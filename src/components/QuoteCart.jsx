@@ -77,7 +77,7 @@ export default function QuoteCart() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-30 bg-ink-900 text-white rounded-full shadow-2xl px-5 py-3 flex items-center gap-2 hover:bg-ink-800 transition"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 bg-ink-900 text-white rounded-full shadow-2xl px-4 py-2.5 md:px-5 md:py-3 flex items-center gap-2 hover:bg-ink-800 transition"
         title="Abrir cotización"
       >
         <ShoppingBag size={18} />
@@ -92,7 +92,13 @@ export default function QuoteCart() {
   }
 
   return (
-    <aside className="fixed top-0 right-0 z-30 w-[380px] h-full bg-white border-l border-ink-100 shadow-2xl flex flex-col">
+    <>
+      {/* Backdrop on mobile only */}
+      <div
+        className="md:hidden fixed inset-0 z-40 bg-ink-900/40"
+        onClick={() => setOpen(false)}
+      />
+    <aside className="fixed inset-0 md:inset-auto md:top-0 md:right-0 z-50 md:z-30 w-full md:w-[380px] h-full bg-white md:border-l border-ink-100 shadow-2xl flex flex-col">
       <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between">
         <div>
           <div className="font-semibold flex items-center gap-2">
@@ -190,6 +196,7 @@ export default function QuoteCart() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
 

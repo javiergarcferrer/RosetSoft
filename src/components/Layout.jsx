@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -8,7 +9,8 @@ import {
   Container as ContainerIcon,
   Upload,
   Settings as SettingsIcon,
-  ChevronDown,
+  Menu,
+  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
@@ -29,20 +31,63 @@ const navItems = [
 export default function Layout() {
   const { settings } = useApp();
   const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
   const company = settings?.companyName || 'Roset Soft';
 
+  // Close drawer on navigation
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="h-full flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col">
-        <div className="px-5 py-5 border-b border-ink-800">
-          <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
-          <div className="text-base font-semibold leading-tight mt-0.5 truncate" title={company}>
-            {company}
+    <div className="h-full flex flex-col md:flex-row">
+      {/* Mobile topbar */}
+      <header className="md:hidden flex items-center justify-between px-3 py-2.5 bg-ink-900 text-ink-100 border-b border-ink-800">
+        <button
+          onClick={() => setNavOpen(true)}
+          className="p-2 -ml-1 rounded hover:bg-ink-800"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="min-w-0 px-2 text-center">
+          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
+          <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
+        </div>
+        <div className="w-8" />
+      </header>
+
+      {/* Mobile drawer overlay */}
+      {navOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-ink-900/40"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — slides in on mobile, static on desktop */}
+      <aside
+        className={`bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-64 md:w-60 transform transition-transform duration-200 md:transform-none ${
+          navOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
+            <div className="text-base font-semibold leading-tight mt-0.5 truncate" title={company}>
+              {company}
+            </div>
           </div>
+          <button
+            onClick={() => setNavOpen(false)}
+            className="md:hidden text-ink-400 hover:text-ink-100 p-1 -mr-1"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <nav className="flex-1 px-2 py-3 space-y-0.5">
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -65,7 +110,7 @@ export default function Layout() {
         <ProfileMenu />
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-y-auto">
         <MainContent />
       </main>
       <QuoteCart />
@@ -76,14 +121,32 @@ export default function Layout() {
 function MainContent() {
   const { open } = useCart();
   const location = useLocation();
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  // On md+ the cart drawer pushes content via reserved padding.
+  // On mobile the cart overlays full-screen, no reservation needed.
+  const reservedPadding = open && isDesktop ? 408 : undefined;
   return (
     <div
-      className="px-8 py-6 transition-[padding] duration-150"
-      style={{ paddingRight: open ? 408 : undefined }}
+      className="px-4 py-4 md:px-8 md:py-6 transition-[padding] duration-150"
+      style={{ paddingRight: reservedPadding }}
     >
       <div className="max-w-[1400px] mx-auto">
         <Outlet key={location.pathname} />
       </div>
     </div>
   );
+}
+
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
 }
