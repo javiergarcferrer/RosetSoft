@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Search, Palette } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import {
   Plus, Search, Sofa, ChevronDown, ChevronRight, ExternalLink, Image as ImageIcon,
 } from 'lucide-react';

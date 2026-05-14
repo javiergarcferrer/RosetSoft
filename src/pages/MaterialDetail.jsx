@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';

@@ -27,7 +27,7 @@ import {
 import { parseMaterialPage } from './fabricParser.js';
 import { parseCabinetryPage } from './cabinetryParser.js';
 import { renderPdfPage, cropCanvasToBlob } from './pageImage.js';
-import { db, newId } from '../db/database.js';
+import { db, newId, saveImage } from '../db/database.js';
 
 const CATEGORY_HEADERS = [
   'COVER MATERIALS',
@@ -353,11 +353,7 @@ export async function commitImport(preview, { merge = true } = {}) {
 
   async function saveImageBlob(kind, ownerId, blob) {
     if (!blob) return null;
-    const id = newId();
-    await db.images.put({
-      id, kind, ownerId, label: '',
-      blob, contentType: blob.type || 'image/png', size: blob.size, createdAt: Date.now(),
-    });
+    const id = await saveImage({ kind, ownerId, file: blob });
     counts.images++;
     return id;
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Sofa, Palette, Users, ArrowRight, Upload } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';

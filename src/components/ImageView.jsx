@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { db } from '../db/database.js';
+import { publicImageUrl } from '../db/supabaseClient.js';
 import { ImageOff } from 'lucide-react';
 
 /**
- * Renders an image stored in the IndexedDB `images` table by id.
+ * Renders an image stored in Supabase Storage by its image-table id.
  * Falls back to a neutral placeholder when missing.
  */
 export default function ImageView({ id, alt = '', className = '', placeholderClassName = '' }) {
@@ -12,7 +13,6 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
 
   useEffect(() => {
     let active = true;
-    let local = null;
     if (!id) {
       setMissing(true);
       setUrl(null);
@@ -21,25 +21,22 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
     setMissing(false);
     db.images.get(id).then((rec) => {
       if (!active) return;
-      if (!rec || !rec.blob) {
+      const u = rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
+      if (!u) {
         setMissing(true);
         setUrl(null);
         return;
       }
-      local = URL.createObjectURL(rec.blob);
-      setUrl(local);
+      setUrl(u);
+    }).catch(() => {
+      if (active) { setMissing(true); setUrl(null); }
     });
-    return () => {
-      active = false;
-      if (local) URL.revokeObjectURL(local);
-    };
+    return () => { active = false; };
   }, [id]);
 
   if (missing || !url) {
     return (
-      <div
-        className={`flex items-center justify-center bg-ink-100 text-ink-400 ${placeholderClassName || className}`}
-      >
+      <div className={`flex items-center justify-center bg-ink-100 text-ink-400 ${placeholderClassName || className}`}>
         <ImageOff size={18} />
       </div>
     );

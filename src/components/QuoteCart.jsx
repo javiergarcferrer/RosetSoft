@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import { ShoppingBag, Trash2, X, ChevronRight, Minus, Plus } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
 import { useApp } from '../context/AppContext.jsx';

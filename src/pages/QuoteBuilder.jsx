@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.jsx';
