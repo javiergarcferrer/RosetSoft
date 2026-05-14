@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { -webkit-font-smoothing: antialiased; }
+  ::selection { background-color: #dd8542; color: #171612; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary { @apply btn bg-ink-900 text-ink-50 hover:bg-ink-800; }
+  .btn-secondary { @apply btn bg-ink-100 text-ink-900 hover:bg-ink-200; }
+  .btn-ghost { @apply btn text-ink-700 hover:bg-ink-100; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-brand { @apply btn bg-brand-500 text-white hover:bg-brand-600; }
+
+  .input {
+    @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ink-900 focus:outline-none focus:ring-1 focus:ring-ink-900;
+  }
+  .label { @apply block text-xs font-medium text-ink-600 mb-1.5 uppercase tracking-wide; }
+  .card { @apply rounded-lg bg-white border border-ink-100 shadow-soft; }
+  .card-pad { @apply p-5; }
+  .kbd { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
+  .badge { @apply inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700; }
+  .badge-brand { @apply inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700; }
+  .table { @apply w-full text-sm; }
+  .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 border-b border-ink-100; }
+  .table td { @apply px-3 py-2 border-b border-ink-100; }
+  .table tbody tr:hover { @apply bg-ink-50; }
+}
