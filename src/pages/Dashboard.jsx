@@ -35,7 +35,7 @@ export default function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Sofa} label="Products" value={counts.products} to="/catalog" />
         <StatCard icon={Palette} label="Materials" value={counts.materials} to="/materials" />
         <StatCard icon={Users} label="Customers" value={counts.customers} to="/customers" />
@@ -52,22 +52,24 @@ export default function Dashboard() {
         {recentQuotes.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-ink-500">No quotes yet.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th className="text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentQuotes.map((q) => (
-                <RecentQuoteRow key={q.id} q={q} />
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="table min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>Customer</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                  <th className="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentQuotes.map((q) => (
+                  <RecentQuoteRow key={q.id} q={q} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

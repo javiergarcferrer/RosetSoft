@@ -12,7 +12,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
   if (!open) return null;
   const widths = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-2 sm:p-4">
       <div className="fixed inset-0 bg-ink-900/40" onClick={onClose} />
       <div className={`relative w-full ${widths[size] || widths.md} bg-white rounded-lg shadow-2xl border border-ink-100 flex flex-col max-h-[90vh]`}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-100">

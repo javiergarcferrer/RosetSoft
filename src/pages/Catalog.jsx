@@ -109,7 +109,7 @@ export default function Catalog() {
         actions={<button onClick={() => setNewOpen(true)} className="btn-primary"><Plus size={14} /> Agregar producto</button>}
       />
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
@@ -128,34 +128,36 @@ export default function Catalog() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="table">
-          <thead>
-            <tr>
-              <th className="w-10"></th>
-              <th className="w-28">Foto</th>
-              <th>Producto</th>
-              <th>Diseñador</th>
-              <th>Categoría</th>
-              <th className="text-right">Variantes</th>
-              <th className="text-right">Desde</th>
-              <th className="w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p) => (
-              <ProductRows
-                key={p.id}
-                product={p}
-                isExpanded={expandedId === p.id}
-                onToggle={() => setExpandedId(expandedId === p.id ? null : p.id)}
-                onAdd={(variant) => setPickerState({ open: true, variant, product: p })}
-                category={categories.find((c) => c.id === p.categoryId)}
-                rates={rates}
-                currency={currency}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="table min-w-[860px]">
+            <thead>
+              <tr>
+                <th className="w-10"></th>
+                <th className="w-28">Foto</th>
+                <th>Producto</th>
+                <th>Diseñador</th>
+                <th>Categoría</th>
+                <th className="text-right">Variantes</th>
+                <th className="text-right">Desde</th>
+                <th className="w-20"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <ProductRows
+                  key={p.id}
+                  product={p}
+                  isExpanded={expandedId === p.id}
+                  onToggle={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                  onAdd={(variant) => setPickerState({ open: true, variant, product: p })}
+                  category={categories.find((c) => c.id === p.categoryId)}
+                  rates={rates}
+                  currency={currency}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {filtered.length === 0 && <div className="px-5 py-10 text-center text-sm text-ink-500">Sin coincidencias.</div>}
       </div>
 
@@ -213,30 +215,32 @@ function ProductRows({ product, isExpanded, onToggle, onAdd, category, rates, cu
       {isExpanded && variants.length > 0 && (
         <tr>
           <td colSpan={8} className="!p-0 bg-ink-50/50">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] text-ink-500 uppercase tracking-wider">
-                  <th className="text-left pl-12 py-2 w-24"></th>
-                  <th className="text-left py-2 w-2/5">Variante</th>
-                  <th className="text-left py-2">Referencia</th>
-                  <th className="text-left py-2">Telas</th>
-                  <th className="text-right py-2">Precio</th>
-                  <th className="text-right py-2 pr-5 w-32"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {variants.map((v) => (
-                  <VariantRow
-                    key={v.id}
-                    product={product}
-                    variant={v}
-                    onAdd={() => onAdd(v)}
-                    rates={rates}
-                    currency={currency}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="text-[10px] text-ink-500 uppercase tracking-wider">
+                    <th className="text-left pl-12 py-2 w-24"></th>
+                    <th className="text-left py-2 w-2/5">Variante</th>
+                    <th className="text-left py-2">Referencia</th>
+                    <th className="text-left py-2">Telas</th>
+                    <th className="text-right py-2">Precio</th>
+                    <th className="text-right py-2 pr-5 w-32"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variants.map((v) => (
+                    <VariantRow
+                      key={v.id}
+                      product={product}
+                      variant={v}
+                      onAdd={() => onAdd(v)}
+                      rates={rates}
+                      currency={currency}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </td>
         </tr>
       )}
@@ -385,7 +389,7 @@ function FabricPickerModal({ open, onClose, product, variant }) {
       title={`${product?.name || ''} — ${variant.name}`}
       size="xl"
     >
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-ink-100">
+      <div className="flex flex-wrap items-center gap-3 mb-4 pb-3 border-b border-ink-100">
         <div className="flex items-center gap-2">
           <span className="text-xs text-ink-500">Cantidad</span>
           <input
@@ -409,7 +413,7 @@ function FabricPickerModal({ open, onClose, product, variant }) {
         </div>
       ) : !activeMaterial ? (
         <>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <input
               autoFocus
               className="input flex-1"
@@ -417,7 +421,7 @@ function FabricPickerModal({ open, onClose, product, variant }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} className="input max-w-[160px]">
+            <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} className="input">
               <option value="">Todos</option>
               <option value="fabric">Tela</option>
               <option value="leather">Cuero</option>
@@ -425,40 +429,42 @@ function FabricPickerModal({ open, onClose, product, variant }) {
             </select>
           </div>
           <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Tipo</th>
-                  <th>Grado</th>
-                  <th className="text-right">Precio</th>
-                  <th>Colores</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((m) => {
-                  const price = variantPriceForGrade(variant, m.grade);
-                  const colorCount = colors.filter((c) => c.materialId === m.id).length;
-                  return (
-                    <tr key={m.id}>
-                      <td className="font-medium">{m.name}</td>
-                      <td className="capitalize text-xs">{m.kind.replace('-', ' ')}</td>
-                      <td><span className="badge">{m.grade || '—'}</span></td>
-                      <td className="text-right font-medium">
-                        <PriceCell amount={price} />
-                      </td>
-                      <td className="text-ink-500">{colorCount}</td>
-                      <td className="text-right">
-                        <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">
-                          Elegir →
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Tipo</th>
+                    <th>Grado</th>
+                    <th className="text-right">Precio</th>
+                    <th>Colores</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((m) => {
+                    const price = variantPriceForGrade(variant, m.grade);
+                    const colorCount = colors.filter((c) => c.materialId === m.id).length;
+                    return (
+                      <tr key={m.id}>
+                        <td className="font-medium">{m.name}</td>
+                        <td className="capitalize text-xs">{m.kind.replace('-', ' ')}</td>
+                        <td><span className="badge">{m.grade || '—'}</span></td>
+                        <td className="text-right font-medium">
+                          <PriceCell amount={price} />
+                        </td>
+                        <td className="text-ink-500">{colorCount}</td>
+                        <td className="text-right">
+                          <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">
+                            Elegir →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             {filtered.length === 0 && (
               <div className="text-center text-sm text-ink-500 py-10">
                 No hay telas disponibles para este producto/grado.
@@ -548,7 +554,7 @@ function NewProductModal({ open, onClose, categories }) {
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="label">Nombre *</div>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="p. ej. ANDY" />
@@ -557,7 +563,7 @@ function NewProductModal({ open, onClose, categories }) {
           <div className="label">Diseñador</div>
           <input className="input" value={designer} onChange={(e) => setDesigner(e.target.value)} placeholder="p. ej. Pierre Paulin" />
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <div className="label">Categoría</div>
           <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             <option value="">(sin categoría)</option>

@@ -81,7 +81,7 @@ export default function Quotes() {
         actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> New quote</Link>}
       />
 
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
           <input className="input pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by number or customer…" />
@@ -97,30 +97,32 @@ export default function Quotes() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Number</th>
-              <th>Name</th>
-              <th>Customer</th>
-              <th>Status</th>
-              <th>Contenedor</th>
-              <th>Updated</th>
-              <th className="text-right">Total</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((qu) => (
-              <QuoteRow
-                key={qu.id}
-                qu={qu}
-                customer={customerById.get(qu.customerId)}
-                allContainers={containers}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="table min-w-[760px]">
+            <thead>
+              <tr>
+                <th>Number</th>
+                <th>Name</th>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Contenedor</th>
+                <th>Updated</th>
+                <th className="text-right">Total</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((qu) => (
+                <QuoteRow
+                  key={qu.id}
+                  qu={qu}
+                  customer={customerById.get(qu.customerId)}
+                  allContainers={containers}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

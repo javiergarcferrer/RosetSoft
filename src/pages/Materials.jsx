@@ -71,7 +71,7 @@ export default function Materials() {
         actions={<button onClick={() => setNewOpen(true)} className="btn-primary"><Plus size={14} /> Add material</button>}
       />
 
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
           <input

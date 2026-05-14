@@ -44,7 +44,7 @@ export default function Customers() {
         />
       ) : (
         <>
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
             <div className="relative flex-1 max-w-md">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers…" className="input pl-9" />
@@ -52,30 +52,32 @@ export default function Customers() {
           </div>
 
           <div className="card overflow-hidden">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Company</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th>City</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
-                    <td className="font-medium">{c.name}</td>
-                    <td className="text-ink-700">{c.company || '—'}</td>
-                    <td className="text-ink-700">{c.email || '—'}</td>
-                    <td className="text-ink-700">{c.phone || '—'}</td>
-                    <td className="text-ink-700">{c.city || '—'}</td>
-                    <td className="text-right w-20"><span className="text-xs text-ink-500">Edit</span></td>
+            <div className="overflow-x-auto">
+              <table className="table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>City</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((c) => (
+                    <tr key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
+                      <td className="font-medium">{c.name}</td>
+                      <td className="text-ink-700">{c.company || '—'}</td>
+                      <td className="text-ink-700">{c.email || '—'}</td>
+                      <td className="text-ink-700">{c.phone || '—'}</td>
+                      <td className="text-ink-700">{c.city || '—'}</td>
+                      <td className="text-right w-20"><span className="text-xs text-ink-500">Edit</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -146,8 +148,8 @@ function CustomerModal({ customer, onClose, profileId }) {
         <button onClick={save} className="btn-primary">Save</button>
       </>
     }>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
           <div className="label">Name *</div>
           <input className="input" value={data.name} onChange={(e) => set('name', e.target.value)} />
         </div>
@@ -167,7 +169,7 @@ function CustomerModal({ customer, onClose, profileId }) {
           <div className="label">Country</div>
           <input className="input" value={data.country} onChange={(e) => set('country', e.target.value)} />
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <div className="label">Address</div>
           <input className="input" value={data.address} onChange={(e) => set('address', e.target.value)} />
         </div>
@@ -185,7 +187,7 @@ function CustomerModal({ customer, onClose, profileId }) {
             <input className="input" value={data.zip} onChange={(e) => set('zip', e.target.value)} />
           </div>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <div className="label">Notes</div>
           <textarea className="input min-h-[80px]" value={data.notes} onChange={(e) => set('notes', e.target.value)} />
         </div>
