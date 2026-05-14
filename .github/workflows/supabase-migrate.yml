@@ -1,0 +1,40 @@
+name: Apply Supabase migrations
+
+# Runs `supabase db push` against the linked project whenever migrations
+# change on the main branch. Also exposes a "Run workflow" button under the
+# Actions tab so you can apply migrations from any branch on demand.
+#
+# Required GitHub repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN   — Personal access token from
+#                              https://supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_ID     — Project ref (the xxxx in https://xxxx.supabase.co)
+#   SUPABASE_DB_PASSWORD    — Database password (Project Settings → Database;
+#                              click "Reset database password" if you don't have it)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/supabase-migrate.yml'
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID:  ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Push migrations
+        run: supabase db push --include-all

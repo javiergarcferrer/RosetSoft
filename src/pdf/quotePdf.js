@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { db } from '../db/database.js';
+import { downloadImageBytes } from '../db/database.js';
 import { applyLineAdjustments, ITBIS_PCT } from '../lib/pricing.js';
 import { effectiveDopRate, rateSourceLabel } from '../lib/exchangeRate.js';
 
@@ -445,15 +445,13 @@ function formatMoney(value, code, rates) {
 
 async function embedImageById(doc, id) {
   if (!id) return null;
-  const rec = await db.images.get(id);
-  if (!rec?.blob) return null;
-  const buf = await rec.blob.arrayBuffer();
-  const u8 = new Uint8Array(buf);
-  const ct = (rec.contentType || '').toLowerCase();
+  const res = await downloadImageBytes(id);
+  if (!res?.bytes) return null;
+  const u8 = res.bytes;
+  const ct = (res.contentType || '').toLowerCase();
   try {
     if (ct.includes('png')) return await doc.embedPng(u8);
     if (ct.includes('jpeg') || ct.includes('jpg')) return await doc.embedJpg(u8);
-    // Try png first, fall back to jpg
     try { return await doc.embedPng(u8); } catch {}
     try { return await doc.embedJpg(u8); } catch {}
     return null;

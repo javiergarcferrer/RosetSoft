@@ -4,6 +4,10 @@ import { fetchMarketRate, effectiveDopRate } from '../lib/exchangeRate.js';
 
 const Ctx = createContext(null);
 
+/**
+ * Single-tenant team context: `profileId` is always the shared 'team' profile.
+ * `profiles` lists team members (rows in the profiles table) for display.
+ */
 export function AppProvider({ children }) {
   const [profileId, setProfileId] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -11,51 +15,51 @@ export function AppProvider({ children }) {
   const [ready, setReady] = useState(false);
 
   const refreshProfiles = useCallback(async () => {
-    const list = await db.profiles.orderBy('createdAt').toArray();
+    const list = await db.profiles.toArray();
     setProfiles(list);
     return list;
   }, []);
 
-  const refreshSettings = useCallback(async (pid = profileId) => {
-    if (!pid) return null;
-    const s = await getSettings(pid);
+  const refreshSettings = useCallback(async (pid) => {
+    const target = pid || profileId;
+    if (!target) return null;
+    const s = await getSettings(target);
     setSettings(s);
     return s;
   }, [profileId]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const pid = await ensureDefaultProfile();
-      const stored = localStorage.getItem('rs.activeProfile');
-      const list = await refreshProfiles();
-      const active = stored && list.some((p) => p.id === stored) ? stored : pid;
-      setProfileId(active);
-      const s = await getSettings(active);
-      setSettings(s);
-      setReady(true);
+      try {
+        const pid = await ensureDefaultProfile();
+        if (cancelled) return;
+        setProfileId(pid);
+        const s = await getSettings(pid);
+        if (cancelled) return;
+        setSettings(s);
+        await refreshProfiles();
+        setReady(true);
 
-      // Auto-refresh market rate once a day in the background
-      const lastFetch = s?.market?.fetchedAt || 0;
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (!lastFetch || Date.now() - lastFetch > oneDay) {
-        const result = await fetchMarketRate();
-        if (result) {
-          const merged = { ...s, market: { ...result, fetchedAt: Date.now() } };
-          // Keep currencyRates.DOP in sync with effective rate
-          merged.currencyRates = { ...(s?.currencyRates || {}), USD: 1, DOP: effectiveDopRate(merged) };
-          await updateSettings(active, merged);
-          setSettings(merged);
+        // Auto-refresh market rate once a day in the background.
+        const lastFetch = s?.market?.fetchedAt || 0;
+        const oneDay = 24 * 60 * 60 * 1000;
+        if (!lastFetch || Date.now() - lastFetch > oneDay) {
+          const result = await fetchMarketRate();
+          if (result && !cancelled) {
+            const merged = { ...s, market: { ...result, fetchedAt: Date.now() } };
+            merged.currencyRates = { ...(s?.currencyRates || {}), USD: 1, DOP: effectiveDopRate(merged) };
+            await updateSettings(pid, merged);
+            setSettings(merged);
+          }
         }
+      } catch (e) {
+        console.error('AppContext init failed:', e);
+        setReady(true);
       }
     })();
+    return () => { cancelled = true; };
   }, [refreshProfiles]);
-
-  const switchProfile = useCallback(async (pid) => {
-    setProfileId(pid);
-    localStorage.setItem('rs.activeProfile', pid);
-    const s = await getSettings(pid);
-    setSettings(s);
-  }, []);
 
   const saveSettings = useCallback(async (patch) => {
     await updateSettings(profileId, patch);
@@ -69,7 +73,6 @@ export function AppProvider({ children }) {
     settings,
     refreshProfiles,
     refreshSettings,
-    switchProfile,
     saveSettings,
   };
 

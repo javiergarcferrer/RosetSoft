@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Trash2, AlertTriangle, Database, RefreshCw, ExternalLink } from 'lucide-react';
+import { Database, RefreshCw, ExternalLink, Cloud } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
-import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { db } from '../db/database.js';
 import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -13,7 +11,6 @@ const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 export default function Settings() {
   const { profileId, settings, saveSettings } = useApp();
   const [local, setLocal] = useState(settings || {});
-  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     setLocal(settings || {});
@@ -26,11 +23,6 @@ export default function Settings() {
     const dop = effectiveDopRate(local);
     const next = { ...local, currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: dop } };
     await saveSettings(next);
-  }
-
-  async function resetAll() {
-    await db.delete();
-    location.reload();
   }
 
   const rates = local.currencyRates || { USD: 1 };
@@ -110,29 +102,16 @@ export default function Settings() {
         {/* Sidebar */}
         <div className="space-y-5">
           <div className="card card-pad">
-            <h2 className="font-semibold mb-3 flex items-center gap-2"><Database size={16} /> Almacenamiento</h2>
-            <p className="text-xs text-ink-500 mb-3">Toda la información se guarda localmente en tu navegador.</p>
-            <div className="text-xs text-ink-500">
-              La opción de nube con usuarios múltiples llegará en una futura versión; tus datos locales serán importables.
-            </div>
-          </div>
-
-          <div className="card card-pad border-red-200">
-            <h2 className="font-semibold mb-2 text-red-700 flex items-center gap-2"><AlertTriangle size={16} /> Zona peligrosa</h2>
-            <p className="text-xs text-ink-500 mb-3">Borra todos los datos locales — productos, telas, clientes, cotizaciones. No se puede deshacer.</p>
-            <button onClick={() => setConfirmReset(true)} className="btn-danger w-full">Borrar todo</button>
+            <h2 className="font-semibold mb-3 flex items-center gap-2"><Cloud size={16} /> Almacenamiento</h2>
+            <p className="text-xs text-ink-500 mb-3">
+              Los datos del equipo están en la nube (Supabase). Cualquier miembro autenticado los ve y los edita en tiempo real.
+            </p>
+            <p className="text-xs text-ink-500">
+              Las imágenes se guardan en el bucket público <code className="kbd">images</code> y se sirven directamente como URLs.
+            </p>
           </div>
         </div>
       </div>
-
-      <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="¿Borrar todo?" footer={
-        <>
-          <button onClick={() => setConfirmReset(false)} className="btn-ghost">Cancelar</button>
-          <button onClick={resetAll} className="btn-danger">Sí, borrar</button>
-        </>
-      }>
-        <p className="text-sm">Se eliminarán productos, telas, clientes, cotizaciones, imágenes y ajustes. Esta acción no se puede deshacer.</p>
-      </Modal>
     </>
   );
 }
