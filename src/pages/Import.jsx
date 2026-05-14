@@ -9,6 +9,7 @@ export default function Import() {
   const inputRef = useRef(null);
   const [phase, setPhase] = useState('idle'); // idle | parsing | preview | committing | done | error
   const [progress, setProgress] = useState({ page: 0, total: 0, stage: '' });
+  const [commitProgress, setCommitProgress] = useState({ done: 0, total: 0 });
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState('');
@@ -38,8 +39,12 @@ export default function Import() {
 
   async function commit() {
     setPhase('committing');
+    setCommitProgress({ done: 0, total: 0 });
     try {
-      const c = await commitImport(preview, { merge: true });
+      const c = await commitImport(preview, {
+        merge: true,
+        onProgress: ({ done, total }) => setCommitProgress({ done, total }),
+      });
       setCounts(c);
       setPhase('done');
     } catch (e) {
@@ -214,7 +219,27 @@ export default function Import() {
 
       {phase === 'committing' && (
         <div className="card card-pad text-center py-16">
-          <div className="text-sm text-ink-500">Saving to the catalog…</div>
+          <div className="text-sm text-ink-500 mb-2">
+            {commitProgress.total > 0 ? 'Subiendo imágenes al catálogo' : 'Guardando en el catálogo'}
+          </div>
+          {commitProgress.total > 0 ? (
+            <>
+              <div className="text-2xl font-semibold tabular-nums">
+                {commitProgress.done} / {commitProgress.total}
+              </div>
+              <div className="w-full max-w-md mx-auto mt-4 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand-500 transition-all"
+                  style={{ width: `${commitProgress.total ? (commitProgress.done / commitProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+              <div className="text-[11px] text-ink-500 mt-3">
+                Cada imagen se sube a Supabase Storage. Si la red está lenta esto puede tomar varios minutos.
+              </div>
+            </>
+          ) : (
+            <div className="text-[11px] text-ink-500">Casi listo…</div>
+          )}
         </div>
       )}
 

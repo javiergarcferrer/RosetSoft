@@ -348,14 +348,42 @@ function isValidProductName(s) {
 /*  Commit                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function commitImport(preview, { merge = true } = {}) {
+export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 5 } = {}) {
   const counts = { categories: 0, materials: 0, colors: 0, products: 0, variants: 0, images: 0 };
+
+  // Pre-count uploads so we can show "X / N" progress.
+  let totalUploads = 0;
+  for (const p of preview.products) {
+    if (p.heroBlob) totalUploads++;
+    for (const v of p.variants) if (v.imageBlob) totalUploads++;
+  }
+  let uploadsDone = 0;
+  const reportUpload = () => {
+    uploadsDone++;
+    onProgress?.({ phase: 'uploading', done: uploadsDone, total: totalUploads });
+  };
+  onProgress?.({ phase: 'starting', done: 0, total: totalUploads });
 
   async function saveImageBlob(kind, ownerId, blob) {
     if (!blob) return null;
     const id = await saveImage({ kind, ownerId, file: blob });
     counts.images++;
+    reportUpload();
     return id;
+  }
+
+  // Run N image uploads in parallel; await all before continuing.
+  async function runParallel(tasks, limit = uploadConcurrency) {
+    const results = new Array(tasks.length);
+    let i = 0;
+    async function worker() {
+      while (i < tasks.length) {
+        const idx = i++;
+        results[idx] = await tasks[idx]();
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+    return results;
   }
 
   const categoryIdByName = new Map();
@@ -440,34 +468,43 @@ export async function commitImport(preview, { merge = true } = {}) {
 
     const existingVariants = await db.productVariants.where('productId').equals(productId).toArray();
     const byKey = new Map(existingVariants.map((v) => [v.reference || v.name, v]));
+
+    // Plan: assign IDs and figure out which variants need image uploads.
+    const plans = p.variants.map((v) => {
+      const prev = byKey.get(v.reference || v.name);
+      return { v, prev, vid: prev?.id || newId() };
+    });
+
+    // Upload images in parallel (network-bound).
+    const uploadTasks = plans
+      .filter((pl) => pl.v.imageBlob && !pl.prev?.imageId)
+      .map((pl) => async () => {
+        pl.imageId = await saveImageBlob('variant', pl.vid, pl.v.imageBlob);
+      });
+    await runParallel(uploadTasks);
+
+    // Write variant records.
     let order = 0;
-    for (const v of p.variants) {
-      const k = v.reference || v.name;
-      const prev = byKey.get(k);
-      const vid = prev?.id || newId();
-
-      // Save variant image if we extracted one and there isn't one already
-      let imageId = prev?.imageId || null;
-      if (v.imageBlob && !imageId) {
-        imageId = await saveImageBlob('variant', vid, v.imageBlob);
-      }
-
+    for (const pl of plans) {
+      const imageId = pl.imageId ?? pl.prev?.imageId ?? null;
       await db.productVariants.put({
-        id: vid,
+        id: pl.vid,
         productId,
-        name: v.name,
-        reference: v.reference || '',
-        yardage: v.yardage || '',
-        dimensions: v.dimensions || '',
-        priceByGrade: v.priceByGrade || {},
-        priceFixed: v.priceFixed ?? prev?.priceFixed ?? null,
-        sortOrder: prev?.sortOrder ?? order,
+        name: pl.v.name,
+        reference: pl.v.reference || '',
+        yardage: pl.v.yardage || '',
+        dimensions: pl.v.dimensions || '',
+        priceByGrade: pl.v.priceByGrade || {},
+        priceFixed: pl.v.priceFixed ?? pl.prev?.priceFixed ?? null,
+        sortOrder: pl.prev?.sortOrder ?? order,
         imageId,
       });
-      if (!prev) counts.variants++;
+      if (!pl.prev) counts.variants++;
       order++;
     }
   }
+
+  onProgress?.({ phase: 'done', done: uploadsDone, total: totalUploads });
 
   return counts;
 }
