@@ -28,6 +28,11 @@ export default function Quotes() {
     [profileId],
     []
   );
+  const containers = useLiveQuery(
+    () => db.containers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    []
+  );
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -99,6 +104,7 @@ export default function Quotes() {
               <th>Name</th>
               <th>Customer</th>
               <th>Status</th>
+              <th>Contenedor</th>
               <th>Updated</th>
               <th className="text-right">Total</th>
               <th />
@@ -106,7 +112,12 @@ export default function Quotes() {
           </thead>
           <tbody>
             {filtered.map((qu) => (
-              <QuoteRow key={qu.id} qu={qu} customer={customerById.get(qu.customerId)} />
+              <QuoteRow
+                key={qu.id}
+                qu={qu}
+                customer={customerById.get(qu.customerId)}
+                allContainers={containers}
+              />
             ))}
           </tbody>
         </table>
@@ -115,7 +126,7 @@ export default function Quotes() {
   );
 }
 
-function QuoteRow({ qu, customer }) {
+function QuoteRow({ qu, customer, allContainers }) {
   const total = useLiveQuery(async () => {
     const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
     return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
@@ -130,12 +141,32 @@ function QuoteRow({ qu, customer }) {
     await db.quotes.delete(qu.id);
   }
 
+  async function setContainer(e) {
+    e.stopPropagation();
+    const value = e.target.value || null;
+    await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
+  }
+
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
       <td className="font-medium">#{qu.number || '—'}</td>
       <td>{qu.name || '—'}</td>
       <td className="text-ink-700">{customer?.name || '—'}</td>
       <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{qu.status || 'draft'}</span></td>
+      <td onClick={(e) => e.stopPropagation()}>
+        <select
+          className="input text-xs py-1 max-w-[180px]"
+          value={qu.containerId || ''}
+          onChange={setContainer}
+        >
+          <option value="">— ninguno —</option>
+          {allContainers.map((c) => (
+            <option key={c.id} value={c.id}>
+              #{c.number}{c.name ? ` · ${c.name}` : ''}
+            </option>
+          ))}
+        </select>
+      </td>
       <td className="text-ink-500">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
       <td className="text-right w-12">

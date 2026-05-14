@@ -5,6 +5,7 @@ import {
   Palette,
   Users,
   FileText,
+  Container as ContainerIcon,
   Upload,
   Settings as SettingsIcon,
   ChevronDown,
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/materials', label: 'Telas y cueros', icon: Palette },
   { to: '/customers', label: 'Clientes', icon: Users },
   { to: '/quotes', label: 'Cotizaciones', icon: FileText },
+  { to: '/containers', label: 'Contenedores', icon: ContainerIcon },
   { to: '/import', label: 'Importar PDF', icon: Upload },
   { to: '/settings', label: 'Configuración', icon: SettingsIcon },
 ];

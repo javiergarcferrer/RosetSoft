@@ -12,6 +12,8 @@ import MaterialDetail from './pages/MaterialDetail.jsx';
 import Customers from './pages/Customers.jsx';
 import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
+import Containers from './pages/Containers.jsx';
+import ContainerDetail from './pages/ContainerDetail.jsx';
 import Import from './pages/Import.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -55,6 +57,8 @@ function ProtectedApp() {
               <Route path="quotes" element={<Quotes />} />
               <Route path="quotes/new" element={<QuoteBuilder />} />
               <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
+              <Route path="containers" element={<Containers />} />
+              <Route path="containers/:containerId" element={<ContainerDetail />} />
               <Route path="import" element={<Import />} />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />

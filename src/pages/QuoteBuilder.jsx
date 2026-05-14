@@ -4,6 +4,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.jsx';
+import ImageDrop from '../components/ImageDrop.jsx';
 import Modal from '../components/Modal.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -262,6 +263,7 @@ function Builder({ quoteId, navigate }) {
                       onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
                       onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
                       onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
+                      onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
                       quote={quote}
                     />
                   ))}
@@ -338,7 +340,7 @@ function Row({ label, value, quote, bold, muted }) {
   );
 }
 
-function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, onLineMargin, onLineDiscount, onNotes, quote }) {
+function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, onLineMargin, onLineDiscount, onNotes, onSwatchChange, quote }) {
   const unit = applyLineAdjustments(r.basePrice, r.lineMarginPct, r.lineDiscountPct);
   const lineTotal = unit * (r.qty || 0);
   return (
@@ -350,7 +352,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
         <td>
           <div className="flex gap-3 items-start">
             <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-              <ImageView id={r.variant?.imageId || r.product?.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+              <ImageView id={r.variant?.imageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
             </div>
             <div className="min-w-0">
               <div className="font-medium text-sm truncate">{r.product?.name || '(missing product)'}</div>
@@ -365,7 +367,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
             className="flex items-center gap-2 text-left hover:bg-ink-50 rounded p-1 -m-1 w-full"
           >
             <div className="w-9 h-9 rounded bg-ink-100 overflow-hidden flex-shrink-0">
-              <ImageView id={r.color?.swatchImageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+              <ImageView id={r.swatchImageId || r.color?.swatchImageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
             </div>
             <div className="min-w-0">
               {r.material ? (
@@ -395,43 +397,56 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
       </tr>
       <tr>
         <td colSpan={7} className="!py-2 !border-b-0 border-b border-ink-50">
-          <div className="grid grid-cols-4 gap-3 px-3 py-1.5 bg-ink-50 rounded">
-            <div>
-              <div className="text-[10px] font-medium text-ink-500 uppercase">Override unit ($)</div>
-              <input
-                type="number"
-                className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
-                placeholder={String(r.basePrice || 0)}
-                value={r.priceOverride ?? ''}
-                onChange={(e) => onPriceOverride(e.target.value === '' ? null : Number(e.target.value))}
+          <div className="flex items-start gap-4 px-3 py-2 bg-ink-50 rounded">
+            <div className="w-24 flex-shrink-0">
+              <ImageDrop
+                imageId={r.swatchImageId}
+                onChange={(id) => onSwatchChange(id)}
+                kind="quote-line-swatch"
+                ownerId={r.id}
+                label="Swatch override"
+                imgClassName="w-full aspect-square object-cover rounded"
+                allowUrl={false}
               />
             </div>
-            <div>
-              <div className="text-[10px] font-medium text-ink-500 uppercase">Margin %</div>
-              <input
-                type="number"
-                className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
-                value={r.lineMarginPct ?? 0}
-                onChange={(e) => onLineMargin(Number(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <div className="text-[10px] font-medium text-ink-500 uppercase">Discount %</div>
-              <input
-                type="number"
-                className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
-                value={r.lineDiscountPct ?? 0}
-                onChange={(e) => onLineDiscount(Number(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <div className="text-[10px] font-medium text-ink-500 uppercase">Notes</div>
-              <input
-                className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
-                value={r.notes || ''}
-                onChange={(e) => onNotes(e.target.value)}
-                placeholder="e.g. extra cushion, COM"
-              />
+            <div className="flex-1 grid grid-cols-4 gap-3 self-center">
+              <div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Override unit ($)</div>
+                <input
+                  type="number"
+                  className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
+                  placeholder={String(r.basePrice || 0)}
+                  value={r.priceOverride ?? ''}
+                  onChange={(e) => onPriceOverride(e.target.value === '' ? null : Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Margin %</div>
+                <input
+                  type="number"
+                  className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
+                  value={r.lineMarginPct ?? 0}
+                  onChange={(e) => onLineMargin(Number(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Discount %</div>
+                <input
+                  type="number"
+                  className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
+                  value={r.lineDiscountPct ?? 0}
+                  onChange={(e) => onLineDiscount(Number(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Notes</div>
+                <input
+                  className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
+                  value={r.notes || ''}
+                  onChange={(e) => onNotes(e.target.value)}
+                  placeholder="e.g. extra cushion, COM"
+                />
+              </div>
             </div>
           </div>
         </td>
@@ -473,7 +488,7 @@ function ProductPickerModal({ open, onClose, onPick }) {
             <div key={p.id} className="border border-ink-100 rounded-md hover:border-ink-300 transition">
               <div className="flex items-center gap-3 px-3 py-2 border-b border-ink-100">
                 <div className="w-16 h-12 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-                  <ImageView id={p.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+                  <ImageView id={p.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium text-sm truncate">{p.name}</div>

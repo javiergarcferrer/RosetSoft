@@ -97,6 +97,26 @@ export default function Settings() {
               </div>
             </div>
           </div>
+
+          {/* Containers */}
+          <div className="card card-pad">
+            <h2 className="font-semibold mb-1">Contenedores</h2>
+            <p className="text-xs text-ink-500 mb-3">
+              Un contenedor está listo para despachar cuando la suma de las cotizaciones fijadas alcanza este monto (en USD).
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="label">Monto mínimo para despacho (USD)</div>
+                <input
+                  className="input"
+                  type="number"
+                  step="100"
+                  value={local.dispatchThreshold ?? 50000}
+                  onChange={(e) => set('dispatchThreshold', Number(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Sidebar */}

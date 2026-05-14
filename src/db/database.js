@@ -23,6 +23,7 @@ const TABLES = {
   customers:       { db: 'customers',        pk: 'id' },
   quotes:          { db: 'quotes',           pk: 'id' },
   quoteLines:      { db: 'quote_lines',      pk: 'id' },
+  containers:      { db: 'containers',       pk: 'id' },
 };
 
 function snake(name) {

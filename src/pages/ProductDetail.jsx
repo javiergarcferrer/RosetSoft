@@ -74,13 +74,23 @@ export default function ProductDetail() {
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-1">
           <ImageDrop
-            imageId={product.heroImageId}
-            onChange={(id) => update({ heroImageId: id })}
-            kind="product-hero"
+            imageId={product.vectorImageId}
+            onChange={(id) => update({ vectorImageId: id })}
+            kind="product-vector"
             ownerId={product.id}
-            label="Hero image"
+            label="Vector image — shown in catalog and quote builder"
             imgClassName="w-full aspect-[4/3] object-cover rounded-md"
           />
+          <div className="mt-4">
+            <ImageDrop
+              imageId={product.heroImageId}
+              onChange={(id) => update({ heroImageId: id })}
+              kind="product-hero"
+              ownerId={product.id}
+              label="Hero image — customer-facing photo, used only in exported PDFs"
+              imgClassName="w-full aspect-[4/3] object-cover rounded-md"
+            />
+          </div>
           <div className="card card-pad mt-4 space-y-3">
             <div>
               <div className="label">Name</div>

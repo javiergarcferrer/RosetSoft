@@ -182,7 +182,7 @@ function ProductRows({ product, isExpanded, onToggle, onAdd, category, rates, cu
         </td>
         <td>
           <div className="w-24 h-20 rounded bg-ink-50 border border-ink-100 overflow-hidden">
-            <ImageView id={product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+            <ImageView id={product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
           </div>
         </td>
         <td>
@@ -257,7 +257,7 @@ function VariantRow({ product, variant, onAdd, rates, currency }) {
     <tr className="border-t border-ink-100 align-middle">
       <td className="pl-12 py-2 w-24">
         <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden">
-          <ImageView id={variant.imageId || product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+          <ImageView id={variant.imageId || product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
         </div>
       </td>
       <td className="py-2">
@@ -530,6 +530,7 @@ function NewProductModal({ open, onClose, categories }) {
       description: '',
       technicalImpossibilities: [],
       heroImageId: null,
+      vectorImageId: null,
     });
     onClose();
     window.location.hash = `#/catalog/${id}`;

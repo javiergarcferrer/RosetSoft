@@ -241,8 +241,8 @@ async function drawLineRow(page, ctx, cursor, line) {
   const rowY = cursor.y;
   const rowH = 56;
 
-  // Image (variant > product hero)
-  const imgId = line.variant?.imageId || line.product?.heroImageId;
+  // Image: variant drawing > product hero (customer-facing) > vector (fallback for products with no hero set)
+  const imgId = line.variant?.imageId || line.product?.heroImageId || line.product?.vectorImageId;
   const img = await embedImageById(doc, imgId);
   if (img) {
     const box = 44;
@@ -278,7 +278,8 @@ async function drawLineRow(page, ctx, cursor, line) {
 
   // Material / color (swatch + text)
   const matX = cols[2].x;
-  const swatch = await embedImageById(doc, line.color?.swatchImageId);
+  // Per-line swatch override takes priority over the catalog color's swatch.
+  const swatch = await embedImageById(doc, line.swatchImageId || line.color?.swatchImageId);
   if (swatch) {
     const box = 22;
     const scale = Math.min(box / swatch.width, box / swatch.height);

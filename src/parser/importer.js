@@ -414,10 +414,13 @@ export async function commitImport(preview, { merge = true } = {}) {
     const productId = existing?.id || newId();
     const categoryId = categoryIdByName.get((p.categoryName || '').toUpperCase()) || null;
 
-    // Save hero image if we extracted one and the product doesn't already have one
-    let heroImageId = existing?.heroImageId || null;
-    if (p.heroBlob && !heroImageId) {
-      heroImageId = await saveImageBlob('product-hero', productId, p.heroBlob);
+    // The image extracted from the price list PDF is a technical drawing
+    // and belongs in `vectorImageId` (used in all in-app views). The
+    // customer-facing `heroImageId` stays untouched — it's uploaded
+    // manually and only appears in the exported PDF.
+    let vectorImageId = existing?.vectorImageId || null;
+    if (p.heroBlob && !vectorImageId) {
+      vectorImageId = await saveImageBlob('product-vector', productId, p.heroBlob);
     }
 
     await db.products.put({
@@ -429,7 +432,8 @@ export async function commitImport(preview, { merge = true } = {}) {
       description: p.description || existing?.description || '',
       modelCode: p.modelCode || existing?.modelCode || '',
       technicalImpossibilities: p.impossibilities?.length ? p.impossibilities : (existing?.technicalImpossibilities || []),
-      heroImageId,
+      heroImageId: existing?.heroImageId || null,
+      vectorImageId,
       pages: p.pages || [],
     });
     if (!existing) counts.products++;
