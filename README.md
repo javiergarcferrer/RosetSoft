@@ -20,18 +20,18 @@ Quoting software for Ligne Roset dealers — built as the foundation of a CRM as
 
 ## Setting up Supabase
 
-You need a Supabase project to run Roset Soft.
+You need a Supabase project to run Roset Soft. The repo ships SQL migrations under `supabase/migrations/` so once the project is linked to GitHub, schema changes deploy on push.
 
 1. **Create the project** at https://supabase.com → New project. Free tier is fine. Pick a region close to your team.
-2. **Run the SQL migrations** in `supabase/`:
-   - Open SQL Editor → New query → paste the contents of `supabase/schema.sql` → Run.
-   - Open SQL Editor → New query → paste the contents of `supabase/storage.sql` → Run.
+2. **Link the project to this GitHub repo** (Project Settings → Integrations → GitHub, or Database → Branching). Point it at the branch you want to deploy from (e.g. `main`). Supabase will run any files in `supabase/migrations/` that haven't been applied yet.
 3. **Auth settings** (Authentication → Providers → Email):
    - Enable Email provider.
    - For now, **disable "Confirm email"** so teammates can sign up without configuring SMTP. Re-enable it later when you wire SMTP.
 4. **Add team members** (Authentication → Users → Add user):
    - Enter email + password for each teammate. They'll be able to sign in immediately.
    - Alternatively, leave signup open and have teammates create their own accounts from the Login screen.
+
+> If you haven't linked the repo yet, you can also run the SQL by hand: open SQL Editor → paste each file from `supabase/migrations/` in order (the filename prefix gives the order) → Run.
 
 Your data lives in your Supabase project. Schema:
 
@@ -106,8 +106,9 @@ src/
   App.jsx             Routes + auth gating
   main.jsx            Entry point
 supabase/
-  schema.sql          Postgres tables, indexes, RLS policies
-  storage.sql         Images bucket + bucket-level access policies
+  migrations/         Timestamped SQL migrations — Supabase runs these in order
+    20260514120000_init_schema.sql   Tables, indexes, RLS policies
+    20260514120001_init_storage.sql  Images bucket + bucket-level access policies
 ```
 
 ## Roadmap → CRM
