@@ -352,7 +352,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
         <td>
           <div className="flex gap-3 items-start">
             <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-              <ImageView id={r.variant?.imageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+              <ImageView id={r.variant?.imageId || r.product?.heroImageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
             </div>
             <div className="min-w-0">
               <div className="font-medium text-sm truncate">{r.product?.name || '(missing product)'}</div>

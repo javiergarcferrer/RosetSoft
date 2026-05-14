@@ -121,7 +121,7 @@ export default function QuoteCart() {
                 <li key={r.id} className="px-5 py-3.5">
                   <div className="flex items-start gap-3">
                     <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-                      <ImageView id={r.variant?.imageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+                      <ImageView id={r.variant?.imageId || r.product?.heroImageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium truncate" title={r.product?.name}>
