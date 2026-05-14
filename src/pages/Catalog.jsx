@@ -490,7 +490,7 @@ function FabricPickerModal({ open, onClose, product, variant }) {
               <div className="mt-3"><button onClick={skipColorAndAdd} className="btn-primary">Agregar sin color</button></div>
             </div>
           ) : (
-            <div className="grid grid-cols-5 gap-3 max-h-[55vh] overflow-y-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[55vh] overflow-y-auto">
               {matColors.map((c) => (
                 <button
                   key={c.id}

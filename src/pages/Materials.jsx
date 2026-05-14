@@ -94,34 +94,36 @@ export default function Materials() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Grade</th>
-              <th>Width</th>
-              <th>Price/unit</th>
-              <th>Composition</th>
-              <th className="text-right">Colors</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((m) => (
-              <tr key={m.id}>
-                <td>
-                  <Link to={`/materials/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
-                </td>
-                <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${KIND_COLORS[m.kind] || 'bg-ink-100 text-ink-700'}`}>{KIND_LABELS[m.kind] || m.kind}</span></td>
-                <td><span className="badge">{m.grade || '—'}</span></td>
-                <td className="text-ink-600">{m.width || '—'}</td>
-                <td className="text-ink-600">{m.pricePerUnit ? `$${m.pricePerUnit}` : '—'}</td>
-                <td className="text-ink-500 text-xs max-w-xs truncate" title={m.composition}>{m.composition || '—'}</td>
-                <td className="text-right text-ink-500">{counts.get(m.id) || 0}</td>
+        <div className="overflow-x-auto">
+          <table className="table min-w-[680px]">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Grade</th>
+                <th>Width</th>
+                <th>Price/unit</th>
+                <th>Composition</th>
+                <th className="text-right">Colors</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <Link to={`/materials/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
+                  </td>
+                  <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${KIND_COLORS[m.kind] || 'bg-ink-100 text-ink-700'}`}>{KIND_LABELS[m.kind] || m.kind}</span></td>
+                  <td><span className="badge">{m.grade || '—'}</span></td>
+                  <td className="text-ink-600">{m.width || '—'}</td>
+                  <td className="text-ink-600">{m.pricePerUnit ? `$${m.pricePerUnit}` : '—'}</td>
+                  <td className="text-ink-500 text-xs max-w-xs truncate" title={m.composition}>{m.composition || '—'}</td>
+                  <td className="text-right text-ink-500">{counts.get(m.id) || 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {filtered.length === 0 && <div className="px-5 py-10 text-center text-sm text-ink-500">No matches.</div>}
       </div>
 
@@ -163,7 +165,7 @@ function NewMaterialModal({ open, onClose }) {
         <button onClick={save} className="btn-primary">Create</button>
       </>
     }>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="label">Name *</div>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DIVA" />

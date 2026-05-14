@@ -33,13 +33,13 @@ export default function Settings() {
         <button onClick={save} className="btn-primary">Guardar</button>
       } />
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-5">
           {/* Company */}
           <div className="card card-pad">
             <h2 className="font-semibold mb-3">Empresa</h2>
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 grid grid-cols-[140px_1fr] gap-4">
+              <div className="col-span-2 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4">
                 <ImageDrop
                   imageId={local.logoImageId}
                   onChange={(id) => set('logoImageId', id)}
@@ -172,7 +172,7 @@ function RateCard({ local, set, saveSettings }) {
 
       {/* Mode selector */}
       <div className="label">Tasa que usar al cotizar</div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
         {[
           { key: 'bpd-sell', label: 'BPD — Venta', hint: 'Para cobrar al cliente' },
           { key: 'bpd-buy', label: 'BPD — Compra', hint: 'Si te paga en USD' },

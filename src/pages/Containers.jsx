@@ -93,8 +93,9 @@ export default function Containers() {
       />
 
       <div className="card overflow-hidden">
-        <table className="table">
-          <thead>
+        <div className="overflow-x-auto">
+          <table className="table min-w-[960px]">
+            <thead>
             <tr>
               <th>Número</th>
               <th>Nombre</th>
@@ -152,6 +153,7 @@ export default function Containers() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </>
   );

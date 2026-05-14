@@ -71,8 +71,8 @@ export default function ProductDetail() {
         }
       />
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-1">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1">
           <ImageDrop
             imageId={product.vectorImageId}
             onChange={(id) => update({ vectorImageId: id })}
@@ -126,7 +126,7 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        <div className="col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           {product.description && (
             <div className="card card-pad">
               <div className="label">Description</div>
@@ -146,42 +146,44 @@ export default function ProductDetail() {
             {variants.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-ink-500">No variants yet.</div>
             ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Image</th>
-                    <th>Name</th>
-                    <th>Reference</th>
-                    <th>Yardage</th>
-                    <th>Dimensions</th>
-                    <th className="text-right">Grades</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {variants.map((v) => (
-                    <tr key={v.id}>
-                      <td className="w-14">
-                        <div className="w-12 h-12 rounded bg-ink-100 overflow-hidden">
-                          <ImageView id={v.imageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
-                        </div>
-                      </td>
-                      <td className="font-medium">{v.name}</td>
-                      <td className="font-mono text-xs text-ink-600">{v.reference || '—'}</td>
-                      <td className="text-ink-600">{v.yardage || '—'}</td>
-                      <td className="text-ink-600 max-w-xs truncate" title={v.dimensions}>{v.dimensions || '—'}</td>
-                      <td className="text-right text-xs text-ink-500">
-                        {Object.keys(v.priceByGrade || {}).length} grade{Object.keys(v.priceByGrade || {}).length === 1 ? '' : 's'}
-                      </td>
-                      <td className="text-right w-20">
-                        <button onClick={() => setEditingVariantId(v.id)} className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1">
-                          Edit <ExternalLink size={12} />
-                        </button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="table min-w-[760px]">
+                  <thead>
+                    <tr>
+                      <th>Image</th>
+                      <th>Name</th>
+                      <th>Reference</th>
+                      <th>Yardage</th>
+                      <th>Dimensions</th>
+                      <th className="text-right">Grades</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {variants.map((v) => (
+                      <tr key={v.id}>
+                        <td className="w-14">
+                          <div className="w-12 h-12 rounded bg-ink-100 overflow-hidden">
+                            <ImageView id={v.imageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+                          </div>
+                        </td>
+                        <td className="font-medium">{v.name}</td>
+                        <td className="font-mono text-xs text-ink-600">{v.reference || '—'}</td>
+                        <td className="text-ink-600">{v.yardage || '—'}</td>
+                        <td className="text-ink-600 max-w-xs truncate" title={v.dimensions}>{v.dimensions || '—'}</td>
+                        <td className="text-right text-xs text-ink-500">
+                          {Object.keys(v.priceByGrade || {}).length} grade{Object.keys(v.priceByGrade || {}).length === 1 ? '' : 's'}
+                        </td>
+                        <td className="text-right w-20">
+                          <button onClick={() => setEditingVariantId(v.id)} className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1">
+                            Edit <ExternalLink size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
@@ -233,7 +235,7 @@ function VariantEditor({ variantId, onClose }) {
         </>
       }
     >
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
         <ImageDrop
           imageId={variant.imageId}
           onChange={(id) => update({ imageId: id })}
@@ -242,12 +244,12 @@ function VariantEditor({ variantId, onClose }) {
           label="Variant image"
           imgClassName="w-full aspect-square object-cover rounded-md"
         />
-        <div className="col-span-2 space-y-3">
+        <div className="sm:col-span-2 space-y-3">
           <div>
             <div className="label">Name</div>
             <input className="input" value={variant.name} onChange={(e) => update({ name: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="label">Reference code</div>
               <input className="input font-mono" value={variant.reference || ''} onChange={(e) => update({ reference: e.target.value })} />
@@ -265,7 +267,7 @@ function VariantEditor({ variantId, onClose }) {
       </div>
 
       <div className="label">Pricing by grade (USD)</div>
-      <div className="grid grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {GRADES.map((g) => (
           <div key={g}>
             <div className="text-[10px] font-semibold text-ink-500 uppercase">Grade {g}</div>

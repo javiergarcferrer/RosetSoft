@@ -207,11 +207,11 @@ function Builder({ quoteId, navigate }) {
         }
       />
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
           {/* Quote header */}
           <div className="card card-pad space-y-3">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Quote name (internal)</div>
                 <input className="input" value={quote.name || ''} onChange={(e) => updateQuote({ name: e.target.value })} placeholder='e.g. "Smith residence — den"' />
@@ -239,36 +239,38 @@ function Builder({ quoteId, navigate }) {
                 No items yet — click <b>Add item</b> to pick a product.
               </div>
             ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th className="w-10" />
-                    <th>Item</th>
-                    <th>Material / color</th>
-                    <th className="w-20 text-right">Qty</th>
-                    <th className="w-32 text-right">Unit</th>
-                    <th className="w-32 text-right">Line total</th>
-                    <th className="w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {resolved.map((r) => (
-                    <LineRow
-                      key={r.id}
-                      r={r}
-                      onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
-                      onRemove={() => removeLine(r.id)}
-                      onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
-                      onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
-                      onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
-                      onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
-                      onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
-                      onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
-                      quote={quote}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="table min-w-[760px]">
+                  <thead>
+                    <tr>
+                      <th className="w-10" />
+                      <th>Item</th>
+                      <th>Material / color</th>
+                      <th className="w-20 text-right">Qty</th>
+                      <th className="w-32 text-right">Unit</th>
+                      <th className="w-32 text-right">Line total</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resolved.map((r) => (
+                      <LineRow
+                        key={r.id}
+                        r={r}
+                        onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
+                        onRemove={() => removeLine(r.id)}
+                        onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
+                        onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
+                        onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
+                        onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
+                        onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
+                        onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
+                        quote={quote}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
@@ -397,7 +399,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
       </tr>
       <tr>
         <td colSpan={7} className="!py-2 !border-b-0 border-b border-ink-50">
-          <div className="flex items-start gap-4 px-3 py-2 bg-ink-50 rounded">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4 px-3 py-2 bg-ink-50 rounded">
             <div className="w-24 flex-shrink-0">
               <ImageDrop
                 imageId={r.swatchImageId}
@@ -409,7 +411,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
                 allowUrl={false}
               />
             </div>
-            <div className="flex-1 grid grid-cols-4 gap-3 self-center">
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 self-center">
               <div>
                 <div className="text-[10px] font-medium text-ink-500 uppercase">Override unit ($)</div>
                 <input
@@ -554,15 +556,15 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Pick material & color" size="xl">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
         <input autoFocus className="input flex-1" placeholder="Search materials…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="input max-w-[160px]" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+        <select className="input sm:max-w-[160px]" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
           <option value="">All types</option>
           <option value="fabric">Fabric</option>
           <option value="leather">Leather</option>
           <option value="outdoor-fabric">Outdoor</option>
         </select>
-        <select className="input max-w-[120px]" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)}>
+        <select className="input sm:max-w-[120px]" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)}>
           <option value="">All grades</option>
           {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((g) => <option key={g} value={g}>Grade {g}</option>)}
           <option value="S">Grade S</option>
@@ -571,44 +573,46 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
 
       {!activeMaterial ? (
         <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Grade</th>
-                <th>Composition</th>
-                <th>Colors</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMaterials.map((m) => {
-                const blocked = (product?.technicalImpossibilities || []).map((s) => s.toUpperCase()).includes(m.name.toUpperCase());
-                const colorCount = colors.filter((c) => c.materialId === m.id).length;
-                return (
-                  <tr key={m.id} className={blocked ? 'opacity-50' : ''}>
-                    <td className="font-medium">{m.name}</td>
-                    <td className="capitalize text-ink-700 text-xs">{m.kind.replace('-', ' ')}</td>
-                    <td><span className="badge">{m.grade || '—'}</span></td>
-                    <td className="text-xs text-ink-500 max-w-xs truncate" title={m.composition}>{m.composition || '—'}</td>
-                    <td className="text-ink-500">{colorCount}</td>
-                    <td className="text-right">
-                      {blocked ? (
-                        <span className="text-[11px] text-red-600">Not allowed</span>
-                      ) : (
-                        <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">Pick →</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="table min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Grade</th>
+                  <th>Composition</th>
+                  <th>Colors</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMaterials.map((m) => {
+                  const blocked = (product?.technicalImpossibilities || []).map((s) => s.toUpperCase()).includes(m.name.toUpperCase());
+                  const colorCount = colors.filter((c) => c.materialId === m.id).length;
+                  return (
+                    <tr key={m.id} className={blocked ? 'opacity-50' : ''}>
+                      <td className="font-medium">{m.name}</td>
+                      <td className="capitalize text-ink-700 text-xs">{m.kind.replace('-', ' ')}</td>
+                      <td><span className="badge">{m.grade || '—'}</span></td>
+                      <td className="text-xs text-ink-500 max-w-xs truncate" title={m.composition}>{m.composition || '—'}</td>
+                      <td className="text-ink-500">{colorCount}</td>
+                      <td className="text-right">
+                        {blocked ? (
+                          <span className="text-[11px] text-red-600">Not allowed</span>
+                        ) : (
+                          <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">Pick →</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <button onClick={() => setActiveMaterial(null)} className="btn-ghost"><ArrowLeft size={14} /> Back</button>
             <div className="text-sm">
               <span className="font-medium">{activeMaterial.name}</span>
@@ -622,7 +626,7 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
               <div className="mt-2"><button onClick={() => onPick(activeMaterial, null)} className="btn-primary">Use anyway</button></div>
             </div>
           ) : (
-            <div className="grid grid-cols-5 gap-3 max-h-[55vh] overflow-y-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[55vh] overflow-y-auto">
               {matColors.map((c) => (
                 <button key={c.id} onClick={() => onPick(activeMaterial, c)} className="card hover:border-ink-300 transition text-left overflow-hidden">
                   <div className="aspect-square bg-ink-100">

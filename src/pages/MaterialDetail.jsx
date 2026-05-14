@@ -57,8 +57,8 @@ export default function MaterialDetail() {
         }
       />
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="card card-pad col-span-1 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="card card-pad lg:col-span-1 space-y-3">
           <div>
             <div className="label">Name</div>
             <input className="input" value={material.name} onChange={(e) => update({ name: e.target.value })} />
@@ -116,13 +116,13 @@ export default function MaterialDetail() {
           </div>
         </div>
 
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
           {colors.length === 0 ? (
             <div className="card card-pad text-center text-sm text-ink-500 py-16">
               No colors yet. Add a color and upload a swatch image to make it easy to select on quotes.
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {colors.map((c) => (
                 <button
                   key={c.id}
@@ -176,7 +176,7 @@ function ColorEditor({ open, colorId, onClose }) {
         <button onClick={onClose} className="btn-primary">Done</button>
       </>
     }>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <ImageDrop
           imageId={color.swatchImageId}
           onChange={(id) => update({ swatchImageId: id })}
