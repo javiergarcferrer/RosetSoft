@@ -1,0 +1,547 @@
+{
+  "pageNumber": 808,
+  "items": [
+    {
+      "str": "808",
+      "x": 24.5527,
+      "y": 820.5814,
+      "w": 26.013000000000005,
+      "h": 13,
+      "fontSize": 13,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "05.09.2026/USA 02/AMERICAN/USD",
+      "x": 214.5417,
+      "y": 817.98921,
+      "w": 166.18703099999993,
+      "h": 10,
+      "fontSize": 10,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "KAKUDO",
+      "x": 46.5066,
+      "y": 187.39,
+      "w": 122.20000000000002,
+      "h": 25,
+      "fontSize": 25,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "CODE",
+      "x": 42.56988,
+      "y": 766.56,
+      "w": 43.554,
+      "h": 14,
+      "fontSize": 14,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "BH",
+      "x": 42.56988,
+      "y": 680.6002799999999,
+      "w": 22.554000000000002,
+      "h": 14,
+      "fontSize": 14,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Name",
+      "x": 146.217,
+      "y": 36.43299999999999,
+      "w": 18.669,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Dimensions",
+      "x": 227.9772,
+      "y": 36.56581300000005,
+      "w": 36.561,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Reference",
+      "x": 494.924,
+      "y": 36.563999999999965,
+      "w": 32.291,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 536.301,
+      "y": 36.563999999999965,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Colors",
+      "x": 292.498,
+      "y": 36.563999999999965,
+      "w": 20.223,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "TV CABINET",
+      "x": 140.304,
+      "y": 332.52799999999996,
+      "w": 29.999999999999986,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE LEFT",
+      "x": 123.2392,
+      "y": 353.31319999999994,
+      "w": 63.889999999999944,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 201.792,
+      "y": 326.61,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "23¼",
+      "x": 275.7584,
+      "y": 326.974063,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 201.792,
+      "y": 333.696723,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "82¾",
+      "x": 275.7584,
+      "y": 334.060786,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 201.792,
+      "y": 340.783056,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19¾",
+      "x": 275.7584,
+      "y": 341.147119,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 293.351,
+      "y": 326.42801899999995,
+      "w": 79.96948024999998,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AR1G",
+      "x": 488.8760302499999,
+      "y": 326.42801899999995,
+      "w": 26.900499999999997,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "4930",
+      "x": 542.99,
+      "y": 326.61005,
+      "w": 13.344,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "TV CABINET",
+      "x": 140.30400000000003,
+      "y": 238.98585000000003,
+      "w": 29.999999999999986,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE RIGHT",
+      "x": 121.70910000000003,
+      "y": 259.77065000000005,
+      "w": 66.94499999999995,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 201.792,
+      "y": 233.06600000000003,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "23¼",
+      "x": 275.7584,
+      "y": 233.43006300000002,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 201.792,
+      "y": 240.15272300000004,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "82¾",
+      "x": 275.7584,
+      "y": 240.51678600000002,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 201.792,
+      "y": 247.23944600000004,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19¾",
+      "x": 275.7584,
+      "y": 247.603118,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 293.351,
+      "y": 232.88401799999997,
+      "w": 79.96948024999998,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AR1D",
+      "x": 488.8760302499999,
+      "y": 232.88401799999997,
+      "w": 26.592499999999998,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "4930",
+      "x": 542.99,
+      "y": 233.06604900000002,
+      "w": 13.344,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "SIDEBOARD",
+      "x": 140.30200000000002,
+      "y": 145.44184900000005,
+      "w": 29.999999999999996,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE LEFT",
+      "x": 123.23680000000002,
+      "y": 166.22664900000007,
+      "w": 63.889999999999944,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 201.792,
+      "y": 139.52300000000002,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "30¼",
+      "x": 275.7584,
+      "y": 139.887063,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 201.792,
+      "y": 146.60972300000003,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "55",
+      "x": 281.5963,
+      "y": 146.97378600000002,
+      "w": 7.784,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 201.79199999999997,
+      "y": 153.69644600000004,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "22",
+      "x": 281.5963,
+      "y": 154.06050900000002,
+      "w": 7.784,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 293.351,
+      "y": 139.34100899999999,
+      "w": 79.96948024999998,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AB1G",
+      "x": 488.8760302499999,
+      "y": 139.34100899999999,
+      "w": 26.598,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "3725",
+      "x": 542.99,
+      "y": 139.52343099999996,
+      "w": 13.344,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "SIDEBOARD",
+      "x": 140.178,
+      "y": 51.89883099999997,
+      "w": 29.999999999999996,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE RIGHT",
+      "x": 121.7081,
+      "y": 72.68363099999999,
+      "w": 66.94499999999995,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 201.793,
+      "y": 45.98000000000002,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "30¼",
+      "x": 275.75980000000004,
+      "y": 46.34367199999997,
+      "w": 13.622,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 201.79340000000005,
+      "y": 53.06633199999999,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "55",
+      "x": 281.59770000000003,
+      "y": 53.430394999999976,
+      "w": 7.784,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 201.79340000000002,
+      "y": 60.153054999999995,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "22",
+      "x": 281.59770000000003,
+      "y": 60.51711799999998,
+      "w": 7.784,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 293.35240000000005,
+      "y": 45.798017999999956,
+      "w": 79.96948024999998,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AB1D",
+      "x": 488.87743025,
+      "y": 45.798017999999956,
+      "w": 26.29,
+      "h": 5.5,
+      "fontSize": 5.5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "3725",
+      "x": 542.9914000000001,
+      "y": 45.98004900000001,
+      "w": 13.344,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    }
+  ],
+  "width": 595.276,
+  "height": 841.89
+}

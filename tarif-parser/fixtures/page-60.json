@@ -1,0 +1,847 @@
+{
+  "pageNumber": 60,
+  "items": [
+    {
+      "str": "B",
+      "x": 103.464,
+      "y": 207.774,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "A",
+      "x": 103.464,
+      "y": 199.26999999999998,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "C",
+      "x": 103.464,
+      "y": 216.27699999999993,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "E",
+      "x": 103.464,
+      "y": 233.28499999999997,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "G",
+      "x": 103.464,
+      "y": 250.293,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "I",
+      "x": 103.464,
+      "y": 267.30099999999993,
+      "w": 1.946,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "K",
+      "x": 103.464,
+      "y": 284.30899999999997,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "M",
+      "x": 103.464,
+      "y": 301.317,
+      "w": 5.831,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "O",
+      "x": 103.464,
+      "y": 318.32499999999993,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Q",
+      "x": 103.464,
+      "y": 335.33299999999997,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "S",
+      "x": 103.464,
+      "y": 352.34,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "U",
+      "x": 103.464,
+      "y": 369.348,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 103.464,
+      "y": 386.356,
+      "w": 6.6080000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Y",
+      "x": 103.464,
+      "y": 403.364,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 103.464,
+      "y": 224.78099999999995,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "F",
+      "x": 103.464,
+      "y": 241.789,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 103.464,
+      "y": 258.797,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "J",
+      "x": 103.464,
+      "y": 275.80499999999995,
+      "w": 3.5,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "L",
+      "x": 103.464,
+      "y": 292.813,
+      "w": 3.892,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "N",
+      "x": 103.464,
+      "y": 309.821,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "P",
+      "x": 103.464,
+      "y": 326.82899999999995,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "R",
+      "x": 103.464,
+      "y": 343.836,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "T",
+      "x": 103.464,
+      "y": 360.844,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "V",
+      "x": 103.464,
+      "y": 377.852,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "X",
+      "x": 103.464,
+      "y": 394.86,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Z",
+      "x": 103.464,
+      "y": 411.868,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "B",
+      "x": 103.464,
+      "y": 601.789,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "A",
+      "x": 103.464,
+      "y": 593.285,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "C",
+      "x": 103.464,
+      "y": 610.293,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "E",
+      "x": 103.464,
+      "y": 627.3009999999999,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "G",
+      "x": 103.464,
+      "y": 644.309,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "I",
+      "x": 103.464,
+      "y": 661.317,
+      "w": 1.946,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "K",
+      "x": 103.464,
+      "y": 678.325,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "M",
+      "x": 103.464,
+      "y": 695.333,
+      "w": 5.831,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "O",
+      "x": 103.464,
+      "y": 712.3399999999999,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Q",
+      "x": 103.464,
+      "y": 729.348,
+      "w": 5.446,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "S",
+      "x": 103.464,
+      "y": 746.3564,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "U",
+      "x": 103.464,
+      "y": 763.3642,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 103.464,
+      "y": 780.372,
+      "w": 6.6080000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Y",
+      "x": 103.464,
+      "y": 797.3797999999999,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 103.464,
+      "y": 618.797,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "F",
+      "x": 103.464,
+      "y": 635.805,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 103.464,
+      "y": 652.813,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "J",
+      "x": 103.464,
+      "y": 669.821,
+      "w": 3.5,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "L",
+      "x": 103.464,
+      "y": 686.829,
+      "w": 3.892,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "N",
+      "x": 103.464,
+      "y": 703.836,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "P",
+      "x": 103.464,
+      "y": 720.8439999999999,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "R",
+      "x": 103.464,
+      "y": 737.852,
+      "w": 5.054,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "T",
+      "x": 103.464,
+      "y": 754.8602999999999,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "V",
+      "x": 103.464,
+      "y": 771.8681,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "X",
+      "x": 103.464,
+      "y": 788.8759,
+      "w": 4.6690000000000005,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Z",
+      "x": 103.464,
+      "y": 805.8837,
+      "w": 4.277,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "60",
+      "x": 28.8883,
+      "y": 820.5814,
+      "w": 17.342000000000002,
+      "h": 13,
+      "fontSize": 13,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "05.09.2026/USA 02/AMERICAN/USD",
+      "x": 214.5423,
+      "y": 817.98921,
+      "w": 166.18703099999993,
+      "h": 10,
+      "fontSize": 10,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "CODE",
+      "x": 42.5699,
+      "y": 766.5591,
+      "w": 43.554,
+      "h": 14,
+      "fontSize": 14,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "103",
+      "x": 42.5699,
+      "y": 680.59938,
+      "w": 28.014000000000003,
+      "h": 14,
+      "fontSize": 14,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "STORE LAYOUT",
+      "x": 46.50662,
+      "y": 278.7591,
+      "w": 213.55742249999997,
+      "h": 25,
+      "fontSize": 25,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Name",
+      "x": 103.464,
+      "y": 63.49299999999994,
+      "w": 18.669,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Currency",
+      "x": 103.464,
+      "y": 182.54899999999998,
+      "w": 28.392,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Reference",
+      "x": 103.464,
+      "y": 174.04431,
+      "w": 32.291,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Yardage",
+      "x": 103.464,
+      "y": 165.53922999999998,
+      "w": 25.940615400000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Dimensions",
+      "x": 103.464,
+      "y": 114.51622999999995,
+      "w": 36.561,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Name",
+      "x": 103.464,
+      "y": 457.50922999999995,
+      "w": 18.669,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Currency",
+      "x": 103.464,
+      "y": 576.5652299999999,
+      "w": 28.392,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Reference",
+      "x": 103.464,
+      "y": 568.06054,
+      "w": 32.291,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Yardage",
+      "x": 103.464,
+      "y": 559.5554599999999,
+      "w": 25.940615400000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Dimensions",
+      "x": 103.464,
+      "y": 508.5324599999999,
+      "w": 36.561,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Fabrics",
+      "x": 61.5132,
+      "y": 198.88045999999997,
+      "w": 18.816000000000003,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Microfibers",
+      "x": 61.5117,
+      "y": 351.95,
+      "w": 28.063000000000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Leather",
+      "x": 61.5117,
+      "y": 368.9602,
+      "w": 19.467000000000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Fabrics",
+      "x": 60.580841,
+      "y": 592.8972,
+      "w": 18.816000000000003,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Microfibers",
+      "x": 60.5824,
+      "y": 745.9658,
+      "w": 28.063000000000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Leather",
+      "x": 60.5824,
+      "y": 762.9756,
+      "w": 19.467000000000002,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "STORE LAYOUT",
+      "x": 186.5929,
+      "y": 61.0616,
+      "w": 46.343001,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "PARTITION",
+      "x": 194.03898999999998,
+      "y": 78.07140000000004,
+      "w": 31.451192400000004,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "10030175",
+      "x": 160.15739,
+      "y": 174.4085,
+      "w": 35.584,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 203.79138999999998,
+      "y": 182.54834000000005,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 160.157,
+      "y": 113.44399999999996,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "119¾",
+      "x": 241.37220000000002,
+      "y": 113.80845299999999,
+      "w": 16.9954456,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "W",
+      "x": 160.15700000000004,
+      "y": 120.53072299999997,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "59",
+      "x": 250.58360000000005,
+      "y": 120.89478599999995,
+      "w": 7.784,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "D",
+      "x": 160.15700000000004,
+      "y": 127.61744599999997,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "11¾",
+      "x": 245.26520000000005,
+      "y": 127.98150899999996,
+      "w": 13.105579899999995,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "10955",
+      "x": 199.33550000000005,
+      "y": 191.69670899999994,
+      "w": 20.85,
+      "h": 7.5,
+      "fontSize": 7.5,
+      "rotation": 0,
+      "hasEOL": false
+    }
+  ],
+  "width": 595.276,
+  "height": 841.89
+}

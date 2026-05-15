@@ -1,0 +1,26 @@
+{
+  "name": "tarif-parser",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Node.js parser for Ligne Roset TARIF (price-list) PDFs. Outputs catalog.json.",
+  "main": "index.js",
+  "bin": {
+    "tarif-parser": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.10.38",
+    "zod": "3.24.1"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^1.0.0",
+    "sharp": "^0.33.5"
+  }
+}

@@ -1,0 +1,1517 @@
+{
+  "pageNumber": 600,
+  "items": [
+    {
+      "str": "600",
+      "x": 24.5527,
+      "y": 820.5814,
+      "w": 26.013000000000005,
+      "h": 13,
+      "fontSize": 13,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "05.09.2026/USA 02/AMERICAN/USD",
+      "x": 214.5417,
+      "y": 817.98921,
+      "w": 166.18703099999993,
+      "h": 10,
+      "fontSize": 10,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "OTHER OCCASIONAL ITEMS",
+      "x": 46.5066,
+      "y": 450.39,
+      "w": 385.1722642500001,
+      "h": 25,
+      "fontSize": 25,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Name",
+      "x": 289.635,
+      "y": 36.698999999999955,
+      "w": 16.002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Currency",
+      "x": 510.572,
+      "y": 36.44999999999993,
+      "w": 24.336,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Reference",
+      "x": 158.822,
+      "y": 36.44999999999993,
+      "w": 27.677999999999994,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Dimensions",
+      "x": 429.117,
+      "y": 36.44999999999993,
+      "w": 31.337999999999997,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "TV CABINET",
+      "x": 285.388,
+      "y": 684.8879999999999,
+      "w": 35.34,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE LEFT",
+      "x": 264.99969999999996,
+      "y": 700.0079,
+      "w": 76.22630580000003,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 259.43798,
+      "y": 715.122,
+      "w": 87.23929800000002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AR1G",
+      "x": 155.54298,
+      "y": 681.9454,
+      "w": 34.237,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.77098,
+      "y": 684.78017,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 680.623,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "23¼",
+      "x": 474.217,
+      "y": 680.623,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 687.70894,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "82¾",
+      "x": 474.217,
+      "y": 687.70894,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 694.7948799999999,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19¾",
+      "x": 474.217,
+      "y": 694.7948799999999,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "4930",
+      "x": 514.956,
+      "y": 705.39138,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Cabinet range consisting of a 2-door sideboard and a 4-door TV unit. The sideboard has a niche at one end – this may be specified in a different color to the one selected for the rest of the",
+      "x": 142.04900000000004,
+      "y": 724.7046799999999,
+      "w": 413.59471699999875,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "sideboard (chests and top). The TV unit consists of 2 niches (one in the front and one at one end): these 2 niches are always in the same color but may be specified in a different color to",
+      "x": 142.04900000000004,
+      "y": 730.7046799999999,
+      "w": 408.8492354999988,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "the one selected for the rest of the TV unit (chests and top). This TV unit also has a cable port and ventilation grille.",
+      "x": 142.04900000000004,
+      "y": 736.7046799999999,
+      "w": 254.0238579999998,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- All CHESTS + TOP, NICHES and HANDLES may be ordered in the choice of 15 lacquer colors : Blanc, Argile, Chocolat, Bleu nuit, Brique, Brun acajou, Cuivre, Gris platine, Moutarde,",
+      "x": 142.04900000000004,
+      "y": 742.7046799999999,
+      "w": 406.433360999999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Noir, Perle, Plomb, Vert sauge, Beige and Make-Up.",
+      "x": 142.04900000000004,
+      "y": 748.7046799999999,
+      "w": 115.33039099999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- Handles are also available in a bronze finish.",
+      "x": 142.04900000000004,
+      "y": 754.7046799999999,
+      "w": 102.26499999999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Please specify your color choice for each of these 3 items when placing your order. The base is always finished in black lacquer.",
+      "x": 142.04900000000004,
+      "y": 760.7046799999999,
+      "w": 283.1147169999997,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "TV CABINET",
+      "x": 285.38800000000003,
+      "y": 594.17768,
+      "w": 35.34,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE RIGHT",
+      "x": 263.0017,
+      "y": 609.2975799999999,
+      "w": 80.22230580000004,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 259.43803,
+      "y": 624.4116799999999,
+      "w": 87.23929800000002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AR1D",
+      "x": 155.73703000000003,
+      "y": 591.2350799999999,
+      "w": 33.845,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.76903,
+      "y": 594.07024,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 589.915,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "23¼",
+      "x": 474.217,
+      "y": 589.915,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 597.00094,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "82¾",
+      "x": 474.217,
+      "y": 597.00094,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 604.08688,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19¾",
+      "x": 474.217,
+      "y": 604.08688,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "4930",
+      "x": 514.956,
+      "y": 614.68378,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Cabinet range consisting of a 2-door sideboard and a 4-door TV unit. The sideboard has a niche at one end – this may be specified in a different color to the one selected for the rest of the",
+      "x": 142.04900000000004,
+      "y": 633.99668,
+      "w": 413.59471699999875,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "sideboard (chests and top). The TV unit consists of 2 niches (one in the front and one at one end): these 2 niches are always in the same color but may be specified in a different color to",
+      "x": 142.04900000000004,
+      "y": 639.99668,
+      "w": 408.8492354999988,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "the one selected for the rest of the TV unit (chests and top). This TV unit also has a cable port and ventilation grille.",
+      "x": 142.04900000000004,
+      "y": 645.99668,
+      "w": 254.0238579999998,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- All CHESTS + TOP, NICHES and HANDLES may be ordered in the choice of 15 lacquer colors : Blanc, Argile, Chocolat, Bleu nuit, Brique, Brun acajou, Cuivre, Gris platine, Moutarde,",
+      "x": 142.04900000000004,
+      "y": 651.99668,
+      "w": 406.433360999999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Noir, Perle, Plomb, Vert sauge, Beige and Make-Up.",
+      "x": 142.04900000000004,
+      "y": 657.99668,
+      "w": 115.33039099999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- Handles are also available in a bronze finish.",
+      "x": 142.04900000000004,
+      "y": 663.99668,
+      "w": 102.26499999999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Please specify your color choice for each of these 3 items when placing your order. The base is always finished in black lacquer.",
+      "x": 142.04900000000004,
+      "y": 669.99668,
+      "w": 283.1147169999997,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "SIDEBOARD",
+      "x": 285.38700000000006,
+      "y": 503.47067999999996,
+      "w": 35.339999999999996,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE LEFT",
+      "x": 264.99910000000006,
+      "y": 518.5905799999999,
+      "w": 76.22630580000003,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 259.43699000000004,
+      "y": 533.7046799999999,
+      "w": 87.23929800000002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AB1G",
+      "x": 155.73599000000004,
+      "y": 500.52807999999993,
+      "w": 33.852,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.76799,
+      "y": 503.3632399999999,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 499.20599999999996,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "30¼",
+      "x": 474.217,
+      "y": 499.20599999999996,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 506.29193999999995,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "55",
+      "x": 479.21500000000003,
+      "y": 506.29193999999995,
+      "w": 6.672,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 513.37788,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "22",
+      "x": 479.21500000000003,
+      "y": 513.37788,
+      "w": 6.672,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "3725",
+      "x": 514.956,
+      "y": 523.97478,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Cabinet range consisting of a 2-door sideboard and a 4-door TV unit. The sideboard has a niche at one end – this may be specified in a different color to the one selected for the rest of the",
+      "x": 142.04900000000004,
+      "y": 543.2876799999999,
+      "w": 413.59471699999875,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "sideboard (chests and top). The TV unit consists of 2 niches (one in the front and one at one end): these 2 niches are always in the same color but may be specified in a different color to",
+      "x": 142.04900000000004,
+      "y": 549.2876799999999,
+      "w": 408.8492354999988,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "the one selected for the rest of the TV unit (chests and top). This TV unit also has a cable port and ventilation grille.",
+      "x": 142.04900000000004,
+      "y": 555.2876799999999,
+      "w": 254.0238579999998,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- All CHESTS + TOP, NICHES and HANDLES may be ordered in the choice of 15 lacquer colors : Blanc, Argile, Chocolat, Bleu nuit, Brique, Brun acajou, Cuivre, Gris platine, Moutarde,",
+      "x": 142.04900000000004,
+      "y": 561.2876799999999,
+      "w": 406.433360999999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Noir, Perle, Plomb, Vert sauge, Beige and Make-Up.",
+      "x": 142.04900000000004,
+      "y": 567.2876799999999,
+      "w": 115.33039099999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- Handles are also available in a bronze finish.",
+      "x": 142.04900000000004,
+      "y": 573.2876799999999,
+      "w": 102.26499999999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Please specify your color choice for each of these 3 items when placing your order. The base is always finished in black lacquer.",
+      "x": 142.04900000000004,
+      "y": 579.2876799999999,
+      "w": 283.1147169999997,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "SIDEBOARD",
+      "x": 285.38700000000006,
+      "y": 412.76167999999996,
+      "w": 35.339999999999996,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WITH NICHE ON THE RIGHT",
+      "x": 263.00110000000006,
+      "y": 427.88157999999993,
+      "w": 80.22230580000004,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "LACQUER - PACK OF COLORS",
+      "x": 259.4370400000001,
+      "y": 442.99567999999994,
+      "w": 87.23929800000002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "00J0AB1D",
+      "x": 155.93104000000008,
+      "y": 409.81907999999993,
+      "w": 33.46,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.7670400000001,
+      "y": 412.6538499999999,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 408.497,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "30¼",
+      "x": 474.217,
+      "y": 408.497,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 415.58294,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "55",
+      "x": 479.21500000000003,
+      "y": 415.58294,
+      "w": 6.672,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 422.66888,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "22",
+      "x": 479.21500000000003,
+      "y": 422.66888,
+      "w": 6.672,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "3725",
+      "x": 514.956,
+      "y": 433.26538,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "BH",
+      "x": 127.464,
+      "y": 454.151,
+      "w": 11.552,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": true
+    },
+    {
+      "str": "KAKUDO",
+      "x": 93.616,
+      "y": 465.9268,
+      "w": 35.104,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Rémi Bouhaniche",
+      "x": 77.6578,
+      "y": 493.3045,
+      "w": 39.459999999999994,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "2024",
+      "x": 77.762878,
+      "y": 414.7096,
+      "w": 11.120000000000001,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Cabinet range consisting of a 2-door sideboard and a 4-door TV unit. The sideboard has a niche at one end – this may be specified in a different color to the one selected for the rest of the",
+      "x": 142.049,
+      "y": 452.579,
+      "w": 413.59471699999875,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "sideboard (chests and top). The TV unit consists of 2 niches (one in the front and one at one end): these 2 niches are always in the same color but may be specified in a different color to",
+      "x": 142.049,
+      "y": 458.579,
+      "w": 408.8492354999989,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "the one selected for the rest of the TV unit (chests and top). This TV unit also has a cable port and ventilation grille.",
+      "x": 142.049,
+      "y": 464.579,
+      "w": 254.0238579999998,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- All CHESTS + TOP, NICHES and HANDLES may be ordered in the choice of 15 lacquer colors : Blanc, Argile, Chocolat, Bleu nuit, Brique, Brun acajou, Cuivre, Gris platine, Moutarde,",
+      "x": 142.04900000000004,
+      "y": 470.579,
+      "w": 406.433360999999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "Noir, Perle, Plomb, Vert sauge, Beige and Make-Up.",
+      "x": 142.04900000000004,
+      "y": 476.579,
+      "w": 115.33039099999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "- Handles are also available in a bronze finish.",
+      "x": 142.04900000000004,
+      "y": 482.579,
+      "w": 102.26499999999992,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "Please specify your color choice for each of these 3 items when placing your order. The base is always finished in black lacquer.",
+      "x": 142.04900000000004,
+      "y": 488.579,
+      "w": 283.1147169999997,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "DRESSING TABLE",
+      "x": 277.327,
+      "y": 322.053,
+      "w": 51.459564600000014,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19970020",
+      "x": 157.091,
+      "y": 319.11042,
+      "w": 31.136,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.7719999999999,
+      "y": 321.94519,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 317.789,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "30 / 51½",
+      "x": 462.54088,
+      "y": 317.789,
+      "w": 23.352000000000015,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 324.87494000000004,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "47¼",
+      "x": 474.217,
+      "y": 324.87494000000004,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 331.96088000000003,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "21¾ / 35¾",
+      "x": 457.53700000000003,
+      "y": 331.96088000000003,
+      "w": 28.356000000000012,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "3135",
+      "x": 514.956,
+      "y": 342.55738,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "10H",
+      "x": 127.464,
+      "y": 365.002,
+      "w": 14.672,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": true
+    },
+    {
+      "str": "JULIETTE",
+      "x": 93.616,
+      "y": 376.55400000000003,
+      "w": 37.78399999999999,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Evangelos Vasileiou",
+      "x": 77.6578,
+      "y": 402.595,
+      "w": 44.8379685,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "2013",
+      "x": 77.762878,
+      "y": 324.0001000000001,
+      "w": 11.120000000000001,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "A feminine furniture par excellence, the dressing table Juliette is particularly graceful. The vanity presents a large workspace. It is completed with a drawer and a second storage space",
+      "x": 142.049,
+      "y": 361.87,
+      "w": 404.5481374999989,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "closed by a lift-top. This lift-top conceals on its inner surface a large mirror visible in the open position. Opening by 2 folding stays. The piece is made of American walnut veneered MDF,",
+      "x": 142.049,
+      "y": 367.87,
+      "w": 407.523084499999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "which brings a touch both precious and warm. This dressing table can also be used as a small desk. Black lacquered steel base. Usable dimensions of the storage space W 18 3/4\"/D 20",
+      "x": 142.049,
+      "y": 373.87,
+      "w": 409.38016599999895,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "1/4\"/H 3 1/2\" and drawer W 24 3/4\"/D 16 1/4\"/H 2\" (L 48 cm/P 51,5 cm/H 8,8 cm drawer L 63 cm/P 41,5 cm/H 5 cm).",
+      "x": 142.049,
+      "y": 379.87,
+      "w": 256.20624549999957,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "CONSOLE TABLE",
+      "x": 278.326,
+      "y": 231.34399999999994,
+      "w": 49.46151539999998,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "MARBLE TOP",
+      "x": 283.88186,
+      "y": 246.46389999999997,
+      "w": 38.45825880000003,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19980394",
+      "x": 157.09086000000002,
+      "y": 228.40139999999997,
+      "w": 31.136,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.7718600000001,
+      "y": 231.23617000000002,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 227.08000000000004,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "29½",
+      "x": 474.217,
+      "y": 227.08000000000004,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 234.1659400000001,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "47¼",
+      "x": 474.217,
+      "y": 234.1659400000001,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 241.25188000000014,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "12½",
+      "x": 474.217,
+      "y": 241.25188000000014,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "1990",
+      "x": 514.956,
+      "y": 251.84838000000013,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "The Istrana console is named after a village near Treviso, Italy. The minimalist design is a model of elegance and simplicity meant to hold only that which is essential.",
+      "x": 142.04900000000004,
+      "y": 271.16168000000016,
+      "w": 364.69509249999936,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "The base is made up in satin black lacquered steel (with adjustable feet) and on this reference the top is in Carrara marble with soap-style edges. A wall fixing bracket is supplied which is",
+      "x": 142.04900000000004,
+      "y": 277.16168000000016,
+      "w": 410.20390599999905,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "strongly recommended to be used to guarantee stability.",
+      "x": 142.04900000000004,
+      "y": 283.16168000000016,
+      "w": 124.14640599999996,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "CONSOLE TABLE",
+      "x": 278.326,
+      "y": 140.63468000000023,
+      "w": 49.46151539999998,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "WALNUT TOP",
+      "x": 283.72014,
+      "y": 155.75498000000027,
+      "w": 38.78796060000002,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19980393",
+      "x": 157.09114,
+      "y": 137.69208000000026,
+      "w": 31.136,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.77214,
+      "y": 140.52724000000023,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 136.37099999999998,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "29½",
+      "x": 474.217,
+      "y": 136.37099999999998,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "W",
+      "x": 403.687,
+      "y": 143.45694000000003,
+      "w": 5.664,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "47¼",
+      "x": 474.217,
+      "y": 143.45694000000003,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "D",
+      "x": 403.687,
+      "y": 150.54288000000008,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "12½",
+      "x": 474.217,
+      "y": 150.54288000000008,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "1505",
+      "x": 514.956,
+      "y": 161.13938000000007,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "10H",
+      "x": 127.464,
+      "y": 183.58500000000004,
+      "w": 14.672,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": true
+    },
+    {
+      "str": "ISTRANA",
+      "x": 93.616,
+      "y": 193.87330000000009,
+      "w": 35.552,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Busetti Garuti Redaelli",
+      "x": 77.6578,
+      "y": 221.1780000000001,
+      "w": 49.73999999999998,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "2020",
+      "x": 77.762878,
+      "y": 142.58310000000017,
+      "w": 11.120000000000001,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "The Istrana console is named after a village near Treviso, Italy. The minimalist design is a model of elegance and simplicity meant to hold only that which is essential.",
+      "x": 142.049,
+      "y": 180.45299999999997,
+      "w": 364.69509249999936,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "The base is made up in satin black lacquered steel (with adjustable feet) and on this reference the top is in solid American walnut. A wall fixing bracket is supplied which is strongly recom",
+      "x": 142.04899999999998,
+      "y": 186.45299999999997,
+      "w": 409.64133799999917,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "-",
+      "x": 551.704,
+      "y": 186.45299999999997,
+      "w": 1.665,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "mended to be used to guarantee stability.",
+      "x": 142.04399999999993,
+      "y": 192.45299999999997,
+      "w": 91.35789049999994,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "OCCASIONAL TABLE",
+      "x": 273.4359999999999,
+      "y": 49.928,
+      "w": 59.24159160000003,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "19980415",
+      "x": 157.09099999999992,
+      "y": 46.985419999999976,
+      "w": 31.136,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "USD",
+      "x": 516.7719999999999,
+      "y": 49.820190000000025,
+      "w": 14.777000000000001,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "H",
+      "x": 403.687,
+      "y": 45.66399999999999,
+      "w": 4.332,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "18",
+      "x": 479.21500000000003,
+      "y": 45.66399999999999,
+      "w": 6.672,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": true
+    },
+    {
+      "str": "DIAM.",
+      "x": 403.687,
+      "y": 52.74994000000004,
+      "w": 16.668,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "15¾",
+      "x": 474.21706,
+      "y": 52.74994000000004,
+      "w": 11.676,
+      "h": 6,
+      "fontSize": 6,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "1070",
+      "x": 514.956,
+      "y": 70.43234000000007,
+      "w": 15.568,
+      "h": 7,
+      "fontSize": 7,
+      "rotation": 0,
+      "hasEOL": false
+    },
+    {
+      "str": "10H",
+      "x": 127.464,
+      "y": 92.87699999999995,
+      "w": 14.672,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": true
+    },
+    {
+      "str": "INTERVALLE",
+      "x": 93.616,
+      "y": 110.2847999999999,
+      "w": 49.485719200000005,
+      "h": 8,
+      "fontSize": 8,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Guillaume Delvigne",
+      "x": 77.6578,
+      "y": 130.4699999999999,
+      "w": 43.34499999999999,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "2024",
+      "x": 77.762878,
+      "y": 51.87469999999996,
+      "w": 11.120000000000001,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 90,
+      "hasEOL": false
+    },
+    {
+      "str": "Occasional table with whitened oak legs and top in satin brun vert lacquered MDF.",
+      "x": 142.049,
+      "y": 89.745,
+      "w": 181.48913499999983,
+      "h": 5,
+      "fontSize": 5,
+      "rotation": 0,
+      "hasEOL": false
+    }
+  ],
+  "width": 595.276,
+  "height": 841.89
+}
