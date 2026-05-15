@@ -348,7 +348,12 @@ function isValidProductName(s) {
 /*  Commit                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 5 } = {}) {
+// uploadConcurrency=3: Supabase Storage edges return 502/504 even at 5 for
+// catalogs with a few hundred crops. With retry-on-transient now wrapping
+// uploadImageOnly, 3 concurrent PUTs is a robust ceiling — a retry burst
+// doesn't pile back on top of a healthy queue. Total wall-time is
+// dominated by render anyway, not uploads.
+export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 3 } = {}) {
   const counts = { categories: 0, materials: 0, colors: 0, products: 0, variants: 0, images: 0 };
 
   // Pre-count uploads so we can show "X / N" progress.

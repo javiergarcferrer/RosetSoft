@@ -274,14 +274,7 @@ export async function uploadImageOnly({ kind, ownerId, file, label = '' }) {
   const id = newId();
   const ext = extensionForType(blob.type);
   const storagePath = `${id}.${ext}`;
-  const { error: upErr } = await supabase.storage
-    .from(IMAGES_BUCKET)
-    .upload(storagePath, blob, {
-      contentType: blob.type || 'application/octet-stream',
-      cacheControl: '31536000',
-      upsert: false,
-    });
-  if (upErr) throw upErr;
+  await uploadWithRetry(storagePath, blob, blob.type || 'application/octet-stream');
   return {
     id,
     kind,
@@ -291,6 +284,53 @@ export async function uploadImageOnly({ kind, ownerId, file, label = '' }) {
     size: blob.size,
     storagePath,
   };
+}
+
+/**
+ * Upload a blob to Storage with retry on transient gateway errors.
+ *
+ * Supabase Storage edges intermittently return 502/503/504 under load —
+ * any non-trivial PDF import is otherwise one bad gateway away from
+ * dying mid-flight. We retry up to 4 times with jittered exponential
+ * backoff (≈0.8s → 1.6s → 3.2s), only on those status codes. Permanent
+ * errors (auth, RLS, size limit, conflict) throw immediately.
+ *
+ * On a retry we flip `upsert` to true: a previous attempt may have
+ * actually written bytes server-side before the gateway timed out, and
+ * `upsert:false` would refuse the retry as a conflict.
+ */
+async function uploadWithRetry(storagePath, blob, contentType, { maxAttempts = 4, baseDelay = 800 } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const { error } = await supabase.storage
+      .from(IMAGES_BUCKET)
+      .upload(storagePath, blob, {
+        contentType,
+        cacheControl: '31536000',
+        upsert: attempt > 1,
+      });
+    if (!error) return;
+    lastError = error;
+    if (!isTransientStorageError(error) || attempt === maxAttempts) {
+      throw error;
+    }
+    const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 500;
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  throw lastError;
+}
+
+function isTransientStorageError(err) {
+  if (!err) return false;
+  // Supabase StorageApiError surfaces the HTTP status in several places
+  // depending on whether the response was parseable JSON. Check them all.
+  const code = err.statusCode ?? err.status ?? err.code;
+  if (code) {
+    const n = Number(code);
+    if (n === 502 || n === 503 || n === 504 || n === 429) return true;
+  }
+  const msg = String(err.message || err);
+  return /\b(502|503|504|429)\b/.test(msg) || /gateway|timeout|too many requests/i.test(msg);
 }
 
 export async function imageObjectUrl(id) {
