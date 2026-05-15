@@ -424,7 +424,7 @@ async function drawLineRow(page, ctx, cursor, line) {
 function estimateTotalsHeight(quote) {
   let h = 22;       // gap above
   h += 14 * 5;      // up to 5 subtotal rows
-  h += 46;          // divider + grand total
+  h += 52;          // divider + ascent gap + grand total + spacing
   h += 50;          // DOP note
   if (quote.terms) h += 90;
   return h;
@@ -450,22 +450,36 @@ function drawTotals(page, ctx, cursor, totals) {
     y -= 14;
   }
 
-  // Divider above the grand total. The old position (y + 8) clipped the
-  // ascenders of the size-13 "Total" below — Helvetica caps reach ~9.3pt
-  // above the baseline, so the rule has to sit higher than that with a
-  // visible gap.
-  y -= 4;
-  page.drawLine({
-    start: { x: leftX, y },
-    end: { x: rightX, y },
-    thickness: 0.6, color: INK,
-  });
-  y -= 18;
+  // Grand total + divider. We compute positions from font metrics so the
+  // rule cannot accidentally clip the text — earlier passes derived the
+  // divider from a magic offset, which left only ~8pt between the rule
+  // and the cap-top of "$0.00".
+  const totalLabelSize = 13;
+  const totalValueSize = 14;          // value is a hair larger than the label
+  const ascUnits = fontBold.heightAtSize(totalValueSize, { descender: false });
+  const GAP_RULE_TO_TEXT = 10;        // visible breathing room above the cap-top
+  const dividerThickness = 0.6;
 
-  // Grand total
-  page.drawText('Total', { x: leftX, y, size: 13, font: fontBold, color: INK, characterSpacing: 0.2 });
-  drawRightAt(page, formatMoney(totals.grandTotal, ctx.currency, ctx.rates), rightX, y, 14, fontBold, INK);
-  y -= 24;
+  y -= 6;                              // breathing room below the subtotals
+  const dividerY = y;
+  const totalBaselineY =
+    dividerY - dividerThickness / 2 - GAP_RULE_TO_TEXT - ascUnits;
+
+  page.drawLine({
+    start: { x: leftX, y: dividerY },
+    end:   { x: rightX, y: dividerY },
+    thickness: dividerThickness, color: INK,
+  });
+  page.drawText('Total', {
+    x: leftX, y: totalBaselineY,
+    size: totalLabelSize, font: fontBold, color: INK, characterSpacing: 0.2,
+  });
+  drawRightAt(
+    page,
+    formatMoney(totals.grandTotal, ctx.currency, ctx.rates),
+    rightX, totalBaselineY, totalValueSize, fontBold, INK,
+  );
+  y = totalBaselineY - 24;
 
   // DOP conversion — a quiet secondary note rather than a boxed strip.
   // Top hairline groups it with the totals block; no fill keeps it from
