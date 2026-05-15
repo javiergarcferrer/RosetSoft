@@ -61,10 +61,11 @@ export default function Dashboard() {
             </ul>
             {/* Desktop: table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="table min-w-[640px]">
+              <table className="table min-w-[720px]">
                 <thead>
                   <tr>
                     <th>Number</th>
+                    <th>Name</th>
                     <th>Customer</th>
                     <th>Status</th>
                     <th>Updated</th>
@@ -110,6 +111,7 @@ function RecentQuoteRow({ q }) {
   return (
     <tr>
       <td><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
+      <td className="max-w-[220px] truncate" title={q.name || ''}>{q.name || '—'}</td>
       <td className="text-ink-700">{customer?.name || '—'}</td>
       <td><span className="badge capitalize">{q.status || 'draft'}</span></td>
       <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
@@ -129,7 +131,7 @@ function RecentQuoteCard({ q }) {
       <Link to={`/quotes/${q.id}`} className="block px-4 py-3 hover:bg-ink-50">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-medium">#{q.number || '—'}</div>
+            <div className="text-sm font-medium truncate">#{q.number || '—'}{q.name ? ` · ${q.name}` : ''}</div>
             <div className="text-xs text-ink-500 truncate">{customer?.name || '—'}</div>
           </div>
           <div className="text-right flex-shrink-0">
