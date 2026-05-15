@@ -1,21 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle2, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
-import { importPdf, commitImport } from '../parser/importer.js';
+import { importPdf, commitImport, extractAndUploadImages } from '../parser/importer.js';
 
+/**
+ * Import flow phases:
+ *
+ *   idle → parsing → preview → committing → committed
+ *                                    ↓
+ *                                 (optional) → extracting-images → done
+ *
+ *   committed = catalog text saved (the durable, fast part). The user can
+ *   navigate away from this point and the catalog is intact.
+ *   extracting-images = optional second pass that renders intro pages and
+ *   uploads hero drawings to Storage. Decoupled because Storage is the most
+ *   rate-limited part of Supabase free tier.
+ */
 export default function Import() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
-  const [phase, setPhase] = useState('idle'); // idle | parsing | preview | committing | done | error
+  const [phase, setPhase] = useState('idle');
   const [progress, setProgress] = useState({ page: 0, total: 0, stage: '' });
-  const [commitProgress, setCommitProgress] = useState({ done: 0, total: 0 });
+  const [commitProgress, setCommitProgress] = useState({ done: 0, total: 0, label: '' });
+  const [imageProgress, setImageProgress] = useState({ done: 0, total: 0 });
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState('');
   const [counts, setCounts] = useState(null);
-  const [tab, setTab] = useState('fabrics');
-  const [extractImages, setExtractImages] = useState(true);
+  const [imageCounts, setImageCounts] = useState(null);
+  const [tab, setTab] = useState('products');
 
   async function onFile(file) {
     if (!file) return;
@@ -25,7 +39,6 @@ export default function Import() {
     setProgress({ page: 0, total: 0, stage: '' });
     try {
       const result = await importPdf(file, {
-        extractImages,
         onProgress: ({ page, total, stage }) => setProgress({ page, total, stage }),
       });
       setPreview(result);
@@ -42,22 +55,28 @@ export default function Import() {
     setCommitProgress({ done: 0, total: 0, label: '' });
     try {
       const c = await commitImport(preview, {
-        merge: true,
-        onProgress: ({ phase: ph, done, total }) => {
-          // Surface each commit phase with its own label so the user sees
-          // *something* happening between phases instead of a long pause
-          // at 0% before uploads kick in.
-          const label =
-            ph === 'planning' ? 'Preparando catálogo'
-            : ph === 'uploading' ? 'Subiendo imágenes'
-            : ph === 'writing' ? 'Guardando filas en la base de datos'
-            : ph === 'starting' ? 'Iniciando'
-            : ph === 'done' ? 'Listo'
-            : '';
-          setCommitProgress({ done, total, label });
+        onProgress: ({ phase: ph, done, total, label }) => {
+          setCommitProgress({ done, total, label: label || ph });
         },
       });
       setCounts(c);
+      setPhase('committed');
+    } catch (e) {
+      console.error(e);
+      setError(e.message || String(e));
+      setPhase('error');
+    }
+  }
+
+  async function runImagePass() {
+    setPhase('extracting-images');
+    setImageProgress({ done: 0, total: 0 });
+    try {
+      const r = await extractAndUploadImages(preview, {
+        concurrency: 3,
+        onProgress: ({ done, total }) => setImageProgress({ done, total }),
+      });
+      setImageCounts(r);
       setPhase('done');
     } catch (e) {
       console.error(e);
@@ -73,6 +92,7 @@ export default function Import() {
     setError(null);
     setFileName('');
     setCounts(null);
+    setImageCounts(null);
   }
 
   return (
@@ -95,7 +115,9 @@ export default function Import() {
           >
             <Upload size={36} className="mx-auto text-ink-400 mb-3" />
             <div className="text-base font-medium">Suelta aquí un PDF de lista de precios de Ligne Roset</div>
-            <div className="text-sm text-ink-500 mt-1">…o haz clic para elegir archivo. Los productos y telas existentes se fusionan (no se sobreescriben).</div>
+            <div className="text-sm text-ink-500 mt-1">
+              …o haz clic para elegir archivo. Los productos y telas existentes se fusionan (no se sobreescriben).
+            </div>
             <input
               ref={inputRef}
               type="file"
@@ -104,33 +126,24 @@ export default function Import() {
               onChange={(e) => onFile(e.target.files?.[0])}
             />
             <div className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 bg-ink-100 rounded-full text-xs text-ink-600">
-              <FileText size={12} /> PDFs grandes (50+ MB) tardan unos minutos
+              <FileText size={12} /> PDFs grandes (50+ MB) tardan ~1 min en parsear
             </div>
           </div>
-          <div className="mt-4 card card-pad">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={extractImages}
-                onChange={(e) => setExtractImages(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-sm flex items-center gap-2"><ImageIcon size={14} /> Extraer dibujos vectoriales</div>
-                <div className="text-xs text-ink-500 mt-0.5">
-                  Renderiza cada página y recorta los pequeños dibujos técnicos junto a cada producto / variante. Aumenta el tiempo de importación pero llena el catálogo con imágenes automáticamente.
-                </div>
-              </div>
-            </label>
+          <div className="mt-4 card card-pad text-xs text-ink-600 leading-relaxed">
+            <div className="font-medium text-ink-900 mb-1.5 flex items-center gap-1.5"><Sparkles size={13} /> Cómo funciona</div>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li><b>Parsear</b> — extrae familias, productos y precios sin tocar la base de datos.</li>
+              <li><b>Vista previa</b> — revisa lo extraído.</li>
+              <li><b>Guardar</b> — sube todo en bloques (rápido y resistente a errores de red).</li>
+              <li><b>Imágenes</b> (opcional) — extrae los dibujos de las páginas intro de cada familia.</li>
+            </ol>
           </div>
         </>
       )}
 
       {phase === 'parsing' && (
         <div className="card card-pad text-center py-16">
-          <div className="text-sm text-ink-500 mb-2">
-            {progress.stage === 'rendering' ? 'Extrayendo dibujos de' : 'Procesando'} {fileName}
-          </div>
+          <div className="text-sm text-ink-500 mb-2">Parseando {fileName}</div>
           <div className="text-2xl font-semibold tabular-nums">{progress.page} / {progress.total || '?'}</div>
           <div className="w-full max-w-md mx-auto mt-4 h-1.5 bg-ink-100 rounded-full overflow-hidden">
             <div
@@ -138,24 +151,21 @@ export default function Import() {
               style={{ width: `${progress.total ? (progress.page / progress.total) * 100 : 0}%` }}
             />
           </div>
-          {extractImages && (
-            <div className="text-[11px] text-ink-500 mt-3">
-              Cada página se renderiza y se recortan los dibujos. Si va lento, desmarca <i>Extraer dibujos</i> y vuelve a intentar.
-            </div>
-          )}
+          <div className="text-[11px] text-ink-500 mt-3">
+            Sólo lectura — todavía no se ha guardado nada.
+          </div>
         </div>
       )}
 
       {phase === 'preview' && preview && (
         <>
-          <div className="card card-pad mb-4 flex items-center justify-between">
+          <div className="card card-pad mb-4 flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-sm font-medium">Listo: {fileName}</div>
               <div className="text-xs text-ink-500">
                 {preview.fabrics.length} {preview.fabrics.length === 1 ? 'tela/cuero' : 'telas/cueros'} ·{' '}
-                {preview.products.length} {preview.products.length === 1 ? 'producto' : 'productos'} ·{' '}
-                {preview.products.reduce((a, p) => a + p.variantCount, 0)} variantes
-                {preview.imageCount ? ` · ${preview.imageCount} ${preview.imageCount === 1 ? 'dibujo extraído' : 'dibujos extraídos'}` : ''}
+                {preview.productsPreview.length} {preview.productsPreview.length === 1 ? 'producto' : 'productos'} ·{' '}
+                {preview.products.length} variantes
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -166,8 +176,12 @@ export default function Import() {
 
           <div className="card overflow-hidden">
             <div className="flex border-b border-ink-100 px-2">
-              <Tab active={tab === 'fabrics'} onClick={() => setTab('fabrics')}>Materials ({preview.fabrics.length})</Tab>
-              <Tab active={tab === 'products'} onClick={() => setTab('products')}>Products ({preview.products.length})</Tab>
+              <Tab active={tab === 'products'} onClick={() => setTab('products')}>
+                Products ({preview.productsPreview.length})
+              </Tab>
+              <Tab active={tab === 'fabrics'} onClick={() => setTab('fabrics')}>
+                Materials ({preview.fabrics.length})
+              </Tab>
             </div>
 
             {tab === 'fabrics' && (
@@ -175,14 +189,8 @@ export default function Import() {
                 <table className="table">
                   <thead className="sticky top-0 bg-white z-10">
                     <tr>
-                      <th>Name</th>
-                      <th>Type</th>
-                      <th>Grade</th>
-                      <th>Wear</th>
-                      <th>Width</th>
-                      <th>Price</th>
-                      <th>Colors</th>
-                      <th>Composition</th>
+                      <th>Name</th><th>Type</th><th>Grade</th><th>Wear</th>
+                      <th>Width</th><th>Price</th><th>Colors</th><th>Composition</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -208,18 +216,20 @@ export default function Import() {
                 <table className="table">
                   <thead className="sticky top-0 bg-white z-10">
                     <tr>
-                      <th>Imagen</th>
-                      <th>Nombre</th>
-                      <th>Categoría</th>
-                      <th>Diseñador</th>
-                      <th>Variantes</th>
-                      <th>Imágenes</th>
-                      <th>Página(s)</th>
+                      <th>Nombre</th><th>Categoría</th><th>Diseñador</th>
+                      <th className="text-right">Variantes</th>
+                      <th className="text-xs">Página intro</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.products.map((p, i) => (
-                      <PreviewProductRow key={i} product={p} />
+                    {preview.productsPreview.map((p, i) => (
+                      <tr key={i}>
+                        <td className="font-medium">{p.name}</td>
+                        <td className="text-xs text-ink-600">{p.categoryName || '—'}</td>
+                        <td className="text-xs text-ink-600">{p.designer || '—'}</td>
+                        <td className="text-right">{p.variantCount}</td>
+                        <td className="text-xs text-ink-500">{p.family?.intro_page ?? '—'}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -231,9 +241,7 @@ export default function Import() {
 
       {phase === 'committing' && (
         <div className="card card-pad text-center py-16">
-          <div className="text-sm text-ink-500 mb-2">
-            {commitProgress.label || (commitProgress.total > 0 ? 'Subiendo imágenes al catálogo' : 'Guardando en el catálogo')}
-          </div>
+          <div className="text-sm text-ink-500 mb-2">{commitProgress.label || 'Guardando…'}</div>
           {commitProgress.total > 0 ? (
             <>
               <div className="text-2xl font-semibold tabular-nums">
@@ -242,26 +250,86 @@ export default function Import() {
               <div className="w-full max-w-md mx-auto mt-4 h-1.5 bg-ink-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-brand-500 transition-all"
-                  style={{ width: `${commitProgress.total ? (commitProgress.done / commitProgress.total) * 100 : 0}%` }}
+                  style={{ width: `${(commitProgress.done / commitProgress.total) * 100}%` }}
                 />
-              </div>
-              <div className="text-[11px] text-ink-500 mt-3">
-                Las imágenes se reducen a ≤ 800 px y se suben como JPEG para que la transferencia sea ligera incluso con conexión lenta.
               </div>
             </>
           ) : (
-            <div className="text-[11px] text-ink-500">Casi listo…</div>
+            <div className="text-[11px] text-ink-500">Iniciando…</div>
           )}
+          <div className="text-[11px] text-ink-500 mt-3">
+            Subida en bloques de 500 filas con reintentos automáticos.
+          </div>
         </div>
       )}
 
-      {phase === 'done' && counts && (
+      {phase === 'committed' && counts && (
+        <div className="card card-pad py-12">
+          <div className="text-center">
+            <CheckCircle2 size={36} className="mx-auto text-emerald-500 mb-3" />
+            <div className="text-base font-semibold">Catálogo guardado.</div>
+            <div className="text-sm text-ink-500 mt-1">
+              +{counts.products} productos · +{counts.variants} variantes · +{counts.materials} materiales · +{counts.colors} colores · +{counts.categories} categorías
+            </div>
+          </div>
+
+          <div className="border-t border-ink-100 mt-8 pt-6 max-w-2xl mx-auto">
+            <div className="flex items-start gap-3">
+              <ImageIcon size={20} className="text-ink-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium text-sm">Extraer dibujos de los productos (opcional)</div>
+                <div className="text-xs text-ink-500 mt-1 leading-relaxed">
+                  Renderiza cada página intro de familia y sube el dibujo principal.
+                  Más lento porque cada imagen es una petición a Storage — si Supabase
+                  está saturado puedes reintentar más tarde sin perder datos.
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <button onClick={runImagePass} className="btn-secondary">
+                <ImageIcon size={14} /> Extraer dibujos
+              </button>
+              <button onClick={() => navigate('/catalog')} className="btn-primary ml-auto">
+                Abrir catálogo
+              </button>
+              <button onClick={reset} className="btn-ghost">Importar otro</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase === 'extracting-images' && (
+        <div className="card card-pad text-center py-16">
+          <div className="text-sm text-ink-500 mb-2">Extrayendo dibujos</div>
+          <div className="text-2xl font-semibold tabular-nums">
+            {imageProgress.done} / {imageProgress.total || '?'}
+          </div>
+          <div className="w-full max-w-md mx-auto mt-4 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand-500 transition-all"
+              style={{ width: `${imageProgress.total ? (imageProgress.done / imageProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+          <div className="text-[11px] text-ink-500 mt-3">
+            Cada imagen es una subida a Supabase Storage — concurrencia limitada a 3.
+          </div>
+        </div>
+      )}
+
+      {phase === 'done' && (
         <div className="card card-pad text-center py-16">
           <CheckCircle2 size={36} className="mx-auto text-emerald-500 mb-3" />
           <div className="text-base font-semibold">Importado.</div>
           <div className="text-sm text-ink-500 mt-1">
-            +{counts.products} productos · +{counts.variants} variantes · +{counts.materials} telas · +{counts.colors} colores · +{counts.categories} categorías
-            {counts.images ? ` · +${counts.images} imágenes` : ''}
+            {counts && (
+              <>+{counts.products} productos · +{counts.variants} variantes · +{counts.materials} materiales · +{counts.colors} colores</>
+            )}
+            {imageCounts && (
+              <div className="mt-1">
+                Imágenes: {imageCounts.uploaded} subidas · {imageCounts.failed} fallidas
+                {imageCounts.failed > 0 && ' (puedes volver a ejecutar “Extraer dibujos” para reintentar)'}
+              </div>
+            )}
           </div>
           <div className="mt-5 flex items-center gap-2 justify-center">
             <button onClick={reset} className="btn-secondary">Importar otro</button>
@@ -273,8 +341,14 @@ export default function Import() {
       {phase === 'error' && (
         <div className="card card-pad text-center py-12 border-red-200">
           <AlertCircle size={28} className="mx-auto text-red-500 mb-2" />
-          <div className="text-base font-semibold">No se pudo procesar el PDF.</div>
-          <div className="text-xs text-ink-500 mt-1 max-w-md mx-auto whitespace-pre-wrap">{error}</div>
+          <div className="text-base font-semibold">Hubo un problema.</div>
+          <div className="text-xs text-ink-500 mt-1 max-w-xl mx-auto whitespace-pre-wrap break-words">{error}</div>
+          {counts && (
+            <div className="text-[11px] text-emerald-600 mt-3">
+              El catálogo de texto sí se guardó ({counts.products} productos · {counts.variants} variantes).
+              El error ocurrió en la fase de imágenes.
+            </div>
+          )}
           <button onClick={reset} className="btn-secondary mt-5">Probar otro archivo</button>
         </div>
       )}
@@ -293,48 +367,4 @@ function Tab({ active, onClick, children }) {
       {children}
     </button>
   );
-}
-
-/**
- * Preview row that renders the extracted hero/variant blobs directly from the
- * in-memory preview data (before commit). Lets you visually verify image
- * extraction before saving anything to IndexedDB.
- */
-function PreviewProductRow({ product }) {
-  const variantImages = (product.variants || []).filter((v) => v.imageBlob).length;
-  return (
-    <tr>
-      <td className="w-16">
-        {product.heroBlob ? (
-          <BlobThumb blob={product.heroBlob} />
-        ) : (
-          <div className="w-12 h-9 rounded bg-ink-100 text-[9px] text-ink-400 flex items-center justify-center">—</div>
-        )}
-      </td>
-      <td className="font-medium">{product.name}</td>
-      <td className="text-xs text-ink-600">{product.categoryName || '—'}</td>
-      <td className="text-xs text-ink-600">{product.designer || '—'}</td>
-      <td>{product.variantCount}</td>
-      <td className="text-xs">
-        {variantImages > 0 ? (
-          <span className="text-emerald-700 font-medium">{variantImages}/{product.variantCount}</span>
-        ) : (
-          <span className="text-ink-400">0/{product.variantCount}</span>
-        )}
-      </td>
-      <td className="text-xs text-ink-500">{(product.pages || []).join(', ')}</td>
-    </tr>
-  );
-}
-
-function BlobThumb({ blob }) {
-  const [url, setUrl] = useState(null);
-  useEffect(() => {
-    if (!blob) return;
-    const u = URL.createObjectURL(blob);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [blob]);
-  if (!url) return null;
-  return <img src={url} className="w-12 h-9 object-cover rounded border border-ink-100" alt="" />;
 }
