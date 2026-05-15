@@ -182,6 +182,49 @@ class Table {
     return record[this.t.pk];
   }
 
+  /**
+   * Batched upsert with retry. Use for bulk imports — one Supabase round-trip
+   * per chunk instead of one per row. The catalog import script can land a
+   * ~7500-row variant table in ~15 requests this way.
+   *
+   *   chunkSize  rows per request (500 is the community-validated sweet spot
+   *              for PostgREST upserts; the 1000-row default is the SELECT
+   *              return cap, not a write cap, but we stay well under it to
+   *              keep payload + transaction time bounded)
+   *   retries    extra attempts per batch after the initial try (3 → 4 total)
+   *   onProgress (done, total) called after each successful batch
+   */
+  async bulkPut(records, { chunkSize = 500, retries = 3, onProgress } = {}) {
+    const rows = records.map(toRow);
+    if (!rows.length) return 0;
+    const conflictKey = snake(this.t.pk);
+    let done = 0;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize);
+      let lastErr = null;
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        const { error } = await supabase
+          .from(this.t.db)
+          .upsert(chunk, { onConflict: conflictKey });
+        if (!error) { lastErr = null; break; }
+        lastErr = error;
+        if (attempt < retries) {
+          const delay = 600 * Math.pow(2, attempt) + Math.random() * 250;
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+      if (lastErr) {
+        throw new Error(
+          `bulkPut ${this.t.db}: failed batch ${i}-${i + chunk.length} after ${retries + 1} attempts: ${lastErr.message || lastErr}`
+        );
+      }
+      done += chunk.length;
+      onProgress?.(done, rows.length);
+    }
+    invalidate();
+    return done;
+  }
+
   async update(id, patch) {
     const pkCol = snake(this.t.pk);
     const { error } = await supabase

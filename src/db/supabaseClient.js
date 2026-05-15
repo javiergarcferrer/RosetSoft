@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// `import.meta.env` is undefined outside Vite (e.g. when a node test imports
+// this transitively); guard the lookup so the module can still load.
+const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+const url = env.VITE_SUPABASE_URL;
+const anonKey = env.VITE_SUPABASE_ANON_KEY;
 
 // Loud at startup so a misconfigured deploy is obvious in the console.
 // `import.meta.env.MODE` is 'production' on Vercel builds, 'development' on

@@ -14,6 +14,7 @@ import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Containers from './pages/Containers.jsx';
 import ContainerDetail from './pages/ContainerDetail.jsx';
+import CatalogImport from './pages/CatalogImport.jsx';
 import Settings from './pages/Settings.jsx';
 
 function Loading() {
@@ -58,6 +59,7 @@ function ProtectedApp() {
               <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
               <Route path="containers" element={<Containers />} />
               <Route path="containers/:containerId" element={<ContainerDetail />} />
+              <Route path="import" element={<CatalogImport />} />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
