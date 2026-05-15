@@ -101,20 +101,23 @@ function drawHeader(page, ctx, logoImage) {
 
   // Left side: logo OR companyName (never both — the logo usually IS the
   // wordmark). Address/contact go beneath in muted small caps.
+  // The wordmark sits at ~28pt cap-height; bigger reads as a banner, not
+  // letterhead, and amplifies any rasterization roughness in the user's image.
   let leftBottomY = top;
   if (logoImage) {
-    const maxH = 36;
-    const maxW = 160;
+    const maxH = 28;
+    const maxW = 140;
     const scale = Math.min(maxH / logoImage.height, maxW / logoImage.width);
     const w = logoImage.width * scale;
     const h = logoImage.height * scale;
     page.drawImage(logoImage, { x: MARGIN_L, y: top - h, width: w, height: h });
-    leftBottomY = top - h - 10;
+    leftBottomY = top - h - 8;
   } else {
     page.drawText(settings.companyName || 'Your Company', {
-      x: MARGIN_L, y: top - 18, size: 18, font: fontBold, color: INK,
+      x: MARGIN_L, y: top - 20, size: 20, font: fontBold, color: INK,
+      characterSpacing: 0.4,
     });
-    leftBottomY = top - 28;
+    leftBottomY = top - 30;
   }
 
   const addressLines = [
@@ -131,15 +134,17 @@ function drawHeader(page, ctx, logoImage) {
   // when the quote hasn't been numbered yet — better than rendering "# —").
   const numbered = ctx.quote.number != null && ctx.quote.number !== '';
   const labelText = 'COTIZACIÓN';
-  const labelSize = 9;
-  const labelW = fontRegular.widthOfTextAtSize(labelText, labelSize);
+  const labelSize = 8;
+  const labelSpacing = 1.6;
+  // widthOfTextAtSize ignores characterSpacing — add it back for right-alignment.
+  const labelW = fontRegular.widthOfTextAtSize(labelText, labelSize) + labelSpacing * (labelText.length - 1);
   page.drawText(labelText, {
     x: PAGE_W - MARGIN_R - labelW,
     y: top - labelSize,
     size: labelSize,
     font: fontRegular,
     color: INK_MID,
-    characterSpacing: 1.2,
+    characterSpacing: labelSpacing,
   });
 
   const numText = numbered ? `#${ctx.quote.number}` : 'BORRADOR';
@@ -177,22 +182,29 @@ function drawQuoteMeta(page, ctx, cursor) {
     ['MONEDA', moneda],
   ];
 
-  // Soft band
+  // Meta band — top and bottom hairlines, no fill. Reads as a
+  // typographic system rather than a UI chip.
   const bandH = 44;
-  page.drawRectangle({
-    x: MARGIN_L, y: cursor.y - bandH + 8,
-    width: CONTENT_W, height: bandH,
-    color: BG_SOFT,
-    borderColor: INK_LINE, borderWidth: 0.5,
+  const bandTop = cursor.y + 8;
+  const bandBottom = bandTop - bandH;
+  page.drawLine({
+    start: { x: MARGIN_L, y: bandTop },
+    end:   { x: PAGE_W - MARGIN_R, y: bandTop },
+    thickness: 0.5, color: INK_LINE2,
+  });
+  page.drawLine({
+    start: { x: MARGIN_L, y: bandBottom },
+    end:   { x: PAGE_W - MARGIN_R, y: bandBottom },
+    thickness: 0.5, color: INK_LINE2,
   });
 
   const colW = CONTENT_W / cols.length;
   cols.forEach(([label, value], i) => {
-    const x = MARGIN_L + 14 + i * colW;
-    page.drawText(label, { x, y: cursor.y - 6, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+    const x = MARGIN_L + i * colW;
+    page.drawText(label, { x, y: cursor.y - 6, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2 });
     page.drawText(value, { x, y: cursor.y - 22, size: 11, font: fontBold, color: INK });
   });
-  return { x: MARGIN_L, y: cursor.y - bandH - 14 };
+  return { x: MARGIN_L, y: cursor.y - bandH - 16 };
 }
 
 function drawCustomerBlock(page, ctx, cursor) {
@@ -200,7 +212,7 @@ function drawCustomerBlock(page, ctx, cursor) {
   const y0 = cursor.y;
 
   // Left column: customer
-  page.drawText('PREPARADO PARA', { x: MARGIN_L, y: y0, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+  page.drawText('PREPARADO PARA', { x: MARGIN_L, y: y0, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2 });
   let y = y0 - 14;
   if (customer) {
     page.drawText(customer.name || '—', { x: MARGIN_L, y, size: 12, font: fontBold, color: INK }); y -= 14;
@@ -216,7 +228,7 @@ function drawCustomerBlock(page, ctx, cursor) {
 
   // Right column: project
   if (quote.name) {
-    page.drawText('PROYECTO', { x: MARGIN_L + CONTENT_W / 2, y: y0, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+    page.drawText('PROYECTO', { x: MARGIN_L + CONTENT_W / 2, y: y0, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2 });
     page.drawText(truncate(quote.name, 38), {
       x: MARGIN_L + CONTENT_W / 2,
       y: y0 - 14, size: 12, font: fontBold, color: INK,
@@ -266,8 +278,11 @@ function drawLineHeader(page, ctx, cursor) {
     color: INK,
   });
   const ty = y - 14;
-  const labelSize = 7.5;
+  const labelSize = 7;
   const labelColor = rgb(0.93, 0.92, 0.90);
+  // Tracking on the left-aligned labels is kept tight (0.6) — the inter-column
+  // gap between MATERIAL and CANT. is only ~10pt at the chosen x positions,
+  // and bumping to 1.2 (like the body labels) makes MATERIAL overlap CANT.
   page.drawText(cols.itemLabel, { x: cols.item.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
   page.drawText(cols.matLabel, { x: cols.mat.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
   drawRightAt(page, cols.qty.label, cols.qty.rightX, ty, labelSize, fontBold, labelColor);
@@ -407,10 +422,10 @@ async function drawLineRow(page, ctx, cursor, line) {
 /* ------------------------------------------------------------------ */
 
 function estimateTotalsHeight(quote) {
-  let h = 18; // gap above
-  h += 12 * 5; // up to 5 rows
-  h += 14;     // total row
-  h += 36;     // DOP strip
+  let h = 22;       // gap above
+  h += 14 * 5;      // up to 5 subtotal rows
+  h += 46;          // divider + grand total
+  h += 50;          // DOP note
   if (quote.terms) h += 90;
   return h;
 }
@@ -435,39 +450,43 @@ function drawTotals(page, ctx, cursor, totals) {
     y -= 14;
   }
 
-  // Divider above the grand total
-  y -= 2;
+  // Divider above the grand total. The old position (y + 8) clipped the
+  // ascenders of the size-13 "Total" below — Helvetica caps reach ~9.3pt
+  // above the baseline, so the rule has to sit higher than that with a
+  // visible gap.
+  y -= 4;
   page.drawLine({
-    start: { x: leftX, y: y + 8 },
-    end: { x: rightX, y: y + 8 },
-    thickness: 0.7, color: INK,
+    start: { x: leftX, y },
+    end: { x: rightX, y },
+    thickness: 0.6, color: INK,
   });
+  y -= 18;
 
   // Grand total
-  page.drawText('Total', { x: leftX, y, size: 13, font: fontBold, color: INK });
+  page.drawText('Total', { x: leftX, y, size: 13, font: fontBold, color: INK, characterSpacing: 0.2 });
   drawRightAt(page, formatMoney(totals.grandTotal, ctx.currency, ctx.rates), rightX, y, 14, fontBold, INK);
-  y -= 22;
+  y -= 24;
 
-  // DOP conversion: rate on top line, RD$ amount on its own line below.
+  // DOP conversion — a quiet secondary note rather than a boxed strip.
+  // Top hairline groups it with the totals block; no fill keeps it from
+  // competing with the grand total.
   const dopRate = effectiveDopRate(ctx.settings);
   const dopTotal = totals.grandTotal * dopRate;
   const rateLabel = rateSourceLabel(ctx.settings);
-  const stripH = 38;
-  page.drawRectangle({
-    x: leftX, y: y - stripH + 6,
-    width: panelW, height: stripH,
-    color: BG_SOFT,
-    borderColor: INK_LINE, borderWidth: 0.5,
+  page.drawLine({
+    start: { x: leftX, y: y + 4 },
+    end:   { x: rightX, y: y + 4 },
+    thickness: 0.4, color: INK_LINE2,
   });
   page.drawText(`Tipo de cambio: 1 USD = ${dopRate.toFixed(2)} DOP`, {
-    x: leftX + 10, y: y - 6, size: 8, font: fontRegular, color: INK_MID,
+    x: leftX, y: y - 8, size: 8, font: fontRegular, color: INK_MID,
   });
   page.drawText(`(${rateLabel})`, {
-    x: leftX + 10, y: y - 16, size: 7.5, font: fontRegular, color: INK_SOFT,
+    x: leftX, y: y - 19, size: 7.5, font: fontRegular, color: INK_SOFT,
   });
-  page.drawText('Total RD$', { x: leftX + 10, y: y - 28, size: 9, font: fontBold, color: INK });
-  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX - 10, y - 28, 11, fontBold, INK);
-  y -= stripH + 12;
+  page.drawText('Total RD$', { x: leftX, y: y - 33, size: 10, font: fontBold, color: INK_HIGH });
+  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX, y - 33, 11, fontBold, INK);
+  y -= 50;
 
   return { x: MARGIN_L, y };
 }
@@ -475,7 +494,7 @@ function drawTotals(page, ctx, cursor, totals) {
 function drawTerms(page, ctx, cursor) {
   const { fontRegular, fontBold, quote } = ctx;
   let y = cursor.y - 4;
-  page.drawText('TÉRMINOS Y CONDICIONES', { x: MARGIN_L, y, size: 7.5, font: fontBold, color: INK_MID, characterSpacing: 0.8 });
+  page.drawText('TÉRMINOS Y CONDICIONES', { x: MARGIN_L, y, size: 7, font: fontBold, color: INK_MID, characterSpacing: 1.2 });
   y -= 14;
   const lines = wrapText(quote.terms || '', 95);
   for (const ln of lines) {
