@@ -258,6 +258,18 @@ function extensionForType(type) {
 }
 
 export async function saveImage({ kind, ownerId, file, label = '' }) {
+  const row = await uploadImageOnly({ kind, ownerId, file, label });
+  await db.images.put(row);
+  return row.id;
+}
+
+/**
+ * Upload an image to Storage and return the row metadata WITHOUT inserting
+ * it into the `images` table. The caller is responsible for writing the row
+ * (ideally as part of a bulkPut so a big import doesn't open hundreds of
+ * separate DB connections). Used by the PDF importer.
+ */
+export async function uploadImageOnly({ kind, ownerId, file, label = '' }) {
   const blob = await fileToBlob(file);
   const id = newId();
   const ext = extensionForType(blob.type);
@@ -270,7 +282,7 @@ export async function saveImage({ kind, ownerId, file, label = '' }) {
       upsert: false,
     });
   if (upErr) throw upErr;
-  await db.images.put({
+  return {
     id,
     kind,
     ownerId,
@@ -278,8 +290,7 @@ export async function saveImage({ kind, ownerId, file, label = '' }) {
     contentType: blob.type || 'application/octet-stream',
     size: blob.size,
     storagePath,
-  });
-  return id;
+  };
 }
 
 export async function imageObjectUrl(id) {

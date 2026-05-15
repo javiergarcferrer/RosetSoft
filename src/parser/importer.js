@@ -27,7 +27,7 @@ import {
 import { parseMaterialPage } from './fabricParser.js';
 import { parseCabinetryPage } from './cabinetryParser.js';
 import { renderPdfPage, cropCanvasToBlob } from './pageImage.js';
-import { db, newId, saveImage } from '../db/database.js';
+import { db, newId, saveImage, uploadImageOnly } from '../db/database.js';
 import { normalizeKey } from '../lib/normalizeKey.js';
 
 const CATEGORY_HEADERS = [
@@ -382,12 +382,19 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   };
   onProgress?.({ phase: 'starting', done: 0, total: totalUploads });
 
+  // Collected `images` table rows for ALL uploads in this import. We upload
+  // to Storage in parallel (network-bound) but stash the row metadata here
+  // instead of `db.images.put`-ing each one — those per-image inserts were
+  // exhausting the Supabase connection pool on large catalogs. One bulkPut
+  // at the end of the upload phase replaces N round-trips.
+  const pendingImageRows = [];
   async function saveImageBlob(kind, ownerId, blob) {
     if (!blob) return null;
-    const id = await saveImage({ kind, ownerId, file: blob });
+    const row = await uploadImageOnly({ kind, ownerId, file: blob });
+    pendingImageRows.push(row);
     counts.images++;
     reportUpload();
-    return id;
+    return row.id;
   }
 
   // Run N image uploads in parallel; await all before continuing.
@@ -574,6 +581,13 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
 
   // Phase 2: fire ALL image uploads through a single shared worker pool.
   await runParallel(allUploadTasks);
+
+  // Phase 2.5: bulk-insert every `images` row we accumulated during the
+  // upload phase. Doing this BEFORE the product/variant writes means
+  // variants whose imageId references a freshly-uploaded image won't end
+  // up dangling — and the import only burns one round-trip per ~500 image
+  // rows instead of one per image.
+  if (pendingImageRows.length) await db.images.bulkPut(pendingImageRows);
 
   // Phase 3: write the per-product DB rows now that every upload id is
   // resolved. Build a flat task list of all product+variant puts and run
