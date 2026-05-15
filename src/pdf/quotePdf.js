@@ -254,12 +254,18 @@ function fontItalicOrRegular(ctx) {
 // shorten the material label to "MATERIAL".
 function lineColumns() {
   const right = PAGE_W - MARGIN_R;
+  // Column anchors for the line-items table. Positions in absolute x units.
+  // The MATERIAL header label is 39pt wide at size-7 with the chosen
+  // tracking, so qty.rightX must leave at least ~10pt clearance between
+  // (mat.x + MATERIAL_width) and (qty.rightX − CANT_width). With CANT
+  // ≈ 21pt wide at size 7, qty.rightX needs to be ≥ mat.x + 39 + 10 + 21
+  // = mat.x + 70 — i.e. right − 130 at minimum given mat.x = MARGIN_L+280.
   return {
     img:  { x: MARGIN_L + 8,  size: 48 },
     item: { x: MARGIN_L + 68, w: 200 },
     mat:  { x: MARGIN_L + 280 },
-    qty:  { rightX: right - 165, label: 'CANT.' },
-    unit: { rightX: right - 80,  label: 'UNIT.' },
+    qty:  { rightX: right - 125, label: 'CANT.' },
+    unit: { rightX: right - 65,  label: 'UNIT.' },
     tot:  { rightX: right - 8,   label: 'TOTAL' },
     itemLabel: 'ARTÍCULO',
     matLabel: 'MATERIAL',
