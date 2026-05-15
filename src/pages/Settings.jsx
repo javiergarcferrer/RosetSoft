@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
 import { scanDuplicateReferences, dedupCatalogReferences } from '../lib/catalogDedup.js';
+import { scanDuplicateProducts, dedupProductsByName } from '../lib/productDedup.js';
 
 const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 
@@ -141,6 +142,7 @@ export default function Settings() {
 
 function CatalogMaintenanceCard() {
   const [busy, setBusy] = useState(false);
+  const [busyProducts, setBusyProducts] = useState(false);
 
   async function runDedup() {
     if (busy) return;
@@ -174,6 +176,40 @@ function CatalogMaintenanceCard() {
     }
   }
 
+  async function runProductDedup() {
+    if (busyProducts) return;
+    setBusyProducts(true);
+    try {
+      const scan = await scanDuplicateProducts();
+      if (scan.totalDuplicates === 0) {
+        alert('No hay productos duplicados.');
+        return;
+      }
+      const ok = window.confirm(
+        `Se encontraron ${scan.totalDuplicates} productos duplicados ` +
+        `repartidos entre ${scan.totalGroups} nombres distintos.\n\n` +
+        `Se fusionarán en una sola entrada por nombre + diseñador. ` +
+        `Las variantes de los productos eliminados se moverán al ` +
+        `producto canónico, y las referencias duplicadas resultantes ` +
+        `se limpiarán automáticamente.\n\n` +
+        `¿Continuar?`,
+      );
+      if (!ok) return;
+      const result = await dedupProductsByName();
+      alert(
+        `Listo. Se fusionaron ${result.mergedProducts} productos en ` +
+        `${result.canonicalProducts} entradas canónicas; ` +
+        `se fusionaron ${result.mergedVariants} variantes y se redirigieron ` +
+        `${result.repointedLines} líneas de cotización.`,
+      );
+    } catch (e) {
+      console.error('Product dedup failed', e);
+      alert('No se pudo completar la limpieza: ' + (e?.message || e));
+    } finally {
+      setBusyProducts(false);
+    }
+  }
+
   return (
     <div className="card card-pad">
       <h2 className="font-semibold mb-3 flex items-center gap-2"><Wrench size={16} /> Mantenimiento del catálogo</h2>
@@ -191,6 +227,17 @@ function CatalogMaintenanceCard() {
         className="btn-secondary w-full"
       >
         {busy ? 'Limpiando…' : 'Limpiar referencias duplicadas'}
+      </button>
+      <p className="text-xs text-ink-500 mt-4 mb-3">
+        Une productos con el mismo nombre y diseñador en una sola entrada.
+      </p>
+      <button
+        type="button"
+        onClick={runProductDedup}
+        disabled={busyProducts}
+        className="btn-secondary w-full"
+      >
+        {busyProducts ? 'Combinando…' : 'Combinar productos duplicados'}
       </button>
     </div>
   );
