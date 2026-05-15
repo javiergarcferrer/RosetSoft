@@ -9,17 +9,38 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    (async () => {
-      const { data } = await supabase.auth.getSession();
+    // Hard timeout: if getSession hasn't returned in 3s the stored token is
+    // probably stale from a different Supabase project. Drop it and proceed
+    // — the user will land on /login and can re-auth against the current
+    // project instead of staring at a loading spinner forever.
+    const fallback = setTimeout(() => {
       if (!active) return;
-      setSession(data.session || null);
+      try { localStorage && Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-'))
+        .forEach((k) => localStorage.removeItem(k)); } catch {}
+      setSession(null);
       setReady(true);
+    }, 3000);
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!active) return;
+        clearTimeout(fallback);
+        setSession(data.session || null);
+        setReady(true);
+      } catch {
+        if (!active) return;
+        clearTimeout(fallback);
+        setSession(null);
+        setReady(true);
+      }
     })();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s || null);
     });
     return () => {
       active = false;
+      clearTimeout(fallback);
       sub?.subscription?.unsubscribe();
     };
   }, []);
