@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical, ChevronDown, Minus } from 'lucide-react';
@@ -21,6 +21,10 @@ export default function QuoteBuilder() {
 
   const [quoteId, setQuoteId] = useState(routeId || null);
   const [creating, setCreating] = useState(!routeId);
+  // Tracks a quote that THIS visit created via /quotes/new. If the user
+  // leaves without ever giving it a customer, a name, or any line items,
+  // we delete it on unmount to avoid leaving "empty quote" rows behind.
+  const createdIdRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +56,7 @@ export default function QuoteBuilder() {
       });
       await db.settings.put({ ...(settings || { profileId }), profileId, quoteCounter: number });
       if (!cancelled) {
+        createdIdRef.current = id;
         setQuoteId(id);
         setCreating(false);
         // Optionally add an initial line for ?product=ID
@@ -80,6 +85,33 @@ export default function QuoteBuilder() {
     })();
     return () => { cancelled = true; };
   }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clean up abandoned empty quotes on unmount. Only runs for quotes this
+  // visit created (createdIdRef set), so opening an existing quote and
+  // leaving it never deletes user data.
+  useEffect(() => {
+    return () => {
+      const id = createdIdRef.current;
+      if (!id) return;
+      // Fire-and-forget; we're leaving the page.
+      (async () => {
+        try {
+          const q = await db.quotes.get(id);
+          if (!q) return;
+          const lineCount = await db.quoteLines.where('quoteId').equals(id).count();
+          const untouched =
+            lineCount === 0 &&
+            !q.customerId &&
+            !(q.name && q.name.trim());
+          if (untouched) {
+            await db.quotes.delete(id);
+          }
+        } catch (e) {
+          // No-op: leaving the page anyway.
+        }
+      })();
+    };
+  }, []);
 
   if (creating || !quoteId) return <div className="text-sm text-ink-500">Preparing quote…</div>;
   return <Builder quoteId={quoteId} navigate={navigate} />;
