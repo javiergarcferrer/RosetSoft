@@ -23,6 +23,7 @@ export default function CatalogImport() {
   const [parseProgress, setParseProgress] = useState({ phase: '', page: 0, total: 0, label: '' });
   const [inspection, setInspection] = useState(null);
   const [transformed, setTransformed] = useState(null);
+  const [pdfDoc, setPdfDoc] = useState(null);
   const [parserWarnings, setParserWarnings] = useState([]);
   const [commitProgress, setCommitProgress] = useState({ phase: '', done: 0, total: 0, label: '' });
   const [counts, setCounts] = useState(null);
@@ -34,11 +35,12 @@ export default function CatalogImport() {
     setPhase('parsing-pdf');
     setParseProgress({ phase: 'toc', page: 0, total: 0, label: 'Leyendo índice' });
     try {
-      const { json, warnings } = await buildCatalogFromPdf(file, {
+      const { json, warnings, pdf } = await buildCatalogFromPdf(file, {
         sourceName: file.name,
         onProgress: setParseProgress,
       });
       setParserWarnings(warnings);
+      setPdfDoc(pdf);
       const insp = inspectCatalogJson(json);
       if (!insp.ok) throw new Error(insp.error);
       const t = transformCatalog(json);
@@ -57,7 +59,10 @@ export default function CatalogImport() {
     setPhase('committing');
     setCommitProgress({ phase: '', done: 0, total: 0, label: '' });
     try {
-      const c = await commitCatalog(transformed, { onProgress: setCommitProgress });
+      const c = await commitCatalog(transformed, {
+        onProgress: setCommitProgress,
+        pdf: pdfDoc,                              // enables phase 6 (hero images)
+      });
       setCounts(c);
       setPhase('done');
     } catch (e) {
@@ -73,6 +78,7 @@ export default function CatalogImport() {
     setError(null);
     setInspection(null);
     setTransformed(null);
+    setPdfDoc(null);
     setParserWarnings([]);
     setCounts(null);
     setCommitProgress({ phase: '', done: 0, total: 0, label: '' });
@@ -225,6 +231,7 @@ export default function CatalogImport() {
           <div className="text-sm text-ink-500 mt-1">
             {counts.categories} categorías · {counts.products} productos · {counts.variants} variantes ·{' '}
             {counts.materials} materiales · {counts.colors} colores
+            {counts.images > 0 && <> · {counts.images} imágenes</>}
           </div>
           <div className="mt-5 flex items-center gap-2 justify-center">
             <button onClick={reset} className="btn-secondary">Importar otro</button>

@@ -240,5 +240,7 @@ export async function buildCatalogFromPdf(source, { onProgress, sourceName } = {
   };
 
   report({ phase: 'done', page: doc.numPages, total: doc.numPages, label: 'Listo' });
-  return { json, warnings };
+  // Expose the live pdf.js document so an optional second pass can render
+  // page regions (product hero images) without re-opening the file.
+  return { json, warnings, pdf: doc };
 }

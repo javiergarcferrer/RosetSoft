@@ -24,7 +24,8 @@
  * catalog UI shows its placeholder icon.
  */
 
-import { db } from '../db/database.js';
+import { db, saveImage } from '../db/database.js';
+import { renderProductHero } from '../parser/lib/renderHero.js';
 
 /* ------------------------------------------------------------------ */
 /*  Validation                                                          */
@@ -351,14 +352,21 @@ function priceWeight(v) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Write a transformed catalog to Supabase in five bulk-upsert phases.
- * Phases run sequentially because each one's foreign keys reference the
- * previous one's rows. Within a phase, db.bulkPut() chunks at 500 rows and
- * retries each chunk on transient errors.
+ * Write a transformed catalog to Supabase in five bulk-upsert phases plus
+ * one optional image phase. Phases 1-5 run sequentially because each one's
+ * foreign keys reference the previous one's rows. Within a phase,
+ * db.bulkPut() chunks at 500 rows and retries each chunk on transient
+ * errors.
+ *
+ * Phase 6 (images) is only attempted when a live pdf.js document is passed
+ * in via the `pdf` option. It renders each product's intro page, crops the
+ * hero region, uploads it to Storage, and stamps the product row with the
+ * resulting `vectorImageId`. Concurrency is bounded so a free-tier Storage
+ * project doesn't see a thundering herd.
  *
  * Returns counts of rows attempted (not necessarily *new*) per phase.
  */
-export async function commitCatalog(transformed, { onProgress } = {}) {
+export async function commitCatalog(transformed, { onProgress, pdf } = {}) {
   const step = (phase, done, total, label) =>
     onProgress?.({ phase, done, total, label });
 
@@ -399,6 +407,89 @@ export async function commitCatalog(transformed, { onProgress } = {}) {
   });
   counts.colors = transformed.materialColors.length;
 
+  /* 6. Images — optional, only when a live pdf doc is provided. */
+  counts.images = 0;
+  if (pdf) {
+    counts.images = await uploadProductHeroImages(pdf, transformed.products, {
+      onProgress: (done, total, label) => step('images', done, total, label || 'Imágenes'),
+    });
+  }
+
   step('done', 1, 1, 'Listo');
   return counts;
+}
+
+/**
+ * For each product with a known intro page, render the page, crop the hero
+ * region, upload the JPEG to Storage, and patch products.vector_image_id.
+ *
+ * Concurrency caps at 3 parallel uploads — empirically the largest value
+ * Supabase Storage on free tier handles without 429s. Per-image errors are
+ * swallowed (logged) so one bad render doesn't sink the whole pass.
+ */
+async function uploadProductHeroImages(pdf, products, { onProgress, concurrency = 3 } = {}) {
+  // Build the work list. Skip products without an intro page; skip products
+  // that already have a vectorImageId (so re-runs converge).
+  const existing = await db.products.toArray();
+  const haveImage = new Set(existing.filter((p) => p.vectorImageId).map((p) => p.id));
+  const tasks = [];
+  for (const p of products) {
+    const introPage = Array.isArray(p.pages) ? p.pages[0] : null;
+    if (!introPage) continue;
+    if (haveImage.has(p.id)) continue;
+    tasks.push({ id: p.id, name: p.name, page: introPage });
+  }
+  const total = tasks.length;
+  if (!total) { onProgress?.(0, 0); return 0; }
+
+  let done = 0;
+  let uploaded = 0;
+  onProgress?.(0, total, 'Imágenes');
+
+  async function worker(slice) {
+    for (const t of slice) {
+      try {
+        const blob = await renderProductHero(pdf, t.page);
+        if (blob) {
+          const imageId = await uploadWithRetry({
+            kind: 'product-vector',
+            ownerId: t.id,
+            file: blob,
+            label: t.name,
+          });
+          if (imageId) {
+            await db.products.update(t.id, { vectorImageId: imageId });
+            uploaded++;
+          }
+        }
+      } catch (e) {
+        console.warn(`[catalog image] ${t.name} (p.${t.page}):`, e?.message || e);
+      } finally {
+        done++;
+        onProgress?.(done, total, 'Imágenes');
+      }
+    }
+  }
+
+  const slices = Array.from({ length: Math.min(concurrency, tasks.length) }, () => []);
+  tasks.forEach((t, i) => slices[i % slices.length].push(t));
+  await Promise.all(slices.map(worker));
+  return uploaded;
+}
+
+async function uploadWithRetry(opts, retries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await saveImage(opts);
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) {
+        const delay = 700 * Math.pow(2, attempt) + Math.random() * 300;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  console.warn('[catalog image] gave up after retries:', lastErr?.message || lastErr);
+  return null;
 }
