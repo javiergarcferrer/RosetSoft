@@ -390,6 +390,19 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   const existingCats = await db.categories.toArray();
   for (const c of existingCats) categoryIdByName.set(c.name.toUpperCase(), c.id);
 
+  // Reference numbers must be globally unique across the catalog. Build a
+  // lookup of every existing variant keyed by its reference once, then
+  // re-use it inside the per-product loop so an incoming variant with a
+  // reference that already exists ANYWHERE — even on a different product —
+  // updates the existing row in place (and gets moved to the new product
+  // if needed) instead of creating a duplicate.
+  const allExistingVariants = await db.productVariants.toArray();
+  const variantByRef = new Map();
+  for (const v of allExistingVariants) {
+    const key = (v.reference || '').trim().toUpperCase();
+    if (key) variantByRef.set(key, v);
+  }
+
   const neededCategories = new Set(preview.products.map((p) => p.categoryName).filter(Boolean));
   for (const name of neededCategories) {
     if (categoryIdByName.has(name.toUpperCase())) continue;
@@ -470,8 +483,15 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     const byKey = new Map(existingVariants.map((v) => [v.reference || v.name, v]));
 
     // Plan: assign IDs and figure out which variants need image uploads.
+    // Reference takes precedence over name. A reference that matches an
+    // existing variant anywhere in the catalog updates that row in place
+    // (and re-parents it to the current product if needed); otherwise we
+    // fall back to a name match within the current product, matching the
+    // historical behavior for reference-less variants.
     const plans = p.variants.map((v) => {
-      const prev = byKey.get(v.reference || v.name);
+      const refKey = (v.reference || '').trim().toUpperCase();
+      const globalMatch = refKey ? variantByRef.get(refKey) : null;
+      const prev = globalMatch || byKey.get(v.reference || v.name);
       return { v, prev, vid: prev?.id || newId() };
     });
 
@@ -487,7 +507,7 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     let order = 0;
     for (const pl of plans) {
       const imageId = pl.imageId ?? pl.prev?.imageId ?? null;
-      await db.productVariants.put({
+      const record = {
         id: pl.vid,
         productId,
         name: pl.v.name,
@@ -498,8 +518,13 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
         priceFixed: pl.v.priceFixed ?? pl.prev?.priceFixed ?? null,
         sortOrder: pl.prev?.sortOrder ?? order,
         imageId,
-      });
+      };
+      await db.productVariants.put(record);
       if (!pl.prev) counts.variants++;
+      // Keep the global ref-lookup in sync so that two variants sharing a
+      // reference within this same import dedupe against each other too.
+      const refKey = (record.reference || '').trim().toUpperCase();
+      if (refKey) variantByRef.set(refKey, record);
       order++;
     }
   }
