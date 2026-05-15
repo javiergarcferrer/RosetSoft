@@ -1,96 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle2, AlertCircle, Image as ImageIcon, Folder, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
-import { buildPreview, commitCatalog } from '../lib/catalogImport.js';
+import { importPdf, commitImport } from '../parser/importer.js';
 
-/**
- * Catalog importer UI.
- *
- * The PDF parser lives offline now (see `tarif-parser/` at repo root). The
- * user runs it locally to produce `out/catalog.json` + `out/images/*.jpg`,
- * then drops both here. The catalog.json is required; the images folder is
- * optional (the app still imports rows without images attached).
- */
 export default function Import() {
   const navigate = useNavigate();
-  const catalogInputRef = useRef(null);
-  const imagesInputRef = useRef(null);
-  const [phase, setPhase] = useState('idle'); // idle | preview | committing | done | error
-  const [commitProgress, setCommitProgress] = useState({ done: 0, total: 0, label: '' });
+  const inputRef = useRef(null);
+  const [phase, setPhase] = useState('idle'); // idle | parsing | preview | committing | done | error
+  const [progress, setProgress] = useState({ page: 0, total: 0, stage: '' });
+  const [commitProgress, setCommitProgress] = useState({ done: 0, total: 0 });
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
-  const [catalogFile, setCatalogFile] = useState(null);
-  const [imageFiles, setImageFiles] = useState(null); // FileList | null
+  const [fileName, setFileName] = useState('');
   const [counts, setCounts] = useState(null);
   const [tab, setTab] = useState('fabrics');
+  const [extractImages, setExtractImages] = useState(true);
 
-  /* ----- file pickers --------------------------------------------------- */
-
-  function pickCatalog(file) {
+  async function onFile(file) {
     if (!file) return;
-    if (!/\.json$/i.test(file.name)) {
-      setError('El archivo del catálogo debe ser catalog.json');
-      setPhase('error');
-      return;
-    }
+    setFileName(file.name);
+    setPhase('parsing');
     setError(null);
-    setCatalogFile(file);
-  }
-
-  function pickImages(fileList) {
-    if (!fileList || !fileList.length) return;
-    setImageFiles(fileList);
-  }
-
-  function clearImages() {
-    setImageFiles(null);
-    if (imagesInputRef.current) imagesInputRef.current.value = '';
-  }
-
-  function reset() {
-    setPhase('idle');
-    setPreview(null);
-    setError(null);
-    setCatalogFile(null);
-    setImageFiles(null);
-    setCounts(null);
-    setCommitProgress({ done: 0, total: 0, label: '' });
-    if (catalogInputRef.current) catalogInputRef.current.value = '';
-    if (imagesInputRef.current) imagesInputRef.current.value = '';
-  }
-
-  /* ----- process -------------------------------------------------------- */
-
-  async function process() {
-    if (!catalogFile) return;
+    setProgress({ page: 0, total: 0, stage: '' });
     try {
-      const text = await catalogFile.text();
-      let catalog;
-      try {
-        catalog = JSON.parse(text);
-      } catch (e) {
-        throw new Error('catalog.json no es JSON válido: ' + e.message);
-      }
-
-      // Build the image lookup table. Each file is keyed by BOTH its full
-      // webkitRelativePath AND its bare filename so the caller can drop
-      // either the parser's `out/` directory or just `out/images/`.
-      const blobs = new Map();
-      if (imageFiles) {
-        for (const f of imageFiles) {
-          const rel = f.webkitRelativePath || f.name;
-          blobs.set(rel, f);
-          const base = rel.split('/').pop();
-          if (base && !blobs.has(base)) blobs.set(base, f);
-          // Also key by `images/<filename>` to match catalog.json paths
-          // exactly when the user drops a non-`images/` folder.
-          if (base && !blobs.has('images/' + base)) blobs.set('images/' + base, f);
-        }
-      }
-
-      const p = buildPreview(catalog, blobs);
-      setPreview(p);
+      const result = await importPdf(file, {
+        extractImages,
+        onProgress: ({ page, total, stage }) => setProgress({ page, total, stage }),
+      });
+      setPreview(result);
       setPhase('preview');
     } catch (e) {
       console.error(e);
@@ -103,9 +41,12 @@ export default function Import() {
     setPhase('committing');
     setCommitProgress({ done: 0, total: 0, label: '' });
     try {
-      const c = await commitCatalog(preview, {
+      const c = await commitImport(preview, {
         merge: true,
         onProgress: ({ phase: ph, done, total }) => {
+          // Surface each commit phase with its own label so the user sees
+          // *something* happening between phases instead of a long pause
+          // at 0% before uploads kick in.
           const label =
             ph === 'planning' ? 'Preparando catálogo'
             : ph === 'uploading' ? 'Subiendo imágenes'
@@ -125,108 +66,96 @@ export default function Import() {
     }
   }
 
-  /* ----- render --------------------------------------------------------- */
-
-  const variantTotal = preview?.products?.reduce((a, p) => a + p.variantCount, 0) ?? 0;
-  const expectedImages = preview?.expectedImages ?? 0;
+  function reset() {
+    setPhase('idle');
+    setPreview(null);
+    setProgress({ page: 0, total: 0 });
+    setError(null);
+    setFileName('');
+    setCounts(null);
+  }
 
   return (
     <>
       <PageHeader
-        title="Importar catálogo"
-        subtitle="Sube el catalog.json producido por tarif-parser, opcionalmente con la carpeta de imágenes."
+        title="Import PDF"
+        subtitle="Parse a Ligne Roset price list — fabrics, leathers, products, variants, and prices."
       />
 
       {phase === 'idle' && (
         <>
-          <CatalogDrop
-            inputRef={catalogInputRef}
-            file={catalogFile}
-            onPick={pickCatalog}
-            onClear={() => { setCatalogFile(null); if (catalogInputRef.current) catalogInputRef.current.value = ''; }}
-          />
-
-          <div className="mt-4 card card-pad">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <Folder size={18} className="text-ink-400 mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <div className="font-medium text-sm">Carpeta de imágenes (opcional)</div>
-                  <div className="text-xs text-ink-500 mt-0.5">
-                    Selecciona la carpeta <code className="px-1 py-0.5 bg-ink-100 rounded">out/images</code> que produjo el parser. Sin imágenes, el catálogo se importa con texto y precios pero sin fotos.
-                  </div>
-                  {imageFiles && (
-                    <div className="text-xs text-emerald-700 mt-1 truncate">
-                      {imageFiles.length} {imageFiles.length === 1 ? 'archivo' : 'archivos'} seleccionados
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {imageFiles && (
-                  <button onClick={clearImages} className="btn-ghost text-xs" title="Quitar imágenes">
-                    <X size={14} />
-                  </button>
-                )}
-                <button
-                  onClick={() => imagesInputRef.current?.click()}
-                  className="btn-secondary text-xs"
-                >
-                  {imageFiles ? 'Cambiar carpeta' : 'Elegir carpeta'}
-                </button>
-                <input
-                  ref={imagesInputRef}
-                  type="file"
-                  webkitdirectory=""
-                  directory=""
-                  multiple
-                  className="hidden"
-                  onChange={(e) => pickImages(e.target.files)}
-                />
-              </div>
+          <div
+            className="card card-pad text-center py-20 border-2 border-dashed border-ink-200 cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              onFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <Upload size={36} className="mx-auto text-ink-400 mb-3" />
+            <div className="text-base font-medium">Suelta aquí un PDF de lista de precios de Ligne Roset</div>
+            <div className="text-sm text-ink-500 mt-1">…o haz clic para elegir archivo. Los productos y telas existentes se fusionan (no se sobreescriben).</div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => onFile(e.target.files?.[0])}
+            />
+            <div className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 bg-ink-100 rounded-full text-xs text-ink-600">
+              <FileText size={12} /> PDFs grandes (50+ MB) tardan unos minutos
             </div>
           </div>
-
-          <div className="mt-6 flex items-center justify-end gap-2">
-            <button
-              onClick={process}
-              disabled={!catalogFile}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Procesar
-            </button>
-          </div>
-
-          <div className="mt-4 text-xs text-ink-500">
-            <details>
-              <summary className="cursor-pointer hover:text-ink-700">¿Cómo genero el catalog.json?</summary>
-              <div className="mt-2 pl-4 space-y-1.5">
-                <div>1. Desde la raíz del repo: <code className="px-1 py-0.5 bg-ink-100 rounded">cd tarif-parser && npm install</code></div>
-                <div>2. <code className="px-1 py-0.5 bg-ink-100 rounded">node index.js /ruta/al/tarif.pdf --out ./out</code></div>
-                <div>3. Sube <code className="px-1 py-0.5 bg-ink-100 rounded">out/catalog.json</code> y la carpeta <code className="px-1 py-0.5 bg-ink-100 rounded">out/images</code> aquí.</div>
+          <div className="mt-4 card card-pad">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={extractImages}
+                onChange={(e) => setExtractImages(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <div className="flex-1">
+                <div className="font-medium text-sm flex items-center gap-2"><ImageIcon size={14} /> Extraer dibujos vectoriales</div>
+                <div className="text-xs text-ink-500 mt-0.5">
+                  Renderiza cada página y recorta los pequeños dibujos técnicos junto a cada producto / variante. Aumenta el tiempo de importación pero llena el catálogo con imágenes automáticamente.
+                </div>
               </div>
-            </details>
+            </label>
           </div>
         </>
+      )}
+
+      {phase === 'parsing' && (
+        <div className="card card-pad text-center py-16">
+          <div className="text-sm text-ink-500 mb-2">
+            {progress.stage === 'rendering' ? 'Extrayendo dibujos de' : 'Procesando'} {fileName}
+          </div>
+          <div className="text-2xl font-semibold tabular-nums">{progress.page} / {progress.total || '?'}</div>
+          <div className="w-full max-w-md mx-auto mt-4 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand-500 transition-all"
+              style={{ width: `${progress.total ? (progress.page / progress.total) * 100 : 0}%` }}
+            />
+          </div>
+          {extractImages && (
+            <div className="text-[11px] text-ink-500 mt-3">
+              Cada página se renderiza y se recortan los dibujos. Si va lento, desmarca <i>Extraer dibujos</i> y vuelve a intentar.
+            </div>
+          )}
+        </div>
       )}
 
       {phase === 'preview' && preview && (
         <>
           <div className="card card-pad mb-4 flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium">Listo: {catalogFile?.name}</div>
+              <div className="text-sm font-medium">Listo: {fileName}</div>
               <div className="text-xs text-ink-500">
                 {preview.fabrics.length} {preview.fabrics.length === 1 ? 'tela/cuero' : 'telas/cueros'} ·{' '}
                 {preview.products.length} {preview.products.length === 1 ? 'producto' : 'productos'} ·{' '}
-                {variantTotal} variantes
-                {expectedImages > 0 && (
-                  <>
-                    {' · '}
-                    <span className={preview.imageCount === expectedImages ? 'text-ink-500' : 'text-amber-700'}>
-                      {preview.imageCount} / {expectedImages} imágenes encontradas
-                    </span>
-                  </>
-                )}
+                {preview.products.reduce((a, p) => a + p.variantCount, 0)} variantes
+                {preview.imageCount ? ` · ${preview.imageCount} ${preview.imageCount === 1 ? 'dibujo extraído' : 'dibujos extraídos'}` : ''}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -316,6 +245,9 @@ export default function Import() {
                   style={{ width: `${commitProgress.total ? (commitProgress.done / commitProgress.total) * 100 : 0}%` }}
                 />
               </div>
+              <div className="text-[11px] text-ink-500 mt-3">
+                Las imágenes se reducen a ≤ 800 px y se suben como JPEG para que la transferencia sea ligera incluso con conexión lenta.
+              </div>
             </>
           ) : (
             <div className="text-[11px] text-ink-500">Casi listo…</div>
@@ -341,53 +273,12 @@ export default function Import() {
       {phase === 'error' && (
         <div className="card card-pad text-center py-12 border-red-200">
           <AlertCircle size={28} className="mx-auto text-red-500 mb-2" />
-          <div className="text-base font-semibold">No se pudo procesar el catálogo.</div>
+          <div className="text-base font-semibold">No se pudo procesar el PDF.</div>
           <div className="text-xs text-ink-500 mt-1 max-w-md mx-auto whitespace-pre-wrap">{error}</div>
           <button onClick={reset} className="btn-secondary mt-5">Probar otro archivo</button>
         </div>
       )}
     </>
-  );
-}
-
-function CatalogDrop({ inputRef, file, onPick, onClear }) {
-  return (
-    <div
-      className="card card-pad text-center py-16 border-2 border-dashed border-ink-200 cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition"
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        onPick(e.dataTransfer.files?.[0]);
-      }}
-    >
-      <Upload size={36} className="mx-auto text-ink-400 mb-3" />
-      {!file ? (
-        <>
-          <div className="text-base font-medium">Suelta aquí el archivo <code className="text-[13px] px-1 py-0.5 bg-ink-100 rounded">catalog.json</code></div>
-          <div className="text-sm text-ink-500 mt-1">Producido por <code className="text-[12px] px-1 py-0.5 bg-ink-100 rounded">tarif-parser</code>. Los productos y telas existentes se fusionan (no se sobreescriben).</div>
-        </>
-      ) : (
-        <div className="flex items-center justify-center gap-3">
-          <FileText size={20} className="text-emerald-600" />
-          <div className="text-base font-medium">{file.name}</div>
-          <button
-            onClick={(e) => { e.stopPropagation(); onClear(); }}
-            className="btn-ghost text-xs"
-            title="Quitar archivo"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/json,.json"
-        className="hidden"
-        onChange={(e) => onPick(e.target.files?.[0])}
-      />
-    </div>
   );
 }
 
@@ -405,8 +296,9 @@ function Tab({ active, onClick, children }) {
 }
 
 /**
- * Preview row rendering the resolved hero/variant blobs from the in-memory
- * preview, so you can visually verify image matching before commit.
+ * Preview row that renders the extracted hero/variant blobs directly from the
+ * in-memory preview data (before commit). Lets you visually verify image
+ * extraction before saving anything to IndexedDB.
  */
 function PreviewProductRow({ product }) {
   const variantImages = (product.variants || []).filter((v) => v.imageBlob).length;
