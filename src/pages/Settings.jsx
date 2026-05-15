@@ -8,6 +8,7 @@ import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchan
 import { formatDateTime } from '../lib/format.js';
 import { dedupCatalogReferences } from '../lib/catalogDedup.js';
 import { dedupProductsByName } from '../lib/productDedup.js';
+import { purgeCatalog, CATALOG_PURGE_PHRASE } from '../lib/catalogPurge.js';
 
 const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 
@@ -320,6 +321,16 @@ function CatalogMaintenanceCard() {
         </button>
       </div>
 
+      <div className="mt-5 pt-4 border-t border-ink-100">
+        <h3 className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">Zona peligrosa</h3>
+        <p className="text-xs text-ink-500 mb-2">
+          Elimina todo el catálogo: productos, variantes, materiales, colores,
+          categorías y sus imágenes. Las cotizaciones existentes se conservan
+          pero sus líneas quedarán sin producto / material asignado.
+        </p>
+        <DeleteCatalogButton disabled={!!busyMode} />
+      </div>
+
       <Modal
         open={!!preview}
         onClose={closeModal}
@@ -349,6 +360,110 @@ function CatalogMaintenanceCard() {
         {preview && <DedupPreviewBody preview={preview} />}
       </Modal>
     </div>
+  );
+}
+
+function DeleteCatalogButton({ disabled }) {
+  const [open, setOpen] = useState(false);
+  const [phrase, setPhrase] = useState('');
+  const [working, setWorking] = useState(false);
+
+  const matched = phrase.trim().toLowerCase() === CATALOG_PURGE_PHRASE;
+
+  function reset() {
+    setPhrase('');
+    setWorking(false);
+    setOpen(false);
+  }
+
+  async function confirmDelete() {
+    if (!matched || working) return;
+    setWorking(true);
+    try {
+      const counts = await purgeCatalog();
+      reset();
+      alert(
+        `Catálogo eliminado:\n` +
+        `· ${counts.products} productos\n` +
+        `· ${counts.variants} variantes\n` +
+        `· ${counts.materials} materiales\n` +
+        `· ${counts.materialColors} colores\n` +
+        `· ${counts.categories} categorías\n` +
+        `· ${counts.imageRows} imágenes (${counts.storageObjects} archivos en almacenamiento)`
+      );
+    } catch (e) {
+      setWorking(false);
+      alert('No se pudo eliminar el catálogo: ' + (e?.message || e));
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="btn w-full bg-red-600 text-white hover:bg-red-700"
+      >
+        Eliminar catálogo completo
+      </button>
+      <Modal
+        open={open}
+        onClose={() => !working && reset()}
+        size="md"
+        title="Eliminar catálogo completo"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={reset}
+              disabled={working}
+              className="btn-ghost"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={!matched || working}
+              className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {working ? 'Eliminando…' : 'Eliminar catálogo'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink-700">
+            Esta acción <b>no se puede deshacer</b>. Se eliminarán todos los
+            productos, variantes, materiales, colores, categorías y sus
+            imágenes (tanto las filas como los archivos en almacenamiento).
+          </p>
+          <p className="text-sm text-ink-700">
+            Las cotizaciones y los contenedores se conservan, pero sus líneas
+            quedarán sin referencia a productos / materiales.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block uppercase tracking-wide">
+              Para confirmar, escribe <code className="kbd">delete catalog</code>
+            </label>
+            <input
+              type="text"
+              className="input"
+              autoFocus
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              value={phrase}
+              onChange={(e) => setPhrase(e.target.value)}
+              placeholder="delete catalog"
+              disabled={working}
+            />
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 
