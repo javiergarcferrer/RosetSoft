@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
 import { ShoppingBag, Trash2, X, ChevronRight, Minus, Plus } from 'lucide-react';
 import { useCart } from '../context/CartContext.jsx';
@@ -18,6 +18,11 @@ export default function QuoteCart() {
   const { cartId, open, setOpen, removeLine, updateLine, clearCart, finalizeCart } = useCart();
   const { settings } = useApp();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  // Don't show the floating cart on the QuoteBuilder — that page edits a
+  // specific quote (not the draft cart) and has its own sticky totals bar.
+  const onQuoteBuilder = !!matchPath('/quotes/new', pathname) || !!matchPath('/quotes/:quoteId', pathname);
 
   const lines = useLiveQuery(
     () => (cartId ? db.quoteLines.where('quoteId').equals(cartId).sortBy('sortOrder') : []),
@@ -74,16 +79,17 @@ export default function QuoteCart() {
   }
 
   if (!open) {
+    if (onQuoteBuilder) return null;
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 md:bottom-6 md:right-6 z-30 bg-ink-900 text-white rounded-full shadow-2xl px-4 py-2.5 md:px-5 md:py-3 flex items-center gap-2 hover:bg-ink-800 transition"
+        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 md:bottom-6 md:right-6 z-30 bg-ink-900/95 text-white rounded-full shadow-lg ring-1 ring-black/5 backdrop-blur-md px-4 py-2.5 md:px-5 md:py-3 flex items-center gap-2 hover:bg-ink-800 active:scale-[0.98] transition"
         title="Abrir cotización"
       >
         <ShoppingBag size={18} />
-        <span className="font-medium">{resolved.length}</span>
+        <span className="font-medium tabular-nums">{resolved.length}</span>
         {resolved.length > 0 && (
-          <span className="text-xs opacity-75 ml-1 border-l border-ink-700 pl-2.5">
+          <span className="text-xs opacity-75 ml-1 border-l border-white/15 pl-2.5 tabular-nums">
             {formatMoney(total, currency, rates)}
           </span>
         )}

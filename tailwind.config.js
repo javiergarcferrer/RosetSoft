@@ -34,6 +34,8 @@ export default {
       },
       boxShadow: {
         soft: '0 1px 2px rgba(23,22,18,0.04), 0 8px 24px rgba(23,22,18,0.06)',
+        pop:  '0 8px 28px rgba(23,22,18,0.18), 0 2px 6px rgba(23,22,18,0.10)',
+        focus:'0 0 0 4px rgba(23,22,18,0.10)',
       },
     },
   },

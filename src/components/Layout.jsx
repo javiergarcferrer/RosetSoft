@@ -136,9 +136,14 @@ function MainContent() {
   // On md+ the cart drawer pushes content via reserved padding.
   // On mobile the cart overlays full-screen, no reservation needed.
   const reservedPadding = open && isDesktop ? 408 : undefined;
+  // Quote builder owns its bottom space with its own sticky bar.
+  const onQuoteBuilder = location.pathname === '/quotes/new' || /^\/quotes\/[^/]+$/.test(location.pathname);
+  // Mobile pages get bottom padding so the floating cart pill never covers
+  // the last row when scrolled all the way down.
+  const mobileBottom = onQuoteBuilder ? '' : 'pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-6';
   return (
     <div
-      className="px-4 py-4 md:px-8 md:py-6 transition-[padding] duration-150"
+      className={`px-4 py-4 md:px-8 md:py-6 transition-[padding] duration-150 ${mobileBottom}`}
       style={{ paddingRight: reservedPadding }}
     >
       <div className="max-w-[1400px] mx-auto">
