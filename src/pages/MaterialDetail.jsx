@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import ImageView from '../components/ImageView.jsx';
 import Modal from '../components/Modal.jsx';
+import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { db, newId, deleteImage } from '../db/database.js';
 
 export default function MaterialDetail() {
@@ -61,7 +62,7 @@ export default function MaterialDetail() {
         <div className="card card-pad lg:col-span-1 space-y-3">
           <div>
             <div className="label">Name</div>
-            <input className="input" value={material.name} onChange={(e) => update({ name: e.target.value })} />
+            <DebouncedInput className="input" value={material.name} onCommit={(v) => update({ name: v })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -84,33 +85,33 @@ export default function MaterialDetail() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="label">Width</div>
-              <input className="input" value={material.width || ''} onChange={(e) => update({ width: e.target.value })} placeholder='e.g. 55"' />
+              <DebouncedInput className="input" value={material.width || ''} onCommit={(v) => update({ width: v })} placeholder='e.g. 55"' />
             </div>
             <div>
               <div className="label">Price / unit (USD)</div>
-              <input className="input" type="number" value={material.pricePerUnit ?? ''} onChange={(e) => update({ pricePerUnit: e.target.value ? Number(e.target.value) : null })} />
+              <DebouncedInput className="input" type="number" value={material.pricePerUnit ?? ''} onCommit={(v) => update({ pricePerUnit: v ? Number(v) : null })} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="label">Wear (AFNOR)</div>
-              <input className="input" value={material.wear || ''} onChange={(e) => update({ wear: e.target.value })} placeholder="e.g. 3C" />
+              <DebouncedInput className="input" value={material.wear || ''} onCommit={(v) => update({ wear: v })} placeholder="e.g. 3C" />
             </div>
             <div>
               <div className="label">Martindale</div>
-              <input className="input" type="number" value={material.martindale ?? ''} onChange={(e) => update({ martindale: e.target.value ? Number(e.target.value) : null })} />
+              <DebouncedInput className="input" type="number" value={material.martindale ?? ''} onCommit={(v) => update({ martindale: v ? Number(v) : null })} />
             </div>
           </div>
           <div>
             <div className="label">Composition</div>
-            <textarea className="input min-h-[80px]" value={material.composition || ''} onChange={(e) => update({ composition: e.target.value })} />
+            <DebouncedTextarea className="input min-h-[80px]" value={material.composition || ''} onCommit={(v) => update({ composition: v })} />
           </div>
           <div>
             <div className="label">Restricted to products (optional, comma-separated)</div>
-            <input
+            <DebouncedInput
               className="input"
               value={(material.restrictedToProductNames || []).join(', ')}
-              onChange={(e) => update({ restrictedToProductNames: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+              onCommit={(v) => update({ restrictedToProductNames: v.split(',').map((s) => s.trim()).filter(Boolean) })}
               placeholder="e.g. EXCLUSIF, EXCLUSIF 2"
             />
           </div>
@@ -188,11 +189,11 @@ function ColorEditor({ open, colorId, onClose }) {
         <div className="space-y-3">
           <div>
             <div className="label">Name</div>
-            <input className="input" value={color.name} onChange={(e) => update({ name: e.target.value })} />
+            <DebouncedInput className="input" value={color.name} onCommit={(v) => update({ name: v })} />
           </div>
           <div>
             <div className="label">Color code</div>
-            <input className="input font-mono" value={color.code || ''} onChange={(e) => update({ code: e.target.value })} />
+            <DebouncedInput className="input font-mono" value={color.code || ''} onCommit={(v) => update({ code: v })} />
           </div>
           <div className="text-xs text-ink-500">
             Tip: drag the swatch image from <code className="kbd">ligne-roset.com</code> directly onto the upload area, or paste it from your clipboard.

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Download, CheckCircle2, X, Search } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Modal from '../components/Modal.jsx';
+import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -190,28 +191,28 @@ export default function ContainerDetail() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Nombre</div>
-                <input
+                <DebouncedInput
                   className="input"
                   value={container.name || ''}
-                  onChange={(e) => updateContainer({ name: e.target.value })}
+                  onCommit={(v) => updateContainer({ name: v })}
                   placeholder='e.g. "Container Marzo — Santo Domingo"'
                 />
               </div>
               <div>
                 <div className="label">Código / referencia naviera</div>
-                <input
+                <DebouncedInput
                   className="input"
                   value={container.code || ''}
-                  onChange={(e) => updateContainer({ code: e.target.value })}
+                  onCommit={(v) => updateContainer({ code: v })}
                   placeholder="MSCU1234567"
                 />
               </div>
               <div className="sm:col-span-2">
                 <div className="label">Notas</div>
-                <textarea
+                <DebouncedTextarea
                   className="input min-h-[60px]"
                   value={container.notes || ''}
-                  onChange={(e) => updateContainer({ notes: e.target.value })}
+                  onCommit={(v) => updateContainer({ notes: v })}
                 />
               </div>
             </div>

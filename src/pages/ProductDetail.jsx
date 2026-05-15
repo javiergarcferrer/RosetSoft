@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import ImageView from '../components/ImageView.jsx';
 import Modal from '../components/Modal.jsx';
+import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { db, newId } from '../db/database.js';
 import { GRADES } from '../lib/pricing.js';
 
@@ -94,16 +95,16 @@ export default function ProductDetail() {
           <div className="card card-pad mt-4 space-y-3">
             <div>
               <div className="label">Name</div>
-              <input className="input" value={product.name} onChange={(e) => update({ name: e.target.value })} />
+              <DebouncedInput className="input" value={product.name} onCommit={(v) => update({ name: v })} />
             </div>
             <div>
               <div className="label">Designer</div>
-              <input className="input" value={product.designer || ''} onChange={(e) => update({ designer: e.target.value })} />
+              <DebouncedInput className="input" value={product.designer || ''} onCommit={(v) => update({ designer: v })} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <div className="label">Year</div>
-                <input className="input" type="number" value={product.year || ''} onChange={(e) => update({ year: e.target.value ? Number(e.target.value) : null })} />
+                <DebouncedInput className="input" type="number" value={product.year || ''} onCommit={(v) => update({ year: v ? Number(v) : null })} />
               </div>
               <div>
                 <div className="label">Category</div>
@@ -115,11 +116,11 @@ export default function ProductDetail() {
             </div>
             <div>
               <div className="label">Technical impossibilities (fabric names, comma-separated)</div>
-              <textarea
+              <DebouncedTextarea
                 className="input min-h-[60px]"
                 value={impossibilitiesText}
-                onChange={(e) => update({
-                  technicalImpossibilities: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                onCommit={(v) => update({
+                  technicalImpossibilities: v.split(',').map((s) => s.trim()).filter(Boolean),
                 })}
               />
             </div>
@@ -130,10 +131,10 @@ export default function ProductDetail() {
           {product.description && (
             <div className="card card-pad">
               <div className="label">Description</div>
-              <textarea
+              <DebouncedTextarea
                 className="input min-h-[100px]"
                 value={product.description}
-                onChange={(e) => update({ description: e.target.value })}
+                onCommit={(v) => update({ description: v })}
               />
             </div>
           )}
@@ -279,21 +280,21 @@ function VariantEditor({ variantId, onClose }) {
         <div className="sm:col-span-2 space-y-3">
           <div>
             <div className="label">Name</div>
-            <input className="input" value={variant.name} onChange={(e) => update({ name: e.target.value })} />
+            <DebouncedInput className="input" value={variant.name} onCommit={(v) => update({ name: v })} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="label">Reference code</div>
-              <input className="input font-mono" value={variant.reference || ''} onChange={(e) => update({ reference: e.target.value })} />
+              <DebouncedInput className="input font-mono" value={variant.reference || ''} onCommit={(v) => update({ reference: v })} />
             </div>
             <div>
               <div className="label">Yardage</div>
-              <input className="input" value={variant.yardage || ''} onChange={(e) => update({ yardage: e.target.value })} placeholder="e.g. 6.60yd" />
+              <DebouncedInput className="input" value={variant.yardage || ''} onCommit={(v) => update({ yardage: v })} placeholder="e.g. 6.60yd" />
             </div>
           </div>
           <div>
             <div className="label">Dimensions</div>
-            <input className="input" value={variant.dimensions || ''} onChange={(e) => update({ dimensions: e.target.value })} placeholder='e.g. H 28" W 32" D 32" S 16"' />
+            <DebouncedInput className="input" value={variant.dimensions || ''} onCommit={(v) => update({ dimensions: v })} placeholder='e.g. H 28" W 32" D 32" S 16"' />
           </div>
         </div>
       </div>
@@ -303,11 +304,11 @@ function VariantEditor({ variantId, onClose }) {
         {GRADES.map((g) => (
           <div key={g}>
             <div className="text-[10px] font-semibold text-ink-500 uppercase">Grade {g}</div>
-            <input
+            <DebouncedInput
               type="number"
               className="input mt-1"
               value={(variant.priceByGrade || {})[g] ?? ''}
-              onChange={(e) => updateGrade(g, e.target.value)}
+              onCommit={(v) => updateGrade(g, v)}
               placeholder="—"
             />
           </div>

@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import Modal from '../components/Modal.jsx';
+import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, applyLineAdjustments, variantPriceForGrade, ITBIS_PCT } from '../lib/pricing.js';
@@ -214,7 +215,7 @@ function Builder({ quoteId, navigate }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Quote name (internal)</div>
-                <input className="input" value={quote.name || ''} onChange={(e) => updateQuote({ name: e.target.value })} placeholder='e.g. "Smith residence — den"' />
+                <DebouncedInput className="input" value={quote.name || ''} onCommit={(v) => updateQuote({ name: v })} placeholder='e.g. "Smith residence — den"' />
               </div>
               <div>
                 <div className="label">Customer</div>
@@ -304,11 +305,11 @@ function Builder({ quoteId, navigate }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="label">Descuento %</div>
-                <input className="input" type="number" value={quote.discountPct ?? 0} onChange={(e) => updateQuote({ discountPct: Number(e.target.value) || 0 })} />
+                <DebouncedInput className="input" type="number" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: Number(v) || 0 })} />
               </div>
               <div>
                 <div className="label">Envío (USD)</div>
-                <input className="input" type="number" value={quote.shipping ?? 0} onChange={(e) => updateQuote({ shipping: Number(e.target.value) || 0 })} />
+                <DebouncedInput className="input" type="number" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Number(v) || 0 })} />
               </div>
             </div>
             <div className="text-[10px] text-ink-500">
@@ -326,11 +327,11 @@ function Builder({ quoteId, navigate }) {
             <h2 className="font-semibold text-sm">Términos y notas</h2>
             <div>
               <div className="label">Notas internas</div>
-              <textarea className="input min-h-[80px]" value={quote.notes || ''} onChange={(e) => updateQuote({ notes: e.target.value })} />
+              <DebouncedTextarea className="input min-h-[80px]" value={quote.notes || ''} onCommit={(v) => updateQuote({ notes: v })} />
             </div>
             <div>
               <div className="label">Términos (se imprimen en PDF)</div>
-              <textarea className="input min-h-[100px]" value={quote.terms || ''} onChange={(e) => updateQuote({ terms: e.target.value })} />
+              <DebouncedTextarea className="input min-h-[100px]" value={quote.terms || ''} onCommit={(v) => updateQuote({ terms: v })} />
             </div>
           </div>
         </div>
@@ -456,38 +457,38 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 self-center">
               <div>
                 <div className="text-[10px] font-medium text-ink-500 uppercase">Override unit ($)</div>
-                <input
+                <DebouncedInput
                   type="number"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   placeholder={String(r.basePrice || 0)}
                   value={r.priceOverride ?? ''}
-                  onChange={(e) => onPriceOverride(e.target.value === '' ? null : Number(e.target.value))}
+                  onCommit={(v) => onPriceOverride(v === '' ? null : Number(v))}
                 />
               </div>
               <div>
                 <div className="text-[10px] font-medium text-ink-500 uppercase">Margin %</div>
-                <input
+                <DebouncedInput
                   type="number"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   value={r.lineMarginPct ?? 0}
-                  onChange={(e) => onLineMargin(Number(e.target.value) || 0)}
+                  onCommit={(v) => onLineMargin(Number(v) || 0)}
                 />
               </div>
               <div>
                 <div className="text-[10px] font-medium text-ink-500 uppercase">Discount %</div>
-                <input
+                <DebouncedInput
                   type="number"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   value={r.lineDiscountPct ?? 0}
-                  onChange={(e) => onLineDiscount(Number(e.target.value) || 0)}
+                  onCommit={(v) => onLineDiscount(Number(v) || 0)}
                 />
               </div>
               <div>
                 <div className="text-[10px] font-medium text-ink-500 uppercase">Notes</div>
-                <input
+                <DebouncedInput
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   value={r.notes || ''}
-                  onChange={(e) => onNotes(e.target.value)}
+                  onCommit={(v) => onNotes(v)}
                   placeholder="e.g. extra cushion, COM"
                 />
               </div>
@@ -574,38 +575,38 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
           <div className="flex-1 grid grid-cols-2 gap-3">
             <div>
               <div className="label">Override unit ($)</div>
-              <input
+              <DebouncedInput
                 type="number"
                 className="input"
                 placeholder={String(r.basePrice || 0)}
                 value={r.priceOverride ?? ''}
-                onChange={(e) => onPriceOverride(e.target.value === '' ? null : Number(e.target.value))}
+                onCommit={(v) => onPriceOverride(v === '' ? null : Number(v))}
               />
             </div>
             <div>
               <div className="label">Margin %</div>
-              <input
+              <DebouncedInput
                 type="number"
                 className="input"
                 value={r.lineMarginPct ?? 0}
-                onChange={(e) => onLineMargin(Number(e.target.value) || 0)}
+                onCommit={(v) => onLineMargin(Number(v) || 0)}
               />
             </div>
             <div>
               <div className="label">Discount %</div>
-              <input
+              <DebouncedInput
                 type="number"
                 className="input"
                 value={r.lineDiscountPct ?? 0}
-                onChange={(e) => onLineDiscount(Number(e.target.value) || 0)}
+                onCommit={(v) => onLineDiscount(Number(v) || 0)}
               />
             </div>
             <div>
               <div className="label">Notes</div>
-              <input
+              <DebouncedInput
                 className="input"
                 value={r.notes || ''}
-                onChange={(e) => onNotes(e.target.value)}
+                onCommit={(v) => onNotes(v)}
                 placeholder="e.g. COM"
               />
             </div>
@@ -626,11 +627,11 @@ function QtyStepper({ value, onChange }) {
       >
         <Minus size={14} />
       </button>
-      <input
+      <DebouncedInput
         type="number"
         min="0"
         value={value ?? 0}
-        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        onCommit={(v) => onChange(Math.max(0, Number(v) || 0))}
         className="w-12 text-center bg-transparent border-0 px-0 focus:outline-none focus:ring-0"
       />
       <button
