@@ -552,7 +552,36 @@ function FabricPickerModal({ open, onClose, product, variant }) {
             </select>
           </div>
           <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1">
-            <div className="overflow-x-auto">
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-ink-100">
+              {filtered.map((m) => {
+                const price = variantPriceForGrade(variant, m.grade);
+                const colorCount = colors.filter((c) => c.materialId === m.id).length;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setActiveMaterial(m)}
+                    className="w-full text-left p-3 flex items-start justify-between gap-2 hover:bg-ink-50 active:bg-ink-100"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold truncate">{m.name}</div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="capitalize text-[10px] text-ink-700">{m.kind.replace('-', ' ')}</span>
+                        <span className="badge">{m.grade || '—'}</span>
+                        <span className="text-[10px] text-ink-500">{colorCount} {colorCount === 1 ? 'color' : 'colores'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-medium"><PriceCell amount={price} /></div>
+                      <div className="text-[11px] text-brand-600 mt-0.5">Elegir →</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="table min-w-[640px]">
                 <thead>
                   <tr>

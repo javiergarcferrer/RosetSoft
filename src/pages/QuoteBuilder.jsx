@@ -760,7 +760,39 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
 
       {!activeMaterial ? (
         <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1">
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <div className="md:hidden divide-y divide-ink-100">
+            {filteredMaterials.map((m) => {
+              const blocked = (product?.technicalImpossibilities || []).map((s) => s.toUpperCase()).includes(m.name.toUpperCase());
+              const colorCount = colors.filter((c) => c.materialId === m.id).length;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => !blocked && setActiveMaterial(m)}
+                  disabled={blocked}
+                  className={`w-full text-left p-3 flex items-start justify-between gap-2 ${blocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-ink-50 active:bg-ink-100'}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold truncate">{m.name}</div>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="capitalize text-[10px] text-ink-700">{m.kind.replace('-', ' ')}</span>
+                      <span className="badge">{m.grade || '—'}</span>
+                      <span className="text-[10px] text-ink-500">{colorCount} {colorCount === 1 ? 'color' : 'colores'}</span>
+                    </div>
+                    {m.composition && (
+                      <div className="text-[11px] text-ink-500 mt-1 truncate">{m.composition}</div>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0 text-xs text-brand-600">
+                    {blocked ? <span className="text-red-600 text-[11px]">Not allowed</span> : 'Pick →'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="table min-w-[640px]">
               <thead>
                 <tr>
