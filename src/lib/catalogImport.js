@@ -25,7 +25,11 @@
  */
 
 import { db, saveImage } from '../db/database.js';
-import { renderProductHero } from '../parser/lib/renderHero.js';
+import {
+  renderProductHero,
+  renderPageImage,
+  renderRowThumbnail,
+} from '../parser/lib/renderHero.js';
 
 /* ------------------------------------------------------------------ */
 /*  Validation                                                          */
@@ -190,7 +194,7 @@ export function transformCatalog(json) {
   }
 
   /* variants — dedupe first, then assign deterministic ids */
-  const variants = transformVariants(json.variants, productIdByParserId, warnings);
+  const { variants, variantImageAnchors } = transformVariants(json.variants, productIdByParserId, warnings);
 
   /* materials + colors */
   const cm = json.cover_materials || {};
@@ -247,7 +251,7 @@ export function transformCatalog(json) {
     }
   }
 
-  return { categories, products, variants, materials, materialColors, warnings };
+  return { categories, products, variants, variantImageAnchors, materials, materialColors, warnings };
 }
 
 function rangeAsArray(start, end) {
@@ -300,8 +304,14 @@ function transformVariants(rawVariants, productIdByParserId, warnings) {
   // Within a (product, reference) pair, number the surviving rows so their
   // ids stay unique even after dedupe — the rare case where two variants
   // genuinely differ on something we can't see in the key.
+  //
+  // We also build a parallel `variantImageAnchors` array carrying the page
+  // and row-y of each surviving variant, so the optional image phase can
+  // render-and-crop a thumbnail per row. `_row_y` is internal to the
+  // parser; not persisted to Postgres.
   const seqByPair = new Map();
   const variants = [];
+  const variantImageAnchors = [];
   for (const arr of groups.values()) {
     arr.sort((a, b) => priceWeight(b) - priceWeight(a));
     const v = arr[0];
@@ -334,9 +344,13 @@ function transformVariants(rawVariants, productIdByParserId, warnings) {
       sortOrder: variants.length,
       imageId: null,
     });
+
+    if (v._row_y != null && v.page != null) {
+      variantImageAnchors.push({ variantId: id, page: v.page, rowY: v._row_y });
+    }
   }
 
-  return variants;
+  return { variants, variantImageAnchors };
 }
 
 function priceWeight(v) {
@@ -407,11 +421,17 @@ export async function commitCatalog(transformed, { onProgress, pdf } = {}) {
   });
   counts.colors = transformed.materialColors.length;
 
-  /* 6. Images — optional, only when a live pdf doc is provided. */
+  /* 6. Images — optional, only when a live pdf doc is provided. Two passes:
+        (a) one hero per product, anchored on the intro page;
+        (b) one thumbnail per row-priced variant, anchored on row_y. */
   counts.images = 0;
+  counts.variantImages = 0;
   if (pdf) {
     counts.images = await uploadProductHeroImages(pdf, transformed.products, {
       onProgress: (done, total, label) => step('images', done, total, label || 'Imágenes'),
+    });
+    counts.variantImages = await uploadVariantThumbnails(pdf, transformed.variantImageAnchors || [], {
+      onProgress: (done, total, label) => step('variant-images', done, total, label || 'Miniaturas'),
     });
   }
 
@@ -473,6 +493,82 @@ async function uploadProductHeroImages(pdf, products, { onProgress, concurrency 
 
   const slices = Array.from({ length: Math.min(concurrency, tasks.length) }, () => []);
   tasks.forEach((t, i) => slices[i % slices.length].push(t));
+  await Promise.all(slices.map(worker));
+  return uploaded;
+}
+
+/**
+ * For each variant with a row-y anchor (the LIGHTING / RUGS / DECORATIVE
+ * etc. layouts that print a small thumbnail next to every SKU), render the
+ * page ONCE and crop a band centred on the row. Reuses one render per
+ * page so 700 variants across 400 pages costs ~400 renders, not 700.
+ *
+ * Skips anchors whose variant row already carries an `image_id` so re-runs
+ * converge.
+ */
+async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency = 3 } = {}) {
+  if (!anchors.length) { onProgress?.(0, 0); return 0; }
+
+  // Don't re-upload variants that already have an image.
+  const existing = await db.productVariants.toArray();
+  const haveImage = new Set(existing.filter((v) => v.imageId).map((v) => v.id));
+  const work = anchors.filter((a) => !haveImage.has(a.variantId));
+  if (!work.length) { onProgress?.(0, 0); return 0; }
+
+  // Group by page so we render each page at most once.
+  const byPage = new Map();
+  for (const a of work) {
+    let arr = byPage.get(a.page);
+    if (!arr) { arr = []; byPage.set(a.page, arr); }
+    arr.push(a);
+  }
+  const pages = [...byPage.keys()].sort((a, b) => a - b);
+  const total = work.length;
+  let done = 0;
+  let uploaded = 0;
+  onProgress?.(0, total, 'Miniaturas');
+
+  // Page-level concurrency. Each page handler renders once, then iterates
+  // its anchors sequentially (cheap canvas crops).
+  async function worker(slicePages) {
+    for (const page of slicePages) {
+      const anchorsOnPage = byPage.get(page) || [];
+      let pageImage = null;
+      try {
+        pageImage = await renderPageImage(pdf, page);
+      } catch (e) {
+        console.warn(`[variant image] render page ${page} failed:`, e?.message || e);
+        done += anchorsOnPage.length;
+        onProgress?.(done, total, 'Miniaturas');
+        continue;
+      }
+      for (const a of anchorsOnPage) {
+        try {
+          const blob = pageImage ? await renderRowThumbnail(pageImage, a.rowY) : null;
+          if (blob) {
+            const imageId = await uploadWithRetry({
+              kind: 'variant',
+              ownerId: a.variantId,
+              file: blob,
+              label: a.variantId,
+            });
+            if (imageId) {
+              await db.productVariants.update(a.variantId, { imageId });
+              uploaded++;
+            }
+          }
+        } catch (e) {
+          console.warn(`[variant image] ${a.variantId}:`, e?.message || e);
+        } finally {
+          done++;
+          onProgress?.(done, total, 'Miniaturas');
+        }
+      }
+    }
+  }
+
+  const slices = Array.from({ length: Math.min(concurrency, pages.length) }, () => []);
+  pages.forEach((p, i) => slices[i % slices.length].push(p));
   await Promise.all(slices.map(worker));
   return uploaded;
 }

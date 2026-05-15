@@ -231,7 +231,8 @@ export default function CatalogImport() {
           <div className="text-sm text-ink-500 mt-1">
             {counts.categories} categorías · {counts.products} productos · {counts.variants} variantes ·{' '}
             {counts.materials} materiales · {counts.colors} colores
-            {counts.images > 0 && <> · {counts.images} imágenes</>}
+            {counts.images > 0 && <> · {counts.images} imágenes de productos</>}
+            {counts.variantImages > 0 && <> · {counts.variantImages} miniaturas de variantes</>}
           </div>
           <div className="mt-5 flex items-center gap-2 justify-center">
             <button onClick={reset} className="btn-secondary">Importar otro</button>

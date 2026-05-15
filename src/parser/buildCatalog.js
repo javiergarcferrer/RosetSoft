@@ -201,6 +201,11 @@ export async function buildCatalogFromPdf(source, { onProgress, sourceName } = {
   const variantsClean = variants.map((v) => {
     // eslint-disable-next-line no-unused-vars
     const { _row_y, ...rest } = v;
+    // Preserve _row_y as a public property too — the importer's optional
+    // image phase reads it to anchor row-aligned thumbnails. The Python
+    // pipeline doesn't surface this in JSON; we add it here without
+    // breaking the rest of the schema.
+    if (_row_y != null) rest._row_y = _row_y;
     return rest;
   });
 

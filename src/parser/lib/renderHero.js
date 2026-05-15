@@ -65,3 +65,71 @@ function isMostlyBlank(ctx, w, h) {
   if (!samples) return true;
   return whitish / samples > 0.985;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Per-variant thumbnails                                              */
+/* ------------------------------------------------------------------ */
+//
+// Row-priced pages (LIGHTING, RUGS, DECORATIVE ACCESSORIES, …) print a
+// small product photo to the LEFT of each row. The Python parser locates
+// these by scanning embedded image XObjects and matching by Y proximity to
+// each variant's row_y. We can't read XObjects directly through PDF.js, so
+// the cheaper, equally-effective fallback is to render the page once and
+// crop a band centred on each variant's row_y.
+
+const ROW_SCALE = 1.4;
+const ROW_BAND_PT = 56;            // ±28 pt around the row anchor in PDF units
+const ROW_LEFT_PT = 28;            // skip the page margin
+const ROW_WIDTH_PT = 230;          // product photos sit in the left half (x < 280)
+const ROW_QUALITY = 0.82;
+const PAGE_HEIGHT_PT = 842;        // most catalog pages are ~A4/Letter, used for Y-flip
+
+/**
+ * Render one PDF page at `ROW_SCALE` and return an opaque page-image handle
+ * the row-thumbnail cropper can consume repeatedly without re-rendering.
+ */
+export async function renderPageImage(pdf, pageNumber) {
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: ROW_SCALE });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return { canvas, viewport, scale: ROW_SCALE, pageHeightPt: viewport.height / ROW_SCALE };
+}
+
+/**
+ * Crop the row-photo band from a rendered page. `rowYPt` is the variant's
+ * row anchor in PDF user units, top-down (PyMuPDF / our spans convention).
+ * Returns a JPEG blob, or null when the crop is essentially blank.
+ */
+export function renderRowThumbnail(pageImage, rowYPt) {
+  if (!pageImage) return null;
+  const { canvas, scale, pageHeightPt } = pageImage;
+
+  // Centre the band on the row; clamp to page bounds.
+  const halfBandPt = ROW_BAND_PT / 2;
+  const topPt = Math.max(0, rowYPt - halfBandPt);
+  const heightPt = Math.min(pageHeightPt - topPt, ROW_BAND_PT);
+
+  const sx = Math.floor(ROW_LEFT_PT * scale);
+  const sy = Math.floor(topPt * scale);
+  const sw = Math.floor(ROW_WIDTH_PT * scale);
+  const sh = Math.floor(heightPt * scale);
+  if (sw < 40 || sh < 30) return null;
+
+  const out = document.createElement('canvas');
+  out.width = sw;
+  out.height = sh;
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, sw, sh);
+  octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  if (isMostlyBlank(octx, sw, sh)) return null;
+
+  return new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', ROW_QUALITY));
+}
