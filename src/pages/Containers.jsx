@@ -92,7 +92,58 @@ export default function Containers() {
         actions={<button onClick={newContainer} className="btn-primary"><Plus size={14} /> Nuevo</button>}
       />
 
-      <div className="card overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-2">
+        {containers.map((c) => {
+          const total = totalsByContainer.get(c.id) || 0;
+          const count = quoteCountByContainer.get(c.id) || 0;
+          const pct = threshold > 0 ? Math.min(100, (total / threshold) * 100) : 0;
+          const ready = total >= threshold;
+          return (
+            <div key={c.id} className="card p-3">
+              <Link to={`/containers/${c.id}`} className="block">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">#{c.number || '—'}{c.name ? ` · ${c.name}` : ''}</div>
+                    {c.code && <div className="font-mono text-[11px] text-ink-500">{c.code}</div>}
+                    <div className="text-[11px] text-ink-500 mt-1">
+                      {count} {count === 1 ? 'cotización' : 'cotizaciones'} · {formatDateTime(c.updatedAt)}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-medium">{formatMoney(total, 'USD', { USD: 1 })}</div>
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium capitalize mt-1 ${STATUS_STYLES[c.status] || 'bg-ink-100 text-ink-700'}`}>
+                      {c.status === 'dispatched' ? 'Despachado' : 'Abierto'}
+                      {ready && c.status === 'open' && <CheckCircle2 size={10} />}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-ink-500 w-9 text-right">{Math.round(pct)}%</span>
+                </div>
+              </Link>
+              <div className="flex justify-end mt-1">
+                <button
+                  onClick={() => del(c)}
+                  className="text-ink-400 hover:text-red-600 p-2 -mr-2 -mb-1"
+                  aria-label="Eliminar"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table min-w-[960px]">
             <thead>

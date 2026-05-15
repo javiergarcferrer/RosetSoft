@@ -51,7 +51,31 @@ export default function Customers() {
             </div>
           </div>
 
-          <div className="card overflow-hidden">
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-2">
+            {filtered.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setEditing(c)}
+                className="card w-full text-left p-3 hover:bg-ink-50"
+              >
+                <div className="font-medium text-sm">{c.name}</div>
+                {c.company && <div className="text-xs text-ink-500">{c.company}</div>}
+                <div className="text-xs text-ink-700 mt-1 space-y-0.5">
+                  {c.email && <div className="truncate">{c.email}</div>}
+                  {c.phone && <div>{c.phone}</div>}
+                  {c.city && <div className="text-ink-500">{c.city}</div>}
+                </div>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
+            )}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="table min-w-[640px]">
                 <thead>

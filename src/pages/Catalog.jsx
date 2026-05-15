@@ -127,7 +127,27 @@ export default function Catalog() {
         </select>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Mobile: stacked cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.map((p) => (
+          <ProductCard
+            key={p.id}
+            product={p}
+            isExpanded={expandedId === p.id}
+            onToggle={() => setExpandedId(expandedId === p.id ? null : p.id)}
+            onAdd={(variant) => setPickerState({ open: true, variant, product: p })}
+            category={categories.find((c) => c.id === p.categoryId)}
+            rates={rates}
+            currency={currency}
+          />
+        ))}
+        {filtered.length === 0 && (
+          <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
+        )}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table min-w-[860px]">
             <thead>
@@ -245,6 +265,109 @@ function ProductRows({ product, isExpanded, onToggle, onAdd, category, rates, cu
         </tr>
       )}
     </>
+  );
+}
+
+function ProductCard({ product, isExpanded, onToggle, onAdd, category, rates, currency }) {
+  const variantCount = product.variants.length;
+  return (
+    <div className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left flex items-start gap-3 p-3 hover:bg-ink-50"
+      >
+        <div className="w-20 h-16 rounded bg-ink-50 border border-ink-100 overflow-hidden flex-shrink-0">
+          <ImageView id={product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-sm truncate">{product.name}</div>
+              <div className="text-xs text-ink-500 truncate">
+                {product.designer || '—'}{category?.name ? ` · ${category.name}` : ''}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              {product.minPrice != null ? (
+                <div className="text-sm font-medium">{formatMoney(product.minPrice, currency, rates)}</div>
+              ) : (
+                <div className="text-xs text-ink-400">—</div>
+              )}
+              <div className="text-[10px] text-ink-500">{variantCount} {variantCount === 1 ? 'variante' : 'variantes'}</div>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      <div className="px-3 pb-2 flex items-center justify-between">
+        <Link
+          to={`/catalog/${product.id}`}
+          className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 px-2 py-1 -ml-2"
+        >
+          Editar <ExternalLink size={11} />
+        </Link>
+        {variantCount > 0 && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="text-xs text-ink-600 inline-flex items-center gap-1 px-2 py-1 -mr-2"
+          >
+            {isExpanded ? <>Ocultar <ChevronDown size={12} /></> : <>Ver variantes <ChevronRight size={12} /></>}
+          </button>
+        )}
+      </div>
+
+      {isExpanded && variantCount > 0 && (
+        <ul className="border-t border-ink-100 divide-y divide-ink-100 bg-ink-50/50">
+          {product.variants.map((v) => (
+            <VariantCard
+              key={v.id}
+              product={product}
+              variant={v}
+              onAdd={() => onAdd(v)}
+              rates={rates}
+              currency={currency}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function VariantCard({ product, variant, onAdd, rates, currency }) {
+  const grades = Object.entries(variant.priceByGrade || {}).sort((a, b) => a[0].localeCompare(b[0]));
+  const minPrice = grades.length
+    ? Math.min(...grades.map(([, v]) => v))
+    : variant.priceFixed ?? null;
+  const maxPrice = grades.length
+    ? Math.max(...grades.map(([, v]) => v))
+    : variant.priceFixed ?? null;
+  return (
+    <li className="px-3 py-2.5 flex items-start gap-3">
+      <div className="w-16 h-12 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
+        <ImageView id={variant.imageId || product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">{variant.name}</div>
+        {variant.reference && <div className="font-mono text-[10px] text-ink-500">{variant.reference}</div>}
+        {minPrice != null && (
+          <div className="text-xs text-ink-700 mt-0.5">
+            {minPrice === maxPrice
+              ? formatMoney(minPrice, currency, rates)
+              : `${formatMoney(minPrice, currency, rates)} – ${formatMoney(maxPrice, currency, rates)}`}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onAdd}
+        className="btn-brand text-xs flex-shrink-0"
+        title="Agregar a la cotización"
+      >
+        <Plus size={12} /> Agregar
+      </button>
+    </li>
   );
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
-import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical, ChevronDown, Minus } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
@@ -202,7 +202,7 @@ function Builder({ quoteId, navigate }) {
               <option value="declined">Declined</option>
               <option value="archived">Archived</option>
             </select>
-            <button onClick={exportPdf} className="btn-primary"><Download size={14} /> Export PDF</button>
+            <button onClick={exportPdf} className="btn-primary hidden md:inline-flex"><Download size={14} /> Export PDF</button>
           </>
         }
       />
@@ -239,38 +239,60 @@ function Builder({ quoteId, navigate }) {
                 No items yet — click <b>Add item</b> to pick a product.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="table min-w-[760px]">
-                  <thead>
-                    <tr>
-                      <th className="w-10" />
-                      <th>Item</th>
-                      <th>Material / color</th>
-                      <th className="w-20 text-right">Qty</th>
-                      <th className="w-32 text-right">Unit</th>
-                      <th className="w-32 text-right">Line total</th>
-                      <th className="w-8" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {resolved.map((r) => (
-                      <LineRow
-                        key={r.id}
-                        r={r}
-                        onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
-                        onRemove={() => removeLine(r.id)}
-                        onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
-                        onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
-                        onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
-                        onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
-                        onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
-                        onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
-                        quote={quote}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile: stacked cards */}
+                <ul className="md:hidden divide-y divide-ink-100">
+                  {resolved.map((r) => (
+                    <LineCard
+                      key={r.id}
+                      r={r}
+                      onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
+                      onRemove={() => removeLine(r.id)}
+                      onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
+                      onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
+                      onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
+                      onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
+                      onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
+                      onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
+                      quote={quote}
+                    />
+                  ))}
+                </ul>
+
+                {/* Desktop: table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="table min-w-[760px]">
+                    <thead>
+                      <tr>
+                        <th className="w-10" />
+                        <th>Item</th>
+                        <th>Material / color</th>
+                        <th className="w-20 text-right">Qty</th>
+                        <th className="w-32 text-right">Unit</th>
+                        <th className="w-32 text-right">Line total</th>
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resolved.map((r) => (
+                        <LineRow
+                          key={r.id}
+                          r={r}
+                          onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
+                          onRemove={() => removeLine(r.id)}
+                          onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
+                          onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
+                          onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
+                          onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
+                          onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
+                          onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
+                          quote={quote}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -329,6 +351,26 @@ function Builder({ quoteId, navigate }) {
           setMaterialPicker({ open: false, lineId: null });
         }}
       />
+
+      {/* Mobile sticky totals bar */}
+      <div
+        className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-wide text-ink-500">Total</div>
+          <div className="text-lg font-semibold tabular-nums truncate">
+            {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+          </div>
+        </div>
+        <button onClick={() => setPicker({ open: true })} className="btn-secondary">
+          <Plus size={14} /> Item
+        </button>
+        <button onClick={exportPdf} className="btn-primary">
+          <Download size={14} /> PDF
+        </button>
+      </div>
+      {/* Spacer so content can scroll above the sticky bar */}
+      <div className="md:hidden h-20" aria-hidden />
     </>
   );
 }
@@ -454,6 +496,151 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
         </td>
       </tr>
     </>
+  );
+}
+
+function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, onLineMargin, onLineDiscount, onNotes, onSwatchChange, quote }) {
+  const [expanded, setExpanded] = useState(false);
+  const unit = applyLineAdjustments(r.basePrice, r.lineMarginPct, r.lineDiscountPct);
+  const lineTotal = unit * (r.qty || 0);
+  const fmt = (v) => formatMoney(v, quote.currencyCode || 'USD', quote.rates || { USD: 1 });
+  return (
+    <li className="px-4 py-3 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
+          <ImageView id={r.variant?.imageId || r.product?.heroImageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-sm truncate">{r.product?.name || '(missing product)'}</div>
+          <div className="text-xs text-ink-500 truncate">{r.variant?.name || '—'}</div>
+          {r.variant?.reference && <div className="font-mono text-[10px] text-ink-400">{r.variant.reference}</div>}
+        </div>
+        <button onClick={onRemove} className="text-ink-400 hover:text-red-600 p-2 -m-2" aria-label="Remove">
+          <Trash2 size={16} />
+        </button>
+      </div>
+
+      <button
+        onClick={onPickMaterial}
+        className="flex items-center gap-2 text-left w-full border border-ink-100 rounded p-2 hover:bg-ink-50"
+      >
+        <div className="w-9 h-9 rounded bg-ink-100 overflow-hidden flex-shrink-0">
+          <ImageView id={r.swatchImageId || r.color?.swatchImageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+        </div>
+        <div className="min-w-0 flex-1">
+          {r.material ? (
+            <>
+              <div className="text-sm font-medium truncate">{r.material.name} <span className="text-ink-500 font-normal">· Grade {r.material.grade}</span></div>
+              <div className="text-xs text-ink-500 truncate">{r.color?.name || 'Pick color'}</div>
+            </>
+          ) : (
+            <span className="text-sm text-brand-600 font-medium">Pick fabric / leather…</span>
+          )}
+        </div>
+      </button>
+
+      <div className="flex items-center justify-between gap-3">
+        <QtyStepper value={r.qty ?? 1} onChange={onQtyChange} />
+        <div className="text-right">
+          <div className="text-base font-semibold">{fmt(lineTotal)}</div>
+          <div className="text-[11px] text-ink-500">{fmt(unit)} c/u</div>
+          {r.basePrice === 0 && r.material && (
+            <div className="text-[10px] text-amber-600 mt-0.5">No grade-{r.material.grade} price</div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between text-xs text-ink-500 hover:text-ink-900 py-2 border-t border-ink-100"
+      >
+        <span>Override / margin / discount / notes</span>
+        <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="flex items-start gap-3 bg-ink-50 rounded p-3">
+          <div className="w-20 flex-shrink-0">
+            <ImageDrop
+              imageId={r.swatchImageId}
+              onChange={(id) => onSwatchChange(id)}
+              kind="quote-line-swatch"
+              ownerId={r.id}
+              label="Swatch"
+              imgClassName="w-full aspect-square object-cover rounded"
+              allowUrl={false}
+            />
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-3">
+            <div>
+              <div className="label">Override unit ($)</div>
+              <input
+                type="number"
+                className="input"
+                placeholder={String(r.basePrice || 0)}
+                value={r.priceOverride ?? ''}
+                onChange={(e) => onPriceOverride(e.target.value === '' ? null : Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <div className="label">Margin %</div>
+              <input
+                type="number"
+                className="input"
+                value={r.lineMarginPct ?? 0}
+                onChange={(e) => onLineMargin(Number(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <div className="label">Discount %</div>
+              <input
+                type="number"
+                className="input"
+                value={r.lineDiscountPct ?? 0}
+                onChange={(e) => onLineDiscount(Number(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <div className="label">Notes</div>
+              <input
+                className="input"
+                value={r.notes || ''}
+                onChange={(e) => onNotes(e.target.value)}
+                placeholder="e.g. COM"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function QtyStepper({ value, onChange }) {
+  return (
+    <div className="inline-flex items-center border border-ink-200 rounded-md">
+      <button
+        onClick={() => onChange(Math.max(0, (value || 0) - 1))}
+        className="px-3 py-2 text-ink-600 hover:bg-ink-100"
+        aria-label="Decrement"
+      >
+        <Minus size={14} />
+      </button>
+      <input
+        type="number"
+        min="0"
+        value={value ?? 0}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        className="w-12 text-center bg-transparent border-0 px-0 focus:outline-none focus:ring-0"
+      />
+      <button
+        onClick={() => onChange((value || 0) + 1)}
+        className="px-3 py-2 text-ink-600 hover:bg-ink-100"
+        aria-label="Increment"
+      >
+        <Plus size={14} />
+      </button>
+    </div>
   );
 }
 

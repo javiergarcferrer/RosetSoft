@@ -93,7 +93,40 @@ export default function Materials() {
         </select>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-2">
+        {filtered.map((m) => (
+          <Link
+            key={m.id}
+            to={`/materials/${m.id}`}
+            className="card block p-3 hover:bg-ink-50"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-medium text-sm">{m.name}</div>
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ${KIND_COLORS[m.kind] || 'bg-ink-100 text-ink-700'}`}>{KIND_LABELS[m.kind] || m.kind}</span>
+                  <span className="badge">{m.grade || '—'}</span>
+                  {m.width && <span className="text-[10px] text-ink-500">{m.width}</span>}
+                </div>
+                {m.composition && (
+                  <div className="text-[11px] text-ink-500 mt-1 truncate">{m.composition}</div>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0">
+                {m.pricePerUnit && <div className="text-sm font-medium">${m.pricePerUnit}</div>}
+                <div className="text-[10px] text-ink-500">{counts.get(m.id) || 0} {counts.get(m.id) === 1 ? 'color' : 'colores'}</div>
+              </div>
+            </div>
+          </Link>
+        ))}
+        {filtered.length === 0 && (
+          <div className="card card-pad text-center text-sm text-ink-500">No matches.</div>
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table min-w-[680px]">
             <thead>
