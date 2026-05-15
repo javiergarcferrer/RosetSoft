@@ -1,26 +1,21 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, CheckCircle2, AlertCircle, FileJson, FileType } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { inspectCatalogJson, transformCatalog, commitCatalog } from '../lib/catalogImport.js';
 import { buildCatalogFromPdf } from '../parser/buildCatalog.js';
 
 /**
- * Catalog importer with two upload paths:
+ * Catalog importer.
  *
- *   1. PDF  — parse the tariff in the browser (PDF.js), produce the same
- *             JSON the Python parser does, then run the upload pipeline.
- *   2. JSON — bring a pre-built `catalog.json` (e.g. from the Python pipeline)
- *             and skip parsing.
- *
- * Both paths converge on the same `commitCatalog()` call: five bulk-upsert
- * phases (categories → products → product_variants → materials → colors)
- * with retry-on-error.
+ * Drop the Ligne Roset USA TARIF PDF; the parser runs in the browser
+ * (PDF.js), produces an in-memory catalog object, and then the upload
+ * pipeline writes it to Supabase in five bulk-upsert phases with
+ * retry-on-error.
  */
 export default function CatalogImport() {
   const navigate = useNavigate();
-  const pdfInputRef = useRef(null);
-  const jsonInputRef = useRef(null);
+  const inputRef = useRef(null);
 
   const [phase, setPhase] = useState('idle');
   const [fileName, setFileName] = useState('');
@@ -44,37 +39,17 @@ export default function CatalogImport() {
         onProgress: setParseProgress,
       });
       setParserWarnings(warnings);
-      await ingestJson(json);
+      const insp = inspectCatalogJson(json);
+      if (!insp.ok) throw new Error(insp.error);
+      const t = transformCatalog(json);
+      setInspection(insp);
+      setTransformed(t);
+      setPhase('preview');
     } catch (e) {
       console.error(e);
       setError(e?.message || String(e));
       setPhase('error');
     }
-  }
-
-  async function onJsonFile(file) {
-    if (!file) return;
-    setFileName(file.name);
-    setError(null);
-    setPhase('reading-json');
-    try {
-      const text = await file.text();
-      const json = JSON.parse(text);
-      await ingestJson(json);
-    } catch (e) {
-      console.error(e);
-      setError(e?.message || String(e));
-      setPhase('error');
-    }
-  }
-
-  async function ingestJson(json) {
-    const insp = inspectCatalogJson(json);
-    if (!insp.ok) throw new Error(insp.error);
-    const t = transformCatalog(json);
-    setInspection(insp);
-    setTransformed(t);
-    setPhase('preview');
   }
 
   async function commit() {
@@ -108,63 +83,38 @@ export default function CatalogImport() {
     <>
       <PageHeader
         title="Importar catálogo"
-        subtitle="Sube el PDF de tarifa Ligne Roset (USA) — el parser corre en tu navegador."
+        subtitle="Sube el PDF de tarifa Ligne Roset (USA)."
       />
 
       {phase === 'idle' && (
-        <div className="grid md:grid-cols-2 gap-4">
+        <>
           <div
-            className="card card-pad text-center py-16 border-2 border-dashed border-ink-200 cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition"
-            onClick={() => pdfInputRef.current?.click()}
+            className="card card-pad text-center py-20 border-2 border-dashed border-ink-200 cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition"
+            onClick={() => inputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); onPdfFile(e.dataTransfer.files?.[0]); }}
           >
-            <FileType size={32} className="mx-auto text-ink-400 mb-3" />
-            <div className="text-base font-medium">Subir PDF de tarifa</div>
+            <Upload size={36} className="mx-auto text-ink-400 mb-3" />
+            <div className="text-base font-medium">Suelta aquí el PDF de tarifa</div>
             <div className="text-sm text-ink-500 mt-1">
-              Suelta aquí <code>TARIF.pdf</code> · ~100 MB · parseo ~60–120 s
+              ~100 MB · el parseo corre en tu navegador y tarda ~60–120 s
             </div>
             <input
-              ref={pdfInputRef}
+              ref={inputRef}
               type="file"
               accept="application/pdf,.pdf"
               className="hidden"
               onChange={(e) => onPdfFile(e.target.files?.[0])}
             />
           </div>
-
-          <div
-            className="card card-pad text-center py-16 border-2 border-dashed border-ink-200 cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition"
-            onClick={() => jsonInputRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); onJsonFile(e.dataTransfer.files?.[0]); }}
-          >
-            <FileJson size={32} className="mx-auto text-ink-400 mb-3" />
-            <div className="text-base font-medium">Subir catalog.json</div>
-            <div className="text-sm text-ink-500 mt-1">
-              Si ya tienes el JSON precomputado del parser Python
-            </div>
-            <input
-              ref={jsonInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(e) => onJsonFile(e.target.files?.[0])}
-            />
-          </div>
-
-          <div className="md:col-span-2 card card-pad text-xs text-ink-600 leading-relaxed">
-            <div className="font-medium text-ink-900 mb-1.5">Flujo</div>
+          <div className="mt-4 card card-pad text-xs text-ink-600 leading-relaxed">
             <ol className="list-decimal list-inside space-y-0.5">
               <li>Sube el PDF — todo el parseo ocurre en el navegador.</li>
               <li>Revisa la vista previa (categorías, productos, variantes, materiales).</li>
               <li>Confirma — se sube a Supabase en bloques de 500 filas con reintentos.</li>
             </ol>
-            <div className="mt-2 text-ink-500">
-              Las imágenes vectoriales/raster del PDF no se importan todavía. Se pueden subir manualmente por producto desde el catálogo.
-            </div>
           </div>
-        </div>
+        </>
       )}
 
       {phase === 'parsing-pdf' && (
@@ -191,20 +141,12 @@ export default function CatalogImport() {
         </div>
       )}
 
-      {phase === 'reading-json' && (
-        <div className="card card-pad text-center py-16">
-          <div className="text-sm text-ink-500">Leyendo {fileName}…</div>
-        </div>
-      )}
-
       {phase === 'preview' && inspection && transformed && (
         <>
           <div className="card card-pad mb-4 flex items-center justify-between flex-wrap gap-3">
             <div>
               <div className="text-sm font-medium">{fileName}</div>
-              <div className="text-xs text-ink-500">
-                {inspection.sourcePdf ? `Fuente: ${inspection.sourcePdf} · ` : ''}{inspection.pages || '?'} páginas
-              </div>
+              <div className="text-xs text-ink-500">{inspection.pages || '?'} páginas</div>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={reset} className="btn-ghost">Cancelar</button>
