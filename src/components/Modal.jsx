@@ -17,7 +17,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       <div className={`relative w-full ${widths[size] || widths.md} bg-white rounded-lg shadow-2xl border border-ink-100 flex flex-col max-h-[90vh]`}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-100">
           <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-ink-400 hover:text-ink-900 p-1">
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-900 p-2 -mr-2 -my-1" aria-label="Cerrar">
             <X size={18} />
           </button>
         </div>

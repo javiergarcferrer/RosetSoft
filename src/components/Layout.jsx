@@ -56,7 +56,7 @@ export default function Layout() {
       <header className="md:hidden flex items-center justify-between px-3 py-2.5 bg-ink-900 text-ink-100 border-b border-ink-800">
         <button
           onClick={() => setNavOpen(true)}
-          className="p-2 -ml-1 rounded hover:bg-ink-800"
+          className="p-2.5 -ml-1 rounded hover:bg-ink-800"
           aria-label="Open menu"
         >
           <Menu size={20} />
@@ -91,7 +91,7 @@ export default function Layout() {
           </div>
           <button
             onClick={() => setNavOpen(false)}
-            className="md:hidden text-ink-400 hover:text-ink-100 p-1 -mr-1"
+            className="md:hidden text-ink-400 hover:text-ink-100 p-2 -mr-2 -my-1"
             aria-label="Close menu"
           >
             <X size={18} />

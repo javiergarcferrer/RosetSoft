@@ -108,7 +108,7 @@ export default function QuoteCart() {
             {resolved.length} {resolved.length === 1 ? 'artículo' : 'artículos'} · borrador
           </div>
         </div>
-        <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-900 p-1">
+        <button onClick={() => setOpen(false)} className="text-ink-400 hover:text-ink-900 p-2 -mr-2 -my-1" aria-label="Cerrar carrito">
           <X size={18} />
         </button>
       </div>
@@ -150,8 +150,8 @@ export default function QuoteCart() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => removeLine(r.id)} className="text-ink-400 hover:text-red-600 p-1">
-                      <Trash2 size={14} />
+                    <button onClick={() => removeLine(r.id)} className="text-ink-400 hover:text-red-600 p-2 -m-1" aria-label="Eliminar línea">
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </li>

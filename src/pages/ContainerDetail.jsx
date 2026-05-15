@@ -246,10 +246,10 @@ export default function ContainerDetail() {
                         <div className="text-sm font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</div>
                         <button
                           onClick={() => unpin(q.id)}
-                          className="text-ink-400 hover:text-red-600 p-1 -mr-1"
+                          className="text-ink-400 hover:text-red-600 p-2 -m-1"
                           aria-label="Quitar del contenedor"
                         >
-                          <X size={16} />
+                          <X size={18} />
                         </button>
                       </div>
                     </div>
