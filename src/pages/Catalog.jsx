@@ -204,7 +204,7 @@ function ProductRows({ product, isExpanded, onToggle, onAdd, category, rates, cu
         </td>
         <td>
           <div className="w-24 h-20 rounded bg-ink-50 border border-ink-100 overflow-hidden">
-            <ImageView id={product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+            <ImageView id={product.vectorImageId || product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
           </div>
         </td>
         <td>
@@ -278,7 +278,7 @@ function ProductCard({ product, isExpanded, onToggle, onAdd, category, rates, cu
         className="w-full text-left flex items-start gap-3 p-3 hover:bg-ink-50"
       >
         <div className="w-20 h-16 rounded bg-ink-50 border border-ink-100 overflow-hidden flex-shrink-0">
-          <ImageView id={product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+          <ImageView id={product.vectorImageId || product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -347,7 +347,7 @@ function VariantCard({ product, variant, onAdd, rates, currency }) {
   return (
     <li className="px-3 py-2.5 flex items-start gap-3">
       <div className="w-16 h-12 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-        <ImageView id={variant.imageId || product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+        <ImageView id={variant.imageId || product.vectorImageId || product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium truncate">{variant.name}</div>
@@ -384,7 +384,7 @@ function VariantRow({ product, variant, onAdd, rates, currency }) {
     <tr className="border-t border-ink-100 align-middle">
       <td className="pl-12 py-2 w-24">
         <div className="w-20 h-16 rounded bg-white border border-ink-100 overflow-hidden">
-          <ImageView id={variant.imageId || product.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+          <ImageView id={variant.imageId || product.vectorImageId || product.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
         </div>
       </td>
       <td className="py-2">

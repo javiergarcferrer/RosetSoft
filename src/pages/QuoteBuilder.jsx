@@ -677,7 +677,7 @@ function ProductPickerModal({ open, onClose, onPick }) {
             <div key={p.id} className="border border-ink-100 rounded-md hover:border-ink-300 transition">
               <div className="flex items-center gap-3 px-3 py-2 border-b border-ink-100">
                 <div className="w-16 h-12 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
-                  <ImageView id={p.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
+                  <ImageView id={p.vectorImageId || p.heroImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium text-sm truncate">{p.name}</div>
