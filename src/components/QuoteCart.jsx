@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation, matchPath } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
 import { ShoppingBag, Trash2, X, ChevronRight, Minus, Plus } from 'lucide-react';
@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
-import { resolveLineBasePrice, applyLineAdjustments, ITBIS_PCT } from '../lib/pricing.js';
+import { resolveLineBasePrice, applyLineAdjustments, computeTotals, ITBIS_PCT } from '../lib/pricing.js';
 import ImageView from './ImageView.jsx';
 
 /**
@@ -56,16 +56,24 @@ export default function QuoteCart() {
   const rates = settings?.currencyRates || { USD: 1, DOP: 60.0 };
   const currency = settings?.defaultCurrency || 'DOP';
 
-  const subtotal = resolved.reduce((acc, r) => {
-    const unit = applyLineAdjustments(r.basePrice, r.lineMarginPct, r.lineDiscountPct);
-    return acc + unit * (r.qty || 0);
-  }, 0);
-
+  // Same formula as the QuoteBuilder sidebar — the cart preview must match
+  // the totals the user will see after finalizing.
+  const totals = useMemo(() => computeTotals(
+    resolved.map((r) => ({
+      qty: r.qty,
+      basePrice: r.basePrice,
+      lineMarginPct: r.lineMarginPct,
+      lineDiscountPct: r.lineDiscountPct,
+    })),
+    {
+      marginPct: quote?.marginPct,
+      discountPct: quote?.discountPct,
+      shipping: quote?.shipping,
+    },
+  ), [resolved, quote?.marginPct, quote?.discountPct, quote?.shipping]);
+  const { subtotal, marginAmt, discountAmt, taxAmt, shipping, grandTotal } = totals;
+  const marginPct = quote?.marginPct || 0;
   const discountPct = quote?.discountPct || 0;
-  const discountAmt = subtotal * (discountPct / 100);
-  const afterDiscount = subtotal - discountAmt;
-  const itbis = afterDiscount * (ITBIS_PCT / 100);
-  const total = afterDiscount + itbis;
 
   async function handleFinalize() {
     if (!resolved.length) return;
@@ -85,7 +93,7 @@ export default function QuoteCart() {
         <span className="font-medium tabular-nums">{resolved.length}</span>
         {resolved.length > 0 && (
           <span className="text-xs opacity-75 ml-1 border-l border-white/15 pl-2.5 tabular-nums">
-            {formatMoney(total, currency, rates)}
+            {formatMoney(grandTotal, currency, rates)}
           </span>
         )}
       </button>
@@ -167,6 +175,12 @@ export default function QuoteCart() {
           <span>Subtotal</span>
           <span>{formatMoney(subtotal, currency, rates)}</span>
         </div>
+        {marginPct ? (
+          <div className="flex items-center justify-between text-ink-600">
+            <span>Margen ({marginPct}%)</span>
+            <span>{formatMoney(marginAmt, currency, rates)}</span>
+          </div>
+        ) : null}
         {discountPct ? (
           <div className="flex items-center justify-between text-ink-600">
             <span>Descuento ({discountPct}%)</span>
@@ -175,11 +189,17 @@ export default function QuoteCart() {
         ) : null}
         <div className="flex items-center justify-between text-ink-600">
           <span>ITBIS ({ITBIS_PCT}%)</span>
-          <span>{formatMoney(itbis, currency, rates)}</span>
+          <span>{formatMoney(taxAmt, currency, rates)}</span>
         </div>
+        {shipping ? (
+          <div className="flex items-center justify-between text-ink-600">
+            <span>Envío</span>
+            <span>{formatMoney(shipping, currency, rates)}</span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between font-semibold text-base pt-1.5 border-t border-ink-100">
           <span>Total</span>
-          <span>{formatMoney(total, currency, rates)}</span>
+          <span>{formatMoney(grandTotal, currency, rates)}</span>
         </div>
       </div>
 

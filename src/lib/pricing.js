@@ -13,6 +13,24 @@
 
 export const ITBIS_PCT = 18;
 
+/** Coerce to a finite number, falling back to a default if not. */
+function safeNum(v, fallback = 0) {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Clamp a percentage to [0, max] (default 100). Used for discount fields
+ * where a negative value would invert the operation and a >100% value is
+ * never meaningful. Exported so input widgets can mirror the clamp.
+ */
+export function clampPct(v, max = 100) {
+  const n = safeNum(v, 0);
+  if (n < 0) return 0;
+  if (n > max) return max;
+  return n;
+}
+
 export function variantPriceForGrade(variant, grade) {
   if (!variant?.priceByGrade) return null;
   return variant.priceByGrade[grade] ?? null;
@@ -44,32 +62,62 @@ export function resolveLineBasePrice(
 /**
  * Compute totals for a quote.
  *
+ * Order of operations matters when both margin and discount are non-zero:
+ *
+ *   lineUnit      = applyLineAdjustments(basePrice, lineMarginPct, lineDiscountPct)
+ *   subtotal      = Σ( lineUnit × qty )
+ *   afterMargin   = subtotal × (1 + marginPct/100)        // margin lifts the bill
+ *   afterDiscount = afterMargin × (1 − discountPct/100)   // discount eats into the lifted total
+ *   taxAmt        = afterDiscount × (ITBIS/100)
+ *   grandTotal    = afterDiscount + taxAmt + shipping
+ *
+ * Constraints (defense in depth — inputs are also clamped at the UI layer):
+ *   - marginPct:   free range (negative = loss-leader / clearance is legitimate)
+ *   - discountPct: clamped to [0, 100]
+ *   - line pcts:   same rules as quote-level pcts
+ *   - shipping:    clamped to [0, ∞)
+ *   - non-finite numeric inputs are treated as 0 (never NaN-out a quote)
+ *
  * @param {Array} lines  resolved line items: { qty, basePrice, lineMarginPct, lineDiscountPct }
- * @param {Object} quote { marginPct, discountPct, taxPct, shipping, currencyCode, rates }
- * @returns {Object} { subtotal, marginAmt, discountAmt, taxableBase, taxAmt, shipping, grandTotal }
+ * @param {Object} quote { marginPct, discountPct, shipping }
+ *                       (taxPct is intentionally ignored — ITBIS is fixed)
+ * @returns {Object} { subtotal, marginAmt, discountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct }
  */
 export function computeTotals(lines, quote = {}) {
-  const subtotal = lines.reduce((acc, l) => {
-    const unit = applyLineAdjustments(l.basePrice, l.lineMarginPct, l.lineDiscountPct);
-    return acc + unit * (l.qty || 0);
+  const subtotal = (lines || []).reduce((acc, l) => {
+    const unit = applyLineAdjustments(l?.basePrice, l?.lineMarginPct, l?.lineDiscountPct);
+    return acc + unit * safeNum(l?.qty, 0);
   }, 0);
 
-  const marginAmt = subtotal * ((quote.marginPct || 0) / 100);
+  const marginPct = safeNum(quote.marginPct, 0);
+  const discountPct = clampPct(quote.discountPct);
+
+  const marginAmt = subtotal * (marginPct / 100);
   const afterMargin = subtotal + marginAmt;
-  const discountAmt = afterMargin * ((quote.discountPct || 0) / 100);
+  const discountAmt = afterMargin * (discountPct / 100);
   const taxableBase = afterMargin - discountAmt;
-  // ITBIS is fixed at 18% — hardcoded for Dominican Republic
   const taxAmt = taxableBase * (ITBIS_PCT / 100);
-  const shipping = quote.shipping || 0;
+  const shipping = Math.max(0, safeNum(quote.shipping, 0));
   const grandTotal = taxableBase + taxAmt + shipping;
 
-  return { subtotal, marginAmt, discountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct: ITBIS_PCT };
+  return {
+    subtotal: safeNum(subtotal),
+    marginAmt: safeNum(marginAmt),
+    discountAmt: safeNum(discountAmt),
+    taxableBase: safeNum(taxableBase),
+    taxAmt: safeNum(taxAmt),
+    shipping,
+    grandTotal: safeNum(grandTotal),
+    taxPct: ITBIS_PCT,
+  };
 }
 
 export function applyLineAdjustments(basePrice, marginPct, discountPct) {
-  if (basePrice == null) return 0;
-  const withMargin = basePrice * (1 + (marginPct || 0) / 100);
-  return withMargin * (1 - (discountPct || 0) / 100);
+  const base = safeNum(basePrice, 0);
+  const margin = safeNum(marginPct, 0);
+  const discount = clampPct(discountPct);
+  const withMargin = base * (1 + margin / 100);
+  return withMargin * (1 - discount / 100);
 }
 
 /** A fabric "is allowed" on a product when:

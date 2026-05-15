@@ -579,10 +579,23 @@ function validUntil(quote) {
   return new Date(created + 30 * 86400 * 1000).toLocaleDateString('es-DO');
 }
 
+// computeTotals() guarantees finite numbers, but if something upstream (a
+// missing exchange rate, a corrupt variant payload, an arithmetic bug) sneaks
+// a NaN/Infinity through, surface it loudly rather than rendering "—" with
+// no diagnostic — a quote that ships with "—" in the total column is worse
+// than one that fails to generate.
 function formatMoney(value, code, rates) {
-  if (value == null || Number.isNaN(value)) return '—';
+  if (value == null) return '—';
+  if (!Number.isFinite(value)) {
+    console.warn('[quotePdf] formatMoney got non-finite value', { value, code });
+    return '—';
+  }
   const rate = rates?.[code] ?? 1;
   const v = value * rate;
+  if (!Number.isFinite(v)) {
+    console.warn('[quotePdf] formatMoney post-rate non-finite', { value, code, rate });
+    return '—';
+  }
   try {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 2 }).format(v);
   } catch {
@@ -591,7 +604,11 @@ function formatMoney(value, code, rates) {
 }
 
 function formatPlain(value) {
-  if (value == null || Number.isNaN(value)) return '—';
+  if (value == null) return '—';
+  if (!Number.isFinite(value)) {
+    console.warn('[quotePdf] formatPlain got non-finite value', { value });
+    return '—';
+  }
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(value));
 }
 

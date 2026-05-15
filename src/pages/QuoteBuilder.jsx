@@ -9,7 +9,7 @@ import Modal from '../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, applyLineAdjustments, resolveLineBasePrice, ITBIS_PCT } from '../lib/pricing.js';
+import { computeTotals, applyLineAdjustments, resolveLineBasePrice, clampPct, ITBIS_PCT } from '../lib/pricing.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
 import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
 
@@ -358,11 +358,11 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="label">Descuento %</div>
-                <DebouncedInput className="input" type="number" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: Number(v) || 0 })} />
+                <DebouncedInput className="input" type="number" min="0" max="100" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: clampPct(v) })} />
               </div>
               <div>
                 <div className="label">Envío (USD)</div>
-                <DebouncedInput className="input" type="number" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Number(v) || 0 })} />
+                <DebouncedInput className="input" type="number" min="0" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Math.max(0, Number(v) || 0) })} />
               </div>
             </div>
             <div className="text-[10px] text-ink-500">
@@ -509,17 +509,18 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
             </div>
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 self-center">
               <div>
-                <div className="text-[10px] font-medium text-ink-500 uppercase">Override unit ($)</div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Precio unit. ($)</div>
                 <DebouncedInput
                   type="number"
+                  min="0"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   placeholder={String(r.basePrice || 0)}
                   value={r.priceOverride ?? ''}
-                  onCommit={(v) => onPriceOverride(v === '' ? null : Number(v))}
+                  onCommit={(v) => onPriceOverride(v === '' ? null : Math.max(0, Number(v) || 0))}
                 />
               </div>
               <div>
-                <div className="text-[10px] font-medium text-ink-500 uppercase">Margin %</div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Margen %</div>
                 <DebouncedInput
                   type="number"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
@@ -528,12 +529,14 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
                 />
               </div>
               <div>
-                <div className="text-[10px] font-medium text-ink-500 uppercase">Discount %</div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Descuento %</div>
                 <DebouncedInput
                   type="number"
+                  min="0"
+                  max="100"
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   value={r.lineDiscountPct ?? 0}
-                  onCommit={(v) => onLineDiscount(Number(v) || 0)}
+                  onCommit={(v) => onLineDiscount(clampPct(v))}
                 />
               </div>
               <div>
@@ -627,17 +630,18 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
           </div>
           <div className="flex-1 grid grid-cols-2 gap-3">
             <div>
-              <div className="label">Override unit ($)</div>
+              <div className="label">Precio unit. ($)</div>
               <DebouncedInput
                 type="number"
+                min="0"
                 className="input"
                 placeholder={String(r.basePrice || 0)}
                 value={r.priceOverride ?? ''}
-                onCommit={(v) => onPriceOverride(v === '' ? null : Number(v))}
+                onCommit={(v) => onPriceOverride(v === '' ? null : Math.max(0, Number(v) || 0))}
               />
             </div>
             <div>
-              <div className="label">Margin %</div>
+              <div className="label">Margen %</div>
               <DebouncedInput
                 type="number"
                 className="input"
@@ -646,12 +650,14 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
               />
             </div>
             <div>
-              <div className="label">Discount %</div>
+              <div className="label">Descuento %</div>
               <DebouncedInput
                 type="number"
+                min="0"
+                max="100"
                 className="input"
                 value={r.lineDiscountPct ?? 0}
-                onCommit={(v) => onLineDiscount(Number(v) || 0)}
+                onCommit={(v) => onLineDiscount(clampPct(v))}
               />
             </div>
             <div>
