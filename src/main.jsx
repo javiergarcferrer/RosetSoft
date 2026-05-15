@@ -7,11 +7,14 @@ import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import './index.css';
 import App from './App.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <App />
+      </HashRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

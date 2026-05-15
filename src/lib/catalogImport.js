@@ -425,14 +425,20 @@ export async function commitCatalog(transformed, { onProgress, pdf } = {}) {
         (a) one hero per product, anchored on the intro page;
         (b) one thumbnail per row-priced variant, anchored on row_y. */
   counts.images = 0;
+  counts.imagesFailed = 0;
   counts.variantImages = 0;
+  counts.variantImagesFailed = 0;
   if (pdf) {
-    counts.images = await uploadProductHeroImages(pdf, transformed.products, {
+    const heroResult = await uploadProductHeroImages(pdf, transformed.products, {
       onProgress: (done, total, label) => step('images', done, total, label || 'Imágenes'),
     });
-    counts.variantImages = await uploadVariantThumbnails(pdf, transformed.variantImageAnchors || [], {
+    counts.images = heroResult.uploaded;
+    counts.imagesFailed = heroResult.failed;
+    const thumbResult = await uploadVariantThumbnails(pdf, transformed.variantImageAnchors || [], {
       onProgress: (done, total, label) => step('variant-images', done, total, label || 'Miniaturas'),
     });
+    counts.variantImages = thumbResult.uploaded;
+    counts.variantImagesFailed = thumbResult.failed;
   }
 
   step('done', 1, 1, 'Listo');
@@ -445,7 +451,10 @@ export async function commitCatalog(transformed, { onProgress, pdf } = {}) {
  *
  * Concurrency caps at 3 parallel uploads — empirically the largest value
  * Supabase Storage on free tier handles without 429s. Per-image errors are
- * swallowed (logged) so one bad render doesn't sink the whole pass.
+ * swallowed (logged) so one bad render doesn't sink the whole pass; the
+ * count of failures is returned so the caller can surface it.
+ *
+ * Returns { uploaded, failed }.
  */
 async function uploadProductHeroImages(pdf, products, { onProgress, concurrency = 3 } = {}) {
   // Build the work list. Skip products without an intro page; skip products
@@ -460,14 +469,16 @@ async function uploadProductHeroImages(pdf, products, { onProgress, concurrency 
     tasks.push({ id: p.id, name: p.name, page: introPage });
   }
   const total = tasks.length;
-  if (!total) { onProgress?.(0, 0); return 0; }
+  if (!total) { onProgress?.(0, 0); return { uploaded: 0, failed: 0 }; }
 
   let done = 0;
   let uploaded = 0;
+  let failed = 0;
   onProgress?.(0, total, 'Imágenes');
 
   async function worker(slice) {
     for (const t of slice) {
+      let ok = false;
       try {
         const blob = await renderProductHero(pdf, t.page);
         if (blob) {
@@ -480,11 +491,13 @@ async function uploadProductHeroImages(pdf, products, { onProgress, concurrency 
           if (imageId) {
             await db.products.update(t.id, { vectorImageId: imageId });
             uploaded++;
+            ok = true;
           }
         }
       } catch (e) {
         console.warn(`[catalog image] ${t.name} (p.${t.page}):`, e?.message || e);
       } finally {
+        if (!ok) failed++;
         done++;
         onProgress?.(done, total, 'Imágenes');
       }
@@ -494,7 +507,7 @@ async function uploadProductHeroImages(pdf, products, { onProgress, concurrency 
   const slices = Array.from({ length: Math.min(concurrency, tasks.length) }, () => []);
   tasks.forEach((t, i) => slices[i % slices.length].push(t));
   await Promise.all(slices.map(worker));
-  return uploaded;
+  return { uploaded, failed };
 }
 
 /**
@@ -507,13 +520,13 @@ async function uploadProductHeroImages(pdf, products, { onProgress, concurrency 
  * converge.
  */
 async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency = 3 } = {}) {
-  if (!anchors.length) { onProgress?.(0, 0); return 0; }
+  if (!anchors.length) { onProgress?.(0, 0); return { uploaded: 0, failed: 0 }; }
 
   // Don't re-upload variants that already have an image.
   const existing = await db.productVariants.toArray();
   const haveImage = new Set(existing.filter((v) => v.imageId).map((v) => v.id));
   const work = anchors.filter((a) => !haveImage.has(a.variantId));
-  if (!work.length) { onProgress?.(0, 0); return 0; }
+  if (!work.length) { onProgress?.(0, 0); return { uploaded: 0, failed: 0 }; }
 
   // Group by page so we render each page at most once.
   const byPage = new Map();
@@ -526,6 +539,7 @@ async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency =
   const total = work.length;
   let done = 0;
   let uploaded = 0;
+  let failed = 0;
   onProgress?.(0, total, 'Miniaturas');
 
   // Page-level concurrency. Each page handler renders once, then iterates
@@ -538,11 +552,14 @@ async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency =
         pageImage = await renderPageImage(pdf, page);
       } catch (e) {
         console.warn(`[variant image] render page ${page} failed:`, e?.message || e);
+        // Whole page failed → every anchor on it counts as failed.
+        failed += anchorsOnPage.length;
         done += anchorsOnPage.length;
         onProgress?.(done, total, 'Miniaturas');
         continue;
       }
       for (const a of anchorsOnPage) {
+        let ok = false;
         try {
           const blob = pageImage ? await renderRowThumbnail(pageImage, a.rowY) : null;
           if (blob) {
@@ -555,11 +572,13 @@ async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency =
             if (imageId) {
               await db.productVariants.update(a.variantId, { imageId });
               uploaded++;
+              ok = true;
             }
           }
         } catch (e) {
           console.warn(`[variant image] ${a.variantId}:`, e?.message || e);
         } finally {
+          if (!ok) failed++;
           done++;
           onProgress?.(done, total, 'Miniaturas');
         }
@@ -570,7 +589,7 @@ async function uploadVariantThumbnails(pdf, anchors, { onProgress, concurrency =
   const slices = Array.from({ length: Math.min(concurrency, pages.length) }, () => []);
   pages.forEach((p, i) => slices[i % slices.length].push(p));
   await Promise.all(slices.map(worker));
-  return uploaded;
+  return { uploaded, failed };
 }
 
 async function uploadWithRetry(opts, retries = 3) {

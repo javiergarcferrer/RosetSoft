@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { CartProvider } from './context/CartContext.jsx';
@@ -16,9 +18,37 @@ import Containers from './pages/Containers.jsx';
 import ContainerDetail from './pages/ContainerDetail.jsx';
 import CatalogImport from './pages/CatalogImport.jsx';
 import Settings from './pages/Settings.jsx';
+import NotFound from './pages/NotFound.jsx';
 
+/**
+ * Loading screen. If the boot takes longer than 5 s — typically because of a
+ * stale Supabase token whose getSession() never returns — surface an "escape
+ * hatch" button so the user can clear it and continue, instead of staring at
+ * a spinner. AuthProvider has its own 3 s timeout, so this button is the
+ * second-line defense when even that fallback doesn't recover.
+ */
 function Loading() {
-  return <div className="h-full flex items-center justify-center text-ink-500 text-sm">Loading…</div>;
+  const { forceReset } = useAuth();
+  const [showEscape, setShowEscape] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShowEscape(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-ink-500 text-sm gap-3 px-6">
+      <div className="animate-pulse">Cargando…</div>
+      {showEscape && (
+        <button
+          type="button"
+          onClick={forceReset}
+          className="btn-ghost text-xs inline-flex items-center gap-1.5"
+        >
+          <RefreshCw size={12} />
+          ¿Tardó demasiado? Toca aquí para reiniciar la sesión.
+        </button>
+      )}
+    </div>
+  );
 }
 
 function RequireAuth({ children }) {
@@ -61,7 +91,7 @@ function ProtectedApp() {
               <Route path="containers/:containerId" element={<ContainerDetail />} />
               <Route path="import" element={<CatalogImport />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </Gate>

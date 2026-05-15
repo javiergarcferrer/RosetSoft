@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Database, RefreshCw, ExternalLink, Cloud, Wrench } from 'lucide-react';
+import { Database, RefreshCw, ExternalLink, Cloud, Wrench, Check } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import Modal from '../components/Modal.jsx';
@@ -9,12 +9,16 @@ import { formatDateTime } from '../lib/format.js';
 import { dedupCatalogReferences } from '../lib/catalogDedup.js';
 import { dedupProductsByName } from '../lib/productDedup.js';
 import { purgeCatalog, CATALOG_PURGE_PHRASE } from '../lib/catalogPurge.js';
+import { clampPct } from '../lib/pricing.js';
+import { userMessageFor } from '../lib/errorMessages.js';
 
 const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 
 export default function Settings() {
   const { profileId, settings, saveSettings } = useApp();
   const [local, setLocal] = useState(settings || {});
+  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const [saveError, setSaveError] = useState(null);
 
   useEffect(() => {
     setLocal(settings || {});
@@ -23,10 +27,22 @@ export default function Settings() {
   function set(k, v) { setLocal((s) => ({ ...s, [k]: v })); }
 
   async function save() {
-    // Keep currencyRates.DOP in sync with whichever rate the user chose
-    const dop = effectiveDopRate(local);
-    const next = { ...local, currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: dop } };
-    await saveSettings(next);
+    if (saveState === 'saving') return;
+    setSaveState('saving');
+    setSaveError(null);
+    try {
+      // Keep currencyRates.DOP in sync with whichever rate the user chose
+      const dop = effectiveDopRate(local);
+      const next = { ...local, currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: dop } };
+      await saveSettings(next);
+      setSaveState('saved');
+      // Drop the "Guardado" badge after a beat so the button is reusable.
+      setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (e) {
+      console.error('saveSettings failed', e);
+      setSaveError(userMessageFor(e));
+      setSaveState('error');
+    }
   }
 
   const rates = local.currencyRates || { USD: 1 };
@@ -34,8 +50,17 @@ export default function Settings() {
   return (
     <>
       <PageHeader title="Configuración" subtitle="Empresa, tasa de cambio, condiciones y datos" actions={
-        <button onClick={save} className="btn-primary">Guardar</button>
+        <button onClick={save} disabled={saveState === 'saving'} className="btn-primary">
+          {saveState === 'saving' && <><RefreshCw size={14} className="animate-spin" /> Guardando…</>}
+          {saveState === 'saved' && <><Check size={14} /> Guardado</>}
+          {(saveState === 'idle' || saveState === 'error') && 'Guardar'}
+        </button>
       } />
+      {saveState === 'error' && saveError && (
+        <div className="card card-pad mb-4 text-sm text-red-700 bg-red-50 border-red-200">
+          No se pudo guardar: {saveError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-5">
@@ -85,7 +110,7 @@ export default function Settings() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="label">Descuento por defecto %</div>
-                <input className="input" type="number" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', Number(e.target.value) || 0)} />
+                <input className="input" type="number" min="0" max="100" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', clampPct(e.target.value))} />
               </div>
               <div>
                 <div className="label">ITBIS</div>
@@ -114,9 +139,10 @@ export default function Settings() {
                 <input
                   className="input"
                   type="number"
+                  min="0"
                   step="100"
                   value={local.dispatchThreshold ?? 50000}
-                  onChange={(e) => set('dispatchThreshold', Number(e.target.value) || 0)}
+                  onChange={(e) => set('dispatchThreshold', Math.max(0, Number(e.target.value) || 0))}
                 />
               </div>
             </div>
@@ -174,7 +200,7 @@ function CatalogMaintenanceCard() {
       });
     } catch (e) {
       console.error('Variant dedup preview failed', e);
-      alert('No se pudo generar la vista previa: ' + (e?.message || e));
+      alert('No se pudo generar la vista previa: ' + userMessageFor(e));
     } finally {
       setBusyMode(null);
     }
@@ -203,7 +229,7 @@ function CatalogMaintenanceCard() {
       });
     } catch (e) {
       console.error('Product dedup preview failed', e);
-      alert('No se pudo generar la vista previa: ' + (e?.message || e));
+      alert('No se pudo generar la vista previa: ' + userMessageFor(e));
     } finally {
       setBusyMode(null);
     }
@@ -241,7 +267,7 @@ function CatalogMaintenanceCard() {
       });
     } catch (e) {
       console.error('Combined dedup preview failed', e);
-      alert('No se pudo generar la vista previa: ' + (e?.message || e));
+      alert('No se pudo generar la vista previa: ' + userMessageFor(e));
     } finally {
       setBusyMode(null);
     }
@@ -278,7 +304,7 @@ function CatalogMaintenanceCard() {
       alert(msg);
     } catch (e) {
       console.error('Dedup apply failed', e);
-      alert('No se pudo completar la limpieza: ' + (e?.message || e));
+      alert('No se pudo completar la limpieza: ' + userMessageFor(e));
     } finally {
       setApplying(false);
     }
@@ -393,7 +419,7 @@ function DeleteCatalogButton({ disabled }) {
       );
     } catch (e) {
       setWorking(false);
-      alert('No se pudo eliminar el catálogo: ' + (e?.message || e));
+      alert('No se pudo eliminar el catálogo: ' + userMessageFor(e));
     }
   }
 

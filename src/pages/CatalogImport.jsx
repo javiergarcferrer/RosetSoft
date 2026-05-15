@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { inspectCatalogJson, transformCatalog, commitCatalog } from '../lib/catalogImport.js';
 import { buildCatalogFromPdf } from '../parser/buildCatalog.js';
+import { userMessageFor } from '../lib/errorMessages.js';
 
 /**
  * Catalog importer.
@@ -49,7 +50,7 @@ export default function CatalogImport() {
       setPhase('preview');
     } catch (e) {
       console.error(e);
-      setError(e?.message || String(e));
+      setError(userMessageFor(e));
       setPhase('error');
     }
   }
@@ -67,7 +68,7 @@ export default function CatalogImport() {
       setPhase('done');
     } catch (e) {
       console.error(e);
-      setError(e?.message || String(e));
+      setError(userMessageFor(e));
       setPhase('error');
     }
   }
@@ -234,6 +235,20 @@ export default function CatalogImport() {
             {counts.images > 0 && <> · {counts.images} imágenes de productos</>}
             {counts.variantImages > 0 && <> · {counts.variantImages} miniaturas de variantes</>}
           </div>
+          {(counts.imagesFailed > 0 || counts.variantImagesFailed > 0) && (
+            <div className="mt-4 inline-flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 max-w-md mx-auto text-left">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+              <span>
+                {counts.imagesFailed > 0 && (
+                  <>{counts.imagesFailed} imágenes de productos no se pudieron subir. </>
+                )}
+                {counts.variantImagesFailed > 0 && (
+                  <>{counts.variantImagesFailed} miniaturas de variantes no se pudieron subir. </>
+                )}
+                Vuelve a importar el PDF para reintentarlas (las que sí subieron no se duplicarán).
+              </span>
+            </div>
+          )}
           <div className="mt-5 flex items-center gap-2 justify-center">
             <button onClick={reset} className="btn-secondary">Importar otro</button>
             <button onClick={() => navigate('/catalog')} className="btn-primary">Abrir catálogo</button>
