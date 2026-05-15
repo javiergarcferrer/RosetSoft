@@ -223,6 +223,9 @@ export function newId() {
 /* ---------------------------------------------------------------------- */
 
 export async function fileToBlob(file) {
+  // File extends Blob, so any Blob/File can be uploaded directly without a
+  // re-wrap. Re-wrapping forces an extra arrayBuffer() copy which doubles
+  // peak memory for large images and serialises the upload behind the copy.
   if (file instanceof Blob) return file;
   const buf = await file.arrayBuffer();
   return new Blob([buf], { type: file.type || 'application/octet-stream' });

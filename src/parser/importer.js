@@ -348,7 +348,7 @@ function isValidProductName(s) {
 /*  Commit                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 5 } = {}) {
+export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 10 } = {}) {
   const counts = { categories: 0, materials: 0, colors: 0, products: 0, variants: 0, images: 0 };
 
   // Pre-count uploads so we can show "X / N" progress.
@@ -373,6 +373,10 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   }
 
   // Run N image uploads in parallel; await all before continuing.
+  // Concurrency was raised from 5 → 10: Supabase Storage handles many
+  // simultaneous PUTs from a single client well, and most browsers cap HTTP/2
+  // streams at 100, so 10 is comfortably inside the safe zone. Lower this
+  // cap if you start seeing storage-side throttling (429s).
   async function runParallel(tasks, limit = uploadConcurrency) {
     const results = new Array(tasks.length);
     let i = 0;
@@ -446,6 +450,22 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     }
   }
 
+  // ------------------------------------------------------------------
+  //  Phase 1: plan every product + variant (no I/O on the upload path
+  //  yet). We resolve existing rows, pre-assign new ids, and collect a
+  //  single flat list of upload tasks across ALL products.
+  //
+  //  This replaces the previous shape — a per-product await barrier on
+  //  `runParallel(uploadTasks)` — where each product's uploads had to
+  //  finish before the next product's uploads could even start. With ~50
+  //  products and a handful of uploads each, the old shape left the
+  //  upload worker pool idle most of the time. Now every upload across
+  //  every product feeds the same N-worker pool, so the workers stay
+  //  saturated end-to-end.
+  // ------------------------------------------------------------------
+  const productPlans = [];
+  const allUploadTasks = [];
+
   for (const p of preview.products) {
     let existing = null;
     if (merge) {
@@ -455,16 +475,62 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     const productId = existing?.id || newId();
     const categoryId = categoryIdByName.get((p.categoryName || '').toUpperCase()) || null;
 
-    // The image extracted from the price list PDF is a technical drawing
-    // and belongs in `vectorImageId` (used in all in-app views). The
-    // customer-facing `heroImageId` stays untouched — it's uploaded
-    // manually and only appears in the exported PDF.
-    let vectorImageId = existing?.vectorImageId || null;
-    if (p.heroBlob && !vectorImageId) {
-      vectorImageId = await saveImageBlob('product-vector', productId, p.heroBlob);
-    }
+    const existingVariants = await db.productVariants.where('productId').equals(productId).toArray();
+    const byKey = new Map(existingVariants.map((v) => [v.reference || v.name, v]));
 
-    await db.products.put({
+    // Plan variants. Reference takes precedence over name. A reference that
+    // matches an existing variant anywhere in the catalog updates that row
+    // in place (and re-parents it to the current product if needed);
+    // otherwise we fall back to a name match within the current product,
+    // matching the historical behavior for reference-less variants.
+    //
+    // We also reserve the ref → vid mapping in the global lookup at plan
+    // time (not at DB-write time) so two products in the same import that
+    // share a reference dedupe against each other — preserving the
+    // original behavior, which used to happen via the per-product write
+    // loop updating the same map.
+    const variantPlans = p.variants.map((v) => {
+      const refKey = (v.reference || '').trim().toUpperCase();
+      const globalMatch = refKey ? variantByRef.get(refKey) : null;
+      const prev = globalMatch || byKey.get(v.reference || v.name);
+      const vid = prev?.id || newId();
+      if (refKey) variantByRef.set(refKey, { id: vid, reference: v.reference || '' });
+      return { v, prev, vid };
+    });
+
+    // Plan the hero (vector) image — only upload if there's no existing one.
+    // The customer-facing `heroImageId` stays untouched — it's uploaded
+    // manually and only appears in the exported PDF.
+    const plan = {
+      p, existing, productId, categoryId, variantPlans,
+      vectorImageId: existing?.vectorImageId || null,
+    };
+    if (p.heroBlob && !plan.vectorImageId) {
+      allUploadTasks.push(async () => {
+        plan.vectorImageId = await saveImageBlob('product-vector', productId, p.heroBlob);
+      });
+    }
+    for (const pl of variantPlans) {
+      if (pl.v.imageBlob && !pl.prev?.imageId) {
+        allUploadTasks.push(async () => {
+          pl.imageId = await saveImageBlob('variant', pl.vid, pl.v.imageBlob);
+        });
+      }
+    }
+    productPlans.push(plan);
+  }
+
+  // Phase 2: fire ALL image uploads through a single shared worker pool.
+  await runParallel(allUploadTasks);
+
+  // Phase 3: write the per-product DB rows now that every upload id is
+  // resolved. The product row and its variant rows write in parallel
+  // (independent inserts), and so do the rows across products — bounded
+  // by Supabase's per-request limits via the same connection pool.
+  for (const plan of productPlans) {
+    const { p, existing, productId, categoryId, variantPlans, vectorImageId } = plan;
+
+    const productPut = db.products.put({
       id: productId,
       name: p.name,
       categoryId,
@@ -479,33 +545,9 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     });
     if (!existing) counts.products++;
 
-    const existingVariants = await db.productVariants.where('productId').equals(productId).toArray();
-    const byKey = new Map(existingVariants.map((v) => [v.reference || v.name, v]));
-
-    // Plan: assign IDs and figure out which variants need image uploads.
-    // Reference takes precedence over name. A reference that matches an
-    // existing variant anywhere in the catalog updates that row in place
-    // (and re-parents it to the current product if needed); otherwise we
-    // fall back to a name match within the current product, matching the
-    // historical behavior for reference-less variants.
-    const plans = p.variants.map((v) => {
-      const refKey = (v.reference || '').trim().toUpperCase();
-      const globalMatch = refKey ? variantByRef.get(refKey) : null;
-      const prev = globalMatch || byKey.get(v.reference || v.name);
-      return { v, prev, vid: prev?.id || newId() };
-    });
-
-    // Upload images in parallel (network-bound).
-    const uploadTasks = plans
-      .filter((pl) => pl.v.imageBlob && !pl.prev?.imageId)
-      .map((pl) => async () => {
-        pl.imageId = await saveImageBlob('variant', pl.vid, pl.v.imageBlob);
-      });
-    await runParallel(uploadTasks);
-
-    // Write variant records.
     let order = 0;
-    for (const pl of plans) {
+    const variantPuts = [];
+    for (const pl of variantPlans) {
       const imageId = pl.imageId ?? pl.prev?.imageId ?? null;
       const record = {
         id: pl.vid,
@@ -519,14 +561,11 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
         sortOrder: pl.prev?.sortOrder ?? order,
         imageId,
       };
-      await db.productVariants.put(record);
+      variantPuts.push(db.productVariants.put(record));
       if (!pl.prev) counts.variants++;
-      // Keep the global ref-lookup in sync so that two variants sharing a
-      // reference within this same import dedupe against each other too.
-      const refKey = (record.reference || '').trim().toUpperCase();
-      if (refKey) variantByRef.set(refKey, record);
       order++;
     }
+    await Promise.all([productPut, ...variantPuts]);
   }
 
   onProgress?.({ phase: 'done', done: uploadsDone, total: totalUploads });

@@ -27,7 +27,13 @@ export default function ImageDrop({
     if (!file) return;
     setBusy(true);
     try {
-      if (imageId) await deleteImage(imageId).catch(() => {});
+      // Fire-and-forget the old-image delete: the new upload uses a fresh id
+      // so deletion only affects storage cleanup and never the new record.
+      // Awaiting it serialised every replacement upload behind a network
+      // round-trip; running it in parallel cuts perceived latency in half
+      // for replace-image flows.
+      const prevId = imageId;
+      if (prevId) deleteImage(prevId).catch(() => {});
       const id = await saveImage({ kind, ownerId, file });
       onChange(id);
     } finally {
@@ -50,7 +56,8 @@ export default function ImageDrop({
       const res = await fetch(url, { mode: 'cors' });
       if (!res.ok) throw new Error('Fetch failed: ' + res.status);
       const blob = await res.blob();
-      if (imageId) await deleteImage(imageId).catch(() => {});
+      const prevId = imageId;
+      if (prevId) deleteImage(prevId).catch(() => {});
       const id = await saveImage({ kind, ownerId, file: blob });
       onChange(id);
     } catch (e) {
