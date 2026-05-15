@@ -33,18 +33,11 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            pdfjs: ['pdfjs-dist'],
             pdflib: ['pdf-lib'],
             react: ['react', 'react-dom', 'react-router-dom'],
           },
         },
       },
-    },
-    worker: {
-      format: 'es',
-    },
-    optimizeDeps: {
-      exclude: ['pdfjs-dist'],
     },
   };
 });

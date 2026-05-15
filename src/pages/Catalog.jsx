@@ -88,12 +88,9 @@ export default function Catalog() {
         <EmptyState
           icon={Sofa}
           title="Sin productos"
-          description="Importa un PDF de Ligne Roset para poblar el catálogo automáticamente, o agrega un producto manualmente."
+          description="Agrega un producto manualmente para empezar el catálogo."
           action={
-            <div className="flex items-center justify-center gap-2">
-              <Link to="/import" className="btn-primary">Importar PDF</Link>
-              <button onClick={() => setNewOpen(true)} className="btn-secondary">Agregar manual</button>
-            </div>
+            <button onClick={() => setNewOpen(true)} className="btn-primary">Agregar producto</button>
           }
         />
         <NewProductModal open={newOpen} onClose={() => setNewOpen(false)} categories={categories} />

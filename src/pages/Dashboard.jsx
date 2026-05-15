@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Sofa, Palette, Users, ArrowRight, Upload } from 'lucide-react';
+import { FileText, Sofa, Palette, Users, ArrowRight } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -28,10 +28,7 @@ export default function Dashboard() {
         title="Dashboard"
         subtitle={`${settings?.companyName || 'Your Company'} · ${counts.products} products · ${counts.materials} materials`}
         actions={
-          <>
-            <Link to="/import" className="btn-secondary"><Upload size={14} /> Import PDF</Link>
-            <Link to="/quotes/new" className="btn-primary">New quote</Link>
-          </>
+          <Link to="/quotes/new" className="btn-primary">New quote</Link>
         }
       />
 

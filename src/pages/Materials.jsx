@@ -50,12 +50,9 @@ export default function Materials() {
         <EmptyState
           icon={Palette}
           title="No materials yet"
-          description="Import a PDF price list to populate fabrics and leathers automatically — or add one by hand."
+          description="Add a fabric or leather by hand to get started."
           action={
-            <div className="flex items-center gap-2 justify-center">
-              <Link to="/import" className="btn-primary">Import PDF</Link>
-              <button onClick={() => setNewOpen(true)} className="btn-secondary">Add manually</button>
-            </div>
+            <button onClick={() => setNewOpen(true)} className="btn-primary">Add manually</button>
           }
         />
         <NewMaterialModal open={newOpen} onClose={() => setNewOpen(false)} />

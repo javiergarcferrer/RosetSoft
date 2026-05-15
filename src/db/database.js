@@ -182,47 +182,6 @@ class Table {
     return record[this.t.pk];
   }
 
-  /**
-   * Batched upsert for bulk imports. Each batch is a single Supabase request,
-   * so 500 rows = 1 round-trip (vs 500 with `put`). Retries each failing
-   * batch with exponential backoff to ride out transient errors / brief
-   * Supabase free-tier rate-limit responses.
-   *
-   *   chunkSize  rows per request (PostgREST max-rows on Supabase = 1000)
-   *   retries    extra attempts per batch after the initial try (3 → 4 total)
-   *   onProgress (done, total) called after each successful batch
-   */
-  async bulkPut(records, { chunkSize = 500, retries = 3, onProgress } = {}) {
-    const rows = records.map(toRow);
-    if (!rows.length) return 0;
-    const conflictKey = snake(this.t.pk);
-    let done = 0;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      let lastErr = null;
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        const { error } = await supabase
-          .from(this.t.db)
-          .upsert(chunk, { onConflict: conflictKey });
-        if (!error) { lastErr = null; break; }
-        lastErr = error;
-        if (attempt < retries) {
-          const delay = 600 * Math.pow(2, attempt) + Math.random() * 250;
-          await new Promise(r => setTimeout(r, delay));
-        }
-      }
-      if (lastErr) {
-        throw new Error(
-          `bulkPut ${this.t.db}: failed batch ${i}-${i + chunk.length} after ${retries + 1} attempts: ${lastErr.message || lastErr}`
-        );
-      }
-      done += chunk.length;
-      onProgress?.(done, rows.length);
-    }
-    invalidate();
-    return done;
-  }
-
   async update(id, patch) {
     const pkCol = snake(this.t.pk);
     const { error } = await supabase
@@ -299,28 +258,6 @@ export async function saveImage({ kind, ownerId, file, label = '' }) {
     storagePath,
   });
   return id;
-}
-
-/**
- * Upload a Storage object and create the matching `images` row, retrying on
- * transient errors (Supabase Storage free tier sees occasional 5xx under
- * load). Returns the new image id, or null if every attempt failed.
- */
-export async function saveImageWithRetry({ kind, ownerId, file, label = '', retries = 3 }) {
-  let lastErr;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await saveImage({ kind, ownerId, file, label });
-    } catch (e) {
-      lastErr = e;
-      if (attempt < retries) {
-        const delay = 800 * Math.pow(2, attempt) + Math.random() * 300;
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-  }
-  console.warn('[saveImageWithRetry] gave up after retries:', lastErr?.message || lastErr);
-  return null;
 }
 
 export async function imageObjectUrl(id) {
