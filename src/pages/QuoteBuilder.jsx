@@ -742,16 +742,29 @@ function ProductPickerModal({ open, onClose, onPick }) {
               <div className="px-2 py-1.5 space-y-0.5">
                 {pv.length === 0 ? (
                   <div className="text-[11px] text-ink-400 px-2 py-1">No variants</div>
-                ) : pv.map((v) => (
-                  <button
-                    key={v.id}
-                    onClick={() => onPick(v)}
-                    className="w-full flex items-center justify-between text-left text-xs px-2 py-1.5 rounded hover:bg-ink-100"
-                  >
-                    <span className="truncate">{v.name}</span>
-                    <span className="text-[10px] text-ink-400 font-mono ml-2">{v.reference || ''}</span>
-                  </button>
-                ))}
+                ) : pv.map((v) => {
+                  const diff = v.dimensions || v.yardage || p.description || '';
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => onPick(v)}
+                      className="w-full flex items-center justify-between text-left text-xs px-2 py-1.5 rounded hover:bg-ink-100"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="truncate">{v.name}</span>
+                        {diff && (
+                          <span
+                            className="block text-[10px] text-ink-500 truncate tabular-nums"
+                            title={diff}
+                          >
+                            {diff}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-ink-400 font-mono ml-2 flex-shrink-0">{v.reference || ''}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );

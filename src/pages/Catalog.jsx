@@ -344,6 +344,7 @@ function VariantCard({ product, variant, onAdd, rates, currency }) {
   const maxPrice = grades.length
     ? Math.max(...grades.map(([, v]) => v))
     : variant.priceFixed ?? null;
+  const differentiator = variant.dimensions || variant.yardage || product.description || '';
   return (
     <li className="px-3 py-2.5 flex items-start gap-3">
       <div className="w-16 h-12 rounded bg-white border border-ink-100 overflow-hidden flex-shrink-0">
@@ -351,6 +352,14 @@ function VariantCard({ product, variant, onAdd, rates, currency }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium truncate">{variant.name}</div>
+        {differentiator && (
+          <div
+            className="text-[11px] text-ink-600 truncate tabular-nums"
+            title={differentiator}
+          >
+            {differentiator}
+          </div>
+        )}
         {variant.reference && <div className="font-mono text-[10px] text-ink-500">{variant.reference}</div>}
         {minPrice != null && (
           <div className="text-xs text-ink-700 mt-0.5">
@@ -389,7 +398,17 @@ function VariantRow({ product, variant, onAdd, rates, currency }) {
       </td>
       <td className="py-2">
         <div className="font-medium text-sm">{variant.name}</div>
-        {variant.dimensions && <div className="text-[10px] text-ink-500">{variant.dimensions}</div>}
+        {(() => {
+          const diff = variant.dimensions || variant.yardage || product.description || '';
+          return diff ? (
+            <div
+              className="text-[11px] text-ink-600 truncate tabular-nums max-w-xs"
+              title={diff}
+            >
+              {diff}
+            </div>
+          ) : null;
+        })()}
       </td>
       <td className="py-2 font-mono text-xs text-ink-600">{variant.reference || '—'}</td>
       <td className="py-2 text-xs text-ink-500">
