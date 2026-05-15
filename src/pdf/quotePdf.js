@@ -6,23 +6,29 @@ import { effectiveDopRate, rateSourceLabel } from '../lib/exchangeRate.js';
 /**
  * Generates a branded PDF quote.
  *
- *  - Page 1+: header (logo, company info, quote meta) + line items table
- *  - Final page: totals + terms
- *  - Embeds product hero image, variant image, swatch image when available
+ *  - Page 1+: header + meta + customer/project + line items
+ *  - Final page: totals + DOP conversion + terms
+ *  - Footer on every page: site URL + page X / Y
  */
 
 const PAGE_W = 612;       // 8.5"
 const PAGE_H = 792;       // 11"
-const MARGIN_L = 48;
-const MARGIN_R = 48;
-const MARGIN_T = 48;
-const MARGIN_B = 48;
+const MARGIN_L = 56;
+const MARGIN_R = 56;
+const MARGIN_T = 56;
+const MARGIN_B = 56;
+const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
 
-const INK = rgb(0.09, 0.085, 0.07);
-const INK_MID = rgb(0.45, 0.43, 0.38);
-const INK_LIGHT = rgb(0.85, 0.84, 0.82);
-const ACCENT = rgb(0.78, 0.42, 0.16);
-const BG_SOFT = rgb(0.97, 0.965, 0.96);
+// Tuned to mirror the app's ink palette + brand accent
+const INK       = rgb(0.09, 0.085, 0.07);   // ink-900
+const INK_HIGH  = rgb(0.23, 0.22, 0.19);    // ink-800
+const INK_MID   = rgb(0.42, 0.40, 0.36);    // ink-500
+const INK_SOFT  = rgb(0.66, 0.64, 0.59);    // ink-400
+const INK_LINE  = rgb(0.91, 0.90, 0.88);    // ink-100
+const INK_LINE2 = rgb(0.82, 0.81, 0.78);    // ink-200
+const BG_SOFT   = rgb(0.97, 0.965, 0.96);   // ink-50
+const ACCENT    = rgb(0.78, 0.42, 0.16);    // brand-500
+const WHITE     = rgb(1, 1, 1);
 
 export async function generateQuotePdf({ quote, settings, lines, totals, customer }) {
   const doc = await PDFDocument.create();
@@ -45,48 +51,36 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
   const logoImage = await embedImageById(doc, settings?.logoImageId);
 
   let page = doc.addPage([PAGE_W, PAGE_H]);
-  let cursor = await drawHeader(page, ctx, logoImage);
+  let cursor = drawHeader(page, ctx, logoImage);
   cursor = drawQuoteMeta(page, ctx, cursor);
   cursor = drawCustomerBlock(page, ctx, cursor);
 
   // Line items table
-  cursor = drawLineHeaderRow(page, cursor);
-  drawLineHeaderText(page, fontBold, cursor);
+  cursor = drawLineHeader(page, ctx, cursor);
 
   for (const line of lines) {
     const needed = await measureLineRow(ctx, line);
-    if (cursor.y - needed < MARGIN_B + 140) {
-      drawFooter(page, ctx);
+    if (cursor.y - needed < MARGIN_B + 80) {
       page = doc.addPage([PAGE_W, PAGE_H]);
       cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
-      cursor = drawLineHeaderRow(page, cursor);
-      drawLineHeaderText(page, fontBold, cursor);
+      cursor = drawLineHeader(page, ctx, cursor);
     }
     cursor = await drawLineRow(page, ctx, cursor, line);
   }
 
-  // Totals block — make sure we have room (includes DOP conversion strip)
-  const totalsHeight = 260 + (quote.terms ? 90 : 0);
-  if (cursor.y - totalsHeight < MARGIN_B + 80) {
-    drawFooter(page, ctx);
+  // Totals + terms — keep them together if they fit.
+  const totalsHeight = estimateTotalsHeight(quote);
+  if (cursor.y - totalsHeight < MARGIN_B + 60) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
   }
   cursor = drawTotals(page, ctx, cursor, totals);
   if (quote.terms) cursor = drawTerms(page, ctx, cursor);
-  drawFooter(page, ctx);
 
-  // Page numbers
+  // Footer on every page
   const pageCount = doc.getPageCount();
   for (let i = 0; i < pageCount; i++) {
-    const p = doc.getPage(i);
-    p.drawText(`${i + 1} / ${pageCount}`, {
-      x: PAGE_W - MARGIN_R - 30,
-      y: 22,
-      size: 8,
-      font: fontRegular,
-      color: INK_MID,
-    });
+    drawFooter(doc.getPage(i), ctx, i + 1, pageCount);
   }
 
   const bytes = await doc.save();
@@ -94,313 +88,391 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
 }
 
 /* ------------------------------------------------------------------ */
-/*  Drawing helpers                                                    */
+/*  Header / meta / customer                                            */
 /* ------------------------------------------------------------------ */
 
-async function drawHeader(page, ctx, logoImage) {
+function drawHeader(page, ctx, logoImage) {
   const { fontBold, fontRegular, settings } = ctx;
-  let x = MARGIN_L;
-  let y = PAGE_H - MARGIN_T;
+  const top = PAGE_H - MARGIN_T;
 
+  // Left side: logo OR companyName (never both — the logo usually IS the
+  // wordmark). Address/contact go beneath in muted small caps.
+  let leftBottomY = top;
   if (logoImage) {
-    const targetH = 40;
-    const scale = targetH / logoImage.height;
+    const maxH = 36;
+    const maxW = 160;
+    const scale = Math.min(maxH / logoImage.height, maxW / logoImage.width);
     const w = logoImage.width * scale;
-    page.drawImage(logoImage, { x, y: y - targetH, width: w, height: targetH });
-    x += w + 14;
+    const h = logoImage.height * scale;
+    page.drawImage(logoImage, { x: MARGIN_L, y: top - h, width: w, height: h });
+    leftBottomY = top - h - 10;
+  } else {
+    page.drawText(settings.companyName || 'Your Company', {
+      x: MARGIN_L, y: top - 18, size: 18, font: fontBold, color: INK,
+    });
+    leftBottomY = top - 28;
   }
 
-  page.drawText(settings.companyName || 'Your Company', {
-    x, y: y - 12, size: 14, font: fontBold, color: INK,
-  });
   const addressLines = [
     settings.companyAddress,
     [settings.companyPhone, settings.companyEmail].filter(Boolean).join(' · '),
   ].filter(Boolean);
-  let ay = y - 26;
+  let ay = leftBottomY;
   for (const ln of addressLines) {
-    page.drawText(ln, { x, y: ay, size: 8.5, font: fontRegular, color: INK_MID });
+    page.drawText(ln, { x: MARGIN_L, y: ay, size: 8.5, font: fontRegular, color: INK_MID });
     ay -= 11;
   }
 
-  // "COTIZACIÓN" label on the right
-  const label = 'COTIZACIÓN';
-  const labelW = fontBold.widthOfTextAtSize(label, 22);
-  page.drawText(label, {
+  // Right side: small uppercase label + big quote number
+  const labelText = 'COTIZACIÓN';
+  const labelSize = 9;
+  const labelW = fontRegular.widthOfTextAtSize(labelText, labelSize);
+  page.drawText(labelText, {
     x: PAGE_W - MARGIN_R - labelW,
-    y: y - 14,
-    size: 22,
+    y: top - labelSize,
+    size: labelSize,
+    font: fontRegular,
+    color: INK_MID,
+    characterSpacing: 1.2,
+  });
+
+  const numText = `#${ctx.quote.number || '—'}`;
+  const numSize = 26;
+  const numW = fontBold.widthOfTextAtSize(numText, numSize);
+  page.drawText(numText, {
+    x: PAGE_W - MARGIN_R - numW,
+    y: top - labelSize - 8 - numSize,
+    size: numSize,
     font: fontBold,
     color: INK,
   });
+  // Brand-color underline under the number
   page.drawRectangle({
-    x: PAGE_W - MARGIN_R - labelW,
-    y: y - 18,
-    width: labelW,
+    x: PAGE_W - MARGIN_R - numW,
+    y: top - labelSize - 8 - numSize - 6,
+    width: numW,
     height: 2,
     color: ACCENT,
   });
 
-  return { x: MARGIN_L, y: y - 70 };
+  return { x: MARGIN_L, y: top - 92 };
 }
 
 function drawQuoteMeta(page, ctx, cursor) {
   const { fontBold, fontRegular, quote } = ctx;
-  const labelSize = 8;
-  const valueSize = 10;
   const cols = [
-    ['NÚMERO', `#${quote.number || '—'}`],
     ['FECHA', new Date(quote.createdAt || Date.now()).toLocaleDateString('es-DO')],
     ['VÁLIDA HASTA', validUntil(quote)],
     ['ESTADO', (quote.status || 'borrador').toUpperCase()],
+    ['MONEDA', `${ctx.currency} · USD`],
   ];
-  let x = MARGIN_L;
-  const colW = (PAGE_W - MARGIN_L - MARGIN_R) / cols.length;
-  for (const [label, value] of cols) {
-    page.drawText(label, { x, y: cursor.y, size: labelSize, font: fontRegular, color: INK_MID });
-    page.drawText(value, { x, y: cursor.y - 14, size: valueSize, font: fontBold, color: INK });
-    x += colW;
-  }
-  return { x: MARGIN_L, y: cursor.y - 38 };
+
+  // Soft band
+  const bandH = 44;
+  page.drawRectangle({
+    x: MARGIN_L, y: cursor.y - bandH + 8,
+    width: CONTENT_W, height: bandH,
+    color: BG_SOFT,
+    borderColor: INK_LINE, borderWidth: 0.5,
+  });
+
+  const colW = CONTENT_W / cols.length;
+  cols.forEach(([label, value], i) => {
+    const x = MARGIN_L + 14 + i * colW;
+    page.drawText(label, { x, y: cursor.y - 6, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+    page.drawText(value, { x, y: cursor.y - 22, size: 11, font: fontBold, color: INK });
+  });
+  return { x: MARGIN_L, y: cursor.y - bandH - 14 };
 }
 
 function drawCustomerBlock(page, ctx, cursor) {
   const { fontBold, fontRegular, customer, quote } = ctx;
-  page.drawText('PREPARADO PARA', { x: MARGIN_L, y: cursor.y, size: 8, font: fontRegular, color: INK_MID });
-  let y = cursor.y - 14;
+  const y0 = cursor.y;
+
+  // Left column: customer
+  page.drawText('PREPARADO PARA', { x: MARGIN_L, y: y0, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+  let y = y0 - 14;
   if (customer) {
-    page.drawText(customer.name || '—', { x: MARGIN_L, y, size: 11, font: fontBold, color: INK }); y -= 13;
-    if (customer.company) { page.drawText(customer.company, { x: MARGIN_L, y, size: 9.5, font: fontRegular, color: INK }); y -= 11; }
+    page.drawText(customer.name || '—', { x: MARGIN_L, y, size: 12, font: fontBold, color: INK }); y -= 14;
+    if (customer.company) { page.drawText(customer.company, { x: MARGIN_L, y, size: 9.5, font: fontRegular, color: INK_HIGH }); y -= 11; }
     const addrLines = [customer.address, [customer.city, customer.state, customer.zip].filter(Boolean).join(', '), customer.country].filter(Boolean);
     for (const a of addrLines) { page.drawText(a, { x: MARGIN_L, y, size: 9, font: fontRegular, color: INK_MID }); y -= 11; }
     const contact = [customer.email, customer.phone].filter(Boolean).join(' · ');
     if (contact) { page.drawText(contact, { x: MARGIN_L, y, size: 9, font: fontRegular, color: INK_MID }); y -= 11; }
   } else {
-    page.drawText('(sin cliente asignado)', { x: MARGIN_L, y, size: 10, font: fontRegular, color: INK_MID });
+    page.drawText('Sin cliente asignado', { x: MARGIN_L, y, size: 11, font: fontItalicOrRegular(ctx), color: INK_SOFT });
     y -= 12;
   }
 
-  // Quote name (project) right-aligned
+  // Right column: project
   if (quote.name) {
-    const t = quote.name;
-    const w = fontBold.widthOfTextAtSize(t, 11);
-    page.drawText('PROYECTO', {
-      x: PAGE_W - MARGIN_R - Math.max(w, 60),
-      y: cursor.y,
-      size: 8, font: fontRegular, color: INK_MID,
-    });
-    page.drawText(t, {
-      x: PAGE_W - MARGIN_R - w,
-      y: cursor.y - 14,
-      size: 11, font: fontBold, color: INK,
+    page.drawText('PROYECTO', { x: MARGIN_L + CONTENT_W / 2, y: y0, size: 7.5, font: fontRegular, color: INK_MID, characterSpacing: 0.8 });
+    page.drawText(truncate(quote.name, 38), {
+      x: MARGIN_L + CONTENT_W / 2,
+      y: y0 - 14, size: 12, font: fontBold, color: INK,
     });
   }
 
-  return { x: MARGIN_L, y: y - 16 };
+  const bottom = Math.min(y, y0 - 28);
+  return { x: MARGIN_L, y: bottom - 18 };
 }
 
-function drawLineHeaderRow(page, cursor) {
-  const y = cursor.y;
-  const w = PAGE_W - MARGIN_L - MARGIN_R;
-  page.drawRectangle({ x: MARGIN_L, y: y - 18, width: w, height: 22, color: INK });
-  return { x: MARGIN_L, y: y - 30 };
+function fontItalicOrRegular(ctx) {
+  return ctx.fontItalic || ctx.fontRegular;
 }
 
-function drawLineHeaderText(page, font, cursor) {
-  const cols = lineColumns();
-  for (const col of cols) {
-    if (!col.label) continue;
-    const x = col.align === 'right'
-      ? col.x + col.w - font.widthOfTextAtSize(col.label, 7.5)
-      : col.x;
-    page.drawText(col.label, { x, y: cursor.y + 13, size: 7.5, font, color: rgb(0.95, 0.95, 0.93) });
-  }
-}
+/* ------------------------------------------------------------------ */
+/*  Line items                                                          */
+/* ------------------------------------------------------------------ */
 
+// All x positions absolute; right-aligned columns specify their right edge.
 function lineColumns() {
-  return [
-    { key: 'img',  x: MARGIN_L + 6,  w: 50,  label: '' },
-    { key: 'item', x: MARGIN_L + 64, w: 200, label: 'ARTÍCULO' },
-    { key: 'mat',  x: MARGIN_L + 270, w: 130, label: 'TELA / COLOR' },
-    { key: 'qty',  x: PAGE_W - MARGIN_R - 165, w: 30, label: 'CANT.', align: 'right' },
-    { key: 'unit', x: PAGE_W - MARGIN_R - 110, w: 60, label: 'UNIT.', align: 'right' },
-    { key: 'tot',  x: PAGE_W - MARGIN_R - 6,  w: 50, label: 'TOTAL', align: 'right' },
-  ];
+  const right = PAGE_W - MARGIN_R;
+  return {
+    img:  { x: MARGIN_L + 8,  size: 48 },
+    item: { x: MARGIN_L + 68, w: 200 },
+    mat:  { x: MARGIN_L + 280 },
+    qty:  { rightX: right - 145, label: 'CANT.' },
+    unit: { rightX: right - 75,  label: 'UNIT.' },
+    tot:  { rightX: right - 8,   label: 'TOTAL' },
+    itemLabel: 'ARTÍCULO',
+    matLabel: 'TELA / COLOR',
+  };
 }
 
-async function measureLineRow(ctx, line) {
-  // Rough estimate; actual layout is fixed-height with wrap for description.
-  const desc = lineDescription(line);
-  const lines = wrapText(desc, 30);
-  return 56 + Math.max(0, lines.length - 1) * 9;
+function drawLineHeader(page, ctx, cursor) {
+  const { fontBold } = ctx;
+  const cols = lineColumns();
+  const headerH = 22;
+  const y = cursor.y;
+  // Dark band
+  page.drawRectangle({
+    x: MARGIN_L, y: y - headerH,
+    width: CONTENT_W, height: headerH,
+    color: INK,
+  });
+  const ty = y - 14;
+  const labelSize = 7.5;
+  const labelColor = rgb(0.93, 0.92, 0.90);
+  page.drawText(cols.itemLabel, { x: cols.item.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
+  page.drawText(cols.matLabel, { x: cols.mat.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
+  drawRightAt(page, cols.qty.label, cols.qty.rightX, ty, labelSize, fontBold, labelColor);
+  drawRightAt(page, cols.unit.label, cols.unit.rightX, ty, labelSize, fontBold, labelColor);
+  drawRightAt(page, cols.tot.label, cols.tot.rightX, ty, labelSize, fontBold, labelColor);
+  return { x: MARGIN_L, y: y - headerH - 6 };
+}
+
+async function measureLineRow() {
+  return 64;
 }
 
 async function drawLineRow(page, ctx, cursor, line) {
   const { doc, fontRegular, fontBold } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
-  const rowH = 56;
+  const rowH = 60;
+  const innerTop = rowY - 12;
 
-  // Image: variant drawing > product hero (customer-facing) > vector (fallback for products with no hero set)
+  // Image: variant > hero > vector
   const imgId = line.variant?.imageId || line.product?.heroImageId || line.product?.vectorImageId;
   const img = await embedImageById(doc, imgId);
+  const box = cols.img.size;
+  const boxY = rowY - rowH + 6;
+  page.drawRectangle({
+    x: cols.img.x, y: boxY, width: box, height: box,
+    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
+  });
   if (img) {
-    const box = 44;
-    const scale = Math.min(box / img.width, box / img.height);
+    const scale = Math.min(box / img.width, box / img.height) * 0.92;
     const w = img.width * scale;
     const h = img.height * scale;
-    page.drawRectangle({ x: cols[0].x, y: rowY - rowH + 4, width: box, height: box, color: BG_SOFT });
     page.drawImage(img, {
-      x: cols[0].x + (box - w) / 2,
-      y: rowY - rowH + 4 + (box - h) / 2,
+      x: cols.img.x + (box - w) / 2,
+      y: boxY + (box - h) / 2,
       width: w, height: h,
     });
-  } else {
-    page.drawRectangle({ x: cols[0].x, y: rowY - rowH + 4, width: 44, height: 44, color: BG_SOFT });
   }
 
-  // Item name + variant + reference
-  const itemX = cols[1].x;
-  let y = rowY - 10;
-  page.drawText(line.product?.name || '(product)', { x: itemX, y, size: 10, font: fontBold, color: INK });
-  y -= 12;
+  // Item: name (bold) / variant (mid) / reference (small mono-ish)
+  let y = innerTop;
+  page.drawText(truncate(line.product?.name || '(producto)', 34), { x: cols.item.x, y, size: 10.5, font: fontBold, color: INK });
+  y -= 13;
   if (line.variant?.name) {
-    page.drawText(truncate(line.variant.name, 38), { x: itemX, y, size: 8.5, font: fontRegular, color: INK_MID });
-    y -= 10;
+    page.drawText(truncate(line.variant.name, 38), { x: cols.item.x, y, size: 9, font: fontRegular, color: INK_HIGH });
+    y -= 11;
   }
   if (line.variant?.reference) {
-    page.drawText(line.variant.reference, { x: itemX, y, size: 7.5, font: fontRegular, color: INK_MID });
-    y -= 9;
+    page.drawText(line.variant.reference, { x: cols.item.x, y, size: 7.5, font: fontRegular, color: INK_SOFT });
+    y -= 10;
   }
   if (line.notes) {
-    page.drawText('Note: ' + truncate(line.notes, 50), { x: itemX, y, size: 7.5, font: ctx.fontItalic, color: INK_MID });
+    page.drawText(truncate('Nota: ' + line.notes, 52), { x: cols.item.x, y, size: 7.5, font: ctx.fontItalic, color: INK_MID });
   }
 
   // Material / color (swatch + text)
-  const matX = cols[2].x;
-  // Per-line swatch override takes priority over the catalog color's swatch.
+  const matX = cols.mat.x;
   const swatch = await embedImageById(doc, line.swatchImageId || line.color?.swatchImageId);
+  const swatchBox = 26;
   if (swatch) {
-    const box = 22;
-    const scale = Math.min(box / swatch.width, box / swatch.height);
+    const scale = Math.min(swatchBox / swatch.width, swatchBox / swatch.height);
     const w = swatch.width * scale;
     const h = swatch.height * scale;
+    page.drawRectangle({
+      x: matX, y: rowY - 28, width: swatchBox, height: swatchBox,
+      color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
+    });
     page.drawImage(swatch, {
-      x: matX,
-      y: rowY - 26 + (box - h) / 2,
+      x: matX + (swatchBox - w) / 2,
+      y: rowY - 28 + (swatchBox - h) / 2,
       width: w, height: h,
     });
-    page.drawText(line.material ? `${line.material.name}` : '—', { x: matX + 28, y: rowY - 12, size: 9, font: fontBold, color: INK });
-    page.drawText(line.color ? truncate(line.color.name, 18) : '—', { x: matX + 28, y: rowY - 22, size: 8, font: fontRegular, color: INK_MID });
+    const tx = matX + swatchBox + 8;
+    page.drawText(truncate(line.material?.name || '—', 18), { x: tx, y: innerTop, size: 9.5, font: fontBold, color: INK });
+    page.drawText(truncate(line.color?.name || '—', 18), { x: tx, y: innerTop - 11, size: 8.5, font: fontRegular, color: INK_MID });
     if (line.material?.grade) {
-      page.drawText(`Grade ${line.material.grade}`, { x: matX + 28, y: rowY - 32, size: 7.5, font: fontRegular, color: INK_MID });
+      page.drawText(`Grade ${line.material.grade}`, { x: tx, y: innerTop - 22, size: 7.5, font: fontRegular, color: INK_SOFT });
     }
   } else {
-    page.drawText(line.material ? line.material.name : 'C.O.M.', { x: matX, y: rowY - 12, size: 9, font: fontBold, color: INK });
-    page.drawText(line.color?.name || '—', { x: matX, y: rowY - 22, size: 8, font: fontRegular, color: INK_MID });
+    page.drawText(truncate(line.material?.name || 'C.O.M.', 22), { x: matX, y: innerTop, size: 9.5, font: fontBold, color: INK });
+    if (line.color?.name) {
+      page.drawText(truncate(line.color.name, 22), { x: matX, y: innerTop - 11, size: 8.5, font: fontRegular, color: INK_MID });
+    }
     if (line.material?.grade) {
-      page.drawText(`Grade ${line.material.grade}`, { x: matX, y: rowY - 32, size: 7.5, font: fontRegular, color: INK_MID });
+      page.drawText(`Grade ${line.material.grade}`, { x: matX, y: innerTop - 22, size: 7.5, font: fontRegular, color: INK_SOFT });
     }
   }
 
-  // Qty, Unit, Total
+  // Qty / Unit / Total — vertically centered in the row
+  const numY = rowY - 26;
   const unit = applyLineAdjustments(line.basePrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
-  drawRight(page, String(line.qty || 0), cols[3].x + cols[3].w, rowY - 14, 9.5, fontRegular);
-  drawRight(page, formatMoney(unit, ctx.currency, ctx.rates), cols[4].x + cols[4].w, rowY - 14, 9.5, fontRegular);
-  drawRight(page, formatMoney(total, ctx.currency, ctx.rates), cols[5].x + cols[5].w, rowY - 14, 10, fontBold);
+  drawRightAt(page, String(line.qty || 0), cols.qty.rightX, numY, 10, fontRegular, INK_HIGH);
+  drawRightAt(page, formatMoney(unit, ctx.currency, ctx.rates), cols.unit.rightX, numY, 10, fontRegular, INK_HIGH);
+  drawRightAt(page, formatMoney(total, ctx.currency, ctx.rates), cols.tot.rightX, numY, 10.5, fontBold, INK);
 
-  // Line separator
+  // Hairline separator
   page.drawLine({
-    start: { x: MARGIN_L, y: rowY - rowH + 2 },
-    end: { x: PAGE_W - MARGIN_R, y: rowY - rowH + 2 },
+    start: { x: MARGIN_L, y: rowY - rowH },
+    end: { x: PAGE_W - MARGIN_R, y: rowY - rowH },
     thickness: 0.5,
-    color: INK_LIGHT,
+    color: INK_LINE,
   });
 
   return { x: MARGIN_L, y: rowY - rowH };
 }
 
+/* ------------------------------------------------------------------ */
+/*  Totals / DOP / terms                                                */
+/* ------------------------------------------------------------------ */
+
+function estimateTotalsHeight(quote) {
+  let h = 18; // gap above
+  h += 12 * 5; // up to 5 rows
+  h += 14;     // total row
+  h += 36;     // DOP strip
+  if (quote.terms) h += 90;
+  return h;
+}
+
 function drawTotals(page, ctx, cursor, totals) {
   const { fontBold, fontRegular, quote } = ctx;
-  let y = cursor.y - 16;
+  const panelW = 280;
+  const leftX = PAGE_W - MARGIN_R - panelW;
   const rightX = PAGE_W - MARGIN_R;
-  const leftX = PAGE_W - MARGIN_R - 240;
+  let y = cursor.y - 22;
 
-  const rows = [
-    ['Subtotal', totals.subtotal, false],
-  ];
-  if (quote.marginPct) rows.push([`Margen (${quote.marginPct}%)`, totals.marginAmt, false]);
-  if (quote.discountPct) rows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, false]);
-  rows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, false]);
-  if (quote.shipping) rows.push(['Envío', totals.shipping, false]);
-  rows.push(['Total', totals.grandTotal, true]);
+  const rows = [['Subtotal', totals.subtotal]];
+  if (quote.marginPct) rows.push([`Margen (${quote.marginPct}%)`, totals.marginAmt]);
+  if (quote.discountPct) rows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt]);
+  rows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt]);
+  if (quote.shipping) rows.push(['Envío', totals.shipping]);
 
-  for (const [label, value, bold] of rows) {
-    page.drawText(label, { x: leftX, y, size: bold ? 11 : 9.5, font: bold ? fontBold : fontRegular, color: bold ? INK : INK_MID });
-    drawRight(page, formatMoney(value, ctx.currency, ctx.rates), rightX, y, bold ? 11 : 9.5, bold ? fontBold : fontRegular);
-    y -= bold ? 16 : 12;
+  // Subtotals
+  for (const [label, value] of rows) {
+    page.drawText(label, { x: leftX, y, size: 9.5, font: fontRegular, color: INK_MID });
+    drawRightAt(page, formatMoney(value, ctx.currency, ctx.rates), rightX, y, 9.5, fontRegular, INK_HIGH);
+    y -= 14;
   }
+
+  // Divider above the grand total
+  y -= 2;
   page.drawLine({
-    start: { x: leftX, y: y + 22 },
-    end: { x: rightX, y: y + 22 },
-    thickness: 0.7,
-    color: INK,
+    start: { x: leftX, y: y + 8 },
+    end: { x: rightX, y: y + 8 },
+    thickness: 0.7, color: INK,
   });
 
-  // DOP conversion block — single line with rate + DOP-equivalent total
+  // Grand total
+  page.drawText('Total', { x: leftX, y, size: 13, font: fontBold, color: INK });
+  drawRightAt(page, formatMoney(totals.grandTotal, ctx.currency, ctx.rates), rightX, y, 14, fontBold, INK);
+  y -= 22;
+
+  // DOP conversion: rate on top line, RD$ amount on its own line below.
   const dopRate = effectiveDopRate(ctx.settings);
   const dopTotal = totals.grandTotal * dopRate;
   const rateLabel = rateSourceLabel(ctx.settings);
-  y -= 4;
+  const stripH = 38;
   page.drawRectangle({
-    x: leftX - 6,
-    y: y - 14,
-    width: rightX - leftX + 12,
-    height: 22,
+    x: leftX, y: y - stripH + 6,
+    width: panelW, height: stripH,
     color: BG_SOFT,
+    borderColor: INK_LINE, borderWidth: 0.5,
   });
-  const rateText = `Tipo de cambio: 1 USD = ${dopRate.toFixed(2)} DOP (${rateLabel})`;
-  page.drawText(rateText, {
-    x: leftX,
-    y: y - 6,
-    size: 8,
-    font: fontRegular,
-    color: INK_MID,
+  page.drawText(`Tipo de cambio: 1 USD = ${dopRate.toFixed(2)} DOP`, {
+    x: leftX + 10, y: y - 6, size: 8, font: fontRegular, color: INK_MID,
   });
-  const dopText = `RD$ ${Math.round(dopTotal).toLocaleString('en-US')}`;
-  drawRight(page, dopText, rightX, y - 6, 10.5, fontBold);
-  y -= 24;
+  page.drawText(`(${rateLabel})`, {
+    x: leftX + 10, y: y - 16, size: 7.5, font: fontRegular, color: INK_SOFT,
+  });
+  page.drawText('Total RD$', { x: leftX + 10, y: y - 28, size: 9, font: fontBold, color: INK });
+  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX - 10, y - 28, 11, fontBold, INK);
+  y -= stripH + 12;
 
-  return { x: MARGIN_L, y: y - 8 };
+  return { x: MARGIN_L, y };
 }
 
 function drawTerms(page, ctx, cursor) {
-  const { fontRegular, quote } = ctx;
-  page.drawText('TÉRMINOS Y CONDICIONES', { x: MARGIN_L, y: cursor.y, size: 8, font: fontRegular, color: INK_MID });
-  const lines = wrapText(quote.terms || '', 90);
-  let y = cursor.y - 14;
+  const { fontRegular, fontBold, quote } = ctx;
+  let y = cursor.y - 4;
+  page.drawText('TÉRMINOS Y CONDICIONES', { x: MARGIN_L, y, size: 7.5, font: fontBold, color: INK_MID, characterSpacing: 0.8 });
+  y -= 14;
+  const lines = wrapText(quote.terms || '', 95);
   for (const ln of lines) {
-    page.drawText(ln, { x: MARGIN_L, y, size: 8.5, font: fontRegular, color: INK });
-    y -= 11;
+    page.drawText(ln, { x: MARGIN_L, y, size: 9, font: fontRegular, color: INK_HIGH });
+    y -= 12;
   }
   return { x: MARGIN_L, y: y - 6 };
 }
 
-function drawFooter(page, ctx) {
+function drawFooter(page, ctx, pageNum, pageCount) {
   const { fontRegular, settings } = ctx;
-  const text = settings.quoteFooter || `${settings.companyName || ''} · Prepared via Roset Soft`;
-  if (!text) return;
-  page.drawText(text, { x: MARGIN_L, y: 22, size: 7.5, font: fontRegular, color: INK_MID });
+  const y = 28;
+  // Hairline
+  page.drawLine({
+    start: { x: MARGIN_L, y: y + 14 },
+    end: { x: PAGE_W - MARGIN_R, y: y + 14 },
+    thickness: 0.4, color: INK_LINE2,
+  });
+  const footerLeft = settings.quoteFooter || siteUrlFromEmail(settings.companyEmail) || settings.companyName || '';
+  if (footerLeft) {
+    page.drawText(footerLeft, { x: MARGIN_L, y, size: 8, font: fontRegular, color: INK_MID });
+  }
+  const pageText = `${pageNum} / ${pageCount}`;
+  drawRightAt(page, pageText, PAGE_W - MARGIN_R, y, 8, fontRegular, INK_MID);
+}
+
+function siteUrlFromEmail(email) {
+  if (!email || !email.includes('@')) return null;
+  return email.split('@')[1].toLowerCase();
 }
 
 /* ------------------------------------------------------------------ */
-/*  Utilities                                                          */
+/*  Utilities                                                           */
 /* ------------------------------------------------------------------ */
 
-function drawRight(page, text, rightX, y, size, font) {
+function drawRightAt(page, text, rightX, y, size, font, color) {
   const w = font.widthOfTextAtSize(text, size);
-  page.drawText(text, { x: rightX - w, y, size, font, color: INK });
+  page.drawText(text, { x: rightX - w, y, size, font, color: color || INK });
 }
 
 function truncate(s, n) {
@@ -424,13 +496,9 @@ function wrapText(text, perLine) {
   return out;
 }
 
-function lineDescription(line) {
-  return [line.product?.name, line.variant?.name, line.notes].filter(Boolean).join(' — ');
-}
-
 function validUntil(quote) {
   const created = quote.createdAt || Date.now();
-  return new Date(created + 30 * 86400 * 1000).toLocaleDateString();
+  return new Date(created + 30 * 86400 * 1000).toLocaleDateString('es-DO');
 }
 
 function formatMoney(value, code, rates) {
@@ -442,6 +510,11 @@ function formatMoney(value, code, rates) {
   } catch {
     return `${v.toFixed(2)} ${code}`;
   }
+}
+
+function formatPlain(value) {
+  if (value == null || Number.isNaN(value)) return '—';
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(value));
 }
 
 async function embedImageById(doc, id) {
