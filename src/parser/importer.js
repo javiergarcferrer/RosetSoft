@@ -28,6 +28,7 @@ import { parseMaterialPage } from './fabricParser.js';
 import { parseCabinetryPage } from './cabinetryParser.js';
 import { renderPdfPage, cropCanvasToBlob } from './pageImage.js';
 import { db, newId, saveImage } from '../db/database.js';
+import { normalizeKey } from '../lib/normalizeKey.js';
 
 const CATEGORY_HEADERS = [
   'COVER MATERIALS',
@@ -403,7 +404,7 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   const allExistingVariants = await db.productVariants.toArray();
   const variantByRef = new Map();
   for (const v of allExistingVariants) {
-    const key = (v.reference || '').trim().toUpperCase();
+    const key = normalizeKey(v.reference, 'ref');
     if (key) variantByRef.set(key, v);
   }
 
@@ -490,7 +491,7 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     // original behavior, which used to happen via the per-product write
     // loop updating the same map.
     const variantPlans = p.variants.map((v) => {
-      const refKey = (v.reference || '').trim().toUpperCase();
+      const refKey = normalizeKey(v.reference, 'ref');
       const globalMatch = refKey ? variantByRef.get(refKey) : null;
       const prev = globalMatch || byKey.get(v.reference || v.name);
       const vid = prev?.id || newId();

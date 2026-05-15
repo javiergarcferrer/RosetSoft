@@ -1,12 +1,16 @@
 import { db } from '../db/database.js';
 import { dedupCatalogReferences } from './catalogDedup.js';
+import { normalizeKey } from './normalizeKey.js';
 
 /**
  * Product-level dedup — collapses duplicate `products` rows that share the
- * same (name, designer) pair after trimming + case-folding. Variants are
- * re-pointed onto the winning product, then the variant ref-level dedup is
- * re-run because the merge can produce duplicate references across what
- * were previously two distinct products.
+ * same (name, designer) pair after the shared `normalizeKey(_, 'name')`
+ * pipeline (NFKC fold, accent strip, case-fold, noise-punctuation strip,
+ * whitespace collapse). So "ABANDON", "ABANDON " (NBSP), "Abandon",
+ * "ABANDÓN", and "ABANDON (test)" all collide as duplicates of one another.
+ * Variants are re-pointed onto the winning product, then the variant
+ * ref-level dedup is re-run because the merge can produce duplicate
+ * references across what were previously two distinct products.
  *
  * Year is intentionally NOT part of the group key — the same designer can
  * reissue a model with a different year, but those should still merge into
@@ -29,7 +33,7 @@ import { dedupCatalogReferences } from './catalogDedup.js';
  */
 
 function normKey(s) {
-  return (s || '').trim().toLowerCase();
+  return normalizeKey(s, 'name');
 }
 
 function toMillis(v) {
@@ -140,16 +144,47 @@ function buildFillPatch(winner, loser) {
  * each duplicate group, then runs the existing variant ref-level dedup to
  * collapse references that the merge brought together.
  *
- * Returns: {
+ * Options:
+ *   { dryRun: true } — runs the product scan AND the post-merge variant
+ *   scan (also in dry-run mode) without writing anything. The return value
+ *   includes a `productGroups` array and a `variantGroups` array describing
+ *   what WOULD be merged so the Settings preview modal can show both lists
+ *   in a single confirm step.
+ *
+ *   NOTE: in dry-run mode, the variant scan still runs against the CURRENT
+ *   DB state — it cannot show the variant collisions that would only
+ *   become visible AFTER the product merge re-parents variants. The live
+ *   run handles that case correctly. The preview is therefore a lower
+ *   bound on the variant merge — the actual number can grow slightly.
+ *
+ * Returns (live): {
  *   mergedProducts,        // total loser product rows removed
  *   canonicalProducts,     // distinct (name, designer) groups merged
  *   mergedVariants,        // from the post-merge variant dedup
  *   canonicalRefGroups,    // from the post-merge variant dedup
  *   repointedLines,        // from the post-merge variant dedup
  * }
+ * Returns (dryRun): same + { productGroups, variantGroups }
  */
-export async function dedupProductsByName() {
+export async function dedupProductsByName({ dryRun = false } = {}) {
   const { groups } = await scanDuplicateProducts();
+
+  // eslint-disable-next-line no-console
+  console.log(`[dedup] product scan: ${groups.length} (name, designer) groups, ` +
+    `${groups.reduce((n, g) => n + g.losers.length, 0)} losers`);
+
+  if (dryRun) {
+    const variantPreview = await dedupCatalogReferences({ dryRun: true });
+    return {
+      mergedProducts: groups.reduce((n, g) => n + g.losers.length, 0),
+      canonicalProducts: groups.length,
+      mergedVariants: variantPreview.mergedVariants,
+      canonicalRefGroups: variantPreview.canonicalGroups,
+      repointedLines: 0,
+      productGroups: groups,
+      variantGroups: variantPreview.groups,
+    };
+  }
 
   let mergedProducts = 0;
   const canonicalProducts = groups.length;

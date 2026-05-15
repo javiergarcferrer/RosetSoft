@@ -1,4 +1,5 @@
 import { db } from '../db/database.js';
+import { normalizeKey } from './normalizeKey.js';
 
 /**
  * Catalog dedup — one-shot cleanup that collapses duplicate `productVariants`
@@ -8,9 +9,11 @@ import { db } from '../db/database.js';
  * collapsing incoming variants against the global catalog, but legacy rows
  * created before that fix still need to be merged.
  *
- * Reference matching is trimmed + case-folded. Reference-less variants
- * (empty / whitespace only) are NEVER touched — multiple empty references
- * are legitimate.
+ * Reference matching uses the shared `normalizeKey(_, 'ref')` pipeline —
+ * NFKC fold + accent strip + case-fold + drop all non-alphanumerics — so
+ * "0P50FX1N", "0P50FX1N " (NBSP), "0p50fx1n", and "(0P50FX1N)" all collide.
+ * Reference-less variants (empty / whitespace only) are NEVER touched —
+ * multiple empty references are legitimate.
  *
  * Winner-pick rule (in order):
  *   1. Has a non-empty `priceByGrade` map (otherwise the row is a stub)
@@ -28,7 +31,7 @@ import { db } from '../db/database.js';
  */
 
 function normKey(ref) {
-  return (ref || '').trim().toUpperCase();
+  return normalizeKey(ref, 'ref');
 }
 
 function hasPriceByGrade(v) {
@@ -107,14 +110,35 @@ export async function scanDuplicateReferences() {
  * One-shot dedup. Re-scans the catalog (don't trust a stale scan), re-points
  * any quote_lines that target a loser, then deletes the losers.
  *
- * Returns: {
+ * Options:
+ *   { dryRun: true } — runs the scan but does NOT write anything. The
+ *   return shape gets a `groups` array describing what WOULD be merged:
+ *     { winner: {id, name, reference}, losers: [{id, name, reference}], key }
+ *   so the Settings preview modal can render the proposed merge for
+ *   visual spot-check before the user confirms.
+ *
+ * Returns (live mode): {
  *   mergedVariants,   // total loser rows removed
  *   canonicalGroups,  // distinct references that had duplicates
  *   repointedLines,   // quote_lines that were updated to point at a winner
  * }
+ * Returns (dryRun):  { mergedVariants, canonicalGroups, repointedLines: 0, groups }
  */
-export async function dedupCatalogReferences() {
+export async function dedupCatalogReferences({ dryRun = false } = {}) {
   const { groups } = await scanDuplicateReferences();
+
+  // eslint-disable-next-line no-console
+  console.log(`[dedup] variant scan: ${groups.length} reference groups, ` +
+    `${groups.reduce((n, g) => n + g.losers.length, 0)} losers`);
+
+  if (dryRun) {
+    return {
+      mergedVariants: groups.reduce((n, g) => n + g.losers.length, 0),
+      canonicalGroups: groups.length,
+      repointedLines: 0,
+      groups,
+    };
+  }
 
   if (groups.length === 0) {
     return { mergedVariants: 0, canonicalGroups: 0, repointedLines: 0 };

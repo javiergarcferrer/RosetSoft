@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Database, RefreshCw, ExternalLink, Cloud, Wrench } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
+import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
-import { scanDuplicateReferences, dedupCatalogReferences } from '../lib/catalogDedup.js';
-import { scanDuplicateProducts, dedupProductsByName } from '../lib/productDedup.js';
+import { dedupCatalogReferences } from '../lib/catalogDedup.js';
+import { dedupProductsByName } from '../lib/productDedup.js';
 
 const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 
@@ -141,72 +142,144 @@ export default function Settings() {
 }
 
 function CatalogMaintenanceCard() {
-  const [busy, setBusy] = useState(false);
-  const [busyProducts, setBusyProducts] = useState(false);
+  // Which dedup is busy (preview or applying)?
+  const [busyMode, setBusyMode] = useState(null); // 'variants' | 'products' | 'all' | null
+  const [applying, setApplying] = useState(false);
 
-  async function runDedup() {
-    if (busy) return;
-    setBusy(true);
+  // Preview state, lifted out of the buttons so the modal can render.
+  // shape: { mode, productGroups, variantGroups, summary }
+  const [preview, setPreview] = useState(null);
+
+  function closeModal() {
+    if (applying) return; // don't let the user close mid-write
+    setPreview(null);
+  }
+
+  async function previewVariants() {
+    if (busyMode) return;
+    setBusyMode('variants');
     try {
-      const scan = await scanDuplicateReferences();
-      if (scan.totalDuplicates === 0) {
+      const result = await dedupCatalogReferences({ dryRun: true });
+      if (result.canonicalGroups === 0) {
         alert('No se encontraron referencias duplicadas. El catálogo ya está limpio.');
         return;
       }
-      const ok = window.confirm(
-        `Se encontraron ${scan.totalDuplicates} variantes duplicadas ` +
-        `repartidas entre ${scan.totalGroups} referencias.\n\n` +
-        `Se conservará una variante canónica por referencia y las demás ` +
-        `se eliminarán. Las líneas de cotización existentes se ` +
-        `redirigirán automáticamente a la variante canónica.\n\n` +
-        `¿Continuar?`,
-      );
-      if (!ok) return;
-      const result = await dedupCatalogReferences();
-      alert(
-        `Listo. Se fusionaron ${result.mergedVariants} variantes en ` +
-        `${result.canonicalGroups} filas canónicas; se redirigieron ` +
-        `${result.repointedLines} líneas de cotización.`,
-      );
+      setPreview({
+        mode: 'variants',
+        productGroups: [],
+        variantGroups: result.groups,
+        summary: `Se encontraron ${result.mergedVariants} variantes duplicadas ` +
+                 `en ${result.canonicalGroups} referencias.`,
+      });
     } catch (e) {
-      console.error('Catalog dedup failed', e);
-      alert('No se pudo completar la limpieza: ' + (e?.message || e));
+      console.error('Variant dedup preview failed', e);
+      alert('No se pudo generar la vista previa: ' + (e?.message || e));
     } finally {
-      setBusy(false);
+      setBusyMode(null);
     }
   }
 
-  async function runProductDedup() {
-    if (busyProducts) return;
-    setBusyProducts(true);
+  async function previewProducts() {
+    if (busyMode) return;
+    setBusyMode('products');
     try {
-      const scan = await scanDuplicateProducts();
-      if (scan.totalDuplicates === 0) {
-        alert('No hay productos duplicados.');
+      const result = await dedupProductsByName({ dryRun: true });
+      if (result.canonicalProducts === 0 && result.canonicalRefGroups === 0) {
+        alert('No hay productos ni referencias duplicadas.');
         return;
       }
-      const ok = window.confirm(
-        `Se encontraron ${scan.totalDuplicates} productos duplicados ` +
-        `repartidos entre ${scan.totalGroups} nombres distintos.\n\n` +
-        `Se fusionarán en una sola entrada por nombre + diseñador. ` +
-        `Las variantes de los productos eliminados se moverán al ` +
-        `producto canónico, y las referencias duplicadas resultantes ` +
-        `se limpiarán automáticamente.\n\n` +
-        `¿Continuar?`,
-      );
-      if (!ok) return;
-      const result = await dedupProductsByName();
-      alert(
-        `Listo. Se fusionaron ${result.mergedProducts} productos en ` +
-        `${result.canonicalProducts} entradas canónicas; ` +
-        `se fusionaron ${result.mergedVariants} variantes y se redirigieron ` +
-        `${result.repointedLines} líneas de cotización.`,
-      );
+      setPreview({
+        mode: 'products',
+        productGroups: result.productGroups,
+        variantGroups: result.variantGroups,
+        summary:
+          `Se encontraron ${result.mergedProducts} productos duplicados ` +
+          `en ${result.canonicalProducts} nombres distintos` +
+          (result.canonicalRefGroups
+            ? ` y ${result.mergedVariants} variantes duplicadas en ` +
+              `${result.canonicalRefGroups} referencias.`
+            : '.'),
+      });
     } catch (e) {
-      console.error('Product dedup failed', e);
+      console.error('Product dedup preview failed', e);
+      alert('No se pudo generar la vista previa: ' + (e?.message || e));
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function previewAll() {
+    if (busyMode) return;
+    setBusyMode('all');
+    try {
+      // Product dryRun already includes the variant dryRun inside, so a
+      // single call gives us both lists.
+      const result = await dedupProductsByName({ dryRun: true });
+      if (result.canonicalProducts === 0 && result.canonicalRefGroups === 0) {
+        alert('El catálogo ya está limpio. No hay productos ni referencias duplicadas.');
+        return;
+      }
+      const parts = [];
+      if (result.canonicalProducts > 0) {
+        parts.push(
+          `${result.mergedProducts} productos duplicados en ` +
+          `${result.canonicalProducts} nombres distintos`,
+        );
+      }
+      if (result.canonicalRefGroups > 0) {
+        parts.push(
+          `${result.mergedVariants} variantes duplicadas en ` +
+          `${result.canonicalRefGroups} referencias`,
+        );
+      }
+      setPreview({
+        mode: 'all',
+        productGroups: result.productGroups,
+        variantGroups: result.variantGroups,
+        summary: 'Se encontraron ' + parts.join(' y ') + '.',
+      });
+    } catch (e) {
+      console.error('Combined dedup preview failed', e);
+      alert('No se pudo generar la vista previa: ' + (e?.message || e));
+    } finally {
+      setBusyMode(null);
+    }
+  }
+
+  async function applyPreview() {
+    if (!preview || applying) return;
+    setApplying(true);
+    try {
+      let msg;
+      if (preview.mode === 'variants') {
+        const r = await dedupCatalogReferences();
+        msg = `Listo. Se fusionaron ${r.mergedVariants} variantes en ` +
+              `${r.canonicalGroups} filas canónicas; se redirigieron ` +
+              `${r.repointedLines} líneas de cotización.`;
+      } else if (preview.mode === 'products') {
+        const r = await dedupProductsByName();
+        msg = `Listo. Se fusionaron ${r.mergedProducts} productos en ` +
+              `${r.canonicalProducts} entradas canónicas; ` +
+              `se fusionaron ${r.mergedVariants} variantes y se redirigieron ` +
+              `${r.repointedLines} líneas de cotización.`;
+      } else {
+        // 'all' — product dedup already chains the variant sweep at the end.
+        const r = await dedupProductsByName();
+        // Run variant dedup a second time to also catch ref groups that
+        // didn't involve a product merge.
+        const v = await dedupCatalogReferences();
+        msg = `Listo. Se fusionaron ${r.mergedProducts} productos y ` +
+              `${r.mergedVariants + v.mergedVariants} variantes; ` +
+              `se redirigieron ${r.repointedLines + v.repointedLines} ` +
+              `líneas de cotización.`;
+      }
+      setPreview(null);
+      alert(msg);
+    } catch (e) {
+      console.error('Dedup apply failed', e);
       alert('No se pudo completar la limpieza: ' + (e?.message || e));
     } finally {
-      setBusyProducts(false);
+      setApplying(false);
     }
   }
 
@@ -214,31 +287,157 @@ function CatalogMaintenanceCard() {
     <div className="card card-pad">
       <h2 className="font-semibold mb-3 flex items-center gap-2"><Wrench size={16} /> Mantenimiento del catálogo</h2>
       <p className="text-xs text-ink-500 mb-3">
-        Encuentra variantes que comparten una misma referencia (después de
-        recortar espacios e ignorar mayúsculas), conserva la más completa
-        y elimina las demás. Las cotizaciones existentes se conservan
-        intactas: las líneas que apuntaban a una variante eliminada se
-        redirigen a la canónica.
+        Une productos con el mismo nombre + diseñador y variantes con la
+        misma referencia (ignora mayúsculas, acentos, espacios invisibles
+        y signos). Verás una vista previa antes de aplicar; las
+        cotizaciones existentes se redirigen automáticamente a la entrada
+        canónica.
       </p>
       <button
         type="button"
-        onClick={runDedup}
-        disabled={busy}
-        className="btn-secondary w-full"
+        onClick={previewAll}
+        disabled={!!busyMode}
+        className="btn-primary w-full"
       >
-        {busy ? 'Limpiando…' : 'Limpiar referencias duplicadas'}
+        {busyMode === 'all' ? 'Buscando…' : 'Limpiar todo el catálogo'}
       </button>
-      <p className="text-xs text-ink-500 mt-4 mb-3">
-        Une productos con el mismo nombre y diseñador en una sola entrada.
+      <div className="grid grid-cols-1 gap-2 mt-3">
+        <button
+          type="button"
+          onClick={previewProducts}
+          disabled={!!busyMode}
+          className="btn-secondary w-full"
+        >
+          {busyMode === 'products' ? 'Buscando…' : 'Solo productos duplicados'}
+        </button>
+        <button
+          type="button"
+          onClick={previewVariants}
+          disabled={!!busyMode}
+          className="btn-secondary w-full"
+        >
+          {busyMode === 'variants' ? 'Buscando…' : 'Solo referencias duplicadas'}
+        </button>
+      </div>
+
+      <Modal
+        open={!!preview}
+        onClose={closeModal}
+        size="lg"
+        title="Vista previa de limpieza del catálogo"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeModal}
+              disabled={applying}
+              className="btn-ghost"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={applyPreview}
+              disabled={applying}
+              className="btn-primary"
+            >
+              {applying ? 'Aplicando…' : 'Confirmar y aplicar'}
+            </button>
+          </>
+        }
+      >
+        {preview && <DedupPreviewBody preview={preview} />}
+      </Modal>
+    </div>
+  );
+}
+
+function DedupPreviewBody({ preview }) {
+  const { productGroups, variantGroups, summary } = preview;
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-ink-700">{summary}</p>
+      <p className="text-xs text-ink-500">
+        En cada grupo, la primera fila (resaltada) es la entrada que se
+        conserva (la canónica). Las filas siguientes se fusionarán en ella
+        y luego se eliminarán.
       </p>
-      <button
-        type="button"
-        onClick={runProductDedup}
-        disabled={busyProducts}
-        className="btn-secondary w-full"
-      >
-        {busyProducts ? 'Combinando…' : 'Combinar productos duplicados'}
-      </button>
+
+      {productGroups.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold mb-2">
+            Productos duplicados ({productGroups.length} grupos,{' '}
+            {productGroups.reduce((n, g) => n + g.losers.length, 0)} a fusionar)
+          </h3>
+          <div className="space-y-3 max-h-72 overflow-y-auto rounded-md border border-ink-100 p-2 bg-ink-50/40">
+            {productGroups.map((g) => (
+              <ProductGroup key={g.key} group={g} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {variantGroups.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold mb-2">
+            Referencias duplicadas ({variantGroups.length} grupos,{' '}
+            {variantGroups.reduce((n, g) => n + g.losers.length, 0)} a fusionar)
+          </h3>
+          <div className="space-y-3 max-h-72 overflow-y-auto rounded-md border border-ink-100 p-2 bg-ink-50/40">
+            {variantGroups.map((g) => (
+              <VariantGroup key={g.key} group={g} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {productGroups.length === 0 && variantGroups.length === 0 && (
+        <p className="text-sm text-ink-500">Nada que limpiar.</p>
+      )}
+    </div>
+  );
+}
+
+function ProductGroup({ group }) {
+  const rows = [{ row: group.winner, winner: true }, ...group.losers.map((row) => ({ row, winner: false }))];
+  return (
+    <div className="rounded-md bg-white border border-ink-100">
+      <table className="w-full text-xs">
+        <tbody>
+          {rows.map(({ row, winner }) => (
+            <tr key={row.id} className={winner ? 'bg-brand-50' : ''}>
+              <td className="px-3 py-1.5 w-16 text-[10px] font-medium uppercase tracking-wider text-ink-500">
+                {winner ? 'Conservar' : 'Fusionar'}
+              </td>
+              <td className="px-3 py-1.5 font-medium">{row.name || <span className="text-ink-400">(sin nombre)</span>}</td>
+              <td className="px-3 py-1.5 text-ink-500">{row.designer || ''}</td>
+              <td className="px-3 py-1.5 text-ink-400 text-[10px]">{row.id}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VariantGroup({ group }) {
+  const rows = [{ row: group.winner, winner: true }, ...group.losers.map((row) => ({ row, winner: false }))];
+  return (
+    <div className="rounded-md bg-white border border-ink-100">
+      <table className="w-full text-xs">
+        <tbody>
+          {rows.map(({ row, winner }) => (
+            <tr key={row.id} className={winner ? 'bg-brand-50' : ''}>
+              <td className="px-3 py-1.5 w-16 text-[10px] font-medium uppercase tracking-wider text-ink-500">
+                {winner ? 'Conservar' : 'Fusionar'}
+              </td>
+              <td className="px-3 py-1.5 font-mono">{row.reference || <span className="text-ink-400">(sin ref.)</span>}</td>
+              <td className="px-3 py-1.5 text-ink-500">{row.name || ''}</td>
+              <td className="px-3 py-1.5 text-ink-400 text-[10px]">{row.id}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
