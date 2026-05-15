@@ -9,7 +9,7 @@ import Modal from '../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, applyLineAdjustments, variantPriceForGrade, ITBIS_PCT } from '../lib/pricing.js';
+import { computeTotals, applyLineAdjustments, resolveLineBasePrice, ITBIS_PCT } from '../lib/pricing.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
 import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
 
@@ -165,10 +165,9 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
         const product = variant ? await db.products.get(variant.productId) : null;
         const material = l.materialId ? await db.materials.get(l.materialId) : null;
         const color = l.colorId ? await db.materialColors.get(l.colorId) : null;
-        let basePrice = 0;
-        if (l.priceOverride != null) basePrice = l.priceOverride;
-        else if (variant && material?.grade) basePrice = variantPriceForGrade(variant, material.grade) ?? 0;
-        else if (variant?.priceFixed != null) basePrice = variant.priceFixed;
+        const basePrice = resolveLineBasePrice({
+          variant, material, priceOverride: l.priceOverride,
+        });
         out.push({ ...l, variant, product, material, color, basePrice });
       }
       if (!cancel) setResolved(out);

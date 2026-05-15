@@ -19,6 +19,29 @@ export function variantPriceForGrade(variant, grade) {
 }
 
 /**
+ * Resolve the base price for a quote line given its variant + material.
+ *
+ *   priceOverride          → wins outright (COM/COL or user override)
+ *   variant + material.grade → look up the grade column on the variant
+ *   variant.priceFixed     → single-price variants (cabinetry, accessories)
+ *   fallbackToLowestGrade  → optionally show the cheapest grade when no
+ *                            material has been picked yet (cart preview)
+ */
+export function resolveLineBasePrice(
+  { variant, material, priceOverride },
+  { fallbackToLowestGrade = false } = {},
+) {
+  if (priceOverride != null) return priceOverride;
+  if (variant && material?.grade) return variantPriceForGrade(variant, material.grade) ?? 0;
+  if (variant?.priceFixed != null) return variant.priceFixed;
+  if (fallbackToLowestGrade && variant) {
+    const vals = Object.values(variant.priceByGrade || {});
+    return vals.length ? Math.min(...vals) : 0;
+  }
+  return 0;
+}
+
+/**
  * Compute totals for a quote.
  *
  * @param {Array} lines  resolved line items: { qty, basePrice, lineMarginPct, lineDiscountPct }

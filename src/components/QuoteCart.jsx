@@ -6,7 +6,7 @@ import { useCart } from '../context/CartContext.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
-import { variantPriceForGrade, applyLineAdjustments, ITBIS_PCT } from '../lib/pricing.js';
+import { resolveLineBasePrice, applyLineAdjustments, ITBIS_PCT } from '../lib/pricing.js';
 import ImageView from './ImageView.jsx';
 
 /**
@@ -42,15 +42,10 @@ export default function QuoteCart() {
         const product = variant ? await db.products.get(variant.productId) : null;
         const material = l.materialId ? await db.materials.get(l.materialId) : null;
         const color = l.colorId ? await db.materialColors.get(l.colorId) : null;
-        let basePrice = 0;
-        if (l.priceOverride != null) basePrice = l.priceOverride;
-        else if (variant && material?.grade) basePrice = variantPriceForGrade(variant, material.grade) ?? 0;
-        else if (variant?.priceFixed != null) basePrice = variant.priceFixed;
-        else if (variant) {
-          // Default to lowest available grade price if no material chosen yet
-          const vals = Object.values(variant.priceByGrade || {});
-          basePrice = vals.length ? Math.min(...vals) : 0;
-        }
+        const basePrice = resolveLineBasePrice(
+          { variant, material, priceOverride: l.priceOverride },
+          { fallbackToLowestGrade: true },
+        );
         out.push({ ...l, variant, product, material, color, basePrice });
       }
       if (!cancel) setResolved(out);
