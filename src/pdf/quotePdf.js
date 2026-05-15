@@ -58,14 +58,18 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
   // Line items table
   cursor = drawLineHeader(page, ctx, cursor);
 
-  for (const line of lines) {
-    const needed = await measureLineRow(ctx, line);
-    if (cursor.y - needed < MARGIN_B + 80) {
-      page = doc.addPage([PAGE_W, PAGE_H]);
-      cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
-      cursor = drawLineHeader(page, ctx, cursor);
+  if (!lines.length) {
+    cursor = drawEmptyLineBody(page, ctx, cursor);
+  } else {
+    for (const line of lines) {
+      const needed = await measureLineRow(ctx, line);
+      if (cursor.y - needed < MARGIN_B + 80) {
+        page = doc.addPage([PAGE_W, PAGE_H]);
+        cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
+        cursor = drawLineHeader(page, ctx, cursor);
+      }
+      cursor = await drawLineRow(page, ctx, cursor, line);
     }
-    cursor = await drawLineRow(page, ctx, cursor, line);
   }
 
   // Totals + terms — keep them together if they fit.
@@ -123,7 +127,9 @@ function drawHeader(page, ctx, logoImage) {
     ay -= 11;
   }
 
-  // Right side: small uppercase label + big quote number
+  // Right side: small uppercase label + big quote number (or "BORRADOR"
+  // when the quote hasn't been numbered yet — better than rendering "# —").
+  const numbered = ctx.quote.number != null && ctx.quote.number !== '';
   const labelText = 'COTIZACIÓN';
   const labelSize = 9;
   const labelW = fontRegular.widthOfTextAtSize(labelText, labelSize);
@@ -136,8 +142,8 @@ function drawHeader(page, ctx, logoImage) {
     characterSpacing: 1.2,
   });
 
-  const numText = `#${ctx.quote.number || '—'}`;
-  const numSize = 26;
+  const numText = numbered ? `#${ctx.quote.number}` : 'BORRADOR';
+  const numSize = numbered ? 26 : 20;
   const numW = fontBold.widthOfTextAtSize(numText, numSize);
   page.drawText(numText, {
     x: PAGE_W - MARGIN_R - numW,
@@ -160,11 +166,15 @@ function drawHeader(page, ctx, logoImage) {
 
 function drawQuoteMeta(page, ctx, cursor) {
   const { fontBold, fontRegular, quote } = ctx;
+  // MONEDA: when the display currency IS USD don't repeat it ("USD · USD"
+  // looked silly). Show just the code; for any other code (e.g. DOP) show
+  // "DOP / USD" to make the conversion-target relationship explicit.
+  const moneda = ctx.currency === 'USD' ? 'USD' : `${ctx.currency} / USD`;
   const cols = [
     ['FECHA', new Date(quote.createdAt || Date.now()).toLocaleDateString('es-DO')],
     ['VÁLIDA HASTA', validUntil(quote)],
     ['ESTADO', (quote.status || 'borrador').toUpperCase()],
-    ['MONEDA', `${ctx.currency} · USD`],
+    ['MONEDA', moneda],
   ];
 
   // Soft band
@@ -226,17 +236,21 @@ function fontItalicOrRegular(ctx) {
 /* ------------------------------------------------------------------ */
 
 // All x positions absolute; right-aligned columns specify their right edge.
+// Header labels need real horizontal gaps between adjacent columns. The
+// previous layout had MATLABEL ending ~5pt before CANT. began, so they
+// rendered as one run ("TELA / COLORCANT."). We push qty further right and
+// shorten the material label to "MATERIAL".
 function lineColumns() {
   const right = PAGE_W - MARGIN_R;
   return {
     img:  { x: MARGIN_L + 8,  size: 48 },
     item: { x: MARGIN_L + 68, w: 200 },
     mat:  { x: MARGIN_L + 280 },
-    qty:  { rightX: right - 145, label: 'CANT.' },
-    unit: { rightX: right - 75,  label: 'UNIT.' },
+    qty:  { rightX: right - 165, label: 'CANT.' },
+    unit: { rightX: right - 80,  label: 'UNIT.' },
     tot:  { rightX: right - 8,   label: 'TOTAL' },
     itemLabel: 'ARTÍCULO',
-    matLabel: 'TELA / COLOR',
+    matLabel: 'MATERIAL',
   };
 }
 
@@ -264,6 +278,33 @@ function drawLineHeader(page, ctx, cursor) {
 
 async function measureLineRow() {
   return 64;
+}
+
+// Centered "Sin artículos" placeholder so the totals block doesn't appear to
+// float over empty white space when the quote has no line items yet.
+function drawEmptyLineBody(page, ctx, cursor) {
+  const { fontRegular, fontItalic } = ctx;
+  const boxH = 56;
+  const top = cursor.y;
+  const bottom = top - boxH;
+  // Hairline under the dark header band so the empty area reads as a row.
+  page.drawLine({
+    start: { x: MARGIN_L, y: bottom },
+    end:   { x: PAGE_W - MARGIN_R, y: bottom },
+    thickness: 0.5,
+    color: INK_LINE,
+  });
+  const msg = 'Sin artículos en esta cotización';
+  const size = 9.5;
+  const w = fontRegular.widthOfTextAtSize(msg, size);
+  page.drawText(msg, {
+    x: MARGIN_L + (CONTENT_W - w) / 2,
+    y: top - (boxH / 2) - 3,
+    size,
+    font: fontItalic || fontRegular,
+    color: INK_SOFT,
+  });
+  return { x: MARGIN_L, y: bottom };
 }
 
 async function drawLineRow(page, ctx, cursor, line) {
