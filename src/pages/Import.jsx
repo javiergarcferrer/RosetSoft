@@ -39,11 +39,23 @@ export default function Import() {
 
   async function commit() {
     setPhase('committing');
-    setCommitProgress({ done: 0, total: 0 });
+    setCommitProgress({ done: 0, total: 0, label: '' });
     try {
       const c = await commitImport(preview, {
         merge: true,
-        onProgress: ({ done, total }) => setCommitProgress({ done, total }),
+        onProgress: ({ phase: ph, done, total }) => {
+          // Surface each commit phase with its own label so the user sees
+          // *something* happening between phases instead of a long pause
+          // at 0% before uploads kick in.
+          const label =
+            ph === 'planning' ? 'Preparando catálogo'
+            : ph === 'uploading' ? 'Subiendo imágenes'
+            : ph === 'writing' ? 'Guardando filas en la base de datos'
+            : ph === 'starting' ? 'Iniciando'
+            : ph === 'done' ? 'Listo'
+            : '';
+          setCommitProgress({ done, total, label });
+        },
       });
       setCounts(c);
       setPhase('done');
@@ -128,7 +140,7 @@ export default function Import() {
           </div>
           {extractImages && (
             <div className="text-[11px] text-ink-500 mt-3">
-              Renderizar cada página tarda ~1s. Si va lento, desmarca <i>Extraer dibujos</i> y vuelve a intentar.
+              Cada página se renderiza y se recortan los dibujos. Si va lento, desmarca <i>Extraer dibujos</i> y vuelve a intentar.
             </div>
           )}
         </div>
@@ -220,7 +232,7 @@ export default function Import() {
       {phase === 'committing' && (
         <div className="card card-pad text-center py-16">
           <div className="text-sm text-ink-500 mb-2">
-            {commitProgress.total > 0 ? 'Subiendo imágenes al catálogo' : 'Guardando en el catálogo'}
+            {commitProgress.label || (commitProgress.total > 0 ? 'Subiendo imágenes al catálogo' : 'Guardando en el catálogo')}
           </div>
           {commitProgress.total > 0 ? (
             <>
@@ -234,7 +246,7 @@ export default function Import() {
                 />
               </div>
               <div className="text-[11px] text-ink-500 mt-3">
-                Cada imagen se sube a Supabase Storage. Si la red está lenta esto puede tomar varios minutos.
+                Las imágenes se reducen a ≤ 800 px y se suben como JPEG para que la transferencia sea ligera incluso con conexión lenta.
               </div>
             </>
           ) : (

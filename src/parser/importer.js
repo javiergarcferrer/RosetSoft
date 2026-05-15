@@ -192,7 +192,10 @@ export async function importPdf(source, { onProgress, extractImages = true } = {
         }
       }
 
-      // Extract images for this page (hero + per-variant drawings)
+      // Extract images for this page (hero + per-variant drawings).
+      // PDF render is single-threaded CPU work on the main thread — yield
+      // to the event loop after each render so the progress bar redraws
+      // and the tab doesn't feel frozen.
       if (extractImages) {
         try {
           onProgress?.({ page: p, total, stage: 'rendering' });
@@ -211,6 +214,8 @@ export async function importPdf(source, { onProgress, extractImages = true } = {
               imageCount++;
             }
           }
+          // Yield to the browser so the UI can repaint between renders.
+          await new Promise((r) => setTimeout(r, 0));
         } catch (e) {
           console.warn(`Image extraction failed on page ${p}:`, e?.message || e);
         }
@@ -279,7 +284,11 @@ async function extractPageImages(pdf, pageNum, items, { hasBanner, isCabinetry }
 
   if (!hasBanner && !nameRow && !isCabinetry) return { hero: null, variantImages: [] };
 
-  const { canvas, scale } = await renderPdfPage(pdf, pageNum, 2.0);
+  // Render at a moderate scale — every crop is downscaled to <= 800px on
+  // the longest edge by cropCanvasToBlob anyway. Halving the scale (2.0 → 1.25)
+  // ~halves render time, which is the single biggest contributor to
+  // perceived import latency. See pageImage.js header comment.
+  const { canvas, scale } = await renderPdfPage(pdf, pageNum, 1.25);
   const result = { hero: null, variantImages: [] };
 
   // Hero crop: description-style page (banner + no variant table)
@@ -349,7 +358,15 @@ function isValidProductName(s) {
 /*  Commit                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 10 } = {}) {
+// Concurrency for the upload worker pool. Was raised 5 → 10 in b93c523 on
+// the assumption that storage uploads were the wall, but the real wall is
+// the synchronous PDF-page render in the preview phase + per-product DB
+// round-trips in the commit phase (both of which this file now addresses).
+// 10 simultaneous PUTs over a residential cellular link don't speed
+// anything up — the link is the bottleneck — and they do create contention
+// with whatever else the tab is doing (XHR queue, fetch backpressure).
+// 6 is empirically a good middle for HTTP/2 single-origin throughput.
+export async function commitImport(preview, { merge = true, onProgress, uploadConcurrency = 6 } = {}) {
   const counts = { categories: 0, materials: 0, colors: 0, products: 0, variants: 0, images: 0 };
 
   // Pre-count uploads so we can show "X / N" progress.
@@ -374,10 +391,8 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   }
 
   // Run N image uploads in parallel; await all before continuing.
-  // Concurrency was raised from 5 → 10: Supabase Storage handles many
-  // simultaneous PUTs from a single client well, and most browsers cap HTTP/2
-  // streams at 100, so 10 is comfortably inside the safe zone. Lower this
-  // cap if you start seeing storage-side throttling (429s).
+  // See the comment on commitImport's uploadConcurrency default for why
+  // this is bounded at a modest number rather than maxed out.
   async function runParallel(tasks, limit = uploadConcurrency) {
     const results = new Array(tasks.length);
     let i = 0;
@@ -418,12 +433,26 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     counts.categories++;
   }
 
+  // Pre-fetch ALL existing materials and material colors in two requests
+  // instead of N+M round-trips inside the loop. Same rationale as the
+  // products block below.
+  const allExistingMaterials = merge ? await db.materials.toArray() : [];
+  // Case-sensitive name keys — matches the historical behavior of
+  // `db.materials.where('name').equals(m.name)`.
+  const materialByNameKind = new Map();
+  for (const r of allExistingMaterials) {
+    if (r.name != null) materialByNameKind.set(r.name + '|' + r.kind, r);
+  }
+  const allExistingColors = merge ? await db.materialColors.toArray() : [];
+  const colorsByMaterialId = new Map();
+  for (const c of allExistingColors) {
+    const arr = colorsByMaterialId.get(c.materialId) || [];
+    arr.push(c);
+    colorsByMaterialId.set(c.materialId, arr);
+  }
+
   for (const m of preview.fabrics) {
-    let existing = null;
-    if (merge) {
-      const matches = await db.materials.where('name').equals(m.name).toArray();
-      existing = matches.find((x) => x.kind === m.kind);
-    }
+    const existing = merge ? materialByNameKind.get(m.name + '|' + m.kind) || null : null;
     const id = existing?.id || newId();
     await db.materials.put({
       id,
@@ -440,7 +469,7 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     });
     if (!existing) counts.materials++;
 
-    const existingColors = await db.materialColors.where('materialId').equals(id).toArray();
+    const existingColors = colorsByMaterialId.get(id) || [];
     const seen = new Set(existingColors.map((c) => (c.name + '|' + c.code).toUpperCase()));
     for (const col of m.colors) {
       const key = (col.name + '|' + col.code).toUpperCase();
@@ -452,31 +481,47 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   }
 
   // ------------------------------------------------------------------
-  //  Phase 1: plan every product + variant (no I/O on the upload path
-  //  yet). We resolve existing rows, pre-assign new ids, and collect a
-  //  single flat list of upload tasks across ALL products.
+  //  Phase 1: plan every product + variant. We resolve existing rows,
+  //  pre-assign new ids, and collect a single flat list of upload tasks
+  //  across ALL products.
   //
-  //  This replaces the previous shape — a per-product await barrier on
-  //  `runParallel(uploadTasks)` — where each product's uploads had to
-  //  finish before the next product's uploads could even start. With ~50
-  //  products and a handful of uploads each, the old shape left the
-  //  upload worker pool idle most of the time. Now every upload across
-  //  every product feeds the same N-worker pool, so the workers stay
-  //  saturated end-to-end.
+  //  Critical perf detail: previously this loop did
+  //    `await db.products.where('name').equals(p.name).toArray()` and
+  //    `await db.productVariants.where('productId').equals(productId).toArray()`
+  //  per product. With ~50 products that's ~100 sequential Supabase
+  //  round-trips before the first upload could even start — invisible to
+  //  the user (no progress UI for it) and on cellular it dominated the
+  //  "starting…" wait. We already fetch `productVariants` in full above
+  //  to build `variantByRef`, so we can reuse those rows and bulk-fetch
+  //  `products` once too — turning N+M HTTP requests into 0 inside the
+  //  loop.
   // ------------------------------------------------------------------
+  onProgress?.({ phase: 'planning', done: 0, total: totalUploads });
+  const allExistingProducts = merge ? await db.products.toArray() : [];
+  // Use exact-name keys — matches the historical behavior of
+  // `db.products.where('name').equals(p.name)` (case-sensitive).
+  const productByName = new Map();
+  for (const r of allExistingProducts) {
+    if (r.name != null) productByName.set(r.name, r);
+  }
+  // Group already-loaded variant rows by productId so per-product lookups
+  // are pure in-memory work.
+  const variantsByProductId = new Map();
+  for (const v of allExistingVariants) {
+    const arr = variantsByProductId.get(v.productId) || [];
+    arr.push(v);
+    variantsByProductId.set(v.productId, arr);
+  }
+
   const productPlans = [];
   const allUploadTasks = [];
 
   for (const p of preview.products) {
-    let existing = null;
-    if (merge) {
-      const list = await db.products.where('name').equals(p.name).toArray();
-      existing = list[0];
-    }
+    const existing = merge ? productByName.get(p.name) || null : null;
     const productId = existing?.id || newId();
     const categoryId = categoryIdByName.get((p.categoryName || '').toUpperCase()) || null;
 
-    const existingVariants = await db.productVariants.where('productId').equals(productId).toArray();
+    const existingVariants = variantsByProductId.get(productId) || [];
     const byKey = new Map(existingVariants.map((v) => [v.reference || v.name, v]));
 
     // Plan variants. Reference takes precedence over name. A reference that
@@ -525,13 +570,15 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   await runParallel(allUploadTasks);
 
   // Phase 3: write the per-product DB rows now that every upload id is
-  // resolved. The product row and its variant rows write in parallel
-  // (independent inserts), and so do the rows across products — bounded
-  // by Supabase's per-request limits via the same connection pool.
+  // resolved. Build a flat task list of all product+variant puts and run
+  // them through the same worker pool so the rows across products don't
+  // wait on each other.
+  onProgress?.({ phase: 'writing', done: 0, total: totalUploads });
+  const writeTasks = [];
   for (const plan of productPlans) {
     const { p, existing, productId, categoryId, variantPlans, vectorImageId } = plan;
 
-    const productPut = db.products.put({
+    writeTasks.push(() => db.products.put({
       id: productId,
       name: p.name,
       categoryId,
@@ -543,11 +590,10 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
       heroImageId: existing?.heroImageId || null,
       vectorImageId,
       pages: p.pages || [],
-    });
+    }));
     if (!existing) counts.products++;
 
     let order = 0;
-    const variantPuts = [];
     for (const pl of variantPlans) {
       const imageId = pl.imageId ?? pl.prev?.imageId ?? null;
       const record = {
@@ -562,12 +608,12 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
         sortOrder: pl.prev?.sortOrder ?? order,
         imageId,
       };
-      variantPuts.push(db.productVariants.put(record));
+      writeTasks.push(() => db.productVariants.put(record));
       if (!pl.prev) counts.variants++;
       order++;
     }
-    await Promise.all([productPut, ...variantPuts]);
   }
+  await runParallel(writeTasks);
 
   onProgress?.({ phase: 'done', done: uploadsDone, total: totalUploads });
 
