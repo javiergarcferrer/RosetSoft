@@ -14,7 +14,7 @@ export default function ProfileMenu() {
   }
 
   return (
-    <div className="border-t border-ink-800 p-2 relative">
+    <div className="border-t border-ink-800 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] relative">
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 bg-ink-800 rounded-md border border-ink-700 shadow-xl py-1">
           <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-ink-400">Signed in as</div>

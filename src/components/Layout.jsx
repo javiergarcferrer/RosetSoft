@@ -31,13 +31,24 @@ const navItems = [
 export default function Layout() {
   const { settings } = useApp();
   const location = useLocation();
+  const { open: cartOpen } = useCart();
   const [navOpen, setNavOpen] = useState(false);
+  const isMobile = !useMediaQuery('(min-width: 768px)');
   const company = settings?.companyName || 'Roset Soft';
 
   // Close drawer on navigation
   useEffect(() => {
     setNavOpen(false);
   }, [location.pathname]);
+
+  // Lock body scroll when a drawer is open on mobile.
+  useEffect(() => {
+    if (!isMobile) return;
+    const shouldLock = navOpen || cartOpen;
+    const prev = document.body.style.overflow;
+    if (shouldLock) document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [navOpen, cartOpen, isMobile]);
 
   return (
     <div className="h-full flex flex-col md:flex-row">

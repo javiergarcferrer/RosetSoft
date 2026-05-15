@@ -4,8 +4,17 @@
 
 @layer base {
   html, body, #root { height: 100%; }
-  body { -webkit-font-smoothing: antialiased; }
+  /* Dynamic viewport on mobile so collapsing browser chrome doesn't clip content. */
+  @supports (height: 100dvh) {
+    html, body, #root { height: 100dvh; }
+  }
+  body { -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
   ::selection { background-color: #dd8542; color: #171612; }
+
+  /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px). */
+  @media (max-width: 767px) {
+    input, select, textarea { font-size: 16px !important; }
+  }
 }
 
 @layer components {

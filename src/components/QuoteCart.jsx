@@ -77,7 +77,7 @@ export default function QuoteCart() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 bg-ink-900 text-white rounded-full shadow-2xl px-4 py-2.5 md:px-5 md:py-3 flex items-center gap-2 hover:bg-ink-800 transition"
+        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 md:bottom-6 md:right-6 z-30 bg-ink-900 text-white rounded-full shadow-2xl px-4 py-2.5 md:px-5 md:py-3 flex items-center gap-2 hover:bg-ink-800 transition"
         title="Abrir cotización"
       >
         <ShoppingBag size={18} />
@@ -182,7 +182,7 @@ export default function QuoteCart() {
         </div>
       </div>
 
-      <div className="border-t border-ink-100 px-5 py-3 flex items-center gap-2">
+      <div className="border-t border-ink-100 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2">
         <button onClick={clearCart} disabled={!resolved.length} className="btn-ghost text-red-600 hover:bg-red-50 text-xs">
           Vaciar
         </button>
