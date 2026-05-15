@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Database, RefreshCw, ExternalLink, Cloud } from 'lucide-react';
+import { Database, RefreshCw, ExternalLink, Cloud, Wrench } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
+import { scanDuplicateReferences, dedupCatalogReferences } from '../lib/catalogDedup.js';
 
 const COMMON_CURRENCIES = ['DOP', 'USD', 'EUR', 'MXN', 'CAD', 'GBP'];
 
@@ -130,9 +131,68 @@ export default function Settings() {
               Las imágenes se guardan en el bucket público <code className="kbd">images</code> y se sirven directamente como URLs.
             </p>
           </div>
+
+          <CatalogMaintenanceCard />
         </div>
       </div>
     </>
+  );
+}
+
+function CatalogMaintenanceCard() {
+  const [busy, setBusy] = useState(false);
+
+  async function runDedup() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const scan = await scanDuplicateReferences();
+      if (scan.totalDuplicates === 0) {
+        alert('No se encontraron referencias duplicadas. El catálogo ya está limpio.');
+        return;
+      }
+      const ok = window.confirm(
+        `Se encontraron ${scan.totalDuplicates} variantes duplicadas ` +
+        `repartidas entre ${scan.totalGroups} referencias.\n\n` +
+        `Se conservará una variante canónica por referencia y las demás ` +
+        `se eliminarán. Las líneas de cotización existentes se ` +
+        `redirigirán automáticamente a la variante canónica.\n\n` +
+        `¿Continuar?`,
+      );
+      if (!ok) return;
+      const result = await dedupCatalogReferences();
+      alert(
+        `Listo. Se fusionaron ${result.mergedVariants} variantes en ` +
+        `${result.canonicalGroups} filas canónicas; se redirigieron ` +
+        `${result.repointedLines} líneas de cotización.`,
+      );
+    } catch (e) {
+      console.error('Catalog dedup failed', e);
+      alert('No se pudo completar la limpieza: ' + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card card-pad">
+      <h2 className="font-semibold mb-3 flex items-center gap-2"><Wrench size={16} /> Mantenimiento del catálogo</h2>
+      <p className="text-xs text-ink-500 mb-3">
+        Encuentra variantes que comparten una misma referencia (después de
+        recortar espacios e ignorar mayúsculas), conserva la más completa
+        y elimina las demás. Las cotizaciones existentes se conservan
+        intactas: las líneas que apuntaban a una variante eliminada se
+        redirigen a la canónica.
+      </p>
+      <button
+        type="button"
+        onClick={runDedup}
+        disabled={busy}
+        className="btn-secondary w-full"
+      >
+        {busy ? 'Limpiando…' : 'Limpiar referencias duplicadas'}
+      </button>
+    </div>
   );
 }
 
