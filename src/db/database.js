@@ -204,25 +204,6 @@ class Table {
     if (error) throw error;
     invalidate();
   }
-
-  /**
-   * Upsert an array of records in one or more chunked requests instead of
-   * one-call-per-row. Critical for bulk imports — N separate `.put()` calls
-   * each open a connection from the Supabase pool, so a few hundred row
-   * writes can saturate the pool (you get "max connections" errors). One
-   * 500-row upsert uses one connection for ~the same wall time.
-   */
-  async bulkPut(records, { chunkSize = 500 } = {}) {
-    if (!records?.length) return;
-    const pkCol = snake(this.t.pk);
-    for (let i = 0; i < records.length; i += chunkSize) {
-      const chunk = records.slice(i, i + chunkSize).map(toRow);
-      const { error } = await supabase
-        .from(this.t.db).upsert(chunk, { onConflict: pkCol });
-      if (error) throw error;
-    }
-    invalidate();
-  }
 }
 
 export const db = Object.fromEntries(
@@ -242,9 +223,6 @@ export function newId() {
 /* ---------------------------------------------------------------------- */
 
 export async function fileToBlob(file) {
-  // File extends Blob, so any Blob/File can be uploaded directly without a
-  // re-wrap. Re-wrapping forces an extra arrayBuffer() copy which doubles
-  // peak memory for large images and serialises the upload behind the copy.
   if (file instanceof Blob) return file;
   const buf = await file.arrayBuffer();
   return new Blob([buf], { type: file.type || 'application/octet-stream' });
@@ -258,24 +236,19 @@ function extensionForType(type) {
 }
 
 export async function saveImage({ kind, ownerId, file, label = '' }) {
-  const row = await uploadImageOnly({ kind, ownerId, file, label });
-  await db.images.put(row);
-  return row.id;
-}
-
-/**
- * Upload an image to Storage and return the row metadata WITHOUT inserting
- * it into the `images` table. The caller is responsible for writing the row
- * (ideally as part of a bulkPut so a big import doesn't open hundreds of
- * separate DB connections). Used by the PDF importer.
- */
-export async function uploadImageOnly({ kind, ownerId, file, label = '' }) {
   const blob = await fileToBlob(file);
   const id = newId();
   const ext = extensionForType(blob.type);
   const storagePath = `${id}.${ext}`;
-  await uploadWithRetry(storagePath, blob, blob.type || 'application/octet-stream');
-  return {
+  const { error: upErr } = await supabase.storage
+    .from(IMAGES_BUCKET)
+    .upload(storagePath, blob, {
+      contentType: blob.type || 'application/octet-stream',
+      cacheControl: '31536000',
+      upsert: false,
+    });
+  if (upErr) throw upErr;
+  await db.images.put({
     id,
     kind,
     ownerId,
@@ -283,54 +256,8 @@ export async function uploadImageOnly({ kind, ownerId, file, label = '' }) {
     contentType: blob.type || 'application/octet-stream',
     size: blob.size,
     storagePath,
-  };
-}
-
-/**
- * Upload a blob to Storage with retry on transient gateway errors.
- *
- * Supabase Storage edges intermittently return 502/503/504 under load —
- * any non-trivial PDF import is otherwise one bad gateway away from
- * dying mid-flight. We retry up to 4 times with jittered exponential
- * backoff (≈0.8s → 1.6s → 3.2s), only on those status codes. Permanent
- * errors (auth, RLS, size limit, conflict) throw immediately.
- *
- * On a retry we flip `upsert` to true: a previous attempt may have
- * actually written bytes server-side before the gateway timed out, and
- * `upsert:false` would refuse the retry as a conflict.
- */
-async function uploadWithRetry(storagePath, blob, contentType, { maxAttempts = 4, baseDelay = 800 } = {}) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const { error } = await supabase.storage
-      .from(IMAGES_BUCKET)
-      .upload(storagePath, blob, {
-        contentType,
-        cacheControl: '31536000',
-        upsert: attempt > 1,
-      });
-    if (!error) return;
-    lastError = error;
-    if (!isTransientStorageError(error) || attempt === maxAttempts) {
-      throw error;
-    }
-    const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 500;
-    await new Promise((r) => setTimeout(r, delay));
-  }
-  throw lastError;
-}
-
-function isTransientStorageError(err) {
-  if (!err) return false;
-  // Supabase StorageApiError surfaces the HTTP status in several places
-  // depending on whether the response was parseable JSON. Check them all.
-  const code = err.statusCode ?? err.status ?? err.code;
-  if (code) {
-    const n = Number(code);
-    if (n === 502 || n === 503 || n === 504 || n === 429) return true;
-  }
-  const msg = String(err.message || err);
-  return /\b(502|503|504|429)\b/.test(msg) || /gateway|timeout|too many requests/i.test(msg);
+  });
+  return id;
 }
 
 export async function imageObjectUrl(id) {
