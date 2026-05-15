@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { db, newId } from '../db/database.js';
 import { useApp } from './AppContext.jsx';
 
@@ -35,6 +35,39 @@ export function CartProvider({ children }) {
       if (existing) setCartId(existing.id);
     })();
     return () => { cancel = true; };
+  }, [profileId]);
+
+  // One-time orphan sweep per profile session. Hard-deletes quotes that are
+  // unambiguously empty: 0 lines, no name, no customer, not pinned to a
+  // container. We additionally require createdAt to be > 60s ago so that a
+  // brand-new /quotes/new the user just opened can't be deleted while they
+  // haven't started typing yet.
+  const sweptRef = useRef(false);
+  useEffect(() => {
+    if (!profileId || sweptRef.current) return;
+    sweptRef.current = true;
+    (async () => {
+      try {
+        const cutoff = Date.now() - 60_000;
+        const all = await db.quotes.where('profileId').equals(profileId).toArray();
+        const candidates = all.filter((q) =>
+          !q.customerId &&
+          !q.containerId &&
+          (!q.name || !q.name.trim()) &&
+          typeof q.createdAt === 'number' && q.createdAt < cutoff
+        );
+        let deleted = 0;
+        for (const q of candidates) {
+          const lineCount = await db.quoteLines.where('quoteId').equals(q.id).count();
+          if (lineCount > 0) continue;
+          await db.quotes.delete(q.id);
+          deleted += 1;
+        }
+        if (deleted > 0) console.info(`[orphan sweep] removed ${deleted} empty quote${deleted === 1 ? '' : 's'}`);
+      } catch (e) {
+        console.warn('[orphan sweep] failed:', e);
+      }
+    })();
   }, [profileId]);
 
   // Lazily create the cart row the first time the user actually adds an item.
