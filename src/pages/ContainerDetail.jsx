@@ -230,40 +230,68 @@ export default function ContainerDetail() {
                 Sin cotizaciones — usa <b>Fijar cotización</b> para añadir.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="table min-w-[720px]">
-                  <thead>
-                    <tr>
-                      <th>Número</th>
-                      <th>Cliente</th>
-                      <th>Nombre</th>
-                      <th>Líneas</th>
-                      <th>Actualizado</th>
-                      <th className="text-right">Total</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pinnedWithTotals.map((q) => (
-                      <tr key={q.id}>
-                        <td className="font-medium">
-                          <Link to={`/quotes/${q.id}`} className="hover:underline">#{q.number || '—'}</Link>
-                        </td>
-                        <td className="text-ink-700">{q.customer?.name || '—'}</td>
-                        <td>{q.name || '—'}</td>
-                        <td className="text-ink-500">{q.lines.length}</td>
-                        <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
-                        <td className="text-right font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</td>
-                        <td className="text-right w-8">
-                          <button onClick={() => unpin(q.id)} className="text-ink-400 hover:text-red-600" title="Quitar del contenedor">
-                            <X size={14} />
-                          </button>
-                        </td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden divide-y divide-ink-100">
+                  {pinnedWithTotals.map((q) => (
+                    <div key={q.id} className="p-3 flex items-start gap-2">
+                      <Link to={`/quotes/${q.id}`} className="flex-1 min-w-0 block">
+                        <div className="text-sm font-semibold">#{q.number || '—'}{q.name ? ` · ${q.name}` : ''}</div>
+                        <div className="text-xs text-ink-700 truncate">{q.customer?.name || 'Sin cliente'}</div>
+                        <div className="text-[11px] text-ink-500 mt-0.5">
+                          {q.lines.length} {q.lines.length === 1 ? 'línea' : 'líneas'} · {formatDateTime(q.updatedAt)}
+                        </div>
+                      </Link>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <div className="text-sm font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</div>
+                        <button
+                          onClick={() => unpin(q.id)}
+                          className="text-ink-400 hover:text-red-600 p-1 -mr-1"
+                          aria-label="Quitar del contenedor"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="table min-w-[720px]">
+                    <thead>
+                      <tr>
+                        <th>Número</th>
+                        <th>Cliente</th>
+                        <th>Nombre</th>
+                        <th>Líneas</th>
+                        <th>Actualizado</th>
+                        <th className="text-right">Total</th>
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {pinnedWithTotals.map((q) => (
+                        <tr key={q.id}>
+                          <td className="font-medium">
+                            <Link to={`/quotes/${q.id}`} className="hover:underline">#{q.number || '—'}</Link>
+                          </td>
+                          <td className="text-ink-700">{q.customer?.name || '—'}</td>
+                          <td>{q.name || '—'}</td>
+                          <td className="text-ink-500">{q.lines.length}</td>
+                          <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
+                          <td className="text-right font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</td>
+                          <td className="text-right w-8">
+                            <button onClick={() => unpin(q.id)} className="text-ink-400 hover:text-red-600" title="Quitar del contenedor">
+                              <X size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -345,41 +373,70 @@ function QuotePickerModal({ open, onClose, onPick, quotes, customers, linesByQuo
         {candidates.length === 0 ? (
           <div className="text-center text-sm text-ink-500 py-8">Sin cotizaciones disponibles.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table min-w-[640px]">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Cliente</th>
-                  <th>Nombre</th>
-                  <th>Líneas</th>
-                  <th className="text-right">Total</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.map((qu) => {
-                  const lines = linesByQuote.get(qu.id) || [];
-                  const total = lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-                  const cust = customers.get(qu.customerId);
-                  return (
-                    <tr key={qu.id}>
-                      <td className="font-medium">#{qu.number || '—'}</td>
-                      <td className="text-ink-700">{cust?.name || '—'}</td>
-                      <td>{qu.name || '—'}</td>
-                      <td className="text-ink-500">{lines.length}</td>
-                      <td className="text-right font-medium">{formatMoney(total, 'USD', { USD: 1 })}</td>
-                      <td className="text-right">
-                        <button onClick={() => onPick(qu.id)} className="text-xs text-brand-600 hover:underline">
-                          Fijar →
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-ink-100">
+              {candidates.map((qu) => {
+                const lines = linesByQuote.get(qu.id) || [];
+                const total = lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
+                const cust = customers.get(qu.customerId);
+                return (
+                  <button
+                    key={qu.id}
+                    onClick={() => onPick(qu.id)}
+                    className="w-full text-left p-3 flex items-start justify-between gap-2 hover:bg-ink-50 active:bg-ink-100"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">#{qu.number || '—'}{qu.name ? ` · ${qu.name}` : ''}</div>
+                      <div className="text-xs text-ink-700 truncate">{cust?.name || 'Sin cliente'}</div>
+                      <div className="text-[11px] text-ink-500 mt-0.5">{lines.length} {lines.length === 1 ? 'línea' : 'líneas'}</div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-medium">{formatMoney(total, 'USD', { USD: 1 })}</div>
+                      <div className="text-[11px] text-brand-600 mt-0.5">Fijar →</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cliente</th>
+                    <th>Nombre</th>
+                    <th>Líneas</th>
+                    <th className="text-right">Total</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {candidates.map((qu) => {
+                    const lines = linesByQuote.get(qu.id) || [];
+                    const total = lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
+                    const cust = customers.get(qu.customerId);
+                    return (
+                      <tr key={qu.id}>
+                        <td className="font-medium">#{qu.number || '—'}</td>
+                        <td className="text-ink-700">{cust?.name || '—'}</td>
+                        <td>{qu.name || '—'}</td>
+                        <td className="text-ink-500">{lines.length}</td>
+                        <td className="text-right font-medium">{formatMoney(total, 'USD', { USD: 1 })}</td>
+                        <td className="text-right">
+                          <button onClick={() => onPick(qu.id)} className="text-xs text-brand-600 hover:underline">
+                            Fijar →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </Modal>

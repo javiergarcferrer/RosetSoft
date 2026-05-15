@@ -146,44 +146,76 @@ export default function ProductDetail() {
             {variants.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-ink-500">No variants yet.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="table min-w-[760px]">
-                  <thead>
-                    <tr>
-                      <th>Image</th>
-                      <th>Name</th>
-                      <th>Reference</th>
-                      <th>Yardage</th>
-                      <th>Dimensions</th>
-                      <th className="text-right">Grades</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {variants.map((v) => (
-                      <tr key={v.id}>
-                        <td className="w-14">
-                          <div className="w-12 h-12 rounded bg-ink-100 overflow-hidden">
-                            <ImageView id={v.imageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden divide-y divide-ink-100">
+                  {variants.map((v) => {
+                    const gradeCount = Object.keys(v.priceByGrade || {}).length;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setEditingVariantId(v.id)}
+                        className="w-full text-left p-3 flex items-center gap-3 hover:bg-ink-50 active:bg-ink-100"
+                      >
+                        <div className="w-14 h-14 rounded bg-ink-100 overflow-hidden flex-shrink-0">
+                          <ImageView id={v.imageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold truncate">{v.name}</div>
+                          {v.reference && <div className="font-mono text-[11px] text-ink-500 truncate">{v.reference}</div>}
+                          <div className="text-[11px] text-ink-500 mt-0.5 truncate">
+                            {[v.yardage, v.dimensions].filter(Boolean).join(' · ') || '—'}
                           </div>
-                        </td>
-                        <td className="font-medium">{v.name}</td>
-                        <td className="font-mono text-xs text-ink-600">{v.reference || '—'}</td>
-                        <td className="text-ink-600">{v.yardage || '—'}</td>
-                        <td className="text-ink-600 max-w-xs truncate" title={v.dimensions}>{v.dimensions || '—'}</td>
-                        <td className="text-right text-xs text-ink-500">
-                          {Object.keys(v.priceByGrade || {}).length} grade{Object.keys(v.priceByGrade || {}).length === 1 ? '' : 's'}
-                        </td>
-                        <td className="text-right w-20">
-                          <button onClick={() => setEditingVariantId(v.id)} className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1">
-                            Edit <ExternalLink size={12} />
-                          </button>
-                        </td>
+                          <div className="text-[11px] text-ink-500 mt-0.5">
+                            {gradeCount} grade{gradeCount === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                        <ExternalLink size={14} className="text-ink-400 flex-shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="table min-w-[760px]">
+                    <thead>
+                      <tr>
+                        <th>Image</th>
+                        <th>Name</th>
+                        <th>Reference</th>
+                        <th>Yardage</th>
+                        <th>Dimensions</th>
+                        <th className="text-right">Grades</th>
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {variants.map((v) => (
+                        <tr key={v.id}>
+                          <td className="w-14">
+                            <div className="w-12 h-12 rounded bg-ink-100 overflow-hidden">
+                              <ImageView id={v.imageId} className="w-full h-full object-cover" placeholderClassName="w-full h-full" />
+                            </div>
+                          </td>
+                          <td className="font-medium">{v.name}</td>
+                          <td className="font-mono text-xs text-ink-600">{v.reference || '—'}</td>
+                          <td className="text-ink-600">{v.yardage || '—'}</td>
+                          <td className="text-ink-600 max-w-xs truncate" title={v.dimensions}>{v.dimensions || '—'}</td>
+                          <td className="text-right text-xs text-ink-500">
+                            {Object.keys(v.priceByGrade || {}).length} grade{Object.keys(v.priceByGrade || {}).length === 1 ? '' : 's'}
+                          </td>
+                          <td className="text-right w-20">
+                            <button onClick={() => setEditingVariantId(v.id)} className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1">
+                              Edit <ExternalLink size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
