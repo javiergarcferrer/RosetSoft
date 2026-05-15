@@ -22,7 +22,7 @@ export default function ContainerDetail() {
     [],
   );
   const allQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').toArray(),
+    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).toArray(),
     [profileId],
     [],
   );

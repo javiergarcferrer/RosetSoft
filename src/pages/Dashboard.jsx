@@ -13,11 +13,11 @@ export default function Dashboard() {
     products: await db.products.count(),
     materials: await db.materials.count(),
     customers: await db.customers.where('profileId').equals(profileId || '').count(),
-    quotes: await db.quotes.where('profileId').equals(profileId || '').count(),
+    quotes: await db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).count(),
   }), [profileId], { products: 0, materials: 0, customers: 0, quotes: 0 });
 
   const recentQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt').then((r) => r.slice(0, 6)),
+    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).reverse().sortBy('updatedAt').then((r) => r.slice(0, 6)),
     [profileId],
     []
   );
