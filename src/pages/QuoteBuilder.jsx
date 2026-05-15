@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Trash2, Download, FileText, Save, ArrowLeft, GripVertical, ChevronDown, Minus } from 'lucide-react';
@@ -19,112 +19,132 @@ export default function QuoteBuilder() {
   const { quoteId: routeId } = useParams();
   const [search] = useSearchParams();
 
-  const [quoteId, setQuoteId] = useState(routeId || null);
-  const [creating, setCreating] = useState(!routeId);
-  // Tracks a quote that THIS visit created via /quotes/new. If the user
-  // leaves without ever giving it a customer, a name, or any line items,
-  // we delete it on unmount to avoid leaving "empty quote" rows behind.
-  const createdIdRef = useRef(null);
+  // Already-saved quote — render normally.
+  if (routeId) return <Builder quoteId={routeId} navigate={navigate} />;
 
-  useEffect(() => {
-    let cancelled = false;
-    if (routeId) {
-      setQuoteId(routeId);
-      setCreating(false);
-      return;
-    }
-    (async () => {
-      const id = newId();
-      const number = (settings?.quoteCounter || 1000) + 1;
-      await db.quotes.put({
-        id,
-        profileId,
-        number,
-        name: '',
-        customerId: null,
-        status: 'draft',
-        currencyCode: 'USD',
-        rates: settings?.currencyRates || { USD: 1 },
-        marginPct: settings?.defaultMarginPct || 0,
-        discountPct: settings?.defaultDiscountPct || 0,
-        taxPct: 0,
-        shipping: 0,
-        terms: settings?.quoteTerms || '',
-        notes: '',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      await db.settings.put({ ...(settings || { profileId }), profileId, quoteCounter: number });
-      if (!cancelled) {
-        createdIdRef.current = id;
-        setQuoteId(id);
-        setCreating(false);
-        // Optionally add an initial line for ?product=ID
-        const initialProductId = search.get('product');
-        if (initialProductId) {
-          const variants = await db.productVariants.where('productId').equals(initialProductId).toArray();
-          const firstVariant = variants.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))[0];
-          if (firstVariant) {
-            await db.quoteLines.put({
-              id: newId(),
-              quoteId: id,
-              productVariantId: firstVariant.id,
-              materialId: null,
-              colorId: null,
-              qty: 1,
-              unitPrice: 0,
-              priceOverride: null,
-              lineMarginPct: 0,
-              lineDiscountPct: 0,
-              notes: '',
-              sortOrder: 0,
-            });
-          }
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clean up abandoned empty quotes on unmount. Only runs for quotes this
-  // visit created (createdIdRef set), so opening an existing quote and
-  // leaving it never deletes user data.
-  useEffect(() => {
-    return () => {
-      const id = createdIdRef.current;
-      if (!id) return;
-      // Fire-and-forget; we're leaving the page.
-      (async () => {
-        try {
-          const q = await db.quotes.get(id);
-          if (!q) return;
-          const lineCount = await db.quoteLines.where('quoteId').equals(id).count();
-          const untouched =
-            lineCount === 0 &&
-            !q.customerId &&
-            !(q.name && q.name.trim());
-          if (untouched) {
-            await db.quotes.delete(id);
-          }
-        } catch (e) {
-          // No-op: leaving the page anyway.
-        }
-      })();
-    };
-  }, []);
-
-  if (creating || !quoteId) return <div className="text-sm text-ink-500">Preparing quote…</div>;
-  return <Builder quoteId={quoteId} navigate={navigate} />;
+  // Otherwise the user just hit /quotes/new. Render the builder against an
+  // in-memory draft. Nothing is written to Supabase until the user actually
+  // does something (types a name, picks a customer, adds a line item).
+  return (
+    <DraftBuilder
+      profileId={profileId}
+      settings={settings}
+      initialProductId={search.get('product')}
+      navigate={navigate}
+    />
+  );
 }
 
-function Builder({ quoteId, navigate }) {
+function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
+  // Stable id chosen up-front; the row only exists in Supabase after materialize.
+  const idRef = useRef(null);
+  if (!idRef.current) idRef.current = newId();
+  const id = idRef.current;
+
+  const defaults = useMemo(() => ({
+    id,
+    profileId,
+    number: null,
+    name: '',
+    customerId: null,
+    status: 'draft',
+    currencyCode: 'USD',
+    rates: settings?.currencyRates || { USD: 1 },
+    marginPct: settings?.defaultMarginPct || 0,
+    discountPct: settings?.defaultDiscountPct || 0,
+    taxPct: 0,
+    shipping: 0,
+    terms: settings?.quoteTerms || '',
+    notes: '',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }), [id, profileId, settings]);
+
+  // Persist on first real action. Cached in a ref so concurrent mutations
+  // share the single in-flight create instead of double-writing the row.
+  const persistedRef = useRef(false);
+  const inFlightRef = useRef(null);
+  const materialize = useCallback(async () => {
+    if (persistedRef.current) return id;
+    if (inFlightRef.current) return inFlightRef.current;
+    inFlightRef.current = (async () => {
+      try {
+        const number = (settings?.quoteCounter || 1000) + 1;
+        await db.quotes.put({ ...defaults, number, updatedAt: Date.now() });
+        await db.settings.put({ ...(settings || { profileId }), profileId, quoteCounter: number });
+        persistedRef.current = true;
+        // Quietly update the URL bar so reload / share lands on the saved
+        // quote. Hash-router's listener doesn't fire on replaceState, so
+        // React Router stays at /quotes/new and the component does NOT
+        // remount — debounced inputs, picker state, scroll position all
+        // survive.
+        try {
+          window.history.replaceState(null, '', `#/quotes/${id}`);
+        } catch {}
+        return id;
+      } catch (e) {
+        // Allow a retry on the next user action.
+        inFlightRef.current = null;
+        throw e;
+      }
+    })();
+    return inFlightRef.current;
+  }, [id, defaults, profileId, settings]);
+
+  // ?product=X — adding an initial line IS a real action, so it materializes.
+  useEffect(() => {
+    if (!initialProductId) return;
+    let cancel = false;
+    (async () => {
+      const variants = await db.productVariants.where('productId').equals(initialProductId).toArray();
+      const firstVariant = variants.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))[0];
+      if (!firstVariant || cancel) return;
+      await materialize();
+      if (cancel) return;
+      await db.quoteLines.put({
+        id: newId(),
+        quoteId: id,
+        productVariantId: firstVariant.id,
+        materialId: null,
+        colorId: null,
+        qty: 1,
+        unitPrice: 0,
+        priceOverride: null,
+        lineMarginPct: 0,
+        lineDiscountPct: 0,
+        notes: '',
+        sortOrder: 0,
+      });
+    })();
+    return () => { cancel = true; };
+  }, [initialProductId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Builder
+      quoteId={id}
+      navigate={navigate}
+      draftQuote={defaults}
+      materialize={materialize}
+    />
+  );
+}
+
+function Builder({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId } = useApp();
-  const quote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
+  const liveQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
+  // In draft mode (materialize provided + nothing persisted yet) the live row
+  // doesn't exist; fall back to the in-memory defaults so the form renders.
+  const quote = liveQuote || draftQuote || null;
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
     [quoteId],
     []
   );
+
+  // Wrap any mutation so it lazily materializes the draft before touching the DB.
+  const ensurePersisted = useCallback(async () => {
+    if (materialize) await materialize();
+  }, [materialize]);
   const customers = useLiveQuery(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId],
@@ -173,10 +193,12 @@ function Builder({ quoteId, navigate }) {
   if (!quote) return <div className="text-sm text-ink-500">Loading…</div>;
 
   async function updateQuote(patch) {
+    await ensurePersisted();
     await db.quotes.put({ ...quote, ...patch, updatedAt: Date.now() });
   }
 
   async function addLineForVariant(variant) {
+    await ensurePersisted();
     await db.quoteLines.put({
       id: newId(),
       quoteId,
