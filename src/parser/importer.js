@@ -424,14 +424,16 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   }
 
   const neededCategories = new Set(preview.products.map((p) => p.categoryName).filter(Boolean));
+  const newCategoryRecords = [];
   for (const name of neededCategories) {
     if (categoryIdByName.has(name.toUpperCase())) continue;
     const id = newId();
     const idx = CATEGORY_HEADERS.indexOf(name);
-    await db.categories.put({ id, name, sortOrder: idx >= 0 ? idx : 999 });
+    newCategoryRecords.push({ id, name, sortOrder: idx >= 0 ? idx : 999 });
     categoryIdByName.set(name.toUpperCase(), id);
     counts.categories++;
   }
+  if (newCategoryRecords.length) await db.categories.bulkPut(newCategoryRecords);
 
   // Pre-fetch ALL existing materials and material colors in two requests
   // instead of N+M round-trips inside the loop. Same rationale as the
@@ -451,10 +453,12 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
     colorsByMaterialId.set(c.materialId, arr);
   }
 
+  const materialRecords = [];
+  const colorRecords = [];
   for (const m of preview.fabrics) {
     const existing = merge ? materialByNameKind.get(m.name + '|' + m.kind) || null : null;
     const id = existing?.id || newId();
-    await db.materials.put({
+    materialRecords.push({
       id,
       kind: m.kind,
       name: m.name,
@@ -475,10 +479,12 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
       const key = (col.name + '|' + col.code).toUpperCase();
       if (seen.has(key)) continue;
       const cid = newId();
-      await db.materialColors.put({ id: cid, materialId: id, name: col.name, code: col.code, swatchImageId: null });
+      colorRecords.push({ id: cid, materialId: id, name: col.name, code: col.code, swatchImageId: null });
       counts.colors++;
     }
   }
+  if (materialRecords.length) await db.materials.bulkPut(materialRecords);
+  if (colorRecords.length) await db.materialColors.bulkPut(colorRecords);
 
   // ------------------------------------------------------------------
   //  Phase 1: plan every product + variant. We resolve existing rows,
@@ -572,13 +578,16 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
   // Phase 3: write the per-product DB rows now that every upload id is
   // resolved. Build a flat task list of all product+variant puts and run
   // them through the same worker pool so the rows across products don't
-  // wait on each other.
+  // wait on each other. Bulk-upsert in two calls (products, then variants)
+  // instead of N separate `.put()`s to keep us well below the Supabase
+  // connection-pool limit on large imports.
   onProgress?.({ phase: 'writing', done: 0, total: totalUploads });
-  const writeTasks = [];
+  const productRecords = [];
+  const variantRecords = [];
   for (const plan of productPlans) {
     const { p, existing, productId, categoryId, variantPlans, vectorImageId } = plan;
 
-    writeTasks.push(() => db.products.put({
+    productRecords.push({
       id: productId,
       name: p.name,
       categoryId,
@@ -590,13 +599,13 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
       heroImageId: existing?.heroImageId || null,
       vectorImageId,
       pages: p.pages || [],
-    }));
+    });
     if (!existing) counts.products++;
 
     let order = 0;
     for (const pl of variantPlans) {
       const imageId = pl.imageId ?? pl.prev?.imageId ?? null;
-      const record = {
+      variantRecords.push({
         id: pl.vid,
         productId,
         name: pl.v.name,
@@ -607,13 +616,13 @@ export async function commitImport(preview, { merge = true, onProgress, uploadCo
         priceFixed: pl.v.priceFixed ?? pl.prev?.priceFixed ?? null,
         sortOrder: pl.prev?.sortOrder ?? order,
         imageId,
-      };
-      writeTasks.push(() => db.productVariants.put(record));
+      });
       if (!pl.prev) counts.variants++;
       order++;
     }
   }
-  await runParallel(writeTasks);
+  if (productRecords.length) await db.products.bulkPut(productRecords);
+  if (variantRecords.length) await db.productVariants.bulkPut(variantRecords);
 
   onProgress?.({ phase: 'done', done: uploadsDone, total: totalUploads });
 

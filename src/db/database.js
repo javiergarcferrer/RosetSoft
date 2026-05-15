@@ -204,6 +204,25 @@ class Table {
     if (error) throw error;
     invalidate();
   }
+
+  /**
+   * Upsert an array of records in one or more chunked requests instead of
+   * one-call-per-row. Critical for bulk imports — N separate `.put()` calls
+   * each open a connection from the Supabase pool, so a few hundred row
+   * writes can saturate the pool (you get "max connections" errors). One
+   * 500-row upsert uses one connection for ~the same wall time.
+   */
+  async bulkPut(records, { chunkSize = 500 } = {}) {
+    if (!records?.length) return;
+    const pkCol = snake(this.t.pk);
+    for (let i = 0; i < records.length; i += chunkSize) {
+      const chunk = records.slice(i, i + chunkSize).map(toRow);
+      const { error } = await supabase
+        .from(this.t.db).upsert(chunk, { onConflict: pkCol });
+      if (error) throw error;
+    }
+    invalidate();
+  }
 }
 
 export const db = Object.fromEntries(
