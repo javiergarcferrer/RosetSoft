@@ -138,7 +138,19 @@ export default function Quotes() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input className="input pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número o cliente…" />
+          <input
+            className="input pl-9"
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por número o cliente…"
+          />
         </div>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="input max-w-[160px]">
           <option value="">Todos los estados</option>

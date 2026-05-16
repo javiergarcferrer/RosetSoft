@@ -96,14 +96,15 @@ export default function QuoteHeader({
               <Download size={14} /> Exportar PDF
             </button>
 
-            {/* Mobile: condense Export + palette into a single menu */}
+            {/* Mobile: condense Export + palette into a single icon-only menu.
+                btn-icon is the 44pt-on-coarse, 36pt-on-fine square target. */}
             <button
               type="button"
               onClick={onOpenPalette}
-              className="btn-ghost sm:hidden p-2"
+              className="btn-icon sm:hidden"
               aria-label="Acciones"
             >
-              <MoreHorizontal size={16} />
+              <MoreHorizontal size={18} />
             </button>
           </div>
         </div>

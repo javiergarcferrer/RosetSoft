@@ -42,11 +42,13 @@ export default function Layout() {
 
   return (
     <div className="h-full flex flex-col md:flex-row">
-      {/* Mobile topbar */}
-      <header className="md:hidden flex items-center justify-between px-3 py-2.5 bg-ink-900 text-ink-100 border-b border-ink-800">
+      {/* Mobile topbar — extends behind the status bar on standalone iOS
+          via pt-safe-area, so our dark background covers the white status-bar
+          text instead of leaving a milky strip above the topbar. */}
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-ink-900 text-ink-100 border-b border-ink-800">
         <button
           onClick={() => setNavOpen(true)}
-          className="p-2.5 -ml-1 rounded hover:bg-ink-800"
+          className="inline-flex items-center justify-center w-11 h-11 -ml-2 rounded text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
           aria-label="Abrir menú"
         >
           <Menu size={20} />
@@ -55,22 +57,28 @@ export default function Layout() {
           <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
           <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
         </div>
-        <div className="w-8" />
+        <div className="w-11" />
       </header>
 
       {/* Mobile drawer overlay */}
       {navOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-ink-900/40"
+          className="md:hidden fixed inset-0 z-40 bg-ink-900/50"
           onClick={() => setNavOpen(false)}
+          aria-hidden
         />
       )}
 
-      {/* Sidebar — slides in on mobile, static on desktop */}
+      {/* Sidebar — slides in on mobile, static on desktop. Width capped at
+          85vw so a sliver of the underlying page is still visible on phones
+          (gives the user a clear tap target to dismiss). pt-safe-area /
+          pb-safe-area / pl-safe-area keep the panel content clear of the
+          notch, home indicator, and landscape ear. */}
       <aside
-        className={`bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-64 md:w-60 transform transition-transform duration-200 md:transform-none ${
-          navOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        className={`bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+          navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
         }`}
+        aria-label="Navegación principal"
       >
         <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between">
           <div className="min-w-0">
@@ -81,21 +89,21 @@ export default function Layout() {
           </div>
           <button
             onClick={() => setNavOpen(false)}
-            className="md:hidden text-ink-400 hover:text-ink-100 p-2 -mr-2 -my-1"
+            className="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 -my-2 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
             aria-label="Cerrar menú"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overscroll-contain">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
                   isActive
                     ? 'bg-ink-700 text-white'
                     : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
@@ -122,8 +130,11 @@ export default function Layout() {
 
 function MainContent() {
   const location = useLocation();
+  // Landscape-notch insets via pl/pr-safe so content doesn't slide under the
+  // Dynamic Island ear. Bottom padding reserves room for the QuoteBuilder's
+  // sticky mobile totals bar AND the home indicator.
   return (
-    <div className="px-4 py-4 md:px-8 md:py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
+    <div className="px-4 py-4 md:px-8 md:py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
       <div className="max-w-[1400px] mx-auto">
         <Outlet key={location.pathname} />
       </div>

@@ -78,16 +78,39 @@ export default function Settings() {
                 <div className="space-y-3">
                   <div>
                     <div className="label">Razón social</div>
-                    <input className="input" value={local.companyName || ''} onChange={(e) => set('companyName', e.target.value)} />
+                    <input
+                      className="input"
+                      value={local.companyName || ''}
+                      onChange={(e) => set('companyName', e.target.value)}
+                      autoComplete="organization"
+                      autoCapitalize="words"
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <div className="label">Teléfono</div>
-                      <input className="input" value={local.companyPhone || ''} onChange={(e) => set('companyPhone', e.target.value)} />
+                      <input
+                        className="input"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        value={local.companyPhone || ''}
+                        onChange={(e) => set('companyPhone', e.target.value)}
+                      />
                     </div>
                     <div>
                       <div className="label">Correo</div>
-                      <input className="input" type="email" value={local.companyEmail || ''} onChange={(e) => set('companyEmail', e.target.value)} />
+                      <input
+                        className="input"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={local.companyEmail || ''}
+                        onChange={(e) => set('companyEmail', e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>

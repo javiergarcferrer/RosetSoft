@@ -47,7 +47,19 @@ export default function Customers() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
             <div className="relative flex-1 max-w-md">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar clientes…" className="input pl-9" />
+              <input
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar clientes…"
+                className="input pl-9"
+              />
             </div>
           </div>
 
@@ -171,48 +183,125 @@ function CustomerModal({ customer, onClose, profileId }) {
         <button onClick={save} className="btn-primary">Guardar</button>
       </>
     }>
+      {/* autoComplete + inputMode hints give iOS the right keyboard / autofill
+          suggestion for each field. autoCapitalize on the email/phone keeps
+          Safari from upper-casing the first letter, which is the default. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <div className="label">Nombre *</div>
-          <input className="input" value={data.name} onChange={(e) => set('name', e.target.value)} />
+          <input
+            className="input"
+            value={data.name}
+            onChange={(e) => set('name', e.target.value)}
+            autoComplete="name"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
         </div>
         <div>
           <div className="label">Empresa</div>
-          <input className="input" value={data.company} onChange={(e) => set('company', e.target.value)} />
+          <input
+            className="input"
+            value={data.company}
+            onChange={(e) => set('company', e.target.value)}
+            autoComplete="organization"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
         </div>
         <div>
           <div className="label">Correo</div>
-          <input className="input" type="email" value={data.email} onChange={(e) => set('email', e.target.value)} />
+          <input
+            className="input"
+            type="email"
+            value={data.email}
+            onChange={(e) => set('email', e.target.value)}
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="next"
+          />
         </div>
         <div>
           <div className="label">Teléfono</div>
-          <input className="input" value={data.phone} onChange={(e) => set('phone', e.target.value)} />
+          <input
+            className="input"
+            type="tel"
+            value={data.phone}
+            onChange={(e) => set('phone', e.target.value)}
+            inputMode="tel"
+            autoComplete="tel"
+            enterKeyHint="next"
+          />
         </div>
         <div>
           <div className="label">País</div>
-          <input className="input" value={data.country} onChange={(e) => set('country', e.target.value)} />
+          <input
+            className="input"
+            value={data.country}
+            onChange={(e) => set('country', e.target.value)}
+            autoComplete="country-name"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
         </div>
         <div className="sm:col-span-2">
           <div className="label">Dirección</div>
-          <input className="input" value={data.address} onChange={(e) => set('address', e.target.value)} />
+          <input
+            className="input"
+            value={data.address}
+            onChange={(e) => set('address', e.target.value)}
+            autoComplete="street-address"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
         </div>
         <div>
           <div className="label">Ciudad</div>
-          <input className="input" value={data.city} onChange={(e) => set('city', e.target.value)} />
+          <input
+            className="input"
+            value={data.city}
+            onChange={(e) => set('city', e.target.value)}
+            autoComplete="address-level2"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="label">Provincia</div>
-            <input className="input" value={data.state} onChange={(e) => set('state', e.target.value)} />
+            <input
+              className="input"
+              value={data.state}
+              onChange={(e) => set('state', e.target.value)}
+              autoComplete="address-level1"
+              autoCapitalize="words"
+              enterKeyHint="next"
+            />
           </div>
           <div>
             <div className="label">Código postal</div>
-            <input className="input" value={data.zip} onChange={(e) => set('zip', e.target.value)} />
+            <input
+              className="input"
+              value={data.zip}
+              onChange={(e) => set('zip', e.target.value)}
+              inputMode="numeric"
+              autoComplete="postal-code"
+              enterKeyHint="next"
+            />
           </div>
         </div>
         <div className="sm:col-span-2">
           <div className="label">Notas</div>
-          <textarea className="input min-h-[80px]" value={data.notes} onChange={(e) => set('notes', e.target.value)} />
+          <textarea
+            className="input min-h-[80px]"
+            value={data.notes}
+            onChange={(e) => set('notes', e.target.value)}
+            autoCapitalize="sentences"
+            enterKeyHint="done"
+          />
         </div>
       </div>
     </Modal>

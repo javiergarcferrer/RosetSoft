@@ -136,37 +136,42 @@ export default function PdfViewer({ url, initialPage = 1 }) {
 
   return (
     <div className="flex flex-col h-full bg-ink-50">
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-ink-100 bg-white text-xs">
-        <button onClick={() => go(-1)} disabled={page <= 1} className="btn-ghost p-1 disabled:opacity-30" aria-label="Página anterior">
-          <ChevronLeft size={14} />
+      <div className="flex items-center gap-1 px-1 py-1 border-b border-ink-100 bg-white text-xs">
+        <button onClick={() => go(-1)} disabled={page <= 1} className="btn-icon disabled:opacity-30" aria-label="Página anterior">
+          <ChevronLeft size={16} />
         </button>
         <input
           type="number"
+          inputMode="numeric"
+          pattern="[0-9]*"
           min="1"
           max={numPages || 1}
           value={pageInput}
           onChange={(e) => setPageInput(e.target.value)}
           onBlur={commitPageInput}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-          className="input w-14 text-center text-xs py-0.5"
+          className="input w-14 text-center text-xs py-1 min-h-0 coarse:min-h-0"
+          aria-label="Número de página"
         />
         <span className="text-ink-500 tabular-nums">/ {numPages || '…'}</span>
-        <button onClick={() => go(1)} disabled={page >= numPages} className="btn-ghost p-1 disabled:opacity-30" aria-label="Página siguiente">
-          <ChevronRight size={14} />
+        <button onClick={() => go(1)} disabled={page >= numPages} className="btn-icon disabled:opacity-30" aria-label="Página siguiente">
+          <ChevronRight size={16} />
         </button>
         <div className="flex-1" />
-        <button onClick={() => setZoom((z) => Math.max(0.3, z / 1.2))} className="btn-ghost p-1" aria-label="Reducir zoom">
-          <ZoomOut size={14} />
+        <button onClick={() => setZoom((z) => Math.max(0.3, z / 1.2))} className="btn-icon" aria-label="Reducir zoom">
+          <ZoomOut size={16} />
         </button>
         <span className="text-ink-500 tabular-nums w-10 text-right">{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom((z) => Math.min(3, z * 1.2))} className="btn-ghost p-1" aria-label="Aumentar zoom">
-          <ZoomIn size={14} />
+        <button onClick={() => setZoom((z) => Math.min(3, z * 1.2))} className="btn-icon" aria-label="Aumentar zoom">
+          <ZoomIn size={16} />
         </button>
-        <button onClick={fitToWidth} className="btn-ghost p-1" aria-label="Ajustar al ancho" title="Ajustar al ancho">
-          <Maximize2 size={14} />
+        <button onClick={fitToWidth} className="btn-icon" aria-label="Ajustar al ancho" title="Ajustar al ancho">
+          <Maximize2 size={16} />
         </button>
       </div>
-      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden p-3 flex-1">
+      {/* The PDF canvas wants pinch-zoom; opt back in to it (overrides the
+          global touch-action:manipulation that suppresses double-tap zoom). */}
+      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden p-3 flex-1 [touch-action:pinch-zoom]">
         <div className="flex justify-center">
           <canvas ref={canvasRef} className="shadow-md bg-white" />
         </div>

@@ -119,33 +119,51 @@ export default function QuickActions({
 
   if (!open) return null;
 
+  // Sheet-from-bottom on phones, centered modal on tablets up. Same layout as
+  // the generic Modal but tuned for the palette's search-first interaction —
+  // the input sits at the top so the iOS keyboard pushes the list above it.
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:pt-[12vh]">
-      <div className="fixed inset-0 bg-ink-900/40" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-white rounded-xl shadow-pop border border-ink-100 overflow-hidden flex flex-col max-h-[80vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-start justify-center sm:p-4 sm:pt-[12vh]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Acciones rápidas"
+    >
+      <div className="fixed inset-0 bg-ink-900/50" onClick={onClose} aria-hidden />
+      <div className="relative w-full max-w-xl bg-white shadow-pop border border-ink-100 overflow-hidden flex flex-col rounded-t-2xl sm:rounded-xl max-h-[85vh] sm:max-h-[80vh] pb-[env(safe-area-inset-bottom)] sm:pb-0">
+        <div className="sm:hidden pt-2 pb-1 flex justify-center" aria-hidden>
+          <div className="w-9 h-1 rounded-full bg-ink-200" />
+        </div>
         <div className="relative border-b border-ink-100">
-          <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => { setQ(e.target.value); setActiveIdx(0); }}
             onKeyDown={onKeyDown}
             placeholder="Buscar acción, artículo o cliente…"
-            className="w-full pl-10 pr-10 py-3.5 text-sm focus:outline-none placeholder:text-ink-400"
+            className="w-full pl-11 pr-12 py-4 sm:py-3.5 text-sm focus:outline-none placeholder:text-ink-400"
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            enterKeyHint="search"
           />
           {q && (
             <button
               type="button"
               onClick={() => { setQ(''); inputRef.current?.focus(); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1"
-              aria-label="Limpiar"
+              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-9 h-9 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors"
+              aria-label="Limpiar búsqueda"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="flex-1 overflow-y-auto overscroll-contain py-1">
           {flat.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-ink-500">
               Sin resultados. Pulsa <kbd className="kbd">Esc</kbd> para cerrar.
@@ -174,13 +192,15 @@ export default function QuickActions({
           )}
         </div>
 
-        <div className="border-t border-ink-100 px-3 py-2 flex items-center justify-between text-[10px] text-ink-500">
+        {/* Hide the keyboard-hint strip on touch — keys are inert there and it
+            steals vertical space that the keyboard already pinches. */}
+        <div className="hidden sm:flex border-t border-ink-100 px-3 py-2 items-center justify-between text-[10px] text-ink-500">
           <div className="flex items-center gap-3">
             <span><kbd className="kbd">↑</kbd> <kbd className="kbd">↓</kbd> Navegar</span>
             <span><kbd className="kbd">{shortcutLabel('enter')}</kbd> Elegir</span>
             <span><kbd className="kbd">Esc</kbd> Cerrar</span>
           </div>
-          <span className="hidden sm:inline">{shortcutLabel('mod+k')} para abrir</span>
+          <span>{shortcutLabel('mod+k')} para abrir</span>
         </div>
       </div>
     </div>
@@ -205,7 +225,7 @@ function RowButton({ row, active, currency, rates, currentCustomerId, onHover, o
       type="button"
       onMouseEnter={onHover}
       onClick={onClick}
-      className={`w-full text-left flex items-center gap-3 px-3 py-2 transition-colors ${
+      className={`w-full text-left flex items-center gap-3 px-3 py-3 sm:py-2 min-h-12 sm:min-h-0 transition-colors active:bg-ink-200 ${
         active ? 'bg-ink-100' : 'hover:bg-ink-50'
       }`}
     >

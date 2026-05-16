@@ -626,10 +626,15 @@ function CompactTotals({ quote, totals }) {
 }
 
 function MobileStickyTotals({ quote, totals, onAdd, onExport }) {
+  // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
+  // insets so the buttons clear the Dynamic Island ear when the phone is
+  // sideways; pb uses max(0.75rem, …) so the home indicator never overlaps
+  // the buttons. The spacer below reserves room so the page content can
+  // scroll fully into view without the bar covering the last row.
   return (
     <>
       <div
-        className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3"
+        className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2"
       >
         <div className="min-w-0 flex-1">
           <div className="text-[10px] uppercase tracking-wide text-ink-500">Total</div>
@@ -637,14 +642,19 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport }) {
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>
         </div>
-        <button type="button" onClick={onAdd} className="btn-secondary">
-          <Plus size={14} /> Artículo
+        <button type="button" onClick={onAdd} className="btn-secondary" aria-label="Agregar artículo">
+          <Plus size={16} /> <span>Artículo</span>
         </button>
-        <button type="button" onClick={onExport} className="btn-primary">
-          <Download size={14} /> PDF
+        <button type="button" onClick={onExport} className="btn-primary" aria-label="Exportar PDF">
+          <Download size={16} /> PDF
         </button>
       </div>
-      <div className="md:hidden h-20" aria-hidden />
+      {/* Spacer matches the bar height + safe-area so the last list row is
+          fully scrollable above the bar. */}
+      <div
+        className="md:hidden h-[calc(4.5rem+env(safe-area-inset-bottom))]"
+        aria-hidden
+      />
     </>
   );
 }

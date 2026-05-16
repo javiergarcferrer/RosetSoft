@@ -1,28 +1,61 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
+/**
+ * Sheet-on-mobile, dialog-on-desktop. Below sm we anchor to the bottom and
+ * fill the width edge-to-edge with a grab handle — feels native on iOS and
+ * keeps controls in thumb reach. From sm up it reverts to the centered
+ * dialog. Body scroll is locked while open so iOS doesn't rubber-band the
+ * page underneath, and the close button is sized to a 44pt touch target.
+ */
 export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open, onClose]);
 
   if (!open) return null;
   const widths = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-2 sm:p-4">
-      <div className="fixed inset-0 bg-ink-900/40" onClick={onClose} />
-      <div className={`relative w-full ${widths[size] || widths.md} bg-white rounded-lg shadow-2xl border border-ink-100 flex flex-col max-h-[90vh]`}>
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-ink-100">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-ink-400 hover:text-ink-900 p-2 -mr-2 -my-1" aria-label="Cerrar">
-            <X size={18} />
+    <div
+      className="fixed inset-0 z-40 flex items-end sm:items-center justify-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div className="fixed inset-0 bg-ink-900/50" onClick={onClose} aria-hidden />
+      <div
+        className={`relative w-full ${widths[size] || widths.md} bg-white shadow-2xl border border-ink-100 flex flex-col rounded-t-2xl sm:rounded-lg max-h-[92vh] sm:max-h-[90vh] pb-[env(safe-area-inset-bottom)] sm:pb-0`}
+      >
+        {/* iOS-style grab handle (decorative — pointer doesn't drag, but the
+            visual cue makes the sheet read as dismissible). */}
+        <div className="sm:hidden pt-2 pb-1 flex justify-center" aria-hidden>
+          <div className="w-9 h-1 rounded-full bg-ink-200" />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 sm:py-3.5 border-b border-ink-100">
+          <h2 className="text-base font-semibold truncate pr-3">{title}</h2>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 -mr-2 rounded text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X size={20} className="sm:hidden" />
+            <X size={18} className="hidden sm:block" />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-4 flex-1">{children}</div>
-        {footer && <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-end gap-2">{footer}</div>}
+        <div className="overflow-y-auto overscroll-contain px-5 py-4 flex-1">{children}</div>
+        {footer && (
+          <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-end gap-2">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

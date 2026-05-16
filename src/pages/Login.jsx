@@ -54,12 +54,17 @@ export default function Login() {
               <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input
                 type="email"
+                inputMode="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input pl-9"
                 placeholder="tu@correo.com"
                 autoComplete="email"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
               />
             </div>
           </div>
@@ -76,6 +81,7 @@ export default function Login() {
                 className="input pl-9"
                 placeholder="••••••••"
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                enterKeyHint={mode === 'signin' ? 'go' : 'done'}
               />
             </div>
           </div>
