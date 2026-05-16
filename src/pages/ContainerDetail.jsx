@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle2, X, Search, ChevronRight, Undo2 } from 'lucide-react';
+import { ArrowLeft, Plus, Download, CheckCircle2, X, Search, ChevronRight, Undo2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Modal from '../components/Modal.jsx';
+import FulfillmentPills from '../components/FulfillmentPills.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
@@ -10,7 +11,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { downloadCsv } from '../lib/csv.js';
 import {
-  STAGES, STAGE_BY_KEY, FULFILLMENT_MILESTONES,
+  STAGES, STAGE_BY_KEY,
   currentStage, nextStage, stageIndex,
 } from '../lib/containerStages.js';
 
@@ -126,6 +127,7 @@ export default function ContainerDetail() {
         continue;
       }
       for (const l of q.lines) {
+        if (l.kind === 'section') continue; // headings aren't dispatchable
         const lineTotal = (l.qty || 0) * (l.unitPrice || 0);
         rows.push([
           container.number, container.name, container.code, currentStage(container),
@@ -495,28 +497,4 @@ function StageStepper({ container, stage, next, onAdvance, onUndo }) {
   );
 }
 
-function FulfillmentPills({ quote, onChange }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {FULFILLMENT_MILESTONES.map((m) => {
-        const ts = quote[m.key];
-        const done = !!ts;
-        return (
-          <button
-            key={m.key}
-            onClick={() => onChange({ [m.key]: done ? null : Date.now() })}
-            title={`${m.title}${done ? ` · ${new Date(ts).toLocaleDateString()}` : ""}`}
-            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors
-              ${done
-                ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
-                : "bg-white text-ink-500 border-ink-200 hover:border-ink-400 hover:text-ink-700"}`}
-          >
-            {done && <CheckCircle2 size={9} className="inline mr-0.5 -mt-px" />}
-            {m.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 

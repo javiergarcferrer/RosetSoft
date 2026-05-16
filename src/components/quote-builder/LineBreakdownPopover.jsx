@@ -1,0 +1,85 @@
+import { useEffect, useRef } from 'react';
+import { applyLineAdjustments } from '../../lib/pricing.js';
+import { formatMoney } from '../../lib/format.js';
+
+/**
+ * The "show me the math" popover. Anchored to the line total — opens on
+ * click, closes on outside-click or Escape. Surfaces each step of the
+ * per-line calculation so a dealer reviewing a quote with a client never
+ * has to apologise for a "weird" number.
+ *
+ * Shown rows:
+ *   Base                $4,180.00
+ *   Margen +20%          +836.00     (only if margin ≠ 0)
+ *   Descuento –10%      –501.60      (only if discount ≠ 0)
+ *   Precio unitario     $4,514.40
+ *   × Cantidad                × 1
+ *   ───────────────────────────
+ *   Total línea         $4,514.40
+ */
+export default function LineBreakdownPopover({ line, currency, rates, onClose, anchor = 'right' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const base = Number(line.unitPrice) || 0;
+  const margin = Number(line.lineMarginPct) || 0;
+  const discount = Number(line.lineDiscountPct) || 0;
+  const qty = Number(line.qty) || 0;
+
+  const withMargin = base * (1 + margin / 100);
+  const marginAmt = withMargin - base;
+  const discountAmt = withMargin * (discount / 100);
+  const unit = applyLineAdjustments(base, margin, discount);
+  const total = unit * qty;
+
+  const fmt = (v) => formatMoney(v, currency, rates);
+
+  return (
+    <div
+      ref={ref}
+      className={`absolute z-30 mt-1 w-72 rounded-md border border-ink-200 bg-white shadow-pop p-3 ${
+        anchor === 'right' ? 'right-0' : 'left-0'
+      }`}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-2">
+        Cómo se calcula
+      </div>
+      <Row label="Base" value={fmt(base)} />
+      {margin !== 0 && (
+        <Row label={`Margen ${margin > 0 ? '+' : ''}${margin}%`} value={`${marginAmt >= 0 ? '+' : ''}${fmt(marginAmt)}`} muted />
+      )}
+      {discount !== 0 && (
+        <Row label={`Descuento ${discount > 0 ? '–' : ''}${discount}%`} value={`–${fmt(discountAmt)}`} muted />
+      )}
+      <Divider />
+      <Row label="Precio unitario" value={fmt(unit)} />
+      <Row label="× Cantidad" value={`× ${qty}`} muted />
+      <Divider />
+      <Row label="Total línea" value={fmt(total)} bold />
+    </div>
+  );
+}
+
+function Row({ label, value, muted, bold }) {
+  return (
+    <div className={`flex items-center justify-between py-0.5 text-xs tabular-nums ${
+      muted ? 'text-ink-500' : 'text-ink-900'
+    } ${bold ? 'font-semibold text-sm' : ''}`}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="my-1.5 border-t border-ink-100" />;
+}

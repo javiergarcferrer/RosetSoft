@@ -1,29 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Plus, Hash, Download } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
-import { Plus, Download, ArrowLeft, BookOpen, X } from 'lucide-react';
-import PageHeader from '../components/PageHeader.jsx';
-import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
-import QuoteLineItem from '../components/quote-builder/QuoteLineItem.jsx';
 import PdfViewer from '../components/PdfViewer.jsx';
 import { db, newId } from '../db/database.js';
 import { publicPricelistUrl } from '../db/supabaseClient.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, clampPct, ITBIS_PCT } from '../lib/pricing.js';
-import { formatMoney, formatDateTime } from '../lib/format.js';
+import { computeTotals } from '../lib/pricing.js';
+import { formatMoney } from '../lib/format.js';
 import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
+import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
+import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
-// Sticky-per-user (NOT per-quote) preference: was the PDF panel open last time?
+import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
+import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
+import LineItemList from '../components/quote-builder/LineItemList.jsx';
+import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
+import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
+import QuickActions from '../components/quote-builder/QuickActions.jsx';
+import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
+
+// Sticky per-user (not per-quote): remember whether the PDF panel was open.
 const PDF_PANEL_STORAGE_KEY = 'rosetsoft.pdfPanel.open';
 
 /**
- * Quote builder.
+ * The Quote Workspace — the redesigned quote builder.
  *
- * Lines are free-form: the user reads a row from the price-list PDF and
- * types it in directly — there is no normalized catalog the line refers
- * back to. Each line stores its own copy of family / reference / name /
- * subtype / dimensions / image / unit price so the quote remains
- * self-contained even if the price list changes in the next edition.
+ * Layout is a single editable canvas with a persistent totals rail on the
+ * right. The price-list PDF replaces the rail (becomes the right column)
+ * when toggled — the rail collapses into a compact strip below the line
+ * items so the running total stays visible.
+ *
+ * The "Vista cliente" toggle in the header swaps the line items area for a
+ * read-only `ClientPreview` of the quote, styled like the PDF, so the dealer
+ * can show the client what they're getting without downloading a file.
+ *
+ * Lines are still free-form (typed from the price-list PDF). The command
+ * palette (⌘K) surfaces past-quote line items as insertable suggestions —
+ * our catalog substitute that grows with usage.
  */
 export default function QuoteBuilder() {
   const navigate = useNavigate();
@@ -31,10 +45,10 @@ export default function QuoteBuilder() {
   const { quoteId: routeId } = useParams();
   const [search] = useSearchParams();
 
-  if (routeId) return <Builder quoteId={routeId} navigate={navigate} />;
+  if (routeId) return <Workspace quoteId={routeId} navigate={navigate} />;
 
   return (
-    <DraftBuilder
+    <DraftWorkspace
       profileId={profileId}
       settings={settings}
       initialRef={search.get('ref') || ''}
@@ -43,8 +57,11 @@ export default function QuoteBuilder() {
   );
 }
 
-function DraftBuilder({ profileId, settings, initialRef, navigate }) {
-  // Stable id chosen up-front; the row only exists in Supabase after materialize.
+/* -------------------------------------------------------------------------- */
+/*  Draft → Materialize                                                       */
+/* -------------------------------------------------------------------------- */
+
+function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = newId();
   const id = idRef.current;
@@ -55,9 +72,6 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
     number: null,
     name: '',
     customerId: null,
-    // New quotes auto-pin to the team's "currently filling" container if
-    // one is set. Avoids the per-quote container-picker step the dealer
-    // used to forget; can be unassigned manually later.
     containerId: settings?.defaultContainerId || null,
     status: 'draft',
     currencyCode: 'USD',
@@ -71,10 +85,9 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
     updatedAt: Date.now(),
   }), [id, profileId, settings]);
 
-  // Persist on first real action. Cached in a ref so concurrent mutations
-  // share the single in-flight create instead of double-writing the row.
   const persistedRef = useRef(false);
   const inFlightRef = useRef(null);
+
   const materialize = useCallback(async () => {
     if (persistedRef.current) return id;
     if (inFlightRef.current) return inFlightRef.current;
@@ -94,7 +107,7 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
     return inFlightRef.current;
   }, [id, defaults, profileId, settings]);
 
-  // ?ref=XXXXX — pre-fill the first line's reference field after materialize.
+  // ?ref=XXXXX pre-fills the first line's reference field after materialize.
   useEffect(() => {
     if (!initialRef) return;
     let cancel = false;
@@ -104,6 +117,7 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
       await db.quoteLines.put({
         id: newId(),
         quoteId: id,
+        kind: 'item',
         sortOrder: 0,
         family: '',
         reference: initialRef,
@@ -125,7 +139,7 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
   }, [initialRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Builder
+    <Workspace
       quoteId={id}
       navigate={navigate}
       draftQuote={defaults}
@@ -134,208 +148,480 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
   );
 }
 
-function Builder({ quoteId, navigate, draftQuote, materialize }) {
+/* -------------------------------------------------------------------------- */
+/*  Workspace                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId } = useApp();
   const liveQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
   const quote = liveQuote || draftQuote || null;
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
     [quoteId],
-    []
+    [],
+  );
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
   );
 
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
   }, [materialize]);
-  const customers = useLiveQuery(
-    () => db.customers.where('profileId').equals(profileId || '').toArray(),
-    [profileId],
-    []
-  );
 
-  // Side-panel PDF viewer state. Default off on first ever load; once toggled
-  // we remember the choice across sessions/quotes via localStorage.
+  // -------- view + panels state --------
+  const [view, setView] = useState('compose'); // 'compose' | 'client'
   const priceListUrl = useMemo(
     () => publicPricelistUrl(settings?.priceList?.path),
     [settings?.priceList?.path],
   );
+  const hasPdf = !!priceListUrl;
   const [pdfOpen, setPdfOpen] = useState(() => {
     try { return localStorage.getItem(PDF_PANEL_STORAGE_KEY) === '1'; } catch { return false; }
   });
   useEffect(() => {
     try { localStorage.setItem(PDF_PANEL_STORAGE_KEY, pdfOpen ? '1' : '0'); } catch {}
   }, [pdfOpen]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
-  // When `addLine` runs we stash the new id here so the matching row can
-  // auto-focus its reference input on mount. One-shot — cleared after consumption.
+  // -------- save indicator state --------
+  // We track a UI-only timestamp here rather than reading quote.updatedAt
+  // because line edits don't bump the parent quote's updatedAt (by design).
+  const [savedAt, setSavedAt] = useState(quote?.updatedAt || null);
+  const [saving, setSaving] = useState(false);
+  // Counter of in-flight writes so concurrent edits don't flicker the badge.
+  const inFlight = useRef(0);
+
+  function markSaving() { inFlight.current += 1; setSaving(true); }
+  function markSaved() {
+    inFlight.current = Math.max(0, inFlight.current - 1);
+    if (inFlight.current === 0) {
+      setSaving(false);
+      setSavedAt(Date.now());
+    }
+  }
+
+  // -------- focus for the newest line --------
   const [focusLineId, setFocusLineId] = useState(null);
+
+  // -------- undo toast --------
+  const { show: showUndo, element: undoToast } = useUndoToast();
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
+  /* ---------------------------- mutations ---------------------------- */
+
   async function updateQuote(patch) {
-    await ensurePersisted();
-    await db.quotes.put({ ...quote, ...patch, updatedAt: Date.now() });
+    markSaving();
+    try {
+      await ensurePersisted();
+      await db.quotes.put({ ...quote, ...patch, updatedAt: Date.now() });
+    } finally {
+      markSaved();
+    }
   }
 
-  async function addLine() {
-    await ensurePersisted();
-    const id = newId();
-    await db.quoteLines.put({
-      id,
-      quoteId,
-      sortOrder: lines.length,
-      family: '',
-      reference: '',
-      name: '',
-      subtype: '',
-      dimensions: '',
-      description: '',
-      yardage: '',
-      pageRef: '',
-      imageId: null,
-      qty: 1,
-      unitPrice: 0,
-      lineMarginPct: 0,
-      lineDiscountPct: 0,
-      notes: '',
-    });
-    setFocusLineId(id);
+  function nextSortOrder() {
+    return lines.length ? Math.max(...lines.map((l) => l.sortOrder || 0)) + 1 : 0;
+  }
+
+  async function addLine(seed = {}) {
+    markSaving();
+    try {
+      await ensurePersisted();
+      const id = newId();
+      await db.quoteLines.put({
+        id,
+        quoteId,
+        kind: 'item',
+        sortOrder: nextSortOrder(),
+        family: seed.family || '',
+        reference: seed.reference || '',
+        name: seed.name || '',
+        subtype: seed.subtype || '',
+        dimensions: seed.dimensions || '',
+        description: seed.description || '',
+        yardage: seed.yardage || '',
+        pageRef: seed.pageRef || '',
+        imageId: seed.imageId || null,
+        qty: seed.qty ?? 1,
+        unitPrice: seed.unitPrice ?? 0,
+        lineMarginPct: seed.lineMarginPct ?? 0,
+        lineDiscountPct: seed.lineDiscountPct ?? 0,
+        notes: seed.notes || '',
+      });
+      setFocusLineId(id);
+    } finally {
+      markSaved();
+    }
+  }
+
+  async function addSection() {
+    markSaving();
+    try {
+      await ensurePersisted();
+      const id = newId();
+      await db.quoteLines.put({
+        id,
+        quoteId,
+        kind: 'section',
+        sortOrder: nextSortOrder(),
+        family: '',
+        reference: '',
+        name: '',
+        subtype: '',
+        dimensions: '',
+        description: '',
+        yardage: '',
+        pageRef: '',
+        imageId: null,
+        qty: 0,
+        unitPrice: 0,
+        lineMarginPct: 0,
+        lineDiscountPct: 0,
+        notes: '',
+      });
+      setFocusLineId(id);
+    } finally {
+      markSaved();
+    }
   }
 
   async function updateLine(id, patch) {
-    await db.quoteLines.update(id, patch);
+    markSaving();
+    try { await db.quoteLines.update(id, patch); }
+    finally { markSaved(); }
   }
 
-  async function removeLine(id) {
-    await db.quoteLines.delete(id);
+  async function duplicateLine(line) {
+    markSaving();
+    try {
+      await ensurePersisted();
+      const id = newId();
+      // Insert immediately after the source line. We renumber everything
+      // after the insertion point so the new line lands exactly where the
+      // user expects.
+      const srcIdx = lines.findIndex((l) => l.id === line.id);
+      const newSortOrder = (line.sortOrder ?? 0) + 1;
+      await db.quoteLines.put({
+        ...line,
+        id,
+        sortOrder: newSortOrder,
+      });
+      // Bump everyone after.
+      const after = lines.slice(srcIdx + 1);
+      for (const l of after) {
+        await db.quoteLines.update(l.id, { sortOrder: (l.sortOrder ?? 0) + 1 });
+      }
+      setFocusLineId(id);
+    } finally {
+      markSaved();
+    }
+  }
+
+  async function removeLine(line) {
+    markSaving();
+    try {
+      await db.quoteLines.delete(line.id);
+      const label = line.kind === 'section'
+        ? `Sección "${line.name || 'sin nombre'}" eliminada`
+        : `Artículo "${line.name || line.reference || 'sin nombre'}" eliminado`;
+      showUndo(label, async () => {
+        // Restore the row at its original sort_order. The other rows kept
+        // their positions, so the slot is still empty.
+        await db.quoteLines.put(line);
+      });
+    } finally {
+      markSaved();
+    }
+  }
+
+  async function reorderLines(orderedIds) {
+    markSaving();
+    try {
+      const idToLine = new Map(lines.map((l) => [l.id, l]));
+      for (let i = 0; i < orderedIds.length; i++) {
+        const l = idToLine.get(orderedIds[i]);
+        if (!l) continue;
+        if (l.sortOrder !== i) await db.quoteLines.update(l.id, { sortOrder: i });
+      }
+    } finally {
+      markSaved();
+    }
   }
 
   const totals = computeTotals(
-    lines.map((l) => ({
-      qty: l.qty,
-      basePrice: l.unitPrice,
-      lineMarginPct: l.lineMarginPct,
-      lineDiscountPct: l.lineDiscountPct,
-    })),
-    { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping }
+    lines
+      .filter((l) => l.kind !== 'section')
+      .map((l) => ({
+        qty: l.qty,
+        basePrice: l.unitPrice,
+        lineMarginPct: l.lineMarginPct,
+        lineDiscountPct: l.lineDiscountPct,
+      })),
+    { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
   );
 
   async function exportPdf() {
     const customer = quote.customerId ? customers.find((c) => c.id === quote.customerId) : null;
-    const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
+    // The PDF generator predates sections — strip them out so the printable
+    // is a clean item list (sections are visible in the on-screen client
+    // preview but not yet in the printed PDF).
+    const printable = lines.filter((l) => l.kind !== 'section');
+    const blob = await generateQuotePdf({ quote, settings, lines: printable, totals, customer });
     downloadBlob(blob, `Quote-${quote.number || 'draft'}.pdf`);
   }
 
+  /* ---------------------------- shortcuts ----------------------------
+   * Kept deliberately small to avoid clashing with the browser:
+   *   ⌘K       — open the command palette (the universal launcher)
+   *   ⌘↵       — add a new blank line (works even inside an input)
+   *   ⌘P       — export PDF (commandeers the browser's print shortcut on
+   *              purpose — the PDF IS the print equivalent for this app)
+   * The client-view toggle is intentionally NOT bound — every browser has
+   * its own ⌘E meaning, and the palette + header toggle cover the need.
+   */
+  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
+  useKeyboardShortcut('mod+enter', () => addLine(), { ignoreInInput: false });
+  useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
+
+  /* ---------------------------- render ---------------------------- */
+
+  const customer = quote.customerId ? customers.find((c) => c.id === quote.customerId) : null;
+
   return (
     <>
-      <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3">
-        <ArrowLeft size={12} /> Volver a cotizaciones
-      </Link>
-      <PageHeader
-        title={quote.number ? `Cotización #${quote.number}` : 'Cotización (borrador)'}
-        subtitle={`Actualizada ${formatDateTime(quote.updatedAt)}`}
-        actions={
-          <>
-            <button
-              onClick={() => setPdfOpen((v) => !v)}
-              className={`btn-ghost hidden lg:inline-flex ${pdfOpen ? 'bg-ink-100' : ''}`}
-              title={pdfOpen ? 'Ocultar lista de precios' : 'Mostrar lista de precios'}
-            >
-              {pdfOpen ? <><X size={14} /> Ocultar PDF</> : <><BookOpen size={14} /> Lista de precios</>}
-            </button>
-            <select
-              value={quote.status || 'draft'}
-              onChange={(e) => updateQuote({ status: e.target.value })}
-              className="input max-w-[140px]"
-            >
-              <option value="draft">Borrador</option>
-              <option value="sent">Enviada</option>
-              <option value="accepted">Aceptada</option>
-              <option value="declined">Rechazada</option>
-              <option value="archived">Archivada</option>
-            </select>
-            <button onClick={exportPdf} className="btn-primary hidden md:inline-flex"><Download size={14} /> Exportar PDF</button>
-          </>
-        }
+      <QuoteHeader
+        quote={quote}
+        customers={customers}
+        profileId={profileId}
+        view={view}
+        onViewChange={setView}
+        pdfOpen={pdfOpen}
+        onTogglePdf={() => setPdfOpen((v) => !v)}
+        hasPdf={hasPdf}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onExportPdf={exportPdf}
+        onUpdateQuote={updateQuote}
+        savedAt={savedAt}
+        saving={saving}
       />
 
-      <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[1fr_520px]' : 'lg:grid-cols-3'}`}>
-        <div className={pdfOpen ? 'space-y-4 min-w-0' : 'lg:col-span-2 space-y-4'}>
-          {/* Quote header */}
-          <div className="card card-pad space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <div className="label">Nombre interno</div>
-                <DebouncedInput className="input" value={quote.name || ''} onCommit={(v) => updateQuote({ name: v })} placeholder='p. ej. "Residencia Smith — sala"' />
-              </div>
-              <div>
-                <div className="label">Cliente</div>
-                <select className="input" value={quote.customerId || ''} onChange={(e) => updateQuote({ customerId: e.target.value || null })}>
-                  <option value="">— Sin cliente —</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Line items */}
-          <div className="card overflow-hidden">
-            <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-              <h2 className="font-semibold">Artículos</h2>
-              <button onClick={addLine} className="btn-secondary">
-                <Plus size={14} /> Agregar artículo
-              </button>
-            </div>
-            {lines.length === 0 ? (
-              <div className="px-5 py-12 text-center text-sm text-ink-500">
-                Sin artículos — toca <b>Agregar artículo</b> para empezar.
-              </div>
-            ) : (
-              <>
-                {/* Single layout for every viewport. QuoteLineItem uses
-                    flex-wrap so the fields stack on narrow widths (e.g. PDF
-                    panel open) and lay out horizontally on wide ones — no
-                    horizontal scroll ever. */}
-                <ul className="divide-y divide-ink-100">
-                  {lines.map((l) => (
-                    <QuoteLineItem
-                      key={l.id}
-                      line={l}
-                      quote={quote}
-                      autoFocus={l.id === focusLineId}
-                      onChange={(patch) => updateLine(l.id, patch)}
-                      onRemove={() => removeLine(l.id)}
-                    />
-                  ))}
-                </ul>
-
-                {/* Repeat-add button at the bottom so the user can keep
-                    transcribing PDF rows without scrolling back to the top. */}
-                <div className="px-5 py-3 border-t border-ink-100 flex justify-end">
-                  <button onClick={addLine} className="btn-secondary text-xs">
-                    <Plus size={12} /> Agregar otra línea
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* When the PDF panel is open the right column belongs to the PDF;
-              the totals + notes drop here under the line items so they stay
-              reachable without alt-tabbing. */}
-          {pdfOpen && <SidebarBlock quote={quote} totals={totals} updateQuote={updateQuote} />}
-        </div>
-
-        {pdfOpen ? (
-          <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start h-[calc(100vh-2rem)] card overflow-hidden">
-            <PdfViewer url={priceListUrl} />
-          </div>
-        ) : (
-          <SidebarBlock quote={quote} totals={totals} updateQuote={updateQuote} />
-        )}
+      <div className="mb-5">
+        <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
       </div>
 
+      {view === 'client' ? (
+        <ClientPreview
+          quote={quote}
+          settings={settings}
+          lines={lines}
+          totals={totals}
+          customer={customer}
+        />
+      ) : (
+        <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[1fr_520px]' : 'lg:grid-cols-[1fr_360px]'}`}>
+          {/* Main column */}
+          <div className={`space-y-5 min-w-0 ${pdfOpen ? '' : ''}`}>
+            <LineItemsCard
+              lines={lines}
+              quote={quote}
+              focusLineId={focusLineId}
+              onChangeLine={updateLine}
+              onRemoveLine={removeLine}
+              onDuplicateLine={duplicateLine}
+              onReorder={reorderLines}
+              onAddItem={() => addLine()}
+              onAddSection={addSection}
+            />
+
+            {/* When the PDF panel is on, totals collapse here so the running
+                total stays visible while the dealer reads the price-list. */}
+            {pdfOpen && (
+              <div className="lg:hidden">
+                <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+              </div>
+            )}
+            {pdfOpen && (
+              <div className="hidden lg:block">
+                <CompactTotals quote={quote} totals={totals} />
+                <div className="mt-5">
+                  <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+                </div>
+              </div>
+            )}
+
+            <NotesAndTermsCard quote={quote} onUpdateQuote={updateQuote} />
+          </div>
+
+          {/* Right column: either the PDF or the totals rail */}
+          {pdfOpen ? (
+            <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start h-[calc(100vh-2rem)] card overflow-hidden">
+              <PdfViewer url={priceListUrl} />
+            </div>
+          ) : (
+            <div className="lg:sticky lg:top-4 lg:self-start">
+              <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Mobile sticky totals bar */}
+      <MobileStickyTotals
+        quote={quote}
+        totals={totals}
+        onAdd={() => addLine()}
+        onExport={exportPdf}
+      />
+
+      <QuickActions
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        customers={customers}
+        currentCustomerId={quote.customerId}
+        onInsertLine={(seed) => addLine(seed)}
+        onAddSection={addSection}
+        onSelectCustomer={(id) => updateQuote({ customerId: id })}
+        onExportPdf={exportPdf}
+        onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
+        onTogglePdfPanel={() => setPdfOpen((v) => !v)}
+        hasPdfPanel={hasPdf}
+        clientView={view === 'client'}
+        currency={quote.currencyCode || 'USD'}
+        rates={quote.rates || { USD: 1 }}
+      />
+
+      {undoToast}
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Sub-cards                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function LineItemsCard({
+  lines, quote, focusLineId,
+  onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
+  onAddItem, onAddSection,
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Artículos</h2>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onAddSection}
+            className="btn-ghost text-xs hidden sm:inline-flex"
+            title="Agregar sección"
+          >
+            <Hash size={12} /> Sección
+          </button>
+          <button
+            type="button"
+            onClick={onAddItem}
+            className="btn-secondary"
+            title={`Agregar artículo (${shortcutLabel('mod+enter')})`}
+          >
+            <Plus size={14} /> Agregar
+          </button>
+        </div>
+      </div>
+      <LineItemList
+        lines={lines}
+        quote={quote}
+        focusLineId={focusLineId}
+        onChangeLine={onChangeLine}
+        onRemoveLine={onRemoveLine}
+        onDuplicateLine={onDuplicateLine}
+        onReorder={onReorder}
+        onAddItem={onAddItem}
+        onAddSection={onAddSection}
+      />
+      {lines.length > 0 && (
+        <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-ink-500">
+            {lines.filter((l) => l.kind !== 'section').length} artículo(s) · arrastra
+            <span className="font-mono"> ⋮⋮ </span>para reordenar
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={onAddSection} className="btn-ghost text-xs">
+              <Hash size={12} /> Sección
+            </button>
+            <button type="button" onClick={onAddItem} className="btn-secondary text-xs">
+              <Plus size={12} /> Agregar otro
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesAndTermsCard({ quote, onUpdateQuote }) {
+  return (
+    <div className="card card-pad space-y-4">
+      <h2 className="font-semibold text-sm">Notas y términos</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div className="label flex items-center justify-between">
+            <span>Notas internas</span>
+            <span className="text-[9px] text-ink-400 normal-case tracking-normal">solo equipo</span>
+          </div>
+          <DebouncedTextarea
+            className="input min-h-[100px]"
+            value={quote.notes || ''}
+            onCommit={(v) => onUpdateQuote({ notes: v })}
+            placeholder="Información que solo ve tu equipo."
+          />
+        </div>
+        <div>
+          <div className="label flex items-center justify-between">
+            <span>Términos</span>
+            <span className="text-[9px] text-ink-400 normal-case tracking-normal">se imprimen en el PDF</span>
+          </div>
+          <DebouncedTextarea
+            className="input min-h-[100px]"
+            value={quote.terms || ''}
+            onCommit={(v) => onUpdateQuote({ terms: v })}
+            placeholder="Validez, plazos de entrega, condiciones de pago…"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tight totals strip shown above the line items only when the PDF panel
+ * is open and the rail is hidden. Keeps the running total in view without
+ * eating vertical space.
+ */
+function CompactTotals({ quote, totals }) {
+  const currency = quote.currencyCode || 'USD';
+  const rates = quote.rates || { USD: 1 };
+  return (
+    <div className="card px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-4 text-xs text-ink-500 tabular-nums">
+        <span>Subtotal <b className="text-ink-900">{formatMoney(totals.subtotal, currency, rates)}</b></span>
+        {quote.discountPct ? <span>Desc. <b className="text-ink-900">–{quote.discountPct}%</b></span> : null}
+        <span>ITBIS <b className="text-ink-900">{formatMoney(totals.taxAmt, currency, rates)}</b></span>
+      </div>
+      <div className="text-right">
+        <div className="text-[10px] uppercase tracking-wide text-ink-500">Total</div>
+        <div className="text-lg font-semibold tabular-nums">{formatMoney(totals.grandTotal, currency, rates)}</div>
+      </div>
+    </div>
+  );
+}
+
+function MobileStickyTotals({ quote, totals, onAdd, onExport }) {
+  return (
+    <>
       <div
         className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3"
       >
@@ -345,65 +631,14 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>
         </div>
-        <button onClick={addLine} className="btn-secondary">
+        <button type="button" onClick={onAdd} className="btn-secondary">
           <Plus size={14} /> Artículo
         </button>
-        <button onClick={exportPdf} className="btn-primary">
+        <button type="button" onClick={onExport} className="btn-primary">
           <Download size={14} /> PDF
         </button>
       </div>
-      {/* Spacer so content can scroll above the sticky bar */}
       <div className="md:hidden h-20" aria-hidden />
     </>
-  );
-}
-
-function SidebarBlock({ quote, totals, updateQuote }) {
-  return (
-    <div className="space-y-4">
-      <div className="card card-pad space-y-3">
-        <h2 className="font-semibold text-sm">Totales</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="label">Descuento %</div>
-            <DebouncedInput className="input" type="number" min="0" max="100" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: clampPct(v) })} />
-          </div>
-          <div>
-            <div className="label">Envío (USD)</div>
-            <DebouncedInput className="input" type="number" min="0" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Math.max(0, Number(v) || 0) })} />
-          </div>
-        </div>
-        <div className="text-[10px] text-ink-500">
-          Precios en USD · ITBIS fijo en {ITBIS_PCT}% · El PDF incluye conversión a DOP usando la <Link to="/settings" className="underline">tasa configurada</Link>.
-        </div>
-        <hr className="border-ink-100" />
-        <Row label="Subtotal" value={totals.subtotal} quote={quote} />
-        {quote.discountPct ? <Row label={`Descuento (${quote.discountPct}%)`} value={-totals.discountAmt} quote={quote} muted /> : null}
-        <Row label={`ITBIS (${ITBIS_PCT}%)`} value={totals.taxAmt} quote={quote} muted />
-        {quote.shipping ? <Row label="Envío" value={totals.shipping} quote={quote} muted /> : null}
-        <Row label="Total" value={totals.grandTotal} quote={quote} bold />
-      </div>
-
-      <div className="card card-pad space-y-3">
-        <h2 className="font-semibold text-sm">Términos y notas</h2>
-        <div>
-          <div className="label">Notas internas</div>
-          <DebouncedTextarea className="input min-h-[80px]" value={quote.notes || ''} onCommit={(v) => updateQuote({ notes: v })} />
-        </div>
-        <div>
-          <div className="label">Términos (se imprimen en el PDF)</div>
-          <DebouncedTextarea className="input min-h-[100px]" value={quote.terms || ''} onCommit={(v) => updateQuote({ terms: v })} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value, quote, bold, muted }) {
-  return (
-    <div className={`flex items-center justify-between text-sm ${bold ? 'font-semibold text-base mt-1.5 pt-2 border-t border-ink-100' : ''} ${muted ? 'text-ink-500' : ''}`}>
-      <span>{label}</span>
-      <span>{formatMoney(value, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}</span>
-    </div>
   );
 }
