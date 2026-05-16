@@ -32,6 +32,36 @@ function describeQuote(q) {
   return 'borrador sin nombre';
 }
 
+/**
+ * Shared row-level operations: derived total, delete confirm, container
+ * assignment. The QuoteCard / QuoteRow components below have different
+ * layouts but identical row-level behavior — keep that behavior here so
+ * both stay in sync when (for example) the delete confirm copy changes.
+ */
+function useQuoteOps(qu) {
+  const total = useLiveQuery(async () => {
+    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
+    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
+  }, [qu.id], 0);
+
+  async function del(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
+    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
+    await db.quoteLines.bulkDelete(lines.map((l) => l.id));
+    await db.quotes.delete(qu.id);
+  }
+
+  async function setContainer(e) {
+    e.stopPropagation();
+    const value = e.target.value || null;
+    await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
+  }
+
+  return { total, del, setContainer };
+}
+
 export default function Quotes() {
   const { profileId } = useApp();
   const quotes = useLiveQuery(
@@ -161,25 +191,7 @@ export default function Quotes() {
 }
 
 function QuoteCard({ qu, customer, allContainers }) {
-  const total = useLiveQuery(async () => {
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-  }, [qu.id], 0);
-
-  async function del(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    await db.quoteLines.bulkDelete(lines.map((l) => l.id));
-    await db.quotes.delete(qu.id);
-  }
-
-  async function setContainer(e) {
-    e.stopPropagation();
-    const value = e.target.value || null;
-    await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
-  }
+  const { total, del, setContainer } = useQuoteOps(qu);
 
   return (
     <div className="card p-3">
@@ -219,32 +231,14 @@ function QuoteCard({ qu, customer, allContainers }) {
 }
 
 function QuoteRow({ qu, customer, allContainers }) {
-  const total = useLiveQuery(async () => {
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-  }, [qu.id], 0);
-
-  async function del(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    await db.quoteLines.bulkDelete(lines.map((l) => l.id));
-    await db.quotes.delete(qu.id);
-  }
-
-  async function setContainer(e) {
-    e.stopPropagation();
-    const value = e.target.value || null;
-    await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
-  }
+  const { total, del, setContainer } = useQuoteOps(qu);
 
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
       <td className="font-medium">#{qu.number || '—'}</td>
       <td>{qu.name || '—'}</td>
       <td className="text-ink-700">{customer?.name || '—'}</td>
-      <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{qu.status || 'draft'}</span></td>
+      <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td onClick={(e) => e.stopPropagation()}>
         <select
           className="input text-xs py-1 max-w-[180px]"
