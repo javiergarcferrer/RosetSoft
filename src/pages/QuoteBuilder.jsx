@@ -209,6 +209,25 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // -------- undo toast --------
   const { show: showUndo, element: undoToast } = useUndoToast();
 
+  /* ---------------------------- shortcuts ----------------------------
+   * Kept deliberately small to avoid clashing with the browser:
+   *   ⌘K       — open the command palette (the universal launcher)
+   *   ⌘↵       — add a new blank line (works even inside an input)
+   *   ⌘P       — export PDF (commandeers the browser's print shortcut on
+   *              purpose — the PDF IS the print equivalent for this app)
+   * The client-view toggle is intentionally NOT bound — every browser has
+   * its own ⌘E meaning, and the palette + header toggle cover the need.
+   *
+   * These hooks live above the `!quote` guard so the hook count stays
+   * stable between the initial "loading" render and the post-load render.
+   * The handlers are hoisted function declarations, so referencing them
+   * before their lexical position is fine; they're only invoked on user
+   * keypress, by which point `quote` is populated.
+   */
+  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
+  useKeyboardShortcut('mod+enter', () => addLine(), { ignoreInInput: false });
+  useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
+
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
   /* ---------------------------- mutations ---------------------------- */
@@ -373,19 +392,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     const blob = await generateQuotePdf({ quote, settings, lines: printable, totals, customer });
     downloadBlob(blob, `Quote-${quote.number || 'draft'}.pdf`);
   }
-
-  /* ---------------------------- shortcuts ----------------------------
-   * Kept deliberately small to avoid clashing with the browser:
-   *   ⌘K       — open the command palette (the universal launcher)
-   *   ⌘↵       — add a new blank line (works even inside an input)
-   *   ⌘P       — export PDF (commandeers the browser's print shortcut on
-   *              purpose — the PDF IS the print equivalent for this app)
-   * The client-view toggle is intentionally NOT bound — every browser has
-   * its own ⌘E meaning, and the palette + header toggle cover the need.
-   */
-  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
-  useKeyboardShortcut('mod+enter', () => addLine(), { ignoreInInput: false });
-  useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
 
   /* ---------------------------- render ---------------------------- */
 
