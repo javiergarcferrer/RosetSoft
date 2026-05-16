@@ -18,8 +18,6 @@ import {
   clampPct,
   applyLineAdjustments,
   computeTotals,
-  resolveLineBasePrice,
-  variantPriceForGrade,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -198,50 +196,3 @@ test('computeTotals: null lines argument behaves like empty', () => {
   assert.equal(t.grandTotal, 0);
 });
 
-/* ----------------------- resolveLineBasePrice ------------------------- */
-
-test('resolveLineBasePrice: priceOverride wins outright', () => {
-  const r = resolveLineBasePrice({
-    variant: { priceByGrade: { A: 100 } },
-    material: { grade: 'A' },
-    priceOverride: 42,
-  });
-  assert.equal(r, 42);
-});
-
-test('resolveLineBasePrice: variant + grade looks up grade column', () => {
-  const r = resolveLineBasePrice({
-    variant: { priceByGrade: { A: 100, B: 150 } },
-    material: { grade: 'B' },
-  });
-  assert.equal(r, 150);
-});
-
-test('resolveLineBasePrice: priceFixed used when no grade lookup applies', () => {
-  const r = resolveLineBasePrice({
-    variant: { priceFixed: 200 },
-    material: null,
-  });
-  assert.equal(r, 200);
-});
-
-test('resolveLineBasePrice: fallbackToLowestGrade returns min grade when no material', () => {
-  const r = resolveLineBasePrice(
-    { variant: { priceByGrade: { B: 150, A: 100, C: 200 } }, material: null },
-    { fallbackToLowestGrade: true },
-  );
-  assert.equal(r, 100);
-});
-
-test('resolveLineBasePrice: missing grade column returns 0', () => {
-  const r = resolveLineBasePrice({
-    variant: { priceByGrade: { A: 100 } },
-    material: { grade: 'Z' },
-  });
-  assert.equal(r, 0);
-});
-
-test('variantPriceForGrade: missing variant returns null', () => {
-  assert.equal(variantPriceForGrade(null, 'A'), null);
-  assert.equal(variantPriceForGrade({}, 'A'), null);
-});

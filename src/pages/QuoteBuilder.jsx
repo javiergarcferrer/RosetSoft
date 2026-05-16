@@ -6,37 +6,40 @@ import PageHeader from '../components/PageHeader.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import QuoteLineRow from '../components/quote-builder/QuoteLineRow.jsx';
 import QuoteLineCard from '../components/quote-builder/QuoteLineCard.jsx';
-import ProductPickerModal from '../components/quote-builder/ProductPickerModal.jsx';
-import MaterialPickerModal from '../components/quote-builder/MaterialPickerModal.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, applyLineAdjustments, resolveLineBasePrice, clampPct, ITBIS_PCT } from '../lib/pricing.js';
+import { computeTotals, clampPct, ITBIS_PCT } from '../lib/pricing.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
 import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
 
+/**
+ * Quote builder.
+ *
+ * Lines are free-form: the user reads a row from the price-list PDF and
+ * types it in directly — there is no normalized catalog the line refers
+ * back to. Each line stores its own copy of family / reference / name /
+ * subtype / dimensions / image / unit price so the quote remains
+ * self-contained even if the price list changes in the next edition.
+ */
 export default function QuoteBuilder() {
   const navigate = useNavigate();
   const { profileId, settings } = useApp();
   const { quoteId: routeId } = useParams();
   const [search] = useSearchParams();
 
-  // Already-saved quote — render normally.
   if (routeId) return <Builder quoteId={routeId} navigate={navigate} />;
 
-  // Otherwise the user just hit /quotes/new. Render the builder against an
-  // in-memory draft. Nothing is written to Supabase until the user actually
-  // does something (types a name, picks a customer, adds a line item).
   return (
     <DraftBuilder
       profileId={profileId}
       settings={settings}
-      initialProductId={search.get('product')}
+      initialRef={search.get('ref') || ''}
       navigate={navigate}
     />
   );
 }
 
-function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
+function DraftBuilder({ profileId, settings, initialRef, navigate }) {
   // Stable id chosen up-front; the row only exists in Supabase after materialize.
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = newId();
@@ -53,7 +56,6 @@ function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
     rates: settings?.currencyRates || { USD: 1 },
     marginPct: settings?.defaultMarginPct || 0,
     discountPct: settings?.defaultDiscountPct || 0,
-    taxPct: 0,
     shipping: 0,
     terms: settings?.quoteTerms || '',
     notes: '',
@@ -74,17 +76,9 @@ function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
         await db.quotes.put({ ...defaults, number, updatedAt: Date.now() });
         await db.settings.put({ ...(settings || { profileId }), profileId, quoteCounter: number });
         persistedRef.current = true;
-        // Quietly update the URL bar so reload / share lands on the saved
-        // quote. Hash-router's listener doesn't fire on replaceState, so
-        // React Router stays at /quotes/new and the component does NOT
-        // remount — debounced inputs, picker state, scroll position all
-        // survive.
-        try {
-          window.history.replaceState(null, '', `#/quotes/${id}`);
-        } catch {}
+        try { window.history.replaceState(null, '', `#/quotes/${id}`); } catch {}
         return id;
       } catch (e) {
-        // Allow a retry on the next user action.
         inFlightRef.current = null;
         throw e;
       }
@@ -92,33 +86,35 @@ function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
     return inFlightRef.current;
   }, [id, defaults, profileId, settings]);
 
-  // ?product=X — adding an initial line IS a real action, so it materializes.
+  // ?ref=XXXXX — pre-fill the first line's reference field after materialize.
   useEffect(() => {
-    if (!initialProductId) return;
+    if (!initialRef) return;
     let cancel = false;
     (async () => {
-      const variants = await db.productVariants.where('productId').equals(initialProductId).toArray();
-      const firstVariant = variants.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))[0];
-      if (!firstVariant || cancel) return;
       await materialize();
       if (cancel) return;
       await db.quoteLines.put({
         id: newId(),
         quoteId: id,
-        productVariantId: firstVariant.id,
-        materialId: null,
-        colorId: null,
+        sortOrder: 0,
+        family: '',
+        reference: initialRef,
+        name: '',
+        subtype: '',
+        dimensions: '',
+        description: '',
+        yardage: '',
+        pageRef: '',
+        imageId: null,
         qty: 1,
         unitPrice: 0,
-        priceOverride: null,
         lineMarginPct: 0,
         lineDiscountPct: 0,
         notes: '',
-        sortOrder: 0,
       });
     })();
     return () => { cancel = true; };
-  }, [initialProductId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Builder
@@ -133,8 +129,6 @@ function DraftBuilder({ profileId, settings, initialProductId, navigate }) {
 function Builder({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId } = useApp();
   const liveQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
-  // In draft mode (materialize provided + nothing persisted yet) the live row
-  // doesn't exist; fall back to the in-memory defaults so the form renders.
   const quote = liveQuote || draftQuote || null;
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
@@ -142,7 +136,6 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     []
   );
 
-  // Wrap any mutation so it lazily materializes the draft before touching the DB.
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
   }, [materialize]);
@@ -152,44 +145,6 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     []
   );
 
-  const [picker, setPicker] = useState({ open: false });
-  const [materialPicker, setMaterialPicker] = useState({ open: false, lineId: null });
-
-  // Resolved line data for pricing
-  const [resolved, setResolved] = useState([]);
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      const out = [];
-      for (const l of lines) {
-        const variant = l.productVariantId ? await db.productVariants.get(l.productVariantId) : null;
-        const product = variant ? await db.products.get(variant.productId) : null;
-        const material = l.materialId ? await db.materials.get(l.materialId) : null;
-        const color = l.colorId ? await db.materialColors.get(l.colorId) : null;
-        const basePrice = resolveLineBasePrice({
-          variant, material, priceOverride: l.priceOverride,
-        });
-        out.push({ ...l, variant, product, material, color, basePrice });
-      }
-      if (!cancel) setResolved(out);
-    })();
-    return () => { cancel = true; };
-  }, [lines]);
-
-  // Persist unitPrice on each line so the Quotes list can show a total
-  // without recomputing from variants
-  useEffect(() => {
-    if (!resolved.length) return;
-    (async () => {
-      for (const r of resolved) {
-        const unit = applyLineAdjustments(r.basePrice, r.lineMarginPct, r.lineDiscountPct);
-        if (r.unitPrice !== unit) {
-          await db.quoteLines.update(r.id, { unitPrice: unit });
-        }
-      }
-    })();
-  }, [resolved]);
-
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
   async function updateQuote(patch) {
@@ -197,42 +152,50 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     await db.quotes.put({ ...quote, ...patch, updatedAt: Date.now() });
   }
 
-  async function addLineForVariant(variant) {
+  async function addLine() {
     await ensurePersisted();
     await db.quoteLines.put({
       id: newId(),
       quoteId,
-      productVariantId: variant.id,
-      materialId: null,
-      colorId: null,
+      sortOrder: lines.length,
+      family: '',
+      reference: '',
+      name: '',
+      subtype: '',
+      dimensions: '',
+      description: '',
+      yardage: '',
+      pageRef: '',
+      imageId: null,
       qty: 1,
       unitPrice: 0,
-      priceOverride: null,
       lineMarginPct: 0,
       lineDiscountPct: 0,
       notes: '',
-      sortOrder: lines.length,
     });
+  }
+
+  async function updateLine(id, patch) {
+    await db.quoteLines.update(id, patch);
   }
 
   async function removeLine(id) {
     await db.quoteLines.delete(id);
   }
 
-  async function setLineMaterial(lineId, materialId, colorId = null) {
-    const line = lines.find((l) => l.id === lineId);
-    if (!line) return;
-    await db.quoteLines.update(lineId, { materialId, colorId });
-  }
-
   const totals = computeTotals(
-    resolved.map((r) => ({ qty: r.qty, basePrice: r.basePrice, lineMarginPct: r.lineMarginPct, lineDiscountPct: r.lineDiscountPct })),
-    { marginPct: quote.marginPct, discountPct: quote.discountPct, taxPct: quote.taxPct, shipping: quote.shipping }
+    lines.map((l) => ({
+      qty: l.qty,
+      basePrice: l.unitPrice,
+      lineMarginPct: l.lineMarginPct,
+      lineDiscountPct: l.lineDiscountPct,
+    })),
+    { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping }
   );
 
   async function exportPdf() {
     const customer = quote.customerId ? customers.find((c) => c.id === quote.customerId) : null;
-    const blob = await generateQuotePdf({ quote, settings, lines: resolved, totals, customer });
+    const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
     downloadBlob(blob, `Quote-${quote.number || 'draft'}.pdf`);
   }
 
@@ -285,31 +248,25 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
           <div className="card overflow-hidden">
             <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
               <h2 className="font-semibold">Artículos</h2>
-              <button onClick={() => setPicker({ open: true })} className="btn-secondary">
+              <button onClick={addLine} className="btn-secondary">
                 <Plus size={14} /> Agregar artículo
               </button>
             </div>
-            {resolved.length === 0 ? (
+            {lines.length === 0 ? (
               <div className="px-5 py-12 text-center text-sm text-ink-500">
-                Sin artículos — toca <b>Agregar artículo</b> para elegir un producto.
+                Sin artículos — toca <b>Agregar artículo</b> para empezar.
               </div>
             ) : (
               <>
                 {/* Mobile: stacked cards */}
                 <ul className="md:hidden divide-y divide-ink-100">
-                  {resolved.map((r) => (
+                  {lines.map((l) => (
                     <QuoteLineCard
-                      key={r.id}
-                      r={r}
+                      key={l.id}
+                      line={l}
                       quote={quote}
-                      onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
-                      onRemove={() => removeLine(r.id)}
-                      onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
-                      onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
-                      onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
-                      onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
-                      onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
-                      onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
+                      onChange={(patch) => updateLine(l.id, patch)}
+                      onRemove={() => removeLine(l.id)}
                     />
                   ))}
                 </ul>
@@ -319,9 +276,9 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                   <table className="table min-w-[760px]">
                     <thead>
                       <tr>
-                        <th className="w-10" />
+                        <th className="w-20">Foto</th>
                         <th>Artículo</th>
-                        <th>Material y color</th>
+                        <th className="w-28">Referencia</th>
                         <th className="w-20 text-right">Cant.</th>
                         <th className="w-32 text-right">Unit.</th>
                         <th className="w-32 text-right">Total</th>
@@ -329,19 +286,13 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {resolved.map((r) => (
+                      {lines.map((l) => (
                         <QuoteLineRow
-                          key={r.id}
-                          r={r}
+                          key={l.id}
+                          line={l}
                           quote={quote}
-                          onPickMaterial={() => setMaterialPicker({ open: true, lineId: r.id })}
-                          onRemove={() => removeLine(r.id)}
-                          onQtyChange={(q) => db.quoteLines.update(r.id, { qty: q })}
-                          onPriceOverride={(p) => db.quoteLines.update(r.id, { priceOverride: p })}
-                          onLineDiscount={(p) => db.quoteLines.update(r.id, { lineDiscountPct: p })}
-                          onLineMargin={(p) => db.quoteLines.update(r.id, { lineMarginPct: p })}
-                          onNotes={(n) => db.quoteLines.update(r.id, { notes: n })}
-                          onSwatchChange={(id) => db.quoteLines.update(r.id, { swatchImageId: id })}
+                          onChange={(patch) => updateLine(l.id, patch)}
+                          onRemove={() => removeLine(l.id)}
                         />
                       ))}
                     </tbody>
@@ -391,21 +342,6 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       </div>
 
-      <ProductPickerModal
-        open={picker.open}
-        onClose={() => setPicker({ open: false })}
-        onPick={(variant) => { setPicker({ open: false }); addLineForVariant(variant); }}
-      />
-      <MaterialPickerModal
-        open={materialPicker.open}
-        product={resolved.find((r) => r.id === materialPicker.lineId)?.product}
-        onClose={() => setMaterialPicker({ open: false, lineId: null })}
-        onPick={(material, color) => {
-          setLineMaterial(materialPicker.lineId, material.id, color?.id || null);
-          setMaterialPicker({ open: false, lineId: null });
-        }}
-      />
-
       {/* Mobile sticky totals bar */}
       <div
         className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3"
@@ -416,7 +352,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>
         </div>
-        <button onClick={() => setPicker({ open: true })} className="btn-secondary">
+        <button onClick={addLine} className="btn-secondary">
           <Plus size={14} /> Artículo
         </button>
         <button onClick={exportPdf} className="btn-primary">
@@ -437,4 +373,3 @@ function Row({ label, value, quote, bold, muted }) {
     </div>
   );
 }
-

@@ -2,36 +2,27 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Sofa,
-  Palette,
   Users,
   FileText,
   Container as ContainerIcon,
-  Upload,
   Settings as SettingsIcon,
   Menu,
   X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { useCart } from '../context/CartContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
-import QuoteCart from './QuoteCart.jsx';
 
 const navItems = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
-  { to: '/catalog', label: 'Catálogo', icon: Sofa },
-  { to: '/materials', label: 'Telas y cueros', icon: Palette },
   { to: '/customers', label: 'Clientes', icon: Users },
   { to: '/quotes', label: 'Cotizaciones', icon: FileText },
   { to: '/containers', label: 'Contenedores', icon: ContainerIcon },
-  { to: '/import', label: 'Importar catálogo', icon: Upload },
   { to: '/settings', label: 'Configuración', icon: SettingsIcon },
 ];
 
 export default function Layout() {
   const { settings } = useApp();
   const location = useLocation();
-  const { open: cartOpen } = useCart();
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = !useMediaQuery('(min-width: 768px)');
   const company = settings?.companyName || 'Roset Soft';
@@ -41,14 +32,13 @@ export default function Layout() {
     setNavOpen(false);
   }, [location.pathname]);
 
-  // Lock body scroll when a drawer is open on mobile.
+  // Lock body scroll when the drawer is open on mobile.
   useEffect(() => {
     if (!isMobile) return;
-    const shouldLock = navOpen || cartOpen;
     const prev = document.body.style.overflow;
-    if (shouldLock) document.body.style.overflow = 'hidden';
+    if (navOpen) document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
-  }, [navOpen, cartOpen, isMobile]);
+  }, [navOpen, isMobile]);
 
   return (
     <div className="h-full flex flex-col md:flex-row">
@@ -124,28 +114,14 @@ export default function Layout() {
       <main className="flex-1 min-w-0 overflow-y-auto">
         <MainContent />
       </main>
-      <QuoteCart />
     </div>
   );
 }
 
 function MainContent() {
-  const { open } = useCart();
   const location = useLocation();
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-  // On md+ the cart drawer pushes content via reserved padding.
-  // On mobile the cart overlays full-screen, no reservation needed.
-  const reservedPadding = open && isDesktop ? 408 : undefined;
-  // Quote builder owns its bottom space with its own sticky bar.
-  const onQuoteBuilder = location.pathname === '/quotes/new' || /^\/quotes\/[^/]+$/.test(location.pathname);
-  // Mobile pages get bottom padding so the floating cart pill never covers
-  // the last row when scrolled all the way down.
-  const mobileBottom = onQuoteBuilder ? '' : 'pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-6';
   return (
-    <div
-      className={`px-4 py-4 md:px-8 md:py-6 transition-[padding] duration-150 ${mobileBottom}`}
-      style={{ paddingRight: reservedPadding }}
-    >
+    <div className="px-4 py-4 md:px-8 md:py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
       <div className="max-w-[1400px] mx-auto">
         <Outlet key={location.pathname} />
       </div>

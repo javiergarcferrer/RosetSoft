@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Sofa, Palette, Users, ArrowRight } from 'lucide-react';
+import { FileText, Users, Container as ContainerIcon, ArrowRight } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -18,14 +18,13 @@ const STATUS_LABELS = {
 export default function Dashboard() {
   const { profileId, settings } = useApp();
   const counts = useLiveQuery(async () => ({
-    products: await db.products.count(),
-    materials: await db.materials.count(),
     customers: await db.customers.where('profileId').equals(profileId || '').count(),
-    quotes: await db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).count(),
-  }), [profileId], { products: 0, materials: 0, customers: 0, quotes: 0 });
+    quotes: await db.quotes.where('profileId').equals(profileId || '').count(),
+    containers: await db.containers.where('profileId').equals(profileId || '').count(),
+  }), [profileId], { customers: 0, quotes: 0, containers: 0 });
 
   const recentQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).reverse().sortBy('updatedAt').then((r) => r.slice(0, 6)),
+    () => db.quotes.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt').then((r) => r.slice(0, 6)),
     [profileId],
     []
   );
@@ -55,17 +54,16 @@ export default function Dashboard() {
     <>
       <PageHeader
         title="Inicio"
-        subtitle={`${settings?.companyName || 'Tu empresa'} · ${counts.products} productos · ${counts.materials} materiales`}
+        subtitle={settings?.companyName || 'Tu empresa'}
         actions={
           <Link to="/quotes/new" className="btn-primary">Nueva cotización</Link>
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Sofa} label="Productos" value={counts.products} to="/catalog" />
-        <StatCard icon={Palette} label="Materiales" value={counts.materials} to="/materials" />
-        <StatCard icon={Users} label="Clientes" value={counts.customers} to="/customers" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={FileText} label="Cotizaciones" value={counts.quotes} to="/quotes" />
+        <StatCard icon={Users} label="Clientes" value={counts.customers} to="/customers" />
+        <StatCard icon={ContainerIcon} label="Contenedores" value={counts.containers} to="/containers" />
       </div>
 
       <div className="card mt-6">

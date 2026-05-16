@@ -1,11 +1,9 @@
 /**
  * Pricing math used by the quote builder and the PDF generator.
  *
- * Variant pricing table shape (stored on productVariant.priceByGrade):
- *   { A: 6445, B: 6645, ..., Z: ... }
- *
- * Lines reference a material (which has a grade letter) to look up base price.
- * COM/COL (customer's own material) is supported via line.priceOverride.
+ * Lines are user-typed (no normalized catalog). Each line carries its own
+ * `unitPrice` straight from the Ligne Roset price-list PDF that the user is
+ * reading; line and quote-level margin/discount layer on top of that.
  *
  * ITBIS (Dominican Republic value-added tax) is fixed at 18% and applied to
  * every quote — there is no per-quote override.
@@ -29,34 +27,6 @@ export function clampPct(v, max = 100) {
   if (n < 0) return 0;
   if (n > max) return max;
   return n;
-}
-
-export function variantPriceForGrade(variant, grade) {
-  if (!variant?.priceByGrade) return null;
-  return variant.priceByGrade[grade] ?? null;
-}
-
-/**
- * Resolve the base price for a quote line given its variant + material.
- *
- *   priceOverride          → wins outright (COM/COL or user override)
- *   variant + material.grade → look up the grade column on the variant
- *   variant.priceFixed     → single-price variants (cabinetry, accessories)
- *   fallbackToLowestGrade  → optionally show the cheapest grade when no
- *                            material has been picked yet (cart preview)
- */
-export function resolveLineBasePrice(
-  { variant, material, priceOverride },
-  { fallbackToLowestGrade = false } = {},
-) {
-  if (priceOverride != null) return priceOverride;
-  if (variant && material?.grade) return variantPriceForGrade(variant, material.grade) ?? 0;
-  if (variant?.priceFixed != null) return variant.priceFixed;
-  if (fallbackToLowestGrade && variant) {
-    const vals = Object.values(variant.priceByGrade || {});
-    return vals.length ? Math.min(...vals) : 0;
-  }
-  return 0;
 }
 
 /**
@@ -120,19 +90,3 @@ export function applyLineAdjustments(basePrice, marginPct, discountPct) {
   return withMargin * (1 - discount / 100);
 }
 
-/** A fabric "is allowed" on a product when:
- *    - the product is not in the material's `restrictedToProductNames`, AND
- *    - the material is not in the product's `technicalImpossibilities` (case-insensitive)
- */
-export function isMaterialAllowed(product, material) {
-  if (!product || !material) return true;
-  const impossibles = (product.technicalImpossibilities || []).map((s) => s.toUpperCase());
-  if (impossibles.includes((material.name || '').toUpperCase())) return false;
-  const restricted = material.restrictedToProductNames || [];
-  if (restricted.length && !restricted.map((s) => s.toUpperCase()).includes((product.name || '').toUpperCase())) {
-    return false;
-  }
-  return true;
-}
-
-export const GRADES = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];

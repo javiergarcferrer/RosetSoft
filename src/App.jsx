@@ -3,20 +3,14 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import { CartProvider } from './context/CartContext.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Catalog from './pages/Catalog.jsx';
-import ProductDetail from './pages/ProductDetail.jsx';
-import Materials from './pages/Materials.jsx';
-import MaterialDetail from './pages/MaterialDetail.jsx';
 import Customers from './pages/Customers.jsx';
 import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Containers from './pages/Containers.jsx';
 import ContainerDetail from './pages/ContainerDetail.jsx';
-import CatalogImport from './pages/CatalogImport.jsx';
 import Settings from './pages/Settings.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -74,28 +68,21 @@ function Gate({ children }) {
 function ProtectedApp() {
   return (
     <AppProvider>
-      <CartProvider>
-        <Gate>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="catalog" element={<Catalog />} />
-              <Route path="catalog/:productId" element={<ProductDetail />} />
-              <Route path="materials" element={<Materials />} />
-              <Route path="materials/:materialId" element={<MaterialDetail />} />
-              <Route path="customers" element={<Customers />} />
-              <Route path="quotes" element={<Quotes />} />
-              <Route path="quotes/new" element={<QuoteBuilder />} />
-              <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
-              <Route path="containers" element={<Containers />} />
-              <Route path="containers/:containerId" element={<ContainerDetail />} />
-              <Route path="import" element={<CatalogImport />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
-        </Gate>
-      </CartProvider>
+      <Gate>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="quotes" element={<Quotes />} />
+            <Route path="quotes/new" element={<QuoteBuilder />} />
+            <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
+            <Route path="containers" element={<Containers />} />
+            <Route path="containers/:containerId" element={<ContainerDetail />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Gate>
     </AppProvider>
   );
 }

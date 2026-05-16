@@ -22,7 +22,7 @@ export default function ContainerDetail() {
     [],
   );
   const allQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).toArray(),
+    () => db.quotes.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
   );
@@ -88,78 +88,44 @@ export default function ContainerDetail() {
   }
 
   function exportCsv() {
-    const variants = new Map();
-    const products = new Map();
-    const materials = new Map();
-    const colors = new Map();
-    // We'll resolve names asynchronously below.
-    (async () => {
-      const lineRefs = pinnedWithTotals.flatMap((q) => q.lines);
-      const variantIds = [...new Set(lineRefs.map((l) => l.productVariantId).filter(Boolean))];
-      const materialIds = [...new Set(lineRefs.map((l) => l.materialId).filter(Boolean))];
-      const colorIds = [...new Set(lineRefs.map((l) => l.colorId).filter(Boolean))];
-
-      for (const id of variantIds) {
-        const v = await db.productVariants.get(id);
-        if (v) {
-          variants.set(id, v);
-          if (v.productId && !products.has(v.productId)) {
-            const p = await db.products.get(v.productId);
-            if (p) products.set(v.productId, p);
-          }
-        }
+    // Lines now carry every field directly (no FK to a catalog), so the
+    // export is a flat dump — no async resolution pass needed.
+    const rows = [
+      [
+        'Container #', 'Container name', 'Container code', 'Container status',
+        'Quote #', 'Quote name', 'Customer', 'Company',
+        'Quote date', 'Family', 'Name', 'Subtype', 'Reference',
+        'Dimensions', 'Yardage', 'Page',
+        'Qty', 'Unit price (USD)', 'Line total (USD)',
+      ],
+    ];
+    for (const q of pinnedWithTotals) {
+      if (!q.lines.length) {
+        rows.push([
+          container.number, container.name, container.code, container.status,
+          q.number, q.name, q.customer?.name || '', q.customer?.company || '',
+          new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
+          '', '', '', '', '', '', '', '', '', '',
+        ]);
+        continue;
       }
-      for (const id of materialIds) {
-        const m = await db.materials.get(id);
-        if (m) materials.set(id, m);
+      for (const l of q.lines) {
+        const lineTotal = (l.qty || 0) * (l.unitPrice || 0);
+        rows.push([
+          container.number, container.name, container.code, container.status,
+          q.number, q.name, q.customer?.name || '', q.customer?.company || '',
+          new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
+          l.family || '', l.name || '', l.subtype || '', l.reference || '',
+          l.dimensions || '', l.yardage || '', l.pageRef || '',
+          l.qty || 0,
+          (l.unitPrice || 0).toFixed(2),
+          lineTotal.toFixed(2),
+        ]);
       }
-      for (const id of colorIds) {
-        const c = await db.materialColors.get(id);
-        if (c) colors.set(id, c);
-      }
-
-      const rows = [
-        [
-          'Container #', 'Container name', 'Container code', 'Container status',
-          'Quote #', 'Quote name', 'Customer', 'Company',
-          'Quote date', 'Product', 'Variant', 'Reference',
-          'Material', 'Grade', 'Color',
-          'Qty', 'Unit price (USD)', 'Line total (USD)',
-        ],
-      ];
-      for (const q of pinnedWithTotals) {
-        if (!q.lines.length) {
-          rows.push([
-            container.number, container.name, container.code, container.status,
-            q.number, q.name, q.customer?.name || '', q.customer?.company || '',
-            new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
-            '', '', '', '', '', '', '', '', '',
-          ]);
-          continue;
-        }
-        for (const l of q.lines) {
-          const v = variants.get(l.productVariantId);
-          const p = v ? products.get(v.productId) : null;
-          const m = materials.get(l.materialId);
-          const c = colors.get(l.colorId);
-          const lineTotal = (l.qty || 0) * (l.unitPrice || 0);
-          rows.push([
-            container.number, container.name, container.code, container.status,
-            q.number, q.name, q.customer?.name || '', q.customer?.company || '',
-            new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
-            p?.name || '', v?.name || '', v?.reference || '',
-            m?.name || '', m?.grade || '', c?.name || '',
-            l.qty || 0,
-            (l.unitPrice || 0).toFixed(2),
-            lineTotal.toFixed(2),
-          ]);
-        }
-      }
-      rows.push([]);
-      rows.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Total (USD)', '', '', containerTotal.toFixed(2)]);
-
-      downloadCsv(`Container-${container.number || container.id}.csv`, rows);
-    })();
+    }
+    rows.push([]);
+    rows.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Total (USD)', '', containerTotal.toFixed(2)]);
+    downloadCsv(`Container-${container.number || container.id}.csv`, rows);
   }
 
   return (

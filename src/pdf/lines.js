@@ -7,28 +7,21 @@ import {
 import { drawRightAt, truncate, formatMoney } from './util.js';
 import { embedImageById } from './embed.js';
 
-// All x positions absolute; right-aligned columns specify their right edge.
-// Header labels need real horizontal gaps between adjacent columns. The
-// previous layout had MATLABEL ending ~5pt before CANT. began, so they
-// rendered as one run ("TELA / COLORCANT."). We push qty further right and
-// shorten the material label to "MATERIAL".
+// Column anchors for the line-items table. Lines are user-typed (no catalog
+// indirection), so every field below comes straight from the quote_lines row:
+// line.imageId, line.family, line.name, line.subtype, line.reference,
+// line.dimensions, line.yardage, line.notes, line.unitPrice.
 function lineColumns() {
   const right = PAGE_W - MARGIN_R;
-  // Column anchors for the line-items table. Positions in absolute x units.
-  // The MATERIAL header label is 39pt wide at size-7 with the chosen
-  // tracking, so qty.rightX must leave at least ~10pt clearance between
-  // (mat.x + MATERIAL_width) and (qty.rightX − CANT_width). With CANT
-  // ≈ 21pt wide at size 7, qty.rightX needs to be ≥ mat.x + 39 + 10 + 21
-  // = mat.x + 70 — i.e. right − 130 at minimum given mat.x = MARGIN_L+280.
   return {
-    img:  { x: MARGIN_L + 8,  size: 48 },
-    item: { x: MARGIN_L + 68, w: 200 },
-    mat:  { x: MARGIN_L + 280 },
+    img:  { x: MARGIN_L + 8,   size: 48 },
+    item: { x: MARGIN_L + 68,  w: 200 },
+    spec: { x: MARGIN_L + 280, w: 120 },
     qty:  { rightX: right - 125, label: 'CANT.' },
     unit: { rightX: right - 65,  label: 'UNIT.' },
     tot:  { rightX: right - 8,   label: 'TOTAL' },
     itemLabel: 'ARTÍCULO',
-    matLabel: 'MATERIAL',
+    specLabel: 'DETALLE',
   };
 }
 
@@ -46,11 +39,8 @@ export function drawLineHeader(page, ctx, cursor) {
   const ty = y - 14;
   const labelSize = 7;
   const labelColor = rgb(0.93, 0.92, 0.90);
-  // Tracking on the left-aligned labels is kept tight (0.6) — the inter-column
-  // gap between MATERIAL and CANT. is only ~10pt at the chosen x positions,
-  // and bumping to 1.2 (like the body labels) makes MATERIAL overlap CANT.
   page.drawText(cols.itemLabel, { x: cols.item.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
-  page.drawText(cols.matLabel, { x: cols.mat.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
+  page.drawText(cols.specLabel, { x: cols.spec.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
   drawRightAt(page, cols.qty.label, cols.qty.rightX, ty, labelSize, fontBold, labelColor);
   drawRightAt(page, cols.unit.label, cols.unit.rightX, ty, labelSize, fontBold, labelColor);
   drawRightAt(page, cols.tot.label, cols.tot.rightX, ty, labelSize, fontBold, labelColor);
@@ -66,7 +56,6 @@ export function drawEmptyLineBody(page, ctx, cursor) {
   const boxH = 56;
   const top = cursor.y;
   const bottom = top - boxH;
-  // Hairline under the dark header band so the empty area reads as a row.
   page.drawLine({
     start: { x: MARGIN_L, y: bottom },
     end:   { x: PAGE_W - MARGIN_R, y: bottom },
@@ -87,19 +76,19 @@ export function drawEmptyLineBody(page, ctx, cursor) {
 }
 
 /**
- * Render one line item row: product image + name/variant/ref, material
- * swatch + name/color/grade, and right-aligned qty / unit / total.
+ * Render one line item row. The line carries all of its fields directly —
+ * no product/variant/material/color lookups — so this is just text + image
+ * placement, no async resolution.
  */
 export async function drawLineRow(page, ctx, cursor, line) {
-  const { doc, fontRegular, fontBold } = ctx;
+  const { doc, fontRegular, fontBold, fontItalic } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
   const rowH = 60;
   const innerTop = rowY - 12;
 
-  // Image: variant > hero > vector
-  const imgId = line.variant?.imageId || line.product?.heroImageId || line.product?.vectorImageId;
-  const img = await embedImageById(doc, imgId);
+  // Image
+  const img = await embedImageById(doc, line.imageId);
   const box = cols.img.size;
   const boxY = rowY - rowH + 6;
   page.drawRectangle({
@@ -117,58 +106,46 @@ export async function drawLineRow(page, ctx, cursor, line) {
     });
   }
 
-  // Item: name (bold) / variant (mid) / reference (small mono-ish)
+  // Item column: family (small caps) / name (bold) / subtype (mid) / reference
   let y = innerTop;
-  page.drawText(truncate(line.product?.name || '(producto)', 34), { x: cols.item.x, y, size: 10.5, font: fontBold, color: INK });
-  y -= 13;
-  if (line.variant?.name) {
-    page.drawText(truncate(line.variant.name, 38), { x: cols.item.x, y, size: 9, font: fontRegular, color: INK_HIGH });
+  if (line.family) {
+    page.drawText(truncate(line.family.toUpperCase(), 24), {
+      x: cols.item.x, y, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2,
+    });
+    y -= 10;
+  }
+  page.drawText(truncate(line.name || '(sin nombre)', 34), { x: cols.item.x, y, size: 10.5, font: fontBold, color: INK });
+  y -= 12;
+  if (line.subtype) {
+    page.drawText(truncate(line.subtype, 38), { x: cols.item.x, y, size: 9, font: fontRegular, color: INK_HIGH });
     y -= 11;
   }
-  if (line.variant?.reference) {
-    page.drawText(line.variant.reference, { x: cols.item.x, y, size: 7.5, font: fontRegular, color: INK_SOFT });
+  if (line.reference) {
+    page.drawText(line.reference, { x: cols.item.x, y, size: 7.5, font: fontRegular, color: INK_SOFT });
     y -= 10;
   }
   if (line.notes) {
-    page.drawText(truncate('Nota: ' + line.notes, 52), { x: cols.item.x, y, size: 7.5, font: ctx.fontItalic, color: INK_MID });
+    page.drawText(truncate('Nota: ' + line.notes, 52), { x: cols.item.x, y, size: 7.5, font: fontItalic || fontRegular, color: INK_MID });
   }
 
-  // Material / color (swatch + text)
-  const matX = cols.mat.x;
-  const swatch = await embedImageById(doc, line.swatchImageId || line.color?.swatchImageId);
-  const swatchBox = 26;
-  if (swatch) {
-    const scale = Math.min(swatchBox / swatch.width, swatchBox / swatch.height);
-    const w = swatch.width * scale;
-    const h = swatch.height * scale;
-    page.drawRectangle({
-      x: matX, y: rowY - 28, width: swatchBox, height: swatchBox,
-      color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
-    });
-    page.drawImage(swatch, {
-      x: matX + (swatchBox - w) / 2,
-      y: rowY - 28 + (swatchBox - h) / 2,
-      width: w, height: h,
-    });
-    const tx = matX + swatchBox + 8;
-    page.drawText(truncate(line.material?.name || '—', 18), { x: tx, y: innerTop, size: 9.5, font: fontBold, color: INK });
-    page.drawText(truncate(line.color?.name || '—', 18), { x: tx, y: innerTop - 11, size: 8.5, font: fontRegular, color: INK_MID });
-    if (line.material?.grade) {
-      page.drawText(`Grade ${line.material.grade}`, { x: tx, y: innerTop - 22, size: 7.5, font: fontRegular, color: INK_SOFT });
-    }
-  } else {
-    page.drawText(truncate(line.material?.name || 'C.O.M.', 22), { x: matX, y: innerTop, size: 9.5, font: fontBold, color: INK });
-    if (line.color?.name) {
-      page.drawText(truncate(line.color.name, 22), { x: matX, y: innerTop - 11, size: 8.5, font: fontRegular, color: INK_MID });
-    }
-    if (line.material?.grade) {
-      page.drawText(`Grade ${line.material.grade}`, { x: matX, y: innerTop - 22, size: 7.5, font: fontRegular, color: INK_SOFT });
-    }
+  // Spec column: dimensions / yardage / description (truncated to one line)
+  const specX = cols.spec.x;
+  let sy = innerTop;
+  if (line.dimensions) {
+    page.drawText(truncate(line.dimensions, 22), { x: specX, y: sy, size: 8.5, font: fontRegular, color: INK_HIGH });
+    sy -= 11;
+  }
+  if (line.yardage) {
+    page.drawText(truncate(line.yardage, 22), { x: specX, y: sy, size: 8.5, font: fontRegular, color: INK_MID });
+    sy -= 11;
+  }
+  if (line.description) {
+    page.drawText(truncate(line.description, 28), { x: specX, y: sy, size: 7.5, font: fontRegular, color: INK_SOFT });
   }
 
   // Qty / Unit / Total — vertically centered in the row
   const numY = rowY - 26;
-  const unit = applyLineAdjustments(line.basePrice, line.lineMarginPct, line.lineDiscountPct);
+  const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
   drawRightAt(page, String(line.qty || 0), cols.qty.rightX, numY, 10, fontRegular, INK_HIGH);
   drawRightAt(page, formatMoney(unit, ctx.currency, ctx.rates), cols.unit.rightX, numY, 10, fontRegular, INK_HIGH);
