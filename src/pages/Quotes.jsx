@@ -166,35 +166,35 @@ export default function Quotes() {
         )}
       </div>
 
-      {/* Desktop: table */}
+      {/* Desktop: table. No overflow wrapper — columns compress to the
+          container, and low-priority columns hide below lg so the table
+          stays within its width regardless of viewport / PDF panel state. */}
       <div className="hidden md:block card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table min-w-[760px]">
-            <thead>
-              <tr>
-                <th>Número</th>
-                <th>Nombre</th>
-                <th>Cliente</th>
-                <th>Estado</th>
-                <th>Contenedor</th>
-                <th>Actualizada</th>
-                <th className="text-right">Total</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((qu) => (
-                <QuoteRow
-                  key={qu.id}
-                  qu={qu}
-                  customer={customerById.get(qu.customerId)}
-                  allContainers={containers}
-                  total={totalByQuoteId.get(qu.id) || 0}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th className="hidden lg:table-cell">Nombre</th>
+              <th>Cliente</th>
+              <th>Estado</th>
+              <th>Contenedor</th>
+              <th className="hidden lg:table-cell">Actualizada</th>
+              <th className="text-right">Total</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((qu) => (
+              <QuoteRow
+                key={qu.id}
+                qu={qu}
+                customer={customerById.get(qu.customerId)}
+                allContainers={containers}
+                total={totalByQuoteId.get(qu.id) || 0}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );
@@ -245,13 +245,13 @@ function QuoteRow({ qu, customer, allContainers, total }) {
 
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
-      <td className="font-medium">#{qu.number || '—'}</td>
-      <td>{qu.name || '—'}</td>
-      <td className="text-ink-700">{customer?.name || '—'}</td>
+      <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
+      <td className="hidden lg:table-cell max-w-[200px] truncate" title={qu.name || ''}>{qu.name || '—'}</td>
+      <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td onClick={(e) => e.stopPropagation()}>
         <select
-          className="input text-xs py-1 max-w-[180px]"
+          className="input text-xs py-1 w-full max-w-[180px]"
           value={qu.containerId || ''}
           onChange={setContainer}
         >
@@ -263,8 +263,8 @@ function QuoteRow({ qu, customer, allContainers, total }) {
           ))}
         </select>
       </td>
-      <td className="text-ink-500">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-medium">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
+      <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
+      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
       <td className="text-right w-12">
         <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
           <Trash2 size={14} />

@@ -4,8 +4,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { Plus, Download, ArrowLeft, BookOpen, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
-import QuoteLineRow from '../components/quote-builder/QuoteLineRow.jsx';
-import QuoteLineCard from '../components/quote-builder/QuoteLineCard.jsx';
+import QuoteLineItem from '../components/quote-builder/QuoteLineItem.jsx';
 import PdfViewer from '../components/PdfViewer.jsx';
 import { db, newId } from '../db/database.js';
 import { publicPricelistUrl } from '../db/supabaseClient.js';
@@ -289,10 +288,13 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
               </div>
             ) : (
               <>
-                {/* Mobile: stacked cards */}
-                <ul className="md:hidden divide-y divide-ink-100">
+                {/* Single layout for every viewport. QuoteLineItem uses
+                    flex-wrap so the fields stack on narrow widths (e.g. PDF
+                    panel open) and lay out horizontally on wide ones — no
+                    horizontal scroll ever. */}
+                <ul className="divide-y divide-ink-100">
                   {lines.map((l) => (
-                    <QuoteLineCard
+                    <QuoteLineItem
                       key={l.id}
                       line={l}
                       quote={quote}
@@ -302,35 +304,6 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                     />
                   ))}
                 </ul>
-
-                {/* Desktop: table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="table min-w-[760px]">
-                    <thead>
-                      <tr>
-                        <th className="w-20">Foto</th>
-                        <th>Artículo</th>
-                        <th className="w-28">Referencia</th>
-                        <th className="w-20 text-right">Cant.</th>
-                        <th className="w-32 text-right">Unit.</th>
-                        <th className="w-32 text-right">Total</th>
-                        <th className="w-16" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l) => (
-                        <QuoteLineRow
-                          key={l.id}
-                          line={l}
-                          quote={quote}
-                          autoFocus={l.id === focusLineId}
-                          onChange={(patch) => updateLine(l.id, patch)}
-                          onRemove={() => removeLine(l.id)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
 
                 {/* Repeat-add button at the bottom so the user can keep
                     transcribing PDF rows without scrolling back to the top. */}

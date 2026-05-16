@@ -142,20 +142,19 @@ export default function Containers() {
         })}
       </div>
 
-      {/* Desktop table */}
+      {/* Desktop table — fluid columns, low-priority cells hide at sub-xl. */}
       <div className="hidden md:block card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="table min-w-[960px]">
-            <thead>
+        <table className="table">
+          <thead>
             <tr>
               <th>Número</th>
               <th>Nombre</th>
-              <th>Código</th>
-              <th>Cotizaciones</th>
+              <th className="hidden xl:table-cell">Código</th>
+              <th className="hidden lg:table-cell">Cot.</th>
               <th>Estado</th>
-              <th>Actualizado</th>
-              <th className="text-right">Total (USD)</th>
-              <th className="text-right">Progreso</th>
+              <th className="hidden xl:table-cell">Actualizado</th>
+              <th className="text-right">Total</th>
+              <th className="text-right hidden lg:table-cell">Progreso</th>
               <th />
             </tr>
           </thead>
@@ -167,19 +166,19 @@ export default function Containers() {
               const ready = total >= threshold;
               return (
                 <tr key={c.id} className="cursor-pointer" onClick={() => (window.location.hash = `#/containers/${c.id}`)}>
-                  <td className="font-medium">#{c.number || '—'}</td>
-                  <td>{c.name || '—'}</td>
-                  <td className="font-mono text-xs text-ink-500">{c.code || '—'}</td>
-                  <td className="text-ink-700">{count}</td>
+                  <td className="font-medium whitespace-nowrap">#{c.number || '—'}</td>
+                  <td className="truncate max-w-[200px]" title={c.name || ''}>{c.name || '—'}</td>
+                  <td className="hidden xl:table-cell font-mono text-xs text-ink-500 truncate max-w-[140px]" title={c.code || ''}>{c.code || '—'}</td>
+                  <td className="hidden lg:table-cell text-ink-700">{count}</td>
                   <td>
                     <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[c.status] || 'bg-ink-100 text-ink-700'}`}>
                       {c.status === 'dispatched' ? 'Despachado' : 'Abierto'}
                       {ready && c.status === 'open' && <CheckCircle2 size={11} />}
                     </span>
                   </td>
-                  <td className="text-ink-500">{formatDateTime(c.updatedAt)}</td>
-                  <td className="text-right font-medium">{formatMoney(total, 'USD', { USD: 1 })}</td>
-                  <td className="text-right w-40">
+                  <td className="hidden xl:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(c.updatedAt)}</td>
+                  <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, 'USD', { USD: 1 })}</td>
+                  <td className="hidden lg:table-cell text-right w-40">
                     <div className="flex items-center gap-2 justify-end">
                       <div className="w-24 h-1.5 bg-ink-100 rounded-full overflow-hidden">
                         <div
@@ -204,7 +203,6 @@ export default function Containers() {
             })}
           </tbody>
         </table>
-        </div>
       </div>
     </>
   );

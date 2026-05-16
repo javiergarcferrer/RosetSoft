@@ -111,7 +111,9 @@ export default function Layout() {
         <ProfileMenu />
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-y-auto">
+      {/* overflow-x-hidden is a hard safety net: no descendant can ever
+          cause the page to scroll horizontally regardless of width. */}
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
         <MainContent />
       </main>
     </div>

@@ -58,6 +58,8 @@ export default function PdfViewer({ url, initialPage = 1 }) {
 
   // Render the current page whenever pdf / page / zoom changes. Cancellable
   // so rapid page input doesn't queue stale renders behind the active one.
+  // Zoom is clamped to fit-to-container-width so the canvas never overflows
+  // horizontally — horizontal scroll is banned throughout the app.
   useEffect(() => {
     if (!pdf || !canvasRef.current) return;
     let cancel = false;
@@ -66,7 +68,11 @@ export default function PdfViewer({ url, initialPage = 1 }) {
       try {
         const p = await pdf.getPage(page);
         if (cancel) return;
-        const vp = p.getViewport({ scale: zoom * RETINA_SCALE });
+        const containerW = containerRef.current?.clientWidth || 0;
+        const baseVp = p.getViewport({ scale: 1 });
+        const maxScale = containerW > 32 ? (containerW - 32) / baseVp.width : zoom;
+        const effective = Math.min(zoom, maxScale);
+        const vp = p.getViewport({ scale: effective * RETINA_SCALE });
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = Math.ceil(vp.width);
@@ -160,7 +166,7 @@ export default function PdfViewer({ url, initialPage = 1 }) {
           <Maximize2 size={14} />
         </button>
       </div>
-      <div ref={containerRef} className="overflow-auto p-3 flex-1">
+      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden p-3 flex-1">
         <div className="flex justify-center">
           <canvas ref={canvasRef} className="shadow-md bg-white" />
         </div>

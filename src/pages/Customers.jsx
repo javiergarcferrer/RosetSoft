@@ -74,34 +74,33 @@ export default function Customers() {
             )}
           </div>
 
-          {/* Desktop table */}
+          {/* Desktop table — no overflow wrapper; lower-priority columns
+              hide at sub-lg widths so the table never exceeds its container. */}
           <div className="hidden md:block card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="table min-w-[640px]">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Empresa</th>
-                    <th>Correo</th>
-                    <th>Teléfono</th>
-                    <th>Ciudad</th>
-                    <th></th>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Empresa</th>
+                  <th className="hidden lg:table-cell">Correo</th>
+                  <th className="hidden lg:table-cell">Teléfono</th>
+                  <th className="hidden xl:table-cell">Ciudad</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c) => (
+                  <tr key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
+                    <td className="font-medium truncate max-w-[200px]" title={c.name}>{c.name}</td>
+                    <td className="text-ink-700 truncate max-w-[200px]" title={c.company || ''}>{c.company || '—'}</td>
+                    <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={c.email || ''}>{c.email || '—'}</td>
+                    <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{c.phone || '—'}</td>
+                    <td className="hidden xl:table-cell text-ink-700 truncate max-w-[160px]" title={c.city || ''}>{c.city || '—'}</td>
+                    <td className="text-right w-20"><span className="text-xs text-ink-500">Editar</span></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((c) => (
-                    <tr key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
-                      <td className="font-medium">{c.name}</td>
-                      <td className="text-ink-700">{c.company || '—'}</td>
-                      <td className="text-ink-700">{c.email || '—'}</td>
-                      <td className="text-ink-700">{c.phone || '—'}</td>
-                      <td className="text-ink-700">{c.city || '—'}</td>
-                      <td className="text-right w-20"><span className="text-xs text-ink-500">Editar</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}

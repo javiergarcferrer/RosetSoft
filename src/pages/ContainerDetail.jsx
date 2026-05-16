@@ -223,16 +223,16 @@ export default function ContainerDetail() {
                   ))}
                 </div>
 
-                {/* Desktop table */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="table min-w-[720px]">
+                {/* Desktop table — fluid; secondary columns hide at narrow widths */}
+                <div className="hidden md:block">
+                  <table className="table">
                     <thead>
                       <tr>
                         <th>Número</th>
                         <th>Cliente</th>
-                        <th>Nombre</th>
-                        <th>Líneas</th>
-                        <th>Actualizado</th>
+                        <th className="hidden lg:table-cell">Nombre</th>
+                        <th className="hidden lg:table-cell">Líneas</th>
+                        <th className="hidden xl:table-cell">Actualizado</th>
                         <th className="text-right">Total</th>
                         <th />
                       </tr>
@@ -240,14 +240,14 @@ export default function ContainerDetail() {
                     <tbody>
                       {pinnedWithTotals.map((q) => (
                         <tr key={q.id}>
-                          <td className="font-medium">
+                          <td className="font-medium whitespace-nowrap">
                             <Link to={`/quotes/${q.id}`} className="hover:underline">#{q.number || '—'}</Link>
                           </td>
-                          <td className="text-ink-700">{q.customer?.name || '—'}</td>
-                          <td>{q.name || '—'}</td>
-                          <td className="text-ink-500">{q.lines.length}</td>
-                          <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
-                          <td className="text-right font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</td>
+                          <td className="text-ink-700 truncate max-w-[180px]" title={q.customer?.name || ''}>{q.customer?.name || '—'}</td>
+                          <td className="hidden lg:table-cell truncate max-w-[200px]" title={q.name || ''}>{q.name || '—'}</td>
+                          <td className="hidden lg:table-cell text-ink-500">{q.lines.length}</td>
+                          <td className="hidden xl:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(q.updatedAt)}</td>
+                          <td className="text-right font-medium whitespace-nowrap">{formatMoney(q.total, 'USD', { USD: 1 })}</td>
                           <td className="text-right w-8">
                             <button onClick={() => unpin(q.id)} className="text-ink-400 hover:text-red-600" title="Quitar del contenedor">
                               <X size={14} />
@@ -367,15 +367,15 @@ function QuotePickerModal({ open, onClose, onPick, quotes, customers, linesByQuo
               })}
             </div>
 
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="table min-w-[640px]">
+            {/* Desktop table — fluid */}
+            <div className="hidden md:block">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>#</th>
                     <th>Cliente</th>
-                    <th>Nombre</th>
-                    <th>Líneas</th>
+                    <th className="hidden lg:table-cell">Nombre</th>
+                    <th className="hidden lg:table-cell">Líneas</th>
                     <th className="text-right">Total</th>
                     <th />
                   </tr>
@@ -387,11 +387,11 @@ function QuotePickerModal({ open, onClose, onPick, quotes, customers, linesByQuo
                     const cust = customers.get(qu.customerId);
                     return (
                       <tr key={qu.id}>
-                        <td className="font-medium">#{qu.number || '—'}</td>
-                        <td className="text-ink-700">{cust?.name || '—'}</td>
-                        <td>{qu.name || '—'}</td>
-                        <td className="text-ink-500">{lines.length}</td>
-                        <td className="text-right font-medium">{formatMoney(total, 'USD', { USD: 1 })}</td>
+                        <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
+                        <td className="text-ink-700 truncate max-w-[180px]" title={cust?.name || ''}>{cust?.name || '—'}</td>
+                        <td className="hidden lg:table-cell truncate max-w-[200px]" title={qu.name || ''}>{qu.name || '—'}</td>
+                        <td className="hidden lg:table-cell text-ink-500">{lines.length}</td>
+                        <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, 'USD', { USD: 1 })}</td>
                         <td className="text-right">
                           <button onClick={() => onPick(qu.id)} className="text-xs text-brand-600 hover:underline">
                             Fijar →

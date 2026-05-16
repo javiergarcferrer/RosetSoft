@@ -88,16 +88,16 @@ export default function Dashboard() {
                 />
               ))}
             </ul>
-            {/* Desktop: table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="table min-w-[720px]">
+            {/* Desktop: table — fluid, low-priority columns hidden at narrow widths */}
+            <div className="hidden md:block">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Número</th>
-                    <th>Nombre</th>
+                    <th className="hidden lg:table-cell">Nombre</th>
                     <th>Cliente</th>
                     <th>Estado</th>
-                    <th>Actualizada</th>
+                    <th className="hidden lg:table-cell">Actualizada</th>
                     <th className="text-right">Total</th>
                   </tr>
                 </thead>
@@ -139,12 +139,12 @@ function StatCard({ icon: Icon, label, value, to }) {
 function RecentQuoteRow({ q, customer, total }) {
   return (
     <tr>
-      <td><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
-      <td className="max-w-[220px] truncate" title={q.name || ''}>{q.name || '—'}</td>
-      <td className="text-ink-700">{customer?.name || '—'}</td>
+      <td className="whitespace-nowrap"><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
+      <td className="hidden lg:table-cell max-w-[220px] truncate" title={q.name || ''}>{q.name || '—'}</td>
+      <td className="text-ink-700 truncate max-w-[180px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td><span className="badge">{STATUS_LABELS[q.status] || 'Borrador'}</span></td>
-      <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
-      <td className="text-right font-medium">{formatMoney(total, q.currencyCode || 'USD', q.rates || { USD: 1 })}</td>
+      <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(q.updatedAt)}</td>
+      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, q.currencyCode || 'USD', q.rates || { USD: 1 })}</td>
     </tr>
   );
 }
