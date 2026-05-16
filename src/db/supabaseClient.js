@@ -34,9 +34,16 @@ export const supabase = createClient(url || 'http://localhost:54321', anonKey ||
 export const supabaseConfigured = !!(url && anonKey);
 
 export const IMAGES_BUCKET = 'images';
+export const PRICELIST_BUCKET = 'pricelist';
 
 export function publicImageUrl(path) {
   if (!path) return null;
   const { data } = supabase.storage.from(IMAGES_BUCKET).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+export function publicPricelistUrl(path) {
+  if (!path) return null;
+  const { data } = supabase.storage.from(PRICELIST_BUCKET).getPublicUrl(path);
   return data?.publicUrl || null;
 }

@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from '../db/hooks.js';
-import { Plus, Download, ArrowLeft } from 'lucide-react';
+import { Plus, Download, ArrowLeft, BookOpen, X } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import QuoteLineRow from '../components/quote-builder/QuoteLineRow.jsx';
 import QuoteLineCard from '../components/quote-builder/QuoteLineCard.jsx';
+import PdfViewer from '../components/PdfViewer.jsx';
 import { db, newId } from '../db/database.js';
+import { publicPricelistUrl } from '../db/supabaseClient.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, clampPct, ITBIS_PCT } from '../lib/pricing.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
 import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
+
+// Sticky-per-user (NOT per-quote) preference: was the PDF panel open last time?
+const PDF_PANEL_STORAGE_KEY = 'rosetsoft.pdfPanel.open';
 
 /**
  * Quote builder.
@@ -145,6 +150,19 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     []
   );
 
+  // Side-panel PDF viewer state. Default off on first ever load; once toggled
+  // we remember the choice across sessions/quotes via localStorage.
+  const priceListUrl = useMemo(
+    () => publicPricelistUrl(settings?.priceList?.path),
+    [settings?.priceList?.path],
+  );
+  const [pdfOpen, setPdfOpen] = useState(() => {
+    try { return localStorage.getItem(PDF_PANEL_STORAGE_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PDF_PANEL_STORAGE_KEY, pdfOpen ? '1' : '0'); } catch {}
+  }, [pdfOpen]);
+
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
   async function updateQuote(patch) {
@@ -209,6 +227,13 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
         subtitle={`Actualizada ${formatDateTime(quote.updatedAt)}`}
         actions={
           <>
+            <button
+              onClick={() => setPdfOpen((v) => !v)}
+              className={`btn-ghost hidden lg:inline-flex ${pdfOpen ? 'bg-ink-100' : ''}`}
+              title={pdfOpen ? 'Ocultar lista de precios' : 'Mostrar lista de precios'}
+            >
+              {pdfOpen ? <><X size={14} /> Ocultar PDF</> : <><BookOpen size={14} /> Lista de precios</>}
+            </button>
             <select
               value={quote.status || 'draft'}
               onChange={(e) => updateQuote({ status: e.target.value })}
@@ -225,8 +250,8 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[1fr_520px]' : 'lg:grid-cols-3'}`}>
+        <div className={pdfOpen ? 'space-y-4 min-w-0' : 'lg:col-span-2 space-y-4'}>
           {/* Quote header */}
           <div className="card card-pad space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -301,45 +326,20 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
               </>
             )}
           </div>
+
+          {/* When the PDF panel is open the right column belongs to the PDF;
+              the totals + notes drop here under the line items so they stay
+              reachable without alt-tabbing. */}
+          {pdfOpen && <SidebarBlock quote={quote} totals={totals} updateQuote={updateQuote} />}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <div className="card card-pad space-y-3">
-            <h2 className="font-semibold text-sm">Totales</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="label">Descuento %</div>
-                <DebouncedInput className="input" type="number" min="0" max="100" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: clampPct(v) })} />
-              </div>
-              <div>
-                <div className="label">Envío (USD)</div>
-                <DebouncedInput className="input" type="number" min="0" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Math.max(0, Number(v) || 0) })} />
-              </div>
-            </div>
-            <div className="text-[10px] text-ink-500">
-              Precios en USD · ITBIS fijo en {ITBIS_PCT}% · El PDF incluye conversión a DOP usando la <Link to="/settings" className="underline">tasa configurada</Link>.
-            </div>
-            <hr className="border-ink-100" />
-            <Row label="Subtotal" value={totals.subtotal} quote={quote} />
-            {quote.discountPct ? <Row label={`Descuento (${quote.discountPct}%)`} value={-totals.discountAmt} quote={quote} muted /> : null}
-            <Row label={`ITBIS (${ITBIS_PCT}%)`} value={totals.taxAmt} quote={quote} muted />
-            {quote.shipping ? <Row label="Envío" value={totals.shipping} quote={quote} muted /> : null}
-            <Row label="Total" value={totals.grandTotal} quote={quote} bold />
+        {pdfOpen ? (
+          <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start h-[calc(100vh-2rem)] card overflow-hidden">
+            <PdfViewer url={priceListUrl} />
           </div>
-
-          <div className="card card-pad space-y-3">
-            <h2 className="font-semibold text-sm">Términos y notas</h2>
-            <div>
-              <div className="label">Notas internas</div>
-              <DebouncedTextarea className="input min-h-[80px]" value={quote.notes || ''} onCommit={(v) => updateQuote({ notes: v })} />
-            </div>
-            <div>
-              <div className="label">Términos (se imprimen en el PDF)</div>
-              <DebouncedTextarea className="input min-h-[100px]" value={quote.terms || ''} onCommit={(v) => updateQuote({ terms: v })} />
-            </div>
-          </div>
-        </div>
+        ) : (
+          <SidebarBlock quote={quote} totals={totals} updateQuote={updateQuote} />
+        )}
       </div>
 
       {/* Mobile sticky totals bar */}
@@ -362,6 +362,47 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
       {/* Spacer so content can scroll above the sticky bar */}
       <div className="md:hidden h-20" aria-hidden />
     </>
+  );
+}
+
+function SidebarBlock({ quote, totals, updateQuote }) {
+  return (
+    <div className="space-y-4">
+      <div className="card card-pad space-y-3">
+        <h2 className="font-semibold text-sm">Totales</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="label">Descuento %</div>
+            <DebouncedInput className="input" type="number" min="0" max="100" value={quote.discountPct ?? 0} onCommit={(v) => updateQuote({ discountPct: clampPct(v) })} />
+          </div>
+          <div>
+            <div className="label">Envío (USD)</div>
+            <DebouncedInput className="input" type="number" min="0" value={quote.shipping ?? 0} onCommit={(v) => updateQuote({ shipping: Math.max(0, Number(v) || 0) })} />
+          </div>
+        </div>
+        <div className="text-[10px] text-ink-500">
+          Precios en USD · ITBIS fijo en {ITBIS_PCT}% · El PDF incluye conversión a DOP usando la <Link to="/settings" className="underline">tasa configurada</Link>.
+        </div>
+        <hr className="border-ink-100" />
+        <Row label="Subtotal" value={totals.subtotal} quote={quote} />
+        {quote.discountPct ? <Row label={`Descuento (${quote.discountPct}%)`} value={-totals.discountAmt} quote={quote} muted /> : null}
+        <Row label={`ITBIS (${ITBIS_PCT}%)`} value={totals.taxAmt} quote={quote} muted />
+        {quote.shipping ? <Row label="Envío" value={totals.shipping} quote={quote} muted /> : null}
+        <Row label="Total" value={totals.grandTotal} quote={quote} bold />
+      </div>
+
+      <div className="card card-pad space-y-3">
+        <h2 className="font-semibold text-sm">Términos y notas</h2>
+        <div>
+          <div className="label">Notas internas</div>
+          <DebouncedTextarea className="input min-h-[80px]" value={quote.notes || ''} onCommit={(v) => updateQuote({ notes: v })} />
+        </div>
+        <div>
+          <div className="label">Términos (se imprimen en el PDF)</div>
+          <DebouncedTextarea className="input min-h-[100px]" value={quote.terms || ''} onCommit={(v) => updateQuote({ terms: v })} />
+        </div>
+      </div>
+    </div>
   );
 }
 
