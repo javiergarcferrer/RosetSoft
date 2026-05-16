@@ -6,6 +6,16 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
+      // Safe-area inset tokens, usable via Tailwind's spacing utilities:
+      //   pt-safe-t, pb-safe-b, pl-safe-l, pr-safe-r, etc.
+      // Combined with stock padding via arbitrary values where a minimum is
+      // desired: pb-[max(0.75rem,env(safe-area-inset-bottom))].
+      spacing: {
+        'safe-t': 'env(safe-area-inset-top)',
+        'safe-b': 'env(safe-area-inset-bottom)',
+        'safe-l': 'env(safe-area-inset-left)',
+        'safe-r': 'env(safe-area-inset-right)',
+      },
       colors: {
         ink: {
           50: '#f7f7f6',
@@ -39,5 +49,14 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Pointer-capability variants so we can size touch targets by the input
+    // device, not by viewport width. iPads on Safari report pointer:coarse
+    // even at >= sm widths, so a width-based breakpoint would under-size
+    // them. Apple HIG / WCAG SC 2.5.5 want 44pt × 44pt minimum.
+    function ({ addVariant }) {
+      addVariant('coarse', '@media (pointer: coarse)');
+      addVariant('fine', '@media (pointer: fine)');
+    },
+  ],
 };

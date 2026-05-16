@@ -2,10 +2,25 @@
 <html lang="es-DO">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#171612" />
+    <meta name="color-scheme" content="light" />
+
+    <!-- iOS / Android standalone behavior when "Add to Home Screen" is used.
+         viewport-fit=cover above is what makes env(safe-area-inset-*) return
+         non-zero on iPhones with a notch / Dynamic Island. status-bar-style
+         "black-translucent" lets our dark topbar paint under the status bar
+         (handled via pt-safe utilities in the Layout). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Roset Soft" />
+    <meta name="format-detection" content="telephone=no" />
+
     <title>Roset Soft — Cotizaciones Ligne Roset</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
   </head>
   <body class="bg-ink-50 text-ink-900 font-sans antialiased">
     <div id="root"></div>
