@@ -77,7 +77,9 @@ export function drawTotals(page, ctx, cursor, totals) {
 
   // DOP conversion — a quiet secondary note rather than a boxed strip.
   // Top hairline groups it with the totals block; no fill keeps it from
-  // competing with the grand total.
+  // competing with the grand total. The rate-source label already wraps any
+  // URL in parens (e.g. "Tasa de mercado (open.er-api.com)"), so render it
+  // bare — wrapping it again gave us "(Tasa de mercado (open.er-api.com))".
   const dopRate = effectiveDopRate(ctx.settings);
   const dopTotal = totals.grandTotal * dopRate;
   const rateLabel = rateSourceLabel(ctx.settings);
@@ -89,11 +91,11 @@ export function drawTotals(page, ctx, cursor, totals) {
   page.drawText(`Tipo de cambio: 1 USD = ${dopRate.toFixed(2)} DOP`, {
     x: leftX, y: y - 8, size: 8, font: fontRegular, color: INK_MID,
   });
-  page.drawText(`(${rateLabel})`, {
+  page.drawText(rateLabel, {
     x: leftX, y: y - 19, size: 7.5, font: fontRegular, color: INK_SOFT,
   });
-  page.drawText('Total RD$', { x: leftX, y: y - 33, size: 10, font: fontBold, color: INK_HIGH });
-  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX, y - 33, 11, fontBold, INK);
+  page.drawText('Total RD$', { x: leftX, y: y - 34, size: 11, font: fontBold, color: INK });
+  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX, y - 34, 11, fontBold, INK);
   y -= 50;
 
   return { x: MARGIN_L, y };

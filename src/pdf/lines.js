@@ -13,13 +13,17 @@ import { embedImageById } from './embed.js';
 // line.dimensions, line.yardage, line.notes, line.unitPrice.
 function lineColumns() {
   const right = PAGE_W - MARGIN_R;
+  // The numeric block (qty / unit / total) was pushed ~15pt right of its prior
+  // anchor so the spec column gains room for ~22 chars without crashing into
+  // the qty value on the shared name baseline. Inter-column gaps stay ≥15pt
+  // even for $X,XXX.XX-class values.
   return {
     img:  { x: MARGIN_L + 8,   size: 48 },
     item: { x: MARGIN_L + 68,  w: 200 },
     spec: { x: MARGIN_L + 280, w: 120 },
-    qty:  { rightX: right - 125, label: 'CANT.' },
-    unit: { rightX: right - 65,  label: 'UNIT.' },
-    tot:  { rightX: right - 8,   label: 'TOTAL' },
+    qty:  { rightX: right - 110, label: 'CANT.' },
+    unit: { rightX: right - 60,  label: 'UNIT.' },
+    tot:  { rightX: right - 4,   label: 'TOTAL' },
     itemLabel: 'ARTÍCULO',
     specLabel: 'DETALLE',
   };
@@ -107,6 +111,9 @@ export async function drawLineRow(page, ctx, cursor, line) {
   }
 
   // Item column: family (small caps) / name (bold) / subtype (mid) / reference
+  // The bold name is the visual anchor for the row — spec and numeric columns
+  // align to its baseline so the eye reads a clean horizontal band of primary
+  // info regardless of whether the optional family/subtype/reference lines fill in.
   let y = innerTop;
   if (line.family) {
     page.drawText(truncate(line.family.toUpperCase(), 24), {
@@ -114,6 +121,7 @@ export async function drawLineRow(page, ctx, cursor, line) {
     });
     y -= 10;
   }
+  const nameY = y;
   page.drawText(truncate(line.name || '(sin nombre)', 34), { x: cols.item.x, y, size: 10.5, font: fontBold, color: INK });
   y -= 12;
   if (line.subtype) {
@@ -128,9 +136,10 @@ export async function drawLineRow(page, ctx, cursor, line) {
     page.drawText(truncate('Nota: ' + line.notes, 52), { x: cols.item.x, y, size: 7.5, font: fontItalic || fontRegular, color: INK_MID });
   }
 
-  // Spec column: dimensions / yardage / description (truncated to one line)
+  // Spec column: dimensions / yardage / description — first line aligned with
+  // the bold name (so it doesn't drift up next to the small family caps).
   const specX = cols.spec.x;
-  let sy = innerTop;
+  let sy = nameY;
   if (line.dimensions) {
     page.drawText(truncate(line.dimensions, 22), { x: specX, y: sy, size: 8.5, font: fontRegular, color: INK_HIGH });
     sy -= 11;
@@ -143,8 +152,8 @@ export async function drawLineRow(page, ctx, cursor, line) {
     page.drawText(truncate(line.description, 28), { x: specX, y: sy, size: 7.5, font: fontRegular, color: INK_SOFT });
   }
 
-  // Qty / Unit / Total — vertically centered in the row
-  const numY = rowY - 26;
+  // Qty / Unit / Total — aligned with the bold name baseline (same anchor as spec)
+  const numY = nameY;
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
   drawRightAt(page, String(line.qty || 0), cols.qty.rightX, numY, 10, fontRegular, INK_HIGH);
