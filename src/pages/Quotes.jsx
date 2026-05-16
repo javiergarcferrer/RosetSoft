@@ -16,6 +16,22 @@ const STATUS_STYLES = {
   archived: 'bg-ink-100 text-ink-500',
 };
 
+const STATUS_LABELS = {
+  draft: 'Borrador',
+  sent: 'Enviada',
+  accepted: 'Aceptada',
+  declined: 'Rechazada',
+  archived: 'Archivada',
+};
+
+// "#123 · Smith residence" / "#123" / "Smith residence" / "borrador sin nombre"
+function describeQuote(q) {
+  if (q.number != null && q.name) return `#${q.number} · ${q.name}`;
+  if (q.number != null) return `#${q.number}`;
+  if (q.name) return q.name;
+  return 'borrador sin nombre';
+}
+
 export default function Quotes() {
   const { profileId } = useApp();
   const quotes = useLiveQuery(
@@ -62,12 +78,12 @@ export default function Quotes() {
   if (!quotes.length) {
     return (
       <>
-        <PageHeader title="Quotes" />
+        <PageHeader title="Cotizaciones" />
         <EmptyState
           icon={FileText}
-          title="No quotes yet"
-          description="Build your first quote. Pick a product, choose a fabric and color, set quantity — done."
-          action={<Link to="/quotes/new" className="btn-primary">New quote</Link>}
+          title="Sin cotizaciones"
+          description="Crea tu primera cotización. Elige un producto, una tela y color, ajusta la cantidad."
+          action={<Link to="/quotes/new" className="btn-primary">Nueva cotización</Link>}
         />
       </>
     );
@@ -76,23 +92,23 @@ export default function Quotes() {
   return (
     <>
       <PageHeader
-        title="Quotes"
-        subtitle={`${quotes.length} quote${quotes.length === 1 ? '' : 's'}`}
-        actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> New quote</Link>}
+        title="Cotizaciones"
+        subtitle={`${quotes.length} ${quotes.length === 1 ? 'cotización' : 'cotizaciones'}`}
+        actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input className="input pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by number or customer…" />
+          <input className="input pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número o cliente…" />
         </div>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="input max-w-[160px]">
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="accepted">Accepted</option>
-          <option value="declined">Declined</option>
-          <option value="archived">Archived</option>
+          <option value="">Todos los estados</option>
+          <option value="draft">Borrador</option>
+          <option value="sent">Enviada</option>
+          <option value="accepted">Aceptada</option>
+          <option value="declined">Rechazada</option>
+          <option value="archived">Archivada</option>
         </select>
       </div>
 
@@ -117,12 +133,12 @@ export default function Quotes() {
           <table className="table min-w-[760px]">
             <thead>
               <tr>
-                <th>Number</th>
-                <th>Name</th>
-                <th>Customer</th>
-                <th>Status</th>
+                <th>Número</th>
+                <th>Nombre</th>
+                <th>Cliente</th>
+                <th>Estado</th>
                 <th>Contenedor</th>
-                <th>Updated</th>
+                <th>Actualizada</th>
                 <th className="text-right">Total</th>
                 <th />
               </tr>
@@ -153,7 +169,7 @@ function QuoteCard({ qu, customer, allContainers }) {
   async function del(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm(`Delete quote #${qu.number}?`)) return;
+    if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
     const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
     await db.quoteLines.bulkDelete(lines.map((l) => l.id));
     await db.quotes.delete(qu.id);
@@ -180,21 +196,21 @@ function QuoteCard({ qu, customer, allContainers }) {
         </div>
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
-        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{qu.status || 'draft'}</span>
+        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span>
         <select
           className="input text-xs py-1 flex-1 min-w-0"
           value={qu.containerId || ''}
           onChange={setContainer}
           onClick={(e) => e.stopPropagation()}
         >
-          <option value="">— sin contenedor —</option>
+          <option value="">— Sin contenedor —</option>
           {allContainers.map((c) => (
             <option key={c.id} value={c.id}>
               #{c.number}{c.name ? ` · ${c.name}` : ''}
             </option>
           ))}
         </select>
-        <button onClick={del} className="text-ink-400 hover:text-red-600 p-2" aria-label="Delete">
+        <button onClick={del} className="text-ink-400 hover:text-red-600 p-2" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -211,7 +227,7 @@ function QuoteRow({ qu, customer, allContainers }) {
   async function del(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm(`Delete quote #${qu.number}?`)) return;
+    if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
     const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
     await db.quoteLines.bulkDelete(lines.map((l) => l.id));
     await db.quotes.delete(qu.id);
@@ -235,7 +251,7 @@ function QuoteRow({ qu, customer, allContainers }) {
           value={qu.containerId || ''}
           onChange={setContainer}
         >
-          <option value="">— ninguno —</option>
+          <option value="">— Ninguno —</option>
           {allContainers.map((c) => (
             <option key={c.id} value={c.id}>
               #{c.number}{c.name ? ` · ${c.name}` : ''}
@@ -246,7 +262,7 @@ function QuoteRow({ qu, customer, allContainers }) {
       <td className="text-ink-500">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
       <td className="text-right w-12">
-        <button onClick={del} className="text-ink-400 hover:text-red-600" title="Delete">
+        <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

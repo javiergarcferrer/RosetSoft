@@ -57,7 +57,7 @@ export default function Layout() {
         <button
           onClick={() => setNavOpen(true)}
           className="p-2.5 -ml-1 rounded hover:bg-ink-800"
-          aria-label="Open menu"
+          aria-label="Abrir menú"
         >
           <Menu size={20} />
         </button>
@@ -92,7 +92,7 @@ export default function Layout() {
           <button
             onClick={() => setNavOpen(false)}
             className="md:hidden text-ink-400 hover:text-ink-100 p-2 -mr-2 -my-1"
-            aria-label="Close menu"
+            aria-label="Cerrar menú"
           >
             <X size={18} />
           </button>

@@ -30,24 +30,24 @@ export default function Customers() {
   return (
     <>
       <PageHeader
-        title="Customers"
-        subtitle={`${customers.length} customer${customers.length === 1 ? '' : 's'}`}
-        actions={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={14} /> Add customer</button>}
+        title="Clientes"
+        subtitle={`${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'}`}
+        actions={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={14} /> Agregar cliente</button>}
       />
 
       {customers.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No customers yet"
-          description="Add your first customer to reuse their details when building quotes."
-          action={<button onClick={() => setEditing({})} className="btn-primary">Add customer</button>}
+          title="Sin clientes"
+          description="Agrega tu primer cliente para reutilizar sus datos al crear cotizaciones."
+          action={<button onClick={() => setEditing({})} className="btn-primary">Agregar cliente</button>}
         />
       ) : (
         <>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
             <div className="relative flex-1 max-w-md">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers…" className="input pl-9" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar clientes…" className="input pl-9" />
             </div>
           </div>
 
@@ -80,11 +80,11 @@ export default function Customers() {
               <table className="table min-w-[640px]">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Company</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>City</th>
+                    <th>Nombre</th>
+                    <th>Empresa</th>
+                    <th>Correo</th>
+                    <th>Teléfono</th>
+                    <th>Ciudad</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -96,7 +96,7 @@ export default function Customers() {
                       <td className="text-ink-700">{c.email || '—'}</td>
                       <td className="text-ink-700">{c.phone || '—'}</td>
                       <td className="text-ink-700">{c.city || '—'}</td>
-                      <td className="text-right w-20"><span className="text-xs text-ink-500">Edit</span></td>
+                      <td className="text-right w-20"><span className="text-xs text-ink-500">Editar</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -158,61 +158,61 @@ function CustomerModal({ customer, onClose, profileId }) {
   }
 
   async function remove() {
-    if (!confirm(`Delete customer "${data.name}"?`)) return;
+    if (!confirm(`¿Eliminar el cliente "${data.name}"?`)) return;
     await db.customers.delete(customer.id);
     onClose();
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={isNew ? 'Add customer' : `Edit — ${data.name || 'Customer'}`} footer={
+    <Modal open={open} onClose={onClose} title={isNew ? 'Agregar cliente' : `Editar — ${data.name || 'Cliente'}`} footer={
       <>
-        {!isNew && <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50"><Trash2 size={14} /> Delete</button>}
+        {!isNew && <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50"><Trash2 size={14} /> Eliminar</button>}
         <div className="flex-1" />
-        <button onClick={onClose} className="btn-ghost">Cancel</button>
-        <button onClick={save} className="btn-primary">Save</button>
+        <button onClick={onClose} className="btn-ghost">Cancelar</button>
+        <button onClick={save} className="btn-primary">Guardar</button>
       </>
     }>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
-          <div className="label">Name *</div>
+          <div className="label">Nombre *</div>
           <input className="input" value={data.name} onChange={(e) => set('name', e.target.value)} />
         </div>
         <div>
-          <div className="label">Company</div>
+          <div className="label">Empresa</div>
           <input className="input" value={data.company} onChange={(e) => set('company', e.target.value)} />
         </div>
         <div>
-          <div className="label">Email</div>
+          <div className="label">Correo</div>
           <input className="input" type="email" value={data.email} onChange={(e) => set('email', e.target.value)} />
         </div>
         <div>
-          <div className="label">Phone</div>
+          <div className="label">Teléfono</div>
           <input className="input" value={data.phone} onChange={(e) => set('phone', e.target.value)} />
         </div>
         <div>
-          <div className="label">Country</div>
+          <div className="label">País</div>
           <input className="input" value={data.country} onChange={(e) => set('country', e.target.value)} />
         </div>
         <div className="sm:col-span-2">
-          <div className="label">Address</div>
+          <div className="label">Dirección</div>
           <input className="input" value={data.address} onChange={(e) => set('address', e.target.value)} />
         </div>
         <div>
-          <div className="label">City</div>
+          <div className="label">Ciudad</div>
           <input className="input" value={data.city} onChange={(e) => set('city', e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="label">State</div>
+            <div className="label">Provincia</div>
             <input className="input" value={data.state} onChange={(e) => set('state', e.target.value)} />
           </div>
           <div>
-            <div className="label">ZIP</div>
+            <div className="label">Código postal</div>
             <input className="input" value={data.zip} onChange={(e) => set('zip', e.target.value)} />
           </div>
         </div>
         <div className="sm:col-span-2">
-          <div className="label">Notes</div>
+          <div className="label">Notas</div>
           <textarea className="input min-h-[80px]" value={data.notes} onChange={(e) => set('notes', e.target.value)} />
         </div>
       </div>

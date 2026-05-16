@@ -189,7 +189,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     })();
   }, [resolved]);
 
-  if (!quote) return <div className="text-sm text-ink-500">Loading…</div>;
+  if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
   async function updateQuote(patch) {
     await ensurePersisted();
@@ -238,11 +238,11 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
   return (
     <>
       <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3">
-        <ArrowLeft size={12} /> Back to quotes
+        <ArrowLeft size={12} /> Volver a cotizaciones
       </Link>
       <PageHeader
-        title={`Quote #${quote.number}`}
-        subtitle={`Updated ${formatDateTime(quote.updatedAt)}`}
+        title={quote.number ? `Cotización #${quote.number}` : 'Cotización (borrador)'}
+        subtitle={`Actualizada ${formatDateTime(quote.updatedAt)}`}
         actions={
           <>
             <select
@@ -250,13 +250,13 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
               onChange={(e) => updateQuote({ status: e.target.value })}
               className="input max-w-[140px]"
             >
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="archived">Archived</option>
+              <option value="draft">Borrador</option>
+              <option value="sent">Enviada</option>
+              <option value="accepted">Aceptada</option>
+              <option value="declined">Rechazada</option>
+              <option value="archived">Archivada</option>
             </select>
-            <button onClick={exportPdf} className="btn-primary hidden md:inline-flex"><Download size={14} /> Export PDF</button>
+            <button onClick={exportPdf} className="btn-primary hidden md:inline-flex"><Download size={14} /> Exportar PDF</button>
           </>
         }
       />
@@ -267,13 +267,13 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
           <div className="card card-pad space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="label">Quote name (internal)</div>
-                <DebouncedInput className="input" value={quote.name || ''} onCommit={(v) => updateQuote({ name: v })} placeholder='e.g. "Smith residence — den"' />
+                <div className="label">Nombre interno</div>
+                <DebouncedInput className="input" value={quote.name || ''} onCommit={(v) => updateQuote({ name: v })} placeholder='p. ej. "Residencia Smith — sala"' />
               </div>
               <div>
-                <div className="label">Customer</div>
+                <div className="label">Cliente</div>
                 <select className="input" value={quote.customerId || ''} onChange={(e) => updateQuote({ customerId: e.target.value || null })}>
-                  <option value="">— No customer —</option>
+                  <option value="">— Sin cliente —</option>
                   {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>)}
                 </select>
               </div>
@@ -283,14 +283,14 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
           {/* Line items */}
           <div className="card overflow-hidden">
             <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-              <h2 className="font-semibold">Line items</h2>
+              <h2 className="font-semibold">Artículos</h2>
               <button onClick={() => setPicker({ open: true })} className="btn-secondary">
-                <Plus size={14} /> Add item
+                <Plus size={14} /> Agregar artículo
               </button>
             </div>
             {resolved.length === 0 ? (
               <div className="px-5 py-12 text-center text-sm text-ink-500">
-                No items yet — click <b>Add item</b> to pick a product.
+                Sin artículos — toca <b>Agregar artículo</b> para elegir un producto.
               </div>
             ) : (
               <>
@@ -319,11 +319,11 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                     <thead>
                       <tr>
                         <th className="w-10" />
-                        <th>Item</th>
-                        <th>Material / color</th>
-                        <th className="w-20 text-right">Qty</th>
-                        <th className="w-32 text-right">Unit</th>
-                        <th className="w-32 text-right">Line total</th>
+                        <th>Artículo</th>
+                        <th>Material y color</th>
+                        <th className="w-20 text-right">Cant.</th>
+                        <th className="w-32 text-right">Unit.</th>
+                        <th className="w-32 text-right">Total</th>
                         <th className="w-8" />
                       </tr>
                     </thead>
@@ -383,7 +383,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
               <DebouncedTextarea className="input min-h-[80px]" value={quote.notes || ''} onCommit={(v) => updateQuote({ notes: v })} />
             </div>
             <div>
-              <div className="label">Términos (se imprimen en PDF)</div>
+              <div className="label">Términos (se imprimen en el PDF)</div>
               <DebouncedTextarea className="input min-h-[100px]" value={quote.terms || ''} onCommit={(v) => updateQuote({ terms: v })} />
             </div>
           </div>
@@ -417,7 +417,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
           </div>
         </div>
         <button onClick={() => setPicker({ open: true })} className="btn-secondary">
-          <Plus size={14} /> Item
+          <Plus size={14} /> Artículo
         </button>
         <button onClick={exportPdf} className="btn-primary">
           <Download size={14} /> PDF
@@ -453,7 +453,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
               <ImageView id={r.variant?.imageId || r.product?.heroImageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
             </div>
             <div className="min-w-0">
-              <div className="font-medium text-sm truncate">{r.product?.name || '(missing product)'}</div>
+              <div className="font-medium text-sm truncate">{r.product?.name || '(producto faltante)'}</div>
               <div className="text-xs text-ink-500 truncate">{r.variant?.name || '—'}</div>
               {r.variant?.reference && <div className="font-mono text-[10px] text-ink-400">{r.variant.reference}</div>}
             </div>
@@ -470,11 +470,11 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
             <div className="min-w-0">
               {r.material ? (
                 <>
-                  <div className="text-sm font-medium truncate">{r.material.name} <span className="text-ink-500 font-normal">· Grade {r.material.grade}</span></div>
-                  <div className="text-xs text-ink-500 truncate">{r.color?.name || 'Pick color'}</div>
+                  <div className="text-sm font-medium truncate">{r.material.name} <span className="text-ink-500 font-normal">· Grado {r.material.grade}</span></div>
+                  <div className="text-xs text-ink-500 truncate">{r.color?.name || 'Elegir color'}</div>
                 </>
               ) : (
-                <span className="text-xs text-brand-600 font-medium">Pick fabric / leather…</span>
+                <span className="text-xs text-brand-600 font-medium">Elegir tela o cuero…</span>
               )}
             </div>
           </button>
@@ -485,7 +485,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
         <td className="text-right">
           <div>{formatMoney(unit, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}</div>
           {r.basePrice === 0 && r.material && (
-            <div className="text-[10px] text-amber-600 mt-0.5">No grade-{r.material.grade} price</div>
+            <div className="text-[10px] text-amber-600 mt-0.5">Sin precio para grado {r.material.grade}</div>
           )}
         </td>
         <td className="text-right font-medium">{formatMoney(lineTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}</td>
@@ -502,7 +502,7 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
                 onChange={(id) => onSwatchChange(id)}
                 kind="quote-line-swatch"
                 ownerId={r.id}
-                label="Swatch override"
+                label="Muestra personalizada"
                 imgClassName="w-full aspect-square object-cover rounded"
                 allowUrl={false}
               />
@@ -540,12 +540,12 @@ function LineRow({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, on
                 />
               </div>
               <div>
-                <div className="text-[10px] font-medium text-ink-500 uppercase">Notes</div>
+                <div className="text-[10px] font-medium text-ink-500 uppercase">Notas</div>
                 <DebouncedInput
                   className="w-full bg-transparent border-0 px-0 py-1 text-sm focus:outline-none focus:ring-0"
                   value={r.notes || ''}
                   onCommit={(v) => onNotes(v)}
-                  placeholder="e.g. extra cushion, COM"
+                  placeholder="p. ej. cojín extra, COM"
                 />
               </div>
             </div>
@@ -568,11 +568,11 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
           <ImageView id={r.variant?.imageId || r.product?.heroImageId || r.product?.vectorImageId} className="w-full h-full object-contain" placeholderClassName="w-full h-full" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm truncate">{r.product?.name || '(missing product)'}</div>
+          <div className="font-medium text-sm truncate">{r.product?.name || '(producto faltante)'}</div>
           <div className="text-xs text-ink-500 truncate">{r.variant?.name || '—'}</div>
           {r.variant?.reference && <div className="font-mono text-[10px] text-ink-400">{r.variant.reference}</div>}
         </div>
-        <button onClick={onRemove} className="text-ink-400 hover:text-red-600 p-2 -m-2" aria-label="Remove">
+        <button onClick={onRemove} className="text-ink-400 hover:text-red-600 p-2 -m-2" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -587,11 +587,11 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
         <div className="min-w-0 flex-1">
           {r.material ? (
             <>
-              <div className="text-sm font-medium truncate">{r.material.name} <span className="text-ink-500 font-normal">· Grade {r.material.grade}</span></div>
-              <div className="text-xs text-ink-500 truncate">{r.color?.name || 'Pick color'}</div>
+              <div className="text-sm font-medium truncate">{r.material.name} <span className="text-ink-500 font-normal">· Grado {r.material.grade}</span></div>
+              <div className="text-xs text-ink-500 truncate">{r.color?.name || 'Elegir color'}</div>
             </>
           ) : (
-            <span className="text-sm text-brand-600 font-medium">Pick fabric / leather…</span>
+            <span className="text-sm text-brand-600 font-medium">Elegir tela o cuero…</span>
           )}
         </div>
       </button>
@@ -602,7 +602,7 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
           <div className="text-base font-semibold">{fmt(lineTotal)}</div>
           <div className="text-[11px] text-ink-500">{fmt(unit)} c/u</div>
           {r.basePrice === 0 && r.material && (
-            <div className="text-[10px] text-amber-600 mt-0.5">No grade-{r.material.grade} price</div>
+            <div className="text-[10px] text-amber-600 mt-0.5">Sin precio para grado {r.material.grade}</div>
           )}
         </div>
       </div>
@@ -611,7 +611,7 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center justify-between text-xs text-ink-500 hover:text-ink-900 py-2 border-t border-ink-100"
       >
-        <span>Override / margin / discount / notes</span>
+        <span>Precio / margen / descuento / notas</span>
         <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
@@ -623,7 +623,7 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
               onChange={(id) => onSwatchChange(id)}
               kind="quote-line-swatch"
               ownerId={r.id}
-              label="Swatch"
+              label="Muestra"
               imgClassName="w-full aspect-square object-cover rounded"
               allowUrl={false}
             />
@@ -661,12 +661,12 @@ function LineCard({ r, onPickMaterial, onRemove, onQtyChange, onPriceOverride, o
               />
             </div>
             <div>
-              <div className="label">Notes</div>
+              <div className="label">Notas</div>
               <DebouncedInput
                 className="input"
                 value={r.notes || ''}
                 onCommit={(v) => onNotes(v)}
-                placeholder="e.g. COM"
+                placeholder="p. ej. COM"
               />
             </div>
           </div>
@@ -682,7 +682,7 @@ function QtyStepper({ value, onChange }) {
       <button
         onClick={() => onChange(Math.max(0, (value || 0) - 1))}
         className="px-3 py-2 text-ink-600 hover:bg-ink-100"
-        aria-label="Decrement"
+        aria-label="Restar"
       >
         <Minus size={14} />
       </button>
@@ -696,7 +696,7 @@ function QtyStepper({ value, onChange }) {
       <button
         onClick={() => onChange((value || 0) + 1)}
         className="px-3 py-2 text-ink-600 hover:bg-ink-100"
-        aria-label="Increment"
+        aria-label="Sumar"
       >
         <Plus size={14} />
       </button>
@@ -726,9 +726,9 @@ function ProductPickerModal({ open, onClose, onPick }) {
   }, [products, q]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Add product" size="lg">
+    <Modal open={open} onClose={onClose} title="Agregar producto" size="lg">
       <div className="mb-3">
-        <input autoFocus className="input" placeholder="Search products…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input autoFocus className="input" placeholder="Buscar productos…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto">
         {filteredProducts.map((p) => {
@@ -746,7 +746,7 @@ function ProductPickerModal({ open, onClose, onPick }) {
               </div>
               <div className="px-2 py-1.5 space-y-0.5">
                 {pv.length === 0 ? (
-                  <div className="text-[11px] text-ink-400 px-2 py-1">No variants</div>
+                  <div className="text-[11px] text-ink-400 px-2 py-1">Sin variantes</div>
                 ) : pv.map((v) => {
                   const diff = v.dimensions || v.yardage || p.description || '';
                   return (
@@ -775,7 +775,7 @@ function ProductPickerModal({ open, onClose, onPick }) {
           );
         })}
         {filteredProducts.length === 0 && (
-          <div className="col-span-2 text-center text-sm text-ink-500 py-10">No products found.</div>
+          <div className="col-span-2 text-center text-sm text-ink-500 py-10">Sin productos.</div>
         )}
       </div>
     </Modal>
@@ -815,19 +815,19 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
   }, [materials, q, kindFilter, gradeFilter, product]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Pick material & color" size="xl">
+    <Modal open={open} onClose={onClose} title="Elegir material y color" size="xl">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
-        <input autoFocus className="input flex-1" placeholder="Search materials…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input autoFocus className="input flex-1" placeholder="Buscar materiales…" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input sm:max-w-[160px]" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-          <option value="">All types</option>
-          <option value="fabric">Fabric</option>
-          <option value="leather">Leather</option>
+          <option value="">Todos los tipos</option>
+          <option value="fabric">Tela</option>
+          <option value="leather">Cuero</option>
           <option value="outdoor-fabric">Outdoor</option>
         </select>
         <select className="input sm:max-w-[120px]" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)}>
-          <option value="">All grades</option>
-          {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((g) => <option key={g} value={g}>Grade {g}</option>)}
-          <option value="S">Grade S</option>
+          <option value="">Todos los grados</option>
+          {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((g) => <option key={g} value={g}>Grado {g}</option>)}
+          <option value="S">Grado S</option>
         </select>
       </div>
 
@@ -857,7 +857,7 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
                     )}
                   </div>
                   <div className="flex-shrink-0 text-xs text-brand-600">
-                    {blocked ? <span className="text-red-600 text-[11px]">Not allowed</span> : 'Pick →'}
+                    {blocked ? <span className="text-red-600 text-[11px]">No permitida</span> : 'Elegir →'}
                   </div>
                 </button>
               );
@@ -869,11 +869,11 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
             <table className="table min-w-[640px]">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Grade</th>
-                  <th>Composition</th>
-                  <th>Colors</th>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Grado</th>
+                  <th>Composición</th>
+                  <th>Colores</th>
                   <th></th>
                 </tr>
               </thead>
@@ -890,9 +890,9 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
                       <td className="text-ink-500">{colorCount}</td>
                       <td className="text-right">
                         {blocked ? (
-                          <span className="text-[11px] text-red-600">Not allowed</span>
+                          <span className="text-[11px] text-red-600">No permitida</span>
                         ) : (
-                          <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">Pick →</button>
+                          <button onClick={() => setActiveMaterial(m)} className="text-xs text-brand-600 hover:underline">Elegir →</button>
                         )}
                       </td>
                     </tr>
@@ -905,17 +905,17 @@ function MaterialPickerModal({ open, onClose, onPick, product }) {
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <button onClick={() => setActiveMaterial(null)} className="btn-ghost"><ArrowLeft size={14} /> Back</button>
+            <button onClick={() => setActiveMaterial(null)} className="btn-ghost"><ArrowLeft size={14} /> Atrás</button>
             <div className="text-sm">
               <span className="font-medium">{activeMaterial.name}</span>
-              <span className="text-ink-500"> · Grade {activeMaterial.grade}</span>
+              <span className="text-ink-500"> · Grado {activeMaterial.grade}</span>
             </div>
-            <button onClick={() => onPick(activeMaterial, null)} className="btn-secondary text-xs">Use without color</button>
+            <button onClick={() => onPick(activeMaterial, null)} className="btn-secondary text-xs">Usar sin color</button>
           </div>
           {matColors.length === 0 ? (
             <div className="text-center text-sm text-ink-500 py-10">
-              No colors saved for {activeMaterial.name}.
-              <div className="mt-2"><button onClick={() => onPick(activeMaterial, null)} className="btn-primary">Use anyway</button></div>
+              Sin colores guardados para {activeMaterial.name}.
+              <div className="mt-2"><button onClick={() => onPick(activeMaterial, null)} className="btn-primary">Usar de todos modos</button></div>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[55vh] overflow-y-auto">

@@ -8,9 +8,9 @@ import Modal from '../components/Modal.jsx';
 import { db, newId } from '../db/database.js';
 
 const KIND_LABELS = {
-  fabric: 'Fabric',
-  leather: 'Leather',
-  'outdoor-fabric': 'Outdoor Fabric',
+  fabric: 'Tela',
+  leather: 'Cuero',
+  'outdoor-fabric': 'Tela outdoor',
 };
 const KIND_COLORS = {
   fabric: 'bg-blue-100 text-blue-800',
@@ -46,13 +46,13 @@ export default function Materials() {
   if (materials.length === 0) {
     return (
       <>
-        <PageHeader title="Materials" subtitle="Fabrics, leathers, and outdoor fabrics" />
+        <PageHeader title="Materiales" subtitle="Telas, cueros y telas outdoor" />
         <EmptyState
           icon={Palette}
-          title="No materials yet"
-          description="Add a fabric or leather by hand to get started."
+          title="Sin materiales"
+          description="Agrega una tela o cuero a mano para empezar."
           action={
-            <button onClick={() => setNewOpen(true)} className="btn-primary">Add manually</button>
+            <button onClick={() => setNewOpen(true)} className="btn-primary">Agregar manualmente</button>
           }
         />
         <NewMaterialModal open={newOpen} onClose={() => setNewOpen(false)} />
@@ -63,9 +63,9 @@ export default function Materials() {
   return (
     <>
       <PageHeader
-        title="Materials"
-        subtitle={`${materials.length} materials · ${colors.length} colors`}
-        actions={<button onClick={() => setNewOpen(true)} className="btn-primary"><Plus size={14} /> Add material</button>}
+        title="Materiales"
+        subtitle={`${materials.length} ${materials.length === 1 ? 'material' : 'materiales'} · ${colors.length} ${colors.length === 1 ? 'color' : 'colores'}`}
+        actions={<button onClick={() => setNewOpen(true)} className="btn-primary"><Plus size={14} /> Agregar material</button>}
       />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
@@ -74,19 +74,19 @@ export default function Materials() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name or composition…"
+            placeholder="Buscar por nombre o composición…"
             className="input pl-9"
           />
         </div>
         <select value={kind} onChange={(e) => setKind(e.target.value)} className="input max-w-[180px]">
-          <option value="">All types</option>
-          <option value="fabric">Fabric</option>
-          <option value="leather">Leather</option>
-          <option value="outdoor-fabric">Outdoor Fabric</option>
+          <option value="">Todos los tipos</option>
+          <option value="fabric">Tela</option>
+          <option value="leather">Cuero</option>
+          <option value="outdoor-fabric">Tela outdoor</option>
         </select>
         <select value={grade} onChange={(e) => setGrade(e.target.value)} className="input max-w-[140px]">
-          <option value="">All grades</option>
-          {grades.map((g) => <option key={g} value={g}>Grade {g}</option>)}
+          <option value="">Todos los grados</option>
+          {grades.map((g) => <option key={g} value={g}>Grado {g}</option>)}
         </select>
       </div>
 
@@ -118,7 +118,7 @@ export default function Materials() {
           </Link>
         ))}
         {filtered.length === 0 && (
-          <div className="card card-pad text-center text-sm text-ink-500">No matches.</div>
+          <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
         )}
       </div>
 
@@ -128,13 +128,13 @@ export default function Materials() {
           <table className="table min-w-[680px]">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Grade</th>
-                <th>Width</th>
-                <th>Price/unit</th>
-                <th>Composition</th>
-                <th className="text-right">Colors</th>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Grado</th>
+                <th>Ancho</th>
+                <th>Precio/unidad</th>
+                <th>Composición</th>
+                <th className="text-right">Colores</th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +154,7 @@ export default function Materials() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && <div className="px-5 py-10 text-center text-sm text-ink-500">No matches.</div>}
+        {filtered.length === 0 && <div className="px-5 py-10 text-center text-sm text-ink-500">Sin coincidencias.</div>}
       </div>
 
       <NewMaterialModal open={newOpen} onClose={() => setNewOpen(false)} />
@@ -189,27 +189,27 @@ function NewMaterialModal({ open, onClose }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add material" footer={
+    <Modal open={open} onClose={onClose} title="Agregar material" footer={
       <>
-        <button onClick={onClose} className="btn-ghost">Cancel</button>
-        <button onClick={save} className="btn-primary">Create</button>
+        <button onClick={onClose} className="btn-ghost">Cancelar</button>
+        <button onClick={save} className="btn-primary">Crear</button>
       </>
     }>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <div className="label">Name *</div>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DIVA" />
+          <div className="label">Nombre *</div>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="p. ej. DIVA" />
         </div>
         <div>
-          <div className="label">Type</div>
+          <div className="label">Tipo</div>
           <select className="input" value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="fabric">Fabric</option>
-            <option value="leather">Leather</option>
-            <option value="outdoor-fabric">Outdoor Fabric</option>
+            <option value="fabric">Tela</option>
+            <option value="leather">Cuero</option>
+            <option value="outdoor-fabric">Tela outdoor</option>
           </select>
         </div>
         <div>
-          <div className="label">Grade</div>
+          <div className="label">Grado</div>
           <select className="input" value={grade} onChange={(e) => setGrade(e.target.value)}>
             {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((g) => <option key={g} value={g}>{g}</option>)}
           </select>

@@ -6,7 +6,7 @@ export default function ProfileMenu() {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
 
-  const displayName = user?.user_metadata?.name || user?.email || 'Member';
+  const displayName = user?.user_metadata?.name || user?.email || 'Miembro';
 
   async function handleSignOut() {
     setOpen(false);
@@ -17,7 +17,7 @@ export default function ProfileMenu() {
     <div className="border-t border-ink-800 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] relative">
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 bg-ink-800 rounded-md border border-ink-700 shadow-xl py-1">
-          <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-ink-400">Signed in as</div>
+          <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-ink-400">Sesión iniciada como</div>
           <div className="px-3 pb-2 text-xs text-ink-200 truncate" title={user?.email || ''}>
             {user?.email || '—'}
           </div>
@@ -26,7 +26,7 @@ export default function ProfileMenu() {
             onClick={handleSignOut}
             className="w-full text-left px-3 py-2 text-sm text-ink-200 hover:bg-ink-700 flex items-center gap-2"
           >
-            <LogOut size={14} /> Sign out
+            <LogOut size={14} /> Cerrar sesión
           </button>
         </div>
       )}

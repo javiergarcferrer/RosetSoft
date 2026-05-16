@@ -7,6 +7,14 @@ import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 
+const STATUS_LABELS = {
+  draft: 'Borrador',
+  sent: 'Enviada',
+  accepted: 'Aceptada',
+  declined: 'Rechazada',
+  archived: 'Archivada',
+};
+
 export default function Dashboard() {
   const { profileId, settings } = useApp();
   const counts = useLiveQuery(async () => ({
@@ -25,29 +33,29 @@ export default function Dashboard() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        subtitle={`${settings?.companyName || 'Your Company'} · ${counts.products} products · ${counts.materials} materials`}
+        title="Inicio"
+        subtitle={`${settings?.companyName || 'Tu empresa'} · ${counts.products} productos · ${counts.materials} materiales`}
         actions={
-          <Link to="/quotes/new" className="btn-primary">New quote</Link>
+          <Link to="/quotes/new" className="btn-primary">Nueva cotización</Link>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Sofa} label="Products" value={counts.products} to="/catalog" />
-        <StatCard icon={Palette} label="Materials" value={counts.materials} to="/materials" />
-        <StatCard icon={Users} label="Customers" value={counts.customers} to="/customers" />
-        <StatCard icon={FileText} label="Quotes" value={counts.quotes} to="/quotes" />
+        <StatCard icon={Sofa} label="Productos" value={counts.products} to="/catalog" />
+        <StatCard icon={Palette} label="Materiales" value={counts.materials} to="/materials" />
+        <StatCard icon={Users} label="Clientes" value={counts.customers} to="/customers" />
+        <StatCard icon={FileText} label="Cotizaciones" value={counts.quotes} to="/quotes" />
       </div>
 
       <div className="card mt-6">
         <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between">
-          <h2 className="font-semibold">Recent quotes</h2>
+          <h2 className="font-semibold">Cotizaciones recientes</h2>
           <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
-            See all <ArrowRight size={12} />
+            Ver todas <ArrowRight size={12} />
           </Link>
         </div>
         {recentQuotes.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-ink-500">No quotes yet.</div>
+          <div className="px-5 py-10 text-center text-sm text-ink-500">Aún no hay cotizaciones.</div>
         ) : (
           <>
             {/* Mobile: card list */}
@@ -61,11 +69,11 @@ export default function Dashboard() {
               <table className="table min-w-[720px]">
                 <thead>
                   <tr>
-                    <th>Number</th>
-                    <th>Name</th>
-                    <th>Customer</th>
-                    <th>Status</th>
-                    <th>Updated</th>
+                    <th>Número</th>
+                    <th>Nombre</th>
+                    <th>Cliente</th>
+                    <th>Estado</th>
+                    <th>Actualizada</th>
                     <th className="text-right">Total</th>
                   </tr>
                 </thead>
@@ -110,7 +118,7 @@ function RecentQuoteRow({ q }) {
       <td><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
       <td className="max-w-[220px] truncate" title={q.name || ''}>{q.name || '—'}</td>
       <td className="text-ink-700">{customer?.name || '—'}</td>
-      <td><span className="badge capitalize">{q.status || 'draft'}</span></td>
+      <td><span className="badge">{STATUS_LABELS[q.status] || 'Borrador'}</span></td>
       <td className="text-ink-500">{formatDateTime(q.updatedAt)}</td>
       <td className="text-right font-medium">{formatMoney(total, q.currencyCode || 'USD', q.rates || { USD: 1 })}</td>
     </tr>
@@ -137,7 +145,7 @@ function RecentQuoteCard({ q }) {
           </div>
         </div>
         <div className="mt-1.5">
-          <span className="badge capitalize">{q.status || 'draft'}</span>
+          <span className="badge">{STATUS_LABELS[q.status] || 'Borrador'}</span>
         </div>
       </Link>
     </li>
