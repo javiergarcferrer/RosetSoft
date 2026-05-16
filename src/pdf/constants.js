@@ -15,10 +15,6 @@ export const MARGIN_T = 56;
 export const MARGIN_B = 56;
 export const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
 
-// A hair more than the rendered line-row height (60). Used to detect when
-// the next row would clip the bottom margin so we page-break beforehand.
-export const LINE_ROW_RESERVED = 64;
-
 // Tuned to mirror the app's ink palette + brand accent
 export const INK       = rgb(0.09, 0.085, 0.07);   // ink-900
 export const INK_HIGH  = rgb(0.23, 0.22, 0.19);    // ink-800

@@ -11,22 +11,110 @@ import { embedImageById } from './embed.js';
 // indirection), so every field below comes straight from the quote_lines row:
 // line.imageId, line.family, line.name, line.subtype, line.reference,
 // line.dimensions, line.yardage, line.notes, line.unitPrice.
+//
+// Furniture-quote tuning: the product image was bumped 48 → 72pt (1.5×) so
+// sofas / chairs read as recognizable photos rather than thumbnails. The item
+// column gives back ~35pt to absorb the image growth; the spec column gains
+// 10pt for richer dimensions/material text; the numeric block was pulled
+// slightly left of the right margin to keep ≥18pt gaps between values.
 function lineColumns() {
   const right = PAGE_W - MARGIN_R;
-  // The numeric block (qty / unit / total) was pushed ~15pt right of its prior
-  // anchor so the spec column gains room for ~22 chars without crashing into
-  // the qty value on the shared name baseline. Inter-column gaps stay ≥15pt
-  // even for $X,XXX.XX-class values.
   return {
-    img:  { x: MARGIN_L + 8,   size: 48 },
-    item: { x: MARGIN_L + 68,  w: 200 },
-    spec: { x: MARGIN_L + 280, w: 120 },
-    qty:  { rightX: right - 110, label: 'CANT.' },
-    unit: { rightX: right - 60,  label: 'UNIT.' },
+    img:  { x: MARGIN_L + 8,   size: 72 },
+    item: { x: MARGIN_L + 92,  w: 165 },
+    spec: { x: MARGIN_L + 269, w: 140 },
+    qty:  { rightX: right - 130, label: 'CANT.' },
+    unit: { rightX: right - 65,  label: 'UNIT.' },
     tot:  { rightX: right - 4,   label: 'TOTAL' },
     itemLabel: 'ARTÍCULO',
     specLabel: 'DETALLE',
   };
+}
+
+// Image box (size + 6pt padding from row top) + 6pt below = 84pt minimum row.
+const IMAGE_SIZE = 72;
+const ROW_MIN_H = IMAGE_SIZE + 12;
+const ROW_TOP_PAD = 12;        // innerTop offset (matches the y-from-rowY)
+const ROW_BOTTOM_PAD = 6;      // padding below content before the hairline
+const SPEC_LINE_H = 11;        // line height for 8.5pt spec text
+const SPEC_LINE_H_SMALL = 10;  // line height for 7.5pt description text
+
+/**
+ * Word-wrap `text` so each output line fits within `maxWidth` when rendered
+ * with `font` at `size`. A single word longer than `maxWidth` is pushed
+ * unbroken — the caller asked us not to hide content, so an oversize token
+ * overflows visually rather than disappearing.
+ */
+function wrapToWidth(text, maxWidth, font, size) {
+  const words = (text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const out = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur ? cur + ' ' + w : w;
+    if (font.widthOfTextAtSize(next, size) > maxWidth) {
+      if (cur) {
+        out.push(cur);
+        cur = w;
+      } else {
+        out.push(w);
+        cur = '';
+      }
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
+ * Spec fields rendered top-to-bottom in the spec column, in order. Returned
+ * as an iterable so measure + draw share one source of truth.
+ */
+function specSegments(line) {
+  const segs = [];
+  if (line.dimensions) segs.push({ text: line.dimensions, size: 8.5, lh: SPEC_LINE_H,       color: INK_HIGH });
+  if (line.yardage)    segs.push({ text: line.yardage,    size: 8.5, lh: SPEC_LINE_H,       color: INK_MID  });
+  if (line.description) segs.push({ text: line.description, size: 7.5, lh: SPEC_LINE_H_SMALL, color: INK_SOFT });
+  return segs;
+}
+
+/** First-spec-line width: capped to leave ~28pt for the qty value + gap. */
+function specMaxWidth(cols) {
+  return cols.qty.rightX - cols.spec.x - 28;
+}
+
+/**
+ * How tall this row will render, including dynamic spec-column wrapping.
+ * Exposed so the page-break check can decide whether the row fits before
+ * we actually draw it.
+ */
+export function measureLineRowHeight(ctx, line) {
+  const { fontRegular } = ctx;
+  const cols = lineColumns();
+  const maxW = specMaxWidth(cols);
+
+  // Item column depth (measured as pt below rowY, mirroring the draw code).
+  let itemDepth = ROW_TOP_PAD;
+  if (line.family) itemDepth += 10;
+  itemDepth += 12;                       // bold name
+  if (line.subtype) itemDepth += 11;
+  if (line.reference) itemDepth += 10;
+  if (line.notes) itemDepth += 10;
+
+  // Spec column depth — starts at the bold-name baseline.
+  let specDepth = ROW_TOP_PAD + (line.family ? 10 : 0);
+  for (const seg of specSegments(line)) {
+    const lines = wrapToWidth(seg.text, maxW, fontRegular, seg.size);
+    specDepth += lines.length * seg.lh;
+  }
+
+  // Image footprint: 48pt box + 6pt top padding.
+  const imageDepth = 6 + cols.img.size;
+
+  const contentDepth = Math.max(itemDepth, specDepth, imageDepth);
+  return Math.max(ROW_MIN_H, contentDepth + ROW_BOTTOM_PAD);
 }
 
 /** Dark band with the column labels — repeated at the top of every new page. */
@@ -83,18 +171,22 @@ export function drawEmptyLineBody(page, ctx, cursor) {
  * Render one line item row. The line carries all of its fields directly —
  * no product/variant/material/color lookups — so this is just text + image
  * placement, no async resolution.
+ *
+ * Row height is dynamic: the spec column wraps to multiple lines if its
+ * content overflows the visible width, and the row grows downward to keep
+ * the wrapped lines visible. The 48pt image anchors to the top-left.
  */
 export async function drawLineRow(page, ctx, cursor, line) {
   const { doc, fontRegular, fontBold, fontItalic } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
-  const rowH = 60;
-  const innerTop = rowY - 12;
+  const innerTop = rowY - ROW_TOP_PAD;
 
-  // Image
+  // Image — anchored to the top of the row (no longer tied to rowH so the
+  // image stays put when the spec column grows the row).
   const img = await embedImageById(doc, line.imageId);
   const box = cols.img.size;
-  const boxY = rowY - rowH + 6;
+  const boxY = rowY - 6 - box;
   page.drawRectangle({
     x: cols.img.x, y: boxY, width: box, height: box,
     color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
@@ -134,23 +226,24 @@ export async function drawLineRow(page, ctx, cursor, line) {
   }
   if (line.notes) {
     page.drawText(truncate('Nota: ' + line.notes, 52), { x: cols.item.x, y, size: 7.5, font: fontItalic || fontRegular, color: INK_MID });
+    y -= 10;
   }
+  const itemBottomY = y;
 
-  // Spec column: dimensions / yardage / description — first line aligned with
-  // the bold name (so it doesn't drift up next to the small family caps).
+  // Spec column: wrap each field to multiple lines as needed. The width cap
+  // keeps the first line clear of the qty value on the shared baseline;
+  // subsequent wrap lines reuse the same width for a clean column edge.
   const specX = cols.spec.x;
+  const maxW = specMaxWidth(cols);
   let sy = nameY;
-  if (line.dimensions) {
-    page.drawText(truncate(line.dimensions, 22), { x: specX, y: sy, size: 8.5, font: fontRegular, color: INK_HIGH });
-    sy -= 11;
+  for (const seg of specSegments(line)) {
+    const wrappedLines = wrapToWidth(seg.text, maxW, fontRegular, seg.size);
+    for (const ln of wrappedLines) {
+      page.drawText(ln, { x: specX, y: sy, size: seg.size, font: fontRegular, color: seg.color });
+      sy -= seg.lh;
+    }
   }
-  if (line.yardage) {
-    page.drawText(truncate(line.yardage, 22), { x: specX, y: sy, size: 8.5, font: fontRegular, color: INK_MID });
-    sy -= 11;
-  }
-  if (line.description) {
-    page.drawText(truncate(line.description, 28), { x: specX, y: sy, size: 7.5, font: fontRegular, color: INK_SOFT });
-  }
+  const specBottomY = sy;
 
   // Qty / Unit / Total — aligned with the bold name baseline (same anchor as spec)
   const numY = nameY;
@@ -160,13 +253,18 @@ export async function drawLineRow(page, ctx, cursor, line) {
   drawRightAt(page, formatMoney(unit, ctx.currency, ctx.rates), cols.unit.rightX, numY, 10, fontRegular, INK_HIGH);
   drawRightAt(page, formatMoney(total, ctx.currency, ctx.rates), cols.tot.rightX, numY, 10.5, fontBold, INK);
 
-  // Hairline separator
+  // Row bottom: deepest content (item / spec / image) + padding, with a
+  // 60pt floor so single-line rows still have visual weight.
+  const contentBottomY = Math.min(itemBottomY, specBottomY, boxY);
+  const minRowBottom = rowY - ROW_MIN_H;
+  const rowBottom = Math.min(minRowBottom, contentBottomY - ROW_BOTTOM_PAD);
+
   page.drawLine({
-    start: { x: MARGIN_L, y: rowY - rowH },
-    end: { x: PAGE_W - MARGIN_R, y: rowY - rowH },
+    start: { x: MARGIN_L, y: rowBottom },
+    end: { x: PAGE_W - MARGIN_R, y: rowBottom },
     thickness: 0.5,
     color: INK_LINE,
   });
 
-  return { x: MARGIN_L, y: rowY - rowH };
+  return { x: MARGIN_L, y: rowBottom };
 }

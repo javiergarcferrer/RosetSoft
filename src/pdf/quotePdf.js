@@ -1,10 +1,10 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
-  PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B, LINE_ROW_RESERVED,
+  PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
 import { embedImageById } from './embed.js';
 import { drawHeader, drawQuoteMeta, drawCustomerBlock } from './header.js';
-import { drawLineHeader, drawLineRow, drawEmptyLineBody } from './lines.js';
+import { drawLineHeader, drawLineRow, drawEmptyLineBody, measureLineRowHeight } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 
 /**
@@ -49,9 +49,10 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
     cursor = drawEmptyLineBody(page, ctx, cursor);
   } else {
     for (const line of lines) {
-      // LINE_ROW_RESERVED slightly exceeds the actual row height so we wrap
-      // to a new page a hair before a row would clip the bottom margin.
-      if (cursor.y - LINE_ROW_RESERVED < MARGIN_B + 80) {
+      // Row height is dynamic (spec wraps + image footprint), so ask the
+      // row to measure itself before deciding whether it fits on this page.
+      const rowH = measureLineRowHeight(ctx, line);
+      if (cursor.y - rowH - 4 < MARGIN_B + 80) {
         page = doc.addPage([PAGE_W, PAGE_H]);
         cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         cursor = drawLineHeader(page, ctx, cursor);
