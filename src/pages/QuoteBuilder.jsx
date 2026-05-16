@@ -163,6 +163,10 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
     try { localStorage.setItem(PDF_PANEL_STORAGE_KEY, pdfOpen ? '1' : '0'); } catch {}
   }, [pdfOpen]);
 
+  // When `addLine` runs we stash the new id here so the matching row can
+  // auto-focus its reference input on mount. One-shot — cleared after consumption.
+  const [focusLineId, setFocusLineId] = useState(null);
+
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
   async function updateQuote(patch) {
@@ -172,8 +176,9 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
 
   async function addLine() {
     await ensurePersisted();
+    const id = newId();
     await db.quoteLines.put({
-      id: newId(),
+      id,
       quoteId,
       sortOrder: lines.length,
       family: '',
@@ -191,6 +196,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
       lineDiscountPct: 0,
       notes: '',
     });
+    setFocusLineId(id);
   }
 
   async function updateLine(id, patch) {
@@ -290,6 +296,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                       key={l.id}
                       line={l}
                       quote={quote}
+                      autoFocus={l.id === focusLineId}
                       onChange={(patch) => updateLine(l.id, patch)}
                       onRemove={() => removeLine(l.id)}
                     />
@@ -307,7 +314,7 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                         <th className="w-20 text-right">Cant.</th>
                         <th className="w-32 text-right">Unit.</th>
                         <th className="w-32 text-right">Total</th>
-                        <th className="w-8" />
+                        <th className="w-16" />
                       </tr>
                     </thead>
                     <tbody>
@@ -316,12 +323,21 @@ function Builder({ quoteId, navigate, draftQuote, materialize }) {
                           key={l.id}
                           line={l}
                           quote={quote}
+                          autoFocus={l.id === focusLineId}
                           onChange={(patch) => updateLine(l.id, patch)}
                           onRemove={() => removeLine(l.id)}
                         />
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Repeat-add button at the bottom so the user can keep
+                    transcribing PDF rows without scrolling back to the top. */}
+                <div className="px-5 py-3 border-t border-ink-100 flex justify-end">
+                  <button onClick={addLine} className="btn-secondary text-xs">
+                    <Plus size={12} /> Agregar otra línea
+                  </button>
                 </div>
               </>
             )}

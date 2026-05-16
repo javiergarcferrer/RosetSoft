@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 
 // Local-state-backed input that commits to onCommit either ~delay ms after
 // typing stops, or on blur — whichever comes first. Decouples the input from
@@ -46,12 +46,18 @@ function useDebouncedField(remote, onCommit, delay) {
   };
 }
 
-export function DebouncedInput({ value, onCommit, delay = 400, ...rest }) {
+export const DebouncedInput = forwardRef(function DebouncedInput(
+  { value, onCommit, delay = 400, ...rest },
+  ref,
+) {
   const field = useDebouncedField(value, onCommit, delay);
-  return <input {...rest} {...field} />;
-}
+  return <input ref={ref} {...rest} {...field} />;
+});
 
-export function DebouncedTextarea({ value, onCommit, delay = 400, ...rest }) {
+export const DebouncedTextarea = forwardRef(function DebouncedTextarea(
+  { value, onCommit, delay = 400, ...rest },
+  ref,
+) {
   const field = useDebouncedField(value, onCommit, delay);
-  return <textarea {...rest} {...field} />;
-}
+  return <textarea ref={ref} {...rest} {...field} />;
+});

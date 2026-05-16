@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown } from 'lucide-react';
 import ImageDrop from '../ImageDrop.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
@@ -12,8 +12,15 @@ import QtyStepper from './QtyStepper.jsx';
  * the middle, and a collapsible "Más detalles" panel for dimensions /
  * yardage / margin / discount / description / notes.
  */
-export default function QuoteLineCard({ line, quote, onChange, onRemove }) {
+export default function QuoteLineCard({ line, quote, onChange, onRemove, autoFocus }) {
   const [expanded, setExpanded] = useState(false);
+  const refInput = useRef(null);
+  useEffect(() => {
+    if (autoFocus && refInput.current) {
+      refInput.current.focus();
+      refInput.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [autoFocus]);
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const lineTotal = unit * (line.qty || 0);
   const fmt = (v) => formatMoney(v, quote.currencyCode || 'USD', quote.rates || { USD: 1 });
@@ -44,6 +51,7 @@ export default function QuoteLineCard({ line, quote, onChange, onRemove }) {
               onCommit={(v) => onChange({ family: v })}
             />
             <DebouncedInput
+              ref={refInput}
               className="input font-mono text-xs"
               placeholder="Ref."
               value={line.reference || ''}
