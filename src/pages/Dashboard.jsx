@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Sofa, Palette, Users, ArrowRight } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
@@ -29,6 +29,27 @@ export default function Dashboard() {
     [profileId],
     []
   );
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const customersById = useMemo(() => {
+    const m = new Map();
+    for (const c of customers) m.set(c.id, c);
+    return m;
+  }, [customers]);
+
+  // Single batch fetch of all quote lines → derive per-quote totals. Replaces
+  // the per-row useLiveQuery that ran one round-trip per recent quote.
+  const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
+  const totalsByQuoteId = useMemo(() => {
+    const m = new Map();
+    for (const l of allLines) {
+      m.set(l.quoteId, (m.get(l.quoteId) || 0) + (l.qty || 0) * (l.unitPrice || 0));
+    }
+    return m;
+  }, [allLines]);
 
   return (
     <>
@@ -61,7 +82,12 @@ export default function Dashboard() {
             {/* Mobile: card list */}
             <ul className="md:hidden divide-y divide-ink-100">
               {recentQuotes.map((q) => (
-                <RecentQuoteCard key={q.id} q={q} />
+                <RecentQuoteCard
+                  key={q.id}
+                  q={q}
+                  customer={customersById.get(q.customerId)}
+                  total={totalsByQuoteId.get(q.id) || 0}
+                />
               ))}
             </ul>
             {/* Desktop: table */}
@@ -79,7 +105,12 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {recentQuotes.map((q) => (
-                    <RecentQuoteRow key={q.id} q={q} />
+                    <RecentQuoteRow
+                      key={q.id}
+                      q={q}
+                      customer={customersById.get(q.customerId)}
+                      total={totalsByQuoteId.get(q.id) || 0}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -107,12 +138,7 @@ function StatCard({ icon: Icon, label, value, to }) {
   );
 }
 
-function RecentQuoteRow({ q }) {
-  const customer = useLiveQuery(() => (q.customerId ? db.customers.get(q.customerId) : null), [q.customerId], null);
-  const total = useLiveQuery(async () => {
-    const lines = await db.quoteLines.where('quoteId').equals(q.id).toArray();
-    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-  }, [q.id], 0);
+function RecentQuoteRow({ q, customer, total }) {
   return (
     <tr>
       <td><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
@@ -125,12 +151,7 @@ function RecentQuoteRow({ q }) {
   );
 }
 
-function RecentQuoteCard({ q }) {
-  const customer = useLiveQuery(() => (q.customerId ? db.customers.get(q.customerId) : null), [q.customerId], null);
-  const total = useLiveQuery(async () => {
-    const lines = await db.quoteLines.where('quoteId').equals(q.id).toArray();
-    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-  }, [q.id], 0);
+function RecentQuoteCard({ q, customer, total }) {
   return (
     <li>
       <Link to={`/quotes/${q.id}`} className="block px-4 py-3 hover:bg-ink-50">

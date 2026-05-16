@@ -33,17 +33,13 @@ function describeQuote(q) {
 }
 
 /**
- * Shared row-level operations: derived total, delete confirm, container
- * assignment. The QuoteCard / QuoteRow components below have different
- * layouts but identical row-level behavior — keep that behavior here so
- * both stay in sync when (for example) the delete confirm copy changes.
+ * Shared row-level mutations: delete confirm, container assignment. The
+ * QuoteCard / QuoteRow components have different layouts but identical
+ * row behavior — keep it here so both stay in sync when (e.g.) the delete
+ * confirm copy changes. Totals are passed in as a prop because the parent
+ * fetches them all in a single batch.
  */
 function useQuoteOps(qu) {
-  const total = useLiveQuery(async () => {
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    return lines.reduce((acc, l) => acc + (l.qty || 0) * (l.unitPrice || 0), 0);
-  }, [qu.id], 0);
-
   async function del(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -59,7 +55,7 @@ function useQuoteOps(qu) {
     await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
   }
 
-  return { total, del, setContainer };
+  return { del, setContainer };
 }
 
 export default function Quotes() {
@@ -79,6 +75,10 @@ export default function Quotes() {
     [profileId],
     []
   );
+  // Batch fetch lines once → derive per-quote totals in O(N+M) instead of
+  // N round-trips for N visible quotes. Cheaper for the dashboard's six
+  // recent quotes and an order of magnitude cheaper for the full list page.
+  const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -88,6 +88,14 @@ export default function Quotes() {
     for (const c of customers) m.set(c.id, c);
     return m;
   }, [customers]);
+
+  const totalByQuoteId = useMemo(() => {
+    const m = new Map();
+    for (const l of allLines) {
+      m.set(l.quoteId, (m.get(l.quoteId) || 0) + (l.qty || 0) * (l.unitPrice || 0));
+    }
+    return m;
+  }, [allLines]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -150,6 +158,7 @@ export default function Quotes() {
             qu={qu}
             customer={customerById.get(qu.customerId)}
             allContainers={containers}
+            total={totalByQuoteId.get(qu.id) || 0}
           />
         ))}
         {filtered.length === 0 && (
@@ -180,6 +189,7 @@ export default function Quotes() {
                   qu={qu}
                   customer={customerById.get(qu.customerId)}
                   allContainers={containers}
+                  total={totalByQuoteId.get(qu.id) || 0}
                 />
               ))}
             </tbody>
@@ -190,8 +200,8 @@ export default function Quotes() {
   );
 }
 
-function QuoteCard({ qu, customer, allContainers }) {
-  const { total, del, setContainer } = useQuoteOps(qu);
+function QuoteCard({ qu, customer, allContainers, total }) {
+  const { del, setContainer } = useQuoteOps(qu);
 
   return (
     <div className="card p-3">
@@ -230,8 +240,8 @@ function QuoteCard({ qu, customer, allContainers }) {
   );
 }
 
-function QuoteRow({ qu, customer, allContainers }) {
-  const { total, del, setContainer } = useQuoteOps(qu);
+function QuoteRow({ qu, customer, allContainers, total }) {
+  const { del, setContainer } = useQuoteOps(qu);
 
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
