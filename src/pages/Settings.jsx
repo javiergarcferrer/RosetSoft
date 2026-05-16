@@ -8,6 +8,9 @@ import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { supabase, PRICELIST_BUCKET } from '../db/supabaseClient.js';
+import { db } from '../db/database.js';
+import { useLiveQuery } from '../db/hooks.js';
+import { STAGE_BY_KEY, currentStage } from '../lib/containerStages.js';
 
 export default function Settings() {
   const { profileId, settings, saveSettings } = useApp();
@@ -123,25 +126,7 @@ export default function Settings() {
           </div>
 
           {/* Containers */}
-          <div className="card card-pad">
-            <h2 className="font-semibold mb-1">Contenedores</h2>
-            <p className="text-xs text-ink-500 mb-3">
-              Un contenedor está listo para despachar cuando la suma de las cotizaciones fijadas alcanza este monto (en USD).
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="label">Monto mínimo para despacho (USD)</div>
-                <input
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={local.dispatchThreshold ?? 50000}
-                  onChange={(e) => set('dispatchThreshold', Math.max(0, Number(e.target.value) || 0))}
-                />
-              </div>
-            </div>
-          </div>
+          <ContainersCard local={local} set={set} />
         </div>
 
         {/* Sidebar */}
@@ -160,6 +145,61 @@ export default function Settings() {
         </div>
       </div>
     </>
+  );
+}
+
+function ContainersCard({ local, set }) {
+  const { profileId } = useApp();
+  const containers = useLiveQuery(
+    () => db.containers.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
+    [profileId],
+    [],
+  );
+  // Only "filling" containers make sense as the default — once a container
+  // is past FILLING you've stopped accepting new quotes into it.
+  const fillingContainers = containers.filter((c) => currentStage(c) === 'filling');
+  const defaultId = local.defaultContainerId || '';
+
+  return (
+    <div className="card card-pad">
+      <h2 className="font-semibold mb-3">Contenedores</h2>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div className="label">Contenedor predeterminado</div>
+          <select
+            className="input"
+            value={defaultId}
+            onChange={(e) => set('defaultContainerId', e.target.value || null)}
+          >
+            <option value="">— Ninguno —</option>
+            {fillingContainers.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.number}{c.name ? ` · ${c.name}` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Nuevas cotizaciones se fijan automáticamente a este contenedor.
+          </p>
+        </div>
+
+        <div>
+          <div className="label">Monto mínimo para despacho (USD)</div>
+          <input
+            className="input"
+            type="number"
+            min="0"
+            step="100"
+            value={local.dispatchThreshold ?? 50000}
+            onChange={(e) => set('dispatchThreshold', Math.max(0, Number(e.target.value) || 0))}
+          />
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Un contenedor llega al estado &ldquo;listo para cerrar&rdquo; al alcanzar este monto.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -55,6 +55,10 @@ function DraftBuilder({ profileId, settings, initialRef, navigate }) {
     number: null,
     name: '',
     customerId: null,
+    // New quotes auto-pin to the team's "currently filling" container if
+    // one is set. Avoids the per-quote container-picker step the dealer
+    // used to forget; can be unassigned manually later.
+    containerId: settings?.defaultContainerId || null,
     status: 'draft',
     currencyCode: 'USD',
     rates: settings?.currencyRates || { USD: 1 },

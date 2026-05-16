@@ -61,7 +61,7 @@ function useQuoteOps(qu) {
 export default function Quotes() {
   const { profileId } = useApp();
   const quotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).reverse().sortBy('updatedAt'),
+    () => db.quotes.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
     [profileId],
     []
   );

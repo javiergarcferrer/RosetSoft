@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle2, X, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle2, X, Search, ChevronRight, Undo2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
@@ -9,6 +9,10 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { downloadCsv } from '../lib/csv.js';
+import {
+  STAGES, STAGE_BY_KEY, FULFILLMENT_MILESTONES,
+  currentStage, nextStage, stageIndex,
+} from '../lib/containerStages.js';
 
 export default function ContainerDetail() {
   const { containerId } = useParams();
@@ -78,13 +82,25 @@ export default function ContainerDetail() {
     setPicker(false);
   }
 
-  async function markDispatched() {
-    if (!confirm(`Marcar el contenedor #${container.number} como despachado?`)) return;
-    await updateContainer({ status: 'dispatched', dispatchedAt: Date.now() });
+  // Stage transitions: advancing sets the timestamp on the target stage and
+  // updates `stage`; undoing clears the timestamp and falls back to the
+  // previous stage (so the dealer can recover from an accidental click).
+  async function advanceTo(stage) {
+    const ts = stage.timestampField;
+    const patch = { stage: stage.key };
+    if (ts) patch[ts] = Date.now();
+    await updateContainer(patch);
   }
-
-  async function reopen() {
-    await updateContainer({ status: 'open', dispatchedAt: null });
+  async function undoStage(stage) {
+    const ts = stage.timestampField;
+    const idx = stageIndex(stage.key);
+    const prev = STAGES[Math.max(0, idx - 1)];
+    const patch = { stage: prev.key };
+    if (ts) patch[ts] = null;
+    await updateContainer(patch);
+  }
+  async function updateQuoteMilestone(quoteId, patch) {
+    await db.quotes.update(quoteId, { ...patch, updatedAt: Date.now() });
   }
 
   function exportCsv() {
@@ -102,7 +118,7 @@ export default function ContainerDetail() {
     for (const q of pinnedWithTotals) {
       if (!q.lines.length) {
         rows.push([
-          container.number, container.name, container.code, container.status,
+          container.number, container.name, container.code, currentStage(container),
           q.number, q.name, q.customer?.name || '', q.customer?.company || '',
           new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
           '', '', '', '', '', '', '', '', '', '',
@@ -112,7 +128,7 @@ export default function ContainerDetail() {
       for (const l of q.lines) {
         const lineTotal = (l.qty || 0) * (l.unitPrice || 0);
         rows.push([
-          container.number, container.name, container.code, container.status,
+          container.number, container.name, container.code, currentStage(container),
           q.number, q.name, q.customer?.name || '', q.customer?.company || '',
           new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
           l.family || '', l.name || '', l.subtype || '', l.reference || '',
@@ -128,6 +144,10 @@ export default function ContainerDetail() {
     downloadCsv(`Container-${container.number || container.id}.csv`, rows);
   }
 
+  const stage = currentStage(container);
+  const stageDef = STAGE_BY_KEY[stage];
+  const next = nextStage(stage);
+
   return (
     <>
       <Link to="/containers" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3">
@@ -135,22 +155,21 @@ export default function ContainerDetail() {
       </Link>
       <PageHeader
         title={`Contenedor #${container.number}`}
-        subtitle={`Actualizado ${formatDateTime(container.updatedAt)}${container.dispatchedAt ? ` · Despachado ${formatDateTime(container.dispatchedAt)}` : ''}`}
+        subtitle={`${stageDef.label} · Actualizado ${formatDateTime(container.updatedAt)}`}
         actions={
-          <>
-            <button onClick={exportCsv} className="btn-secondary"><Download size={14} /> Exportar CSV</button>
-            {container.status === 'dispatched' ? (
-              <button onClick={reopen} className="btn-ghost">Reabrir</button>
-            ) : (
-              <button onClick={markDispatched} disabled={!ready} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                <CheckCircle2 size={14} /> Marcar despachado
-              </button>
-            )}
-          </>
+          <button onClick={exportCsv} className="btn-secondary"><Download size={14} /> Exportar CSV</button>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <StageStepper
+        container={container}
+        stage={stage}
+        next={next}
+        onAdvance={advanceTo}
+        onUndo={undoStage}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2 space-y-4">
           {/* Meta */}
           <div className="card card-pad space-y-3">
@@ -197,68 +216,41 @@ export default function ContainerDetail() {
                 Sin cotizaciones — usa <b>Fijar cotización</b> para añadir.
               </div>
             ) : (
-              <>
-                {/* Mobile cards */}
-                <div className="md:hidden divide-y divide-ink-100">
+              /* Customer roll-up — one card per pinned quote, each with
+                 fulfillment pills so the dealer can mark per-customer
+                 milestones (notified / deposit / specs / balance /
+                 delivery) without leaving this page. */
+              <ul className="divide-y divide-ink-100">
                   {pinnedWithTotals.map((q) => (
-                    <div key={q.id} className="p-3 flex items-start gap-2">
-                      <Link to={`/quotes/${q.id}`} className="flex-1 min-w-0 block">
-                        <div className="text-sm font-semibold">#{q.number || '—'}{q.name ? ` · ${q.name}` : ''}</div>
-                        <div className="text-xs text-ink-700 truncate">{q.customer?.name || 'Sin cliente'}</div>
-                        <div className="text-[11px] text-ink-500 mt-0.5">
-                          {q.lines.length} {q.lines.length === 1 ? 'línea' : 'líneas'} · {formatDateTime(q.updatedAt)}
+                    <li key={q.id} className="p-3 sm:p-4">
+                      <div className="flex items-start gap-3 flex-wrap">
+                        <Link to={`/quotes/${q.id}`} className="flex-1 min-w-[200px] block">
+                          <div className="text-sm font-semibold truncate">
+                            #{q.number || '—'}{q.name ? ` · ${q.name}` : ''}
+                          </div>
+                          <div className="text-xs text-ink-700 truncate">{q.customer?.name || 'Sin cliente'}</div>
+                          <div className="text-[11px] text-ink-500 mt-0.5">
+                            {q.lines.length} {q.lines.length === 1 ? 'línea' : 'líneas'} · Act. {formatDateTime(q.updatedAt)}
+                          </div>
+                        </Link>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <div className="text-sm font-medium tabular-nums whitespace-nowrap">{formatMoney(q.total, 'USD', { USD: 1 })}</div>
+                          <button
+                            onClick={() => unpin(q.id)}
+                            className="text-ink-400 hover:text-red-600 p-1"
+                            aria-label="Quitar del contenedor"
+                            title="Quitar del contenedor"
+                          >
+                            <X size={16} />
+                          </button>
                         </div>
-                      </Link>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <div className="text-sm font-medium">{formatMoney(q.total, 'USD', { USD: 1 })}</div>
-                        <button
-                          onClick={() => unpin(q.id)}
-                          className="text-ink-400 hover:text-red-600 p-2 -m-1"
-                          aria-label="Quitar del contenedor"
-                        >
-                          <X size={18} />
-                        </button>
                       </div>
-                    </div>
+                      <div className="mt-2">
+                        <FulfillmentPills quote={q} onChange={(p) => updateQuoteMilestone(q.id, p)} />
+                      </div>
+                    </li>
                   ))}
-                </div>
-
-                {/* Desktop table — fluid; secondary columns hide at narrow widths */}
-                <div className="hidden md:block">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Número</th>
-                        <th>Cliente</th>
-                        <th className="hidden lg:table-cell">Nombre</th>
-                        <th className="hidden lg:table-cell">Líneas</th>
-                        <th className="hidden xl:table-cell">Actualizado</th>
-                        <th className="text-right">Total</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pinnedWithTotals.map((q) => (
-                        <tr key={q.id}>
-                          <td className="font-medium whitespace-nowrap">
-                            <Link to={`/quotes/${q.id}`} className="hover:underline">#{q.number || '—'}</Link>
-                          </td>
-                          <td className="text-ink-700 truncate max-w-[180px]" title={q.customer?.name || ''}>{q.customer?.name || '—'}</td>
-                          <td className="hidden lg:table-cell truncate max-w-[200px]" title={q.name || ''}>{q.name || '—'}</td>
-                          <td className="hidden lg:table-cell text-ink-500">{q.lines.length}</td>
-                          <td className="hidden xl:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(q.updatedAt)}</td>
-                          <td className="text-right font-medium whitespace-nowrap">{formatMoney(q.total, 'USD', { USD: 1 })}</td>
-                          <td className="text-right w-8">
-                            <button onClick={() => unpin(q.id)} className="text-ink-400 hover:text-red-600" title="Quitar del contenedor">
-                              <X size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                </ul>
             )}
           </div>
         </div>
@@ -266,26 +258,34 @@ export default function ContainerDetail() {
         {/* Sidebar */}
         <div className="space-y-4">
           <div className="card card-pad space-y-3">
-            <h2 className="font-semibold text-sm">Progreso de despacho</h2>
+            <h2 className="font-semibold text-sm">Revenue</h2>
             <div className="text-3xl font-semibold">{formatMoney(containerTotal, 'USD', { USD: 1 })}</div>
-            <div className="text-xs text-ink-500">de {formatMoney(threshold, 'USD', { USD: 1 })} mínimo</div>
-            <div className="w-full h-2 bg-ink-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                style={{ width: `${pct}%` }}
-              />
+            <div className="text-xs text-ink-500">
+              {pinnedWithTotals.length} {pinnedWithTotals.length === 1 ? 'cotización' : 'cotizaciones'}
             </div>
-            <div className="text-xs">
-              {ready ? (
-                <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                  <CheckCircle2 size={12} /> Listo para despacho
-                </span>
-              ) : (
-                <span className="text-ink-500">
-                  Faltan {formatMoney(threshold - containerTotal, 'USD', { USD: 1 })}
-                </span>
-              )}
-            </div>
+            {/* Dispatch-minimum bar matters during FILLING only — once the
+                container has moved on, the threshold is history. */}
+            {stage === 'filling' && (
+              <>
+                <div className="w-full h-2 bg-ink-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="text-xs">
+                  {ready ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                      <CheckCircle2 size={12} /> Mínimo de {formatMoney(threshold, 'USD', { USD: 1 })} alcanzado
+                    </span>
+                  ) : (
+                    <span className="text-ink-500">
+                      Faltan {formatMoney(threshold - containerTotal, 'USD', { USD: 1 })} para el mínimo de despacho
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -409,3 +409,114 @@ function QuotePickerModal({ open, onClose, onPick, quotes, customers, linesByQuo
     </Modal>
   );
 }
+
+function StageStepper({ container, stage, next, onAdvance, onUndo }) {
+  const currentIdx = stageIndex(stage);
+  const prev = currentIdx > 0 ? STAGES[currentIdx - 1] : null;
+  const isComplete = stage === "complete";
+  return (
+    <div className="card card-pad space-y-4">
+      {/* Horizontal stepper. Each cell renders the dot + label + date; a
+          single track sits behind the dots showing progress. */}
+      <div className="relative">
+        <div className="absolute top-3 left-0 right-0 h-0.5 bg-ink-100" />
+        <div
+          className="absolute top-3 left-0 h-0.5 bg-brand-500 transition-all"
+          style={{ width: `${(currentIdx / (STAGES.length - 1)) * 100}%` }}
+        />
+        <div className="relative flex justify-between gap-1">
+          {STAGES.map((s, i) => {
+            const ts = s.timestampField ? container[s.timestampField] : container.createdAt;
+            const isPast = i < currentIdx;
+            const isCurrent = i === currentIdx;
+            return (
+              <div key={s.key} className="flex flex-col items-center text-center flex-1 min-w-0">
+                <div
+                  className={`w-6 h-6 rounded-full border-2 z-10 flex items-center justify-center
+                    ${isPast || (isCurrent && i === STAGES.length - 1)
+                      ? "bg-brand-500 border-brand-500 text-white"
+                      : isCurrent
+                        ? "bg-white border-brand-500 ring-2 ring-brand-200"
+                        : "bg-white border-ink-200"}`}
+                >
+                  {(isPast || (isCurrent && i === STAGES.length - 1)) && <CheckCircle2 size={12} />}
+                </div>
+                <div
+                  className={`mt-1.5 text-[10px] font-semibold uppercase tracking-wide truncate w-full
+                    ${isCurrent ? "text-brand-700" : isPast ? "text-ink-700" : "text-ink-400"}`}
+                  title={s.label}
+                >
+                  {s.label}
+                </div>
+                <div className="text-[10px] text-ink-500 mt-0.5">
+                  {ts ? new Date(ts).toLocaleDateString() : "—"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="pt-3 border-t border-ink-100 flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">Estado actual</div>
+          <div className="text-sm font-semibold mt-0.5">{STAGE_BY_KEY[stage].label}</div>
+          <div className="text-xs text-ink-500 mt-1">{STAGE_BY_KEY[stage].description}</div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {prev && (
+            <button
+              onClick={() => {
+                if (confirm(`Regresar a ${prev.label}?`)) onUndo(STAGE_BY_KEY[stage]);
+              }}
+              className="btn-ghost text-xs"
+              title="Volver al paso anterior"
+            >
+              <Undo2 size={12} /> Volver
+            </button>
+          )}
+          {next ? (
+            <button
+              onClick={() => {
+                if (confirm(`Avanzar a ${next.label}? Esto registra la transición con la fecha de hoy.`)) onAdvance(next);
+              }}
+              className="btn-primary"
+            >
+              Avanzar a {next.label} <ChevronRight size={14} />
+            </button>
+          ) : isComplete ? (
+            <span className="inline-flex items-center gap-1 text-emerald-700 text-sm font-medium">
+              <CheckCircle2 size={14} /> Completado
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FulfillmentPills({ quote, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {FULFILLMENT_MILESTONES.map((m) => {
+        const ts = quote[m.key];
+        const done = !!ts;
+        return (
+          <button
+            key={m.key}
+            onClick={() => onChange({ [m.key]: done ? null : Date.now() })}
+            title={`${m.title}${done ? ` · ${new Date(ts).toLocaleDateString()}` : ""}`}
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors
+              ${done
+                ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                : "bg-white text-ink-500 border-ink-200 hover:border-ink-400 hover:text-ink-700"}`}
+          >
+            {done && <CheckCircle2 size={9} className="inline mr-0.5 -mt-px" />}
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+

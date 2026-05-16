@@ -1,16 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Container as ContainerIcon, Trash2, CheckCircle2 } from 'lucide-react';
+import { Plus, Container as ContainerIcon, Trash2, CheckCircle2, Star } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { STAGE_BY_KEY, currentStage } from '../lib/containerStages.js';
 
-const STATUS_STYLES = {
-  open: 'bg-blue-100 text-blue-800',
-  dispatched: 'bg-emerald-100 text-emerald-800',
+const STAGE_STYLES = {
+  filling:    'bg-blue-100 text-blue-800',
+  submitting: 'bg-amber-100 text-amber-800',
+  ordered:    'bg-violet-100 text-violet-800',
+  in_transit: 'bg-sky-100 text-sky-800',
+  landing:    'bg-orange-100 text-orange-800',
+  complete:   'bg-emerald-100 text-emerald-800',
 };
 
 export default function Containers() {
@@ -24,10 +29,16 @@ export default function Containers() {
   );
 
   const allQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.isCart).toArray(),
+    () => db.quotes.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
   );
+
+  const defaultContainerId = settings?.defaultContainerId || null;
+
+  async function setDefault(id) {
+    await saveSettings({ defaultContainerId: id });
+  }
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
   const { totalsByContainer, quoteCountByContainer } = useMemo(() => {
@@ -56,7 +67,7 @@ export default function Containers() {
       number,
       name: '',
       code: '',
-      status: 'open',
+      stage: 'filling',
       notes: '',
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -99,12 +110,18 @@ export default function Containers() {
           const count = quoteCountByContainer.get(c.id) || 0;
           const pct = threshold > 0 ? Math.min(100, (total / threshold) * 100) : 0;
           const ready = total >= threshold;
+          const stg = currentStage(c);
+          const stageDef = STAGE_BY_KEY[stg];
+          const isDefault = defaultContainerId === c.id;
           return (
             <div key={c.id} className="card p-3">
               <Link to={`/containers/${c.id}`} className="block">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-sm">#{c.number || '—'}{c.name ? ` · ${c.name}` : ''}</div>
+                    <div className="font-semibold text-sm inline-flex items-center gap-1.5">
+                      #{c.number || '—'}{c.name ? ` · ${c.name}` : ''}
+                      {isDefault && <Star size={12} className="text-amber-500 fill-amber-500" aria-label="Contenedor por defecto" />}
+                    </div>
                     {c.code && <div className="font-mono text-[11px] text-ink-500">{c.code}</div>}
                     <div className="text-[11px] text-ink-500 mt-1">
                       {count} {count === 1 ? 'cotización' : 'cotizaciones'} · {formatDateTime(c.updatedAt)}
@@ -112,23 +129,36 @@ export default function Containers() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className="text-sm font-medium">{formatMoney(total, 'USD', { USD: 1 })}</div>
-                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium capitalize mt-1 ${STATUS_STYLES[c.status] || 'bg-ink-100 text-ink-700'}`}>
-                      {c.status === 'dispatched' ? 'Despachado' : 'Abierto'}
-                      {ready && c.status === 'open' && <CheckCircle2 size={10} />}
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium mt-1 ${STAGE_STYLES[stg]}`}>
+                      {stageDef.label}
+                      {stg === 'filling' && ready && <CheckCircle2 size={10} />}
                     </span>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-ink-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                      style={{ width: `${pct}%` }}
-                    />
+                {stg === 'filling' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-ink-500 w-9 text-right">{Math.round(pct)}%</span>
                   </div>
-                  <span className="text-[11px] text-ink-500 w-9 text-right">{Math.round(pct)}%</span>
-                </div>
+                )}
               </Link>
-              <div className="flex justify-end mt-1">
+              <div className="flex items-center justify-between mt-1">
+                <button
+                  onClick={() => setDefault(isDefault ? null : c.id)}
+                  className={`text-xs inline-flex items-center gap-1 p-2 -ml-2 ${
+                    isDefault ? 'text-amber-600' : 'text-ink-400 hover:text-amber-600'
+                  }`}
+                  aria-label={isDefault ? 'Quitar como predeterminado' : 'Marcar como predeterminado'}
+                  title={isDefault ? 'Predeterminado · toca para quitar' : 'Marcar como contenedor predeterminado para nuevas cotizaciones'}
+                >
+                  <Star size={14} className={isDefault ? 'fill-current' : ''} />
+                  {isDefault ? 'Predeterminado' : 'Hacer predeterminado'}
+                </button>
                 <button
                   onClick={() => del(c)}
                   className="text-ink-400 hover:text-red-600 p-2 -mr-2 -mb-1"
@@ -164,35 +194,55 @@ export default function Containers() {
               const count = quoteCountByContainer.get(c.id) || 0;
               const pct = threshold > 0 ? Math.min(100, (total / threshold) * 100) : 0;
               const ready = total >= threshold;
+              const stg = currentStage(c);
+              const stageDef = STAGE_BY_KEY[stg];
+              const isDefault = defaultContainerId === c.id;
               return (
                 <tr key={c.id} className="cursor-pointer" onClick={() => (window.location.hash = `#/containers/${c.id}`)}>
-                  <td className="font-medium whitespace-nowrap">#{c.number || '—'}</td>
+                  <td className="font-medium whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1">
+                      {isDefault && <Star size={12} className="text-amber-500 fill-amber-500" aria-label="Contenedor por defecto" />}
+                      #{c.number || '—'}
+                    </span>
+                  </td>
                   <td className="truncate max-w-[200px]" title={c.name || ''}>{c.name || '—'}</td>
                   <td className="hidden xl:table-cell font-mono text-xs text-ink-500 truncate max-w-[140px]" title={c.code || ''}>{c.code || '—'}</td>
                   <td className="hidden lg:table-cell text-ink-700">{count}</td>
                   <td>
-                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_STYLES[c.status] || 'bg-ink-100 text-ink-700'}`}>
-                      {c.status === 'dispatched' ? 'Despachado' : 'Abierto'}
-                      {ready && c.status === 'open' && <CheckCircle2 size={11} />}
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${STAGE_STYLES[stg]}`}>
+                      {stageDef.label}
+                      {stg === 'filling' && ready && <CheckCircle2 size={11} />}
                     </span>
                   </td>
                   <td className="hidden xl:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(c.updatedAt)}</td>
                   <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, 'USD', { USD: 1 })}</td>
                   <td className="hidden lg:table-cell text-right w-40">
-                    <div className="flex items-center gap-2 justify-end">
-                      <div className="w-24 h-1.5 bg-ink-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                          style={{ width: `${pct}%` }}
-                        />
+                    {stg === 'filling' ? (
+                      <div className="flex items-center gap-2 justify-end">
+                        <div className="w-24 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${ready ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-[11px] text-ink-500 w-9 text-right">{Math.round(pct)}%</span>
                       </div>
-                      <span className="text-[11px] text-ink-500 w-9 text-right">{Math.round(pct)}%</span>
-                    </div>
+                    ) : (
+                      <span className="text-xs text-ink-400">—</span>
+                    )}
                   </td>
-                  <td className="text-right w-10">
+                  <td className="text-right w-20 whitespace-nowrap">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDefault(isDefault ? null : c.id); }}
+                      className={`p-1 mr-0.5 ${isDefault ? 'text-amber-500' : 'text-ink-300 hover:text-amber-500'}`}
+                      title={isDefault ? 'Predeterminado · clic para quitar' : 'Marcar como predeterminado'}
+                      aria-label={isDefault ? 'Quitar como predeterminado' : 'Marcar como predeterminado'}
+                    >
+                      <Star size={13} className={isDefault ? 'fill-current' : ''} />
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); del(c); }}
-                      className="text-ink-400 hover:text-red-600"
+                      className="text-ink-400 hover:text-red-600 p-1"
                       title="Eliminar"
                     >
                       <Trash2 size={14} />
