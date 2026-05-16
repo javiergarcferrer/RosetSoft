@@ -1,0 +1,59 @@
+{
+  "name": "Roset Soft — Cotizaciones Ligne Roset",
+  "short_name": "Roset Soft",
+  "description": "Cotizaciones en la nube para distribuidores Ligne Roset",
+  "lang": "es-DO",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#171612",
+  "background_color": "#f7f7f6",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva cotización",
+      "short_name": "Nueva",
+      "url": "./#/quotes/new",
+      "description": "Empezar un borrador en blanco"
+    },
+    {
+      "name": "Cotizaciones",
+      "short_name": "Cotizaciones",
+      "url": "./#/quotes"
+    },
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "url": "./#/customers"
+    }
+  ]
+}
