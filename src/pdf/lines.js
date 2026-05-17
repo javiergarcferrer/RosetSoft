@@ -4,46 +4,63 @@ import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT,
 } from './constants.js';
-import { drawRightAt, truncate, formatMoney } from './util.js';
+import { drawRightAt, formatMoney } from './util.js';
 import { embedImageById } from './embed.js';
 
 // ---------------------------------------------------------------------------
 // Line-items table geometry.
 //
-// The row is split into three equal-width sections that sum to CONTENT_W:
+// Three equal-width sections summing to CONTENT_W. The columns have a clean
+// semantic separation: ARTÍCULO is purely visual (the product photo),
+// DETALLE carries every piece of text describing the product in hierarchy
+// order, and the right column carries the math.
 //
-//   ┌────────────────────────┬────────────────────────┬───────────────────┐
-//   │ ARTÍCULO               │ DETALLE                │ CANT. UNIT. TOTAL │
-//   │ ┌──────────────────┐   │ H 33 W 30¼ D 32¼       │   1   $4180 $4180 │
-//   │ │      image       │   │ Sofá de dos plazas en  │                   │
-//   │ │     130×80       │   │ tela. Color a elegir…  │                   │
-//   │ └──────────────────┘   │                        │                   │
-//   │ AMÉDÉE                 │                        │                   │
-//   │ Sofá 2-plazas Pampa    │                        │                   │
-//   │ Grade C — PAMPA        │                        │                   │
-//   │ 18211150               │                        │                   │
-//   └────────────────────────┴────────────────────────┴───────────────────┘
+//   ┌────────────────────┬─────────────────────────┬───────────────────┐
+//   │ ARTÍCULO           │ DETALLE                 │ CANT. UNIT. TOTAL │
+//   │                    │ AMÉDÉE                  │                   │
+//   │ ┌────────────┐     │ Sofá 2-plazas Pampa     │   1  $4180 $4180  │
+//   │ │  130 × 95  │     │ Grade C — PAMPA         │                   │
+//   │ │   image    │     │ ref 18211150            │                   │
+//   │ │            │     │                         │                   │
+//   │ └────────────┘     │ H 33 W 30¼ D 32¼ S 15   │                   │
+//   │                    │ Sofá de dos plazas en   │                   │
+//   │                    │ tela. Color a elegir…   │                   │
+//   └────────────────────┴─────────────────────────┴───────────────────┘
 //   56 ←──── ~167pt ─────→ 223 ←──── ~167pt ─────→ 390 ←──── ~167pt ──→ 556
 //
-// Inside ARTÍCULO the product image stacks on top of the identity text so
-// the photo can be wider than the column's text would allow and the name
-// still has a sensible wrap target. DETALLE picks up ~75% more usable text
-// width than the previous revision — long descriptions now wrap onto two
-// lines instead of six. Numeric column gains breathing room between the
-// three sub-cells so a 6-digit total never collides with the unit price.
+// Hierarchy inside DETALLE (top to bottom):
+//   1. Family       — small caps, ink-mid (price-list collection name)
+//   2. Name         — bold, ink-900, wraps to column width (HERO)
+//   3. Subtype      — Grade X — Fabric, regular, ink-high
+//   4. Reference    — small, ink-soft (catalog lookup key)
+//   5. (4pt gap)
+//   6. Dimensions   — ink-high, monospace-ish numeric reading
+//   7. Description  — ink-soft, wraps over multiple lines if needed
+//   8. Notes        — italic, ink-mid, prefixed "Nota:"
 // ---------------------------------------------------------------------------
 
-// Image footprint inside the article column. Cinematic (wider than tall)
-// because furniture catalog photos are usually shot in landscape; square
-// thumbnails crop the product harder than they need to.
+// Image footprint inside the article column. Slightly cinematic (wider than
+// tall) — furniture is photographed in landscape; square crops too tight.
+// 130 × 95 lands at 1.37 ratio (close to 4:3) which reads as a photo, not
+// a thumbnail.
 const IMAGE_W = 130;
-const IMAGE_H = 80;
+const IMAGE_H = 95;
 
-const ROW_TOP_PAD = 10;        // distance from rowY (band bottom) to first content
-const ROW_BOTTOM_PAD = 8;      // padding below content before the hairline
-const IMAGE_TEXT_GAP = 8;      // vertical gap between image and identity text
-const SPEC_LINE_H = 11;        // line height for 8.5pt spec text
-const SPEC_LINE_H_SMALL = 10;  // line height for 7.5pt description text
+const ROW_TOP_PAD = 10;
+const ROW_BOTTOM_PAD = 10;
+const IDENTITY_TO_SPEC_GAP = 6;  // gap between Reference and Dimensions
+
+// Detail-column type sizes + line heights. Centralised so a redesign can
+// rebalance the hierarchy in one place.
+const T = {
+  family:      { size: 7,    lh: 10, color: INK_MID,  cs: 1.2 },
+  name:        { size: 11,   lh: 13, color: INK,      bold: true },
+  subtype:     { size: 9,    lh: 11, color: INK_HIGH },
+  reference:   { size: 7.5,  lh: 10, color: INK_SOFT },
+  dimensions:  { size: 8.5,  lh: 11, color: INK_HIGH },
+  description: { size: 7.5,  lh: 10, color: INK_SOFT },
+  notes:       { size: 7.5,  lh: 10, color: INK_MID,  italic: true },
+};
 
 // Three equal columns. CONTENT_W is 500pt on US Letter; thirds give 166-167.
 function lineColumns() {
@@ -54,15 +71,13 @@ function lineColumns() {
   const detail  = { x: MARGIN_L + colW,     w: colW };
   const numeric = { x: MARGIN_L + 2 * colW, w: CONTENT_W - 2 * colW };
 
-  // Image centered horizontally inside the article column. The text below
-  // it gets the full column width (less small padding) for wrapping, so
-  // even long product names land on at most two lines.
+  // Image centered horizontally inside its column — symmetric whitespace on
+  // both sides reads as intentional framing rather than a left-aligned
+  // photo with a chunk of empty space to its right.
   const imgX = article.x + Math.floor((article.w - IMAGE_W) / 2);
-  const itemX = article.x + 6;
-  const itemW = article.w - 12;
 
-  // Detail column: 8pt left padding for breathing room, full remaining
-  // width as the wrap target.
+  // Detail column: 8pt left padding. The text wraps to (column - 16pt) so
+  // there's symmetric breathing room against the column edges.
   const specX = detail.x + 8;
   const specW = detail.w - 16;
 
@@ -75,7 +90,6 @@ function lineColumns() {
   return {
     article, detail, numeric,
     img:  { x: imgX, w: IMAGE_W, h: IMAGE_H },
-    item: { x: itemX, w: itemW },
     spec: { x: specX, w: specW },
     qty:  { rightX: qtyRight,  label: 'CANT.' },
     unit: { rightX: unitRight, label: 'UNIT.' },
@@ -115,53 +129,59 @@ function wrapToWidth(text, maxWidth, font, size) {
 }
 
 /**
- * Detail-column segments rendered top-to-bottom. Returned as an iterable so
- * the measure and draw passes share one source of truth.
+ * Resolve a font for a typography token from the type table. Falls back to
+ * regular if a bold/italic variant wasn't embedded (defensive — production
+ * always has all three).
  */
-function specSegments(line) {
+function fontFor(ctx, token) {
+  if (token.bold) return ctx.fontBold;
+  if (token.italic) return ctx.fontItalic || ctx.fontRegular;
+  return ctx.fontRegular;
+}
+
+/**
+ * Produce the ordered list of detail-column segments for a line, each
+ * already wrapped to the column width. The shape is identical between the
+ * measure and draw passes so they can't drift.
+ */
+function detailSegments(ctx, line, specW) {
   const segs = [];
-  if (line.dimensions) segs.push({ text: line.dimensions, size: 8.5, lh: SPEC_LINE_H,       color: INK_HIGH });
-  if (line.description) segs.push({ text: line.description, size: 7.5, lh: SPEC_LINE_H_SMALL, color: INK_SOFT });
+  function push(text, token) {
+    if (!text) return;
+    const lines = wrapToWidth(text, specW, fontFor(ctx, token), token.size);
+    if (lines.length) segs.push({ token, lines });
+  }
+  // Identity hierarchy
+  push(line.family ? line.family.toUpperCase() : '', T.family);
+  push(line.name || '(sin nombre)', T.name);
+  push(line.subtype, T.subtype);
+  push(line.reference, T.reference);
+  // Visual gap between identity block and physical specs.
+  if ((line.dimensions || line.description) && (line.family || line.name || line.subtype || line.reference)) {
+    segs.push({ gap: IDENTITY_TO_SPEC_GAP });
+  }
+  // Physical / sourcing block
+  push(line.dimensions, T.dimensions);
+  push(line.description, T.description);
+  push(line.notes ? `Nota: ${line.notes}` : '', T.notes);
   return segs;
 }
 
 /**
- * How tall this row will render, including dynamic wrapping in the article
- * (name) and detail (description) columns. Exposed so the page-break check
- * can decide whether the row fits before we actually draw it.
- *
- * Article depth = image height + gap + identity text stack (which itself
- * grows with the wrapped name). Detail depth = description + dimensions
- * wrapped. The row uses the deepest of (article, detail) plus paddings.
+ * How tall this row will render. The detail column drives row height —
+ * the image is a fixed-size box. Numeric column never grows beyond a
+ * single line.
  */
 export function measureLineRowHeight(ctx, line) {
-  const { fontRegular, fontBold } = ctx;
   const cols = lineColumns();
-
-  // Article column — image stacked above identity text.
-  let articleDepth = ROW_TOP_PAD + IMAGE_H + IMAGE_TEXT_GAP;
-  if (line.family) articleDepth += 10;
-  const nameLines = wrapToWidth(line.name || '(sin nombre)', cols.item.w, fontBold, 10.5);
-  articleDepth += Math.max(1, nameLines.length) * 12;
-  if (line.subtype) {
-    const subLines = wrapToWidth(line.subtype, cols.item.w, fontRegular, 9);
-    articleDepth += subLines.length * 11;
-  }
-  if (line.reference) articleDepth += 10;
-  if (line.notes) articleDepth += 10;
-
-  // Detail column — wrap every segment to the column width.
   let detailDepth = ROW_TOP_PAD;
-  for (const seg of specSegments(line)) {
-    const lines = wrapToWidth(seg.text, cols.spec.w, fontRegular, seg.size);
-    detailDepth += lines.length * seg.lh;
+  for (const seg of detailSegments(ctx, line, cols.spec.w)) {
+    if (seg.gap) { detailDepth += seg.gap; continue; }
+    detailDepth += seg.lines.length * seg.token.lh;
   }
-
-  const contentDepth = Math.max(articleDepth, detailDepth);
-  // Floor at one image's worth of height so a row with no description or
-  // identity text still has visual weight.
-  const minRow = ROW_TOP_PAD + IMAGE_H + IMAGE_TEXT_GAP + 20 + ROW_BOTTOM_PAD;
-  return Math.max(minRow, contentDepth + ROW_BOTTOM_PAD);
+  const imageDepth = ROW_TOP_PAD + IMAGE_H;
+  const contentDepth = Math.max(detailDepth, imageDepth);
+  return contentDepth + ROW_BOTTOM_PAD;
 }
 
 /** Dark band with the column labels — repeated at the top of every new page. */
@@ -178,10 +198,12 @@ export function drawLineHeader(page, ctx, cursor) {
   const ty = y - 14;
   const labelSize = 7;
   const labelColor = rgb(0.93, 0.92, 0.90);
-  // ARTÍCULO label aligns with the identity text below the image (not the
-  // image's centered x) so the column header tracks with where the eye
-  // actually scans for the product name.
-  page.drawText(cols.itemLabel, { x: cols.item.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
+  // ARTÍCULO sits centered above the image so the header reads as the
+  // label for the visual column. DETALLE aligns with the left edge of
+  // its text (where the eye lands when scanning the column).
+  const articleLabelW = fontBold.widthOfTextAtSize(cols.itemLabel, labelSize);
+  const articleLabelX = cols.article.x + (cols.article.w - articleLabelW) / 2;
+  page.drawText(cols.itemLabel, { x: articleLabelX, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
   page.drawText(cols.specLabel, { x: cols.spec.x, y: ty, size: labelSize, font: fontBold, color: labelColor, characterSpacing: 0.6 });
   drawRightAt(page, cols.qty.label,  cols.qty.rightX,  ty, labelSize, fontBold, labelColor);
   drawRightAt(page, cols.unit.label, cols.unit.rightX, ty, labelSize, fontBold, labelColor);
@@ -218,28 +240,55 @@ export function drawEmptyLineBody(page, ctx, cursor) {
 }
 
 /**
- * Render one line item row. Lines carry all of their fields directly (no
- * catalog lookups) so this is text + image placement, no async resolve.
+ * Render one line item row.
  *
- * Layout per column:
- *   - ARTÍCULO: cinematic image up top, identity text below
- *   - DETALLE:  dimensions + description, top-aligned with image top
- *   - Numeric:  qty / unit / total on a single horizontal grid line near
- *     the top of the row (aligned with the image's vertical center)
+ *   ARTÍCULO column → image only (vertically centered against the detail
+ *                     column's text block so the photo doesn't drift to
+ *                     the top of a row whose text runs long).
+ *   DETALLE column  → all product text in hierarchy order.
+ *   Numeric column  → qty / unit / total aligned to the name's baseline,
+ *                     so the eye reads "<product>: <count> × <unit> =
+ *                     <total>" across a horizontal band per row.
  */
 export async function drawLineRow(page, ctx, cursor, line) {
   const { doc, fontRegular, fontBold, fontItalic } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
+  const rowH = measureLineRowHeight(ctx, line);
 
-  // Image — top-centre of the article column. The placeholder rectangle is
-  // drawn unconditionally so empty-image rows still show their slot rather
-  // than collapsing to white space (which would visually misalign the row
-  // against neighbours that DO have images).
+  // Detail column — draw first so we know where the name baseline lands
+  // for the numeric column to align against.
+  const segs = detailSegments(ctx, line, cols.spec.w);
+  let sy = rowY - ROW_TOP_PAD;
+  let nameBaselineY = sy;  // fallback if the line has no family / name
+  for (const seg of segs) {
+    if (seg.gap) { sy -= seg.gap; continue; }
+    const f = fontFor(ctx, seg.token);
+    for (const ln of seg.lines) {
+      // PDF draws text with `y` at the baseline of the line. The text
+      // visually extends from y to y + (cap height ~size * 0.7) above.
+      // We track sy as the TOP of each line for predictable layout; the
+      // baseline is sy - size.
+      const baselineY = sy - seg.token.size;
+      page.drawText(ln, {
+        x: cols.spec.x,
+        y: baselineY,
+        size: seg.token.size,
+        font: f,
+        color: seg.token.color,
+        characterSpacing: seg.token.cs || 0,
+      });
+      if (seg.token === T.name) nameBaselineY = baselineY;
+      sy -= seg.token.lh;
+    }
+  }
+
+  // Image — vertically centered in the row, horizontally centered in its
+  // column. Centering keeps the photo and the text block visually weighted
+  // against each other regardless of how long the description runs.
   const img = await embedImageById(doc, line.imageId);
   const boxX = cols.img.x;
-  const boxTop = rowY - ROW_TOP_PAD;
-  const boxY = boxTop - cols.img.h;
+  const boxY = rowY - (rowH / 2) - (cols.img.h / 2);
   page.drawRectangle({
     x: boxX, y: boxY, width: cols.img.w, height: cols.img.h,
     color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
@@ -257,67 +306,17 @@ export async function drawLineRow(page, ctx, cursor, line) {
     });
   }
 
-  // Identity text — stacked under the image, full column width as the
-  // wrap target. Family / Name (bold) / Subtype / Reference / Notes.
-  let y = boxY - IMAGE_TEXT_GAP;
-  if (line.family) {
-    page.drawText(truncate(line.family.toUpperCase(), 32), {
-      x: cols.item.x, y, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2,
-    });
-    y -= 10;
-  }
-  const nameLines = wrapToWidth(line.name || '(sin nombre)', cols.item.w, fontBold, 10.5);
-  for (const ln of nameLines) {
-    page.drawText(ln, { x: cols.item.x, y, size: 10.5, font: fontBold, color: INK });
-    y -= 12;
-  }
-  if (line.subtype) {
-    const subLines = wrapToWidth(line.subtype, cols.item.w, fontRegular, 9);
-    for (const ln of subLines) {
-      page.drawText(ln, { x: cols.item.x, y, size: 9, font: fontRegular, color: INK_HIGH });
-      y -= 11;
-    }
-  }
-  if (line.reference) {
-    page.drawText(line.reference, { x: cols.item.x, y, size: 7.5, font: fontRegular, color: INK_SOFT });
-    y -= 10;
-  }
-  if (line.notes) {
-    page.drawText(truncate('Nota: ' + line.notes, 60), { x: cols.item.x, y, size: 7.5, font: fontItalic || fontRegular, color: INK_MID });
-    y -= 10;
-  }
-  const articleBottomY = y;
-
-  // Detail column — dimensions then description, top-aligned with the row.
-  // Both wrap to the now-spacious column. specBottomY is tracked for the
-  // row-height computation below.
-  let sy = rowY - ROW_TOP_PAD;
-  for (const seg of specSegments(line)) {
-    const wrappedLines = wrapToWidth(seg.text, cols.spec.w, fontRegular, seg.size);
-    for (const ln of wrappedLines) {
-      // Each line draws with its top at sy (text baseline at sy - size).
-      page.drawText(ln, { x: cols.spec.x, y: sy - seg.size, size: seg.size, font: fontRegular, color: seg.color });
-      sy -= seg.lh;
-    }
-  }
-  const detailBottomY = sy;
-
-  // Numeric column — vertical center of the image (so the right-side
-  // numbers anchor optically to the photograph). All three values share
-  // one baseline so the eye reads them as a row, not as a tower.
-  const numY = boxY + (cols.img.h / 2) - 4;
+  // Numeric column — qty / unit / total share the name's baseline so the
+  // three numbers sit on a single horizontal grid line with the product
+  // name. That's the line the eye scans for "what costs what".
+  const numY = nameBaselineY;
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
   drawRightAt(page, String(line.qty || 0),                       cols.qty.rightX,  numY, 10,   fontRegular, INK_HIGH);
   drawRightAt(page, formatMoney(unit,  ctx.currency, ctx.rates), cols.unit.rightX, numY, 10,   fontRegular, INK_HIGH);
   drawRightAt(page, formatMoney(total, ctx.currency, ctx.rates), cols.tot.rightX,  numY, 11,   fontBold,    INK);
 
-  // Row bottom = deepest of (article text, detail text) plus padding.
-  // articleBottomY and detailBottomY are both growing downward (negative
-  // direction in PDF coords) — Math.min picks the most-negative value.
-  const contentBottomY = Math.min(articleBottomY, detailBottomY);
-  const rowBottom = contentBottomY - ROW_BOTTOM_PAD;
-
+  const rowBottom = rowY - rowH;
   page.drawLine({
     start: { x: MARGIN_L, y: rowBottom },
     end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
