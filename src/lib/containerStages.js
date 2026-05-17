@@ -4,8 +4,9 @@
  * where a freshly created container sits until the dispatch threshold is
  * reached; from there it walks the linear path to 'received' (the photo
  * has been off-loaded in DR — what used to be 'complete', renamed because
- * 'delivered' is now the customer-facing order-level state and the two
- * concepts needed unambiguous labels).
+ * 'received' is also the terminal at the order level when every
+ * container has arrived, and using the same word at both levels keeps
+ * the dealer's vocabulary unified).
  *
  * Pages render from this map, so adding a stage or relabeling one is a
  * one-line change. The transition timestamps are nullable columns on the

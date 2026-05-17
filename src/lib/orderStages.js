@@ -1,14 +1,14 @@
-import { stageIndex } from './containerStages.js';
+import { STAGE_BY_KEY } from './containerStages.js';
 
 /**
  * Order lifecycle definitions — single source of truth for the order
  * status stepper, transition CTAs, and the rules that derive an order's
  * visible state from its embedded containers.
  *
- * The lifecycle has six declared states. The first four are linear
- * milestones the dealer triggers (acceptance → deposit → placement →
- * delivery); `cancelled` is the off-track terminal. While an order is
- * `placed`, its container.stage values carry the fulfillment narrative
+ * The lifecycle has five declared states. The first four are linear
+ * milestones the dealer triggers (acceptance → deposit → ordering →
+ * reception); `cancelled` is the off-track terminal. While an order is
+ * `ordered`, its container.stage values carry the fulfillment narrative
  * (filling → submitting → ordered → in_transit → landing → received) —
  * the order itself doesn't tick through one declared state per
  * container milestone, the dealer just watches the containers.
@@ -18,10 +18,15 @@ import { stageIndex } from './containerStages.js';
  *                        the moment a quote is accepted)
  *   accepted           → customer signed off on at least one quote
  *   deposit_received   → funds cleared
- *   placed             → order sent to Ligne Roset; container(s) take over
- *                        the narrative until every container has been received
- *   delivered          → customer took delivery of every quote line (terminal)
- *   cancelled          → won't be fulfilled (terminal)
+ *   ordered            → order placed with Ligne Roset; container(s) take
+ *                        over the moment-to-moment narrative
+ *   received           → every container has been received in DR. Quotes
+ *                        in this order now open for individual delivery
+ *                        (per-quote `deliveredAt` is the next step, but
+ *                        that's tracked on the quote, not as an order
+ *                        status transition — different customers take
+ *                        delivery on different days).
+ *   cancelled          → won't be fulfilled (terminal alt)
  *
  * Mirrors the shape of containerStages.js so the stepper renders with the
  * same visual vocabulary and the timestamp-extraction helpers are
@@ -48,16 +53,16 @@ export const ORDER_STAGES = [
     timestampField: 'depositReceivedAt',
   },
   {
-    key: 'placed',
+    key: 'ordered',
     label: 'Ordenado',
     description: 'Orden colocada con Ligne Roset; siguiendo en contenedores.',
-    timestampField: 'placedAt',
+    timestampField: 'orderedAt',
   },
   {
-    key: 'delivered',
-    label: 'Entregado',
-    description: 'Cliente recibió todas las piezas.',
-    timestampField: 'deliveredAt',
+    key: 'received',
+    label: 'Recibido',
+    description: 'Todos los contenedores llegaron a RD. Cada cotización puede entregarse al cliente cuando esté lista.',
+    timestampField: 'receivedAt',
   },
 ];
 
@@ -102,34 +107,57 @@ export function isTerminalOrderStage(key) {
 }
 
 /**
- * Derive a presentational sub-status for an order in 'placed'. While in
- * placed, the visible state comes from the most-advanced container in the
- * order — the order is "behind" whichever container has progressed
- * furthest. Returns the container-stage key, or null if the order isn't
- * in 'placed' or has no containers.
+ * Can the dealer mark this order as 'received'? Only true once every
+ * container in the order has reached its terminal stage. With zero
+ * containers the answer is no — there's nothing physical to receive
+ * yet, the dealer needs to add a container first.
+ *
+ * The user's words: "Todas las cotizaciones aportan a ese total sin
+ * importar a cual contenedor pertenecen" — quotes don't pin to specific
+ * containers, so we can't open per-quote delivery until *all* containers
+ * have arrived (otherwise we'd risk marking a quote delivered when its
+ * pieces are still on a boat).
  */
-export function orderContainerStage(order, containers) {
-  if (!order || order.status !== 'placed') return null;
-  if (!containers || containers.length === 0) return null;
-  // Pick the most-advanced container (higher stage index = further along).
-  // Falls back to 'filling' (index 0) for rows missing a stage value.
-  let max = null;
-  let maxIdx = -1;
-  for (const c of containers) {
-    const i = stageIndex(c.stage || 'filling');
-    if (i > maxIdx) { maxIdx = i; max = c.stage || 'filling'; }
-  }
-  return max;
-}
-
-/**
- * Can the dealer mark this order as 'delivered'? Only true once every
- * container in the order is at the 'received' terminal — partial
- * deliveries aren't yet a concept (and the user said as much: "When a
- * container is received only then can a quote be delivered").
- */
-export function canMarkDelivered(order, containers) {
-  if (!order || order.status !== 'placed') return false;
+export function canMarkReceived(order, containers) {
+  if (!order || order.status !== 'ordered') return false;
   if (!containers || containers.length === 0) return false;
   return containers.every((c) => (c.stage || 'filling') === 'received');
 }
+
+/**
+ * Can the dealer mark this specific quote as delivered? Only after the
+ * parent order has been received (the goods are physically in DR).
+ * Before then the per-quote delivery action is hidden, since the items
+ * aren't yet available to hand to the customer.
+ */
+export function canDeliverQuote(order) {
+  return order?.status === 'received';
+}
+
+/**
+ * Compute the dispatch threshold for an order: number of attached
+ * containers (with a floor of 1) × the per-container minimum from
+ * settings. Returns { containerCount, threshold } so callers can render
+ * both ("Pedido necesita 2 contenedores · $87k / $100k mínimo") with a
+ * single helper call.
+ *
+ * Floor of 1: an order that hasn't yet had any container added still
+ * has a meaningful minimum — the dealer needs at least one container's
+ * worth of orders before placing the purchase with Ligne Roset. As soon
+ * as a second container row appears, the threshold doubles.
+ */
+export function orderDispatchThreshold(containers, perContainerThreshold) {
+  const count = Math.max(1, containers?.length || 0);
+  return {
+    containerCount: count,
+    threshold: count * (perContainerThreshold || 0),
+  };
+}
+
+/**
+ * Look up a container-stage definition. Re-export the container map so
+ * callers that already use the order-stage helpers don't have to import
+ * two modules to render a mixed view (e.g. OrderDetail rendering both
+ * the order's own steppers and the per-container nested steppers).
+ */
+export { STAGE_BY_KEY as CONTAINER_STAGE_BY_KEY };

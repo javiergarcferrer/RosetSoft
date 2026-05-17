@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X, FileText,
+  ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
+  FileText, CheckCircle2, Undo2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
@@ -13,7 +14,8 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import {
   ORDER_STAGES, ORDER_STAGE_BY_KEY,
-  currentOrderStage, nextOrderStage, orderStageIndex, canMarkDelivered,
+  currentOrderStage, nextOrderStage, orderStageIndex,
+  canMarkReceived, canDeliverQuote, orderDispatchThreshold,
 } from '../lib/orderStages.js';
 import {
   STAGES, STAGE_BY_KEY, currentStage, nextStage, stageIndex,
@@ -26,8 +28,10 @@ import {
  * Layout (top to bottom):
  *
  *   1. Order header + status stepper (5 main stages + cancelled).
- *      The stepper drives the order's own state; while in 'placed' the
- *      containers section below carries the moment-to-moment narrative.
+ *      The stepper drives the order's own state; while in 'ordered' the
+ *      containers section below carries the moment-to-moment narrative
+ *      until all containers reach 'received' and the order itself can
+ *      advance to 'received'.
  *
  *   2. Order info card — customer + deposit + delivery address + notes.
  *
@@ -43,7 +47,7 @@ import {
  */
 export default function OrderDetail() {
   const { orderId } = useParams();
-  const { profileId } = useApp();
+  const { profileId, settings } = useApp();
 
   const order = useLiveQuery(() => db.orders.get(orderId), [orderId], null);
 
@@ -96,12 +100,15 @@ export default function OrderDetail() {
   const nxt = isCancelled ? null : nextOrderStage(stage);
   const idx = orderStageIndex(stage);
 
-  // Block advance to 'delivered' until every container is received. The
-  // user said: "When a container is received only then can a quote be
-  // delivered". canMarkDelivered() enforces it.
+  // Block advance to 'received' until every container has reached its
+  // terminal stage. canMarkReceived() enforces both the "containers
+  // exist" and "every container is at 'received'" rules. Earlier
+  // transitions (accepted → deposit_received → ordered) have no
+  // container precondition — the dealer might place the LR order before
+  // any container row exists.
   const canAdvance = (() => {
     if (!nxt) return false;
-    if (nxt.key === 'delivered') return canMarkDelivered(order, containers);
+    if (nxt.key === 'received') return canMarkReceived(order, containers);
     return true;
   })();
 
@@ -177,8 +184,18 @@ export default function OrderDetail() {
     invalidate();
   }
 
-  // Roll-up: sum of all quote totals attached to this order.
+  // Roll-up: sum of all quote totals attached to this order. Per the
+  // user's rule ("todas las cotizaciones aportan a ese total sin
+  // importar a cual contenedor pertenecen") this is order-wide and
+  // doesn't try to attribute totals to specific containers.
   const orderTotal = quotes.reduce((acc, q) => acc + (totalByQuote.get(q.id) || 0), 0);
+
+  // Dispatch threshold scales with the number of container rows. Floor
+  // of 1 means a fresh order without any containers still gets a
+  // meaningful "minimum to place" indicator.
+  const perContainerThreshold = Number(settings?.dispatchThreshold) || 50000;
+  const { containerCount, threshold } = orderDispatchThreshold(containers, perContainerThreshold);
+  const thresholdMet = orderTotal >= threshold;
 
   // The previous main-track stage (for the "Volver" undo button).
   const prev = idx > 0 ? ORDER_STAGES[idx - 1] : null;
@@ -210,14 +227,28 @@ export default function OrderDetail() {
         currentDescription={
           // Show the "blocked by containers" reason when relevant, so the
           // dealer knows why the Advance button isn't available.
-          nxt && nxt.key === 'delivered' && !canMarkDelivered(order, containers)
-            ? 'Marcar como entregado requiere que todos los contenedores estén en "Recibido".'
+          nxt && nxt.key === 'received' && !canMarkReceived(order, containers)
+            ? (containers.length === 0
+                ? 'Añade al menos un contenedor antes de marcar como recibido.'
+                : 'Marcar como recibido requiere que todos los contenedores estén en "Recibido".')
             : stageDef.description
         }
         onAdvance={advance}
         onUndo={undo}
         cancelled={isCancelled}
       />
+
+      {/* Dispatch threshold widget — shown until the order is placed. After
+          'ordered' the threshold has served its purpose (the LR order is
+          out the door) so we hide it to reduce visual clutter. */}
+      {!isCancelled && idx < orderStageIndex('ordered') && (
+        <DispatchThresholdCard
+          containerCount={containerCount}
+          threshold={threshold}
+          orderTotal={orderTotal}
+          thresholdMet={thresholdMet}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2 space-y-6">
@@ -280,37 +311,13 @@ export default function OrderDetail() {
             ) : (
               <ul className="divide-y divide-ink-100">
                 {quotes.map((q) => (
-                  <li key={q.id} className="px-5 py-3 flex items-center gap-3">
-                    <Link
-                      to={`/quotes/${q.id}`}
-                      className="flex-1 min-w-0 hover:text-brand-700 transition-colors"
-                    >
-                      <div className="text-sm font-semibold truncate">
-                        #{q.number || '—'}{q.name ? ` · ${q.name}` : ''}
-                      </div>
-                      <div className="text-[11px] text-ink-500">
-                        Act. {formatDateTime(q.updatedAt)}
-                      </div>
-                    </Link>
-                    <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-                      {formatMoney(totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
-                    </div>
-                    <button
-                      onClick={() => detachQuote(q.id)}
-                      className="text-ink-400 hover:text-red-600 p-1.5"
-                      title="Quitar del pedido"
-                      aria-label="Quitar del pedido"
-                    >
-                      <X size={14} />
-                    </button>
-                    <Link
-                      to={`/quotes/${q.id}`}
-                      className="text-ink-400 hover:text-ink-900 p-1.5"
-                      title="Abrir cotización"
-                    >
-                      <ExternalLink size={14} />
-                    </Link>
-                  </li>
+                  <QuoteRow
+                    key={q.id}
+                    quote={q}
+                    order={order}
+                    total={totalByQuote.get(q.id) || 0}
+                    onDetach={() => detachQuote(q.id)}
+                  />
                 ))}
               </ul>
             )}
@@ -496,6 +503,151 @@ function CustomerLink({ customer }) {
       {customer.name}
       {customer.company ? <span className="text-ink-500"> · {customer.company}</span> : null}
     </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quote row inside an order's quote list. The per-quote delivery toggle is
+// the *only* fulfillment milestone we surface on a quote anymore — the
+// other 4 milestones from the old FulfillmentPills moved to the order
+// level (deposit, ordering, reception) or were dropped (notification,
+// final balance — those are status of the customer relationship, not the
+// workflow object).
+//
+// The toggle only renders after the parent order reaches 'received';
+// before then the customer's pieces are still on a boat (or not yet
+// ordered) so handing them over isn't possible.
+// ---------------------------------------------------------------------------
+function QuoteRow({ quote, order, total, onDetach }) {
+  const canDeliver = canDeliverQuote(order);
+  const delivered = !!quote.deliveredAt;
+
+  async function toggleDelivered() {
+    const patch = delivered
+      ? { deliveredAt: null }
+      : { deliveredAt: Date.now() };
+    await db.quotes.update(quote.id, { ...patch, updatedAt: Date.now() });
+  }
+
+  return (
+    <li className="px-5 py-3 flex items-center gap-3 flex-wrap">
+      <Link
+        to={`/quotes/${quote.id}`}
+        className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
+      >
+        <div className="text-sm font-semibold truncate">
+          #{quote.number || '—'}{quote.name ? ` · ${quote.name}` : ''}
+        </div>
+        <div className="text-[11px] text-ink-500">
+          {delivered
+            ? <>Entregada · {formatDateTime(quote.deliveredAt)}</>
+            : <>Act. {formatDateTime(quote.updatedAt)}</>}
+        </div>
+      </Link>
+
+      <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+        {formatMoney(total, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+      </div>
+
+      {/* Delivery toggle — only meaningful after the order is received. */}
+      {canDeliver ? (
+        <button
+          type="button"
+          onClick={toggleDelivered}
+          title={delivered ? 'Marcar como pendiente' : 'Marcar como entregada al cliente'}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            delivered
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+              : 'bg-white text-ink-600 border border-ink-200 hover:border-ink-400 hover:text-ink-900'
+          }`}
+        >
+          {delivered ? (
+            <>
+              <CheckCircle2 size={12} />
+              Entregada
+            </>
+          ) : (
+            <>
+              Marcar entregada
+            </>
+          )}
+        </button>
+      ) : (
+        // Order isn't received yet — show the disabled state as a hint so
+        // the dealer knows the action exists but isn't ready yet.
+        <span
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100"
+          title="Disponible cuando el pedido esté en 'Recibido'."
+        >
+          Entrega pendiente
+        </span>
+      )}
+
+      <button
+        onClick={onDetach}
+        className="text-ink-400 hover:text-red-600 p-1.5"
+        title="Quitar del pedido"
+        aria-label="Quitar del pedido"
+      >
+        <X size={14} />
+      </button>
+      <Link
+        to={`/quotes/${quote.id}`}
+        className="text-ink-400 hover:text-ink-900 p-1.5"
+        title="Abrir cotización"
+      >
+        <ExternalLink size={14} />
+      </Link>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch-threshold widget — visible while the order is still being
+// filled. Shows the order's running total against `containerCount ×
+// per-container minimum`, with a progress bar that turns green once the
+// minimum is met. Hidden after the order moves to 'ordered' since the
+// threshold has served its purpose by then.
+//
+// The container count comes from the actual number of container rows
+// (with a floor of 1 — see orderDispatchThreshold). When the dealer adds
+// a second container the threshold doubles; the dealer doesn't enter a
+// number manually anywhere.
+// ---------------------------------------------------------------------------
+function DispatchThresholdCard({ containerCount, threshold, orderTotal, thresholdMet }) {
+  const pct = threshold > 0 ? Math.min(100, (orderTotal / threshold) * 100) : 0;
+  return (
+    <div className="card card-pad mt-4 space-y-2">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">
+            Mínimo de despacho
+          </div>
+          <div className="text-sm font-semibold mt-0.5">
+            {containerCount === 1
+              ? '1 contenedor'
+              : `${containerCount} contenedores`}
+            <span className="text-ink-500 font-normal"> · {formatMoney(threshold, 'USD', { USD: 1 })}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-sm font-medium tabular-nums ${thresholdMet ? 'text-emerald-600' : 'text-ink-700'}`}>
+            {formatMoney(orderTotal, 'USD', { USD: 1 })}
+          </div>
+          <div className="text-[11px] text-ink-500">{Math.round(pct)}% del mínimo</div>
+        </div>
+      </div>
+      <div className="h-2 bg-ink-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all ${thresholdMet ? 'bg-emerald-500' : 'bg-brand-500'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-ink-500">
+        El mínimo se multiplica por el número de contenedores en el pedido.
+        Todas las cotizaciones aportan al total, sin importar a cuál contenedor pertenezcan.
+      </p>
+    </div>
   );
 }
 
