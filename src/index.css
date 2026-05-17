@@ -153,20 +153,33 @@
        ≥ 640px           identity + calc side-by-side, calc 360
        ≥ 820px           calc gets to 400
      =========================================================== */
+  /* HARD RULES for this component, enforced by every rule below:
+       1. Never `text-overflow: ellipsis`. Dealers type long fabric
+          names, dimensions, references — truncating them puts data
+          out of reach.
+       2. Never `overflow: hidden` to "fix" a layout. That clips
+          content silently. If something would spill, make it grow,
+          wrap, or stack instead.
+       3. Inputs auto-grow via `field-sizing: content` (modern
+          browsers). The widthClass becomes a min-width hint, not
+          a max.
+       4. Money stays on one line (`white-space: nowrap`) but the
+          cell it lives in is allowed to grow as wide as it needs. */
   .qli-row {
     container-type: inline-size;
     container-name: qli;
-    overflow: hidden;
+    /* No overflow:hidden — silent clipping is the bug we're killing. */
     min-width: 0;
-    padding: 0.875rem 0.75rem;   /* 14/12 — phone */
+    padding: 0.875rem 0.75rem;
   }
   @container qli (min-width: 380px) {
-    .qli-row { padding: 1rem 1.25rem; }    /* 16/20 — comfortable */
+    .qli-row { padding: 1rem 1.25rem; }
   }
+
   .qli-body {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;        /* 12px — narrow stack */
+    gap: 0.875rem;
     min-width: 0;
   }
   .qli-identity {
@@ -176,62 +189,86 @@
     min-width: 0;
     flex: 1;
   }
+
   .qli-calc {
     background: theme('colors.ink.50');
     border: 1px solid theme('colors.ink.100');
-    border-radius: 0.5rem;       /* rounded-lg */
-    padding: 0.625rem 0.75rem;   /* 10/12px — bumped at ≥ 380px */
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
     min-width: 0;
   }
+  /* Calc cells flow as a flex row that wraps. When the container is
+     wide everything fits left-to-right (qty × unit = total). When
+     narrow, cells wrap onto subsequent rows in reading order and the
+     operators (× and =) disappear so the math still reads. Critically,
+     the total cell auto-grows to fit the money string — never gets
+     squeezed below its natural width. */
   .qli-calc-grid {
-    display: grid;
-    /* qty · × · unit · = · total — total fills remaining space
-       so money never overflows the cell; it shrinks via the
-       minmax(0, 1fr) rather than pushing the row wider. */
-    grid-template-columns: auto auto auto auto minmax(0, 1fr);
-    align-items: end;
-    gap: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.625rem;
     min-width: 0;
   }
   .qli-total-cell {
-    text-align: right;
+    /* flex-grow lets the total cell expand to fill the row when it's
+       on the same line as qty/unit. It's also allowed to wrap to a
+       new row (basis: auto) — when it does, the cell takes the full
+       row width. */
+    flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
+    text-align: right;
   }
-  .qli-total-cell .qli-total-val {
+  .qli-total-val {
+    /* Money never wraps mid-string; the surrounding cell makes room. */
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   @container qli (min-width: 380px) {
-    .qli-calc { padding: 0.75rem 0.875rem; }     /* 12/14 */
-    .qli-calc-grid { gap: 0.625rem; }
+    .qli-calc { padding: 0.75rem 0.875rem; }
   }
 
   @container qli (min-width: 640px) {
     .qli-body {
       flex-direction: row;
       align-items: stretch;
-      gap: 1.125rem;          /* 18px — generous gutter */
+      gap: 1.125rem;
     }
     .qli-calc {
       flex-shrink: 0;
-      width: 22.5rem;         /* 360px */
+      /* Min-width, not a fixed width. The calc grows past 360px if the
+         money or unit price needs more room — we never cap it and
+         force ellipsis. */
+      width: auto;
+      min-width: 22.5rem;
     }
   }
 
   @container qli (min-width: 820px) {
-    .qli-calc { width: 25rem; } /* 400px */
+    .qli-calc { min-width: 25rem; }
   }
 
-  /* Pathological narrow case (e.g. embedded in a 280px drawer):
-     drop the row of cells into a single column so the math still
-     reads top-to-bottom and nothing clips. */
-  @container qli (max-width: 299px) {
-    .qli-calc-grid { grid-template-columns: 1fr; gap: 0.375rem; }
+  /* Narrow container — operators hide and each cell takes its own
+     row. The dealer sees the equation as a stack:
+         Cant.   [ 1 ]
+         Unitario [ 11310 ]
+         Total   $11,310.00
+     No clipped money, no ellipsis, no horizontal scroll. */
+  @container qli (max-width: 359px) {
     .qli-calc-grid .qli-op { display: none; }
+    .qli-calc-grid > * { flex: 1 1 100%; min-width: 0; }
     .qli-total-cell { text-align: left; }
+  }
+
+  /* Auto-growing single-line inputs. `field-sizing: content` sizes
+     the input to its value; the widthClass on the JSX side becomes a
+     min, not a max. Browser support is Chrome 123+, Safari 17.4+,
+     Firefox 123+ (early 2024). Pre-support fallback: the input renders
+     at its declared width — same as the previous behavior, no
+     regression. */
+  .qli-grow {
+    field-sizing: content;
+    max-width: 100%;
   }
 }
 

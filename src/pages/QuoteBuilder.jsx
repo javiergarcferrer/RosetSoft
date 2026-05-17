@@ -433,7 +433,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           customer={customer}
         />
       ) : (
-        <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[1fr_520px]' : 'lg:grid-cols-[1fr_360px]'}`}>
+        // Left column uses `minmax(0, 1fr)` — not bare `1fr` — so it can
+        // shrink below its content's intrinsic min-width. Without that,
+        // the implicit `min-width: auto` on a 1fr track stops the column
+        // from accepting `min-width: 0` from descendants, and any long
+        // string (a 6-digit money value, a full dimension spec) forces
+        // the whole column wider than the viewport.
+        <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[minmax(0,1fr)_520px]' : 'lg:grid-cols-[minmax(0,1fr)_360px]'}`}>
           {/* Main column */}
           <div className={`space-y-5 min-w-0 ${pdfOpen ? '' : ''}`}>
             <LineItemsCard

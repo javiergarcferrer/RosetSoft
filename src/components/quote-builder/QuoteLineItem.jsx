@@ -158,10 +158,11 @@ function TopStrip({ family, expanded, onToggleExpand, onDuplicate, onRemove, dra
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
 function IdentityBand({ line, onChange, refInputRef }) {
-  // qli-identity owns the flex direction; the row stacks below the calc
-  // band when the container is narrow and sits next to it when it's
-  // wide. Children carry min-w-0 so long product names truncate via
-  // ellipsis instead of pushing the whole card sideways.
+  // qli-identity stacks below the calc band when the container is
+  // narrow and sits next to it when it's wide. min-w-0 lets nested
+  // flex children shrink down — combined with HeroInput's wrap and
+  // the spec-strip's flex-wrap, long names and dimensions flow onto
+  // additional lines instead of being clipped or truncated.
   return (
     <div className="qli-identity">
       <Thumbnail
@@ -195,8 +196,13 @@ function IdentityBand({ line, onChange, refInputRef }) {
 function GradeFabricRow({ line, onChange }) {
   const { grade, fabric } = parseSubtype(line.subtype);
   const commit = (next) => onChange({ subtype: composeSubtype(next.grade, next.fabric) });
+  // flex-wrap lets the fabric input drop below the grade Select when
+  // there isn't enough room to fit both inline (long fabric names like
+  // "Alcantara mostaza decadent edition" no longer get hidden inside
+  // an overflowing input — they expand the field, and the field wraps
+  // to the next row if the line is narrow).
   return (
-    <div className="flex items-baseline gap-1 -ml-1.5">
+    <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 -ml-1.5 min-w-0">
       <Select
         variant="ghost"
         value={grade}
@@ -244,17 +250,25 @@ function GradeFabricRow({ line, onChange }) {
         onCommit={(v) => commit({ grade, fabric: v })}
         placeholder="Tela o acabado"
         autoCapitalize="words"
-        className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+        // qli-grow + min-w-* lets the input auto-size to the fabric
+        // text without being capped at flex-1's available width.
+        // max-w-full keeps it from forcing the row wider than its
+        // container — when it can't grow further it just wraps.
+        className="qli-grow min-w-[8rem] max-w-full bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
       />
     </div>
   );
 }
 
-// Compact inline strip of identifying meta — ref, page, dimensions. On
-// narrow widths the InlineEditors wrap naturally onto a second line.
+// Compact inline strip of identifying meta — ref, page, dimensions.
+// `widthClass` values are MIN-widths, not fixed widths: each input
+// has `field-sizing: content` so it grows past the min when the value
+// is long (a full dimension string like "H 28 × L 89 × P 43" expands
+// the input instead of being clipped). The strip flex-wraps so when
+// an expanded input runs out of room, it drops to the next line.
 function SpecStrip({ line, onChange, refInputRef }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-0.5">
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
       <InlineEditor
         label="Ref."
         ref={refInputRef}
@@ -262,7 +276,7 @@ function SpecStrip({ line, onChange, refInputRef }) {
         onCommit={(v) => onChange({ reference: v })}
         placeholder="—"
         mono
-        widthClass="w-[7.5rem]"
+        widthClass="min-w-[7rem]"
         autoCapitalize="characters"
         autoComplete="off"
       />
@@ -271,7 +285,7 @@ function SpecStrip({ line, onChange, refInputRef }) {
         value={line.pageRef || ''}
         onCommit={(v) => onChange({ pageRef: v })}
         placeholder="—"
-        widthClass="w-12"
+        widthClass="min-w-[3rem]"
         inputMode="numeric"
         autoComplete="off"
       />
@@ -281,7 +295,7 @@ function SpecStrip({ line, onChange, refInputRef }) {
         onCommit={(v) => onChange({ dimensions: v })}
         placeholder="H × W × D"
         mono
-        widthClass="w-44"
+        widthClass="min-w-[6rem]"
         autoComplete="off"
       />
     </div>
@@ -301,12 +315,12 @@ function CalculatorBand({
   line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
-  // qli-calc owns background, border, padding, and (most importantly)
-  // the responsive width — 360px when the container is ≥ 640px wide,
-  // 400px when ≥ 820px, full-width-with-1-column-grid when < 300px.
-  // qli-calc-grid uses minmax(0, 1fr) on the total cell so a long
-  // money string truncates with ellipsis instead of pushing the row
-  // wider than its container.
+  // qli-calc owns background, border, padding, and the responsive
+  // sizing — min-width of 360px / 400px at ≥640/820 container widths,
+  // but the calc is free to grow past those mins so the money string
+  // is never clipped. At sub-360px container widths the calc-grid's
+  // cells stack into rows (qty, unit, total) instead of fighting for
+  // one row's worth of horizontal space.
   return (
     <div className="qli-calc transition-shadow group-hover:shadow-soft">
       <div className="qli-calc-grid">
@@ -316,7 +330,7 @@ function CalculatorBand({
             inputMode="decimal"
             min="0"
             step="any"
-            className="w-14 text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+            className="qli-grow min-w-[3.25rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
             value={line.qty ?? 1}
             onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
             aria-label="Cantidad"
@@ -330,7 +344,7 @@ function CalculatorBand({
             currency={currency}
             value={line.unitPrice}
             onCommit={(v) => onChange({ unitPrice: v })}
-            widthClass="w-24"
+            widthClass="min-w-[6rem]"
             aria-label="Precio unitario"
           />
         </CalcCell>
