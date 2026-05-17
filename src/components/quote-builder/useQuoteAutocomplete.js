@@ -9,7 +9,7 @@ import { db } from '../../db/database.js';
  * suggestions. The list gets richer the more the team uses the app.
  *
  * Returned shape: array of suggestions, each
- *   { key, family, reference, name, subtype, dimensions, yardage, pageRef,
+ *   { key, family, reference, name, subtype, dimensions, pageRef,
  *     unitPrice, description, imageId, lastUsedAt, useCount }
  * where `key = reference || name + family` so duplicates merge.
  */
@@ -35,7 +35,6 @@ export function useQuoteAutocomplete() {
         name: l.name || '',
         subtype: l.subtype || '',
         dimensions: l.dimensions || '',
-        yardage: l.yardage || '',
         pageRef: l.pageRef || '',
         unitPrice: Number(l.unitPrice) || 0,
         description: l.description || '',
@@ -77,7 +76,7 @@ export function useQuoteAutocomplete() {
 
 function mergeRicher(a, b) {
   const out = { ...a };
-  for (const k of ['family', 'reference', 'name', 'subtype', 'dimensions', 'yardage', 'pageRef', 'description']) {
+  for (const k of ['family', 'reference', 'name', 'subtype', 'dimensions', 'pageRef', 'description']) {
     if (!out[k] && b[k]) out[k] = b[k];
   }
   if (!out.imageId && b.imageId) out.imageId = b.imageId;

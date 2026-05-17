@@ -112,7 +112,7 @@ export default function ContainerDetail() {
         'Container #', 'Container name', 'Container code', 'Container status',
         'Quote #', 'Quote name', 'Customer', 'Company',
         'Quote date', 'Family', 'Name', 'Subtype', 'Reference',
-        'Dimensions', 'Yardage', 'Page',
+        'Dimensions', 'Page',
         'Qty', 'Unit price (USD)', 'Line total (USD)',
       ],
     ];
@@ -134,7 +134,7 @@ export default function ContainerDetail() {
           q.number, q.name, q.customer?.name || '', q.customer?.company || '',
           new Date(q.createdAt || Date.now()).toISOString().slice(0, 10),
           l.family || '', l.name || '', l.subtype || '', l.reference || '',
-          l.dimensions || '', l.yardage || '', l.pageRef || '',
+          l.dimensions || '', l.pageRef || '',
           l.qty || 0,
           (l.unitPrice || 0).toFixed(2),
           lineTotal.toFixed(2),

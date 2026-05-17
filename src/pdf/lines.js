@@ -10,7 +10,7 @@ import { embedImageById } from './embed.js';
 // Column anchors for the line-items table. Lines are user-typed (no catalog
 // indirection), so every field below comes straight from the quote_lines row:
 // line.imageId, line.family, line.name, line.subtype, line.reference,
-// line.dimensions, line.yardage, line.notes, line.unitPrice.
+// line.dimensions, line.notes, line.unitPrice.
 //
 // Furniture-quote tuning: the product image was bumped 48 → 72pt (1.5×) so
 // sofas / chairs read as recognizable photos rather than thumbnails. The item
@@ -75,7 +75,6 @@ function wrapToWidth(text, maxWidth, font, size) {
 function specSegments(line) {
   const segs = [];
   if (line.dimensions) segs.push({ text: line.dimensions, size: 8.5, lh: SPEC_LINE_H,       color: INK_HIGH });
-  if (line.yardage)    segs.push({ text: line.yardage,    size: 8.5, lh: SPEC_LINE_H,       color: INK_MID  });
   if (line.description) segs.push({ text: line.description, size: 7.5, lh: SPEC_LINE_H_SMALL, color: INK_SOFT });
   return segs;
 }

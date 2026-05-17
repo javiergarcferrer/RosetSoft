@@ -91,7 +91,6 @@ export default function QuickActions({
         name: row.name,
         subtype: row.subtype,
         dimensions: row.dimensions,
-        yardage: row.yardage,
         pageRef: row.pageRef,
         unitPrice: row.unitPrice,
         description: row.description,
