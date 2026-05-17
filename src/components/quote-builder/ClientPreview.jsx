@@ -50,7 +50,6 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
         <div className="text-right">
           <div className="text-[10px] font-medium uppercase tracking-widest text-ink-500">Cotización</div>
           <div className="text-3xl font-semibold tracking-tight">#{quote.number || '—'}</div>
-          {quote.name && <div className="text-sm text-ink-700 mt-1 max-w-xs truncate">{quote.name}</div>}
           <div className="text-[11px] text-ink-500 mt-2">{formatDate(quote.updatedAt)}</div>
         </div>
       </div>

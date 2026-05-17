@@ -2,7 +2,6 @@ import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_R, MARGIN_T, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE2, ACCENT,
 } from './constants.js';
-import { truncate } from './util.js';
 
 /** Italic if available, regular otherwise — keeps the "Sin cliente" fallback readable. */
 function fontItalicOrRegular(ctx) {
@@ -159,14 +158,11 @@ export function drawCustomerBlock(page, ctx, cursor) {
     y -= 12;
   }
 
-  // Right column: project
-  if (quote.name) {
-    page.drawText('PROYECTO', { x: MARGIN_L + CONTENT_W / 2, y: y0, size: 7, font: fontRegular, color: INK_MID, characterSpacing: 1.2 });
-    page.drawText(truncate(quote.name, 38), {
-      x: MARGIN_L + CONTENT_W / 2,
-      y: y0 - 14, size: 12, font: fontBold, color: INK,
-    });
-  }
+  // The right column used to carry a "PROYECTO" label sourced from
+  // quote.name. That field was removed (the quote number identifies the
+  // document; an internal label served no client-facing purpose), so
+  // the column is now intentionally empty — the customer block on the
+  // left fills the header on its own.
 
   const bottom = Math.min(y, y0 - 28);
   return { x: MARGIN_L, y: bottom - 18 };

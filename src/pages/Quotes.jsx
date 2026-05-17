@@ -24,12 +24,11 @@ const STATUS_LABELS = {
   archived: 'Archivada',
 };
 
-// "#123 · Smith residence" / "#123" / "Smith residence" / "borrador sin nombre"
+// "#1001" or "borrador" — the internal-name field was removed; the
+// number plus the customer chip in each row already identify the quote.
 function describeQuote(q) {
-  if (q.number != null && q.name) return `#${q.number} · ${q.name}`;
   if (q.number != null) return `#${q.number}`;
-  if (q.name) return q.name;
-  return 'borrador sin nombre';
+  return 'borrador';
 }
 
 /**
@@ -107,7 +106,6 @@ export default function Quotes() {
         const cust = customerById.get(qu.customerId);
         return (
           (qu.number || '').toString().includes(needle) ||
-          (qu.name || '').toLowerCase().includes(needle) ||
           (cust?.name || '').toLowerCase().includes(needle) ||
           (cust?.company || '').toLowerCase().includes(needle)
         );
@@ -187,7 +185,6 @@ export default function Quotes() {
           <thead>
             <tr>
               <th>Número</th>
-              <th className="hidden lg:table-cell">Nombre</th>
               <th>Cliente</th>
               <th>Estado</th>
               <th>Pedido</th>
@@ -239,7 +236,7 @@ function QuoteCard({ qu, customer, order, total }) {
       <Link to={`/quotes/${qu.id}`} className="block">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-semibold">#{qu.number || '—'}{qu.name ? ` · ${qu.name}` : ''}</div>
+            <div className="text-sm font-semibold">#{qu.number || '—'}</div>
             <div className="text-xs text-ink-500 truncate">{customer?.name || 'Sin cliente'}</div>
           </div>
           <div className="text-right flex-shrink-0">
@@ -267,7 +264,6 @@ function QuoteRow({ qu, customer, order, total }) {
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
       <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
-      <td className="hidden lg:table-cell max-w-[200px] truncate" title={qu.name || ''}>{qu.name || '—'}</td>
       <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td><OrderIndicator order={order} /></td>

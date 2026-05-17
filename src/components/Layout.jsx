@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
+  UserSquare2,
   FileText,
   Package,
   Settings as SettingsIcon,
@@ -15,6 +16,7 @@ import ProfileMenu from './ProfileMenu.jsx';
 const navItems = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
   { to: '/customers', label: 'Clientes', icon: Users },
+  { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
   { to: '/quotes', label: 'Cotizaciones', icon: FileText },
   { to: '/orders', label: 'Pedidos', icon: Package },
   { to: '/settings', label: 'Configuración', icon: SettingsIcon },

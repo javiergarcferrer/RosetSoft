@@ -70,8 +70,9 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
     id,
     profileId,
     number: null,
-    name: '',
     customerId: null,
+    professionalId: null,
+    commissionPct: null,
     orderId: null,
     status: 'draft',
     currencyCode: 'USD',
@@ -163,6 +164,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   );
   const customers = useLiveQuery(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const professionals = useLiveQuery(
+    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
   );
@@ -400,6 +406,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <QuoteHeader
         quote={quote}
         customers={customers}
+        professionals={professionals}
         profileId={profileId}
         view={view}
         onViewChange={setView}

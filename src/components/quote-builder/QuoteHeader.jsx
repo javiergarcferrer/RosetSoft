@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, X, Eye, Pencil, Download, MoreHorizontal, Command } from 'lucide-react';
-import { DebouncedInput } from '../DebouncedInput.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
+import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
@@ -20,6 +20,7 @@ import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 export default function QuoteHeader({
   quote,
   customers,
+  professionals,
   profileId,
   view,
   onViewChange,
@@ -33,6 +34,9 @@ export default function QuoteHeader({
   saving,
 }) {
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
+  const professional = quote?.professionalId
+    ? professionals.find((p) => p.id === quote.professionalId)
+    : null;
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
@@ -45,20 +49,17 @@ export default function QuoteHeader({
       </Link>
 
       <div className="space-y-3">
-        {/* Title row */}
+        {/* Title row — the quote is identified by its number alone now
+            that the internal-name field is gone. The customer chip in
+            the meta row below is the human label. */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500">
-              {quote.number != null ? `Cotización #${quote.number}` : 'Cotización (borrador)'}
+              Cotización
             </div>
-            <div className="mt-0.5">
-              <DebouncedInput
-                value={quote.name || ''}
-                onCommit={(v) => onUpdateQuote({ name: v })}
-                placeholder='Nombre interno · p. ej. "Residencia Smith — sala"'
-                className="block w-full bg-transparent border-0 px-0 py-0 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-0"
-              />
-            </div>
+            <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
+              {quote.number != null ? `#${quote.number}` : 'Borrador'}
+            </h1>
           </div>
 
           {/* Actions */}
@@ -109,9 +110,16 @@ export default function QuoteHeader({
           </div>
         </div>
 
-        {/* Meta row: customer + container + save indicator */}
+        {/* Meta row: customer + professional (+ commission %) + order + save */}
         <div className="flex flex-wrap items-center gap-2">
           <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
+          <ProfessionalChip
+            quote={quote}
+            professional={professional}
+            professionals={professionals}
+            profileId={profileId}
+            onUpdateQuote={onUpdateQuote}
+          />
           <OrderChip
             quote={quote}
             profileId={profileId}

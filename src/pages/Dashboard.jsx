@@ -94,7 +94,6 @@ export default function Dashboard() {
                 <thead>
                   <tr>
                     <th>Número</th>
-                    <th className="hidden lg:table-cell">Nombre</th>
                     <th>Cliente</th>
                     <th>Estado</th>
                     <th className="hidden lg:table-cell">Actualizada</th>
@@ -140,7 +139,6 @@ function RecentQuoteRow({ q, customer, total }) {
   return (
     <tr>
       <td className="whitespace-nowrap"><Link to={`/quotes/${q.id}`} className="font-medium hover:underline">#{q.number || '—'}</Link></td>
-      <td className="hidden lg:table-cell max-w-[220px] truncate" title={q.name || ''}>{q.name || '—'}</td>
       <td className="text-ink-700 truncate max-w-[180px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td><span className="badge">{STATUS_LABELS[q.status] || 'Borrador'}</span></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(q.updatedAt)}</td>
@@ -155,7 +153,7 @@ function RecentQuoteCard({ q, customer, total }) {
       <Link to={`/quotes/${q.id}`} className="block px-4 py-3 hover:bg-ink-50">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-medium truncate">#{q.number || '—'}{q.name ? ` · ${q.name}` : ''}</div>
+            <div className="text-sm font-medium truncate">#{q.number || '—'}</div>
             <div className="text-xs text-ink-500 truncate">{customer?.name || '—'}</div>
           </div>
           <div className="text-right flex-shrink-0">

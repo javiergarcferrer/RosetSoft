@@ -534,7 +534,7 @@ function QuoteRow({ quote, order, total, onDetach }) {
         className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
       >
         <div className="text-sm font-semibold truncate">
-          #{quote.number || '—'}{quote.name ? ` · ${quote.name}` : ''}
+          #{quote.number || '—'}
         </div>
         <div className="text-[11px] text-ink-500">
           {delivered
@@ -668,7 +668,7 @@ function QuoteAttachList({ candidates, onPick, totalByQuote }) {
           >
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate">
-                #{q.number || '—'}{q.name ? ` · ${q.name}` : ''}
+                #{q.number || '—'}
               </div>
               <div className="text-[11px] text-ink-500">
                 {q.status} · {formatDateTime(q.updatedAt)}

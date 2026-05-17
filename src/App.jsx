@@ -7,6 +7,8 @@ import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
+import Professionals from './pages/Professionals.jsx';
+import ProfessionalDetail from './pages/ProfessionalDetail.jsx';
 import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
@@ -73,6 +75,8 @@ function ProtectedApp() {
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="customers" element={<Customers />} />
+            <Route path="professionals" element={<Professionals />} />
+            <Route path="professionals/:professionalId" element={<ProfessionalDetail />} />
             <Route path="quotes" element={<Quotes />} />
             <Route path="quotes/new" element={<QuoteBuilder />} />
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />

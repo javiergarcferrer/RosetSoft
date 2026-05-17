@@ -12,14 +12,15 @@ import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
  */
 
 const TABLES = {
-  profiles:    { db: 'profiles',    pk: 'id' },
-  settings:    { db: 'settings',    pk: 'profileId' },
-  images:      { db: 'images',      pk: 'id' },
-  customers:   { db: 'customers',   pk: 'id' },
-  orders:      { db: 'orders',      pk: 'id' },
-  quotes:      { db: 'quotes',      pk: 'id' },
-  quoteLines:  { db: 'quote_lines', pk: 'id' },
-  containers:  { db: 'containers',  pk: 'id' },
+  profiles:      { db: 'profiles',      pk: 'id' },
+  settings:      { db: 'settings',      pk: 'profileId' },
+  images:        { db: 'images',        pk: 'id' },
+  customers:     { db: 'customers',     pk: 'id' },
+  professionals: { db: 'professionals', pk: 'id' },
+  orders:        { db: 'orders',        pk: 'id' },
+  quotes:        { db: 'quotes',        pk: 'id' },
+  quoteLines:    { db: 'quote_lines',   pk: 'id' },
+  containers:    { db: 'containers',    pk: 'id' },
 };
 
 function snake(name) {
