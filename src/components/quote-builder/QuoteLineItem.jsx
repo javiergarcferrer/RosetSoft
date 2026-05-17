@@ -68,7 +68,13 @@ export default function QuoteLineItem({
   const hasAdjustment = discount !== 0 || margin !== 0;
 
   return (
-    <li className="px-3 sm:px-5 py-3.5 sm:py-4 group transition-colors duration-150 hover:bg-ink-50/40">
+    // qli-row turns each row into its own container-query root, so the
+    // body below reflows based on this row's width — not the viewport's.
+    // That's how the line item reads correctly whether it lives in the
+    // full-width builder, in a narrowed editor when the PDF panel is
+    // open, or in some future drawer / inspector pane. CSS in
+    // src/index.css owns the breakpoints.
+    <li className="qli-row group transition-colors duration-150 hover:bg-ink-50/40">
       <TopStrip
         family={line.family}
         expanded={expanded}
@@ -78,7 +84,7 @@ export default function QuoteLineItem({
         dragHandleProps={dragHandleProps}
       />
 
-      <div className="sm:flex sm:items-stretch sm:gap-5 sm:mt-1.5">
+      <div className="qli-body mt-1.5">
         <IdentityBand
           line={line}
           onChange={onChange}
@@ -152,8 +158,12 @@ function TopStrip({ family, expanded, onToggleExpand, onDuplicate, onRemove, dra
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
 function IdentityBand({ line, onChange, refInputRef }) {
+  // qli-identity owns the flex direction; the row stacks below the calc
+  // band when the container is narrow and sits next to it when it's
+  // wide. Children carry min-w-0 so long product names truncate via
+  // ellipsis instead of pushing the whole card sideways.
   return (
-    <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0 mb-3.5 sm:mb-0">
+    <div className="qli-identity">
       <Thumbnail
         imageId={line.imageId}
         onChange={(id) => onChange({ imageId: id })}
@@ -291,37 +301,43 @@ function CalculatorBand({
   line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
+  // qli-calc owns background, border, padding, and (most importantly)
+  // the responsive width — 360px when the container is ≥ 640px wide,
+  // 400px when ≥ 820px, full-width-with-1-column-grid when < 300px.
+  // qli-calc-grid uses minmax(0, 1fr) on the total cell so a long
+  // money string truncates with ellipsis instead of pushing the row
+  // wider than its container.
   return (
-    <div className="bg-ink-50 rounded-lg border border-ink-100 px-3 py-2.5 sm:px-4 sm:py-3 sm:flex-shrink-0 sm:w-[26rem] transition-shadow group-hover:shadow-soft">
-      <div className="flex items-end gap-2 sm:gap-3">
+    <div className="qli-calc transition-shadow group-hover:shadow-soft">
+      <div className="qli-calc-grid">
         <CalcCell label="Cant.">
           <DebouncedInput
             type="number"
             inputMode="decimal"
             min="0"
             step="any"
-            className="w-14 sm:w-16 text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+            className="w-14 text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
             value={line.qty ?? 1}
             onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
             aria-label="Cantidad"
           />
         </CalcCell>
 
-        <Operator>×</Operator>
+        <Operator className="qli-op">×</Operator>
 
         <CalcCell label="Unitario">
           <MoneyInput
             currency={currency}
             value={line.unitPrice}
             onCommit={(v) => onChange({ unitPrice: v })}
-            widthClass="w-24 sm:w-32"
+            widthClass="w-24"
             aria-label="Precio unitario"
           />
         </CalcCell>
 
-        <Operator>=</Operator>
+        <Operator className="qli-op">=</Operator>
 
-        <div className="flex-1 min-w-0 text-right relative">
+        <div className="qli-total-cell relative">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">Total</div>
           <button
             type="button"
@@ -330,7 +346,7 @@ function CalculatorBand({
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
-            <div className="text-[18px] sm:text-[19px] font-semibold tabular-nums text-ink-900 leading-tight">
+            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
               {fmt(lineTotal)}
             </div>
             {hasAdjustment ? (
