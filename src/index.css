@@ -3,8 +3,22 @@
 @tailwind utilities;
 
 @layer base {
-  html, body, #root { height: 100%; }
-  /* Dynamic viewport on mobile so collapsing browser chrome doesn't clip content. */
+  /* App-shell scroll model: html / body / #root are pinned to the viewport
+     and never scroll themselves. The Layout's <main> is the single scroll
+     container. This is what makes the page feel like a native app on iOS:
+       - no rubber-band of the whole page when the user drags content
+       - the Safari URL bar never animates in/out on scroll (it would
+         repaint half the layout every time, costing perceived perf)
+       - swipe-back gestures don't fight with vertical scrolling
+       - the fixed mobile topbar / sticky totals stay glued to the chrome
+         instead of jittering as the viewport resizes mid-scroll.
+     overscroll-behavior: none belt-and-suspenders the lock for engines
+     that still allow a 1-pixel overscroll bounce on overflow:hidden. */
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   @supports (height: 100dvh) {
     html, body, #root { height: 100dvh; }
   }
@@ -19,10 +33,13 @@
   }
   body {
     -webkit-font-smoothing: antialiased;
-    overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
-    /* Pin a background so rubber-band overscroll doesn't reveal the system color. */
+    /* Pin a background so any 1-pixel overscroll gap never reveals the OS color. */
     background-color: theme('colors.ink.50');
+    /* iOS treats position: fixed on a child as an Anchor for scroll-into-view
+       when a focused input is covered by the keyboard. Keeping body as a
+       static block lets that machinery work even though it doesn't scroll. */
+    position: relative;
   }
   ::selection { background-color: #dd8542; color: #171612; }
 

@@ -119,9 +119,13 @@ export default function Layout() {
         <ProfileMenu />
       </aside>
 
-      {/* overflow-x-hidden is a hard safety net: no descendant can ever
-          cause the page to scroll horizontally regardless of width. */}
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+      {/* Single scroll container for the whole app shell. html/body are
+          pinned in index.css so this is where momentum scrolling lives.
+          overflow-x-hidden is a hard safety net so no descendant can ever
+          cause horizontal scrolling regardless of width. overscroll-contain
+          stops a fling from chaining up to the locked body (which on iOS
+          would otherwise show a 1-pixel bounce flicker). */}
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
         <MainContent />
       </main>
     </div>
