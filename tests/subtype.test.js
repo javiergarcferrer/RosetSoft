@@ -63,6 +63,31 @@ test('compose — empty both sides yields empty string', () => {
   assert.equal(composeSubtype(undefined, ''),  '');
 });
 
+test('parse — every alpha grade in the Ligne Roset taxonomy (A..R, S, U..X)', () => {
+  for (const g of ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','U','V','W','X']) {
+    assert.deepEqual(parseSubtype(`Grade ${g} — Fabric`), { grade: g, fabric: 'Fabric' },
+      `parse failed for Grade ${g}`);
+  }
+});
+
+test('compose — Pieles letters (U..X) format the same as Telas letters', () => {
+  // The taxonomy splits visually into Telas / Microfibras / Pieles, but
+  // in the compose format they're all "Grade X" — the group is only a
+  // picker-side affordance.
+  assert.equal(composeSubtype('U', 'Tea'),   'Grade U — Tea');
+  assert.equal(composeSubtype('S', 'Anti'),  'Grade S — Anti');
+  assert.equal(composeSubtype('X', ''),      'Grade X');
+});
+
+test('parse — legacy "Cuir" / "Leather" round-trip (no longer in picker)', () => {
+  // The Cuir grade was deprecated in favour of specific Pieles letter
+  // grades U..X, but older quotes may still have "Cuir — Tea" in their
+  // subtype column. The parser keeps recognising it so the picker can
+  // render a hidden legacy <option> and not lose the dealer's data.
+  assert.deepEqual(parseSubtype('Cuir — Tea'), { grade: 'Cuir', fabric: 'Tea' });
+  assert.deepEqual(parseSubtype('Leather — black'), { grade: 'Leather', fabric: 'black' });
+});
+
 test('compose ∘ parse is identity for every canonical shape', () => {
   // Round-trip property: anything we'd ever WRITE should re-parse to the
   // same pair. (Legacy hand-typed strings that don't follow the schema
@@ -71,6 +96,9 @@ test('compose ∘ parse is identity for every canonical shape', () => {
     'Grade C — PAMPA',
     'Grade A — Velvet Smoke',
     'Grade H',
+    'Grade S — Microfibra',
+    'Grade U — Tea',
+    'Grade X',
     'Cuir — Tea',
     'Cuir',
     'COM — special',

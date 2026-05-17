@@ -11,7 +11,7 @@ import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import { applyLineAdjustments, clampPct } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
-import { parseSubtype, composeSubtype, GRADE_OPTIONS } from '../../lib/subtype.js';
+import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 
 /**
  * One quote line — designed as a product card with three vertical bands:
@@ -198,17 +198,32 @@ function GradeFabricRow({ line, onChange }) {
             collapsed select reads as "Grade C" rather than just "C" —
             a bare letter is unambiguous to a Ligne Roset dealer in
             isolation but jarring on a card that contains other letters
-            (refs, page numbers, dimensions). Named grades stand alone.
-            The optgroup labels structure the dropdown menu only. */}
+            (refs, page numbers, dimensions).
+
+            Groups (Telas / Microfibras / Pieles) and the A..R, S, U..X
+            letter set come from the Ligne Roset price list verbatim;
+            the in-between letters (T, Y, Z) are reserved and never
+            offered. Source of truth: src/lib/subtype.js GRADE_GROUPS. */}
         <option value="">Grade —</option>
-        <optgroup label="Tela / Fabric">
-          {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((g) => (
-            <option key={g} value={g}>Grade {g}</option>
-          ))}
-        </optgroup>
+        {GRADE_GROUPS.map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.grades.map((g) => (
+              <option key={g} value={g}>Grade {g}</option>
+            ))}
+          </optgroup>
+        ))}
         <optgroup label="Otros">
-          <option value="Cuir">Cuir</option>
-          <option value="COM">COM</option>
+          {SPECIAL_GRADES.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+          {/* Legacy values that may still live in older quotes — render
+              the matching option ONLY when the current value is one of
+              them, so a native <select> can display it back to the user.
+              Without this, the browser would silently fall back to the
+              first option and we'd lose what the dealer typed. */}
+          {LEGACY_NAMED_GRADES.includes(grade) && (
+            <option value={grade}>{grade} (anterior)</option>
+          )}
         </optgroup>
       </Select>
       {(grade || fabric) ? (

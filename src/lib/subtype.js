@@ -1,8 +1,8 @@
 /**
  * Subtype is one free-text column on the line row, but in practice dealers
  * write two distinct concepts into it: a fabric/leather *grade* (the price
- * tier — A, B, C… or Cuir / COM) and a *finish* name (the actual fabric,
- * leather, or wood variant — PAMPA, Velvet Smoke, Walnut, etc.).
+ * tier — A, B, C… or COM) and a *finish* name (the actual fabric, leather,
+ * or wood variant — PAMPA, Velvet Smoke, Walnut, etc.).
  *
  * The UI splits the field into two editors (a Grade dropdown + a Fabric
  * input). This module is the bridge: parse a stored subtype into the two
@@ -11,31 +11,53 @@
  *
  * Canonical compose format mirrors the price list:
  *
- *   "Grade C — PAMPA"     (alpha grade A..H)
- *   "Cuir — Tea"          (named special grade)
+ *   "Grade C — PAMPA"     (alpha grade A..X excluding T/Y/Z)
+ *   "Grade U — Tea"       (leather grade is just another letter)
+ *   "COM — buyer supplied"
  *   "Grade C"             (grade alone)
  *   "PAMPA"               (fabric alone, no grade)
  *
  * Parse is tolerant: anything we don't recognize as a grade is treated as
  * pure fabric, so legacy strings the dealer hand-typed (e.g. "Walnut",
- * "Lacquer black") round-trip intact.
+ * "Cuir — Tea") round-trip intact.
  */
-
-/** Letter grades the price list uses. Single letters A..H. */
-const ALPHA_GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-
-/** Named non-letter grades. Stored verbatim; rendered without the "Grade " prefix. */
-const NAMED_GRADES = ['Cuir', 'COM'];
 
 /**
- * Built-in dropdown options. Custom grades typed via the raw subtype field
- * still round-trip; they just don't appear in the picker.
+ * The full Ligne Roset grade taxonomy, grouped as the price list lays it
+ * out. The picker renders these groups as <optgroup>s so the dealer sees
+ * the same structure they read on paper. T, Y, and Z are intentionally
+ * absent — the price list skips them.
+ *
+ *   Telas       A..R   (18 fabric grades)
+ *   Microfibras S      (1)
+ *   Pieles      U..X   (4 leather grades)
+ *
+ * Plus one special non-letter grade we accept: COM (customer's own
+ * material).
  */
-export const GRADE_OPTIONS = [
-  ...ALPHA_GRADES.map((g) => ({ value: g, label: `Grade ${g}` })),
-  { value: 'Cuir', label: 'Cuir (leather)' },
-  { value: 'COM', label: 'COM' },
+export const GRADE_GROUPS = [
+  { label: 'Telas',       grades: ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'] },
+  { label: 'Microfibras', grades: ['S'] },
+  { label: 'Pieles',      grades: ['U','V','W','X'] },
 ];
+
+/** Special non-letter grades that still get a "Grade —"-less render. */
+export const SPECIAL_GRADES = ['COM'];
+
+/**
+ * Legacy values that may exist in older quotes but are no longer offered
+ * in the picker. Listed here so the parser still recognises them on read
+ * (round-trip safe) and the picker can render them as a hidden option
+ * whenever the current value matches — otherwise a native <select> would
+ * silently revert to its first option and lose the dealer's data.
+ */
+export const LEGACY_NAMED_GRADES = ['Cuir', 'Leather'];
+
+/** Every valid alpha grade across all groups — used by parser + composer. */
+export const ALPHA_GRADES = GRADE_GROUPS.flatMap((g) => g.grades);
+
+/** Every recognized grade value (alpha + special + legacy). */
+const RECOGNIZED_NAMED = new Set([...SPECIAL_GRADES, ...LEGACY_NAMED_GRADES]);
 
 /**
  * Parse a stored subtype into { grade, fabric }. Always returns both keys
@@ -47,17 +69,16 @@ export function parseSubtype(subtype) {
   if (!s) return { grade: '', fabric: '' };
 
   // "Grade <token> — Fabric" — token is anything non-whitespace so custom
-  // codes (Grade G2, Grade Pro) round-trip. The dash can be em-dash,
-  // en-dash, or ASCII hyphen.
+  // codes round-trip. Dash can be em-dash, en-dash, or ASCII hyphen.
   const m1 = s.match(/^Grade\s+(\S+)(?:\s*[—–-]\s*(.+))?$/i);
   if (m1) {
     return { grade: m1[1].toUpperCase(), fabric: (m1[2] || '').trim() };
   }
 
-  // Named grades: "Cuir — Tea", "COM — buyer-supplied", "Cuir" alone, etc.
-  // Case-insensitive match on the grade name, then preserve the canonical
-  // capitalization from NAMED_GRADES so the dropdown still highlights it.
-  for (const named of NAMED_GRADES) {
+  // Named grades: "COM — buyer-supplied", "Cuir — Tea", or the name alone.
+  // Case-insensitive match; canonical capitalisation is preserved so the
+  // dropdown still highlights it.
+  for (const named of RECOGNIZED_NAMED) {
     const m2 = s.match(new RegExp(`^${named}(?:\\s*[—–-]\\s*(.+))?$`, 'i'));
     if (m2) {
       return { grade: named, fabric: (m2[1] || '').trim() };
@@ -80,8 +101,7 @@ export function composeSubtype(grade, fabric) {
   if (!g) return f;
 
   // Alpha grades get the "Grade " prefix in the rendered string; named
-  // grades (Cuir, COM, custom) are written as-is — that's how the price
-  // list reads them.
+  // grades (COM, legacy Cuir/Leather, anything custom) are written as-is.
   const gradeStr = ALPHA_GRADES.includes(g.toUpperCase()) ? `Grade ${g.toUpperCase()}` : g;
   return f ? `${gradeStr} — ${f}` : gradeStr;
 }
