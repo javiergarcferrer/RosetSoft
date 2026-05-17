@@ -9,7 +9,7 @@ import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
-import { db, newId, invalidate } from '../db/database.js';
+import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import {
@@ -152,8 +152,7 @@ export default function OrderDetail() {
   }
 
   async function addContainer() {
-    const settings = await db.settings.get(profileId).catch(() => null);
-    const number = (settings?.containerCounter || 100) + 1;
+    const number = await nextSequenceNumber('containers', profileId, 101);
     const id = newId();
     const now = Date.now();
     await db.containers.put({
@@ -168,7 +167,6 @@ export default function OrderDetail() {
       createdAt: now,
       updatedAt: now,
     });
-    await db.settings.update(profileId, { containerCounter: number, updatedAt: now });
     invalidate();
   }
 

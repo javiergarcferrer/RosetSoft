@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Hash, Download } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import PdfViewer from '../components/PdfViewer.jsx';
-import { db, newId } from '../db/database.js';
+import { db, newId, nextSequenceNumber } from '../db/database.js';
 import { publicPricelistUrl } from '../db/supabaseClient.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals } from '../lib/pricing.js';
@@ -93,9 +93,10 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
     if (inFlightRef.current) return inFlightRef.current;
     inFlightRef.current = (async () => {
       try {
-        const number = (settings?.quoteCounter || 1000) + 1;
+        // Derive the number from the table's current top, not a stored
+        // counter — see nextSequenceNumber's docstring for why.
+        const number = await nextSequenceNumber('quotes', profileId, 1001);
         await db.quotes.put({ ...defaults, number, updatedAt: Date.now() });
-        await db.settings.put({ ...(settings || { profileId }), profileId, quoteCounter: number });
         persistedRef.current = true;
         try { window.history.replaceState(null, '', `#/quotes/${id}`); } catch {}
         return id;
@@ -105,7 +106,7 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
       }
     })();
     return inFlightRef.current;
-  }, [id, defaults, profileId, settings]);
+  }, [id, defaults, profileId]);
 
   // ?ref=XXXXX pre-fills the first line's reference field after materialize.
   useEffect(() => {

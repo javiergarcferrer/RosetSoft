@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Package, ArrowRight, Plus } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
-import { db, newId, invalidate } from '../../db/database.js';
+import { db, newId, invalidate, nextSequenceNumber } from '../../db/database.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
 
 /**
@@ -82,8 +82,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
  */
 async function createOrderFromQuote({ quote, profileId, onAttach }) {
   const id = newId();
-  const settings = await db.settings.get(profileId).catch(() => null);
-  const counter = (settings?.orderCounter ?? 100) + 1;
+  const number = await nextSequenceNumber('orders', profileId, 101);
 
   // Use the linked customer's name when available so the orders list reads
   // human-meaningfully ("Pedido — García & Asociados") instead of "Pedido O-101".
@@ -95,10 +94,10 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
   }
 
   const now = Date.now();
-  await db.orders.add({
+  await db.orders.put({
     id,
     profileId,
-    number: counter,
+    number,
     name: displayName,
     customerId: quote.customerId || null,
     status: 'accepted',
@@ -109,7 +108,6 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
     createdAt: now,
     updatedAt: now,
   });
-  await db.settings.update(profileId, { orderCounter: counter, updatedAt: now });
   invalidate();
   if (onAttach) onAttach(id);
 }

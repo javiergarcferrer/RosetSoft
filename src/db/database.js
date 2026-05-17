@@ -250,6 +250,80 @@ export const db = Object.fromEntries(
 );
 
 /* ---------------------------------------------------------------------- */
+/*  Sequential numbering                                                   */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Assign the next sequential `number` for a per-profile collection
+ * (quotes, orders, containers). The rule is:
+ *
+ *     next = max(existing number) + 1, or `start` if no rows exist.
+ *
+ * The dealer's mental model — and the reason the previous
+ * persisted-counter approach was wrong — is that the *current numeric
+ * top* is the source of truth, not a counter that only ratchets up:
+ *
+ *   • Delete the highest-numbered row (the most recent one) and that
+ *     number is *reused* by the next create. Counters never gave that
+ *     back; they kept advancing past holes.
+ *
+ *   • Delete a non-highest row (a middle one) and the hole stays. The
+ *     next create still goes above the current top. The dealer's words:
+ *     "si borro la #3 y voy por la #5, la siguiente no puede tener el
+ *     número 3". Chronology beats hole-filling.
+ *
+ *   • A counter persisted in `settings` was also fragile: the previous
+ *     code did `put(quote with number=N)` then `settings.put({counter:
+ *     N})` as two separate writes. If the second one failed (network
+ *     blip, page close), the next create would re-issue N. Computing
+ *     from the table itself removes that desync entirely.
+ *
+ * Concurrency: this app is single-user and offline-first (one dealer in
+ * one browser tab), so the "two creates read max simultaneously" race
+ * isn't realistic. If that ever changes we'd add a Postgres-side unique
+ * `(profile_id, number)` constraint plus client retry — for now the
+ * cheap client-side max-query is the right trade-off.
+ *
+ *   tableName  one of TABLES keys ('quotes', 'orders', 'containers').
+ *   profileId  scopes the query (numbers don't collide across profiles
+ *              even though right now there's only the 'team' profile).
+ *   start      the value to use when no rows exist yet. Picked so the
+ *              first issued number isn't #1 — dealers prefer
+ *              #1001/#101 since "Cotización #1" looks rookie. Defaults:
+ *              quotes 1001, orders 101, containers 101.
+ */
+export async function nextSequenceNumber(tableName, profileId, start) {
+  const tbl = TABLES[tableName];
+  if (!tbl) throw new Error(`Unknown table ${tableName}`);
+  const { data, error } = await supabase
+    .from(tbl.db)
+    .select('number')
+    .eq('profile_id', profileId)
+    .not('number', 'is', null)
+    .order('number', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return computeNextSequenceNumber(data?.[0]?.number, start);
+}
+
+/**
+ * Pure-function core of nextSequenceNumber, extracted so the rule can be
+ * unit-tested without a Supabase round-trip.
+ *
+ *   computeNextSequenceNumber(null,   1001) === 1001    // empty table
+ *   computeNextSequenceNumber(1003,   1001) === 1004    // top + 1
+ *   computeNextSequenceNumber('1003', 1001) === 1004    // coerces strings
+ *
+ * The string-coerce branch handles Supabase returning bigints as strings
+ * for some PostgREST configurations — without `Number()` we'd land on
+ * "10031" instead of 1004.
+ */
+export function computeNextSequenceNumber(currentMax, start) {
+  if (currentMax == null) return start;
+  return Number(currentMax) + 1;
+}
+
+/* ---------------------------------------------------------------------- */
 /*  IDs                                                                    */
 /* ---------------------------------------------------------------------- */
 

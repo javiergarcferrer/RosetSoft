@@ -4,7 +4,7 @@ import { Plus, Package, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useLiveQuery } from '../db/hooks.js';
-import { db, newId, invalidate } from '../db/database.js';
+import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
@@ -29,7 +29,7 @@ const STATUS_STYLES = {
 };
 
 export default function Orders() {
-  const { profileId, settings, saveSettings } = useApp();
+  const { profileId } = useApp();
 
   const orders = useLiveQuery(
     () => db.orders.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
@@ -88,7 +88,7 @@ export default function Orders() {
   }, [allQuotes, allLines, allContainers]);
 
   async function newOrder() {
-    const number = (settings?.orderCounter || 100) + 1;
+    const number = await nextSequenceNumber('orders', profileId, 101);
     const id = newId();
     const now = Date.now();
     await db.orders.put({
@@ -104,7 +104,6 @@ export default function Orders() {
       createdAt: now,
       updatedAt: now,
     });
-    await saveSettings({ orderCounter: number });
     window.location.hash = `#/orders/${id}`;
   }
 
