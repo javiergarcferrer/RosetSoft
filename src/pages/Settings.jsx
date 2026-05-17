@@ -9,8 +9,6 @@ import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { supabase, PRICELIST_BUCKET } from '../db/supabaseClient.js';
 import { db } from '../db/database.js';
-import { useLiveQuery } from '../db/hooks.js';
-import { STAGE_BY_KEY, currentStage } from '../lib/containerStages.js';
 
 export default function Settings() {
   const { profileId, settings, saveSettings } = useApp();
@@ -148,8 +146,8 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Containers */}
-          <ContainersCard local={local} set={set} />
+          {/* Orders */}
+          <OrdersCard local={local} set={set} />
         </div>
 
         {/* Sidebar */}
@@ -171,42 +169,11 @@ export default function Settings() {
   );
 }
 
-function ContainersCard({ local, set }) {
-  const { profileId } = useApp();
-  const containers = useLiveQuery(
-    () => db.containers.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
-    [profileId],
-    [],
-  );
-  // Only "filling" containers make sense as the default — once a container
-  // is past FILLING you've stopped accepting new quotes into it.
-  const fillingContainers = containers.filter((c) => currentStage(c) === 'filling');
-  const defaultId = local.defaultContainerId || '';
-
+function OrdersCard({ local, set }) {
   return (
     <div className="card card-pad">
-      <h2 className="font-semibold mb-3">Contenedores</h2>
-
+      <h2 className="font-semibold mb-3">Pedidos</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <div className="label">Contenedor predeterminado</div>
-          <select
-            className="input"
-            value={defaultId}
-            onChange={(e) => set('defaultContainerId', e.target.value || null)}
-          >
-            <option value="">— Ninguno —</option>
-            {fillingContainers.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.number}{c.name ? ` · ${c.name}` : ''}
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-ink-500 mt-1.5">
-            Nuevas cotizaciones se fijan automáticamente a este contenedor.
-          </p>
-        </div>
-
         <div>
           <div className="label">Monto mínimo para despacho (USD)</div>
           <input

@@ -4,7 +4,7 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  Container as ContainerIcon,
+  Package,
   Settings as SettingsIcon,
   Menu,
   X,
@@ -16,7 +16,7 @@ const navItems = [
   { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
   { to: '/customers', label: 'Clientes', icon: Users },
   { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-  { to: '/containers', label: 'Contenedores', icon: ContainerIcon },
+  { to: '/orders', label: 'Pedidos', icon: Package },
   { to: '/settings', label: 'Configuración', icon: SettingsIcon },
 ];
 

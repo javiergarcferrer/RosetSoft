@@ -9,8 +9,8 @@ import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
-import Containers from './pages/Containers.jsx';
-import ContainerDetail from './pages/ContainerDetail.jsx';
+import Orders from './pages/Orders.jsx';
+import OrderDetail from './pages/OrderDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -76,8 +76,17 @@ function ProtectedApp() {
             <Route path="quotes" element={<Quotes />} />
             <Route path="quotes/new" element={<QuoteBuilder />} />
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
-            <Route path="containers" element={<Containers />} />
-            <Route path="containers/:containerId" element={<ContainerDetail />} />
+            <Route path="orders" element={<Orders />} />
+            <Route path="orders/:orderId" element={<OrderDetail />} />
+            {/* Legacy redirects: old container routes were the ancestor of
+                today's order routes. Keep them working as 301-style
+                client-side redirects so external bookmarks survive the
+                rename. The :containerId segment is preserved as the new
+                order's :orderId — the data migration uses
+                'o-' || container.id, but the parent /containers route is
+                what most bookmarks point at. */}
+            <Route path="containers" element={<Navigate to="/orders" replace />} />
+            <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Route>

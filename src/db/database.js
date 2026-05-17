@@ -16,6 +16,7 @@ const TABLES = {
   settings:    { db: 'settings',    pk: 'profileId' },
   images:      { db: 'images',      pk: 'id' },
   customers:   { db: 'customers',   pk: 'id' },
+  orders:      { db: 'orders',      pk: 'id' },
   quotes:      { db: 'quotes',      pk: 'id' },
   quoteLines:  { db: 'quote_lines', pk: 'id' },
   containers:  { db: 'containers',  pk: 'id' },

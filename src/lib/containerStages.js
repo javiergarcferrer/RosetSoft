@@ -1,8 +1,15 @@
 /**
  * Container pipeline definitions — single source of truth for the 6-stage
- * journey a shipment moves through and the per-quote fulfillment milestones
- * within it. Pages render from these maps so adding a stage or relabeling
- * one is a one-line change.
+ * journey a physical shipment moves through. The 'filling' entry stage is
+ * where a freshly created container sits until the dispatch threshold is
+ * reached; from there it walks the linear path to 'received' (the photo
+ * has been off-loaded in DR — what used to be 'complete', renamed because
+ * 'delivered' is now the customer-facing order-level state and the two
+ * concepts needed unambiguous labels).
+ *
+ * Pages render from this map, so adding a stage or relabeling one is a
+ * one-line change. The transition timestamps are nullable columns on the
+ * containers table so a stage's actual happened-at can be displayed.
  */
 
 export const STAGES = [
@@ -37,10 +44,10 @@ export const STAGES = [
     timestampField: 'landedAt',
   },
   {
-    key: 'complete',
-    label: 'Completado',
-    description: 'Todos los clientes recibieron sus piezas y pagaron el balance.',
-    timestampField: 'completedAt',
+    key: 'received',
+    label: 'Recibido',
+    description: 'Contenedor descargado en RD; piezas disponibles para entrega al cliente.',
+    timestampField: 'completedAt',  // legacy column name kept to avoid a second migration
   },
 ];
 
@@ -53,7 +60,7 @@ export function nextStage(stageKey) {
   return STAGES[idx + 1];
 }
 
-/** Numeric index of a stage (0 = filling, 5 = complete). Useful for stepper rendering. */
+/** Numeric index of a stage (0 = filling, 5 = received). Useful for stepper rendering. */
 export function stageIndex(stageKey) {
   const idx = STAGES.findIndex((s) => s.key === stageKey);
   return idx === -1 ? 0 : idx;
@@ -64,19 +71,9 @@ export function currentStage(container) {
   if (!container) return 'filling';
   if (container.stage && STAGE_BY_KEY[container.stage]) return container.stage;
   // Legacy fallback: pre-pipeline rows still have status='dispatched'/'open'.
-  if (container.status === 'dispatched') return 'complete';
+  // The 20260516120200 migration backfills these but a partially-migrated
+  // row could still slip through; coercing here is cheap defence.
+  if (container.status === 'dispatched') return 'received';
+  if (container.stage === 'complete') return 'received';
   return 'filling';
 }
-
-/**
- * Per-quote fulfillment milestones surfaced in the container's customer
- * roll-up. Each is an independent timestamp flag on `quotes` — flipping
- * one doesn't enforce the order of the others.
- */
-export const FULFILLMENT_MILESTONES = [
-  { key: 'customerNotifiedAt', label: 'Notif.',    title: 'Cliente notificado' },
-  { key: 'depositPaidAt',      label: 'Depósito',  title: 'Depósito recibido' },
-  { key: 'specsLockedAt',      label: 'Specs',     title: 'Especificaciones confirmadas' },
-  { key: 'balancePaidAt',      label: 'Balance',   title: 'Balance pagado' },
-  { key: 'deliveredAt',        label: 'Entrega',   title: 'Entregado al cliente' },
-];

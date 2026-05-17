@@ -33,11 +33,12 @@ function describeQuote(q) {
 }
 
 /**
- * Shared row-level mutations: delete confirm, container assignment. The
- * QuoteCard / QuoteRow components have different layouts but identical
- * row behavior — keep it here so both stay in sync when (e.g.) the delete
- * confirm copy changes. Totals are passed in as a prop because the parent
- * fetches them all in a single batch.
+ * Shared row-level mutations: delete confirm. The QuoteCard / QuoteRow
+ * components have different layouts but identical row behavior — keep it
+ * here so both stay in sync when (e.g.) the delete confirm copy changes.
+ * Order assignment used to live here too (back when quotes pinned to
+ * containers); it moved to the quote workspace (OrderChip) since order
+ * creation is event-driven on quote-acceptance.
  */
 function useQuoteOps(qu) {
   async function del(e) {
@@ -49,13 +50,7 @@ function useQuoteOps(qu) {
     await db.quotes.delete(qu.id);
   }
 
-  async function setContainer(e) {
-    e.stopPropagation();
-    const value = e.target.value || null;
-    await db.quotes.update(qu.id, { containerId: value, updatedAt: Date.now() });
-  }
-
-  return { del, setContainer };
+  return { del };
 }
 
 export default function Quotes() {
@@ -70,8 +65,8 @@ export default function Quotes() {
     [profileId],
     []
   );
-  const containers = useLiveQuery(
-    () => db.containers.where('profileId').equals(profileId || '').toArray(),
+  const orders = useLiveQuery(
+    () => db.orders.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     []
   );
@@ -88,6 +83,12 @@ export default function Quotes() {
     for (const c of customers) m.set(c.id, c);
     return m;
   }, [customers]);
+
+  const ordersById = useMemo(() => {
+    const m = new Map();
+    for (const o of orders) m.set(o.id, o);
+    return m;
+  }, [orders]);
 
   const totalByQuoteId = useMemo(() => {
     const m = new Map();
@@ -169,7 +170,7 @@ export default function Quotes() {
             key={qu.id}
             qu={qu}
             customer={customerById.get(qu.customerId)}
-            allContainers={containers}
+            order={ordersById.get(qu.orderId)}
             total={totalByQuoteId.get(qu.id) || 0}
           />
         ))}
@@ -189,7 +190,7 @@ export default function Quotes() {
               <th className="hidden lg:table-cell">Nombre</th>
               <th>Cliente</th>
               <th>Estado</th>
-              <th>Contenedor</th>
+              <th>Pedido</th>
               <th className="hidden lg:table-cell">Actualizada</th>
               <th className="text-right">Total</th>
               <th />
@@ -201,7 +202,7 @@ export default function Quotes() {
                 key={qu.id}
                 qu={qu}
                 customer={customerById.get(qu.customerId)}
-                allContainers={containers}
+                order={ordersById.get(qu.orderId)}
                 total={totalByQuoteId.get(qu.id) || 0}
               />
             ))}
@@ -212,8 +213,26 @@ export default function Quotes() {
   );
 }
 
-function QuoteCard({ qu, customer, allContainers, total }) {
-  const { del, setContainer } = useQuoteOps(qu);
+// Compact read-only order indicator for a quote row. If the quote is in
+// an order, link to it; if not, render a quiet em-dash. Quote→order
+// attachment is event-driven (see OrderChip), so editing it from a list
+// row would be misleading.
+function OrderIndicator({ order }) {
+  if (!order) return <span className="text-ink-300">—</span>;
+  return (
+    <Link
+      to={`/orders/${order.id}`}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 text-xs font-medium text-ink-700 hover:text-brand-700 transition-colors"
+    >
+      <span className="tabular-nums">#{order.number ?? order.id.slice(-4)}</span>
+      {order.name ? <span className="text-ink-500 truncate max-w-[120px]">· {order.name}</span> : null}
+    </Link>
+  );
+}
+
+function QuoteCard({ qu, customer, order, total }) {
+  const { del } = useQuoteOps(qu);
 
   return (
     <div className="card p-3">
@@ -231,19 +250,9 @@ function QuoteCard({ qu, customer, allContainers, total }) {
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
         <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span>
-        <select
-          className="input text-xs py-1 flex-1 min-w-0"
-          value={qu.containerId || ''}
-          onChange={setContainer}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <option value="">— Sin contenedor —</option>
-          {allContainers.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.number}{c.name ? ` · ${c.name}` : ''}
-            </option>
-          ))}
-        </select>
+        <div className="flex-1 min-w-0">
+          <OrderIndicator order={order} />
+        </div>
         <button onClick={del} className="text-ink-400 hover:text-red-600 p-2" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
@@ -252,8 +261,8 @@ function QuoteCard({ qu, customer, allContainers, total }) {
   );
 }
 
-function QuoteRow({ qu, customer, allContainers, total }) {
-  const { del, setContainer } = useQuoteOps(qu);
+function QuoteRow({ qu, customer, order, total }) {
+  const { del } = useQuoteOps(qu);
 
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
@@ -261,20 +270,7 @@ function QuoteRow({ qu, customer, allContainers, total }) {
       <td className="hidden lg:table-cell max-w-[200px] truncate" title={qu.name || ''}>{qu.name || '—'}</td>
       <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
-      <td onClick={(e) => e.stopPropagation()}>
-        <select
-          className="input text-xs py-1 w-full max-w-[180px]"
-          value={qu.containerId || ''}
-          onChange={setContainer}
-        >
-          <option value="">— Ninguno —</option>
-          {allContainers.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.number}{c.name ? ` · ${c.name}` : ''}
-            </option>
-          ))}
-        </select>
-      </td>
+      <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
       <td className="text-right w-12">

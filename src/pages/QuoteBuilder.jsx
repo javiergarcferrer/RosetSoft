@@ -72,7 +72,7 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
     number: null,
     name: '',
     customerId: null,
-    containerId: settings?.defaultContainerId || null,
+    orderId: null,
     status: 'draft',
     currencyCode: 'USD',
     rates: settings?.currencyRates || { USD: 1 },

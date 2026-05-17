@@ -4,13 +4,11 @@ import { ChevronDown, Info } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
-import FulfillmentPills from '../FulfillmentPills.jsx';
-
 /**
- * The persistent totals + adjustments + fulfillment rail. Always visible on
- * the right column at desktop widths so the dealer never loses sight of the
- * running total. At narrow widths the parent flips this to a full-width
- * card under the line items.
+ * The persistent totals + adjustments rail. Always visible on the right
+ * column at desktop widths so the dealer never loses sight of the running
+ * total. At narrow widths the parent flips this to a full-width card
+ * under the line items.
  *
  * Composition:
  *   - Totals card  (subtotal → discount → ITBIS → shipping → grand total)
@@ -19,7 +17,11 @@ import FulfillmentPills from '../FulfillmentPills.jsx';
  *   - Adjustments card (quote-level discount %, shipping). Margin lives on
  *     lines, not quote-wide, by design (each line's margin reflects the
  *     deal struck on that piece).
- *   - Fulfillment card (per-quote milestones reused from container detail).
+ *
+ * Fulfillment milestones used to live here as a third card; they moved to
+ * the order-level status stepper (orderStages.js + OrderDetail.jsx) so the
+ * lifecycle is tracked once at the operational unit, not duplicated per
+ * quote.
  */
 export default function TotalsRail({
   quote, totals, onUpdateQuote,
@@ -106,18 +108,6 @@ export default function TotalsRail({
         <p className="text-[10px] text-ink-500">
           ITBIS fijo en {ITBIS_PCT}% · La tasa DOP se gestiona en <Link to="/settings" className="underline">configuración</Link>.
         </p>
-      </div>
-
-      {/* Fulfillment */}
-      <div className="card card-pad space-y-2">
-        <h2 className="font-semibold text-sm">Fulfillment</h2>
-        <p className="text-[11px] text-ink-500">
-          Marca cada hito conforme avanza el cliente.
-        </p>
-        <FulfillmentPills
-          quote={quote}
-          onChange={(patch) => onUpdateQuote(patch)}
-        />
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { ArrowLeft, BookOpen, X, Eye, Pencil, Download, MoreHorizontal, Command 
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
-import ContainerChip from './ContainerChip.jsx';
+import OrderChip from './OrderChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
@@ -112,10 +112,10 @@ export default function QuoteHeader({
         {/* Meta row: customer + container + save indicator */}
         <div className="flex flex-wrap items-center gap-2">
           <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-          <ContainerChip
+          <OrderChip
+            quote={quote}
             profileId={profileId}
-            containerId={quote.containerId}
-            onChange={(id) => onUpdateQuote({ containerId: id })}
+            onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
           <div className="flex-1" />
           <SaveIndicator savedAt={savedAt} saving={saving} />

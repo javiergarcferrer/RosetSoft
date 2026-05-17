@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Users, Container as ContainerIcon, ArrowRight } from 'lucide-react';
+import { FileText, Users, Package, ArrowRight } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -20,8 +20,8 @@ export default function Dashboard() {
   const counts = useLiveQuery(async () => ({
     customers: await db.customers.where('profileId').equals(profileId || '').count(),
     quotes: await db.quotes.where('profileId').equals(profileId || '').count(),
-    containers: await db.containers.where('profileId').equals(profileId || '').count(),
-  }), [profileId], { customers: 0, quotes: 0, containers: 0 });
+    orders: await db.orders.where('profileId').equals(profileId || '').count(),
+  }), [profileId], { customers: 0, quotes: 0, orders: 0 });
 
   const recentQuotes = useLiveQuery(
     () => db.quotes.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt').then((r) => r.slice(0, 6)),
@@ -63,7 +63,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={FileText} label="Cotizaciones" value={counts.quotes} to="/quotes" />
         <StatCard icon={Users} label="Clientes" value={counts.customers} to="/customers" />
-        <StatCard icon={ContainerIcon} label="Contenedores" value={counts.containers} to="/containers" />
+        <StatCard icon={Package} label="Pedidos" value={counts.orders} to="/orders" />
       </div>
 
       <div className="card mt-6">
