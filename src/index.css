@@ -48,6 +48,20 @@
     input, select, textarea { font-size: 16px !important; }
   }
 
+  /* Hide WebKit / Firefox number-input spinners. They eat ~15px on the
+     right edge of every type="number" field, which on a phone is the
+     difference between "$18,500" fitting and getting clipped. Power
+     users can still step values with ArrowUp / ArrowDown — those work
+     on a bare number input regardless of spinner visibility. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
   /* Faster, more deterministic taps: removes the legacy 300ms click delay and
      suppresses pinch / double-tap zoom inside interactive controls. */
   a, button, [role="button"], input, select, textarea, label {
