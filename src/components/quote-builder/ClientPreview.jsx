@@ -133,40 +133,54 @@ function ClientLine({ line, currency, rates, fmt }) {
     * (1 + (Number(line.lineMarginPct) || 0) / 100)
     * (1 - (Number(line.lineDiscountPct) || 0) / 100);
   const total = unit * (Number(line.qty) || 0);
+  // CSS grid instead of flex-wrap. The old layout used `min-w-[120px]
+  // text-right` on the numeric column, which on a phone-width row
+  // wrapped onto its own line at ~120px wide — leaving the values
+  // floating in the middle of the card instead of sticking to the
+  // right edge. Grid lets the numeric column span both other columns
+  // on mobile (full-width row, right-aligned to the card border)
+  // and slot back to a third column on sm+ widths.
   return (
-    <li className="px-2 sm:px-4 py-4 border-b border-ink-100 last:border-b-0 flex flex-wrap items-start gap-4">
-      {line.imageId ? (
-        <ImageView id={line.imageId} className="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0" />
-      ) : (
-        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
-      )}
-      <div className="flex-1 min-w-[200px]">
-        {line.family && (
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
-            {line.family}
-          </div>
+    <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
+      <div className="grid gap-x-4 gap-y-3 grid-cols-[80px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)_auto] items-start">
+        {line.imageId ? (
+          <ImageView id={line.imageId} className="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-white rounded-md border border-ink-100" />
+        ) : (
+          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-ink-50 rounded-md border border-ink-100" />
         )}
-        <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
-        {line.subtype && <div className="text-[11px] text-ink-500 mt-0.5">{line.subtype}</div>}
-        {(line.reference || line.dimensions) && (
-          <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
-            {line.reference && <span className="font-mono">ref {line.reference}</span>}
-            {line.dimensions && <span>{line.dimensions}</span>}
-          </div>
-        )}
-        {line.description && (
-          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
-            {line.description}
-          </div>
-        )}
-      </div>
-      <div className="text-right tabular-nums flex-shrink-0 min-w-[120px]">
-        <div className="text-[10px] uppercase tracking-wide text-ink-500">Cantidad</div>
-        <div className="text-sm font-medium">{line.qty || 0}</div>
-        <div className="text-[10px] uppercase tracking-wide text-ink-500 mt-1">Unitario</div>
-        <div className="text-sm font-medium">{fmt(unit)}</div>
-        <div className="text-[10px] uppercase tracking-wide text-ink-500 mt-1">Total</div>
-        <div className="text-base font-semibold">{fmt(total)}</div>
+        <div className="min-w-0">
+          {line.family && (
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
+              {line.family}
+            </div>
+          )}
+          <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
+          {line.subtype && <div className="text-[11px] text-ink-500 mt-0.5">{line.subtype}</div>}
+          {(line.reference || line.dimensions) && (
+            <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
+              {line.reference && <span className="font-mono">ref {line.reference}</span>}
+              {line.dimensions && <span>{line.dimensions}</span>}
+            </div>
+          )}
+          {line.description && (
+            <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+              {line.description}
+            </div>
+          )}
+        </div>
+        {/* col-span-2 on mobile: numeric slot occupies the full row
+            beneath the image+text, so text-right hugs the right edge
+            of the card. On sm+ it returns to a third column next to
+            the text block. min-w-0 keeps long money strings from
+            forcing the row wider than the card. */}
+        <div className="col-span-2 sm:col-span-1 text-right tabular-nums min-w-0 sm:min-w-[110px]">
+          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold">Cantidad</div>
+          <div className="text-sm font-medium">{line.qty || 0}</div>
+          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold mt-1.5">Unitario</div>
+          <div className="text-sm font-medium">{fmt(unit)}</div>
+          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold mt-1.5">Total</div>
+          <div className="text-base font-semibold">{fmt(total)}</div>
+        </div>
       </div>
     </li>
   );
