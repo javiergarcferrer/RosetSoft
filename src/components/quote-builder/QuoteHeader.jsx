@@ -35,17 +35,30 @@ export default function QuoteHeader({
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
   // Look up the quote's creator from the AppContext profiles list. The
   // user who clicked "Nueva cotización" has their auth.uid() stamped
-  // on the row at materialize time; we show their name as a small
-  // "Creada por …" line under the H1 so the dealer reading the page
-  // knows whose quote this is. Falls back silently when the field is
-  // null (legacy quotes from before user attribution).
-  const { profiles: allProfiles } = useApp();
+  // on the row at materialize time. Admins can re-assign the seller
+  // via the inline picker below — useful when a quote was built on a
+  // shared workstation, an employee left and an admin needs to credit
+  // a different seller, or to fix legacy quotes that predate user
+  // attribution. Falls back silently to "—" when unset; the rest of
+  // the app (commissions report) skips quotes with no creator.
+  const { profiles: allProfiles, currentProfile } = useApp();
+  const isAdmin = currentProfile?.role === 'admin';
   const creator = quote?.createdByUserId
     ? allProfiles.find((p) => p.id === quote.createdByUserId)
     : null;
   const creatorLabel = creator
     ? (creator.name?.trim() || creator.email?.split('@')[0] || '')
     : '';
+  // Only real, active team members are eligible to be a seller.
+  // Tombstoned / pending profiles would attribute commissions to
+  // ineligible accounts; surface them only when they're the CURRENT
+  // creator so the admin can see who's there and change them.
+  const assignableSellers = (allProfiles || []).filter(
+    (p) =>
+      p.id !== 'team' &&
+      (p.role === 'admin' || p.role === 'employee') &&
+      (p.active || p.id === quote?.createdByUserId),
+  );
   const professional = quote?.professionalId
     ? professionals.find((p) => p.id === quote.professionalId)
     : null;
@@ -72,11 +85,37 @@ export default function QuoteHeader({
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
-            {creatorLabel && (
+            {isAdmin ? (
+              // Inline seller assignment — admin-only. A native select
+              // is the right control: zero modal weight, keyboard-
+              // friendly, mobile-friendly, matches the "small
+              // metadata" visual register. The empty option lets the
+              // admin explicitly clear attribution if the quote was
+              // built without a real seller (rare, but possible for
+              // training / sandbox quotes).
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-ink-500">
+                <label htmlFor="qh-seller" className="select-none">Vendedor</label>
+                <select
+                  id="qh-seller"
+                  value={quote?.createdByUserId || ''}
+                  onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
+                  className="bg-transparent border border-ink-200 hover:border-ink-400 focus:border-ink-700 rounded px-1.5 py-0.5 text-[11px] text-ink-700 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  aria-label="Vendedor asignado"
+                >
+                  <option value="">— sin vendedor —</option>
+                  {assignableSellers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {(p.name?.trim() || p.email?.split('@')[0] || p.id)}
+                      {p.id === quote?.createdByUserId && !p.active ? ' (inactivo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : creatorLabel ? (
               <div className="text-[11px] text-ink-500 mt-1">
                 Creada por <span className="text-ink-700">{creatorLabel}</span>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Actions */}
