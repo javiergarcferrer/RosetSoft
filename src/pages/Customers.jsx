@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLiveQueryStatus } from '../db/hooks.js';
-import { Plus, Search, Trash2, Users } from 'lucide-react';
+import { Plus, Search, Trash2, Users, Pencil, ArrowRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
@@ -70,23 +71,35 @@ export default function Customers() {
             </div>
           </div>
 
-          {/* Mobile cards */}
+          {/* Mobile cards — the whole card links to the detail page;
+              the inline "Editar" button opens the contact-info modal
+              without leaving the list. Mirrors the Professionals
+              pattern so dealers learn one click model. */}
           <div className="md:hidden space-y-2">
             {filtered.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setEditing(c)}
-                className="card w-full text-left p-3 hover:bg-ink-50"
-              >
-                <div className="font-medium text-sm">{c.name}</div>
-                {c.company && <div className="text-xs text-ink-500">{c.company}</div>}
-                <div className="text-xs text-ink-700 mt-1 space-y-0.5">
-                  {c.email && <div className="truncate">{c.email}</div>}
-                  {c.phone && <div>{c.phone}</div>}
-                  {c.city && <div className="text-ink-500">{c.city}</div>}
-                </div>
-              </button>
+              <div key={c.id} className="card relative">
+                <Link
+                  to={`/customers/${c.id}`}
+                  className="block p-3 pr-12 hover:bg-ink-50 rounded-xl"
+                >
+                  <div className="font-medium text-sm">{c.name}</div>
+                  {c.company && <div className="text-xs text-ink-500">{c.company}</div>}
+                  <div className="text-xs text-ink-700 mt-1 space-y-0.5">
+                    {c.email && <div className="truncate">{c.email}</div>}
+                    {c.phone && <div>{c.phone}</div>}
+                    {c.city && <div className="text-ink-500">{c.city}</div>}
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setEditing(c)}
+                  className="absolute top-2 right-2 p-2 text-ink-400 hover:text-ink-900"
+                  aria-label="Editar cliente"
+                  title="Editar contacto"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
             ))}
             {filtered.length === 0 && (
               <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
@@ -109,13 +122,29 @@ export default function Customers() {
               </thead>
               <tbody>
                 {filtered.map((c) => (
-                  <tr key={c.id} className="cursor-pointer" onClick={() => setEditing(c)}>
+                  // Row click navigates to the detail page (related
+                  // quotes + orders). The "Editar" button stops
+                  // propagation so contact-info edits stay inline.
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer"
+                    onClick={() => { window.location.hash = `#/customers/${c.id}`; }}
+                  >
                     <td className="font-medium truncate max-w-[200px]" title={c.name}>{c.name}</td>
                     <td className="text-ink-700 truncate max-w-[200px]" title={c.company || ''}>{c.company || '—'}</td>
                     <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={c.email || ''}>{c.email || '—'}</td>
                     <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{c.phone || '—'}</td>
                     <td className="hidden xl:table-cell text-ink-700 truncate max-w-[160px]" title={c.city || ''}>{c.city || '—'}</td>
-                    <td className="text-right w-20"><span className="text-xs text-ink-500">Editar</span></td>
+                    <td className="text-right w-24">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditing(c); }}
+                        className="text-xs text-ink-500 hover:text-ink-900"
+                      >
+                        Editar
+                      </button>
+                      <span className="text-ink-300 ml-2"><ArrowRight size={12} className="inline" /></span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

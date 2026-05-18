@@ -434,10 +434,13 @@ export async function ensureDefaultProfile() {
     const isAllowlistedAdmin = email && adminEmails.map((e) => String(e).toLowerCase().trim()).includes(email);
 
     const existing = await db.profiles.get(u.id).catch(() => null);
+    const now = Date.now();
     if (!existing) {
       // First time we've seen this user. Create their profile row.
       // Allowlisted admins land already-activated; everyone else
-      // starts pending.
+      // starts pending. `lastSignInAt` is stamped now because this
+      // codepath only runs when a real auth session exists — i.e.
+      // the user is signing in right now.
       await db.profiles.put({
         id: u.id,
         name: (u.user_metadata && u.user_metadata.name) || (u.email?.split('@')[0]) || 'Member',
@@ -445,15 +448,37 @@ export async function ensureDefaultProfile() {
         role: isAllowlistedAdmin ? 'admin' : 'employee',
         active: isAllowlistedAdmin,
         commissionPct: 0,
+        lastSignInAt: now,
       }).catch(() => {});
-    } else if (isAllowlistedAdmin && (!existing.active || existing.role !== 'admin')) {
-      // Existing user whose email got added to the allowlist after
-      // their first signup. Promote them on the next sign-in so we
-      // never lock the dealer out of their own org.
-      await db.profiles.update(u.id, {
-        role: 'admin',
-        active: true,
-      }).catch(() => {});
+    } else {
+      // Update lastSignInAt on every sign-in. Two extra behaviors
+      // depend on what the existing row looks like:
+      //
+      //   1. Invitation acceptance — if the row was created by the
+      //      invite-user edge function (active=false, lastSignInAt=
+      //      null), this is the moment the invitee clicks the magic
+      //      link for the first time. Flip them to active=true. From
+      //      then on they're a working employee.
+      //
+      //   2. Bootstrap-admin promotion — if the user's email is in
+      //      settings.admin_emails but they aren't currently an
+      //      active admin, promote them. This keeps the dealer from
+      //      ever locking themselves out by allowing the allowlist
+      //      to be edited after the first signup.
+      //
+      // The two patches compose: an invited user whose email is in
+      // the admin allowlist arrives as active=true + role=admin in
+      // one round-trip.
+      const patch = { lastSignInAt: now };
+      const isFirstAcceptance = !existing.active && !existing.lastSignInAt;
+      if (isFirstAcceptance) {
+        patch.active = true;
+      }
+      if (isAllowlistedAdmin && (!existing.active || existing.role !== 'admin')) {
+        patch.role = 'admin';
+        patch.active = true;
+      }
+      await db.profiles.update(u.id, patch).catch(() => {});
     }
   }
   return TEAM_PROFILE_ID;

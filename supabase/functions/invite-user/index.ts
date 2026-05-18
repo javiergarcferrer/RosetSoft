@@ -159,16 +159,28 @@ Deno.serve(async (req) => {
   }
 
   // ---- 5. Pre-create the profile row -----------------------------------
-  // Active=true on insert so the invitee bypasses the "Pending approval"
-  // gate when they click the magic link. The role + commission they
-  // arrive with were set by the admin here, not by themselves.
+  // `active = false` + `last_sign_in_at = null` is the canonical
+  // "invitation sent, awaiting acceptance" state. The admin Users page
+  // surfaces these rows in a dedicated "Invitaciones sin aceptar"
+  // section so they don't get confused with employees who actually
+  // work in the system. When the invitee clicks the magic link and
+  // signs in for the first time, ensureDefaultProfile() flips active
+  // to true and stamps last_sign_in_at — the row promotes from
+  // "invited" to "activo" at that moment, and only at that moment.
+  //
+  // Why this beats "active=true on invite": before this change, an
+  // invitee who never clicked the link would still appear in the
+  // active-employees count and show up in commission reports as a
+  // legitimate teammate. Now they don't count until they actually
+  // accept the invitation.
   const { error: profileErr } = await adminClient.from('profiles').upsert({
     id:              invitedUser.id,
     email,
     name,
     role,
     commission_pct:  pct,
-    active:          true,
+    active:          false,
+    last_sign_in_at: null,
     invited_by:      callerUser.id,
   });
   if (profileErr) {

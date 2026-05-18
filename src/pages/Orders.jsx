@@ -74,6 +74,38 @@ export default function Orders() {
     return m;
   }, [customers]);
 
+  // For each order, build the set of customer rows attached via its
+  // quotes. Many orders are created from a quote (the OrderChip flow
+  // pre-sets order.customerId), but some are created manually via
+  // "Nuevo pedido" and never have a direct customer — they inherit
+  // their customer from whichever quote(s) are attached. Without this
+  // lookup the Pedidos list rendered "Sin cliente" for those orders,
+  // which read as a data problem when it was just a display gap.
+  const customersByOrder = useMemo(() => {
+    const m = new Map();
+    for (const q of allQuotes) {
+      if (!q.orderId || !q.customerId) continue;
+      const customer = customerById.get(q.customerId);
+      if (!customer) continue;
+      if (!m.has(q.orderId)) m.set(q.orderId, []);
+      const list = m.get(q.orderId);
+      if (!list.some((c) => c.id === customer.id)) list.push(customer);
+    }
+    return m;
+  }, [allQuotes, customerById]);
+
+  // Resolve the customer label for an order: prefer the direct
+  // assignment (order.customerId), fall back to the quotes', cap
+  // visible at the first customer plus "+N más" when several.
+  function orderCustomerLabel(o) {
+    const direct = o.customerId ? customerById.get(o.customerId) : null;
+    if (direct) return direct.company || direct.name;
+    const fromQuotes = customersByOrder.get(o.id) || [];
+    if (fromQuotes.length === 0) return null;
+    const head = fromQuotes[0].company || fromQuotes[0].name;
+    return fromQuotes.length === 1 ? head : `${head} + ${fromQuotes.length - 1} más`;
+  }
+
   const { totalByOrder, quoteCountByOrder, containerCountByOrder } = useMemo(() => {
     const lineTotalByQuote = new Map();
     for (const l of allLines) {
@@ -165,7 +197,7 @@ export default function Orders() {
           <OrderCard
             key={o.id}
             o={o}
-            customer={customerById.get(o.customerId)}
+            customerLabel={orderCustomerLabel(o)}
             quoteCount={quoteCountByOrder.get(o.id) || 0}
             containerCount={containerCountByOrder.get(o.id) || 0}
             total={totalByOrder.get(o.id) || 0}
@@ -195,7 +227,7 @@ export default function Orders() {
               <OrderRow
                 key={o.id}
                 o={o}
-                customer={customerById.get(o.customerId)}
+                customerLabel={orderCustomerLabel(o)}
                 quoteCount={quoteCountByOrder.get(o.id) || 0}
                 containerCount={containerCountByOrder.get(o.id) || 0}
                 total={totalByOrder.get(o.id) || 0}
@@ -218,7 +250,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function OrderCard({ o, customer, quoteCount, containerCount, total, onDelete }) {
+function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {
   const stg = currentOrderStage(o);
   return (
     <div className="card p-3">
@@ -228,9 +260,13 @@ function OrderCard({ o, customer, quoteCount, containerCount, total, onDelete })
             <div className="text-sm font-semibold">
               #{o.number || '—'}{o.name ? ` · ${o.name}` : ''}
             </div>
-            <div className="text-xs text-ink-500 truncate">
-              {customer?.name || 'Sin cliente'}
-            </div>
+            {/* customerLabel is derived in the parent: direct
+                order.customerId first, falling back to the customers
+                attached via quotes. Only shows nothing when there's
+                truly no customer connection in either direction. */}
+            {customerLabel && (
+              <div className="text-xs text-ink-500 truncate">{customerLabel}</div>
+            )}
             <div className="text-[11px] text-ink-500 mt-1">
               {quoteCount} cot. · {containerCount} cont. · {formatDateTime(o.updatedAt)}
             </div>
@@ -250,13 +286,13 @@ function OrderCard({ o, customer, quoteCount, containerCount, total, onDelete })
   );
 }
 
-function OrderRow({ o, customer, quoteCount, containerCount, total, onDelete }) {
+function OrderRow({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {
   const stg = currentOrderStage(o);
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/orders/${o.id}`)}>
       <td className="font-medium whitespace-nowrap">#{o.number || '—'}</td>
       <td className="truncate max-w-[220px]" title={o.name || ''}>{o.name || '—'}</td>
-      <td className="text-ink-700 truncate max-w-[180px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
+      <td className="text-ink-700 truncate max-w-[180px]" title={customerLabel || ''}>{customerLabel || '—'}</td>
       <td><StatusBadge status={stg} /></td>
       <td className="hidden lg:table-cell text-ink-700">{quoteCount}</td>
       <td className="hidden lg:table-cell text-ink-700">{containerCount}</td>

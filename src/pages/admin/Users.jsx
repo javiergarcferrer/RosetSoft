@@ -51,8 +51,26 @@ export default function AdminUsers() {
     return copy;
   }, [realProfiles]);
 
-  const pending = sorted.filter((p) => !p.active);
-  const active = sorted.filter((p) => p.active);
+  // Three buckets, identified by (active, lastSignInAt):
+  //
+  //   invited     — active=false, lastSignInAt=null. Admin sent an
+  //                 invitation, but the invitee has never clicked the
+  //                 magic link. ensureDefaultProfile() promotes these
+  //                 to active=true on first sign-in, so this bucket
+  //                 self-empties as the invitees accept.
+  //
+  //   active      — active=true. Has signed in at least once and is
+  //                 currently part of the team. Counts toward
+  //                 commissions, shows up everywhere employees do.
+  //
+  //   deactivated — active=false, lastSignInAt is set. The admin
+  //                 disabled them after they joined. Kept around so
+  //                 historical commission reports still resolve names,
+  //                 but rendered in a muted "Inactivos" section at
+  //                 the bottom.
+  const invited     = sorted.filter((p) => !p.active && !p.lastSignInAt);
+  const active      = sorted.filter((p) => p.active);
+  const deactivated = sorted.filter((p) => !p.active && p.lastSignInAt);
 
   if (!isAdmin) {
     return (
@@ -71,7 +89,13 @@ export default function AdminUsers() {
     <>
       <PageHeader
         title="Usuarios"
-        subtitle={loaded ? `${active.length} activos · ${pending.length} pendientes` : ' '}
+        subtitle={loaded
+          ? [
+              `${active.length} activos`,
+              invited.length > 0 ? `${invited.length} invitación${invited.length === 1 ? '' : 'es'} sin aceptar` : null,
+              deactivated.length > 0 ? `${deactivated.length} desactivados` : null,
+            ].filter(Boolean).join(' · ')
+          : ' '}
         actions={
           <button
             type="button"
@@ -100,25 +124,26 @@ export default function AdminUsers() {
         />
       ) : (
         <div className="space-y-6">
-          {pending.length > 0 && (
+          {invited.length > 0 && (
             <section className="card overflow-hidden">
-              <header className="px-5 py-3 border-b border-ink-100 bg-amber-50 flex items-center justify-between gap-3">
+              <header className="px-5 py-3 border-b border-ink-100 bg-blue-50 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-amber-700">Pendientes de aprobación</h2>
-                  <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                    {pending.length}
+                  <h2 className="text-sm font-semibold text-blue-700">Invitaciones enviadas</h2>
+                  <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                    {invited.length}
                   </span>
                 </div>
-                <p className="hidden sm:block text-xs text-amber-700/80">
-                  Asigna rol y comisión antes de aprobar.
+                <p className="hidden sm:block text-xs text-blue-700/80">
+                  Aún no han iniciado sesión con el enlace del correo.
                 </p>
               </header>
               <ul className="divide-y divide-ink-100">
-                {pending.map((p) => (
-                  <PendingRow
+                {invited.map((p) => (
+                  <ActiveRow
                     key={p.id}
                     profile={p}
-                    approvedBy={currentProfile.id}
+                    isSelf={p.id === currentProfile.id}
+                    invitePending
                   />
                 ))}
               </ul>
@@ -146,6 +171,24 @@ export default function AdminUsers() {
               </ul>
             )}
           </section>
+
+          {deactivated.length > 0 && (
+            <section className="card overflow-hidden opacity-80">
+              <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-ink-700">Desactivados</h2>
+                <span className="badge">{deactivated.length}</span>
+              </header>
+              <ul className="divide-y divide-ink-100">
+                {deactivated.map((p) => (
+                  <ActiveRow
+                    key={p.id}
+                    profile={p}
+                    isSelf={p.id === currentProfile.id}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
     </>
@@ -217,102 +260,7 @@ function fmtUpdated(ts) {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Pending row                                                               */
-/* -------------------------------------------------------------------------- */
-
-function PendingRow({ profile, approvedBy }) {
-  // Inline form holds the proposed role + commission until the admin clicks
-  // "Aprobar"; we don't write anything until then so a half-filled form
-  // can't accidentally flip `active` on.
-  const [role, setRole] = useState('employee');
-  const [commission, setCommission] = useState('0');
-  const [busy, setBusy] = useState(false);
-
-  async function approve() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const pct = clampPct(commission);
-      await db.profiles.update(profile.id, {
-        active: true,
-        role,
-        commission_pct: pct,
-        invited_by: approvedBy,
-        updatedAt: Date.now(),
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <li className="px-5 py-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Avatar name={profile.name} email={profile.email} />
-          <div className="min-w-0">
-            <div className="font-medium text-sm truncate">
-              {profile.name || profile.email || 'Sin nombre'}
-            </div>
-            {profile.email && profile.name && (
-              <div className="text-xs text-ink-500 truncate">{profile.email}</div>
-            )}
-            <div className="text-[11px] text-ink-500 mt-0.5">
-              Solicitado {fmtUpdated(profile.createdAt || profile.updatedAt)}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:flex sm:items-end gap-3">
-          <div>
-            <div className="label">Rol</div>
-            <select
-              className="input py-1.5"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              disabled={busy}
-            >
-              <option value="employee">Empleado</option>
-              <option value="admin">Administrador</option>
-            </select>
-          </div>
-          <div>
-            <div className="label">Comisión</div>
-            <div className="relative">
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                max="50"
-                step="0.5"
-                className="input py-1.5 pr-7 tabular-nums w-24"
-                value={commission}
-                onChange={(e) => setCommission(e.target.value)}
-                disabled={busy}
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={approve}
-            disabled={busy}
-            className="btn-primary col-span-2 sm:col-span-1 justify-center disabled:opacity-50"
-          >
-            <UserCheck size={14} /> Aprobar
-          </button>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Active row                                                                */
-/* -------------------------------------------------------------------------- */
-
-function ActiveRow({ profile, isSelf }) {
+function ActiveRow({ profile, isSelf, invitePending }) {
   async function setRole(role) {
     if (role === profile.role) return;
     await db.profiles.update(profile.id, { role, updatedAt: Date.now() });
@@ -327,13 +275,25 @@ function ActiveRow({ profile, isSelf }) {
     });
   }
 
-  async function deactivate() {
+  async function toggleActive() {
     if (isSelf) return; // defensive — button is disabled too
-    if (!confirm(`¿Desactivar a "${profile.name || profile.email}"? Quedará pendiente de aprobación.`)) return;
+    // Whichever direction we're flipping in, ask first. Misclicks
+    // would have visible consequences (locked-out employee, or
+    // unexpected re-activation of a former hire).
+    const verb = profile.active ? 'Desactivar' : 'Reactivar';
+    const consequence = profile.active
+      ? 'Perderá acceso al sistema hasta que lo reactives.'
+      : 'Volverá a tener acceso con su rol y comisión actuales.';
+    if (!confirm(`¿${verb} a "${profile.name || profile.email}"? ${consequence}`)) return;
     await db.profiles.update(profile.id, {
-      active: false,
+      active: !profile.active,
       updatedAt: Date.now(),
     });
+  }
+
+  async function cancelInvite() {
+    if (!confirm(`¿Cancelar la invitación a "${profile.name || profile.email}"? Se eliminará el registro; tendrás que invitarlo de nuevo si cambias de opinión.`)) return;
+    await db.profiles.delete(profile.id);
   }
 
   return (
@@ -343,12 +303,17 @@ function ActiveRow({ profile, isSelf }) {
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Avatar name={profile.name} email={profile.email} />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
               <span className="font-medium text-sm truncate">
                 {profile.name || profile.email || 'Sin nombre'}
               </span>
               {isSelf && (
                 <span className="text-[11px] text-ink-500">(tú)</span>
+              )}
+              {invitePending && (
+                <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                  Sin aceptar
+                </span>
               )}
             </div>
             {profile.email && profile.name && (
@@ -395,21 +360,42 @@ function ActiveRow({ profile, isSelf }) {
 
           <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
             <div className="flex flex-col items-start sm:items-end gap-1">
-              <ActivePill active />
+              <ActivePill active={profile.active} />
               <span className="text-[11px] text-ink-500">
-                Actualizado {fmtUpdated(profile.updatedAt)}
+                {profile.lastSignInAt
+                  ? <>Última sesión {fmtUpdated(profile.lastSignInAt)}</>
+                  : invitePending
+                    ? 'Sin iniciar sesión todavía'
+                    : <>Actualizado {fmtUpdated(profile.updatedAt)}</>}
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={deactivate}
-              disabled={isSelf}
-              title={isSelf ? 'No puedes desactivar tu propia cuenta' : 'Desactivar usuario'}
-              className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-            >
-              <X size={14} /> Desactivar
-            </button>
+            {invitePending ? (
+              <button
+                type="button"
+                onClick={cancelInvite}
+                title="Cancelar invitación"
+                className="btn-ghost text-red-600 hover:bg-red-50"
+              >
+                <X size={14} /> Cancelar invitación
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleActive}
+                disabled={isSelf}
+                title={isSelf
+                  ? 'No puedes desactivar tu propia cuenta'
+                  : (profile.active ? 'Desactivar usuario' : 'Reactivar usuario')}
+                className={`btn-ghost disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
+                  profile.active
+                    ? 'text-red-600 hover:bg-red-50'
+                    : 'text-emerald-700 hover:bg-emerald-50'
+                }`}
+              >
+                <X size={14} /> {profile.active ? 'Desactivar' : 'Reactivar'}
+              </button>
+            )}
           </div>
         </div>
       </div>
