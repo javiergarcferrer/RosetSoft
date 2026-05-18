@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, Users as UsersIcon, Check, X, UserCheck, Mail, UserPlus, Loader2 } from 'lucide-react';
+import { Shield, Users as UsersIcon, Check, X, Mail, UserPlus, Loader2, Trash2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -16,22 +16,29 @@ import { inviteUser, deleteUser } from '../../lib/invite.js';
  *
  * The 'team' profile is a shared settings holder, not a real user — it's
  * filtered out of every list and count on this page. Real users (admin /
- * employee) are split into three buckets:
+ * employee) live in one of two buckets:
  *
- *   invitados      — invitation sent, never accepted (active=false,
- *                    lastSignInAt=null). Cancelling here deletes both
- *                    the auth.users row and the profile.
- *   activos        — currently working on the team.
- *   desactivados   — former employees. Deactivation removes their
- *                    Supabase Auth row so they can't sign in, but keeps
- *                    the profile row marked inactive so historical
- *                    commission attribution on quotes.created_by_user_id
- *                    stays resolvable. Bringing them back is a fresh
- *                    invitation (via "Invitar usuario"), not a flip.
+ *   invitados   — invitation sent, never accepted (active=false,
+ *                 last_sign_in_at=null). Cancelling here hard-deletes
+ *                 both the auth.users row and the profile row.
+ *   activos     — currently working on the team (signed in at least
+ *                 once, active=true).
+ *
+ * "Eliminar usuario" is a true hard-delete: the auth.users row goes
+ * (via the delete-user Edge Function) and the profile row goes too
+ * (via the on_auth_user_deleted cascade trigger in migration
+ * 20260518150000, with a belt-and-suspenders explicit delete in the
+ * function). Quote attribution via quotes.created_by_user_id falls
+ * back to NULL — the commissions report skips quotes with no
+ * resolvable creator, which is the right outcome when the dealer is
+ * no longer with the team.
  *
  * Names, roles, and commission percentages are editable inline; the
  * profile row is the source of truth on the dealer side and RLS
- * allows authenticated team members to write each other's rows.
+ * allows authenticated team members to write each other's rows. The
+ * `updated_at` column gets bumped automatically by the
+ * profiles_set_updated_at Postgres trigger, so the client never has
+ * to stamp it.
  */
 export default function AdminUsers() {
   const { currentProfile, refreshProfiles } = useApp();
@@ -64,26 +71,24 @@ export default function AdminUsers() {
     return copy;
   }, [realProfiles]);
 
-  // Three buckets, identified by (active, lastSignInAt):
+  // Two buckets, identified by (active, lastSignInAt):
   //
-  //   invited     — active=false, lastSignInAt=null. Admin sent an
-  //                 invitation, but the invitee has never clicked the
-  //                 magic link. ensureDefaultProfile() promotes these
-  //                 to active=true on first sign-in, so this bucket
-  //                 self-empties as the invitees accept.
+  //   invited  — active=false, lastSignInAt=null. Admin sent an
+  //              invitation, but the invitee has never clicked the
+  //              magic link. ensureDefaultProfile() promotes these
+  //              to active=true on first sign-in, so this bucket
+  //              self-empties as the invitees accept.
   //
-  //   active      — active=true. Has signed in at least once and is
-  //                 currently part of the team. Counts toward
-  //                 commissions, shows up everywhere employees do.
+  //   active   — active=true. Has signed in at least once and is
+  //              currently part of the team. Counts toward
+  //              commissions, shows up everywhere employees do.
   //
-  //   deactivated — active=false, lastSignInAt is set. The admin
-  //                 disabled them after they joined. Kept around so
-  //                 historical commission reports still resolve names,
-  //                 but rendered in a muted "Inactivos" section at
-  //                 the bottom.
-  const invited     = sorted.filter((p) => !p.active && !p.lastSignInAt);
-  const active      = sorted.filter((p) => p.active);
-  const deactivated = sorted.filter((p) => !p.active && p.lastSignInAt);
+  // There is no "deactivated" bucket: deletion is symmetric (auth row
+  // gone ↔ profile row gone), so a user who's been removed simply
+  // disappears from this list entirely. To bring someone back, send
+  // them a fresh invite.
+  const invited = sorted.filter((p) => !p.active && !p.lastSignInAt);
+  const active  = sorted.filter((p) => p.active);
 
   if (!isAdmin) {
     return (
@@ -106,7 +111,6 @@ export default function AdminUsers() {
           ? [
               `${active.length} activos`,
               invited.length > 0 ? `${invited.length} invitación${invited.length === 1 ? '' : 'es'} sin aceptar` : null,
-              deactivated.length > 0 ? `${deactivated.length} desactivados` : null,
             ].filter(Boolean).join(' · ')
           : ' '}
         actions={
@@ -133,7 +137,7 @@ export default function AdminUsers() {
         <EmptyState
           icon={UsersIcon}
           title="Sin usuarios"
-          description="Los usuarios que inicien sesión aparecerán aquí pendientes de aprobación."
+          description="Invita a tu equipo con el botón “Invitar usuario”."
         />
       ) : (
         <div className="space-y-6">
@@ -158,6 +162,7 @@ export default function AdminUsers() {
                     session={session}
                     isSelf={p.id === currentProfile.id}
                     invitePending
+                    onChanged={() => refreshProfiles()}
                   />
                 ))}
               </ul>
@@ -181,30 +186,12 @@ export default function AdminUsers() {
                     profile={p}
                     session={session}
                     isSelf={p.id === currentProfile.id}
+                    onChanged={() => refreshProfiles()}
                   />
                 ))}
               </ul>
             )}
           </section>
-
-          {deactivated.length > 0 && (
-            <section className="card overflow-hidden opacity-80">
-              <header className="card-header">
-                <h2>Desactivados</h2>
-                <span className="badge">{deactivated.length}</span>
-              </header>
-              <ul className="divide-y divide-ink-100">
-                {deactivated.map((p) => (
-                  <ActiveRow
-                    key={p.id}
-                    profile={p}
-                    session={session}
-                    isSelf={p.id === currentProfile.id}
-                  />
-                ))}
-              </ul>
-            </section>
-          )}
         </div>
       )}
     </>
@@ -258,17 +245,9 @@ function ActivePill({ profile }) {
       </span>
     );
   }
-  // active=false + has lastSignInAt → deactivated (was on the team,
-  // admin removed them). active=false + no lastSignInAt → invited
-  // (admin sent the invite, invitee hasn't signed in yet).
-  if (profile.lastSignInAt) {
-    return (
-      <span className="status-pill status-pill-inactive">
-        <span className="w-1.5 h-1.5 rounded-full bg-ink-400" aria-hidden />
-        Desactivado
-      </span>
-    );
-  }
+  // active=false reaches the row only via the "invited" bucket now —
+  // deactivation hard-deletes, so there's no "former employee" tombstone
+  // state anymore. The pill stays as "Pendiente" until first sign-in.
   return (
     <span className="status-pill status-pill-inactive">
       <span className="w-1.5 h-1.5 rounded-full bg-ink-400" aria-hidden />
@@ -336,73 +315,54 @@ function fmtSessionAgo(ts) {
   return null;
 }
 
-function ActiveRow({ profile, session, isSelf, invitePending }) {
+function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const isDeactivated = !profile.active && profile.lastSignInAt;
 
   async function setName(raw) {
     const name = (raw || '').trim();
     if (!name || name === (profile.name || '')) return;
-    await db.profiles.update(profile.id, { name, updatedAt: Date.now() });
+    // updated_at is bumped by the profiles_set_updated_at trigger; no
+    // need to stamp it from the client.
+    await db.profiles.update(profile.id, { name });
   }
 
   async function setRole(role) {
     if (role === profile.role) return;
-    await db.profiles.update(profile.id, { role, updatedAt: Date.now() });
+    await db.profiles.update(profile.id, { role });
   }
 
   async function setCommission(raw) {
     const pct = clampPct(raw);
     if (pct === (profile.commission_pct ?? 0)) return;
-    await db.profiles.update(profile.id, {
-      commission_pct: pct,
-      updatedAt: Date.now(),
-    });
+    await db.profiles.update(profile.id, { commission_pct: pct });
   }
 
-  // Deactivate is one-way: the auth.users row gets deleted via the
-  // service-role-only `delete-user` edge function, and the profile is
-  // marked inactive. The row stays in the "Desactivados" bucket as a
-  // tombstone so commission attribution on historical quotes still
-  // resolves a name; bringing the person back is a fresh "Invitar
-  // usuario" flow, not a flip on this page.
-  async function deactivate() {
+  // Hard-delete: removes the auth.users row (so the user can't sign
+  // in or recover their password) AND the profile row (so they
+  // disappear from this page entirely). Quote attribution on
+  // historical quotes becomes NULL via the FK's `on delete set null`;
+  // the commissions report skips them, which is the correct outcome.
+  async function remove() {
     if (isSelf) return;
-    if (!confirm(
-      `¿Desactivar a "${profile.name || profile.email}"?\n\n` +
-      `Se eliminará su cuenta de Supabase y no podrá iniciar sesión. ` +
-      `Su historial de cotizaciones se conserva. ` +
-      `Si vuelve al equipo tendrás que invitarlo de nuevo.`
-    )) return;
+    const isInvite = invitePending;
+    const label = profile.name || profile.email || 'este usuario';
+    const confirmText = isInvite
+      ? `¿Cancelar la invitación a “${label}”?\n\n` +
+        `Se eliminará el registro y el enlace del correo dejará de funcionar.`
+      : `¿Eliminar a “${label}”?\n\n` +
+        `Su cuenta de Supabase y su perfil se borrarán por completo. ` +
+        `Las cotizaciones que creó se mantienen, pero sin atribución. ` +
+        `Para volver a darle acceso tendrás que invitarlo de nuevo.`;
+    if (!confirm(confirmText)) return;
     setError(null); setBusy(true);
     try {
       await deleteUser({ session, id: profile.id });
+      // Refresh from the AppContext caller so the row disappears from
+      // every list, count, and dropdown on the page within one tick.
+      onChanged?.();
     } catch (e) {
-      setError(e?.message || 'No se pudo desactivar.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Cancelling an unaccepted invitation should leave no trace:
-  // wipe the auth.users row (so the invite link can't be redeemed
-  // anymore) AND the profile. The previous version only deleted
-  // the profile, which left an orphan auth row alive — when the
-  // invitee eventually clicked their link, ensureDefaultProfile
-  // would create a fresh profile silently.
-  async function cancelInvite() {
-    if (!confirm(
-      `¿Cancelar la invitación a "${profile.name || profile.email}"?\n\n` +
-      `Se eliminará el registro y el enlace del correo dejará de funcionar.`
-    )) return;
-    setError(null); setBusy(true);
-    try {
-      await deleteUser({ session, id: profile.id });
-      await db.profiles.delete(profile.id);
-    } catch (e) {
-      setError(e?.message || 'No se pudo cancelar la invitación.');
-    } finally {
+      setError(e?.message || 'No se pudo eliminar el usuario.');
       setBusy(false);
     }
   }
@@ -412,28 +372,21 @@ function ActiveRow({ profile, session, isSelf, invitePending }) {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         {/* Identity — name is inline-editable; the email below is the
             stable handle (it's the auth.users key and can't be
-            changed from this page). Deactivated rows keep the name
-            read-only since they're tombstones for history. */}
+            changed from this page). */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Avatar name={profile.name} email={profile.email} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              {isDeactivated ? (
-                <span className="font-medium text-sm truncate text-ink-500">
-                  {profile.name || profile.email || 'Sin nombre'}
-                </span>
-              ) : (
-                <DebouncedInput
-                  type="text"
-                  value={profile.name || ''}
-                  onCommit={setName}
-                  className="font-medium text-sm bg-transparent border-0 px-0 py-0 focus:outline-none focus:ring-0 focus:bg-ink-50 focus:px-1 focus:rounded -mx-0 rounded transition-colors min-w-0 w-full max-w-[220px]"
-                  placeholder={profile.email || 'Sin nombre'}
-                  aria-label="Nombre del usuario"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              )}
+              <DebouncedInput
+                type="text"
+                value={profile.name || ''}
+                onCommit={setName}
+                className="font-medium text-sm bg-transparent border-0 px-0 py-0 focus:outline-none focus:ring-0 focus:bg-ink-50 focus:px-1 focus:rounded -mx-0 rounded transition-colors min-w-0 w-full max-w-[220px]"
+                placeholder={profile.email || 'Sin nombre'}
+                aria-label="Nombre del usuario"
+                autoComplete="off"
+                spellCheck={false}
+              />
               {isSelf && (
                 <span className="text-[11px] text-ink-500 flex-shrink-0">(tú)</span>
               )}
@@ -457,10 +410,9 @@ function ActiveRow({ profile, session, isSelf, invitePending }) {
             and reads consistently from phone to desktop. */}
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <select
-            className="input py-1.5 w-36 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="input py-1.5 w-36"
             value={profile.role === 'admin' ? 'admin' : 'employee'}
             onChange={(e) => setRole(e.target.value)}
-            disabled={isDeactivated}
             aria-label="Rol del usuario"
           >
             <option value="employee">Empleado</option>
@@ -474,10 +426,9 @@ function ActiveRow({ profile, session, isSelf, invitePending }) {
               min="0"
               max="50"
               step="0.5"
-              className="input py-1.5 pr-7 tabular-nums w-20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="input py-1.5 pr-7 tabular-nums w-20"
               value={profile.commission_pct ?? 0}
               onCommit={setCommission}
-              disabled={isDeactivated}
               aria-label="Comisión"
             />
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
@@ -515,38 +466,23 @@ function ActiveRow({ profile, session, isSelf, invitePending }) {
               )}
             </div>
 
-            {invitePending ? (
-              <button
-                type="button"
-                onClick={cancelInvite}
-                disabled={busy}
-                title="Cancelar invitación"
-                className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-wait"
-              >
-                {busy
-                  ? <><Loader2 size={14} className="animate-spin" /> Cancelando…</>
-                  : <><X size={14} /> Cancelar invitación</>}
-              </button>
-            ) : isDeactivated ? (
-              // Tombstone — kept for historical commission attribution
-              // but no actions apply. Bringing the person back is a
-              // fresh "Invitar usuario" flow at the top of the page.
-              <span className="text-[11px] text-ink-400 italic">Sin acceso</span>
-            ) : (
-              <button
-                type="button"
-                onClick={deactivate}
-                disabled={isSelf || busy}
-                title={isSelf
-                  ? 'No puedes desactivar tu propia cuenta'
-                  : 'Eliminar de Supabase Auth y marcar inactivo'}
-                className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              >
-                {busy
-                  ? <><Loader2 size={14} className="animate-spin" /> Desactivando…</>
-                  : <><X size={14} /> Desactivar</>}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={remove}
+              disabled={isSelf || busy}
+              title={isSelf
+                ? 'No puedes eliminar tu propia cuenta'
+                : invitePending
+                  ? 'Cancelar invitación y eliminar el registro'
+                  : 'Eliminar de Supabase Auth y borrar el perfil'}
+              className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              {busy
+                ? <><Loader2 size={14} className="animate-spin" /> Eliminando…</>
+                : invitePending
+                  ? <><X size={14} /> Cancelar invitación</>
+                  : <><Trash2 size={14} /> Eliminar</>}
+            </button>
           </div>
         </div>
       </div>
@@ -573,9 +509,10 @@ function clampPct(raw) {
   return Math.round(n * 10) / 10;
 }
 
-// `Check` is imported but kept here intentionally to allow future use in
-// approval confirmation flows; ignore the unused-import lint locally.
+// `Check` and `RolePill` are imported / defined for future use; ignore
+// the unused-import lint locally.
 void Check;
+void RolePill;
 
 // ---------------------------------------------------------------------------
 // InviteModal — admin posts here to send a Supabase invite email and

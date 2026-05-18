@@ -147,6 +147,45 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Before inviting, look for any pre-existing profile row carrying
+  // this email (case-insensitive). Migration 20260518150000 added a
+  // unique-email index, so a leftover orphan profile would make the
+  // post-invite upsert fail with a constraint violation. Handle the
+  // two cases explicitly:
+  //
+  //   • The profile is backed by an auth.users row → 409 conflict.
+  //     The admin should delete that user first, or the recipient
+  //     should reset their existing password.
+  //
+  //   • The profile is an orphan (no matching auth.users) → silently
+  //     delete it. This happens when a previous deletion went
+  //     through the Dashboard before the cascade trigger existed.
+  //     We clean up so the new invite succeeds.
+  const { data: existingProfile, error: existingErr } = await adminClient
+    .from('profiles')
+    .select('id, email')
+    .ilike('email', email)
+    .neq('id', 'team')
+    .maybeSingle();
+  if (existingErr) {
+    return jsonResponse({ error: `No se pudo verificar el correo: ${existingErr.message}` }, 500);
+  }
+  if (existingProfile?.id) {
+    const { data: authUser } = await adminClient.auth.admin.getUserById(existingProfile.id);
+    if (authUser?.user) {
+      return jsonResponse({ error: 'Ya existe una cuenta con ese correo.' }, 409);
+    }
+    // Orphan — wipe so the unique-email index doesn't block the new
+    // profile row we're about to upsert.
+    const { error: orphanErr } = await adminClient
+      .from('profiles')
+      .delete()
+      .eq('id', existingProfile.id);
+    if (orphanErr) {
+      return jsonResponse({ error: `No se pudo limpiar perfil huérfano: ${orphanErr.message}` }, 500);
+    }
+  }
+
   // Try sending the invite. Supabase returns a clean error when the
   // email already has an auth.users row — surface that to the caller
   // so the UI can show "ya existe una cuenta con ese correo" without

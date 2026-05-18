@@ -71,6 +71,44 @@ function Gate({ children }) {
 
   if (!ready) return <Loading />;
 
+  // Deleted-while-signed-in safety net. An admin can hard-delete a
+  // user via /admin/users; that removes their `auth.users` row AND
+  // their `profiles` row. If the deleted user was holding an active
+  // JWT, the access token stays valid until it expires (~1h), so
+  // they'd otherwise float around the app with `user` set but no
+  // backing profile — and Supabase RLS would deny every query.
+  // ensureDefaultProfile() doesn't try to recreate the row because
+  // the deletion is the admin's explicit intent. We sign them out
+  // immediately so they bounce to /login and can't keep operating
+  // on a phantom session.
+  if (user && !currentProfile) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
+        <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 inline-flex items-center justify-center">
+          <Hourglass size={22} />
+        </div>
+        <div>
+          <div className="text-lg font-semibold">Sesión no válida</div>
+          <p className="text-sm text-ink-500 max-w-md mt-1">
+            Tu cuenta ya no existe o fue eliminada. Cierra sesión para volver a la pantalla de inicio.
+          </p>
+          <p className="text-xs text-ink-400 mt-3">
+            Conectado como <b className="text-ink-700">{user.email}</b>.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={signOut}
+          className="btn-primary text-sm inline-flex items-center gap-1.5"
+          autoFocus
+        >
+          <LogOut size={14} />
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
+
   // First-time invite-flow gate. The invitee just clicked the magic
   // link in their email and is signed in via a recovery-grant
   // session — but they've never set a password. If we let them past
