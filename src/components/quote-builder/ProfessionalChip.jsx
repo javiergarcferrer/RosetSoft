@@ -2,23 +2,40 @@ import { useState } from 'react';
 import { ChevronDown, UserSquare2 } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
 import { DebouncedInput } from '../DebouncedInput.jsx';
-import { effectiveCommissionPct, clampCommissionPct } from '../../lib/commissions.js';
+import { clampCommissionPct } from '../../lib/commissions.js';
 
 /**
  * Chip that displays the assigned professional (architect / decorator
- * earning a commission on this sale) and an inline % override input.
+ * earning a commission on this sale) and an inline % editor.
  *
  * Visual model:
  *
- *   [ 🟦 Marta López ⌄ ]  [ 12 % ]   ← when assigned
- *   [ + Asignar profesional ]        ← when unassigned
+ *   [ 🟦 Marta López ⌄ │ 12.0 % ]     ← when assigned (segmented)
+ *   [ + Asignar profesional ]         ← when unassigned
  *
- * Why a separate component from CustomerChip even though they look
- * similar: the customer relationship is *who the quote belongs to* —
- * one-to-one, mandatory for shipping. The professional relationship is
- * a *referral* that may not exist on most quotes, and when it does it
- * carries the extra commission % field. Keeping them separate makes
- * each role clear in the header.
+ * The assigned form is *one unified pill* — a single rounded-full
+ * container that holds two segments separated by a thin divider:
+ *
+ *   • LEFT segment   button → opens ProfessionalPicker
+ *     avatar + name + chevron
+ *   • RIGHT segment  inline-editable percentage
+ *     number input + % suffix
+ *
+ * Why segmented (this rewrite) vs. two adjacent elements (the prior
+ * version): the previous layout rendered the chip and a separate
+ * "Comisión [15] %" group as two flex children of the header's
+ * meta row. On widths where the row had to flex-wrap, the % input
+ * frequently landed on the line below the chip — visually divorced
+ * from the professional it controlled, and adjacent to whatever else
+ * happened to be on that second row (the OrderChip, the save badge).
+ * Merging into one inline-flex group keeps them inseparable: they
+ * either both fit on one row or both wrap together.
+ *
+ * The chip also no longer carries a secondary "15%*" readout next to
+ * the name — that was redundant with the editable input one segment
+ * over. The asterisk indicator went with it. Whether a value is
+ * inherited vs. overridden is communicated by whether the input shows
+ * a placeholder (inherited) vs. a typed value (override).
  */
 export default function ProfessionalChip({ quote, professional, professionals, profileId, onUpdateQuote }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -30,7 +47,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-ink-500 hover:text-ink-900 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 min-h-7 coarse:min-h-9 text-xs text-ink-500 hover:border-ink-500 hover:text-ink-900 transition-colors"
         >
           <UserSquare2 size={12} />
           Asignar profesional
@@ -47,39 +64,43 @@ export default function ProfessionalChip({ quote, professional, professionals, p
     );
   }
 
-  // The effective % drives the chip's display so it always reflects
-  // what the dealer will actually pay out. The little input below
-  // it sets the *override*; placeholder shows the inherited default
-  // when the override is empty so the dealer knows what they're
-  // diverging from.
-  const effective = effectiveCommissionPct(quote, professional);
+  // Override semantics:
+  //   • `commissionPct` numeric (including 0) → explicit per-sale override
+  //   • `commissionPct` null/'' → inherit professional.defaultCommissionPct
+  // We show the override value in the input when present, otherwise an
+  // empty field with the inherited default as a placeholder so the
+  // dealer can see "what would happen if I do nothing".
   const overrideRaw = quote.commissionPct;
   const hasOverride = overrideRaw != null && overrideRaw !== '';
+  const inheritedDefault = professional.defaultCommissionPct ?? 10;
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setPickerOpen(true)}
-        className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-2 py-1 pr-2.5 text-xs hover:border-ink-400 hover:bg-ink-50 transition-colors max-w-full min-w-0"
+      <span
+        className="inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors max-w-full min-w-0 text-xs overflow-hidden"
         title={[professional.name, professional.company, professional.email].filter(Boolean).join(' · ')}
       >
-        <Avatar name={professional.name} />
-        <span className="min-w-0 inline-flex items-baseline gap-1.5 max-w-[260px]">
-          <span className="font-medium text-ink-900 truncate">{professional.name}</span>
-          <span className="text-ink-500 text-[10px] tabular-nums whitespace-nowrap">
-            {effective}%{hasOverride ? '*' : ''}
+        {/* Left segment: avatar + name + chevron, opens the picker */}
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="inline-flex items-center gap-2 pl-2 pr-1.5 min-h-7 coarse:min-h-9 hover:bg-ink-50 transition-colors min-w-0"
+        >
+          <Avatar name={professional.name} />
+          <span className="font-medium text-ink-900 truncate max-w-[160px] sm:max-w-[200px]">
+            {professional.name}
           </span>
-        </span>
-        <ChevronDown size={12} className="text-ink-400 flex-shrink-0" />
-      </button>
+          <ChevronDown size={12} className="text-ink-400 flex-shrink-0" />
+        </button>
 
-      {/* Per-sale override. Blank means "inherit professional.defaultCommissionPct".
-          0 means "explicitly zero for this deal" (handled by effectiveCommissionPct
-          treating 0 as a real value). */}
-      <div className="inline-flex items-center gap-1 text-xs">
-        <span className="text-ink-500">Comisión</span>
-        <div className="relative">
+        {/* Divider — same color as the outer border so it reads as a
+            seam, not a separate stroke. */}
+        <span className="w-px bg-ink-200" aria-hidden />
+
+        {/* Right segment: editable percentage. The label is implicit —
+            adjacency to the professional name + the trailing % glyph
+            tell the user what they're editing. No "Comisión" prefix. */}
+        <label className="inline-flex items-center gap-0.5 pl-2 pr-2 min-h-7 coarse:min-h-9 hover:bg-ink-50 transition-colors cursor-text">
           <DebouncedInput
             type="number"
             inputMode="decimal"
@@ -88,22 +109,19 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             step="0.5"
             value={hasOverride ? overrideRaw : ''}
             onCommit={(v) => {
-              // Treat empty as "remove override" so display falls back
-              // to professional.defaultCommissionPct. Anything else
-              // gets clamped before storing — defense against pasting
-              // 50 from a spreadsheet, etc.
               if (v == null || v === '') {
                 onUpdateQuote({ commissionPct: null });
               } else {
                 onUpdateQuote({ commissionPct: clampCommissionPct(v) });
               }
             }}
-            placeholder={String(professional.defaultCommissionPct ?? 10)}
-            className="input h-7 w-14 pr-5 text-xs tabular-nums"
+            placeholder={String(inheritedDefault)}
+            aria-label="Comisión (%)"
+            className="w-8 text-right tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder:text-ink-400"
           />
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-500 pointer-events-none">%</span>
-        </div>
-      </div>
+          <span className="text-ink-500 select-none" aria-hidden>%</span>
+        </label>
+      </span>
 
       <ProfessionalPicker
         open={pickerOpen}
