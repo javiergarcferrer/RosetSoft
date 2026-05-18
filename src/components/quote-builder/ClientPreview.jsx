@@ -133,56 +133,94 @@ function ClientLine({ line, currency, rates, fmt }) {
     * (1 + (Number(line.lineMarginPct) || 0) / 100)
     * (1 - (Number(line.lineDiscountPct) || 0) / 100);
   const total = unit * (Number(line.qty) || 0);
-  // CSS grid instead of flex-wrap. The old layout used `min-w-[120px]
-  // text-right` on the numeric column, which on a phone-width row
-  // wrapped onto its own line at ~120px wide — leaving the values
-  // floating in the middle of the card instead of sticking to the
-  // right edge. Grid lets the numeric column span both other columns
-  // on mobile (full-width row, right-aligned to the card border)
-  // and slot back to a third column on sm+ widths.
+  // Layout shape, mobile-first:
+  //
+  //   row 1   image + text side-by-side
+  //   row 2   compact label/value strip at the card bottom — three
+  //           pairs (CANTIDAD / UNITARIO / TOTAL) rendered as a
+  //           horizontal flex with a top hairline so it reads as a
+  //           summary footer, not a leftover wrapped column.
+  //
+  // On sm+ the strip promotes back to a vertical column in a third
+  // grid column to the right of the text — same vocabulary, denser.
+  //
+  // The previous full-width col-span-2 wrap was technically right-
+  // aligned but left a tall dead zone next to it on mobile because
+  // each label/value pair sat on its own row. A horizontal strip
+  // uses the width that's already there instead of stacking
+  // vertically into the void.
   return (
     <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
-      <div className="grid gap-x-4 gap-y-3 grid-cols-[80px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)_auto] items-start">
+      <div className="flex items-start gap-4">
         {line.imageId ? (
-          <ImageView id={line.imageId} className="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-white rounded-md border border-ink-100" />
+          <ImageView id={line.imageId} className="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0" />
         ) : (
-          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-ink-50 rounded-md border border-ink-100" />
+          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
         )}
-        <div className="min-w-0">
-          {line.family && (
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
-              {line.family}
-            </div>
-          )}
-          <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
-          {line.subtype && <div className="text-[11px] text-ink-500 mt-0.5">{line.subtype}</div>}
-          {(line.reference || line.dimensions) && (
-            <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
-              {line.reference && <span className="font-mono">ref {line.reference}</span>}
-              {line.dimensions && <span>{line.dimensions}</span>}
-            </div>
-          )}
-          {line.description && (
-            <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
-              {line.description}
-            </div>
-          )}
-        </div>
-        {/* col-span-2 on mobile: numeric slot occupies the full row
-            beneath the image+text, so text-right hugs the right edge
-            of the card. On sm+ it returns to a third column next to
-            the text block. min-w-0 keeps long money strings from
-            forcing the row wider than the card. */}
-        <div className="col-span-2 sm:col-span-1 text-right tabular-nums min-w-0 sm:min-w-[110px]">
-          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold">Cantidad</div>
-          <div className="text-sm font-medium">{line.qty || 0}</div>
-          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold mt-1.5">Unitario</div>
-          <div className="text-sm font-medium">{fmt(unit)}</div>
-          <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold mt-1.5">Total</div>
-          <div className="text-base font-semibold">{fmt(total)}</div>
+        <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
+          <div className="min-w-0 sm:flex-1">
+            {line.family && (
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
+                {line.family}
+              </div>
+            )}
+            <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
+            {line.subtype && <div className="text-[11px] text-ink-500 mt-0.5">{line.subtype}</div>}
+            {(line.reference || line.dimensions) && (
+              <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
+                {line.reference && <span className="font-mono">ref {line.reference}</span>}
+                {line.dimensions && <span>{line.dimensions}</span>}
+              </div>
+            )}
+            {line.description && (
+              <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+                {line.description}
+              </div>
+            )}
+          </div>
+
+          {/* Numbers — horizontal strip on mobile, vertical stack on sm+.
+              On mobile the strip carries its own top hairline + padding
+              so it reads as the card's summary footer; the strip is
+              flex-row with justify-end so the pairs cluster to the
+              right edge but stay visually balanced when the card is
+              wider than they need.
+              On sm+ the wrapper becomes a vertical column sized to
+              auto, sitting next to the text block as the right rail. */}
+          <div
+            className="
+              mt-3 pt-3 border-t border-ink-100
+              flex flex-row flex-wrap justify-end gap-x-6 gap-y-2
+              sm:mt-0 sm:pt-0 sm:border-t-0
+              sm:flex-col sm:items-end sm:gap-y-1.5
+              sm:min-w-[110px] sm:flex-shrink-0
+              tabular-nums
+            "
+          >
+            <PriceCell label="Cantidad" value={String(line.qty || 0)} />
+            <PriceCell label="Unitario" value={fmt(unit)} />
+            <PriceCell label="Total" value={fmt(total)} emphasis />
+          </div>
         </div>
       </div>
     </li>
+  );
+}
+
+// Small label/value pair used inside the line-item summary strip.
+// label = brand-700 eyebrow; value = ink-900. On mobile each cell sits
+// inline with its siblings (label-above-value still, just compact);
+// on sm+ they stack vertically and right-align as part of the column.
+function PriceCell({ label, value, emphasis }) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+        {label}
+      </div>
+      <div className={`whitespace-nowrap ${emphasis ? 'text-base font-semibold text-ink-900' : 'text-sm font-medium text-ink-900'}`}>
+        {value}
+      </div>
+    </div>
   );
 }
 
