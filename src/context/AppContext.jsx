@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { db, ensureDefaultProfile, getSettings, updateSettings } from '../db/database.js';
-import { fetchMarketRate, effectiveDopRate } from '../lib/exchangeRate.js';
+import { effectiveDopRate } from '../lib/exchangeRate.js';
 
 const Ctx = createContext(null);
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, X, Eye, Pencil, Download, MoreHorizontal, Command, Loader2 } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -24,9 +24,6 @@ export default function QuoteHeader({
   profileId,
   view,
   onViewChange,
-  pdfOpen,
-  onTogglePdf,
-  hasPdf,
   onOpenPalette,
   onExportPdf,
   onUpdateQuote,
@@ -77,17 +74,6 @@ export default function QuoteHeader({
             </button>
 
             <ViewToggle view={view} onChange={onViewChange} />
-
-            {hasPdf && (
-              <button
-                type="button"
-                onClick={onTogglePdf}
-                className={`btn-ghost hidden lg:inline-flex ${pdfOpen ? 'bg-ink-100' : ''}`}
-                title={pdfOpen ? 'Ocultar lista de precios' : 'Mostrar lista de precios'}
-              >
-                {pdfOpen ? <><X size={14} /> Ocultar PDF</> : <><BookOpen size={14} /> Lista de precios</>}
-              </button>
-            )}
 
             <button
               type="button"

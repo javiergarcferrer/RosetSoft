@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, ExternalLink, Cloud, Check, Upload, FileText, AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { RefreshCw, ExternalLink, Check, AlertTriangle } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { fetchMarketRate, effectiveDopRate, BPD_PUBLIC_URL } from '../lib/exchangeRate.js';
+import { effectiveDopRate, BSC_PUBLIC_URL } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
-import { supabase, PRICELIST_BUCKET } from '../db/supabaseClient.js';
 import { db } from '../db/database.js';
 
 export default function Settings() {
@@ -58,8 +57,11 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-5">
+      {/* Settings is a single-column layout now. The right sidebar used
+          to carry the "Lista de precios" upload and a static "Almacenamiento"
+          info card; both were removed, so there's nothing left to put in
+          a second column. */}
+      <div className="space-y-5">
           {/* Company */}
           <div className="card card-pad">
             <h2 className="font-semibold mb-3">Empresa</h2>
@@ -146,24 +148,8 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Orders */}
-          <OrdersCard local={local} set={set} />
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-5">
-          <PriceListCard local={local} set={set} saveLive={(patch) => saveSettings({ ...local, ...patch })} />
-
-          <div className="card card-pad">
-            <h2 className="font-semibold mb-3 flex items-center gap-2"><Cloud size={16} /> Almacenamiento</h2>
-            <p className="text-xs text-ink-500 mb-3">
-              Los datos del equipo están en la nube (Supabase). Cualquier miembro autenticado los ve y los edita en tiempo real.
-            </p>
-            <p className="text-xs text-ink-500">
-              Las imágenes se guardan en el bucket público <code className="kbd">images</code> y se sirven directamente como URLs.
-            </p>
-          </div>
-        </div>
+        {/* Orders */}
+        <OrdersCard local={local} set={set} />
       </div>
     </>
   );
@@ -193,162 +179,39 @@ function OrdersCard({ local, set }) {
   );
 }
 
-function PriceListCard({ local, saveLive }) {
-  const inputRef = useRef(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const meta = local.priceList || null;          // { path, uploadedAt, version, size }
-
-  async function onFile(file) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-      setError('El archivo debe ser PDF.');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      // One canonical path per team — newer upload overwrites in place. The
-      // URL stays stable so anyone with the page open just refetches the
-      // updated bytes after navigating away.
-      const path = 'current.pdf';
-      const { error: upErr } = await supabase.storage
-        .from(PRICELIST_BUCKET)
-        .upload(path, file, {
-          contentType: 'application/pdf',
-          cacheControl: '60',   // short — uploads are infrequent but team needs to see new edition fast
-          upsert: true,
-        });
-      if (upErr) throw upErr;
-      await saveLive({
-        priceList: {
-          path,
-          uploadedAt: Date.now(),
-          size: file.size,
-          version: meta?.version || '',
-        },
-      });
-    } catch (e) {
-      console.error('[pricelist] upload failed', e);
-      setError(userMessageFor(e));
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = '';
-    }
-  }
-
-  async function remove() {
-    if (!confirm('¿Eliminar la lista de precios actual?')) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (meta?.path) {
-        await supabase.storage.from(PRICELIST_BUCKET).remove([meta.path]).catch(() => {});
-      }
-      await saveLive({ priceList: null });
-    } catch (e) {
-      setError(userMessageFor(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const mb = meta?.size ? (meta.size / (1024 * 1024)).toFixed(1) : null;
-
-  return (
-    <div className="card card-pad">
-      <h2 className="font-semibold mb-3 flex items-center gap-2"><FileText size={16} /> Lista de precios</h2>
-      <p className="text-xs text-ink-500 mb-3">
-        PDF de tarifa Ligne Roset compartido por todo el equipo. Se muestra
-        como panel lateral al cotizar.
-      </p>
-
-      {meta?.path ? (
-        <div className="rounded-md border border-ink-100 px-3 py-2 mb-3 bg-ink-50">
-          <div className="text-sm font-medium truncate">{meta.path}</div>
-          <div className="text-[11px] text-ink-500">
-            Subida {formatDateTime(meta.uploadedAt)}
-            {mb ? ` · ${mb} MB` : ''}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-md border border-dashed border-ink-200 px-3 py-3 mb-3 flex items-start gap-2 text-xs text-ink-600">
-          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-amber-500" />
-          <span>Aún no se ha subido ninguna lista de precios.</span>
-        </div>
-      )}
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf,.pdf"
-        className="hidden"
-        onChange={(e) => onFile(e.target.files?.[0])}
-      />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          className="btn-primary flex-1 justify-center"
-        >
-          {busy ? <><RefreshCw size={14} className="animate-spin" /> Subiendo…</> : <><Upload size={14} /> {meta?.path ? 'Reemplazar' : 'Subir PDF'}</>}
-        </button>
-        {meta?.path && (
-          <button type="button" onClick={remove} disabled={busy} className="btn-ghost text-red-600 hover:bg-red-50">
-            Eliminar
-          </button>
-        )}
-      </div>
-      {error && (
-        <div className="text-[11px] text-red-700 mt-2">{error}</div>
-      )}
-    </div>
-  );
-}
 
 function RateCard({ local, set, saveSettings }) {
-  const bpd = local.bpd || { buy: null, sell: null, updatedAt: null };
-  const market = local.market || { rate: null, date: null, source: null };
-  const mode = local.dopRateMode || 'bpd-sell';
-  const [fetching, setFetching] = useState(false);
-  const [fetchErr, setFetchErr] = useState(null);
+  // BSC's buy/sell rates live under `settings.bsc`. We accept the
+  // legacy `settings.bpd` shape transparently so existing data isn't
+  // lost on the first render after this code ships — see readBscRates
+  // / normalizeRateMode in lib/exchangeRate.js.
+  const bsc = local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
+  const mode = (local.dopRateMode || '').startsWith('bsc-')
+    ? local.dopRateMode
+    : 'bsc-sell';
 
-  function setBpd(patch) {
-    set('bpd', { ...bpd, ...patch, updatedAt: Date.now() });
-  }
-
-  async function refreshMarket() {
-    setFetching(true);
-    setFetchErr(null);
-    const result = await fetchMarketRate();
-    if (result) {
-      set('market', result);
-    } else {
-      setFetchErr('No se pudo obtener la tasa de mercado.');
-    }
-    setFetching(false);
+  function setBsc(patch) {
+    set('bsc', { ...bsc, ...patch, updatedAt: Date.now() });
   }
 
   const eff = effectiveDopRate(local);
-  const sample = (10000 / eff).toFixed(2); // USD a comprar con 10,000 pesos
+  const sample = (10000 / eff).toFixed(2);
   const sampleInverse = (100 * eff).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
   return (
     <div className="card card-pad">
       <h2 className="font-semibold mb-2">Tasa de cambio USD → DOP</h2>
       <p className="text-xs text-ink-500 mb-4">
-        Los precios del catálogo están en USD (lista oficial Ligne Roset). Aquí defines la tasa que se aplica para convertir a pesos dominicanos en cotizaciones.
+        Los precios del catálogo están en USD (lista oficial Ligne Roset). Aquí defines la tasa de Banco Santa Cruz que se aplica al convertir a pesos dominicanos en cotizaciones.
       </p>
 
-      {/* Mode selector */}
+      {/* Mode selector — three options, all anchored on BSC */}
       <div className="label">Tasa que usar al cotizar</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
         {[
-          { key: 'bpd-sell', label: 'BPD — Venta', hint: 'Para cobrar al cliente' },
-          { key: 'bpd-buy', label: 'BPD — Compra', hint: 'Si te paga en USD' },
-          { key: 'market', label: 'Mercado', hint: 'open.er-api.com' },
-          { key: 'custom', label: 'Personalizada', hint: 'Manual abajo' },
+          { key: 'bsc-sell', label: 'BSC — Venta',     hint: 'Para cobrar al cliente' },
+          { key: 'bsc-buy',  label: 'BSC — Compra',    hint: 'Si te paga en USD' },
+          { key: 'custom',   label: 'Personalizada',   hint: 'Manual abajo' },
         ].map((opt) => (
           <button
             key={opt.key}
@@ -362,16 +225,18 @@ function RateCard({ local, set, saveSettings }) {
         ))}
       </div>
 
-      {/* BPD rates */}
+      {/* BSC rates — manual entry. BSC's web app is a Nuxt SPA with no
+          public no-auth endpoint we can fetch, so we link out to their
+          divisas page and let the dealer paste in today's rates. */}
       <div className="rounded-md border border-ink-100 bg-ink-50 px-4 py-3 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="font-medium text-sm">Banco Popular Dominicano</div>
-          <a href={BPD_PUBLIC_URL} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">
-            popularenlinea.com <ExternalLink size={10} />
+          <div className="font-medium text-sm">Banco Santa Cruz</div>
+          <a href={BSC_PUBLIC_URL} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">
+            bsc.com.do/divisas <ExternalLink size={10} />
           </a>
         </div>
         <p className="text-[11px] text-ink-500 mb-3">
-          Actualiza desde la app del BPD o su sitio web. La tasa de venta es la que paga tu cliente al adquirir USD.
+          Actualiza desde la app de BSC o su sitio web. La tasa de venta es la que paga tu cliente al adquirir USD.
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -380,8 +245,8 @@ function RateCard({ local, set, saveSettings }) {
               type="number"
               step="0.01"
               className="input mt-1"
-              value={bpd.buy ?? ''}
-              onChange={(e) => setBpd({ buy: e.target.value === '' ? null : Number(e.target.value) })}
+              value={bsc.buy ?? ''}
+              onChange={(e) => setBsc({ buy: e.target.value === '' ? null : Number(e.target.value) })}
               placeholder="58.50"
             />
           </div>
@@ -391,49 +256,20 @@ function RateCard({ local, set, saveSettings }) {
               type="number"
               step="0.01"
               className="input mt-1"
-              value={bpd.sell ?? ''}
-              onChange={(e) => setBpd({ sell: e.target.value === '' ? null : Number(e.target.value) })}
+              value={bsc.sell ?? ''}
+              onChange={(e) => setBsc({ sell: e.target.value === '' ? null : Number(e.target.value) })}
               placeholder="62.00"
             />
           </div>
         </div>
-        {bpd.updatedAt && (
+        {bsc.updatedAt && (
           <div className="text-[10px] text-ink-500 mt-2">
-            Actualizado {formatDateTime(bpd.updatedAt)}
+            Actualizado {formatDateTime(bsc.updatedAt)}
           </div>
         )}
       </div>
 
-      {/* Market */}
-      <div className="rounded-md border border-ink-100 px-4 py-3 mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-medium text-sm">Tasa de mercado</div>
-          <button
-            type="button"
-            onClick={refreshMarket}
-            disabled={fetching}
-            className="btn-ghost text-xs"
-          >
-            <RefreshCw size={11} className={fetching ? 'animate-spin' : ''} />
-            {fetching ? 'Obteniendo…' : 'Actualizar'}
-          </button>
-        </div>
-        <div className="text-sm">
-          {market.rate ? (
-            <span>1 USD ≈ <b>{Number(market.rate).toFixed(2)} DOP</b></span>
-          ) : (
-            <span className="text-ink-500">Sin datos. Haz clic en <b>Actualizar</b>.</span>
-          )}
-        </div>
-        {market.date && (
-          <div className="text-[10px] text-ink-500 mt-1">
-            {market.source} · {market.date}
-          </div>
-        )}
-        {fetchErr && <div className="text-[11px] text-red-600 mt-1">{fetchErr}</div>}
-      </div>
-
-      {/* Custom */}
+      {/* Custom — only renders when selected */}
       {mode === 'custom' && (
         <div className="rounded-md border border-ink-100 px-4 py-3 mb-3">
           <div className="label">Tasa personalizada (RD$ por 1 USD)</div>

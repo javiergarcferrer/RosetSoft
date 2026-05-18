@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Plus, Hash, Download, Eye, BookOpen, X, FileText, User as UserIcon, Container as ContainerIcon } from 'lucide-react';
+import { Search, Plus, Hash, Download, Eye, X, FileText, User as UserIcon, Container as ContainerIcon } from 'lucide-react';
 import { useQuoteAutocomplete } from './useQuoteAutocomplete.js';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 import { formatMoney } from '../../lib/format.js';
@@ -26,8 +26,8 @@ export default function QuickActions({
   open, onClose,
   customers, currentCustomerId,
   onInsertLine, onAddSection, onSelectCustomer,
-  onExportPdf, onToggleClientView, onTogglePdfPanel,
-  hasPdfPanel, clientView,
+  onExportPdf, onToggleClientView,
+  clientView,
   currency, rates,
 }) {
   const [q, setQ] = useState('');
@@ -53,9 +53,8 @@ export default function QuickActions({
 
   // ---- Filtered rows ----
   const actions = useMemo(() => buildActions({
-    onInsertLine, onAddSection, onExportPdf, onToggleClientView, onTogglePdfPanel,
-    hasPdfPanel, clientView,
-  }), [onInsertLine, onAddSection, onExportPdf, onToggleClientView, onTogglePdfPanel, hasPdfPanel, clientView]);
+    onInsertLine, onAddSection, onExportPdf, onToggleClientView, clientView,
+  }), [onInsertLine, onAddSection, onExportPdf, onToggleClientView, clientView]);
 
   const filteredActions = useMemo(() => filterByLabel(actions, q), [actions, q]);
   const recentItems = useMemo(() => search(q, 8), [search, q]);
@@ -275,18 +274,14 @@ function RowButton({ row, active, currency, rates, currentCustomerId, onHover, o
   );
 }
 
-function buildActions({ onInsertLine, onAddSection, onExportPdf, onToggleClientView, onTogglePdfPanel, hasPdfPanel, clientView }) {
-  const list = [
+function buildActions({ onInsertLine, onAddSection, onExportPdf, onToggleClientView, clientView }) {
+  return [
     { id: 'add-item', label: 'Agregar artículo en blanco', icon: Plus, kbd: shortcutLabel('mod+enter'), run: () => onInsertLine({}) },
     { id: 'add-section', label: 'Agregar sección', icon: Hash, hint: 'Encabezado para agrupar (ej. "Sala")', run: () => onAddSection() },
     { id: 'export', label: 'Exportar PDF', icon: Download, kbd: shortcutLabel('mod+p'), run: () => onExportPdf() },
     { id: 'client-view', label: clientView ? 'Volver a edición' : 'Vista del cliente', icon: Eye, run: () => onToggleClientView() },
+    { id: 'change-container', label: 'Cambiar contenedor', icon: ContainerIcon, hint: 'Asignar el quote a un contenedor', run: () => {/* opens via chip; included as discovery */} },
   ];
-  if (hasPdfPanel) {
-    list.push({ id: 'pdf-panel', label: 'Mostrar / ocultar lista de precios', icon: BookOpen, run: () => onTogglePdfPanel() });
-  }
-  list.push({ id: 'change-container', label: 'Cambiar contenedor', icon: ContainerIcon, hint: 'Asignar el quote a un contenedor', run: () => {/* opens via chip; included as discovery */} });
-  return list;
 }
 
 function filterByLabel(actions, q) {

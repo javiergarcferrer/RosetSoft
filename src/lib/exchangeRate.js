@@ -1,77 +1,102 @@
 /**
- * Exchange-rate fetching for USD ↔ DOP (Dominican Peso).
+ * Exchange-rate semantics for USD ↔ DOP (Dominican Peso).
  *
- * BPD (Banco Popular Dominicano) doesn't expose a public no-auth endpoint that
- * works with CORS from a browser, so we use two complementary sources:
+ * The dealer is a Banco Santa Cruz customer; the rate they actually
+ * receive on a wire / a card transaction is the BSC rate, not the
+ * international "market" reference from an aggregator. So the data
+ * model now holds BSC's published buy/sell rates and the UI is built
+ * around the dealer keeping them current.
  *
- *   1. **Market reference rate** — fetched live from open.er-api.com (free, CORS,
- *      no key). This is a good fallback and gives a date-stamped "market" rate.
- *   2. **Banco Popular Dominicano rate** — entered manually from
- *      https://popularenlinea.com (or the BPD mobile app). User can store buy
- *      and sell rates. The sell rate is what a customer typically pays to
- *      acquire USD; in retail quoting we use the buy rate (the bank's buy =
- *      what we'd receive when converting customer's DOP to USD invoice).
+ * BSC's website (bsc.com.do) is a Nuxt SPA — no public JSON endpoint
+ * we can fetch from the browser without auth + CORS. The dealer keeps
+ * the rate fresh by hand (the BSC mobile app shows it on every login)
+ * and types it into Settings → "Tasa de cambio". A `BSC_PUBLIC_URL`
+ * constant points the Settings card at bsc.com.do/divisas for a
+ * one-tap reference; the rate value itself is dealer-entered.
  *
- * In `settings.currencyRates` we keep `{ USD: 1, DOP: <rate> }` plus extended
- * fields under `settings.bpd` and `settings.market`.
+ * Modes
+ * -----
+ *   bsc-buy    BSC's published buy rate (the rate BSC pays to acquire
+ *              USD from a holder — i.e. the rate the dealer receives
+ *              when converting customer DOP into USD revenue).
+ *   bsc-sell   BSC's published sell rate (the rate the customer pays
+ *              to acquire USD). Higher than buy.
+ *   custom     A free-form override the dealer types in directly.
+ *              Used when negotiating a specific deal or applying a
+ *              corporate rate that differs from BSC's retail screen.
+ *
+ * Backwards-compatibility: rows in `settings` that still carry the
+ * old `bpd` shape and `dopRateMode: 'bpd-buy' | 'bpd-sell' | 'market'`
+ * are read transparently — bsc fields fall back to bpd, and the
+ * legacy 'bpd-*' / 'market' modes resolve to a best-equivalent bsc
+ * rate. New writes always use the bsc shape.
  */
 
-const MARKET_URL = 'https://open.er-api.com/v6/latest/USD';
+export const BSC_PUBLIC_URL = 'https://www.bsc.com.do/divisas';
 
 /**
- * Fetch the latest USD → DOP market rate from open.er-api.com.
- *
- *   @returns { rate: number, date: string, source: string } | null
+ * Read BSC's buy/sell record off a settings row. The shape is
+ * `{ buy, sell, updatedAt }`; legacy data under `settings.bpd` is
+ * accepted as a fallback so existing dealer accounts don't suddenly
+ * lose their stored rate when this code ships.
  */
-export async function fetchMarketRate() {
-  try {
-    const res = await fetch(MARKET_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data?.result !== 'success' || !data?.rates?.DOP) {
-      throw new Error('Unexpected payload: ' + JSON.stringify(data).slice(0, 100));
-    }
-    return {
-      rate: data.rates.DOP,
-      date: data.time_last_update_utc || new Date().toUTCString(),
-      source: 'open.er-api.com',
-    };
-  } catch (err) {
-    console.warn('Market rate fetch failed:', err.message);
-    return null;
-  }
+export function readBscRates(settings) {
+  if (!settings) return { buy: null, sell: null, updatedAt: null };
+  const src = settings.bsc || settings.bpd || {};
+  return {
+    buy: src.buy ?? null,
+    sell: src.sell ?? null,
+    updatedAt: src.updatedAt ?? null,
+  };
 }
 
 /**
- * Build a `currencyRates` map from the active rate setting on settings.
- * The user can choose which rate type they want to apply.
+ * Resolve the effective USD → DOP rate to apply to a quote, based on
+ * the dealer's selected mode. Returns a number; defaults to 60.0 if
+ * the chosen rate isn't set yet.
  *
- *   modes: 'bpd-buy' | 'bpd-sell' | 'market' | 'custom'
+ * Legacy modes:
+ *   bpd-buy / bpd-sell → mapped to bsc-buy / bsc-sell
+ *   market             → mapped to bsc-sell (the conservative pick
+ *                        for retail quoting; sell > buy, so quoting
+ *                        in sell maximizes the dealer's USD invoice)
  */
 export function effectiveDopRate(settings) {
-  if (!settings) return 60.0; // fallback
-  const mode = settings.dopRateMode || 'bpd-sell';
-  const bpd = settings.bpd || {};
-  const market = settings.market || {};
+  if (!settings) return 60.0;
+  const mode = normalizeRateMode(settings.dopRateMode);
+  const bsc = readBscRates(settings);
   switch (mode) {
-    case 'bpd-buy': return Number(bpd.buy) || Number(market.rate) || 60.0;
-    case 'bpd-sell': return Number(bpd.sell) || Number(market.rate) || 60.0;
-    case 'market': return Number(market.rate) || Number(bpd.sell) || 60.0;
-    case 'custom': return Number(settings.currencyRates?.DOP) || 60.0;
-    default: return Number(bpd.sell) || Number(market.rate) || 60.0;
+    case 'bsc-buy':  return Number(bsc.buy)  || Number(bsc.sell) || 60.0;
+    case 'bsc-sell': return Number(bsc.sell) || Number(bsc.buy)  || 60.0;
+    case 'custom':   return Number(settings.currencyRates?.DOP) || 60.0;
+    default:         return Number(bsc.sell) || Number(bsc.buy) || 60.0;
   }
 }
 
-/** Return what label to print on the quote PDF and in UI hints. */
+/** Friendly label printed on PDFs and in Settings hints. */
 export function rateSourceLabel(settings) {
-  const mode = settings?.dopRateMode || 'bpd-sell';
+  const mode = normalizeRateMode(settings?.dopRateMode);
   switch (mode) {
-    case 'bpd-buy': return 'BPD tasa de compra';
-    case 'bpd-sell': return 'BPD tasa de venta';
-    case 'market': return `Tasa de mercado (${settings?.market?.source || 'open.er-api.com'})`;
-    case 'custom': return 'Tasa personalizada';
-    default: return 'BPD';
+    case 'bsc-buy':  return 'Banco Santa Cruz — tasa de compra';
+    case 'bsc-sell': return 'Banco Santa Cruz — tasa de venta';
+    case 'custom':   return 'Tasa personalizada';
+    default:         return 'Banco Santa Cruz';
   }
 }
 
-export const BPD_PUBLIC_URL = 'https://popularenlinea.com';
+/**
+ * Coerce legacy / unset rate-mode values into the current vocabulary.
+ * Any unknown / empty value falls through to 'bsc-sell' as the safe
+ * retail default.
+ */
+function normalizeRateMode(mode) {
+  switch (mode) {
+    case 'bsc-buy':
+    case 'bpd-buy':       return 'bsc-buy';
+    case 'bsc-sell':
+    case 'bpd-sell':
+    case 'market':        return 'bsc-sell';
+    case 'custom':        return 'custom';
+    default:              return 'bsc-sell';
+  }
+}

@@ -2,9 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
-import PdfViewer from '../components/PdfViewer.jsx';
 import { db, newId, nextSequenceNumber } from '../db/database.js';
-import { publicPricelistUrl } from '../db/supabaseClient.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals } from '../lib/pricing.js';
 import { formatMoney } from '../lib/format.js';
@@ -24,9 +22,6 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
-
-// Sticky per-user (not per-quote): remember whether the PDF panel was open.
-const PDF_PANEL_STORAGE_KEY = 'rosetsoft.pdfPanel.open';
 
 /**
  * The Quote Workspace — the redesigned quote builder.
@@ -182,19 +177,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (materialize) await materialize();
   }, [materialize]);
 
-  // -------- view + panels state --------
+  // -------- view + panel state --------
+  // The "lista de precios" PDF panel (a `pdfjs-dist` viewer that slid
+  // in from the right with the LR price list) was removed entirely —
+  // including the upload affordance in Settings, the panel toggle in
+  // the header, and the pdfjs-dist dependency itself. The quote
+  // builder now stays focused on quote construction; price-list lookup
+  // happens outside the app.
   const [view, setView] = useState('compose'); // 'compose' | 'client'
-  const priceListUrl = useMemo(
-    () => publicPricelistUrl(settings?.priceList?.path),
-    [settings?.priceList?.path],
-  );
-  const hasPdf = !!priceListUrl;
-  const [pdfOpen, setPdfOpen] = useState(() => {
-    try { return localStorage.getItem(PDF_PANEL_STORAGE_KEY) === '1'; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(PDF_PANEL_STORAGE_KEY, pdfOpen ? '1' : '0'); } catch {}
-  }, [pdfOpen]);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // -------- save indicator state --------
@@ -441,9 +431,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         profileId={profileId}
         view={view}
         onViewChange={setView}
-        pdfOpen={pdfOpen}
-        onTogglePdf={() => setPdfOpen((v) => !v)}
-        hasPdf={hasPdf}
         onOpenPalette={() => setPaletteOpen(true)}
         onExportPdf={exportPdf}
         onUpdateQuote={updateQuote}
@@ -493,9 +480,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // from accepting `min-width: 0` from descendants, and any long
         // string (a 6-digit money value, a full dimension spec) forces
         // the whole column wider than the viewport.
-        <div className={`grid grid-cols-1 gap-6 ${pdfOpen ? 'lg:grid-cols-[minmax(0,1fr)_520px]' : 'lg:grid-cols-[minmax(0,1fr)_360px]'}`}>
-          {/* Main column */}
-          <div className={`space-y-5 min-w-0 ${pdfOpen ? '' : ''}`}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-5 min-w-0">
             <LineItemsCard
               lines={lines}
               quote={quote}
@@ -507,36 +493,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               onAddItem={() => addLine()}
               onAddSection={addSection}
             />
-
-            {/* When the PDF panel is on, totals collapse here so the running
-                total stays visible while the dealer reads the price-list. */}
-            {pdfOpen && (
-              <div className="lg:hidden">
-                <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
-              </div>
-            )}
-            {pdfOpen && (
-              <div className="hidden lg:block">
-                <CompactTotals quote={quote} totals={totals} />
-                <div className="mt-5">
-                  <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
-                </div>
-              </div>
-            )}
-
             <NotesAndTermsCard quote={quote} onUpdateQuote={updateQuote} />
           </div>
 
-          {/* Right column: either the PDF or the totals rail */}
-          {pdfOpen ? (
-            <div className="hidden lg:block lg:sticky lg:top-4 lg:self-start h-[calc(100vh-2rem)] card overflow-hidden">
-              <PdfViewer url={priceListUrl} />
-            </div>
-          ) : (
-            <div className="lg:sticky lg:top-4 lg:self-start">
-              <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
-            </div>
-          )}
+          {/* Right column: totals rail, sticky on desktop. The price-list
+              PDF panel that used to alternate into this slot is gone. */}
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+          </div>
         </div>
       )}
 
@@ -559,8 +523,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onSelectCustomer={(id) => updateQuote({ customerId: id })}
         onExportPdf={exportPdf}
         onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
-        onTogglePdfPanel={() => setPdfOpen((v) => !v)}
-        hasPdfPanel={hasPdf}
         clientView={view === 'client'}
         currency={quote.currencyCode || 'USD'}
         rates={quote.rates || { USD: 1 }}
@@ -673,24 +635,6 @@ function NotesAndTermsCard({ quote, onUpdateQuote }) {
  * is open and the rail is hidden. Keeps the running total in view without
  * eating vertical space.
  */
-function CompactTotals({ quote, totals }) {
-  const currency = quote.currencyCode || 'USD';
-  const rates = quote.rates || { USD: 1 };
-  return (
-    <div className="card px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-4 text-xs text-ink-500 tabular-nums">
-        <span>Subtotal <b className="text-ink-900">{formatMoney(totals.subtotal, currency, rates)}</b></span>
-        {quote.discountPct ? <span>Desc. <b className="text-ink-900">–{quote.discountPct}%</b></span> : null}
-        <span>ITBIS <b className="text-ink-900">{formatMoney(totals.taxAmt, currency, rates)}</b></span>
-      </div>
-      <div className="text-right">
-        <div className="text-[10px] uppercase tracking-wide text-ink-500">Total</div>
-        <div className="text-lg font-semibold tabular-nums">{formatMoney(totals.grandTotal, currency, rates)}</div>
-      </div>
-    </div>
-  );
-}
-
 function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
   // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
   // insets so the buttons clear the Dynamic Island ear when the phone is
