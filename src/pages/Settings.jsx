@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, ExternalLink, Check, AlertTriangle } from 'lucide-react';
+import { RefreshCw, ExternalLink, Check, AlertTriangle, Shield } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate, BSC_PUBLIC_URL } from '../lib/exchangeRate.js';
@@ -10,7 +11,7 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
 
 export default function Settings() {
-  const { profileId, settings, saveSettings } = useApp();
+  const { profileId, settings, saveSettings, isAdmin } = useApp();
   const [local, setLocal] = useState(settings || {});
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [saveError, setSaveError] = useState(null);
@@ -41,6 +42,23 @@ export default function Settings() {
   }
 
   const rates = local.currencyRates || { USD: 1 };
+
+  // Configuración is admin-only: company info, exchange rates,
+  // commission defaults, etc. Employees typing /settings in the URL
+  // bar see the same restricted-access screen as on other admin
+  // routes (same pattern as admin/Users + admin/Commissions).
+  if (!isAdmin) {
+    return (
+      <>
+        <PageHeader title="Configuración" subtitle=" " />
+        <EmptyState
+          icon={Shield}
+          title="Acceso restringido"
+          description="Solo administradores pueden ver o modificar la configuración del equipo."
+        />
+      </>
+    );
+  }
 
   return (
     <>

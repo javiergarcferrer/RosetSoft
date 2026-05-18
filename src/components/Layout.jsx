@@ -15,8 +15,12 @@ import {
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 
-// Sidebar groups. Most items render for every user; the
-// "Administración" group is admin-only and we splice it in below.
+// Sidebar groups. The two single-item groups at the ends (Inicio and
+// Configuración) sit on their own so the visual rhythm of the nav
+// reads as: home → contacts → sales → (admin tools if applicable) →
+// settings. Configuración is admin-only (the dealer doesn't want
+// employees seeing currency rates, company info, etc.), so we slice
+// it off for non-admins below.
 const baseNavGroups = [
   { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] },
   {
@@ -49,13 +53,13 @@ const adminNavGroup = {
 
 export default function Layout() {
   const { settings, isAdmin } = useApp();
-  // Splice the admin cluster in just before the "Configuración" item
-  // (which sits in the last baseNavGroups entry). Non-admin users get
-  // the base groups verbatim so they don't even see the admin routes
-  // exist.
+  // Admin navigation: base groups up to "Ventas", then the admin
+  // cluster, then "Configuración" (also admin-only). Employees get
+  // the base groups minus "Configuración" — they don't even see the
+  // route exist.
   const navGroups = isAdmin
     ? [...baseNavGroups.slice(0, -1), adminNavGroup, baseNavGroups[baseNavGroups.length - 1]]
-    : baseNavGroups;
+    : baseNavGroups.slice(0, -1);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = !useMediaQuery('(min-width: 768px)');
