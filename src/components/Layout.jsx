@@ -7,30 +7,17 @@ import {
   FileText,
   Package,
   Settings as SettingsIcon,
+  Shield,
+  Wallet,
   Menu,
   X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 
-// Sidebar layout — flat at first, now grouped because the dealer's mental
-// model of these routes has natural clusters:
-//
-//   • "Contactos" — the people the showroom works with. Clients are who
-//     buys; profesionales are who refers (architects, decorators). Both
-//     are address-book-style records the dealer maintains.
-//
-//   • "Ventas" — the live commercial workflow. A quote becomes a pedido;
-//     they're two phases of the same revenue thread. Grouping them
-//     telegraphs "this is where the money lives".
-//
-//   • "Inicio" and "Configuración" stand alone — they aren't part of a
-//     cluster, so explicit group labels would be noise.
-//
-// Group labels render as small uppercase eyebrows (ink-500 inside the
-// dark sidebar) above each cluster. Items without a group sit flush at
-// the top/bottom.
-const navGroups = [
+// Sidebar groups. Most items render for every user; the
+// "Administración" group is admin-only and we splice it in below.
+const baseNavGroups = [
   { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] },
   {
     label: 'Contactos',
@@ -49,8 +36,26 @@ const navGroups = [
   { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] },
 ];
 
+// Admin-only cluster — Users management + monthly commissions report.
+// Spliced into the nav just before "Configuración" so admins read the
+// list as: work surfaces first, admin tools, then their own settings.
+const adminNavGroup = {
+  label: 'Administración',
+  items: [
+    { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
+    { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
+  ],
+};
+
 export default function Layout() {
-  const { settings } = useApp();
+  const { settings, isAdmin } = useApp();
+  // Splice the admin cluster in just before the "Configuración" item
+  // (which sits in the last baseNavGroups entry). Non-admin users get
+  // the base groups verbatim so they don't even see the admin routes
+  // exist.
+  const navGroups = isAdmin
+    ? [...baseNavGroups.slice(0, -1), adminNavGroup, baseNavGroups[baseNavGroups.length - 1]]
+    : baseNavGroups;
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = !useMediaQuery('(min-width: 768px)');

@@ -103,13 +103,28 @@ export default function Login() {
           </button>
         </form>
 
+        {/* The signup form is intentionally not advertised here. The
+            team is invite-only: a new employee signs up with the email
+            their admin gave them, then waits for the admin to activate
+            them in /admin/users. We keep the toggle available behind a
+            small "registrarme" link so the admin can still bootstrap
+            their own account on first install — and so legitimate new
+            employees who were told to sign up can find the form — but
+            we don't promote it. Anyone landing on /login by chance sees
+            "Iniciar sesión" only. */}
         <div className="text-center text-xs text-ink-500 mt-5">
           {mode === 'signin' ? (
-            <>¿Aún no tienes cuenta? <button type="button" onClick={() => { setMode('signup'); setError(null); setInfo(null); }} className="text-brand-600 hover:underline">Créala</button></>
+            <>¿Tu administrador te dio acceso? <button type="button" onClick={() => { setMode('signup'); setError(null); setInfo(null); }} className="text-ink-700 hover:text-ink-900 underline">Registrarme</button></>
           ) : (
             <>¿Ya tienes cuenta? <button type="button" onClick={() => { setMode('signin'); setError(null); setInfo(null); }} className="text-brand-600 hover:underline">Inicia sesión</button></>
           )}
         </div>
+
+        {mode === 'signup' && (
+          <p className="mt-3 text-center text-[11px] text-ink-500 max-w-xs mx-auto">
+            Tu cuenta queda pendiente hasta que un administrador la apruebe.
+          </p>
+        )}
       </div>
     </div>
   );

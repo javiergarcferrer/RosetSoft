@@ -1,17 +1,35 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { db, ensureDefaultProfile, getSettings, updateSettings } from '../db/database.js';
-import { effectiveDopRate } from '../lib/exchangeRate.js';
+import { useAuth } from './AuthContext.jsx';
 
 const Ctx = createContext(null);
 
 /**
- * Single-tenant team context: `profileId` is always the shared 'team' profile.
- * `profiles` lists team members (rows in the profiles table) for display.
+ * App-level context. The team is still single-tenant (one shared 'team'
+ * profile holds company-wide settings) but each signed-in user now has
+ * a per-user profile row with role + commission. This context exposes:
+ *
+ *   profileId        — the shared 'team' id (kept stable; existing
+ *                      `db.X.where('profileId').equals(profileId)` calls
+ *                      across the app continue to work unchanged)
+ *   profiles         — every profile row (team + each user); used by
+ *                      the admin Users page
+ *   currentProfile   — the *signed-in user's* profile row, with role,
+ *                      commission_pct, active. Pages gate features off
+ *                      this (admin-only routes, etc.)
+ *   settings         — the team settings row
+ *
+ * The shared 'team' row carries `admin_emails` (jsonb array of lowercase
+ * email strings). On first sign-in, any user whose email matches that
+ * list is auto-promoted to role='admin' + active=true. Everyone else
+ * starts inactive and must be approved by an admin via the Users page.
  */
 export function AppProvider({ children }) {
+  const { user } = useAuth();
   const [profileId, setProfileId] = useState(null);
   const [settings, setSettings] = useState(null);
   const [profiles, setProfiles] = useState([]);
+  const [currentProfile, setCurrentProfile] = useState(null);
   const [ready, setReady] = useState(false);
 
   const refreshProfiles = useCallback(async () => {
@@ -28,6 +46,20 @@ export function AppProvider({ children }) {
     return s;
   }, [profileId]);
 
+  // Re-read the signed-in user's profile from the list. Called after
+  // any write that could change the current user's role/active state
+  // (e.g. an admin demoting themselves — defensive, the UI blocks it
+  // but the contract is "any write triggers a refresh").
+  const refreshCurrentProfile = useCallback(async () => {
+    if (!user?.id) {
+      setCurrentProfile(null);
+      return null;
+    }
+    const p = await db.profiles.get(user.id);
+    setCurrentProfile(p || null);
+    return p || null;
+  }, [user?.id]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -35,31 +67,27 @@ export function AppProvider({ children }) {
         const pid = await ensureDefaultProfile();
         if (cancelled) return;
         setProfileId(pid);
+
         const s = await getSettings(pid);
         if (cancelled) return;
         setSettings(s);
-        await refreshProfiles();
-        setReady(true);
 
-        // Auto-refresh market rate once a day in the background.
-        const lastFetch = s?.market?.fetchedAt || 0;
-        const oneDay = 24 * 60 * 60 * 1000;
-        if (!lastFetch || Date.now() - lastFetch > oneDay) {
-          const result = await fetchMarketRate();
-          if (result && !cancelled) {
-            const merged = { ...s, market: { ...result, fetchedAt: Date.now() } };
-            merged.currencyRates = { ...(s?.currencyRates || {}), USD: 1, DOP: effectiveDopRate(merged) };
-            await updateSettings(pid, merged);
-            setSettings(merged);
-          }
-        }
+        const list = await refreshProfiles();
+        if (cancelled) return;
+
+        // Load the current user's profile from what we just fetched
+        // (no extra round-trip).
+        const me = user?.id ? list.find((p) => p.id === user.id) : null;
+        if (!cancelled) setCurrentProfile(me || null);
+
+        setReady(true);
       } catch (e) {
         console.error('AppContext init failed:', e);
         setReady(true);
       }
     })();
     return () => { cancelled = true; };
-  }, [refreshProfiles]);
+  }, [refreshProfiles, user?.id]);
 
   const saveSettings = useCallback(async (patch) => {
     await updateSettings(profileId, patch);
@@ -71,8 +99,12 @@ export function AppProvider({ children }) {
     profileId,
     profiles,
     settings,
+    currentProfile,
+    isAdmin: currentProfile?.role === 'admin',
+    isActive: !!currentProfile?.active,
     refreshProfiles,
     refreshSettings,
+    refreshCurrentProfile,
     saveSettings,
   };
 

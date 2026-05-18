@@ -41,7 +41,7 @@ import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
  */
 export default function QuoteBuilder() {
   const navigate = useNavigate();
-  const { profileId, settings } = useApp();
+  const { profileId, settings, currentProfile } = useApp();
   const { quoteId: routeId } = useParams();
   const [search] = useSearchParams();
 
@@ -51,6 +51,12 @@ export default function QuoteBuilder() {
     <DraftWorkspace
       profileId={profileId}
       settings={settings}
+      // currentProfile.id is auth.uid() for the signed-in user. We stamp
+      // it on every new quote so the monthly commissions report can
+      // attribute the deal back to whoever closed it. Old quotes
+      // without this field are skipped by the report rather than
+      // credited to a random dealer.
+      createdByUserId={currentProfile?.id || null}
       initialRef={search.get('ref') || ''}
       navigate={navigate}
     />
@@ -61,7 +67,7 @@ export default function QuoteBuilder() {
 /*  Draft → Materialize                                                       */
 /* -------------------------------------------------------------------------- */
 
-function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
+function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navigate }) {
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = newId();
   const id = idRef.current;
@@ -69,6 +75,7 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
   const defaults = useMemo(() => ({
     id,
     profileId,
+    createdByUserId,
     number: null,
     customerId: null,
     professionalId: null,
@@ -84,7 +91,7 @@ function DraftWorkspace({ profileId, settings, initialRef, navigate }) {
     notes: '',
     createdAt: Date.now(),
     updatedAt: Date.now(),
-  }), [id, profileId, settings]);
+  }), [id, profileId, settings, createdByUserId]);
 
   const persistedRef = useRef(false);
   const inFlightRef = useRef(null);

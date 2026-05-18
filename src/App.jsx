@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Hourglass, LogOut } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
@@ -14,6 +14,8 @@ import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
 import Settings from './pages/Settings.jsx';
+import AdminUsers from './pages/admin/Users.jsx';
+import AdminCommissions from './pages/admin/Commissions.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -62,8 +64,43 @@ function RedirectIfAuthed({ children }) {
 }
 
 function Gate({ children }) {
-  const { ready } = useApp();
+  const { ready, currentProfile } = useApp();
+  const { user, signOut } = useAuth();
+
   if (!ready) return <Loading />;
+
+  // The user is authenticated with Supabase but doesn't have an active
+  // profile row yet — either they just signed up and an admin hasn't
+  // approved them, or an admin deactivated them. Either way, they
+  // can't see the app. Show a quiet "pending approval" screen with
+  // sign-out as the only available action so they can re-sign-in as
+  // a different account if needed.
+  if (user && currentProfile && !currentProfile.active) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
+        <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 inline-flex items-center justify-center">
+          <Hourglass size={22} />
+        </div>
+        <div>
+          <div className="text-lg font-semibold">Cuenta pendiente de aprobación</div>
+          <p className="text-sm text-ink-500 max-w-md mt-1">
+            Tu administrador necesita activar tu cuenta antes de que puedas usar el sistema. Si crees que es un error, contáctalo directamente.
+          </p>
+          <p className="text-xs text-ink-400 mt-3">
+            Has iniciado sesión como <b className="text-ink-700">{user.email}</b>.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={signOut}
+          className="btn-ghost text-sm inline-flex items-center gap-1.5"
+        >
+          <LogOut size={14} />
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
   return children;
 }
 
@@ -82,16 +119,15 @@ function ProtectedApp() {
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />
-            {/* Legacy redirects: old container routes were the ancestor of
-                today's order routes. Keep them working as 301-style
-                client-side redirects so external bookmarks survive the
-                rename. The :containerId segment is preserved as the new
-                order's :orderId — the data migration uses
-                'o-' || container.id, but the parent /containers route is
-                what most bookmarks point at. */}
+            {/* Legacy redirects */}
             <Route path="containers" element={<Navigate to="/orders" replace />} />
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
             <Route path="settings" element={<Settings />} />
+            {/* Admin-only — the components themselves render a friendly
+                "Acceso restringido" empty state when an employee navigates
+                here, so we don't have to redirect at the route level. */}
+            <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/commissions" element={<AdminCommissions />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

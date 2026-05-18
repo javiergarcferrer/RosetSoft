@@ -412,20 +412,49 @@ export const TEAM_PROFILE_ID = 'team';
 
 export async function ensureDefaultProfile() {
   // Make sure the team profile + settings row exist (the SQL schema bootstraps
-  // these, but we tolerate empty databases too).
-  await db.profiles.put({ id: TEAM_PROFILE_ID, name: 'Team' }).catch(() => {});
+  // these, but we tolerate empty databases too). The 'team' row is special:
+  // it holds shared company settings, not a real user, so its `role` is
+  // 'team' rather than 'admin' / 'employee'.
+  await db.profiles.put({ id: TEAM_PROFILE_ID, name: 'Team', role: 'team', active: true }).catch(() => {});
   const cur = await db.settings.get(TEAM_PROFILE_ID);
-  if (!cur) await db.settings.put({ profileId: TEAM_PROFILE_ID }).catch(() => {});
+  if (!cur) await db.settings.put({ profileId: TEAM_PROFILE_ID, adminEmails: [] }).catch(() => {});
 
-  // Record the current Supabase user as a team member (for audit / display).
+  // Bootstrap-admin promotion. The team settings row carries an
+  // `adminEmails` list (lowercase email strings). On first sign-in,
+  // any user whose email matches gets role='admin' + active=true; the
+  // very first auth event for `javier@alcover.do` self-bootstraps the
+  // org. Every other new user lands inactive and waits for an admin to
+  // approve them via the Users page.
   const { data } = await supabase.auth.getUser();
   const u = data?.user;
   if (u) {
-    await db.profiles.put({
-      id: u.id,
-      name: (u.user_metadata && u.user_metadata.name) || (u.email?.split('@')[0]) || 'Member',
-      email: u.email || null,
-    }).catch(() => {});
+    const settings = await db.settings.get(TEAM_PROFILE_ID).catch(() => null);
+    const adminEmails = Array.isArray(settings?.adminEmails) ? settings.adminEmails : [];
+    const email = (u.email || '').toLowerCase().trim();
+    const isAllowlistedAdmin = email && adminEmails.map((e) => String(e).toLowerCase().trim()).includes(email);
+
+    const existing = await db.profiles.get(u.id).catch(() => null);
+    if (!existing) {
+      // First time we've seen this user. Create their profile row.
+      // Allowlisted admins land already-activated; everyone else
+      // starts pending.
+      await db.profiles.put({
+        id: u.id,
+        name: (u.user_metadata && u.user_metadata.name) || (u.email?.split('@')[0]) || 'Member',
+        email: u.email || null,
+        role: isAllowlistedAdmin ? 'admin' : 'employee',
+        active: isAllowlistedAdmin,
+        commissionPct: 0,
+      }).catch(() => {});
+    } else if (isAllowlistedAdmin && (!existing.active || existing.role !== 'admin')) {
+      // Existing user whose email got added to the allowlist after
+      // their first signup. Promote them on the next sign-in so we
+      // never lock the dealer out of their own org.
+      await db.profiles.update(u.id, {
+        role: 'admin',
+        active: true,
+      }).catch(() => {});
+    }
   }
   return TEAM_PROFILE_ID;
 }
