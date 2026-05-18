@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
+import StatCard from '../components/StatCard.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -31,14 +32,6 @@ const STATUS_LABELS = {
   declined: 'Rechazadas',
   archived: 'Archivadas',
 };
-const STATUS_PILL = {
-  draft: 'bg-ink-100 text-ink-700',
-  sent: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-emerald-100 text-emerald-800',
-  declined: 'bg-red-100 text-red-800',
-  archived: 'bg-ink-100 text-ink-500',
-};
-
 export default function ProfessionalDetail() {
   const { professionalId } = useParams();
   const { profileId } = useApp();
@@ -165,7 +158,7 @@ export default function ProfessionalDetail() {
 
   return (
     <>
-      <Link to="/professionals" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3">
+      <Link to="/professionals" className="back-link">
         <ArrowLeft size={12} /> Volver a profesionales
       </Link>
 
@@ -216,17 +209,19 @@ export default function ProfessionalDetail() {
 
       {/* Roll-up cards: total pipeline + accepted (committed) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        <SummaryCard
+        <StatCard
           label="Comprometido (aceptadas)"
-          amount={summary.acceptedSales}
-          commission={summary.acceptedCommission}
+          value={formatMoney(summary.acceptedSales, 'USD', { USD: 1 })}
+          hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.acceptedCommission, 'USD', { USD: 1 })}</span></>}
           tone="emerald"
+          accent
         />
-        <SummaryCard
+        <StatCard
           label="Total en pipeline"
-          amount={summary.totalSales}
-          commission={summary.totalCommission}
+          value={formatMoney(summary.totalSales, 'USD', { USD: 1 })}
+          hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.totalCommission, 'USD', { USD: 1 })}</span></>}
           tone="ink"
+          accent
         />
       </div>
 
@@ -255,31 +250,14 @@ export default function ProfessionalDetail() {
   );
 }
 
-function SummaryCard({ label, amount, commission, tone }) {
-  const accent = tone === 'emerald'
-    ? 'text-emerald-600 border-emerald-100'
-    : 'text-ink-700 border-ink-100';
-  return (
-    <div className={`card card-pad border-l-4 ${accent}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums mt-1">
-        {formatMoney(amount, 'USD', { USD: 1 })}
-      </div>
-      <div className="text-xs text-ink-500 mt-1">
-        Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(commission, 'USD', { USD: 1 })}</span>
-      </div>
-    </div>
-  );
-}
-
 function StatusGroup({ status, entries }) {
   const totalSales = entries.reduce((s, e) => s + e.total, 0);
   const totalCommission = entries.reduce((s, e) => s + e.commission, 0);
   return (
     <section className="card overflow-hidden">
-      <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3 flex-wrap">
+      <header className="card-header flex-wrap">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_PILL[status] || 'bg-ink-100 text-ink-700'}`}>
+          <span className={`status-pill status-pill-${status}`}>
             {STATUS_LABELS[status] || status}
           </span>
           <span className="text-sm text-ink-700">{entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}</span>

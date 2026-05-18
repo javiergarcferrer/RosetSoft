@@ -6,6 +6,7 @@ import {
 import PageHeader from '../components/PageHeader.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import StatCard from '../components/StatCard.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -34,13 +35,6 @@ const QUOTE_STATUS_LABELS = {
   accepted: 'Aceptadas',
   declined: 'Rechazadas',
   archived: 'Archivadas',
-};
-const QUOTE_STATUS_PILL = {
-  draft: 'bg-ink-100 text-ink-700',
-  sent: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-emerald-100 text-emerald-800',
-  declined: 'bg-red-100 text-red-800',
-  archived: 'bg-ink-100 text-ink-500',
 };
 
 const ORDER_STAGE_ORDER = [
@@ -173,7 +167,7 @@ export default function CustomerDetail() {
     <>
       <Link
         to="/customers"
-        className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3"
+        className="back-link"
       >
         <ArrowLeft size={12} /> Volver a clientes
       </Link>
@@ -204,30 +198,34 @@ export default function CustomerDetail() {
 
       {/* Summary stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <Stat
+        <StatCard
           label="Cotizaciones"
           value={loaded ? String(quotes.length) : '—'}
           hint={loaded ? (quotes.length === 1 ? 'cotización en total' : 'cotizaciones en total') : 'Cargando…'}
+          tone="ink"
         />
-        <Stat
+        <StatCard
           label="Comprometido"
           value={loaded ? formatMoney(derived.acceptedTotal, 'USD', { USD: 1 }) : '—'}
           hint="Solo cotizaciones aceptadas"
           tone="emerald"
+          accent
         />
-        <Stat
+        <StatCard
           label="Pedidos"
           value={loaded ? String(derived.orders.length) : '—'}
           hint={loaded
             ? (derived.orders.length === 1 ? 'pedido en historial' : 'pedidos en historial')
             : 'Cargando…'}
+          tone="ink"
+          accent
         />
       </div>
 
       {/* Quotes — grouped by status */}
       <section className="card overflow-hidden mb-5">
-        <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-          <h2 className="font-semibold flex items-center gap-2">
+        <header className="card-header">
+          <h2 className="flex items-center gap-2">
             <FileText size={14} className="text-ink-500" />
             Cotizaciones
           </h2>
@@ -247,7 +245,7 @@ export default function CustomerDetail() {
               return (
                 <div key={status} className="px-5 py-3">
                   <div className="flex items-baseline justify-between gap-2 mb-2">
-                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${QUOTE_STATUS_PILL[status] || QUOTE_STATUS_PILL.draft}`}>
+                    <span className={`status-pill status-pill-${status}`}>
                       {QUOTE_STATUS_LABELS[status] || 'Borrador'}
                     </span>
                     <span className="text-[11px] text-ink-500 tabular-nums">
@@ -286,8 +284,8 @@ export default function CustomerDetail() {
 
       {/* Orders */}
       <section className="card overflow-hidden">
-        <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-          <h2 className="font-semibold flex items-center gap-2">
+        <header className="card-header">
+          <h2 className="flex items-center gap-2">
             <Package size={14} className="text-ink-500" />
             Pedidos
           </h2>
@@ -374,15 +372,3 @@ function ContactCard({ customer }) {
   );
 }
 
-function Stat({ label, value, hint, tone = 'ink' }) {
-  const accent = tone === 'emerald'
-    ? 'text-emerald-600 border-emerald-100'
-    : 'text-ink-700 border-ink-100';
-  return (
-    <div className={`card card-pad border-l-4 ${accent}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums mt-1 truncate">{value}</div>
-      <div className="text-xs text-ink-500 mt-1">{hint}</div>
-    </div>
-  );
-}

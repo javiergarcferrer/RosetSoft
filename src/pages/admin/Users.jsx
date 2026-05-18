@@ -126,14 +126,14 @@ export default function AdminUsers() {
         <div className="space-y-6">
           {invited.length > 0 && (
             <section className="card overflow-hidden">
-              <header className="px-5 py-3 border-b border-ink-100 bg-blue-50 flex items-center justify-between gap-3">
+              <header className="card-header">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-blue-700">Invitaciones enviadas</h2>
-                  <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  <h2>Invitaciones enviadas</h2>
+                  <span className="status-pill status-pill-sent">
                     {invited.length}
                   </span>
                 </div>
-                <p className="hidden sm:block text-xs text-blue-700/80">
+                <p className="hidden sm:block text-xs text-ink-500">
                   Aún no han iniciado sesión con el enlace del correo.
                 </p>
               </header>
@@ -151,8 +151,8 @@ export default function AdminUsers() {
           )}
 
           <section className="card overflow-hidden">
-            <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-ink-900">Activos</h2>
+            <header className="card-header">
+              <h2>Activos</h2>
               <span className="badge">{active.length}</span>
             </header>
             {active.length === 0 ? (
@@ -174,8 +174,8 @@ export default function AdminUsers() {
 
           {deactivated.length > 0 && (
             <section className="card overflow-hidden opacity-80">
-              <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-ink-700">Desactivados</h2>
+              <header className="card-header">
+                <h2>Desactivados</h2>
                 <span className="badge">{deactivated.length}</span>
               </header>
               <ul className="divide-y divide-ink-100">
@@ -221,13 +221,13 @@ function Avatar({ name, email }) {
 function RolePill({ role }) {
   if (role === 'admin') {
     return (
-      <span className="inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
+      <span className="badge-brand">
         Administrador
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700">
+    <span className="badge">
       Empleado
     </span>
   );
@@ -235,12 +235,12 @@ function RolePill({ role }) {
 
 function ActivePill({ active }) {
   return active ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
-      <span className="w-1.5 h-1.5 rounded-full bg-green-500" aria-hidden />
+    <span className="status-pill status-pill-active">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
       Activo
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">
+    <span className="status-pill status-pill-inactive">
       <span className="w-1.5 h-1.5 rounded-full bg-ink-400" aria-hidden />
       Pendiente
     </span>
@@ -357,7 +357,7 @@ function ActiveRow({ profile, isSelf, invitePending }) {
                 <span className="text-[11px] text-ink-500">(tú)</span>
               )}
               {invitePending && (
-                <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                <span className="status-pill status-pill-sent">
                   Sin aceptar
                 </span>
               )}

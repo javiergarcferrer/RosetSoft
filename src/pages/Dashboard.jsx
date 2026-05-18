@@ -6,6 +6,7 @@ import {
 import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import ListLoading from '../components/ListLoading.jsx';
+import StatCard from '../components/StatCard.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -66,12 +67,12 @@ const QUOTE_STATUS_TONES = {
   declined: 'bg-red-400',
   archived: 'bg-ink-300',
 };
-const QUOTE_STATUS_PILL = {
-  draft: 'bg-ink-100 text-ink-700',
-  sent: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-emerald-100 text-emerald-800',
-  declined: 'bg-red-100 text-red-700',
-  archived: 'bg-ink-100 text-ink-500',
+const STATUS_PILL_CLASS = {
+  draft: 'status-pill-draft',
+  sent: 'status-pill-sent',
+  accepted: 'status-pill-accepted',
+  declined: 'status-pill-declined',
+  archived: 'status-pill-archived',
 };
 
 export default function Dashboard() {
@@ -246,7 +247,7 @@ export default function Dashboard() {
       {/* Row 2 — three KPI summaries. All labels are Spanish; the
           previous "Pipeline" / "Fulfillment" anglicisms are gone.*/}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-        <KpiCard
+        <StatCard
           icon={TrendingUp}
           tone="emerald"
           label="Comprometido"
@@ -254,7 +255,7 @@ export default function Dashboard() {
           hint={loaded ? `${derived.acceptedCount} cotización${derived.acceptedCount === 1 ? '' : 'es'} aceptada${derived.acceptedCount === 1 ? '' : 's'}` : 'Cargando…'}
           to="/quotes?status=accepted"
         />
-        <KpiCard
+        <StatCard
           icon={FileText}
           tone="brand"
           label="Cotizaciones abiertas"
@@ -262,7 +263,7 @@ export default function Dashboard() {
           hint={loaded ? `${derived.openCount} entre borrador y enviada` : 'Cargando…'}
           to="/quotes"
         />
-        <KpiCard
+        <StatCard
           icon={Truck}
           tone="ink"
           label="Pedidos activos"
@@ -299,33 +300,6 @@ export default function Dashboard() {
 }
 
 // ---------------------------------------------------------------------------
-// KPI card — large headline number on top, small icon top-right, hint
-// at the bottom. Wraps the whole card in a Link so the dealer can click
-// through to the relevant list (committed → accepted quotes, etc.).
-// ---------------------------------------------------------------------------
-function KpiCard({ icon: Icon, label, value, hint, to, tone = 'ink' }) {
-  const toneClasses = {
-    emerald: 'text-emerald-600 bg-emerald-50',
-    brand: 'text-brand-700 bg-brand-50',
-    ink: 'text-ink-700 bg-ink-100',
-  };
-  return (
-    <Link to={to} className="card card-pad hover:border-ink-300 transition-colors group">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-ink-500">{label}</div>
-          <div className="text-2xl sm:text-3xl font-semibold mt-1.5 tabular-nums truncate">{value}</div>
-          <div className="text-xs text-ink-500 mt-1">{hint}</div>
-        </div>
-        <div className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors flex-shrink-0 ${toneClasses[tone]}`}>
-          <Icon size={18} />
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Cotizaciones aceptadas — the focused replacement for the prior
 // 5-row pipeline widget. Per the dealer's instruction we show only the
 // two statuses that represent active money in the funnel:
@@ -347,9 +321,9 @@ function AcceptedQuotesCard({ loaded, quotesByStatus, totalByQuote }) {
 
   return (
     <section className="card overflow-hidden">
-      <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-        <h2 className="font-semibold">Cotizaciones aceptadas</h2>
-        <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
+      <header className="card-header">
+        <h2>Cotizaciones aceptadas</h2>
+        <Link to="/quotes" className="card-header-action">
           Ver todas <ArrowRight size={12} />
         </Link>
       </header>
@@ -393,12 +367,12 @@ function AcceptedQuotesCard({ loaded, quotesByStatus, totalByQuote }) {
 function FulfillmentCard({ loaded, entries }) {
   return (
     <section className="card overflow-hidden">
-      <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-        <h2 className="font-semibold flex items-center gap-2">
+      <header className="card-header">
+        <h2 className="flex items-center gap-2">
           <Truck size={14} className="text-ink-500" />
           Pedidos en despacho
         </h2>
-        <Link to="/orders" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
+        <Link to="/orders" className="card-header-action">
           Ver pedidos <ArrowRight size={12} />
         </Link>
       </header>
@@ -455,9 +429,9 @@ function FulfillmentCard({ loaded, entries }) {
 function RecentQuotesCard({ loaded, quotes, customersById, totalByQuote }) {
   return (
     <section className="card overflow-hidden">
-      <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-        <h2 className="font-semibold">Cotizaciones recientes</h2>
-        <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
+      <header className="card-header">
+        <h2>Cotizaciones recientes</h2>
+        <Link to="/quotes" className="card-header-action">
           Ver todas <ArrowRight size={12} />
         </Link>
       </header>
@@ -485,7 +459,7 @@ function RecentQuotesCard({ loaded, quotes, customersById, totalByQuote }) {
                     <div className="text-sm truncate">{customer?.company || customer?.name || 'Sin cliente'}</div>
                     <div className="text-[11px] text-ink-500 truncate">{formatDateTime(q.updatedAt)}</div>
                   </div>
-                  <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${QUOTE_STATUS_PILL[q.status] || 'bg-ink-100 text-ink-700'}`}>
+                  <span className={`hidden sm:inline-flex status-pill ${STATUS_PILL_CLASS[q.status] || 'status-pill-draft'}`}>
                     {QUOTE_STATUS_LABEL[q.status] || 'Borrador'}
                   </span>
                   <div className="text-sm font-medium tabular-nums whitespace-nowrap w-24 text-right flex-shrink-0">

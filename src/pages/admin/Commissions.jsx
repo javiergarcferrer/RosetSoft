@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import StatCard from '../../components/StatCard.jsx';
 import { formatDateTime, formatMoney } from '../../lib/format.js';
 import { computeTotals } from '../../lib/pricing.js';
 
@@ -231,20 +232,23 @@ export default function AdminCommissions() {
 
       {/* Summary card */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-        <SummaryStat
+        <StatCard
           tone="emerald"
+          icon={Wallet}
           label="Comisiones del ciclo"
           value={loaded ? formatMoney(derived.cycleCommission, 'USD', { USD: 1 }) : '—'}
           hint={loaded ? `Sobre ${formatMoney(derived.cycleSales, 'USD', { USD: 1 })} en ventas depositadas` : 'Cargando…'}
         />
-        <SummaryStat
+        <StatCard
           tone="brand"
+          icon={Wallet}
           label="Ventas depositadas"
           value={loaded ? String(derived.depositedCount) : '—'}
           hint={loaded ? (derived.depositedCount === 1 ? 'cotización con depósito en el periodo' : 'cotizaciones con depósito en el periodo') : 'Cargando…'}
         />
-        <SummaryStat
+        <StatCard
           tone="ink"
+          icon={Wallet}
           label="Empleados con comisión"
           value={loaded ? String(derived.activeEmployees) : '—'}
           hint={loaded
@@ -257,8 +261,8 @@ export default function AdminCommissions() {
 
       {/* Per-user breakdown */}
       <section className="card overflow-hidden">
-        <header className="px-5 py-3 border-b border-ink-100">
-          <h2 className="font-semibold">Detalle por empleado</h2>
+        <header className="card-header">
+          <h2>Detalle por empleado</h2>
         </header>
         {!loaded ? (
           <ListLoading rows={5} />
@@ -364,7 +368,7 @@ function CyclePill({ label, sub, active, onClick }) {
       onClick={onClick}
       className={`text-left rounded-md border px-3 py-2 transition ${
         active
-          ? 'border-ink-900 bg-ink-900 text-white'
+          ? 'border-ink-700 bg-ink-700 text-white'
           : 'border-ink-200 hover:border-ink-400 bg-white'
       }`}
     >
@@ -374,28 +378,6 @@ function CyclePill({ label, sub, active, onClick }) {
       </div>
       <div className={`text-[10px] mt-0.5 ${active ? 'text-ink-300' : 'text-ink-500'}`}>{sub}</div>
     </button>
-  );
-}
-
-function SummaryStat({ label, value, hint, tone = 'ink' }) {
-  const toneClasses = {
-    emerald: 'text-emerald-600 bg-emerald-50',
-    brand:   'text-brand-700 bg-brand-50',
-    ink:     'text-ink-700 bg-ink-100',
-  };
-  return (
-    <div className="card card-pad">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-ink-500">{label}</div>
-          <div className="text-2xl sm:text-3xl font-semibold mt-1.5 tabular-nums truncate">{value}</div>
-          <div className="text-xs text-ink-500 mt-1">{hint}</div>
-        </div>
-        <div className={`w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 ${toneClasses[tone]}`}>
-          <Wallet size={18} />
-        </div>
-      </div>
-    </div>
   );
 }
 

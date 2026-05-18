@@ -43,7 +43,7 @@ export default function Login() {
 
   return (
     <div className="h-full flex items-center justify-center bg-ink-50">
-      <div className="w-full max-w-sm bg-white border border-ink-100 rounded-lg shadow-sm p-8">
+      <div className="card-auth">
         <div className="text-center mb-6">
           <div className="text-xs uppercase tracking-widest text-ink-500">Roset Soft</div>
           <h1 className="text-xl font-semibold mt-1">Iniciar sesión</h1>

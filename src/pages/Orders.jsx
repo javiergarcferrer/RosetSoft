@@ -21,17 +21,18 @@ import ListLoading from '../components/ListLoading.jsx';
  * five-stage stepper that lives on the detail page.
  */
 
-// Status palette mirroring the new 6-stage order lifecycle. Earlier
-// stages stay cool (gray/blue), middle stages run warmer (violet/sky)
-// as the goods move, terminal stages are the strongest tone.
-const STATUS_STYLES = {
-  draft:       'bg-ink-100 text-ink-700',
-  placed:      'bg-blue-100 text-blue-800',
-  confirmed:   'bg-violet-100 text-violet-800',
-  in_transit:  'bg-sky-100 text-sky-800',
-  in_customs:  'bg-amber-100 text-amber-800',
-  received:    'bg-emerald-100 text-emerald-800',
-  cancelled:   'bg-rose-100 text-rose-700',
+// Status palette mirroring the new 6-stage order lifecycle. Mapped onto
+// the design-system status pills: confirmed reads as "committed money"
+// (accepted-tone), received as "active", cancelled as "declined", and
+// the two in-flight stages share the sent/pending blues + ambers.
+const STATUS_PILL_CLASS = {
+  draft:       'status-pill-draft',
+  placed:      'status-pill-sent',
+  confirmed:   'status-pill-accepted',
+  in_transit:  'status-pill-sent',
+  in_customs:  'status-pill-pending',
+  received:    'status-pill-active',
+  cancelled:   'status-pill-declined',
 };
 
 export default function Orders() {
@@ -244,7 +245,7 @@ export default function Orders() {
 function StatusBadge({ status }) {
   const def = ORDER_STAGE_BY_KEY[status];
   return (
-    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] || STATUS_STYLES.draft}`}>
+    <span className={`status-pill ${STATUS_PILL_CLASS[status] || STATUS_PILL_CLASS.draft}`}>
       {def?.label || 'Borrador'}
     </span>
   );

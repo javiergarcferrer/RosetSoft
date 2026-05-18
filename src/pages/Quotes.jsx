@@ -9,12 +9,12 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 
-const STATUS_STYLES = {
-  draft: 'bg-ink-100 text-ink-700',
-  sent: 'bg-blue-100 text-blue-800',
-  accepted: 'bg-emerald-100 text-emerald-800',
-  declined: 'bg-red-100 text-red-800',
-  archived: 'bg-ink-100 text-ink-500',
+const STATUS_PILL_CLASS = {
+  draft: 'status-pill-draft',
+  sent: 'status-pill-sent',
+  accepted: 'status-pill-accepted',
+  declined: 'status-pill-declined',
+  archived: 'status-pill-archived',
 };
 
 const STATUS_LABELS = {
@@ -274,7 +274,7 @@ function QuoteCard({ qu, customer, creator, order, total }) {
         </div>
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
-        <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span>
+        <span className={`status-pill ${STATUS_PILL_CLASS[qu.status] || 'status-pill-draft'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span>
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
@@ -297,7 +297,7 @@ function QuoteRow({ qu, customer, creator, order, total }) {
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
       </td>
-      <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
+      <td><span className={`status-pill ${STATUS_PILL_CLASS[qu.status] || 'status-pill-draft'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>

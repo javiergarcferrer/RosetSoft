@@ -208,8 +208,8 @@ export default function OrderDetail() {
 
   return (
     <>
-      <Link to="/orders" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3">
-        <ArrowLeft size={12} /> Volver
+      <Link to="/orders" className="back-link">
+        <ArrowLeft size={12} /> Volver a pedidos
       </Link>
       <PageHeader
         title={`Pedido #${order.number || order.id.slice(-4)}`}
@@ -259,9 +259,9 @@ export default function OrderDetail() {
         <div className="lg:col-span-2 space-y-6">
           {/* Containers section */}
           <section className="card overflow-hidden">
-            <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
+            <header className="card-header">
               <div className="min-w-0">
-                <h2 className="font-semibold flex items-center gap-2">
+                <h2 className="flex items-center gap-2">
                   <Truck size={16} className="text-ink-500" />
                   Contenedores ({containers.length})
                 </h2>
@@ -274,7 +274,7 @@ export default function OrderDetail() {
               <button onClick={addContainer} className="btn-secondary flex-shrink-0">
                 <Plus size={14} /> Contenedor
               </button>
-            </div>
+            </header>
             {containers.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-ink-500">
                 Sin contenedores aún. Crea uno cuando recibas la confirmación
@@ -295,9 +295,9 @@ export default function OrderDetail() {
 
           {/* Quotes section */}
           <section className="card overflow-hidden">
-            <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
+            <header className="card-header">
               <div className="min-w-0">
-                <h2 className="font-semibold flex items-center gap-2">
+                <h2 className="flex items-center gap-2">
                   <FileText size={16} className="text-ink-500" />
                   Cotizaciones ({quotes.length})
                 </h2>
@@ -308,7 +308,7 @@ export default function OrderDetail() {
               <button onClick={() => setPicker(true)} className="btn-secondary flex-shrink-0">
                 <Plus size={14} /> Cotización
               </button>
-            </div>
+            </header>
             {quotes.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-ink-500">
                 Sin cotizaciones. Acepta una desde la cotización o añade una existente.

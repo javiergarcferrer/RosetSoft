@@ -551,8 +551,8 @@ function LineItemsCard({
 }) {
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3">
-        <h2 className="font-semibold">Artículos</h2>
+      <header className="card-header">
+        <h2>Artículos</h2>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -571,7 +571,7 @@ function LineItemsCard({
             <Plus size={14} /> Agregar
           </button>
         </div>
-      </div>
+      </header>
       <LineItemList
         lines={lines}
         quote={quote}

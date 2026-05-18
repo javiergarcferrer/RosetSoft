@@ -88,7 +88,7 @@ export default function SetPassword() {
 
   return (
     <div className="h-full flex items-center justify-center bg-ink-50">
-      <div className="w-full max-w-sm bg-white border border-ink-100 rounded-lg shadow-sm p-8">
+      <div className="card-auth">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 mb-3">
             <CheckCircle2 size={22} />

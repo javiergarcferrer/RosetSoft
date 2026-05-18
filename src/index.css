@@ -124,6 +124,71 @@
   .table tbody tr:hover { @apply bg-ink-50; }
 
   /* ===========================================================
+     Design-system primitives derived from the four-agent audit
+     of every view (May 18 2026). These patterns were duplicated
+     in 4–12 places each; collapsing them here is the difference
+     between an app that feels cohesive and one that reads as
+     five different surfaces stitched together.
+     =========================================================== */
+
+  /* Eyebrow — small uppercase widely-tracked label. The one we
+     standardized on after seeing text-[10px] / text-[11px] /
+     tracking-wide / tracking-wider / text-ink-500 / text-ink-600
+     in roughly every combination across the codebase. */
+  .eyebrow { @apply text-[11px] font-medium uppercase tracking-wider text-ink-500; }
+
+  /* Section header inside a card — used 12+ times across
+     Dashboard, OrderDetail, ProfessionalDetail, Settings,
+     CustomerDetail, Quotes, Orders, admin/Users, admin/Commissions.
+     Always: title on the left, optional action on the right,
+     hairline below, generous-but-not-loud padding. */
+  .card-header { @apply px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3; }
+  .card-header h2 { @apply font-semibold text-sm text-ink-900; }
+  .card-header .card-header-action { @apply text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1; }
+
+  /* Back-link — the "← Volver a …" affordance on every detail
+     page (CustomerDetail, ProfessionalDetail, OrderDetail, plus
+     the back-to-list buttons in the quote builder). Same six
+     classes copy-pasted everywhere; this collapses them. Pair
+     with an <ArrowLeft size={12} /> at the call site. */
+  .back-link { @apply text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3; }
+
+  /* Status pill — the semantic colors for quote status and
+     similarly-shaped status indicators. Every page that renders
+     these (Quotes list, Orders list, Dashboard, CustomerDetail,
+     ProfessionalDetail, admin/Users) was carrying its own copy
+     of the same dictionary. Centralising here means a single
+     edit changes every surface at once.
+
+     Roles:
+       draft     ink-100   in-progress, nothing to celebrate
+       sent      blue-100  waiting for the customer's response
+       accepted  emerald   committed money
+       declined  red       customer said no
+       archived  ink-100   historical, dim
+       pending   amber-100 admin-action required (used in admin
+                 pages for invitations / approvals)
+       active    emerald   currently signed in / working
+       inactive  ink-100   muted, off the team
+   */
+  .status-pill { @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium; }
+  .status-pill-draft    { @apply bg-ink-100 text-ink-700; }
+  .status-pill-sent     { @apply bg-blue-100 text-blue-800; }
+  .status-pill-accepted { @apply bg-emerald-100 text-emerald-800; }
+  .status-pill-declined { @apply bg-red-100 text-red-700; }
+  .status-pill-archived { @apply bg-ink-100 text-ink-500; }
+  .status-pill-pending  { @apply bg-amber-100 text-amber-800; }
+  .status-pill-active   { @apply bg-emerald-100 text-emerald-800; }
+  .status-pill-inactive { @apply bg-ink-100 text-ink-500; }
+
+  /* Auth card — Login + SetPassword centered cards. Same chrome
+     as regular cards but with `p-8` for a generous breathing
+     room when the card is the only thing on screen, plus
+     max-w-sm so the form is comfortable on a tablet without
+     stretching to absurd widths. */
+  .card-auth { @apply rounded-xl bg-white border border-ink-100 shadow-soft p-8 w-full max-w-sm; }
+
+  /* ===========================================================
      Quote line item — responsive shell driven by container
      queries, not viewport breakpoints.
 

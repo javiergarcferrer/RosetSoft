@@ -113,7 +113,7 @@ export default function Professionals() {
                 className="card block hover:bg-ink-50"
               >
                 <div className="flex items-center gap-3 p-3">
-                  <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
                     {initialsFor(p) || <UserSquare2 size={16} />}
                   </div>
                   <div className="min-w-0 flex-1">
