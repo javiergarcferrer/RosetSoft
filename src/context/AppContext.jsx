@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { db, ensureDefaultProfile, getSettings, updateSettings } from '../db/database.js';
+import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } from '../db/database.js';
+import { supabase } from '../db/supabaseClient.js';
 import { useAuth } from './AuthContext.jsx';
 
 const Ctx = createContext(null);
@@ -88,6 +89,37 @@ export function AppProvider({ children }) {
     })();
     return () => { cancelled = true; };
   }, [refreshProfiles, user?.id]);
+
+  // Realtime: subscribe to public.profiles so changes made in another
+  // session land here without a manual refresh. Admin A deleting user
+  // B from one browser tab now removes the row from admin C's open
+  // /admin/users page within ~1 s — previously C would see a ghost
+  // until a hard reload. Migration 20260518160000 adds the profiles
+  // table to the supabase_realtime publication; without that, the
+  // channel here subscribes successfully but never receives events.
+  //
+  // The handler re-runs every refresh path: profiles list, current
+  // user's row, AND the global `invalidate()` bus that backs
+  // useLiveQuery — so any page rendering profile-derived data
+  // refetches together. We don't try to debounce or deduplicate
+  // against local writes; a second refetch after a local mutation is
+  // cheap and keeps the state machine simple.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const channel = supabase
+      .channel('rt:public:profiles')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        async () => {
+          await refreshProfiles();
+          await refreshCurrentProfile();
+          invalidate();
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, refreshProfiles, refreshCurrentProfile]);
 
   const saveSettings = useCallback(async (patch) => {
     await updateSettings(profileId, patch);
