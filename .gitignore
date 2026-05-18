@@ -9,3 +9,4 @@ dist
 # Local files
 /pricelist_extract.txt
 /uploads
+.claude/

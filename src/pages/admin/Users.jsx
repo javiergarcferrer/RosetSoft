@@ -368,43 +368,39 @@ function ActiveRow({ profile, isSelf, invitePending }) {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
-          <div className="sm:w-40">
-            <div className="label sm:hidden">Rol</div>
-            <select
-              className="input py-1.5"
-              value={profile.role === 'admin' ? 'admin' : 'employee'}
-              onChange={(e) => setRole(e.target.value)}
-              aria-label="Rol del usuario"
-            >
-              <option value="employee">Empleado</option>
-              <option value="admin">Administrador</option>
-            </select>
-            <div className="hidden sm:block mt-1">
-              <RolePill role={profile.role} />
-            </div>
+        {/* Controls — single flex-wrap row at every width. The previous
+            "grid-on-mobile / flex-on-sm" split made the role select and
+            its decorative pill stack on top of the avatar at certain
+            widths because the grid item kept rendering the pill
+            beneath the select. One flat layout dodges that entirely
+            and reads consistently from phone to desktop. */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <select
+            className="input py-1.5 w-36"
+            value={profile.role === 'admin' ? 'admin' : 'employee'}
+            onChange={(e) => setRole(e.target.value)}
+            aria-label="Rol del usuario"
+          >
+            <option value="employee">Empleado</option>
+            <option value="admin">Administrador</option>
+          </select>
+
+          <div className="relative">
+            <DebouncedInput
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="50"
+              step="0.5"
+              className="input py-1.5 pr-7 tabular-nums w-20"
+              value={profile.commission_pct ?? 0}
+              onCommit={setCommission}
+              aria-label="Comisión"
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
           </div>
 
-          <div>
-            <div className="label sm:hidden">Comisión</div>
-            <div className="relative">
-              <DebouncedInput
-                type="number"
-                inputMode="decimal"
-                min="0"
-                max="50"
-                step="0.5"
-                className="input py-1.5 pr-7 tabular-nums w-24"
-                value={profile.commission_pct ?? 0}
-                onCommit={setCommission}
-                aria-label="Comisión"
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
-            </div>
-          </div>
-
-          <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial justify-end">
             <div className="flex flex-col items-start sm:items-end gap-0.5">
               <ActivePill active={profile.active} />
               {/* When lastSignInAt is set, we render the precise
