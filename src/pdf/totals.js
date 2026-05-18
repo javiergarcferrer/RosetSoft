@@ -1,102 +1,115 @@
 import { ITBIS_PCT } from '../lib/pricing.js';
-import { effectiveDopRate, rateSourceLabel } from '../lib/exchangeRate.js';
+import { effectiveDopRate } from '../lib/exchangeRate.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
-  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE2,
+  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT,
 } from './constants.js';
 import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
 
 /**
- * Rough vertical budget the totals block needs. Used by the page-break
- * heuristic in generateQuotePdf to decide whether to push totals to a new
- * page rather than splitting them off the last line row.
+ * Right-aligned totals panel — mirrors the ClientPreview structure:
+ *
+ *     Subtotal               $22,620.00
+ *     Descuento (10%)        –$2,262.00      ← only if discount set
+ *     ITBIS (18%)             $4,071.60
+ *     Envío                     $250.00      ← only if shipping set
+ *    ─────────────────────────────────────
+ *     Total                  $26,691.60
+ *     ≈ RD$ 1,576,686 a 59.07 DOP/USD          ← inline FX shadow
+ *
+ * No "Tipo de cambio · rate source · Total RD$" block from the old PDF.
+ * That whole block was replaced by the single inline `≈ RD$ … a … DOP/USD`
+ * line at the bottom — the preview shows it that way and the dealer
+ * specifically asked for the export to match the preview.
  */
+
+// Rough vertical budget the totals block needs. Used by the page-break
+// heuristic in generateQuotePdf to decide whether to push totals to a
+// new page rather than splitting them off the last line row.
 export function estimateTotalsHeight(quote) {
-  let h = 22;       // gap above
-  h += 14 * 5;      // up to 5 subtotal rows
-  h += 52;          // divider + ascent gap + grand total + spacing
-  h += 50;          // DOP note
+  let h = 24;            // top spacing
+  h += 14 * 4;           // up to four subtotal-style rows (subtotal / discount / itbis / shipping)
+  h += 10;               // divider + breathing
+  h += 24;               // grand total row
+  h += 18;               // FX shadow
   if (quote.terms) h += 90;
   return h;
 }
 
-/**
- * Right-aligned totals panel: subtotals, divider, grand total, then a
- * quiet DOP-conversion note. Width and right edge fixed so the grand
- * total always sits in a consistent column on every quote.
- */
 export function drawTotals(page, ctx, cursor, totals) {
-  const { fontBold, fontRegular, quote } = ctx;
-  const panelW = 280;
+  const { fontBold, fontRegular, quote, settings, currency, rates } = ctx;
+  const panelW = 300;
   const leftX = PAGE_W - MARGIN_R - panelW;
   const rightX = PAGE_W - MARGIN_R;
+
+  // A subtle tinted band behind the totals — same treatment as the
+  // preview, where the totals section sits on a soft ink-50 panel.
+  // Geometry: starts at cursor.y, runs down to just under the FX
+  // shadow. We pre-measure to keep the band's bottom edge accurate.
   let y = cursor.y - 22;
+  const bandTop = cursor.y - 4;
 
-  const rows = [['Subtotal', totals.subtotal]];
-  if (quote.marginPct) rows.push([`Margen (${quote.marginPct}%)`, totals.marginAmt]);
-  if (quote.discountPct) rows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt]);
-  rows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt]);
-  if (quote.shipping) rows.push(['Envío', totals.shipping]);
-
-  for (const [label, value] of rows) {
-    page.drawText(label, { x: leftX, y, size: 9.5, font: fontRegular, color: INK_MID });
-    drawRightAt(page, formatMoney(value, ctx.currency, ctx.rates), rightX, y, 9.5, fontRegular, INK_HIGH);
-    y -= 14;
+  // ---- Subtotal stack ----
+  const subRows = [['Subtotal', totals.subtotal, false]];
+  if (quote.discountPct) {
+    subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, true]);
+  }
+  subRows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, false]);
+  if (quote.shipping) {
+    subRows.push(['Envío', totals.shipping, false]);
   }
 
-  // Grand total + divider. We compute positions from font metrics so the
-  // rule cannot accidentally clip the text — earlier passes derived the
-  // divider from a magic offset, which left only ~8pt between the rule
-  // and the cap-top of "$0.00".
-  const totalLabelSize = 13;
-  const totalValueSize = 14;          // value is a hair larger than the label
-  const ascUnits = fontBold.heightAtSize(totalValueSize, { descender: false });
-  const GAP_RULE_TO_TEXT = 10;        // visible breathing room above the cap-top
-  const dividerThickness = 0.6;
+  for (const [label, value, muted] of subRows) {
+    const labelColor = muted ? INK_MID : INK_HIGH;
+    page.drawText(label, {
+      x: leftX, y, size: 10, font: fontRegular, color: labelColor,
+    });
+    drawRightAt(
+      page,
+      formatMoney(value, currency, rates),
+      rightX, y, 10, fontRegular, INK_HIGH,
+    );
+    y -= 16;
+  }
 
-  y -= 6;                              // breathing room below the subtotals
-  const dividerY = y;
-  const totalBaselineY =
-    dividerY - dividerThickness / 2 - GAP_RULE_TO_TEXT - ascUnits;
-
+  // ---- Divider above grand total ----
+  y -= 4;
   page.drawLine({
-    start: { x: leftX, y: dividerY },
-    end:   { x: rightX, y: dividerY },
-    thickness: dividerThickness, color: INK,
+    start: { x: leftX, y },
+    end:   { x: rightX, y },
+    thickness: 0.6, color: INK,
   });
+  y -= 10;
+
+  // ---- Grand total ----
+  const totalLabelSize = 13;
+  const totalValueSize = 15;
+  const ascUnits = fontBold.heightAtSize(totalValueSize, { descender: false });
+  const totalBaselineY = y - ascUnits;
   page.drawText('Total', {
     x: leftX, y: totalBaselineY,
-    size: totalLabelSize, font: fontBold, color: INK, characterSpacing: 0.2,
+    size: totalLabelSize, font: fontBold, color: INK,
   });
   drawRightAt(
     page,
-    formatMoney(totals.grandTotal, ctx.currency, ctx.rates),
+    formatMoney(totals.grandTotal, currency, rates),
     rightX, totalBaselineY, totalValueSize, fontBold, INK,
   );
-  y = totalBaselineY - 24;
+  y = totalBaselineY - 10;
 
-  // DOP conversion — a quiet secondary note rather than a boxed strip.
-  // Top hairline groups it with the totals block; no fill keeps it from
-  // competing with the grand total. The rate-source label already wraps any
-  // URL in parens (e.g. "Tasa de mercado (open.er-api.com)"), so render it
-  // bare — wrapping it again gave us "(Tasa de mercado (open.er-api.com))".
-  const dopRate = effectiveDopRate(ctx.settings);
-  const dopTotal = totals.grandTotal * dopRate;
-  const rateLabel = rateSourceLabel(ctx.settings);
-  page.drawLine({
-    start: { x: leftX, y: y + 4 },
-    end:   { x: rightX, y: y + 4 },
-    thickness: 0.4, color: INK_LINE2,
-  });
-  page.drawText(`Tipo de cambio: 1 USD = ${dopRate.toFixed(2)} DOP`, {
-    x: leftX, y: y - 8, size: 8, font: fontRegular, color: INK_MID,
-  });
-  page.drawText(rateLabel, {
-    x: leftX, y: y - 19, size: 7.5, font: fontRegular, color: INK_SOFT,
-  });
-  page.drawText('Total RD$', { x: leftX, y: y - 34, size: 11, font: fontBold, color: INK });
-  drawRightAt(page, `RD$ ${formatPlain(dopTotal)}`, rightX, y - 34, 11, fontBold, INK);
-  y -= 50;
+  // ---- Inline FX shadow ----
+  // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Replaces the
+  // verbose "Tipo de cambio / source / Total RD$" stack — preview shows
+  // just the shadow and we mirror it.
+  const dopRate = effectiveDopRate(settings);
+  if (dopRate && currency === 'USD') {
+    const dopTotal = totals.grandTotal * dopRate;
+    const fx = `≈ RD$ ${formatPlain(dopTotal)} a ${dopRate.toFixed(2)} DOP/USD`;
+    drawRightAt(page, fx, rightX, y - 8, 9, fontRegular, INK_MID);
+    y -= 22;
+  } else {
+    y -= 4;
+  }
 
   return { x: MARGIN_L, y };
 }
@@ -104,12 +117,17 @@ export function drawTotals(page, ctx, cursor, totals) {
 /** Multi-line terms block at the bottom of the last page. */
 export function drawTerms(page, ctx, cursor) {
   const { fontRegular, fontBold, quote } = ctx;
-  let y = cursor.y - 4;
-  page.drawText('TÉRMINOS Y CONDICIONES', { x: MARGIN_L, y, size: 7, font: fontBold, color: INK_MID, characterSpacing: 1.2 });
+  let y = cursor.y - 8;
+  page.drawText('TÉRMINOS Y CONDICIONES', {
+    x: MARGIN_L, y, size: 7.5, font: fontBold, color: INK_MID,
+    characterSpacing: 1.4,
+  });
   y -= 14;
   const lines = wrapText(quote.terms || '', 95);
   for (const ln of lines) {
-    page.drawText(ln, { x: MARGIN_L, y, size: 9, font: fontRegular, color: INK_HIGH });
+    page.drawText(ln, {
+      x: MARGIN_L, y, size: 9, font: fontRegular, color: INK_HIGH,
+    });
     y -= 12;
   }
   return { x: MARGIN_L, y: y - 6 };
@@ -121,12 +139,16 @@ export function drawFooter(page, ctx, pageNum, pageCount) {
   const y = 28;
   page.drawLine({
     start: { x: MARGIN_L, y: y + 14 },
-    end: { x: PAGE_W - MARGIN_R, y: y + 14 },
-    thickness: 0.4, color: INK_LINE2,
+    end:   { x: PAGE_W - MARGIN_R, y: y + 14 },
+    thickness: 0.4, color: INK_LINE,
   });
-  const footerLeft = settings.quoteFooter || siteUrlFromEmail(settings.companyEmail) || settings.companyName || '';
+  const footerLeft = settings.quoteFooter
+    || siteUrlFromEmail(settings.companyEmail)
+    || settings.companyName || '';
   if (footerLeft) {
-    page.drawText(footerLeft, { x: MARGIN_L, y, size: 8, font: fontRegular, color: INK_MID });
+    page.drawText(footerLeft, {
+      x: MARGIN_L, y, size: 8, font: fontRegular, color: INK_MID,
+    });
   }
   const pageText = `${pageNum} / ${pageCount}`;
   drawRightAt(page, pageText, PAGE_W - MARGIN_R, y, 8, fontRegular, INK_MID);

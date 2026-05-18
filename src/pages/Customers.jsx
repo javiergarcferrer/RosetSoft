@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react';
-import { useLiveQuery } from '../db/hooks.js';
+import { useLiveQueryStatus } from '../db/hooks.js';
 import { Plus, Search, Trash2, Users } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
+import ListLoading from '../components/ListLoading.jsx';
 import { db, newId } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 
 export default function Customers() {
   const { profileId } = useApp();
-  const customers = useLiveQuery(
+  // useLiveQueryStatus lets us distinguish "fetch still in flight on
+  // first mount" from "user really has zero customers" — without that
+  // the page would flash the empty-state UI for one frame on every
+  // navigation here, which read as a disingenuous "you have no data".
+  const { data: customers, loaded } = useLiveQueryStatus(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     []
@@ -31,11 +36,13 @@ export default function Customers() {
     <>
       <PageHeader
         title="Clientes"
-        subtitle={`${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'}`}
+        subtitle={loaded ? `${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'}` : ' '}
         actions={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={14} /> Agregar cliente</button>}
       />
 
-      {customers.length === 0 ? (
+      {!loaded ? (
+        <div className="card overflow-hidden"><ListLoading rows={5} /></div>
+      ) : customers.length === 0 ? (
         <EmptyState
           icon={Users}
           title="Sin clientes"

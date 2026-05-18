@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Trash2, UserSquare2, ArrowRight } from 'lucide-react';
-import { useLiveQuery } from '../db/hooks.js';
+import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
+import ListLoading from '../components/ListLoading.jsx';
 import { db, newId, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
@@ -20,7 +21,11 @@ import { clampCommissionPct } from '../lib/commissions.js';
  */
 export default function Professionals() {
   const { profileId } = useApp();
-  const pros = useLiveQuery(
+  // useLiveQueryStatus → gate the "Sin profesionales" empty state on
+  // the first fetch having completed, so a user navigating into this
+  // page doesn't see the false empty state flicker before their real
+  // list paints.
+  const { data: pros, loaded } = useLiveQueryStatus(
     () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
@@ -43,7 +48,7 @@ export default function Professionals() {
     <>
       <PageHeader
         title="Profesionales"
-        subtitle={`${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'}`}
+        subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'}` : ' '}
         actions={
           <button onClick={() => setEditing({})} className="btn-primary">
             <Plus size={14} /> Agregar profesional
@@ -51,7 +56,9 @@ export default function Professionals() {
         }
       />
 
-      {pros.length === 0 ? (
+      {!loaded ? (
+        <div className="card overflow-hidden"><ListLoading rows={5} /></div>
+      ) : pros.length === 0 ? (
         <EmptyState
           icon={UserSquare2}
           title="Sin profesionales"

@@ -1,9 +1,19 @@
 import { INK } from './constants.js';
 
-/** Draw `text` such that its right edge sits at `rightX`. */
-export function drawRightAt(page, text, rightX, y, size, font, color) {
-  const w = font.widthOfTextAtSize(text, size);
-  page.drawText(text, { x: rightX - w, y, size, font, color: color || INK });
+/**
+ * Draw `text` such that its right edge sits at `rightX`. When
+ * `characterSpacing` is non-zero we have to add the per-gap spacing to
+ * the measured width — pdf-lib's `widthOfTextAtSize` doesn't know about
+ * tracking, so a wide-tracked eyebrow ("CANTIDAD" at 1.4pt tracking)
+ * would render shifted left and unbalanced without this correction.
+ */
+export function drawRightAt(page, text, rightX, y, size, font, color, characterSpacing = 0) {
+  const baseW = font.widthOfTextAtSize(text, size);
+  const trackingW = characterSpacing * Math.max(0, text.length - 1);
+  const w = baseW + trackingW;
+  page.drawText(text, {
+    x: rightX - w, y, size, font, color: color || INK, characterSpacing,
+  });
 }
 
 /** Cap a string at `n` characters with an ellipsis tail. */

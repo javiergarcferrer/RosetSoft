@@ -8,6 +8,8 @@ import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
+import { useLiveQueryStatus } from '../db/hooks.js';
+import ListLoading from '../components/ListLoading.jsx';
 
 /**
  * Orders list view — every order across the team, sorted by recency.
@@ -31,7 +33,10 @@ const STATUS_STYLES = {
 export default function Orders() {
   const { profileId } = useApp();
 
-  const orders = useLiveQuery(
+  // Gate the empty state on `loaded` — same reason as Customers / Quotes:
+  // don't flash "Sin pedidos" on every navigation, only once we know it's
+  // really empty.
+  const { data: orders, loaded } = useLiveQueryStatus(
     () => db.orders.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
     [profileId],
     [],
@@ -120,6 +125,14 @@ export default function Orders() {
     invalidate();
   }
 
+  if (!loaded) {
+    return (
+      <>
+        <PageHeader title="Pedidos" />
+        <div className="card overflow-hidden"><ListLoading rows={5} /></div>
+      </>
+    );
+  }
   if (!orders.length) {
     return (
       <>

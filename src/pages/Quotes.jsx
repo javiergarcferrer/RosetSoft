@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLiveQuery } from '../db/hooks.js';
+import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
+import ListLoading from '../components/ListLoading.jsx';
 import { Plus, Search, FileText, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -54,7 +55,10 @@ function useQuoteOps(qu) {
 
 export default function Quotes() {
   const { profileId } = useApp();
-  const quotes = useLiveQuery(
+  // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
+  // `loaded` so we don't show a misleading "no data" message during the
+  // first fetch — that flicker is the bug we're killing.
+  const { data: quotes, loaded } = useLiveQueryStatus(
     () => db.quotes.where('profileId').equals(profileId || '').reverse().sortBy('updatedAt'),
     [profileId],
     []
@@ -112,6 +116,14 @@ export default function Quotes() {
       });
   }, [quotes, q, status, customerById]);
 
+  if (!loaded) {
+    return (
+      <>
+        <PageHeader title="Cotizaciones" />
+        <div className="card overflow-hidden"><ListLoading rows={6} /></div>
+      </>
+    );
+  }
   if (!quotes.length) {
     return (
       <>

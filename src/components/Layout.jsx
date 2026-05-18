@@ -13,13 +13,40 @@ import {
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 
-const navItems = [
-  { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
-  { to: '/customers', label: 'Clientes', icon: Users },
-  { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
-  { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-  { to: '/orders', label: 'Pedidos', icon: Package },
-  { to: '/settings', label: 'Configuración', icon: SettingsIcon },
+// Sidebar layout — flat at first, now grouped because the dealer's mental
+// model of these routes has natural clusters:
+//
+//   • "Contactos" — the people the showroom works with. Clients are who
+//     buys; profesionales are who refers (architects, decorators). Both
+//     are address-book-style records the dealer maintains.
+//
+//   • "Ventas" — the live commercial workflow. A quote becomes a pedido;
+//     they're two phases of the same revenue thread. Grouping them
+//     telegraphs "this is where the money lives".
+//
+//   • "Inicio" and "Configuración" stand alone — they aren't part of a
+//     cluster, so explicit group labels would be noise.
+//
+// Group labels render as small uppercase eyebrows (ink-500 inside the
+// dark sidebar) above each cluster. Items without a group sit flush at
+// the top/bottom.
+const navGroups = [
+  { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] },
+  {
+    label: 'Contactos',
+    items: [
+      { to: '/customers', label: 'Clientes', icon: Users },
+      { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
+    ],
+  },
+  {
+    label: 'Ventas',
+    items: [
+      { to: '/quotes', label: 'Cotizaciones', icon: FileText },
+      { to: '/orders', label: 'Pedidos', icon: Package },
+    ],
+  },
+  { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] },
 ];
 
 export default function Layout() {
@@ -98,23 +125,37 @@ export default function Layout() {
           </button>
         </div>
 
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overscroll-contain">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
-                  isActive
-                    ? 'bg-ink-700 text-white'
-                    : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
-                }`
-              }
+        <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain">
+          {navGroups.map((group, gi) => (
+            <div
+              key={gi}
+              // Top/bottom spacing inside each group; mt-4 between groups
+              // creates a visual gap without needing a divider line.
+              className={`space-y-0.5 ${gi > 0 ? 'mt-4' : ''}`}
             >
-              <Icon size={16} />
-              {label}
-            </NavLink>
+              {group.label && (
+                <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink-500 select-none">
+                  {group.label}
+                </div>
+              )}
+              {group.items.map(({ to, label, icon: Icon, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
+                      isActive
+                        ? 'bg-ink-700 text-white'
+                        : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
+                    }`
+                  }
+                >
+                  <Icon size={16} />
+                  {label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
