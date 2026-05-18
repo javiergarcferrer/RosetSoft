@@ -7,7 +7,7 @@ import {
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
-import { DebouncedInput } from '../components/DebouncedInput.jsx';
+import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
