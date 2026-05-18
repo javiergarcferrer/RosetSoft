@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Shield, Users as UsersIcon, Check, X, UserCheck } from 'lucide-react';
+import { Shield, Users as UsersIcon, Check, X, UserCheck, Mail, UserPlus, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import Modal from '../../components/Modal.jsx';
 import { DebouncedInput } from '../../components/DebouncedInput.jsx';
+import { inviteUser } from '../../lib/invite.js';
 
 /**
  * Admin-only users management.
@@ -18,8 +21,10 @@ import { DebouncedInput } from '../../components/DebouncedInput.jsx';
  * again, never gone.
  */
 export default function AdminUsers() {
-  const { currentProfile } = useApp();
+  const { currentProfile, refreshProfiles } = useApp();
+  const { session } = useAuth();
   const isAdmin = currentProfile?.role === 'admin';
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   // Always run the live query — early-return below would short-circuit the
   // hook and React would complain about a changing hook count if the role
@@ -67,6 +72,22 @@ export default function AdminUsers() {
       <PageHeader
         title="Usuarios"
         subtitle={loaded ? `${active.length} activos · ${pending.length} pendientes` : ' '}
+        actions={
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="btn-primary"
+          >
+            <UserPlus size={14} /> Invitar usuario
+          </button>
+        }
+      />
+
+      <InviteModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        session={session}
+        onInvited={() => refreshProfiles()}
       />
 
       {!loaded ? (
@@ -413,3 +434,156 @@ function clampPct(raw) {
 // `Check` is imported but kept here intentionally to allow future use in
 // approval confirmation flows; ignore the unused-import lint locally.
 void Check;
+
+// ---------------------------------------------------------------------------
+// InviteModal — admin posts here to send a Supabase invite email and
+// pre-create the matching profile row. Wraps the `invite-user` Edge
+// Function call from lib/invite.js with form state, validation, and
+// inline error rendering so the admin sees what went wrong (already-
+// invited email, missing service-role secret on the function, etc.)
+// without a console dive.
+// ---------------------------------------------------------------------------
+function InviteModal({ open, onClose, session, onInvited }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('employee');
+  const [pct, setPct] = useState(10);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  function reset() {
+    setName(''); setEmail(''); setRole('employee'); setPct(10);
+    setError(null); setSuccess(null); setBusy(false);
+  }
+
+  async function submit() {
+    setError(null); setSuccess(null);
+    if (!name.trim() || !email.trim()) {
+      setError('Nombre y correo son obligatorios.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await inviteUser({
+        session,
+        email: email.trim(),
+        name: name.trim(),
+        role,
+        commissionPct: clampPct(pct),
+      });
+      setSuccess(`Invitación enviada a ${email.trim()}. Recibirá un correo con un enlace para entrar.`);
+      onInvited?.();
+      // Auto-close after a beat so the admin sees the success message
+      // before the modal disappears.
+      setTimeout(() => { onClose?.(); reset(); }, 1400);
+    } catch (e) {
+      setError(e?.message || 'No se pudo enviar la invitación.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { if (!busy) { onClose?.(); reset(); } }}
+      title="Invitar usuario"
+      size="md"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={() => { onClose?.(); reset(); }}
+            disabled={busy}
+            className="btn-ghost"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            className="btn-primary disabled:opacity-60 disabled:cursor-wait"
+          >
+            {busy
+              ? <><Loader2 size={14} className="animate-spin" /> Enviando…</>
+              : <><Mail size={14} /> Enviar invitación</>}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-ink-500">
+          El usuario recibirá un correo con un enlace para crear su contraseña.
+          Al iniciar sesión, ya tendrá el rol y la comisión que asignes aquí.
+        </p>
+
+        <div>
+          <div className="label">Nombre completo</div>
+          <input
+            type="text"
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoCapitalize="words"
+            autoComplete="name"
+            placeholder="María Peña"
+          />
+        </div>
+
+        <div>
+          <div className="label">Correo electrónico</div>
+          <input
+            type="email"
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="maria@example.com"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="label">Rol</div>
+            <select
+              className="input"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            >
+              <option value="employee">Empleado</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div>
+            <div className="label">Comisión (%)</div>
+            <input
+              type="number"
+              min="0"
+              max="50"
+              step="0.5"
+              className="input tabular-nums"
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div role="alert" className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div role="status" className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
+            {success}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}

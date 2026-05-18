@@ -1,32 +1,39 @@
 import { useState } from 'react';
-import { Mail, Lock, LogIn, UserPlus, AlertCircle } from 'lucide-react';
+import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { userMessageFor } from '../lib/errorMessages.js';
 
+/**
+ * Sign-in page. The app is invite-only: there is no signup form, no
+ * "Registrarme" link, no path on this page that creates a new account.
+ *
+ * New employees join via /admin/users → "Invitar usuario", which sends
+ * a Supabase invite email through the `invite-user` Edge Function. The
+ * invitee clicks the link, sets a password, lands signed in. Random
+ * visitors to /login see only "Iniciar sesión" with no door open to
+ * sign-up — exactly the dealer's requirement: "no dejes que cualquiera
+ * con el link pueda registrarse".
+ *
+ * Bootstrap-admin caveat: the very first admin can't be invited (no
+ * other admin exists). Create that account once via the Supabase
+ * Dashboard → Authentication → Users → Add user, with the email in
+ * settings.admin_emails (seeded with javier@alcover.do). On first
+ * sign-in here, ensureDefaultProfile() promotes them to admin
+ * automatically. See supabase/functions/invite-user/README.md.
+ */
 export default function Login() {
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState('signin'); // signin | signup
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [info, setInfo] = useState(null);
 
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setInfo(null);
     try {
-      if (mode === 'signin') {
-        await signIn(email.trim(), password);
-      } else {
-        const r = await signUp(email.trim(), password);
-        if (!r.session) {
-          setInfo('Cuenta creada. Revisa tu correo para confirmar y vuelve a iniciar sesión.');
-          setMode('signin');
-        }
-      }
+      await signIn(email.trim(), password);
     } catch (err) {
       setError(userMessageFor(err));
     } finally {
@@ -39,11 +46,9 @@ export default function Login() {
       <div className="w-full max-w-sm bg-white border border-ink-100 rounded-lg shadow-sm p-8">
         <div className="text-center mb-6">
           <div className="text-xs uppercase tracking-widest text-ink-500">Roset Soft</div>
-          <h1 className="text-xl font-semibold mt-1">{mode === 'signin' ? 'Iniciar sesión' : 'Crear cuenta'}</h1>
+          <h1 className="text-xl font-semibold mt-1">Iniciar sesión</h1>
           <p className="text-xs text-ink-500 mt-1">
-            {mode === 'signin'
-              ? 'Inicia sesión con el correo y contraseña de tu equipo.'
-              : 'Crea una cuenta nueva para tu equipo.'}
+            Inicia sesión con el correo y contraseña de tu equipo.
           </p>
         </div>
 
@@ -80,8 +85,8 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="input pl-9"
                 placeholder="••••••••"
-                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                enterKeyHint={mode === 'signin' ? 'go' : 'done'}
+                autoComplete="current-password"
+                enterKeyHint="go"
               />
             </div>
           </div>
@@ -92,39 +97,15 @@ export default function Login() {
               <span>{error}</span>
             </div>
           )}
-          {info && (
-            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
-              {info}
-            </div>
-          )}
 
           <button type="submit" disabled={busy} className="btn-primary w-full justify-center">
-            {busy ? '…' : mode === 'signin' ? <><LogIn size={14} /> Entrar</> : <><UserPlus size={14} /> Crear cuenta</>}
+            {busy ? '…' : <><LogIn size={14} /> Entrar</>}
           </button>
         </form>
 
-        {/* The signup form is intentionally not advertised here. The
-            team is invite-only: a new employee signs up with the email
-            their admin gave them, then waits for the admin to activate
-            them in /admin/users. We keep the toggle available behind a
-            small "registrarme" link so the admin can still bootstrap
-            their own account on first install — and so legitimate new
-            employees who were told to sign up can find the form — but
-            we don't promote it. Anyone landing on /login by chance sees
-            "Iniciar sesión" only. */}
-        <div className="text-center text-xs text-ink-500 mt-5">
-          {mode === 'signin' ? (
-            <>¿Tu administrador te dio acceso? <button type="button" onClick={() => { setMode('signup'); setError(null); setInfo(null); }} className="text-ink-700 hover:text-ink-900 underline">Registrarme</button></>
-          ) : (
-            <>¿Ya tienes cuenta? <button type="button" onClick={() => { setMode('signin'); setError(null); setInfo(null); }} className="text-brand-600 hover:underline">Inicia sesión</button></>
-          )}
-        </div>
-
-        {mode === 'signup' && (
-          <p className="mt-3 text-center text-[11px] text-ink-500 max-w-xs mx-auto">
-            Tu cuenta queda pendiente hasta que un administrador la apruebe.
-          </p>
-        )}
+        <p className="mt-5 text-center text-[11px] text-ink-500 max-w-xs mx-auto">
+          ¿No tienes cuenta? El acceso es solo por invitación de tu administrador.
+        </p>
       </div>
     </div>
   );

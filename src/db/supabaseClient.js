@@ -23,11 +23,21 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export const supabase = createClient(url || 'http://localhost:54321', anonKey || 'anon', {
+// Exported so other modules (e.g. lib/invite.js) can build URLs to
+// Supabase-hosted resources outside the JS SDK — notably the Edge
+// Functions route at `${SUPABASE_URL}/functions/v1/<name>`.
+export const SUPABASE_URL = url || 'http://localhost:54321';
+
+export const supabase = createClient(SUPABASE_URL, anonKey || 'anon', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    // True so invitees who click the magic link in their email land
+    // with a real session — Supabase parses the recovery / invite
+    // token out of the URL fragment on first page load. Without this,
+    // the link works in Supabase's hosted account-creation flow but
+    // not in the SPA after redirect.
+    detectSessionInUrl: true,
   },
 });
 
