@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
     name?: string;
     role?: string;
     commissionPct?: number | string;
+    redirectTo?: string;
   };
   try {
     body = await req.json();
@@ -119,6 +120,17 @@ Deno.serve(async (req) => {
   const name  = (body.name || '').trim();
   const role  = (body.role || 'employee').trim();
   const pct   = clampCommissionPct(body.commissionPct);
+  // The client passes its own origin (window.location.origin) as the
+  // redirect target. We use it for the invite email's magic-link
+  // landing page — without this, Supabase falls back to the
+  // dashboard-configured Site URL, which defaults to
+  // http://localhost:3000 on a fresh project and produces a broken
+  // invite link for the recipient. Validate it's an http(s) URL and
+  // drop it otherwise so we don't pass garbage through to Supabase.
+  const redirectTo = typeof body.redirectTo === 'string'
+    && /^https?:\/\//i.test(body.redirectTo)
+    ? body.redirectTo
+    : undefined;
 
   if (!email || !email.includes('@')) {
     return jsonResponse({ error: 'Correo electrónico inválido.' }, 400);
@@ -138,10 +150,15 @@ Deno.serve(async (req) => {
   // Try sending the invite. Supabase returns a clean error when the
   // email already has an auth.users row — surface that to the caller
   // so the UI can show "ya existe una cuenta con ese correo" without
-  // a 500.
+  // a 500. Pass `redirectTo` through when the caller supplied it so
+  // the magic-link email lands the invitee at the dealer's actual
+  // domain — not Supabase's default Site URL, which is
+  // http://localhost:3000 on a fresh project and broke invitations
+  // when the dealer first tried them in production.
   const { data: inviteData, error: inviteErr } =
     await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { name },
+      ...(redirectTo ? { redirectTo } : {}),
     });
   if (inviteErr) {
     const msg = (inviteErr.message || '').toLowerCase();

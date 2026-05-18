@@ -33,13 +33,25 @@ export async function inviteUser({ session, email, name, role, commissionPct }) 
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }
   const url = `${SUPABASE_URL}/functions/v1/invite-user`;
+  // Tell the function where to send the invitee after they accept.
+  // We use the admin's current origin — whatever URL they're operating
+  // from is exactly where the invitee should land. Without this, the
+  // invite link redirects to whatever Supabase has set as Site URL,
+  // which defaults to http://localhost:3000 on a fresh project and
+  // breaks invitations until the dealer fixes it in the dashboard.
+  // Passing redirectTo explicitly per-call survives any future
+  // dashboard misconfiguration. The URL still has to be on Supabase's
+  // Redirect URLs allowlist (Auth → URL Configuration) to be honored.
+  const redirectTo = typeof window !== 'undefined'
+    ? window.location.origin + '/'
+    : null;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, name, role, commissionPct }),
+    body: JSON.stringify({ email, name, role, commissionPct, redirectTo }),
   });
   let data = null;
   try { data = await res.json(); } catch { /* empty / non-JSON body */ }
