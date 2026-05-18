@@ -280,15 +280,10 @@ function SpecStrip({ line, onChange, refInputRef }) {
         autoCapitalize="characters"
         autoComplete="off"
       />
-      <InlineEditor
-        label="Pág."
-        value={line.pageRef || ''}
-        onCommit={(v) => onChange({ pageRef: v })}
-        placeholder="—"
-        widthClass="min-w-[3rem]"
-        inputMode="numeric"
-        autoComplete="off"
-      />
+      {/* Catalog page input ("Pág.") intentionally hidden — the field
+          remains in the data model (line.pageRef) and is still surfaced
+          by autocomplete, QuickActions, and PDF rendering; only the
+          edit control has been removed at the dealer's request. */}
       <InlineEditor
         label="Dim."
         value={line.dimensions || ''}
