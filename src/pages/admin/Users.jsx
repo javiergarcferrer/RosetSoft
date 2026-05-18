@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, Users as UsersIcon, Check, X, Mail, UserPlus, Loader2, Trash2 } from 'lucide-react';
+import { Shield, Users as UsersIcon, Check, X, Mail, UserPlus, Loader2, Trash2, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -318,24 +318,45 @@ function fmtSessionAgo(ts) {
 function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // savedField names the column the user just edited inline — the row
+  // flashes a brief "Guardado" badge next to it so it's obvious the
+  // write went through. Without this, the previous design was so
+  // visually quiet that the dealer assumed name editing was broken
+  // and asked for it to be "fixed" three times in a row.
+  const [savedField, setSavedField] = useState(null);
+
+  // updated_at is bumped by the profiles_set_updated_at trigger; the
+  // client never has to stamp it. Every inline editor routes through
+  // this helper so a failed write surfaces in the row instead of
+  // silently disappearing into the console.
+  async function commit(patch, field) {
+    setError(null);
+    try {
+      await db.profiles.update(profile.id, patch);
+      setSavedField(field);
+      setTimeout(() => {
+        setSavedField((cur) => (cur === field ? null : cur));
+      }, 1600);
+    } catch (e) {
+      setError(e?.message || 'No se pudo guardar el cambio.');
+    }
+  }
 
   async function setName(raw) {
     const name = (raw || '').trim();
     if (!name || name === (profile.name || '')) return;
-    // updated_at is bumped by the profiles_set_updated_at trigger; no
-    // need to stamp it from the client.
-    await db.profiles.update(profile.id, { name });
+    await commit({ name }, 'name');
   }
 
   async function setRole(role) {
     if (role === profile.role) return;
-    await db.profiles.update(profile.id, { role });
+    await commit({ role }, 'role');
   }
 
   async function setCommission(raw) {
     const pct = clampPct(raw);
     if (pct === (profile.commission_pct ?? 0)) return;
-    await db.profiles.update(profile.id, { commission_pct: pct });
+    await commit({ commission_pct: pct }, 'commission');
   }
 
   // Hard-delete: removes the auth.users row (so the user can't sign
@@ -377,16 +398,36 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
           <Avatar name={profile.name} email={profile.email} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <DebouncedInput
-                type="text"
-                value={profile.name || ''}
-                onCommit={setName}
-                className="font-medium text-sm bg-transparent border-0 px-0 py-0 focus:outline-none focus:ring-0 focus:bg-ink-50 focus:px-1 focus:rounded -mx-0 rounded transition-colors min-w-0 w-full max-w-[220px]"
-                placeholder={profile.email || 'Sin nombre'}
-                aria-label="Nombre del usuario"
-                autoComplete="off"
-                spellCheck={false}
-              />
+              {/* Visibly an input at rest — light grey border + pencil
+                  icon — so the admin doesn't have to guess that the
+                  name is editable. The previous "transparent until
+                  focused" look read as a label and the dealer kept
+                  reporting that name editing didn't work. */}
+              <div className="relative group">
+                <DebouncedInput
+                  type="text"
+                  value={profile.name || ''}
+                  onCommit={setName}
+                  className="font-medium text-sm bg-white border border-ink-200 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand hover:border-ink-300 transition-colors min-w-0 w-full max-w-[220px]"
+                  placeholder={profile.email || 'Sin nombre'}
+                  aria-label="Nombre del usuario"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <Pencil
+                  size={12}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 group-focus-within:text-brand pointer-events-none"
+                  aria-hidden
+                />
+              </div>
+              {savedField === 'name' && (
+                <span
+                  role="status"
+                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 flex-shrink-0"
+                >
+                  <Check size={11} /> Guardado
+                </span>
+              )}
               {isSelf && (
                 <span className="text-[11px] text-ink-500 flex-shrink-0">(tú)</span>
               )}
@@ -397,7 +438,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
               )}
             </div>
             {profile.email && (
-              <div className="text-xs text-ink-500 truncate">{profile.email}</div>
+              <div className="text-xs text-ink-500 truncate mt-1">{profile.email}</div>
             )}
           </div>
         </div>
@@ -509,9 +550,8 @@ function clampPct(raw) {
   return Math.round(n * 10) / 10;
 }
 
-// `Check` and `RolePill` are imported / defined for future use; ignore
-// the unused-import lint locally.
-void Check;
+// `RolePill` is kept here for future use in a more compact row layout;
+// ignore the unused lint locally.
 void RolePill;
 
 // ---------------------------------------------------------------------------
