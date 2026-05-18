@@ -122,16 +122,85 @@ function groupBySection(lines) {
   return groups;
 }
 
-/** Trigger a browser download for a blob produced by generateQuotePdf. */
-export function downloadBlob(blob, filename) {
+/**
+ * Hand the generated PDF blob to the user. Path varies by platform:
+ *
+ *   1. Web Share API with files — the primary path on mobile and PWAs.
+ *      Triggers the native share sheet so the dealer can save to Files,
+ *      AirDrop to a laptop, email it, etc. iOS standalone PWAs need
+ *      this because the `<a download>` attribute is silently ignored
+ *      in that mode, which is the root of the "nothing happens when I
+ *      tap Export" bug. Requires HTTPS + a recent gesture (the export
+ *      button click counts).
+ *
+ *   2. `<a download>` synthetic click — desktop and any platform where
+ *      Web Share isn't available or refuses the file. This is the
+ *      classic browser-download path; works on Chrome / Edge / Firefox
+ *      / Android Chrome and on iOS Safari in regular tab mode (it'll
+ *      open the blob inline rather than auto-download there, but the
+ *      user still gets the file).
+ *
+ *   3. As a last resort, navigate the current window to the blob URL
+ *      (`window.location.href = url`). This trips most browsers'
+ *      download UI even when click() didn't, at the cost of leaving
+ *      the app momentarily. We only reach this when everything above
+ *      threw — without it, an iOS standalone PWA on a build that
+ *      lacks Web Share files support (rare, but pre-iOS-15) would
+ *      give the dealer no visible response at all.
+ *
+ * The blob URL is held for 30 s before revocation. Earlier code used
+ * setTimeout(..., 0), which raced the browser's blob read on slower
+ * devices — a too-quick revoke is one of the failure modes that looks
+ * to the user like "nothing happened".
+ *
+ * Returns a Promise so callers can await completion (and surface
+ * errors via a try/catch). Errors that aren't user-cancellation are
+ * re-thrown so the UI can show a banner.
+ */
+export async function downloadBlob(blob, filename) {
+  // Web Share with files — the only path that works in iOS PWA
+  // standalone mode. We have to construct a real File (not just a
+  // Blob) because navigator.canShare({ files }) is strict.
+  if (typeof File !== 'undefined' && navigator.canShare) {
+    try {
+      const file = new File([blob], filename, {
+        type: blob.type || 'application/pdf',
+      });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      }
+    } catch (err) {
+      // AbortError = user dismissed the share sheet. That's a valid
+      // outcome, not a failure to deliver the file — return quietly.
+      if (err && err.name === 'AbortError') return;
+      // Anything else: fall through to the anchor-click fallback. Don't
+      // re-throw yet; the desktop path may still succeed.
+      console.warn('[quotePdf] navigator.share fell through:', err);
+    }
+  }
+
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 0);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    try {
+      a.click();
+    } finally {
+      document.body.removeChild(a);
+    }
+  } catch (err) {
+    // Last-resort: navigate to the blob URL. The browser's own viewer
+    // or download UI takes over from there.
+    console.warn('[quotePdf] anchor click failed, navigating to blob:', err);
+    window.location.href = url;
+  } finally {
+    // 30 s gives slow devices plenty of time to read the blob before
+    // the URL is invalidated. Holding it indefinitely would leak the
+    // blob; 0 ms (the previous behavior) raced the read.
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, X, Eye, Pencil, Download, MoreHorizontal, Command } from 'lucide-react';
+import { ArrowLeft, BookOpen, X, Eye, Pencil, Download, MoreHorizontal, Command, Loader2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -32,6 +32,7 @@ export default function QuoteHeader({
   onUpdateQuote,
   savedAt,
   saving,
+  exporting,
 }) {
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
   const professional = quote?.professionalId
@@ -91,10 +92,18 @@ export default function QuoteHeader({
             <button
               type="button"
               onClick={onExportPdf}
-              className="btn-primary hidden md:inline-flex"
+              disabled={exporting}
+              // Hidden on phones — the mobile sticky bottom bar carries
+              // an equivalent export action so the desktop header
+              // doesn't compete for tap space.
+              className="btn-primary hidden md:inline-flex disabled:opacity-60 disabled:cursor-wait"
               title="Descargar PDF"
             >
-              <Download size={14} /> Exportar PDF
+              {exporting ? (
+                <><Loader2 size={14} className="animate-spin" /> Generando…</>
+              ) : (
+                <><Download size={14} /> Exportar PDF</>
+              )}
             </button>
 
             {/* Mobile: condense Export + palette into a single icon-only menu.

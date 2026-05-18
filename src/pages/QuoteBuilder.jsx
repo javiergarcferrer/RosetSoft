@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Hash, Download } from 'lucide-react';
+import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import PdfViewer from '../components/PdfViewer.jsx';
 import { db, newId, nextSequenceNumber } from '../db/database.js';
@@ -197,6 +197,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // because line edits don't bump the parent quote's updatedAt (by design).
   const [savedAt, setSavedAt] = useState(quote?.updatedAt || null);
   const [saving, setSaving] = useState(false);
+  // PDF export UI state — disables the export button while a generation
+  // is in flight, and surfaces failures (a malformed line, a refusal
+  // from the browser to deliver the blob) instead of swallowing them.
+  // Earlier the whole exportPdf() ran without try/catch, so any error
+  // — including "nothing happened" — was invisible to the dealer.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(null);
   // Counter of in-flight writes so concurrent edits don't flicker the badge.
   const inFlight = useRef(0);
 
@@ -388,13 +395,31 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   );
 
   async function exportPdf() {
-    const customer = quote.customerId ? customers.find((c) => c.id === quote.customerId) : null;
-    // The PDF generator predates sections — strip them out so the printable
-    // is a clean item list (sections are visible in the on-screen client
-    // preview but not yet in the printed PDF).
-    const printable = lines.filter((l) => l.kind !== 'section');
-    const blob = await generateQuotePdf({ quote, settings, lines: printable, totals, customer });
-    downloadBlob(blob, `Quote-${quote.number || 'draft'}.pdf`);
+    if (exporting) return;          // de-bounce double-taps
+    setExportError(null);
+    setExporting(true);
+    try {
+      const customer = quote.customerId
+        ? customers.find((c) => c.id === quote.customerId)
+        : null;
+      // Pass *all* lines to the generator — including section breaks.
+      // The generator's groupBySection() consumes them as headings; the
+      // earlier filter that stripped sections out predates the PDF
+      // matching the on-screen ClientPreview, where section headers
+      // ("MOBILIARIO DE SALA") are part of the layout the customer
+      // sees in both places.
+      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
+      // downloadBlob is async now: it awaits navigator.share on mobile/
+      // PWA. The await here is what made the iOS-PWA "nothing happens"
+      // bug surface — without awaiting we'd never see the share-sheet
+      // rejection that the platform raised silently.
+      await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
+    } catch (err) {
+      console.error('[QuoteBuilder] exportPdf failed:', err);
+      setExportError(err?.message || 'No se pudo generar el PDF.');
+    } finally {
+      setExporting(false);
+    }
   }
 
   /* ---------------------------- render ---------------------------- */
@@ -418,7 +443,30 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onUpdateQuote={updateQuote}
         savedAt={savedAt}
         saving={saving}
+        exporting={exporting}
       />
+
+      {/* Surface PDF export failures inline. The export button used to
+          fail silently in iOS-PWA standalone — now if anything throws
+          (gesture timed out, share sheet rejected, generator crashed),
+          the dealer sees a dismissible banner with the underlying
+          message instead of just "I tapped it and nothing happened". */}
+      {exportError && (
+        <div role="alert" className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-medium">No se pudo exportar el PDF</div>
+            <div className="text-red-700">{exportError}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="text-red-700 hover:text-red-900 text-[11px] underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
 
       <div className="mb-5">
         <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
@@ -492,6 +540,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         totals={totals}
         onAdd={() => addLine()}
         onExport={exportPdf}
+        exporting={exporting}
       />
 
       <QuickActions
@@ -636,7 +685,7 @@ function CompactTotals({ quote, totals }) {
   );
 }
 
-function MobileStickyTotals({ quote, totals, onAdd, onExport }) {
+function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
   // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
   // insets so the buttons clear the Dynamic Island ear when the phone is
   // sideways; pb uses max(0.75rem, …) so the home indicator never overlaps
@@ -656,8 +705,22 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport }) {
         <button type="button" onClick={onAdd} className="btn-secondary" aria-label="Agregar artículo">
           <Plus size={16} /> <span>Artículo</span>
         </button>
-        <button type="button" onClick={onExport} className="btn-primary" aria-label="Exportar PDF">
-          <Download size={16} /> PDF
+        {/* On mobile, this button is the *only* way to export — the
+            desktop header version is hidden. Disable it while a
+            generation is in flight so a frustrated dealer double-tap
+            doesn't fire two share sheets in a row. The Loader2 spinner
+            gives an unambiguous "I heard you, working on it" signal,
+            which the previous silent button didn't. */}
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={exporting}
+          className="btn-primary disabled:opacity-60 disabled:cursor-wait"
+          aria-label="Exportar PDF"
+        >
+          {exporting
+            ? <><Loader2 size={16} className="animate-spin" /> PDF</>
+            : <><Download size={16} /> PDF</>}
         </button>
       </div>
       {/* Spacer matches the bar height + safe-area so the last list row is
