@@ -111,19 +111,37 @@ export function isTerminalOrderStage(key) {
 /**
  * Can the dealer move this order forward to its next main-track stage?
  *
- * The only gate that matters is the very last one: an order can be
- * marked `received` only when every container attached to it has a
- * `filledAt` timestamp. The dealer can't truthfully say "the goods
- * arrived" if no container has been packed — the order would be
- * structurally empty.
+ * Two gates matter:
  *
- * Earlier transitions (draft → placed → confirmed → in_transit →
- * in_customs) carry no precondition. The dealer drives them by hand
- * as Ligne Roset's external workflow progresses.
+ *   1. draft → placed   The dispatch threshold (container count ×
+ *      per-container minimum from settings) must be met. The order
+ *      can't be placed with Ligne Roset if the total doesn't clear
+ *      the LR-side minimum — the order would be rejected on the
+ *      vendor end. We surface this gate up-front so the dealer
+ *      knows what they still need to fill.
+ *
+ *   2. in_customs → received   Every attached container must have a
+ *      filledAt timestamp. The dealer can't truthfully say "the
+ *      goods arrived" if no container has been packed.
+ *
+ * Intermediate transitions (placed → confirmed → in_transit →
+ * in_customs) carry no precondition — they're dealer-driven as
+ * Ligne Roset's external workflow progresses.
+ *
+ * `opts.totalAmount` and `opts.threshold` are read by the placed-gate
+ * check. When the caller doesn't supply them, that gate is treated as
+ * unmet (defensive — better to require the dealer to confirm than to
+ * let an under-minimum order through silently).
  */
-export function canAdvanceOrder(order, containers) {
+export function canAdvanceOrder(order, containers, opts = {}) {
   const next = nextOrderStage(currentOrderStage(order));
   if (!next) return false;
+  if (next.key === 'placed') {
+    const total = Number(opts.totalAmount) || 0;
+    const threshold = Number(opts.threshold) || 0;
+    if (threshold > 0 && total < threshold) return false;
+    return true;
+  }
   if (next.key === 'received') {
     if (!containers || containers.length === 0) return false;
     return containers.every((c) => !!c.filledAt);
@@ -136,9 +154,20 @@ export function canAdvanceOrder(order, containers) {
  * Spanish hint, or null if there's no special reason (the button is
  * actually allowed, or there's no next stage).
  */
-export function advanceBlockedReason(order, containers) {
+export function advanceBlockedReason(order, containers, opts = {}) {
   const next = nextOrderStage(currentOrderStage(order));
   if (!next) return null;
+  if (next.key === 'placed') {
+    const total = Number(opts.totalAmount) || 0;
+    const threshold = Number(opts.threshold) || 0;
+    if (threshold > 0 && total < threshold) {
+      const shortfall = threshold - total;
+      // Use a plain en-US dollar format for the shortfall — keeps the
+      // hint terse and avoids loading a money formatter just for this.
+      const fmt = (n) => '$' + Math.round(n).toLocaleString('en-US');
+      return `Faltan ${fmt(shortfall)} para alcanzar el mínimo de despacho (${fmt(threshold)}). El pedido no se puede colocar con Ligne Roset hasta cumplir el mínimo.`;
+    }
+  }
   if (next.key === 'received') {
     if (!containers || containers.length === 0) {
       return 'Añade al menos un contenedor antes de marcar como recibido.';

@@ -142,10 +142,53 @@ test('order advance from in_customs → received requires all containers filled'
   );
 });
 
-test('earlier order transitions are not gated by container fill', () => {
-  for (const status of ['draft', 'placed', 'confirmed', 'in_transit']) {
-    assert.equal(canAdvanceOrder({ status }, []), true, `status=${status} should advance freely`);
+test('order advance from draft → placed requires the dispatch threshold to be met', () => {
+  const order = { status: 'draft' };
+  // Below threshold
+  assert.equal(
+    canAdvanceOrder(order, [], { totalAmount: 30000, threshold: 50000 }),
+    false,
+  );
+  // At threshold
+  assert.equal(
+    canAdvanceOrder(order, [], { totalAmount: 50000, threshold: 50000 }),
+    true,
+  );
+  // Above threshold
+  assert.equal(
+    canAdvanceOrder(order, [], { totalAmount: 60000, threshold: 50000 }),
+    true,
+  );
+});
+
+test('threshold of 0 (or missing opts) does not block placement', () => {
+  // When the dealer hasn't configured a minimum, we don't gate — same
+  // behavior as the legacy "no threshold" case.
+  const order = { status: 'draft' };
+  assert.equal(canAdvanceOrder(order, [], { totalAmount: 0, threshold: 0 }), true);
+  assert.equal(canAdvanceOrder(order, []), true);
+});
+
+test('mid-lifecycle transitions are still not gated by anything', () => {
+  // placed → confirmed → in_transit → in_customs all flow freely.
+  for (const status of ['placed', 'confirmed', 'in_transit']) {
+    assert.equal(
+      canAdvanceOrder({ status }, [], { totalAmount: 0, threshold: 0 }),
+      true,
+      `status=${status} should advance freely`,
+    );
   }
+});
+
+test('advanceBlockedReason explains the threshold gate with a shortfall amount', () => {
+  const reason = advanceBlockedReason(
+    { status: 'draft' }, [],
+    { totalAmount: 30000, threshold: 50000 },
+  );
+  assert.match(reason, /m[ií]nimo de despacho/i);
+  // The shortfall ($20,000) should appear in the message so the dealer
+  // knows how much more to sell before placing.
+  assert.match(reason, /20,000/);
 });
 
 test('advanceBlockedReason explains the container-fill gate', () => {

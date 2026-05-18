@@ -100,13 +100,32 @@ export default function OrderDetail() {
   const nxt = isCancelled ? null : nextOrderStage(stage);
   const idx = orderStageIndex(stage);
 
-  // Only the last transition (in_customs → received) carries a gate:
-  // every container attached to the order must have a filledAt
-  // timestamp. The earlier transitions (draft → placed → confirmed →
-  // in_transit → in_customs) are dealer-driven as Ligne Roset's
-  // external workflow progresses, with no preconditions.
-  const canAdvance = canAdvanceOrder(order, containers);
-  const blockedReason = advanceBlockedReason(order, containers);
+  // Roll-up: sum of all quote totals attached to this order. Per the
+  // dealer's rule ("todas las cotizaciones aportan a ese total sin
+  // importar a cual contenedor pertenecen") this is order-wide and
+  // doesn't try to attribute totals to specific containers.
+  const orderTotal = quotes.reduce((acc, q) => acc + (totalByQuote.get(q.id) || 0), 0);
+
+  // Dispatch threshold scales with the number of container rows. Floor
+  // of 1 means a fresh order without any containers still gets a
+  // meaningful "minimum to place" indicator.
+  const perContainerThreshold = Number(settings?.dispatchThreshold) || 50000;
+  const { containerCount, threshold } = orderDispatchThreshold(containers, perContainerThreshold);
+  const thresholdMet = orderTotal >= threshold;
+
+  // Two gates fire on stage advance:
+  //   • draft → placed   blocked when orderTotal < threshold (the
+  //                      dispatch minimum the dealer set in Settings).
+  //                      LR rejects under-minimum orders, so the app
+  //                      enforces it client-side rather than letting
+  //                      the dealer hit "Avanzar" and get a bounce.
+  //   • in_customs → received   blocked unless every container is
+  //                      packed (each has a filledAt timestamp).
+  // The helpers in orderStages.js carry both rules so the OrderDetail
+  // page doesn't have to know them per-transition.
+  const gateOpts = { totalAmount: orderTotal, threshold };
+  const canAdvance = canAdvanceOrder(order, containers, gateOpts);
+  const blockedReason = advanceBlockedReason(order, containers, gateOpts);
 
   async function updateOrder(patch) {
     await db.orders.update(orderId, { ...patch, updatedAt: Date.now() });
@@ -183,19 +202,6 @@ export default function OrderDetail() {
     await db.quotes.update(quoteId, { orderId: null, updatedAt: Date.now() });
     invalidate();
   }
-
-  // Roll-up: sum of all quote totals attached to this order. Per the
-  // user's rule ("todas las cotizaciones aportan a ese total sin
-  // importar a cual contenedor pertenecen") this is order-wide and
-  // doesn't try to attribute totals to specific containers.
-  const orderTotal = quotes.reduce((acc, q) => acc + (totalByQuote.get(q.id) || 0), 0);
-
-  // Dispatch threshold scales with the number of container rows. Floor
-  // of 1 means a fresh order without any containers still gets a
-  // meaningful "minimum to place" indicator.
-  const perContainerThreshold = Number(settings?.dispatchThreshold) || 50000;
-  const { containerCount, threshold } = orderDispatchThreshold(containers, perContainerThreshold);
-  const thresholdMet = orderTotal >= threshold;
 
   // The previous main-track stage (for the "Volver" undo button).
   const prev = idx > 0 ? ORDER_STAGES[idx - 1] : null;

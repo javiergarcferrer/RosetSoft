@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  FileText, Users, Package, Truck, ArrowRight, Plus, UserSquare2,
-  TrendingUp, Wallet, AlertCircle, CheckCircle2,
+  FileText, Truck, ArrowRight, Plus, TrendingUp,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -12,7 +11,6 @@ import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals } from '../lib/pricing.js';
 import { ORDER_STAGE_BY_KEY } from '../lib/orderStages.js';
-import { effectiveCommissionPct, commissionAmount } from '../lib/commissions.js';
 
 /**
  * Operational dashboard — a single-screen "what's happening right now"
@@ -99,10 +97,6 @@ export default function Dashboard() {
     () => db.containers.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
-  const allProsQ = useLiveQueryStatus(
-    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
-    [profileId], [],
-  );
   // Lines drive total-money roll-ups. Fetched in one shot rather than
   // per-quote because the dashboard touches many quotes' totals at once.
   const allLinesQ = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
@@ -111,11 +105,10 @@ export default function Dashboard() {
   const allOrders    = allOrdersQ.data;
   const allCustomers = allCustomersQ.data;
   const allContainers= allContainersQ.data;
-  const allPros      = allProsQ.data;
   const allLines     = allLinesQ.data;
   const loaded =
     allQuotesQ.loaded && allOrdersQ.loaded && allCustomersQ.loaded &&
-    allContainersQ.loaded && allProsQ.loaded && allLinesQ.loaded;
+    allContainersQ.loaded && allLinesQ.loaded;
 
   // ---- Derive everything from the raw rows --------------------------------
   // We do all the math in a single useMemo so the dashboard re-renders
@@ -123,8 +116,6 @@ export default function Dashboard() {
   const derived = useMemo(() => {
     const customersById = new Map();
     for (const c of allCustomers) customersById.set(c.id, c);
-    const prosById = new Map();
-    for (const p of allPros) prosById.set(p.id, p);
     const linesByQuote = new Map();
     for (const ln of allLines) {
       if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
@@ -134,7 +125,6 @@ export default function Dashboard() {
     // Per-quote grand total (post-margin/discount/tax/shipping) — same
     // shape computeTotals expects, with unitPrice mapped to basePrice.
     const totalByQuote = new Map();
-    const commissionByQuote = new Map();
     for (const q of allQuotes) {
       const lines = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
@@ -146,11 +136,6 @@ export default function Dashboard() {
         }));
       const t = computeTotals(lines, q);
       totalByQuote.set(q.id, t.grandTotal);
-      if (q.professionalId) {
-        const pro = prosById.get(q.professionalId);
-        const pct = effectiveCommissionPct(q, pro);
-        commissionByQuote.set(q.id, commissionAmount(t.grandTotal, pct));
-      }
     }
 
     // Quotes grouped by status — drives the pipeline bar chart and the
@@ -218,24 +203,6 @@ export default function Dashboard() {
         return (b.daysInStage || 0) - (a.daysInStage || 0);
       });
 
-    // Commissions accrued this calendar month, per professional, on
-    // *accepted* quotes only. Drafts can change, declined never close —
-    // accepted is the conservative "real" pipeline.
-    const monthStart = startOfMonth();
-    const commissionsByPro = new Map();
-    for (const q of allQuotes) {
-      if (q.status !== 'accepted') continue;
-      if ((q.acceptedAt || q.updatedAt || 0) < monthStart) continue;
-      if (!q.professionalId) continue;
-      const c = commissionByQuote.get(q.id) || 0;
-      commissionsByPro.set(q.professionalId, (commissionsByPro.get(q.professionalId) || 0) + c);
-    }
-    const topPros = [...commissionsByPro.entries()]
-      .map(([id, amount]) => ({ pro: prosById.get(id), amount }))
-      .filter((r) => r.pro)
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5);
-
     // Recent quotes, most-recently-updated first, capped at 8 rows.
     const recentQuotes = [...allQuotes]
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
@@ -250,10 +217,9 @@ export default function Dashboard() {
       acceptedCount,
       openCount,
       inFulfillment,
-      topPros,
       recentQuotes,
     };
-  }, [allQuotes, allOrders, allCustomers, allContainers, allPros, allLines]);
+  }, [allQuotes, allOrders, allCustomers, allContainers, allLines]);
 
   return (
     <>
@@ -267,8 +233,19 @@ export default function Dashboard() {
         }
       />
 
-      {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Row 1 — Cotizaciones recientes promoted to the top.
+          The dealer's most-visited surface, so it gets the prime
+          slot directly under the page header. */}
+      <RecentQuotesCard
+        loaded={loaded}
+        quotes={derived.recentQuotes}
+        customersById={derived.customersById}
+        totalByQuote={derived.totalByQuote}
+      />
+
+      {/* Row 2 — three KPI summaries. All labels are Spanish; the
+          previous "Pipeline" / "Fulfillment" anglicisms are gone.*/}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
         <KpiCard
           icon={TrendingUp}
           tone="emerald"
@@ -280,7 +257,7 @@ export default function Dashboard() {
         <KpiCard
           icon={FileText}
           tone="brand"
-          label="En el pipeline"
+          label="Cotizaciones abiertas"
           value={loaded ? formatMoney(derived.openTotal, 'USD', { USD: 1 }) : '—'}
           hint={loaded ? `${derived.openCount} entre borrador y enviada` : 'Cargando…'}
           to="/quotes"
@@ -288,20 +265,26 @@ export default function Dashboard() {
         <KpiCard
           icon={Truck}
           tone="ink"
-          label="En fulfillment"
+          label="Pedidos activos"
           value={loaded ? String(derived.inFulfillment.length) : '—'}
           hint={loaded
             ? (derived.inFulfillment.length
-                ? `contenedor${derived.inFulfillment.length === 1 ? '' : 'es'} en tránsito`
-                : 'sin contenedores activos')
+                ? `pedido${derived.inFulfillment.length === 1 ? '' : 's'} en proceso de despacho`
+                : 'sin pedidos en despacho')
             : 'Cargando…'}
           to="/orders"
         />
       </div>
 
-      {/* Pipeline + in-fulfillment */}
+      {/* Row 3 — Cotizaciones aceptadas (replaces the old "Pipeline"
+          widget) + the orders-in-despacho list. The pipeline widget
+          had five rows (drafts/sent/accepted/declined/archived); per
+          the dealer's instruction we show only `enviadas` and
+          `aceptadas` — the two statuses that represent active money
+          in the funnel. Drafts can change, declined never close,
+          archived is historical — none earn space on the home view. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-        <PipelineCard
+        <AcceptedQuotesCard
           loaded={loaded}
           quotesByStatus={derived.quotesByStatus}
           totalByQuote={derived.totalByQuote}
@@ -309,20 +292,6 @@ export default function Dashboard() {
         <FulfillmentCard
           loaded={loaded}
           entries={derived.inFulfillment}
-        />
-      </div>
-
-      {/* Bottom row: top professionals + recent quotes */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-        <TopProfessionalsCard
-          loaded={loaded}
-          entries={derived.topPros}
-        />
-        <RecentQuotesCard
-          loaded={loaded}
-          quotes={derived.recentQuotes}
-          customersById={derived.customersById}
-          totalByQuote={derived.totalByQuote}
         />
       </div>
     </>
@@ -357,14 +326,19 @@ function KpiCard({ icon: Icon, label, value, hint, to, tone = 'ink' }) {
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline-by-status bar chart card. Each row: status label + bar +
-// (count, money total). Bars are proportional to the *count* of quotes
-// in each status; the money total is the auxiliary number. We picked
-// count over money for the bar because the bar is showing flow volume
-// (how many quotes are in each stage); the money sits as context.
+// Cotizaciones aceptadas — the focused replacement for the prior
+// 5-row pipeline widget. Per the dealer's instruction we show only the
+// two statuses that represent active money in the funnel:
+//
+//   • Enviadas  — quotes out to customers, awaiting yes/no
+//   • Aceptadas — quotes the customer has agreed to; committed money
+//
+// Drafts, declined, and archived all stay one click away in the Cotizaciones
+// list but no longer earn dashboard real estate. Each row is a click-
+// through that filters /quotes by that status.
 // ---------------------------------------------------------------------------
-function PipelineCard({ loaded, quotesByStatus, totalByQuote }) {
-  const rows = ['draft', 'sent', 'accepted', 'declined', 'archived'].map((status) => {
+function AcceptedQuotesCard({ loaded, quotesByStatus, totalByQuote }) {
+  const rows = ['sent', 'accepted'].map((status) => {
     const list = quotesByStatus.get(status) || [];
     const total = list.reduce((s, q) => s + (totalByQuote.get(q.id) || 0), 0);
     return { status, count: list.length, total };
@@ -374,13 +348,13 @@ function PipelineCard({ loaded, quotesByStatus, totalByQuote }) {
   return (
     <section className="card overflow-hidden">
       <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-        <h2 className="font-semibold">Pipeline de cotizaciones</h2>
+        <h2 className="font-semibold">Cotizaciones aceptadas</h2>
         <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
           Ver todas <ArrowRight size={12} />
         </Link>
       </header>
       {!loaded ? (
-        <ListLoading rows={5} dense />
+        <ListLoading rows={2} dense />
       ) : (
         <ul className="p-3 space-y-2">
           {rows.map((r) => (
@@ -422,7 +396,7 @@ function FulfillmentCard({ loaded, entries }) {
       <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
         <h2 className="font-semibold flex items-center gap-2">
           <Truck size={14} className="text-ink-500" />
-          En fulfillment
+          Pedidos en despacho
         </h2>
         <Link to="/orders" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
           Ver pedidos <ArrowRight size={12} />
@@ -432,7 +406,7 @@ function FulfillmentCard({ loaded, entries }) {
         <ListLoading rows={4} dense />
       ) : entries.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-ink-500">
-          Sin pedidos en fulfillment en este momento.
+          Sin pedidos en proceso de despacho en este momento.
         </div>
       ) : (
         <ul className="divide-y divide-ink-100 max-h-[280px] overflow-y-auto">
@@ -474,59 +448,13 @@ function FulfillmentCard({ loaded, entries }) {
 }
 
 // ---------------------------------------------------------------------------
-// Top professionals (commission this month). Empty when no commissions
-// have accrued — better than rendering "0" rows that look like a bug.
-// ---------------------------------------------------------------------------
-function TopProfessionalsCard({ loaded, entries }) {
-  return (
-    <section className="card overflow-hidden lg:col-span-1">
-      <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
-        <h2 className="font-semibold flex items-center gap-2">
-          <UserSquare2 size={14} className="text-ink-500" />
-          Profesionales (mes)
-        </h2>
-        <Link to="/professionals" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
-          Ver todos <ArrowRight size={12} />
-        </Link>
-      </header>
-      {!loaded ? (
-        <ListLoading rows={3} dense />
-      ) : entries.length === 0 ? (
-        <div className="px-5 py-8 text-center text-sm text-ink-500">
-          Sin comisiones acreditadas este mes.
-        </div>
-      ) : (
-        <ul className="divide-y divide-ink-100">
-          {entries.map((e) => (
-            <li key={e.pro.id}>
-              <Link
-                to={`/professionals/${e.pro.id}`}
-                className="flex items-center gap-3 px-5 py-2.5 hover:bg-ink-50 transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{e.pro.name}</div>
-                  {e.pro.company && <div className="text-[11px] text-ink-500 truncate">{e.pro.company}</div>}
-                </div>
-                <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-                  {formatMoney(e.amount, 'USD', { USD: 1 })}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Recent quotes, condensed. Two columns wide on desktop because the
-// other side (TopProfessionalsCard) only needs one. Shows quote number,
-// customer, status pill, total.
+// Recent quotes, condensed. Promoted to the first row of the dashboard —
+// the dealer's most-touched surface, so it gets the prime slot directly
+// under the page header. Shows quote number, customer, status pill, total.
 // ---------------------------------------------------------------------------
 function RecentQuotesCard({ loaded, quotes, customersById, totalByQuote }) {
   return (
-    <section className="card overflow-hidden lg:col-span-2">
+    <section className="card overflow-hidden">
       <header className="px-5 py-3 border-b border-ink-100 flex items-center justify-between">
         <h2 className="font-semibold">Cotizaciones recientes</h2>
         <Link to="/quotes" className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1">
