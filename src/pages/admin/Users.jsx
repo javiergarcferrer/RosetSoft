@@ -625,20 +625,48 @@ function InviteModal({ open, onClose, session, onInvited }) {
 
   async function submit() {
     setError(null); setSuccess(null);
-    if (!name.trim() || !email.trim()) {
+    const trimmedEmail = email.trim();
+    const trimmedName  = name.trim();
+    if (!trimmedName || !trimmedEmail) {
       setError('Nombre y correo son obligatorios.');
       return;
     }
     setBusy(true);
     try {
+      // Client-side pre-flight: scan the local view of profiles for
+      // this email (case-insensitive) before we even hit the edge
+      // function. The edge function does the same check server-side
+      // and the DB has a unique-email index, but bouncing here gives
+      // the admin instant feedback ("ya está registrado") and avoids
+      // racing the round-trip when the orphan-cleanup hasn't run
+      // yet. The supabase-js call below selects directly from
+      // Postgres — no local cache.
+      const lowered = trimmedEmail.toLowerCase();
+      const all = await db.profiles.toArray();
+      const realCollisions = all.filter(
+        (p) => p.id !== 'team' && (p.email || '').toLowerCase() === lowered,
+      );
+      if (realCollisions.length > 0) {
+        const winner = realCollisions[0];
+        if (winner.active) {
+          throw new Error(
+            `Ya existe un usuario activo con ese correo (${winner.name || trimmedEmail}). No se puede invitar otra vez.`,
+          );
+        }
+        throw new Error(
+          `Ya existe una invitación pendiente para ${trimmedEmail}. ` +
+          `Cancélala primero desde la lista si quieres re-enviarla.`,
+        );
+      }
+
       await inviteUser({
         session,
-        email: email.trim(),
-        name: name.trim(),
+        email: trimmedEmail,
+        name: trimmedName,
         role,
         commissionPct: clampPct(pct),
       });
-      setSuccess(`Invitación enviada a ${email.trim()}. Recibirá un correo con un enlace para entrar.`);
+      setSuccess(`Invitación enviada a ${trimmedEmail}. Recibirá un correo con un enlace para entrar.`);
       onInvited?.();
       // Auto-close after a beat so the admin sees the success message
       // before the modal disappears.
