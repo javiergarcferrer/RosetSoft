@@ -5,6 +5,7 @@ import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
+import SetPassword from './pages/SetPassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerDetail from './pages/CustomerDetail.jsx';
@@ -70,12 +71,32 @@ function Gate({ children }) {
 
   if (!ready) return <Loading />;
 
-  // The user is authenticated with Supabase but doesn't have an active
-  // profile row yet — either they just signed up and an admin hasn't
-  // approved them, or an admin deactivated them. Either way, they
-  // can't see the app. Show a quiet "pending approval" screen with
-  // sign-out as the only available action so they can re-sign-in as
-  // a different account if needed.
+  // First-time invite-flow gate. The invitee just clicked the magic
+  // link in their email and is signed in via a recovery-grant
+  // session — but they've never set a password. If we let them past
+  // here they could navigate the app, and the moment the session
+  // expires or they sign out they'd be locked out forever (the
+  // magic link is single-use). Forcing them onto SetPassword
+  // resolves that: they pick a password, the page calls
+  // supabase.auth.updateUser({ password }) + stamps
+  // profile.passwordSetAt = now, and the Gate falls through to the
+  // app on the next render.
+  //
+  // Bootstrap admins (created via the Supabase Dashboard's Add User
+  // screen) bypass this because ensureDefaultProfile() stamps
+  // passwordSetAt on first sign-in for any email in the
+  // settings.admin_emails allowlist — they already typed a password
+  // when their account was created.
+  if (user && currentProfile && !currentProfile.passwordSetAt) {
+    return <SetPassword />;
+  }
+
+  // The user is authenticated with Supabase but doesn't have an
+  // active profile yet — either an admin hasn't activated them, or
+  // an admin deactivated them. Either way, they can't see the app.
+  // Show a quiet "pending approval" screen with sign-out as the
+  // only available action so they can re-sign-in as a different
+  // account if needed.
   if (user && currentProfile && !currentProfile.active) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">

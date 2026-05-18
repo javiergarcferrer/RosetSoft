@@ -449,6 +449,14 @@ export async function ensureDefaultProfile() {
         active: isAllowlistedAdmin,
         commissionPct: 0,
         lastSignInAt: now,
+        // Bootstrap-admin code path: this user typed a password into
+        // the Supabase dashboard's Add User screen, so they already
+        // have one. Stamping password_set_at on creation skips the
+        // SetPassword gate for them. Every other path (the edge
+        // function invitation flow) leaves this field null on the
+        // initial profile row so the invitee gets routed through the
+        // password-setup screen on their first sign-in.
+        passwordSetAt: isAllowlistedAdmin ? now : null,
       }).catch(() => {});
     } else {
       // Update lastSignInAt on every sign-in. Two extra behaviors

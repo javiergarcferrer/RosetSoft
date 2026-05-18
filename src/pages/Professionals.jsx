@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, UserSquare2, ArrowRight } from 'lucide-react';
+import { Plus, Search, UserSquare2, ArrowRight, Mail, Phone, ChevronRight } from 'lucide-react';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -9,6 +9,19 @@ import ListLoading from '../components/ListLoading.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
+
+// Two-letter initial pair for the avatar circle. Picks the first letter
+// of the name, then the first letter of the company (if any) or of the
+// second word in the name as a fallback. Uppercased; empty when nothing
+// usable. Mirrors the helper on the Customers page so the visual
+// vocabulary is identical across the two address-book modules.
+function initialsFor(p) {
+  const name = (p?.name || '').trim();
+  const company = (p?.company || '').trim();
+  const first = name.charAt(0);
+  const second = company.charAt(0) || name.split(/\s+/)[1]?.charAt(0) || '';
+  return (first + second).toUpperCase();
+}
 
 /**
  * Professionals list — architects, decorators, etc. that bring deals to
@@ -86,25 +99,29 @@ export default function Professionals() {
             </div>
           </div>
 
-          {/* Mobile cards — the whole card links into the detail; the
-              edit modal opens via the small inline button so the
-              default tap target is the detail view (where the dealer
-              actually wants to land most of the time). */}
+          {/* Mobile cards — whole card navigates to the detail page;
+              no inline edit affordance (the detail page has its own
+              "Editar" button). Avatar + meta strip layout matches the
+              Customers page so dealers learn one pattern. The right-
+              hand column keeps the commission % — that's the unique
+              piece of information for professionals vs. customers. */}
           <div className="md:hidden space-y-2">
             {filtered.map((p) => (
               <Link
                 key={p.id}
                 to={`/professionals/${p.id}`}
-                className="card block p-3 hover:bg-ink-50"
+                className="card block hover:bg-ink-50"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm">{p.name}</div>
-                    {p.company && <div className="text-xs text-ink-500">{p.company}</div>}
-                    <div className="text-xs text-ink-700 mt-1 space-y-0.5">
-                      {p.email && <div className="truncate">{p.email}</div>}
-                      {p.phone && <div>{p.phone}</div>}
-                    </div>
+                <div className="flex items-center gap-3 p-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                    {initialsFor(p) || <UserSquare2 size={16} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm text-ink-900 truncate">{p.name}</div>
+                    {p.company && (
+                      <div className="text-[11px] text-ink-500 truncate">{p.company}</div>
+                    )}
+                    <MetaStrip p={p} />
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[11px] text-ink-500">Comisión</div>
@@ -112,6 +129,7 @@ export default function Professionals() {
                       {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
                     </div>
                   </div>
+                  <ChevronRight size={16} className="text-ink-300 flex-shrink-0" />
                 </div>
               </Link>
             ))}
@@ -169,5 +187,30 @@ export default function Professionals() {
         profileId={profileId}
       />
     </>
+  );
+}
+
+// Meta strip — Mail · Phone. Each piece only renders if the underlying
+// field has a value; the · separator is drawn between rendered pieces,
+// never trailing. Mirrors the helper on the Customers page (sans the
+// city row, which professionals don't carry as a column).
+function MetaStrip({ p }) {
+  const parts = [];
+  if (p.email) parts.push({ icon: Mail, value: p.email, key: 'email' });
+  if (p.phone) parts.push({ icon: Phone, value: p.phone, key: 'phone' });
+  if (parts.length === 0) return null;
+  return (
+    <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-1 min-w-0">
+      {parts.map((part, i) => {
+        const Icon = part.icon;
+        return (
+          <span key={part.key} className="inline-flex items-center gap-1 min-w-0">
+            {i > 0 && <span aria-hidden="true" className="text-ink-300">·</span>}
+            <Icon size={11} className="text-ink-400 flex-shrink-0" />
+            <span className="truncate">{part.value}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }

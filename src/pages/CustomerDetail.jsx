@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, MapPin, Pencil, ExternalLink, FileText, Package,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import CustomerModal from '../components/CustomerModal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
@@ -49,6 +50,12 @@ const ORDER_STAGE_ORDER = [
 export default function CustomerDetail() {
   const { customerId } = useParams();
   const { profileId } = useApp();
+  const navigate = useNavigate();
+  // Local state for the edit modal. The same CustomerModal the list
+  // page uses opens here too — passing onAfterDelete navigates back
+  // to /customers so the user doesn't get stuck on a "Cargando
+  // cliente…" stub after deleting the row they were just looking at.
+  const [editing, setEditing] = useState(null);
 
   const customer = useLiveQuery(
     () => db.customers.get(customerId),
@@ -174,6 +181,23 @@ export default function CustomerDetail() {
       <PageHeader
         title={customer.name || 'Cliente'}
         subtitle={customer.company || ' '}
+        actions={
+          <button
+            type="button"
+            onClick={() => setEditing(customer)}
+            className="btn-secondary"
+            title="Editar cliente"
+          >
+            <Pencil size={14} /> Editar
+          </button>
+        }
+      />
+
+      <CustomerModal
+        customer={editing}
+        onClose={() => setEditing(null)}
+        onAfterDelete={() => navigate('/customers')}
+        profileId={profileId}
       />
 
       <ContactCard customer={customer} />
