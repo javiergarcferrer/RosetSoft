@@ -9,28 +9,47 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    // Hard timeout: if getSession hasn't returned in 3s the stored token is
-    // probably stale from a different Supabase project. Drop it and proceed
-    // — the user will land on /login and can re-auth against the current
-    // project instead of staring at a loading spinner forever.
+    // Stale-token escape hatch. On a normal cold boot, supabase.getSession()
+    // returns near-instantly out of localStorage; if it hasn't returned in
+    // ~12 s the stored token is probably from a different Supabase project
+    // and the SDK is stuck on a request that never resolves. We drop the
+    // tokens and proceed so the user lands on /login instead of staring at
+    // a spinner.
+    //
+    // BUT — when supabase is mid-way through processing an auth callback
+    // (invite / magic-link / recovery), init makes a network call to
+    // validate the token. On a cold deploy or slow connection that can take
+    // several seconds. If we'd hit the timeout we'd silently drop a
+    // session that's about to land — exactly the symptom that broke the
+    // invite flow for Teresa. So when we detect callback parameters in
+    // the URL we extend the budget and skip the localStorage wipe.
+    const inAuthCallback = typeof window !== 'undefined' &&
+      (window.location.hash.includes('access_token=') ||
+       window.location.hash.includes('error=') ||
+       window.location.search.includes('code='));
+    const fallbackMs = inAuthCallback ? 20000 : 3000;
     const fallback = setTimeout(() => {
       if (!active) return;
-      try { localStorage && Object.keys(localStorage)
-        .filter((k) => k.startsWith('sb-'))
-        .forEach((k) => localStorage.removeItem(k)); } catch {}
+      if (!inAuthCallback) {
+        try { localStorage && Object.keys(localStorage)
+          .filter((k) => k.startsWith('sb-'))
+          .forEach((k) => localStorage.removeItem(k)); } catch {}
+      }
       setSession(null);
       setReady(true);
-    }, 3000);
+    }, fallbackMs);
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
         if (!active) return;
         clearTimeout(fallback);
+        if (error) console.warn('[auth] getSession error', error);
         setSession(data.session || null);
         setReady(true);
-      } catch {
+      } catch (err) {
         if (!active) return;
         clearTimeout(fallback);
+        console.warn('[auth] getSession threw', err);
         setSession(null);
         setReady(true);
       }
