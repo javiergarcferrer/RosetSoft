@@ -21,7 +21,11 @@ import { computeTotals } from '../../lib/pricing.js';
  *   • profiles    — id → name, commission_pct
  *   • quotes      — only those with depositReceivedAt in the window
  *                   AND a created_by_user_id we can attribute to
- *   • quoteLines  — drive each quote's grandTotal via computeTotals
+ *   • quoteLines  — drive each quote's taxableBase via computeTotals.
+ *                   Per the dealer's rule, commissions are paid on
+ *                   the base imponible (pre-ITBIS, pre-shipping) —
+ *                   never on the grand total. We surface the grand
+ *                   total in the per-quote drill-down for context.
  *   • customers   — for per-quote drill-down rows
  *
  * Output:
@@ -29,7 +33,7 @@ import { computeTotals } from '../../lib/pricing.js';
  *   • Summary card (totals + counts)
  *   • Per-user table sorted by commission earned descending. Each row
  *     expands into the contributing quotes (number, customer, deposit
- *     date, grand total, commission contribution).
+ *     date, base imponible, grand total c/ ITBIS, commission slice).
  *
  * Quotes without an attributable creator are silently skipped — the
  * monthly payout would be wrong to credit them to a random dealer, so
@@ -89,14 +93,18 @@ export default function AdminCommissions() {
     const customersById = new Map();
     for (const c of customers) customersById.set(c.id, c);
 
-    // Per-quote grand total, mapping unitPrice → basePrice and stripping
-    // section rows (same dance pricing.computeTotals expects).
+    // Per-quote totals, mapping unitPrice → basePrice and stripping
+    // section rows (same dance pricing.computeTotals expects). We
+    // return BOTH the base imponible (commissionable) and the grand
+    // total (informational — useful when the admin wants to see the
+    // invoice headline). Commissions are paid on `base` per the
+    // dealer's rule; grand total never enters the math.
     const linesByQuote = new Map();
     for (const ln of lines) {
       if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
       linesByQuote.get(ln.quoteId).push(ln);
     }
-    function totalFor(q) {
+    function totalsFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
         .map((l) => ({
@@ -105,7 +113,8 @@ export default function AdminCommissions() {
           lineMarginPct: l.lineMarginPct,
           lineDiscountPct: l.lineDiscountPct,
         }));
-      return computeTotals(rows, q).grandTotal;
+      const t = computeTotals(rows, q);
+      return { base: t.taxableBase, grandTotal: t.grandTotal };
     }
 
     // Quotes in the window: deposited within window AND attributable
@@ -119,22 +128,22 @@ export default function AdminCommissions() {
 
     // Group by creator.
     const byUser = new Map();
-    let cycleSales = 0;
+    let cycleBase = 0;
     let cycleCommission = 0;
     for (const q of inWindow) {
       const user = profilesById.get(q.createdByUserId);
       if (!user) continue;          // attributed to a deleted profile
-      const total = totalFor(q);
+      const { base, grandTotal } = totalsFor(q);
       const pct = clampPct(user.commissionPct);
-      const commission = total * (pct / 100);
-      cycleSales += total;
+      const commission = base * (pct / 100);
+      cycleBase += base;
       cycleCommission += commission;
       if (!byUser.has(user.id)) {
         byUser.set(user.id, {
           user,
           pct,
           quotes: [],
-          sales: 0,
+          base: 0,
           commission: 0,
         });
       }
@@ -142,22 +151,23 @@ export default function AdminCommissions() {
       entry.quotes.push({
         quote: q,
         customer: q.customerId ? customersById.get(q.customerId) : null,
-        total,
+        base,
+        grandTotal,
         commission,
       });
-      entry.sales += total;
+      entry.base += base;
       entry.commission += commission;
     }
 
     const rows = [...byUser.values()]
       // Don't show 0-commission rows — better to omit than render a
       // zero that looks like a bug.
-      .filter((r) => r.commission > 0 || r.sales > 0)
+      .filter((r) => r.commission > 0 || r.base > 0)
       .sort((a, b) => b.commission - a.commission);
 
     return {
       rows,
-      cycleSales,
+      cycleBase,
       cycleCommission,
       depositedCount: inWindow.length,
       activeEmployees: rows.length,
@@ -237,7 +247,7 @@ export default function AdminCommissions() {
           icon={Wallet}
           label="Comisiones del ciclo"
           value={loaded ? formatMoney(derived.cycleCommission, 'USD', { USD: 1 }) : '—'}
-          hint={loaded ? `Sobre ${formatMoney(derived.cycleSales, 'USD', { USD: 1 })} en ventas depositadas` : 'Cargando…'}
+          hint={loaded ? `Sobre ${formatMoney(derived.cycleBase, 'USD', { USD: 1 })} en base imponible (sin ITBIS)` : 'Cargando…'}
         />
         <StatCard
           tone="brand"
@@ -292,7 +302,7 @@ export default function AdminCommissions() {
 // ---------------------------------------------------------------------------
 function UserRow({ row }) {
   const [open, setOpen] = useState(false);
-  const { user, pct, sales, commission, quotes } = row;
+  const { user, pct, base, commission, quotes } = row;
 
   return (
     <li>
@@ -313,7 +323,7 @@ function UserRow({ row }) {
             {formatMoney(commission, 'USD', { USD: 1 })}
           </div>
           <div className="text-[11px] text-ink-500 tabular-nums">
-            sobre {formatMoney(sales, 'USD', { USD: 1 })}
+            base {formatMoney(base, 'USD', { USD: 1 })}
           </div>
         </div>
         <ChevronRight
@@ -324,7 +334,7 @@ function UserRow({ row }) {
 
       {open && (
         <ul className="bg-ink-50/60 border-t border-ink-100 divide-y divide-ink-100">
-          {quotes.map(({ quote, customer, total, commission: c }) => (
+          {quotes.map(({ quote, customer, base: b, grandTotal, commission: c }) => (
             <li key={quote.id} className="px-5 py-2.5 pl-14 flex items-center gap-3">
               <Link
                 to={`/quotes/${quote.id}`}
@@ -342,7 +352,10 @@ function UserRow({ row }) {
               </Link>
               <div className="text-right">
                 <div className="text-sm tabular-nums whitespace-nowrap">
-                  {formatMoney(total, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+                  {formatMoney(b, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+                </div>
+                <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
+                  Total c/ ITBIS {formatMoney(grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
                 </div>
                 <div className="text-[11px] text-emerald-700 tabular-nums whitespace-nowrap">
                   +{formatMoney(c, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}

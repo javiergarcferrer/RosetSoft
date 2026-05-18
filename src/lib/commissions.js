@@ -62,14 +62,19 @@ export function effectiveCommissionPct(quote, professional) {
 }
 
 /**
- * Commission $ amount on a quote total. Caller passes the already-
- * computed grand total (post-margin, post-discount, post-tax,
- * post-shipping — i.e. the bottom line the customer pays) and the
- * effective %. Multiplication only, no rounding policy — the formatter
- * decides how to display.
+ * Commission $ amount on a quote's *taxable base* (base imponible).
+ *
+ * The dealer's rule: commission is paid on the amount BEFORE ITBIS
+ * and BEFORE shipping. computeTotals() in pricing.js exposes this as
+ * `taxableBase` — that's the value callers should pass in here, not
+ * `grandTotal`. Passing grandTotal over-pays the professional by
+ * 18% (ITBIS) plus any shipping line.
+ *
+ * Multiplication only, no rounding policy — the formatter decides
+ * how to display.
  */
-export function commissionAmount(total, pct) {
-  const t = Number(total);
+export function commissionAmount(taxableBase, pct) {
+  const t = Number(taxableBase);
   if (!Number.isFinite(t)) return 0;
   return t * (clampCommissionPct(pct) / 100);
 }

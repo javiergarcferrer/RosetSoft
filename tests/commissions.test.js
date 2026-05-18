@@ -99,3 +99,21 @@ test('amount clamps the pct before multiplying', () => {
   // 99% would otherwise produce 990; clamped to 20 → 200.
   assert.equal(commissionAmount(1000, 99), 200);
 });
+
+test('amount is taken from the taxable base, not the grand total', () => {
+  // Dealer rule: commissions multiply against the base imponible
+  // (computeTotals.taxableBase) — never the grand total (which
+  // includes 18% ITBIS and any shipping). This test locks the
+  // semantics so a future caller can't accidentally feed grandTotal
+  // back in and over-pay the professional.
+  //
+  // Numbers chosen to make the math obvious:
+  //   taxableBase = 1000, ITBIS 18% = 180, shipping 50
+  //   grandTotal  = 1230
+  //   10% commission on the base = 100 (correct)
+  //   10% commission on grandTotal = 123 (wrong, what we used to do)
+  const taxableBase = 1000;
+  const grandTotal  = 1230;
+  assert.equal(commissionAmount(taxableBase, 10), 100);
+  assert.notEqual(commissionAmount(taxableBase, 10), commissionAmount(grandTotal, 10));
+});

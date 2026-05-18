@@ -108,11 +108,17 @@ export default function ProfessionalDetail() {
         }));
       const totals = computeTotals(lines, q);
       const pct = effectiveCommissionPct(q, pro);
-      const commission = commissionAmount(totals.grandTotal, pct);
+      // Commissions are paid on the base imponible (pre-ITBIS,
+      // pre-shipping), per the dealer's rule. We keep grandTotal
+      // around for context — the row shows both so the math is
+      // obvious to the professional reading it ("base × pct =
+      // commission" lines up).
+      const commission = commissionAmount(totals.taxableBase, pct);
       const entry = {
         quote: q,
         customer: q.customerId ? customerById.get(q.customerId) : null,
-        total: totals.grandTotal,
+        base: totals.taxableBase,
+        grandTotal: totals.grandTotal,
         pct,
         commission,
       };
@@ -131,21 +137,24 @@ export default function ProfessionalDetail() {
   // Overall roll-up across every status, plus accepted-only as the
   // "committed" figure the dealer cares about most for payouts.
   const summary = useMemo(() => {
-    let totalSales = 0;
+    // "Sales" here is the taxable base (base imponible) — the same
+    // amount commissions are calculated on, so the headline figures
+    // and the commission column always line up arithmetically.
+    let totalBase = 0;
     let totalCommission = 0;
-    let acceptedSales = 0;
+    let acceptedBase = 0;
     let acceptedCommission = 0;
     for (const [status, entries] of grouped) {
       for (const e of entries) {
-        totalSales += e.total;
+        totalBase += e.base;
         totalCommission += e.commission;
         if (status === 'accepted') {
-          acceptedSales += e.total;
+          acceptedBase += e.base;
           acceptedCommission += e.commission;
         }
       }
     }
-    return { totalSales, totalCommission, acceptedSales, acceptedCommission };
+    return { totalBase, totalCommission, acceptedBase, acceptedCommission };
   }, [grouped]);
 
   if (!pro) {
@@ -207,18 +216,20 @@ export default function ProfessionalDetail() {
         </div>
       )}
 
-      {/* Roll-up cards: total pipeline + accepted (committed) */}
+      {/* Roll-up cards: total pipeline + accepted (committed).
+          Headline value is the base imponible — the amount commissions
+          are calculated on — so the math reads cleanly. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <StatCard
-          label="Comprometido (aceptadas)"
-          value={formatMoney(summary.acceptedSales, 'USD', { USD: 1 })}
+          label="Base aceptada (sin ITBIS)"
+          value={formatMoney(summary.acceptedBase, 'USD', { USD: 1 })}
           hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.acceptedCommission, 'USD', { USD: 1 })}</span></>}
           tone="emerald"
           accent
         />
         <StatCard
-          label="Total en pipeline"
-          value={formatMoney(summary.totalSales, 'USD', { USD: 1 })}
+          label="Base total en pipeline"
+          value={formatMoney(summary.totalBase, 'USD', { USD: 1 })}
           hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.totalCommission, 'USD', { USD: 1 })}</span></>}
           tone="ink"
           accent
@@ -251,7 +262,7 @@ export default function ProfessionalDetail() {
 }
 
 function StatusGroup({ status, entries }) {
-  const totalSales = entries.reduce((s, e) => s + e.total, 0);
+  const totalBase = entries.reduce((s, e) => s + e.base, 0);
   const totalCommission = entries.reduce((s, e) => s + e.commission, 0);
   return (
     <section className="card overflow-hidden">
@@ -263,7 +274,7 @@ function StatusGroup({ status, entries }) {
           <span className="text-sm text-ink-700">{entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}</span>
         </div>
         <div className="text-right">
-          <div className="text-sm font-semibold tabular-nums">{formatMoney(totalSales, 'USD', { USD: 1 })}</div>
+          <div className="text-sm font-semibold tabular-nums">{formatMoney(totalBase, 'USD', { USD: 1 })}</div>
           <div className="text-[11px] text-ink-500 tabular-nums">Comisión {formatMoney(totalCommission, 'USD', { USD: 1 })}</div>
         </div>
       </header>
@@ -284,7 +295,10 @@ function StatusGroup({ status, entries }) {
             </Link>
             <div className="text-right">
               <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-                {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                {formatMoney(e.base, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+              </div>
+              <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
+                Total c/ ITBIS {formatMoney(e.grandTotal, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
               </div>
               <div className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">
                 {e.pct}% → {formatMoney(e.commission, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
