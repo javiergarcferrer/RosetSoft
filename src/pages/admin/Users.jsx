@@ -260,6 +260,52 @@ function fmtUpdated(ts) {
   }
 }
 
+/**
+ * Last-sign-in timestamp rendered to the minute, in 12-hour format.
+ * Example output: "18 may, 8:26 a. m." — exactly what the dealer
+ * asked for when they said "show last active sessions to the minute".
+ *
+ * We deliberately use es-DO locale + hour12:true so the AM/PM marker
+ * stays Spanish. Falls back to the bare date if the browser refuses
+ * the locale (defensive — modern engines support es-DO).
+ */
+function fmtSessionAt(ts) {
+  if (!ts) return null;
+  try {
+    return new Date(ts).toLocaleString('es-DO', {
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return new Date(ts).toLocaleString();
+  }
+}
+
+/**
+ * Short relative-time companion to fmtSessionAt — "hace 3 min",
+ * "hace 2 horas", "hace 4 días", or null when the timestamp is more
+ * than ~30 days ago (the absolute time tells the story at that point).
+ * Useful as a secondary line so the admin sees both "8:26 a. m." and
+ * "hace 12 min" at a glance.
+ */
+function fmtSessionAgo(ts) {
+  if (!ts) return null;
+  const ms = Date.now() - new Date(ts).getTime();
+  if (ms < 0) return null;
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60)        return 'hace unos segundos';
+  const min = Math.floor(sec / 60);
+  if (min < 60)        return `hace ${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24)         return `hace ${hr} ${hr === 1 ? 'hora' : 'horas'}`;
+  const day = Math.floor(hr / 24);
+  if (day < 30)        return `hace ${day} ${day === 1 ? 'día' : 'días'}`;
+  return null;
+}
+
 function ActiveRow({ profile, isSelf, invitePending }) {
   async function setRole(role) {
     if (role === profile.role) return;
@@ -359,15 +405,35 @@ function ActiveRow({ profile, isSelf, invitePending }) {
           </div>
 
           <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-            <div className="flex flex-col items-start sm:items-end gap-1">
+            <div className="flex flex-col items-start sm:items-end gap-0.5">
               <ActivePill active={profile.active} />
-              <span className="text-[11px] text-ink-500">
-                {profile.lastSignInAt
-                  ? <>Última sesión {fmtUpdated(profile.lastSignInAt)}</>
-                  : invitePending
-                    ? 'Sin iniciar sesión todavía'
-                    : <>Actualizado {fmtUpdated(profile.updatedAt)}</>}
-              </span>
+              {/* When lastSignInAt is set, we render the precise
+                  clock time ("18 may, 8:26 a. m.") + a short
+                  relative tag underneath ("hace 12 min"). The dealer
+                  asked specifically for "to the minute" — this is
+                  it. When the user has never signed in we say so
+                  explicitly so the admin can tell at a glance which
+                  invitations are still outstanding. */}
+              {profile.lastSignInAt ? (
+                <>
+                  <span className="text-[11px] text-ink-700 tabular-nums">
+                    Última sesión · {fmtSessionAt(profile.lastSignInAt)}
+                  </span>
+                  {fmtSessionAgo(profile.lastSignInAt) && (
+                    <span className="text-[10px] text-ink-400">
+                      {fmtSessionAgo(profile.lastSignInAt)}
+                    </span>
+                  )}
+                </>
+              ) : invitePending ? (
+                <span className="text-[11px] text-ink-500">
+                  Sin iniciar sesión todavía
+                </span>
+              ) : (
+                <span className="text-[11px] text-ink-500">
+                  Actualizado {fmtUpdated(profile.updatedAt)}
+                </span>
+              )}
             </div>
 
             {invitePending ? (
