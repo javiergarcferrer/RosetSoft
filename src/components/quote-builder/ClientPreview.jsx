@@ -179,27 +179,36 @@ function ClientLine({ line, currency, rates, fmt }) {
             )}
           </div>
 
-          {/* Numbers — horizontal strip on mobile, vertical stack on sm+.
-              On mobile the strip carries its own top hairline + padding
-              so it reads as the card's summary footer; the strip is
-              flex-row with justify-end so the pairs cluster to the
-              right edge but stay visually balanced when the card is
-              wider than they need.
-              On sm+ the wrapper becomes a vertical column sized to
-              auto, sitting next to the text block as the right rail. */}
-          <div
-            className="
-              mt-3 pt-3 border-t border-ink-100
-              flex flex-row flex-wrap justify-end gap-x-6 gap-y-2
-              sm:mt-0 sm:pt-0 sm:border-t-0
-              sm:flex-col sm:items-end sm:gap-y-1.5
-              sm:min-w-[110px] sm:flex-shrink-0
-              tabular-nums
-            "
-          >
+          {/* Numbers — on mobile we render a single compact line at
+              the bottom of the card (`1 × $11,310.00 = $11,310.00`).
+              That's the dealer-side editor's mental model already, and
+              it solves the layout problem that two prior fixes danced
+              around: a wide horizontal pill strip kept flex-wrapping
+              each label/value pair onto its own row when the values
+              were 5+ digits, and a vertical right-aligned column left
+              a tall dead zone next to it. One inline equation is
+              ~30 chars wide, fits comfortably on any phone, and reads
+              as "this line costs $11,310.00" in one glance.
+
+              On sm+ we promote back to the labelled vertical column
+              (CANTIDAD / UNITARIO / TOTAL) as the right rail — the
+              desktop layout had no width problem and benefits from
+              the explicit labels. */}
+
+          {/* Mobile: single-line equation. Hidden at sm+. */}
+          <div className="sm:hidden mt-3 pt-3 border-t border-ink-100 text-right text-sm tabular-nums whitespace-nowrap">
+            <span className="text-ink-700">{line.qty || 0}</span>
+            <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
+            <span className="text-ink-700">{fmt(unit)}</span>
+            <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
+            <span className="text-ink-900 font-semibold">{fmt(total)}</span>
+          </div>
+
+          {/* sm+: vertical labelled column. Hidden below sm. */}
+          <div className="hidden sm:block text-right tabular-nums min-w-[110px] flex-shrink-0">
             <PriceCell label="Cantidad" value={String(line.qty || 0)} />
-            <PriceCell label="Unitario" value={fmt(unit)} />
-            <PriceCell label="Total" value={fmt(total)} emphasis />
+            <div className="mt-1.5"><PriceCell label="Unitario" value={fmt(unit)} /></div>
+            <div className="mt-1.5"><PriceCell label="Total" value={fmt(total)} emphasis /></div>
           </div>
         </div>
       </div>
