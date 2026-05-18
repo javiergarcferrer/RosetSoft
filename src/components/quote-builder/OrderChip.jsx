@@ -94,17 +94,22 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
   }
 
   const now = Date.now();
+  // New orders start as 'draft' (Borrador) — the order's own lifecycle
+  // begins when the dealer is ready to place it with Ligne Roset.
+  // Commerce milestones (deposit / balance / delivery) live on the
+  // attached quote, not on the order, so we don't pre-record an
+  // 'accepted' or 'depositReceived' state here just because a quote
+  // got accepted.
   await db.orders.put({
     id,
     profileId,
     number,
     name: displayName,
     customerId: quote.customerId || null,
-    status: 'accepted',
+    status: 'draft',
     notes: '',
     depositAmount: 0,
     deliveryAddress: '',
-    acceptedAt: now,
     createdAt: now,
     updatedAt: now,
   });

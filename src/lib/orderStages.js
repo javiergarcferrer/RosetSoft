@@ -1,67 +1,69 @@
-import { STAGE_BY_KEY } from './containerStages.js';
-
 /**
- * Order lifecycle definitions — single source of truth for the order
- * status stepper, transition CTAs, and the rules that derive an order's
- * visible state from its embedded containers.
+ * Order lifecycle — six stages, LR-handoff-narrative.
  *
- * The lifecycle has five declared states. The first four are linear
- * milestones the dealer triggers (acceptance → deposit → ordering →
- * reception); `cancelled` is the off-track terminal. While an order is
- * `ordered`, its container.stage values carry the fulfillment narrative
- * (filling → submitting → ordered → in_transit → landing → received) —
- * the order itself doesn't tick through one declared state per
- * container milestone, the dealer just watches the containers.
+ *   draft        Borrador     in our system, not yet placed with LR
+ *   placed       Colocado     PO sent to Ligne Roset
+ *   confirmed    Confirmado   LR has confirmed receipt of the PO
+ *   in_transit   En ruta      shipped from the factory
+ *   in_customs   En aduanas   arrived at DR customs
+ *   received     Recibido     cleared customs, in our warehouse
  *
- *   draft              → pre-acceptance scaffolding (manual create only;
- *                        most orders skip this and appear at 'accepted'
- *                        the moment a quote is accepted)
- *   accepted           → customer signed off on at least one quote
- *   deposit_received   → funds cleared
- *   ordered            → order placed with Ligne Roset; container(s) take
- *                        over the moment-to-moment narrative
- *   received           → every container has been received in DR. Quotes
- *                        in this order now open for individual delivery
- *                        (per-quote `deliveredAt` is the next step, but
- *                        that's tracked on the quote, not as an order
- *                        status transition — different customers take
- *                        delivery on different days).
- *   cancelled          → won't be fulfilled (terminal alt)
+ *   cancelled    Cancelado    terminal alt
  *
- * Mirrors the shape of containerStages.js so the stepper renders with the
- * same visual vocabulary and the timestamp-extraction helpers are
- * interchangeable.
+ * The previous version had `accepted` / `deposit_received` stages that
+ * conflated commerce milestones (which live on the *quote* — see
+ * quote.depositReceivedAt, quote.balancePaidAt, quote.deliveredAt) with
+ * the order's own logistics lifecycle. The dealer's distinction:
+ *
+ *   "El acto de confirmar la cotización es recibir el depósito
+ *    literalmente — así que no es un estatus aparte."
+ *
+ * So the order is now purely the LR-shipment narrative; the cotización
+ * tracks who's paid, who's been notified, who's taken delivery.
+ *
+ * Container gating
+ * ----------------
+ * Containers are simpler too: a container is either filled or not.
+ * No more 6-stage pipeline. The order's `received` state requires
+ * every container to have a filledAt timestamp — the dealer can't
+ * mark goods as received before they've packed them.
  */
 
 export const ORDER_STAGES = [
   {
     key: 'draft',
     label: 'Borrador',
-    description: 'Pedido en preparación.',
+    description: 'Pedido en preparación. Aún no se ha colocado con Ligne Roset.',
     timestampField: null,
   },
   {
-    key: 'accepted',
-    label: 'Aceptado',
-    description: 'Cliente aceptó la cotización.',
-    timestampField: 'acceptedAt',
+    key: 'placed',
+    label: 'Colocado',
+    description: 'Orden de compra enviada a Ligne Roset.',
+    timestampField: 'placedAt',
   },
   {
-    key: 'deposit_received',
-    label: 'Depósito',
-    description: 'Depósito recibido — listo para ordenar.',
-    timestampField: 'depositReceivedAt',
+    key: 'confirmed',
+    label: 'Confirmado',
+    description: 'Ligne Roset confirmó la recepción del pedido.',
+    timestampField: 'confirmedAt',
   },
   {
-    key: 'ordered',
-    label: 'Ordenado',
-    description: 'Orden colocada con Ligne Roset; siguiendo en contenedores.',
-    timestampField: 'orderedAt',
+    key: 'in_transit',
+    label: 'En ruta',
+    description: 'Envío en tránsito desde fábrica.',
+    timestampField: 'inTransitAt',
+  },
+  {
+    key: 'in_customs',
+    label: 'En aduanas',
+    description: 'Llegó a aduanas en RD; en proceso de despacho.',
+    timestampField: 'inCustomsAt',
   },
   {
     key: 'received',
     label: 'Recibido',
-    description: 'Todos los contenedores llegaron a RD. Cada cotización puede entregarse al cliente cuando esté lista.',
+    description: 'Mercancía liberada y en el almacén. Listo para entregar a clientes.',
     timestampField: 'receivedAt',
   },
 ];
@@ -81,12 +83,12 @@ export const ORDER_STAGE_BY_KEY = Object.fromEntries(
   ALL_ORDER_STAGES.map((s) => [s.key, s]),
 );
 
-/** Numeric index in the main stepper (0..4). Cancelled returns -1. */
+/** Numeric index in the main stepper (0..5). Cancelled returns -1. */
 export function orderStageIndex(key) {
   return ORDER_STAGES.findIndex((s) => s.key === key);
 }
 
-/** The next main-track stage, or null if at the end (or cancelled). */
+/** The next main-track stage, or null at the end / when cancelled. */
 export function nextOrderStage(key) {
   const idx = orderStageIndex(key);
   if (idx === -1 || idx >= ORDER_STAGES.length - 1) return null;
@@ -101,50 +103,60 @@ export function currentOrderStage(order) {
   return 'draft';
 }
 
-/** True if the given stage is a terminal alternate (cancelled). */
+/** Cancelled is the only terminal alt currently. */
 export function isTerminalOrderStage(key) {
   return ORDER_TERMINAL_STAGES.some((s) => s.key === key);
 }
 
 /**
- * Can the dealer mark this order as 'received'? Only true once every
- * container in the order has reached its terminal stage. With zero
- * containers the answer is no — there's nothing physical to receive
- * yet, the dealer needs to add a container first.
+ * Can the dealer move this order forward to its next main-track stage?
  *
- * The user's words: "Todas las cotizaciones aportan a ese total sin
- * importar a cual contenedor pertenecen" — quotes don't pin to specific
- * containers, so we can't open per-quote delivery until *all* containers
- * have arrived (otherwise we'd risk marking a quote delivered when its
- * pieces are still on a boat).
+ * The only gate that matters is the very last one: an order can be
+ * marked `received` only when every container attached to it has a
+ * `filledAt` timestamp. The dealer can't truthfully say "the goods
+ * arrived" if no container has been packed — the order would be
+ * structurally empty.
+ *
+ * Earlier transitions (draft → placed → confirmed → in_transit →
+ * in_customs) carry no precondition. The dealer drives them by hand
+ * as Ligne Roset's external workflow progresses.
  */
-export function canMarkReceived(order, containers) {
-  if (!order || order.status !== 'ordered') return false;
-  if (!containers || containers.length === 0) return false;
-  return containers.every((c) => (c.stage || 'filling') === 'received');
+export function canAdvanceOrder(order, containers) {
+  const next = nextOrderStage(currentOrderStage(order));
+  if (!next) return false;
+  if (next.key === 'received') {
+    if (!containers || containers.length === 0) return false;
+    return containers.every((c) => !!c.filledAt);
+  }
+  return true;
 }
 
 /**
- * Can the dealer mark this specific quote as delivered? Only after the
- * parent order has been received (the goods are physically in DR).
- * Before then the per-quote delivery action is hidden, since the items
- * aren't yet available to hand to the customer.
+ * Why is the advance button disabled right now? Returns a short
+ * Spanish hint, or null if there's no special reason (the button is
+ * actually allowed, or there's no next stage).
  */
-export function canDeliverQuote(order) {
-  return order?.status === 'received';
+export function advanceBlockedReason(order, containers) {
+  const next = nextOrderStage(currentOrderStage(order));
+  if (!next) return null;
+  if (next.key === 'received') {
+    if (!containers || containers.length === 0) {
+      return 'Añade al menos un contenedor antes de marcar como recibido.';
+    }
+    if (!containers.every((c) => !!c.filledAt)) {
+      return 'Marca todos los contenedores como llenos antes de recibir el pedido.';
+    }
+  }
+  return null;
 }
 
 /**
- * Compute the dispatch threshold for an order: number of attached
- * containers (with a floor of 1) × the per-container minimum from
- * settings. Returns { containerCount, threshold } so callers can render
- * both ("Pedido necesita 2 contenedores · $87k / $100k mínimo") with a
- * single helper call.
- *
- * Floor of 1: an order that hasn't yet had any container added still
- * has a meaningful minimum — the dealer needs at least one container's
- * worth of orders before placing the purchase with Ligne Roset. As soon
- * as a second container row appears, the threshold doubles.
+ * Dispatch-threshold helper for the widget above the line items.
+ * Returns `{ containerCount, threshold }` — count is the number of
+ * container rows attached to the order (with a floor of 1 for orders
+ * that haven't added any yet), threshold is `count × the per-container
+ * minimum from settings`. Doubling the count doubles the minimum;
+ * the dealer never enters this number by hand anywhere.
  */
 export function orderDispatchThreshold(containers, perContainerThreshold) {
   const count = Math.max(1, containers?.length || 0);
@@ -153,11 +165,3 @@ export function orderDispatchThreshold(containers, perContainerThreshold) {
     threshold: count * (perContainerThreshold || 0),
   };
 }
-
-/**
- * Look up a container-stage definition. Re-export the container map so
- * callers that already use the order-stage helpers don't have to import
- * two modules to render a mixed view (e.g. OrderDetail rendering both
- * the order's own steppers and the per-container nested steppers).
- */
-export { STAGE_BY_KEY as CONTAINER_STAGE_BY_KEY };

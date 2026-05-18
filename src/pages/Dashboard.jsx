@@ -12,7 +12,6 @@ import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals } from '../lib/pricing.js';
 import { ORDER_STAGE_BY_KEY } from '../lib/orderStages.js';
-import { STAGE_BY_KEY as CONTAINER_STAGE } from '../lib/containerStages.js';
 import { effectiveCommissionPct, commissionAmount } from '../lib/commissions.js';
 
 /**
@@ -174,30 +173,49 @@ export default function Dashboard() {
       (quotesByStatus.get('draft') || []).length +
       (quotesByStatus.get('sent') || []).length;
 
-    // Containers in fulfillment — anything that hasn't hit 'received'.
-    // We need the parent order for each so the card can show the
-    // customer name. Days-in-stage uses container.updatedAt as a
-    // reasonable proxy (no per-stage timestamp granularity in the
-    // schema; if that becomes important we'd add stage-history rows).
+    // Orders in active fulfillment — anything between 'placed' (PO sent
+    // to LR) and just before 'received' (still en route). The dashboard
+    // shows the order's current stage, customer name, and how many
+    // containers are filled vs total. Previously this section was
+    // container-driven, but containers no longer carry per-stage
+    // narrative — that lives on the order now.
     const ordersById = new Map();
     for (const o of allOrders) ordersById.set(o.id, o);
-    const inFulfillment = allContainers
-      .filter((c) => (c.stage || 'filling') !== 'received')
-      .map((c) => {
-        const order = ordersById.get(c.orderId);
-        const customer = order?.customerId ? customersById.get(order.customerId) : null;
-        const daysInStage = c.updatedAt
-          ? Math.max(0, Math.floor((Date.now() - c.updatedAt) / 86400000))
+    const containersByOrder = new Map();
+    for (const c of allContainers) {
+      if (!c.orderId) continue;
+      if (!containersByOrder.has(c.orderId)) containersByOrder.set(c.orderId, []);
+      containersByOrder.get(c.orderId).push(c);
+    }
+    const ACTIVE = new Set(['placed', 'confirmed', 'in_transit', 'in_customs']);
+    const inFulfillment = allOrders
+      .filter((o) => ACTIVE.has(o.status))
+      .map((o) => {
+        const customer = o.customerId ? customersById.get(o.customerId) : null;
+        const containers = containersByOrder.get(o.id) || [];
+        const filled = containers.filter((c) => !!c.filledAt).length;
+        // Days since the order's most recent stage transition. We pick
+        // the latest of the per-stage timestamps as the proxy — that's
+        // when the order entered its current state.
+        const stageStart = Math.max(
+          o.placedAt || 0,
+          o.confirmedAt || 0,
+          o.inTransitAt || 0,
+          o.inCustomsAt || 0,
+        );
+        const daysInStage = stageStart
+          ? Math.max(0, Math.floor((Date.now() - stageStart) / 86400000))
           : null;
-        return { container: c, order, customer, daysInStage };
+        return { order: o, customer, containers, filled, daysInStage };
       })
       .sort((a, b) => {
-        // Sort by stage progression (filling → received), then within a
-        // stage by ascending updatedAt (oldest first — those need attention).
-        const ai = stageOrderIndex(a.container.stage);
-        const bi = stageOrderIndex(b.container.stage);
+        // Late-stage orders (closer to received) above earlier-stage;
+        // within a stage, oldest first so the dealer sees what's been
+        // sitting longest.
+        const ai = orderStageRank(a.order.status);
+        const bi = orderStageRank(b.order.status);
         if (ai !== bi) return bi - ai;
-        return (a.container.updatedAt || 0) - (b.container.updatedAt || 0);
+        return (b.daysInStage || 0) - (a.daysInStage || 0);
       });
 
     // Commissions accrued this calendar month, per professional, on
@@ -414,27 +432,31 @@ function FulfillmentCard({ loaded, entries }) {
         <ListLoading rows={4} dense />
       ) : entries.length === 0 ? (
         <div className="px-5 py-8 text-center text-sm text-ink-500">
-          Sin contenedores activos en este momento.
+          Sin pedidos en fulfillment en este momento.
         </div>
       ) : (
         <ul className="divide-y divide-ink-100 max-h-[280px] overflow-y-auto">
-          {entries.slice(0, 8).map(({ container, order, customer, daysInStage }) => {
-            const stage = CONTAINER_STAGE[container.stage] || CONTAINER_STAGE.filling;
+          {entries.slice(0, 8).map(({ order, customer, containers, filled, daysInStage }) => {
+            const stage = ORDER_STAGE_BY_KEY[order.status] || ORDER_STAGE_BY_KEY.placed;
+            const total = containers.length;
             return (
-              <li key={container.id}>
+              <li key={order.id}>
                 <Link
-                  to={order ? `/orders/${order.id}` : '/orders'}
+                  to={`/orders/${order.id}`}
                   className="flex items-center gap-3 px-5 py-2.5 hover:bg-ink-50 transition-colors"
                 >
                   <div className="text-[10px] font-mono text-ink-500 w-12 flex-shrink-0">
-                    #{container.number || '—'}
+                    #{order.number || '—'}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">
-                      {customer?.company || customer?.name || (order ? `Pedido #${order.number}` : 'Sin pedido')}
+                      {customer?.company || customer?.name || `Pedido #${order.number}`}
                     </div>
                     <div className="text-[11px] text-ink-500 truncate">
                       {stage.label}
+                      {total > 0 && (
+                        <span className="text-ink-400"> · {filled}/{total} contenedor{total === 1 ? '' : 'es'} llenos</span>
+                      )}
                       {daysInStage != null && (
                         <span className="text-ink-400"> · {daysInStage} día{daysInStage === 1 ? '' : 's'}</span>
                       )}
@@ -560,10 +582,11 @@ function startOfMonth() {
   return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
 }
 
-// Map container stage → linear order index (filling=0 .. received=5) so
-// sort orders progression from earliest to most-advanced.
-const STAGE_PROGRESSION = ['filling', 'submitting', 'ordered', 'in_transit', 'landing', 'received'];
-function stageOrderIndex(stage) {
-  const i = STAGE_PROGRESSION.indexOf(stage || 'filling');
+// Map order status → progression index so the fulfillment list can
+// sort late-stage orders to the top (closer to received = higher
+// priority for the dealer's attention).
+const ORDER_PROGRESSION = ['draft', 'placed', 'confirmed', 'in_transit', 'in_customs', 'received'];
+function orderStageRank(status) {
+  const i = ORDER_PROGRESSION.indexOf(status || 'draft');
   return i === -1 ? 0 : i;
 }

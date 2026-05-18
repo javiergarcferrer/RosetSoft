@@ -21,13 +21,17 @@ import ListLoading from '../components/ListLoading.jsx';
  * five-stage stepper that lives on the detail page.
  */
 
+// Status palette mirroring the new 6-stage order lifecycle. Earlier
+// stages stay cool (gray/blue), middle stages run warmer (violet/sky)
+// as the goods move, terminal stages are the strongest tone.
 const STATUS_STYLES = {
-  draft:            'bg-ink-100 text-ink-700',
-  accepted:         'bg-blue-100 text-blue-800',
-  deposit_received: 'bg-amber-100 text-amber-800',
-  ordered:          'bg-violet-100 text-violet-800',
-  received:         'bg-emerald-100 text-emerald-800',
-  cancelled:        'bg-rose-100 text-rose-700',
+  draft:       'bg-ink-100 text-ink-700',
+  placed:      'bg-blue-100 text-blue-800',
+  confirmed:   'bg-violet-100 text-violet-800',
+  in_transit:  'bg-sky-100 text-sky-800',
+  in_customs:  'bg-amber-100 text-amber-800',
+  received:    'bg-emerald-100 text-emerald-800',
+  cancelled:   'bg-rose-100 text-rose-700',
 };
 
 export default function Orders() {

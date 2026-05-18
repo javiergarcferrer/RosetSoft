@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
-  FileText, CheckCircle2, Undo2,
+  FileText, CheckCircle2, Package, DollarSign, Wallet,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
-import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
+import { DebouncedInput } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -15,11 +15,11 @@ import { formatDateTime, formatMoney } from '../lib/format.js';
 import {
   ORDER_STAGES, ORDER_STAGE_BY_KEY,
   currentOrderStage, nextOrderStage, orderStageIndex,
-  canMarkReceived, canDeliverQuote, orderDispatchThreshold,
+  canAdvanceOrder, advanceBlockedReason, orderDispatchThreshold,
 } from '../lib/orderStages.js';
 import {
-  STAGES, STAGE_BY_KEY, currentStage, nextStage, stageIndex,
-} from '../lib/containerStages.js';
+  canMarkDeposit, canMarkBalance, canMarkDelivered, deliveryBlockedReason,
+} from '../lib/quoteMilestones.js';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -28,10 +28,10 @@ import {
  * Layout (top to bottom):
  *
  *   1. Order header + status stepper (5 main stages + cancelled).
- *      The stepper drives the order's own state; while in 'ordered' the
- *      containers section below carries the moment-to-moment narrative
- *      until all containers reach 'received' and the order itself can
- *      advance to 'received'.
+ *      The order's lifecycle has six stages (draft → placed → confirmed
+ *      → in_transit → in_customs → received). The dealer drives each
+ *      transition manually; the only gated step is the last one, which
+ *      requires every attached container to be marked filled.
  *
  *   2. Order info card — customer + deposit + delivery address + notes.
  *
@@ -100,17 +100,13 @@ export default function OrderDetail() {
   const nxt = isCancelled ? null : nextOrderStage(stage);
   const idx = orderStageIndex(stage);
 
-  // Block advance to 'received' until every container has reached its
-  // terminal stage. canMarkReceived() enforces both the "containers
-  // exist" and "every container is at 'received'" rules. Earlier
-  // transitions (accepted → deposit_received → ordered) have no
-  // container precondition — the dealer might place the LR order before
-  // any container row exists.
-  const canAdvance = (() => {
-    if (!nxt) return false;
-    if (nxt.key === 'received') return canMarkReceived(order, containers);
-    return true;
-  })();
+  // Only the last transition (in_customs → received) carries a gate:
+  // every container attached to the order must have a filledAt
+  // timestamp. The earlier transitions (draft → placed → confirmed →
+  // in_transit → in_customs) are dealer-driven as Ligne Roset's
+  // external workflow progresses, with no preconditions.
+  const canAdvance = canAdvanceOrder(order, containers);
+  const blockedReason = advanceBlockedReason(order, containers);
 
   async function updateOrder(patch) {
     await db.orders.update(orderId, { ...patch, updatedAt: Date.now() });
@@ -143,9 +139,12 @@ export default function OrderDetail() {
   }
 
   async function uncancel() {
-    if (!confirm('¿Reactivar el pedido (estado: Aceptado)?')) return;
+    if (!confirm('¿Reactivar el pedido (estado: Borrador)?')) return;
+    // Reactivated orders go back to draft — the dealer re-drives the
+    // lifecycle from there. The previous flow restored to 'accepted'
+    // which is no longer a valid order status.
     await db.orders.update(orderId, {
-      status: 'accepted',
+      status: 'draft',
       cancelledAt: null,
       updatedAt: Date.now(),
     });
@@ -155,6 +154,9 @@ export default function OrderDetail() {
     const number = await nextSequenceNumber('containers', profileId, 101);
     const id = newId();
     const now = Date.now();
+    // Containers are now structurally just an identifier + a single
+    // filledAt timestamp (nullable). No stage machine, no per-stage
+    // timestamps. The dealer marks each as packed when they pack it.
     await db.containers.put({
       id,
       profileId,
@@ -162,7 +164,7 @@ export default function OrderDetail() {
       number,
       name: '',
       code: '',
-      stage: 'filling',
+      filledAt: null,
       notes: '',
       createdAt: now,
       updatedAt: now,
@@ -222,24 +224,23 @@ export default function OrderDetail() {
         nextStage={canAdvance ? nxt : null}
         prevStage={prev}
         currentLabel={stageDef.label}
-        currentDescription={
-          // Show the "blocked by containers" reason when relevant, so the
-          // dealer knows why the Advance button isn't available.
-          nxt && nxt.key === 'received' && !canMarkReceived(order, containers)
-            ? (containers.length === 0
-                ? 'Añade al menos un contenedor antes de marcar como recibido.'
-                : 'Marcar como recibido requiere que todos los contenedores estén en "Recibido".')
-            : stageDef.description
-        }
+        // When the advance button is disabled, replace the stage's
+        // description with the precise reason (no container yet, or
+        // some containers still unpacked) so the dealer can act on it.
+        currentDescription={blockedReason || stageDef.description}
         onAdvance={advance}
         onUndo={undo}
         cancelled={isCancelled}
       />
 
       {/* Dispatch threshold widget — shown until the order is placed. After
-          'ordered' the threshold has served its purpose (the LR order is
+          'placed' the threshold has served its purpose (the LR order is
           out the door) so we hide it to reduce visual clutter. */}
-      {!isCancelled && idx < orderStageIndex('ordered') && (
+      {/* Threshold widget is useful while the dealer is still building
+          the order toward the LR-side minimum. Once the order is
+          actually placed with LR ('placed' and beyond), the minimum
+          has served its purpose and the widget would just be clutter. */}
+      {!isCancelled && idx < orderStageIndex('placed') && (
         <DispatchThresholdCard
           containerCount={containerCount}
           threshold={threshold}
@@ -391,35 +392,25 @@ export default function OrderDetail() {
 }
 
 // ---------------------------------------------------------------------------
-// Container row inside an order. Each container gets its own mini-stepper
-// (6 stages) and inline-editable name/code/notes. Advancing or undoing a
-// container's stage is local to that container; the order's status is
-// independent (the order moves on dealer command, not automatically on
-// container progress).
+// Container row — collapsed from a 6-stage stepper to a single "Lleno"
+// toggle plus inline-editable name + container code. The dealer's words:
+// "Los contenedores no tienen estatus cambiantes. Solo se marca si están
+// llenos." A container is now structurally just an identifier with one
+// boolean event — packed at the warehouse, yes or no. All the shipping
+// narrative that used to live per-container moved up to the order
+// (placed → confirmed → in_transit → in_customs → received).
 // ---------------------------------------------------------------------------
 function ContainerRow({ container }) {
-  const stg = currentStage(container);
-  const stageDef = STAGE_BY_KEY[stg];
-  const idx = stageIndex(stg);
-  const nxt = nextStage(stg);
-  const prev = idx > 0 ? STAGES[idx - 1] : null;
+  const filled = !!container.filledAt;
 
   async function update(patch) {
     await db.containers.update(container.id, { ...patch, updatedAt: Date.now() });
   }
 
-  async function advance(to) {
-    const now = Date.now();
-    const patch = { stage: to.key, updatedAt: now };
-    if (to.timestampField) patch[to.timestampField] = now;
-    await update(patch);
-  }
-
-  async function undo(current) {
-    if (!prev) return;
-    const patch = { stage: prev.key, updatedAt: Date.now() };
-    if (current.timestampField) patch[current.timestampField] = null;
-    await update(patch);
+  async function toggleFilled() {
+    // Toggling un-marks on second click so the dealer can correct a
+    // misfire — same affordance the quote-milestone toggles use below.
+    await update({ filledAt: filled ? null : Date.now() });
   }
 
   async function del() {
@@ -432,10 +423,17 @@ function ContainerRow({ container }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <div className="flex items-center gap-2 flex-wrap">
+            <Package size={14} className="text-ink-500" />
             <span className="text-sm font-semibold">Contenedor #{container.number || '—'}</span>
-            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ${stageStyle(stg)}`}>
-              {stageDef.label}
-            </span>
+            {filled ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-medium">
+                <CheckCircle2 size={11} /> Lleno · {formatDateTime(container.filledAt)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-md bg-ink-100 text-ink-600 px-2 py-0.5 text-[10px] font-medium">
+                Por llenar
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
             <DebouncedInput
@@ -462,31 +460,25 @@ function ContainerRow({ container }) {
         </button>
       </div>
 
-      <Stepper
-        stages={STAGES}
-        currentIndex={idx}
-        row={container}
-        nextStage={nxt}
-        prevStage={prev}
-        currentLabel={stageDef.label}
-        currentDescription={stageDef.description}
-        onAdvance={advance}
-        onUndo={undo}
-      />
+      <div>
+        <button
+          type="button"
+          onClick={toggleFilled}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            filled
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+              : 'btn-primary'
+          }`}
+        >
+          {filled ? (
+            <><CheckCircle2 size={12} /> Lleno — desmarcar</>
+          ) : (
+            <><Package size={12} /> Marcar lleno</>
+          )}
+        </button>
+      </div>
     </li>
   );
-}
-
-const STAGE_PILL_STYLES = {
-  filling:    'bg-blue-100 text-blue-800',
-  submitting: 'bg-amber-100 text-amber-800',
-  ordered:    'bg-violet-100 text-violet-800',
-  in_transit: 'bg-sky-100 text-sky-800',
-  landing:    'bg-orange-100 text-orange-800',
-  received:   'bg-emerald-100 text-emerald-800',
-};
-function stageStyle(stg) {
-  return STAGE_PILL_STYLES[stg] || 'bg-ink-100 text-ink-700';
 }
 
 function CustomerLink({ customer }) {
@@ -517,86 +509,161 @@ function CustomerLink({ customer }) {
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
 function QuoteRow({ quote, order, total, onDetach }) {
-  const canDeliver = canDeliverQuote(order);
+  // Three commerce milestones live on the quote (not the order):
+  //
+  //   1. depositReceivedAt — the act of receiving the deposit IS what
+  //      the dealer calls "confirming" the cotización; it isn't a
+  //      separate quote status.
+  //   2. balancePaidAt — must be marked before delivery. Goods don't
+  //      leave the warehouse until the customer has paid.
+  //   3. deliveredAt — the customer has taken physical delivery.
+  //
+  // Each step has its own toggle button. Buttons are enabled only
+  // when their precondition is met (per canMark…); when disabled
+  // they show a subdued state with a tooltip explaining why.
+  const deposit   = !!quote.depositReceivedAt;
+  const balance   = !!quote.balancePaidAt;
   const delivered = !!quote.deliveredAt;
 
-  async function toggleDelivered() {
-    const patch = delivered
-      ? { deliveredAt: null }
-      : { deliveredAt: Date.now() };
-    await db.quotes.update(quote.id, { ...patch, updatedAt: Date.now() });
+  async function setMilestone(field, on) {
+    await db.quotes.update(quote.id, {
+      [field]: on ? Date.now() : null,
+      updatedAt: Date.now(),
+    });
   }
 
   return (
-    <li className="px-5 py-3 flex items-center gap-3 flex-wrap">
-      <Link
-        to={`/quotes/${quote.id}`}
-        className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
-      >
-        <div className="text-sm font-semibold truncate">
-          #{quote.number || '—'}
+    <li className="px-5 py-3 space-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Link
+          to={`/quotes/${quote.id}`}
+          className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
+        >
+          <div className="text-sm font-semibold truncate">
+            #{quote.number || '—'}
+          </div>
+          <div className="text-[11px] text-ink-500">
+            Act. {formatDateTime(quote.updatedAt)}
+          </div>
+        </Link>
+        <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+          {formatMoney(total, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
         </div>
-        <div className="text-[11px] text-ink-500">
-          {delivered
-            ? <>Entregada · {formatDateTime(quote.deliveredAt)}</>
-            : <>Act. {formatDateTime(quote.updatedAt)}</>}
-        </div>
-      </Link>
-
-      <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-        {formatMoney(total, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+        <button
+          onClick={onDetach}
+          className="text-ink-400 hover:text-red-600 p-1.5"
+          title="Quitar del pedido"
+          aria-label="Quitar del pedido"
+        >
+          <X size={14} />
+        </button>
+        <Link
+          to={`/quotes/${quote.id}`}
+          className="text-ink-400 hover:text-ink-900 p-1.5"
+          title="Abrir cotización"
+        >
+          <ExternalLink size={14} />
+        </Link>
       </div>
 
-      {/* Delivery toggle — only meaningful after the order is received. */}
-      {canDeliver ? (
-        <button
-          type="button"
-          onClick={toggleDelivered}
-          title={delivered ? 'Marcar como pendiente' : 'Marcar como entregada al cliente'}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-            delivered
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-              : 'bg-white text-ink-600 border border-ink-200 hover:border-ink-400 hover:text-ink-900'
-          }`}
-        >
-          {delivered ? (
-            <>
-              <CheckCircle2 size={12} />
-              Entregada
-            </>
-          ) : (
-            <>
-              Marcar entregada
-            </>
-          )}
-        </button>
-      ) : (
-        // Order isn't received yet — show the disabled state as a hint so
-        // the dealer knows the action exists but isn't ready yet.
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100"
-          title="Disponible cuando el pedido esté en 'Recibido'."
-        >
-          Entrega pendiente
-        </span>
-      )}
-
-      <button
-        onClick={onDetach}
-        className="text-ink-400 hover:text-red-600 p-1.5"
-        title="Quitar del pedido"
-        aria-label="Quitar del pedido"
-      >
-        <X size={14} />
-      </button>
-      <Link
-        to={`/quotes/${quote.id}`}
-        className="text-ink-400 hover:text-ink-900 p-1.5"
-        title="Abrir cotización"
-      >
-        <ExternalLink size={14} />
-      </Link>
+      {/* Milestone strip — three pills shown in chronological order.
+          Reads top-to-bottom as the quote's commerce timeline. Each
+          pill is a button that toggles the milestone on/off (off
+          available so the dealer can correct typos). Disabled state
+          uses the same dimming + tooltip pattern as the original
+          delivery gate. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <MilestonePill
+          icon={Wallet}
+          label="Depósito"
+          done={deposit}
+          doneAt={quote.depositReceivedAt}
+          enabled={canMarkDeposit(quote) || deposit}
+          disabledHint={
+            !quote.status || quote.status !== 'accepted'
+              ? 'Disponible cuando la cotización esté aceptada.'
+              : null
+          }
+          onToggle={() => setMilestone('depositReceivedAt', !deposit)}
+        />
+        <MilestonePill
+          icon={DollarSign}
+          label="Balance"
+          done={balance}
+          doneAt={quote.balancePaidAt}
+          enabled={canMarkBalance(quote) || balance}
+          disabledHint={!deposit ? 'Marca el depósito primero.' : null}
+          onToggle={() => setMilestone('balancePaidAt', !balance)}
+        />
+        <MilestonePill
+          icon={CheckCircle2}
+          label="Entregada"
+          done={delivered}
+          doneAt={quote.deliveredAt}
+          enabled={canMarkDelivered(quote, order) || delivered}
+          disabledHint={deliveryBlockedReason(quote, order)}
+          onToggle={() => setMilestone('deliveredAt', !delivered)}
+          tone="emerald"
+        />
+      </div>
     </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Individual milestone pill — three of these render per quote row.
+// `enabled` controls whether the click handler fires; `disabledHint`
+// shows up as the title (tooltip) when disabled so the dealer can see
+// what's preventing the action.
+//
+// Three visual states:
+//   • done — emerald background, check icon, includes timestamp.
+//   • enabled & not done — outlined white pill with the milestone icon.
+//   • disabled & not done — subdued gray pill, tooltip explains why.
+// ---------------------------------------------------------------------------
+function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint, onToggle, tone }) {
+  if (done) {
+    const doneClass = tone === 'emerald'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100';
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        title="Clic para desmarcar"
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${doneClass}`}
+      >
+        <CheckCircle2 size={12} />
+        <span>{label}</span>
+        {doneAt ? (
+          <span className="text-emerald-600 opacity-80 hidden sm:inline">
+            · {formatDateTime(doneAt)}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+  if (!enabled) {
+    return (
+      <span
+        title={disabledHint || ''}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100"
+      >
+        <Icon size={12} />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={`Marcar ${label.toLowerCase()}`}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-ink-400 hover:text-ink-900 transition-colors"
+    >
+      <Icon size={12} />
+      {label}
+    </button>
   );
 }
 
@@ -604,7 +671,7 @@ function QuoteRow({ quote, order, total, onDetach }) {
 // Dispatch-threshold widget — visible while the order is still being
 // filled. Shows the order's running total against `containerCount ×
 // per-container minimum`, with a progress bar that turns green once the
-// minimum is met. Hidden after the order moves to 'ordered' since the
+// minimum is met. Hidden after the order moves to 'placed' since the
 // threshold has served its purpose by then.
 //
 // The container count comes from the actual number of container rows
