@@ -54,7 +54,7 @@ function useQuoteOps(qu) {
 }
 
 export default function Quotes() {
-  const { profileId } = useApp();
+  const { profileId, profiles } = useApp();
   // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
   // `loaded` so we don't show a misleading "no data" message during the
   // first fetch — that flicker is the bug we're killing.
@@ -86,6 +86,15 @@ export default function Quotes() {
     for (const c of customers) m.set(c.id, c);
     return m;
   }, [customers]);
+
+  // Profiles include the shared 'team' settings row alongside real
+  // users; the lookup is keyed by auth.uid() so we hit only the
+  // matching employee on each quote.createdByUserId reference.
+  const profileById = useMemo(() => {
+    const m = new Map();
+    for (const p of profiles) m.set(p.id, p);
+    return m;
+  }, [profiles]);
 
   const ordersById = useMemo(() => {
     const m = new Map();
@@ -180,6 +189,7 @@ export default function Quotes() {
             key={qu.id}
             qu={qu}
             customer={customerById.get(qu.customerId)}
+            creator={profileById.get(qu.createdByUserId)}
             order={ordersById.get(qu.orderId)}
             total={totalByQuoteId.get(qu.id) || 0}
           />
@@ -198,6 +208,7 @@ export default function Quotes() {
             <tr>
               <th>Número</th>
               <th>Cliente</th>
+              <th className="hidden xl:table-cell">Creada por</th>
               <th>Estado</th>
               <th>Pedido</th>
               <th className="hidden lg:table-cell">Actualizada</th>
@@ -211,6 +222,7 @@ export default function Quotes() {
                 key={qu.id}
                 qu={qu}
                 customer={customerById.get(qu.customerId)}
+                creator={profileById.get(qu.createdByUserId)}
                 order={ordersById.get(qu.orderId)}
                 total={totalByQuoteId.get(qu.id) || 0}
               />
@@ -240,8 +252,9 @@ function OrderIndicator({ order }) {
   );
 }
 
-function QuoteCard({ qu, customer, order, total }) {
+function QuoteCard({ qu, customer, creator, order, total }) {
   const { del } = useQuoteOps(qu);
+  const creatorLabel = creatorDisplay(creator);
 
   return (
     <div className="card p-3">
@@ -250,6 +263,9 @@ function QuoteCard({ qu, customer, order, total }) {
           <div className="min-w-0">
             <div className="text-sm font-semibold">#{qu.number || '—'}</div>
             <div className="text-xs text-ink-500 truncate">{customer?.name || 'Sin cliente'}</div>
+            {creatorLabel && (
+              <div className="text-[11px] text-ink-500 truncate">Creada por {creatorLabel}</div>
+            )}
           </div>
           <div className="text-right flex-shrink-0">
             <div className="text-sm font-medium">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</div>
@@ -270,13 +286,17 @@ function QuoteCard({ qu, customer, order, total }) {
   );
 }
 
-function QuoteRow({ qu, customer, order, total }) {
+function QuoteRow({ qu, customer, creator, order, total }) {
   const { del } = useQuoteOps(qu);
+  const creatorLabel = creatorDisplay(creator);
 
   return (
     <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
       <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
       <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
+      <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
+        {creatorLabel || '—'}
+      </td>
       <td><span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[qu.status] || 'bg-ink-100 text-ink-700'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
@@ -288,4 +308,16 @@ function QuoteRow({ qu, customer, order, total }) {
       </td>
     </tr>
   );
+}
+
+// Shared display rule for the quote-creator field. Returns the
+// creator's stored name if available, falls back to the email prefix,
+// or "—" if nothing on file. Empty string means "render nothing"
+// (the call site uses truthy checks to decide whether to render the
+// "Creada por …" line at all).
+function creatorDisplay(creator) {
+  if (!creator) return '';
+  if (creator.name && creator.name.trim()) return creator.name.trim();
+  if (creator.email) return creator.email.split('@')[0];
+  return '';
 }

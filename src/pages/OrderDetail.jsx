@@ -47,7 +47,7 @@ import {
  */
 export default function OrderDetail() {
   const { orderId } = useParams();
-  const { profileId, settings } = useApp();
+  const { profileId, settings, profiles } = useApp();
 
   const order = useLiveQuery(() => db.orders.get(orderId), [orderId], null);
 
@@ -320,6 +320,7 @@ export default function OrderDetail() {
                     key={q.id}
                     quote={q}
                     order={order}
+                    creator={q.createdByUserId ? profiles.find((p) => p.id === q.createdByUserId) : null}
                     total={totalByQuote.get(q.id) || 0}
                     onDetach={() => detachQuote(q.id)}
                   />
@@ -514,7 +515,7 @@ function CustomerLink({ customer }) {
 // before then the customer's pieces are still on a boat (or not yet
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
-function QuoteRow({ quote, order, total, onDetach }) {
+function QuoteRow({ quote, order, creator, total, onDetach }) {
   // Three commerce milestones live on the quote (not the order):
   //
   //   1. depositReceivedAt — the act of receiving the deposit IS what
@@ -530,6 +531,9 @@ function QuoteRow({ quote, order, total, onDetach }) {
   const deposit   = !!quote.depositReceivedAt;
   const balance   = !!quote.balancePaidAt;
   const delivered = !!quote.deliveredAt;
+  const creatorLabel = creator
+    ? (creator.name?.trim() || creator.email?.split('@')[0] || '')
+    : '';
 
   async function setMilestone(field, on) {
     await db.quotes.update(quote.id, {
@@ -547,6 +551,11 @@ function QuoteRow({ quote, order, total, onDetach }) {
         >
           <div className="text-sm font-semibold truncate">
             #{quote.number || '—'}
+            {creatorLabel && (
+              <span className="ml-2 text-[11px] font-normal text-ink-500">
+                · creada por {creatorLabel}
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-ink-500">
             Act. {formatDateTime(quote.updatedAt)}

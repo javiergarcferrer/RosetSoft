@@ -6,6 +6,7 @@ import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
 import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
+import { useApp } from '../../context/AppContext.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
 /**
@@ -32,6 +33,19 @@ export default function QuoteHeader({
   exporting,
 }) {
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
+  // Look up the quote's creator from the AppContext profiles list. The
+  // user who clicked "Nueva cotización" has their auth.uid() stamped
+  // on the row at materialize time; we show their name as a small
+  // "Creada por …" line under the H1 so the dealer reading the page
+  // knows whose quote this is. Falls back silently when the field is
+  // null (legacy quotes from before user attribution).
+  const { profiles: allProfiles } = useApp();
+  const creator = quote?.createdByUserId
+    ? allProfiles.find((p) => p.id === quote.createdByUserId)
+    : null;
+  const creatorLabel = creator
+    ? (creator.name?.trim() || creator.email?.split('@')[0] || '')
+    : '';
   const professional = quote?.professionalId
     ? professionals.find((p) => p.id === quote.professionalId)
     : null;
@@ -58,6 +72,11 @@ export default function QuoteHeader({
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
+            {creatorLabel && (
+              <div className="text-[11px] text-ink-500 mt-1">
+                Creada por <span className="text-ink-700">{creatorLabel}</span>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
