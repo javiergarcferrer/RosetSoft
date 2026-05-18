@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Shield, Users as UsersIcon, Check, X, Mail, UserPlus, Loader2, Trash2, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db } from '../../db/database.js';
+import { db, dedupeProfilesByEmail } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
@@ -45,6 +45,7 @@ export default function AdminUsers() {
   const { session } = useAuth();
   const isAdmin = currentProfile?.role === 'admin';
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [cleanupNote, setCleanupNote] = useState(null);
 
   // Always run the live query — early-return below would short-circuit the
   // hook and React would complain about a changing hook count if the role
@@ -54,6 +55,31 @@ export default function AdminUsers() {
     [],
     [],
   );
+
+  // Once-per-mount sweep: if Postgres has any same-email duplicate
+  // profile rows (a recurring symptom of the previous broken delete
+  // path until migration 20260518150000 lands), clean them up here
+  // so the list this page renders is the honest, one-row-per-person
+  // truth. We surface a banner with the count so the admin can see
+  // it happened — no silent fixes that hide history.
+  const sweepRan = useRef(false);
+  useEffect(() => {
+    if (!isAdmin || sweepRan.current) return;
+    sweepRan.current = true;
+    (async () => {
+      try {
+        const deleted = await dedupeProfilesByEmail();
+        if (deleted.length) {
+          setCleanupNote(
+            `Se eliminaron ${deleted.length} perfil${deleted.length === 1 ? '' : 'es'} duplicado${deleted.length === 1 ? '' : 's'} con el mismo correo.`,
+          );
+          await refreshProfiles();
+        }
+      } catch (e) {
+        console.warn('[users] dedupe failed:', e);
+      }
+    })();
+  }, [isAdmin, refreshProfiles]);
 
   const realProfiles = useMemo(
     () => (profiles || []).filter((p) => p.role !== 'team'),
@@ -130,6 +156,27 @@ export default function AdminUsers() {
         session={session}
         onInvited={() => refreshProfiles()}
       />
+
+      {cleanupNote && (
+        <div
+          role="status"
+          className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-start gap-2"
+        >
+          <Check size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-medium">Limpieza automática</div>
+            <div className="mt-0.5">{cleanupNote}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCleanupNote(null)}
+            className="text-amber-700 hover:text-amber-900"
+            aria-label="Cerrar"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {!loaded ? (
         <div className="card overflow-hidden"><ListLoading rows={4} /></div>

@@ -410,6 +410,68 @@ export async function downloadImageBytes(id) {
 // id so all team members see the same data.
 export const TEAM_PROFILE_ID = 'team';
 
+/**
+ * Delete duplicate profile rows that share an email (case-insensitive).
+ *
+ * Two profile rows with the same email is always a bug — Supabase Auth
+ * enforces uniqueness on `auth.users.email`, so any duplicate in
+ * `public.profiles` means at least one row is an orphan (its auth.users
+ * counterpart is gone) or a leftover from a previous failed delete.
+ *
+ * The dealer keeps hitting this state in production because (a) the
+ * unique-email index that would block it lives in migration
+ * 20260518150000, which hasn't propagated yet, and (b) the older
+ * `delete-user` Edge Function was failing on its post-delete UPDATE
+ * (the missing `updated_at` column), leaving auth gone but profile
+ * alive — so the next invite would create a second profile for the
+ * same email.
+ *
+ * We pick a "winner" per email group:
+ *   1. active=true beats active=false
+ *   2. then most recent (lastSignInAt > updatedAt > createdAt)
+ * and DELETE every other row. The deletes hit `public.profiles` over
+ * the Supabase REST API under the caller's RLS — no edge function,
+ * no service-role key, no local-only state. The Users page's live
+ * query refetches because `bulkDelete` calls `invalidate()`, so the
+ * list reflects Postgres truth on the next render.
+ *
+ * Returns the list of deleted ids so callers can log/notify.
+ * Idempotent: a second call on a clean dataset deletes nothing.
+ */
+export async function dedupeProfilesByEmail() {
+  const all = await db.profiles.toArray();
+  const byEmail = new Map();
+  for (const p of all) {
+    if (!p.email || p.id === TEAM_PROFILE_ID) continue;
+    const key = String(p.email).toLowerCase().trim();
+    if (!key) continue;
+    if (!byEmail.has(key)) byEmail.set(key, []);
+    byEmail.get(key).push(p);
+  }
+  const toDelete = [];
+  for (const rows of byEmail.values()) {
+    if (rows.length < 2) continue;
+    rows.sort((a, b) => {
+      // Active wins over inactive.
+      if (!!a.active !== !!b.active) return a.active ? -1 : 1;
+      // Then most recent signal wins. `lastSignInAt` is the strongest
+      // proof of life; fall back through updatedAt and createdAt so a
+      // freshly-invited row (lastSignInAt null) still has a comparable
+      // timestamp.
+      const ta = a.lastSignInAt || a.updatedAt || a.createdAt || 0;
+      const tb = b.lastSignInAt || b.updatedAt || b.createdAt || 0;
+      return tb - ta;
+    });
+    for (let i = 1; i < rows.length; i++) {
+      toDelete.push(rows[i].id);
+    }
+  }
+  if (toDelete.length) {
+    await db.profiles.bulkDelete(toDelete);
+  }
+  return toDelete;
+}
+
 export async function ensureDefaultProfile() {
   // Make sure the team profile + settings row exist (the SQL schema bootstraps
   // these, but we tolerate empty databases too). The 'team' row is special:
@@ -488,6 +550,17 @@ export async function ensureDefaultProfile() {
       }
       await db.profiles.update(u.id, patch).catch(() => {});
     }
+
+    // Self-heal: if a previous failed-delete cycle left an orphan
+    // profile row with the same email as this user, blow it away
+    // now so the admin Users page doesn't show two rows for one
+    // person on the next render. Runs on every sign-in / app
+    // boot — once Postgres has a clean dataset this is a no-op,
+    // and the unique-email index from migration 20260518150000
+    // makes it structurally impossible afterwards.
+    await dedupeProfilesByEmail().catch((e) => {
+      console.warn('[profiles] dedupe failed:', e);
+    });
   }
   return TEAM_PROFILE_ID;
 }
