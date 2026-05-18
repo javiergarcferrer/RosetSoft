@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
@@ -12,25 +13,54 @@ import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './total
 /**
  * Generates a branded PDF quote that mirrors the on-screen ClientPreview.
  *
+ * Typography pipeline
+ * -------------------
+ * The PDF embeds **Inter** (the same typeface the on-screen app uses)
+ * via `@pdf-lib/fontkit`. Before this we relied on pdf-lib's built-in
+ * Helvetica, which only supports WinAnsi (Latin-1) — any character
+ * outside that range (`≈`, `–`, `…`, curly quotes, anything beyond
+ * basic accented Latin) throws "WinAnsi cannot encode" mid-render and
+ * the whole export aborts. With Inter embedded as a real TTF, the PDF
+ * handles the full Unicode range Inter ships with: Latin, Latin
+ * Extended, common punctuation, math symbols, etc.
+ *
+ * The font files live in `public/fonts/` (committed to the repo,
+ * served as static assets) and are fetched once per export. Inter is
+ * SIL-OFL licensed — we ship the LICENSE.txt alongside the binaries.
+ *
+ * Page layout (unchanged from the previous pass)
+ * ----------------------------------------------
  *  - Page 1: company header → CLIENTE block → (section header → lines)*
  *  - Final page: totals + FX shadow + terms
  *  - Footer on every page: site URL + page X / Y
- *
- * One sequential pass: each draw function returns the next cursor.
- * Page breaks happen inline by comparing cursor.y to the bottom margin
- * plus a reserved height for the upcoming section.
- *
- * Lines are grouped by sections — a line with `kind: 'section'` doesn't
- * render as a line item; it prints a brand-color uppercase heading
- * ("MOBILIARIO DE SALA") and the lines after it sit under that heading
- * until the next section break (or end of list). Same grouping the
- * preview uses, so the output is visually identical.
  */
 export async function generateQuotePdf({ quote, settings, lines, totals, customer }) {
   const doc = await PDFDocument.create();
-  const fontRegular = await doc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const fontItalic = await doc.embedFont(StandardFonts.HelveticaOblique);
+
+  // Register fontkit BEFORE any custom-font embedding. Without this
+  // call, doc.embedFont(ttfBytes) throws "Input to PDFDocument.embedFont
+  // must be a StandardFonts member" — the StandardFonts-only path is the
+  // pdf-lib default to keep the bundle small; fontkit unlocks TTF/OTF.
+  doc.registerFontkit(fontkit);
+
+  // Fetch the three font weights in parallel. The trade-off vs caching
+  // these on the window: PDF exports happen rarely (once per quote
+  // delivery), so cold-loading ~1.2MB total per export keeps memory
+  // pressure lower than holding the fonts resident forever. The browser
+  // HTTP cache makes the second+ exports effectively free.
+  const [regular, bold, italic] = await Promise.all([
+    fetchFontBytes('/fonts/Inter-Regular.ttf'),
+    fetchFontBytes('/fonts/Inter-Bold.ttf'),
+    fetchFontBytes('/fonts/Inter-Italic.ttf'),
+  ]);
+  const fontRegular = await doc.embedFont(regular, { subset: true });
+  const fontBold    = await doc.embedFont(bold,    { subset: true });
+  const fontItalic  = await doc.embedFont(italic,  { subset: true });
+
+  // `subset: true` tells fontkit to embed only the glyphs we actually
+  // use. With three full Inter weights an unsubsetted PDF would carry
+  // ~1.2 MB of fonts; subsetted, a typical 1-page quote PDF is
+  // 30–80 KB total. Same fidelity, an order of magnitude smaller files.
 
   const ctx = {
     doc,
@@ -51,15 +81,11 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
   cursor = drawCustomerBlock(page, ctx, cursor);
 
   // ---- Lines, grouped by section ---------------------------------------
-  // Same grouping algorithm the preview uses (lib in client-preview):
-  // a 'section' line emits a heading and starts a new group.
   if (!lines.length) {
     cursor = drawEmptyLineBody(page, ctx, cursor);
   } else {
     const groups = groupBySection(lines);
     for (const group of groups) {
-      // Reserve enough vertical space for the heading plus the first row
-      // so we don't print a heading at the bottom of a page and orphan it.
       if (group.label) {
         const firstRowH = group.items.length
           ? measureLineRowHeight(ctx, group.items[0])
@@ -102,11 +128,23 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
 }
 
 /**
- * Split lines into [{ label, items }] groups. Lines without a preceding
- * section sit in a leading null-label group. Matches the preview's
- * groupBySection() — keeping the two in lockstep means the PDF and the
- * web preview are visually identical for the customer.
+ * Fetch a font file from /public and return its bytes as an
+ * ArrayBuffer suitable for doc.embedFont. We use the absolute path
+ * (`/fonts/...`) so it works regardless of where the SPA is mounted —
+ * Vite serves public/ at the site root in both dev and production.
+ *
+ * Errors surface as an Error with a descriptive message so the
+ * top-level try/catch in QuoteBuilder.exportPdf can show a banner
+ * instead of letting the export silently fail mid-render.
  */
+async function fetchFontBytes(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`No se pudo cargar la fuente ${url} (HTTP ${res.status}).`);
+  }
+  return res.arrayBuffer();
+}
+
 function groupBySection(lines) {
   const groups = [];
   let cur = { label: null, items: [] };

@@ -8,7 +8,12 @@ import { publicPricelistUrl } from '../db/supabaseClient.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals } from '../lib/pricing.js';
 import { formatMoney } from '../lib/format.js';
-import { generateQuotePdf, downloadBlob } from '../pdf/quotePdf.js';
+// PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
+// gzipped between pdf-lib, fontkit, and the font fetch. Loading it
+// eagerly would bloat every page that imports QuoteBuilder. Dynamic
+// import keeps it out of the initial bundle and fetched only when the
+// dealer first taps Export PDF — the browser caches the chunk after
+// that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
@@ -402,6 +407,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
         : null;
+      const { generateQuotePdf, downloadBlob } = await import('../pdf/quotePdf.js');
       // Pass *all* lines to the generator — including section breaks.
       // The generator's groupBySection() consumes them as headings; the
       // earlier filter that stripped sections out predates the PDF
