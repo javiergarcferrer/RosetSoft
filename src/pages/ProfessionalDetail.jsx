@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -41,6 +42,13 @@ const STATUS_PILL = {
 export default function ProfessionalDetail() {
   const { professionalId } = useParams();
   const { profileId } = useApp();
+  const navigate = useNavigate();
+  // Local state for the edit modal. The same ProfessionalModal
+  // component the list page uses opens here too — passing
+  // onAfterDelete navigates back to /professionals so the user
+  // doesn't get stuck on a "Cargando profesional…" stub after
+  // deleting the row they were just looking at.
+  const [editing, setEditing] = useState(null);
 
   const pro = useLiveQuery(
     () => db.professionals.get(professionalId),
@@ -168,6 +176,23 @@ export default function ProfessionalDetail() {
             ? <><Building2 size={12} className="inline -mt-0.5 mr-1" />{pro.company}</>
             : `Comisión por defecto · ${pro.defaultCommissionPct ?? 10}%`
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => setEditing(pro)}
+            className="btn-secondary"
+            title="Editar profesional"
+          >
+            <Pencil size={14} /> Editar
+          </button>
+        }
+      />
+
+      <ProfessionalModal
+        professional={editing}
+        onClose={() => setEditing(null)}
+        onAfterDelete={() => navigate('/professionals')}
+        profileId={profileId}
       />
 
       {/* Contact strip — small, dense, only shown if there's anything */}
