@@ -1,0 +1,22 @@
+# Supabase project config. Used by the GitHub integration's
+# auto-deploy pipeline to apply per-function settings on push.
+#
+# Per-function `verify_jwt` toggles whether Supabase's gateway checks
+# the request's JWT *before* the function code runs. We set it to
+# false for `invite-user` because the function does its OWN JWT
+# verification + admin-role check internally (see
+# functions/invite-user/index.ts) — leaving the gateway-level check
+# enabled would (1) be redundant for our auth needs and (2) break the
+# browser's CORS preflight, since browsers don't send the
+# Authorization header on the OPTIONS request the gateway would
+# require it on. That second part is what produces the cryptic
+# "Load failed" error the admin sees when trying to invite a user
+# from /admin/users: the OPTIONS hits the gateway, gets a 401, CORS
+# preflight fails, and the actual POST never even goes out.
+#
+# Functions not listed here keep Supabase's default (verify_jwt =
+# true). Add a new `[functions.<name>]` block when you need to opt
+# out per-function.
+
+[functions.invite-user]
+verify_jwt = false
