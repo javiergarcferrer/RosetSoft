@@ -60,3 +60,38 @@ export async function inviteUser({ session, email, name, role, commissionPct }) 
   }
   return data;
 }
+
+/**
+ * Call the `delete-user` Edge Function to remove a team member's
+ * Supabase Auth row. The matching profile row is kept (with
+ * active=false) so historical commission attribution stays
+ * resolvable in the admin Users page's "Desactivados" bucket.
+ *
+ *   400  caller tried to delete themselves or 'team' / missing id
+ *   401  no session or expired token
+ *   403  caller is not an admin
+ *
+ * The function is idempotent on auth.users (already-deleted rows
+ * return success); it always ends in the state "auth row gone,
+ * profile.active=false".
+ */
+export async function deleteUser({ session, id }) {
+  if (!session?.access_token) {
+    throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+  }
+  const url = `${SUPABASE_URL}/functions/v1/delete-user`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ id }),
+  });
+  let data = null;
+  try { data = await res.json(); } catch { /* empty / non-JSON body */ }
+  if (!res.ok) {
+    throw new Error(data?.error || `No se pudo desactivar el usuario (HTTP ${res.status}).`);
+  }
+  return data;
+}

@@ -9,16 +9,29 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import Modal from '../../components/Modal.jsx';
 import { DebouncedInput } from '../../components/DebouncedInput.jsx';
-import { inviteUser } from '../../lib/invite.js';
+import { inviteUser, deleteUser } from '../../lib/invite.js';
 
 /**
  * Admin-only users management.
  *
  * The 'team' profile is a shared settings holder, not a real user — it's
  * filtered out of every list and count on this page. Real users (admin /
- * employee) are split into "Pendientes" (active=false, awaiting approval)
- * and "Activos". Soft delete only: a deactivated user becomes "pending"
- * again, never gone.
+ * employee) are split into three buckets:
+ *
+ *   invitados      — invitation sent, never accepted (active=false,
+ *                    lastSignInAt=null). Cancelling here deletes both
+ *                    the auth.users row and the profile.
+ *   activos        — currently working on the team.
+ *   desactivados   — former employees. Deactivation removes their
+ *                    Supabase Auth row so they can't sign in, but keeps
+ *                    the profile row marked inactive so historical
+ *                    commission attribution on quotes.created_by_user_id
+ *                    stays resolvable. Bringing them back is a fresh
+ *                    invitation (via "Invitar usuario"), not a flip.
+ *
+ * Names, roles, and commission percentages are editable inline; the
+ * profile row is the source of truth on the dealer side and RLS
+ * allows authenticated team members to write each other's rows.
  */
 export default function AdminUsers() {
   const { currentProfile, refreshProfiles } = useApp();
@@ -142,6 +155,7 @@ export default function AdminUsers() {
                   <ActiveRow
                     key={p.id}
                     profile={p}
+                    session={session}
                     isSelf={p.id === currentProfile.id}
                     invitePending
                   />
@@ -165,6 +179,7 @@ export default function AdminUsers() {
                   <ActiveRow
                     key={p.id}
                     profile={p}
+                    session={session}
                     isSelf={p.id === currentProfile.id}
                   />
                 ))}
@@ -183,6 +198,7 @@ export default function AdminUsers() {
                   <ActiveRow
                     key={p.id}
                     profile={p}
+                    session={session}
                     isSelf={p.id === currentProfile.id}
                   />
                 ))}
@@ -233,13 +249,27 @@ function RolePill({ role }) {
   );
 }
 
-function ActivePill({ active }) {
-  return active ? (
-    <span className="status-pill status-pill-active">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
-      Activo
-    </span>
-  ) : (
+function ActivePill({ profile }) {
+  if (profile.active) {
+    return (
+      <span className="status-pill status-pill-active">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
+        Activo
+      </span>
+    );
+  }
+  // active=false + has lastSignInAt → deactivated (was on the team,
+  // admin removed them). active=false + no lastSignInAt → invited
+  // (admin sent the invite, invitee hasn't signed in yet).
+  if (profile.lastSignInAt) {
+    return (
+      <span className="status-pill status-pill-inactive">
+        <span className="w-1.5 h-1.5 rounded-full bg-ink-400" aria-hidden />
+        Desactivado
+      </span>
+    );
+  }
+  return (
     <span className="status-pill status-pill-inactive">
       <span className="w-1.5 h-1.5 rounded-full bg-ink-400" aria-hidden />
       Pendiente
@@ -306,7 +336,17 @@ function fmtSessionAgo(ts) {
   return null;
 }
 
-function ActiveRow({ profile, isSelf, invitePending }) {
+function ActiveRow({ profile, session, isSelf, invitePending }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const isDeactivated = !profile.active && profile.lastSignInAt;
+
+  async function setName(raw) {
+    const name = (raw || '').trim();
+    if (!name || name === (profile.name || '')) return;
+    await db.profiles.update(profile.id, { name, updatedAt: Date.now() });
+  }
+
   async function setRole(role) {
     if (role === profile.role) return;
     await db.profiles.update(profile.id, { role, updatedAt: Date.now() });
@@ -321,48 +361,89 @@ function ActiveRow({ profile, isSelf, invitePending }) {
     });
   }
 
-  async function toggleActive() {
-    if (isSelf) return; // defensive — button is disabled too
-    // Whichever direction we're flipping in, ask first. Misclicks
-    // would have visible consequences (locked-out employee, or
-    // unexpected re-activation of a former hire).
-    const verb = profile.active ? 'Desactivar' : 'Reactivar';
-    const consequence = profile.active
-      ? 'Perderá acceso al sistema hasta que lo reactives.'
-      : 'Volverá a tener acceso con su rol y comisión actuales.';
-    if (!confirm(`¿${verb} a "${profile.name || profile.email}"? ${consequence}`)) return;
-    await db.profiles.update(profile.id, {
-      active: !profile.active,
-      updatedAt: Date.now(),
-    });
+  // Deactivate is one-way: the auth.users row gets deleted via the
+  // service-role-only `delete-user` edge function, and the profile is
+  // marked inactive. The row stays in the "Desactivados" bucket as a
+  // tombstone so commission attribution on historical quotes still
+  // resolves a name; bringing the person back is a fresh "Invitar
+  // usuario" flow, not a flip on this page.
+  async function deactivate() {
+    if (isSelf) return;
+    if (!confirm(
+      `¿Desactivar a "${profile.name || profile.email}"?\n\n` +
+      `Se eliminará su cuenta de Supabase y no podrá iniciar sesión. ` +
+      `Su historial de cotizaciones se conserva. ` +
+      `Si vuelve al equipo tendrás que invitarlo de nuevo.`
+    )) return;
+    setError(null); setBusy(true);
+    try {
+      await deleteUser({ session, id: profile.id });
+    } catch (e) {
+      setError(e?.message || 'No se pudo desactivar.');
+    } finally {
+      setBusy(false);
+    }
   }
 
+  // Cancelling an unaccepted invitation should leave no trace:
+  // wipe the auth.users row (so the invite link can't be redeemed
+  // anymore) AND the profile. The previous version only deleted
+  // the profile, which left an orphan auth row alive — when the
+  // invitee eventually clicked their link, ensureDefaultProfile
+  // would create a fresh profile silently.
   async function cancelInvite() {
-    if (!confirm(`¿Cancelar la invitación a "${profile.name || profile.email}"? Se eliminará el registro; tendrás que invitarlo de nuevo si cambias de opinión.`)) return;
-    await db.profiles.delete(profile.id);
+    if (!confirm(
+      `¿Cancelar la invitación a "${profile.name || profile.email}"?\n\n` +
+      `Se eliminará el registro y el enlace del correo dejará de funcionar.`
+    )) return;
+    setError(null); setBusy(true);
+    try {
+      await deleteUser({ session, id: profile.id });
+      await db.profiles.delete(profile.id);
+    } catch (e) {
+      setError(e?.message || 'No se pudo cancelar la invitación.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <li className="px-5 py-4">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        {/* Identity */}
+        {/* Identity — name is inline-editable; the email below is the
+            stable handle (it's the auth.users key and can't be
+            changed from this page). Deactivated rows keep the name
+            read-only since they're tombstones for history. */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Avatar name={profile.name} email={profile.email} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <span className="font-medium text-sm truncate">
-                {profile.name || profile.email || 'Sin nombre'}
-              </span>
+              {isDeactivated ? (
+                <span className="font-medium text-sm truncate text-ink-500">
+                  {profile.name || profile.email || 'Sin nombre'}
+                </span>
+              ) : (
+                <DebouncedInput
+                  type="text"
+                  value={profile.name || ''}
+                  onCommit={setName}
+                  className="font-medium text-sm bg-transparent border-0 px-0 py-0 focus:outline-none focus:ring-0 focus:bg-ink-50 focus:px-1 focus:rounded -mx-0 rounded transition-colors min-w-0 w-full max-w-[220px]"
+                  placeholder={profile.email || 'Sin nombre'}
+                  aria-label="Nombre del usuario"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              )}
               {isSelf && (
-                <span className="text-[11px] text-ink-500">(tú)</span>
+                <span className="text-[11px] text-ink-500 flex-shrink-0">(tú)</span>
               )}
               {invitePending && (
-                <span className="status-pill status-pill-sent">
+                <span className="status-pill status-pill-sent flex-shrink-0">
                   Sin aceptar
                 </span>
               )}
             </div>
-            {profile.email && profile.name && (
+            {profile.email && (
               <div className="text-xs text-ink-500 truncate">{profile.email}</div>
             )}
           </div>
@@ -376,9 +457,10 @@ function ActiveRow({ profile, isSelf, invitePending }) {
             and reads consistently from phone to desktop. */}
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <select
-            className="input py-1.5 w-36"
+            className="input py-1.5 w-36 disabled:opacity-50 disabled:cursor-not-allowed"
             value={profile.role === 'admin' ? 'admin' : 'employee'}
             onChange={(e) => setRole(e.target.value)}
+            disabled={isDeactivated}
             aria-label="Rol del usuario"
           >
             <option value="employee">Empleado</option>
@@ -392,9 +474,10 @@ function ActiveRow({ profile, isSelf, invitePending }) {
               min="0"
               max="50"
               step="0.5"
-              className="input py-1.5 pr-7 tabular-nums w-20"
+              className="input py-1.5 pr-7 tabular-nums w-20 disabled:opacity-50 disabled:cursor-not-allowed"
               value={profile.commission_pct ?? 0}
               onCommit={setCommission}
+              disabled={isDeactivated}
               aria-label="Comisión"
             />
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
@@ -402,7 +485,7 @@ function ActiveRow({ profile, isSelf, invitePending }) {
 
           <div className="flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial justify-end">
             <div className="flex flex-col items-start sm:items-end gap-0.5">
-              <ActivePill active={profile.active} />
+              <ActivePill profile={profile} />
               {/* When lastSignInAt is set, we render the precise
                   clock time ("18 may, 8:26 a. m.") + a short
                   relative tag underneath ("hace 12 min"). The dealer
@@ -436,31 +519,42 @@ function ActiveRow({ profile, isSelf, invitePending }) {
               <button
                 type="button"
                 onClick={cancelInvite}
+                disabled={busy}
                 title="Cancelar invitación"
-                className="btn-ghost text-red-600 hover:bg-red-50"
+                className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-wait"
               >
-                <X size={14} /> Cancelar invitación
+                {busy
+                  ? <><Loader2 size={14} className="animate-spin" /> Cancelando…</>
+                  : <><X size={14} /> Cancelar invitación</>}
               </button>
+            ) : isDeactivated ? (
+              // Tombstone — kept for historical commission attribution
+              // but no actions apply. Bringing the person back is a
+              // fresh "Invitar usuario" flow at the top of the page.
+              <span className="text-[11px] text-ink-400 italic">Sin acceso</span>
             ) : (
               <button
                 type="button"
-                onClick={toggleActive}
-                disabled={isSelf}
+                onClick={deactivate}
+                disabled={isSelf || busy}
                 title={isSelf
                   ? 'No puedes desactivar tu propia cuenta'
-                  : (profile.active ? 'Desactivar usuario' : 'Reactivar usuario')}
-                className={`btn-ghost disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
-                  profile.active
-                    ? 'text-red-600 hover:bg-red-50'
-                    : 'text-emerald-700 hover:bg-emerald-50'
-                }`}
+                  : 'Eliminar de Supabase Auth y marcar inactivo'}
+                className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
-                <X size={14} /> {profile.active ? 'Desactivar' : 'Reactivar'}
+                {busy
+                  ? <><Loader2 size={14} className="animate-spin" /> Desactivando…</>
+                  : <><X size={14} /> Desactivar</>}
               </button>
             )}
           </div>
         </div>
       </div>
+      {error && (
+        <div role="alert" className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+          {error}
+        </div>
+      )}
     </li>
   );
 }
