@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { applyLineAdjustments } from '../../lib/pricing.js';
+import {
+  applyLineAdjustments, isCompoundLine, lineBasePrice, lineQty,
+} from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -30,10 +32,11 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
     };
   }, [onClose]);
 
-  const base = Number(line.unitPrice) || 0;
+  const compound = isCompoundLine(line);
+  const base = lineBasePrice(line);
   const margin = Number(line.lineMarginPct) || 0;
   const discount = Number(line.lineDiscountPct) || 0;
-  const qty = Number(line.qty) || 0;
+  const qty = lineQty(line);
 
   const withMargin = base * (1 + margin / 100);
   const marginAmt = withMargin - base;
@@ -53,16 +56,38 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
       <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-2">
         Cómo se calcula
       </div>
-      <Row label="Base" value={fmt(base)} />
+      {compound && (
+        <>
+          {(line.components || []).map((c, i) => {
+            const cqty = Number(c.qty) || 0;
+            const cprice = Number(c.unitPrice) || 0;
+            const subtotal = cqty * cprice;
+            return (
+              <Row
+                key={c.id || i}
+                label={`${c.name || `Componente ${i + 1}`} (${cqty} × ${fmt(cprice)})`}
+                value={fmt(subtotal)}
+                muted
+              />
+            );
+          })}
+          <Divider />
+        </>
+      )}
+      <Row label={compound ? 'Subtotal componentes' : 'Base'} value={fmt(base)} />
       {margin !== 0 && (
         <Row label={`Margen ${margin > 0 ? '+' : ''}${margin}%`} value={`${marginAmt >= 0 ? '+' : ''}${fmt(marginAmt)}`} muted />
       )}
       {discount !== 0 && (
         <Row label={`Descuento ${discount > 0 ? '–' : ''}${discount}%`} value={`–${fmt(discountAmt)}`} muted />
       )}
-      <Divider />
-      <Row label="Precio unitario" value={fmt(unit)} />
-      <Row label="× Cantidad" value={`× ${qty}`} muted />
+      {!compound && (
+        <>
+          <Divider />
+          <Row label="Precio unitario" value={fmt(unit)} />
+          <Row label="× Cantidad" value={`× ${qty}`} muted />
+        </>
+      )}
       <Divider />
       <Row label="Total línea" value={fmt(total)} bold />
     </div>

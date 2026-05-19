@@ -4,7 +4,7 @@ import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals } from '../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { formatMoney } from '../lib/format.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
 // gzipped between pdf-lib, fontkit, and the font fetch. Loading it
@@ -284,6 +284,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         lineMarginPct: seed.lineMarginPct ?? 0,
         lineDiscountPct: seed.lineDiscountPct ?? 0,
         notes: seed.notes || '',
+        components: Array.isArray(seed.components) ? seed.components : [],
       });
       setFocusLineId(id);
     } finally {
@@ -314,6 +315,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         lineMarginPct: 0,
         lineDiscountPct: 0,
         notes: '',
+        components: [],
       });
       setFocusLineId(id);
     } finally {
@@ -337,10 +339,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // user expects.
       const srcIdx = lines.findIndex((l) => l.id === line.id);
       const newSortOrder = (line.sortOrder ?? 0) + 1;
+      // Deep-copy compound components and stamp fresh ids on each so
+      // React keys (and any future direct-component reference) don't
+      // collide between the original and the duplicate.
+      const components = Array.isArray(line.components)
+        ? line.components.map((c) => ({ ...c, id: newId() }))
+        : [];
       await db.quoteLines.put({
         ...line,
         id,
         sortOrder: newSortOrder,
+        components,
       });
       // Bump everyone after.
       const after = lines.slice(srcIdx + 1);
@@ -385,14 +394,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }
 
   const totals = computeTotals(
-    lines
-      .filter((l) => l.kind !== 'section')
-      .map((l) => ({
-        qty: l.qty,
-        basePrice: l.unitPrice,
-        lineMarginPct: l.lineMarginPct,
-        lineDiscountPct: l.lineDiscountPct,
-      })),
+    lines.filter((l) => l.kind !== 'section').map(lineForTotals),
     { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
   );
 

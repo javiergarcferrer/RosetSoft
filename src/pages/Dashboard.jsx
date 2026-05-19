@@ -10,7 +10,7 @@ import StatCard from '../components/StatCard.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals } from '../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { ORDER_STAGE_BY_KEY } from '../lib/orderStages.js';
 
 /**
@@ -124,17 +124,13 @@ export default function Dashboard() {
     }
 
     // Per-quote grand total (post-margin/discount/tax/shipping) — same
-    // shape computeTotals expects, with unitPrice mapped to basePrice.
+    // shape computeTotals expects, with unitPrice mapped to basePrice
+    // (compound lines aggregate their components inside lineForTotals).
     const totalByQuote = new Map();
     for (const q of allQuotes) {
       const lines = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
-        .map((l) => ({
-          qty: l.qty,
-          basePrice: l.unitPrice,
-          lineMarginPct: l.lineMarginPct,
-          lineDiscountPct: l.lineDiscountPct,
-        }));
+        .map(lineForTotals);
       const t = computeTotals(lines, q);
       totalByQuote.set(q.id, t.grandTotal);
     }

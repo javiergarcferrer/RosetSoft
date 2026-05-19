@@ -1,7 +1,10 @@
-import { applyLineAdjustments } from '../lib/pricing.js';
+import {
+  applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
+  lineTotal,
+} from '../lib/pricing.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
-  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT, BRAND_700,
+  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import { embedImageById } from './embed.js';
@@ -84,6 +87,18 @@ const T = {
   numValue:    { size: 11,  lh: 14, color: INK },
   totalLabel:  { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
   totalValue:  { size: 14,  lh: 18, color: INK,       bold: true },
+  // Compound article — components rendered as a vertical stack
+  // beneath the shared family + name. Each component carries its own
+  // name, grade/fabric, ref/dim, plus an inline qty × unit = subtotal
+  // equation right-aligned with the component name.
+  compName:        { size: 10.5, lh: 13.5, color: INK,      bold: true },
+  compSubtype:     { size: 9,    lh: 12,   color: INK_HIGH },
+  compMeta:        { size: 8.5,  lh: 11,   color: INK_MID },
+  compDescription: { size: 8.5,  lh: 11,   color: INK_HIGH },
+  compInline:      { size: 9.5,  lh: 12,   color: INK },
+  compTotalLabel:  { size: 7.5,  lh: 11,   color: BRAND_700, cs: 1.4, bold: true },
+  compTotalValue:  { size: 14,   lh: 18,   color: INK,       bold: true },
+  compSubtotal:    { size: 9,    lh: 12,   color: INK_MID },
 };
 
 const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
@@ -193,12 +208,158 @@ function numericHeight() {
 
 /**
  * Row height = max(image, detail, numeric) + top + bottom padding.
+ * Compound rows use a different geometry — the numeric column collapses
+ * into the detail column, and each component contributes its own
+ * sub-block (name + meta + inline equation). See compoundRowHeight().
  */
 export function measureLineRowHeight(ctx, line) {
+  if (isCompoundLine(line)) return compoundRowHeight(ctx, line);
   const cols = lineColumns();
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
   const inner = Math.max(IMAGE_SIZE, detailH, numericHeight());
   return ROW_TOP_PAD + inner + ROW_BOTTOM_PAD;
+}
+
+/* ----------------------------- compound ------------------------------ */
+//
+// Compound layout (single product family with N priced sub-rows):
+//
+//   ┌────────────────────────────────────────────────────────────────┐
+//   │ ┌────────┐  TOGO                                               │
+//   │ │        │  Composición de salón                                │
+//   │ │ image  │  ─────────────────────────────────────────────────  │
+//   │ │ 170pt  │  Settee 2P            1 × $4,500 = $4,500           │
+//   │ │  sq    │  Grade C · Alpaga                                    │
+//   │ │        │  ref Y3Y322 · H 28 × L 89 × P 43                    │
+//   │ │        │  ─────────────────────────────────────────────────  │
+//   │ │        │  Loveseat              1 × $3,200 = $3,200           │
+//   │ │        │  ...                                                 │
+//   │ └────────┘                                                       │
+//   │                                            TOTAL COMPUESTO       │
+//   │                                                  $8,800.00      │
+//   └────────────────────────────────────────────────────────────────┘
+//
+// The numeric column from a normal row disappears — the per-component
+// totals live inline (right-aligned) under the component name, and the
+// roll-up TOTAL COMPUESTO sits as a single label/value pair under the
+// component list. This keeps the eye scanning down the family + the
+// list without zig-zagging across to a right column.
+
+const COMP_HEADER_GAP = 6;        // gap between parent identity and components
+const COMP_TOP_GAP    = 4;        // gap above each component (after divider)
+const COMP_BLOCK_GAP  = 4;        // gap between component meta and next divider
+const COMP_TOTAL_GAP  = 10;       // gap between last component and total block
+const COMPOUND_DETAIL_GUTTER = 12; // breathing room between detail and right edge
+
+function compoundColumns() {
+  const right = PAGE_W - MARGIN_R;
+  const imgX = MARGIN_L;
+  const detailX = imgX + IMAGE_SIZE + IMG_GUTTER;
+  // Compound's detail column extends nearly to the right margin —
+  // the per-component qty × unit = subtotal equation lives inside
+  // this column (right-aligned), so we don't reserve a separate
+  // numeric track like normal lines do.
+  const detailW = CONTENT_W - IMAGE_SIZE - IMG_GUTTER - COMPOUND_DETAIL_GUTTER;
+  return {
+    img:    { x: imgX, w: IMAGE_SIZE, h: IMAGE_SIZE },
+    detail: { x: detailX, rightX: right, w: detailW },
+  };
+}
+
+function compoundHeaderSegments(ctx, line, detailW) {
+  const segs = [];
+  function push(text, token) {
+    if (!text) return;
+    const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
+    if (lines.length) segs.push({ token, lines });
+  }
+  push(line.family ? line.family.toUpperCase() : '', T.family);
+  push(line.name, T.name);
+  return segs;
+}
+
+// One component block: name + (optional) subtype + (optional) meta +
+// (optional) description. The qty × unit = subtotal equation lives on
+// the same baseline as the name, right-aligned, so the column reads
+// as a labelled price row with subordinated specs beneath.
+function componentBlockSegments(ctx, component, detailW) {
+  // Reserve room on the right for the inline equation so the name
+  // wraps before it overlaps. The equation length depends on the
+  // formatted numbers, so we measure once and shrink the nameW for
+  // wrapping. This means a very long fabric-grade like "Microfibras
+  // Mostaza decadente" wraps onto a new line BELOW the equation
+  // rather than colliding with it.
+  const nameSegs = [];
+  function push(text, token) {
+    if (!text) return;
+    const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
+    if (lines.length) nameSegs.push({ token, lines });
+  }
+  push(component.name || '(sin nombre)', T.compName);
+  push(component.subtype, T.compSubtype);
+  const meta = [
+    component.reference ? `ref ${component.reference}` : null,
+    component.dimensions,
+  ].filter(Boolean).join(' · ');
+  push(meta, T.compMeta);
+  push(component.description, T.compDescription);
+  return nameSegs;
+}
+
+function compoundRowHeight(ctx, line) {
+  const cols = compoundColumns();
+  // Parent identity (family + name) block.
+  let textH = 0;
+  for (const seg of compoundHeaderSegments(ctx, line, cols.detail.w)) {
+    textH += seg.lines.length * seg.token.lh;
+  }
+  textH += COMP_HEADER_GAP;
+
+  // Each component block contributes its own height.
+  const components = line.components || [];
+  // The qty × unit = subtotal inline equation reserves a track on the
+  // right of each component's first line. We compute the maximum width
+  // needed so wrapping accounts for it.
+  const eqWidth = maxEquationWidth(ctx, line);
+  const nameW = Math.max(40, cols.detail.w - eqWidth - 12);
+
+  for (let i = 0; i < components.length; i++) {
+    if (i > 0) textH += COMP_TOP_GAP;       // divider gap before this block
+    const blockSegs = componentBlockSegments(ctx, components[i], nameW);
+    for (const seg of blockSegs) {
+      textH += seg.lines.length * seg.token.lh;
+    }
+    textH += COMP_BLOCK_GAP;
+  }
+
+  // Compound total block.
+  textH += COMP_TOTAL_GAP + T.compTotalLabel.lh + T.compTotalValue.lh;
+  // If a line-level discount is set, surface a subtotal line above
+  // the grand total ("Subtotal $X · descuento –Y%"). One more lh.
+  if (Number(line.lineDiscountPct) || 0) {
+    textH += T.compSubtotal.lh;
+  }
+
+  const inner = Math.max(IMAGE_SIZE, textH);
+  return ROW_TOP_PAD + inner + ROW_BOTTOM_PAD;
+}
+
+// Widest "qty × unit = subtotal" equation across all components on
+// this line. Used for layout reservation so each row's wrap width
+// accommodates the longest equation it will render.
+function maxEquationWidth(ctx, line) {
+  const { fontRegular } = ctx;
+  let max = 0;
+  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+  for (const c of line.components || []) {
+    const qty = Number(c.qty) || 0;
+    const unit = Number(c.unitPrice) || 0;
+    const sub = componentSubtotal(c);
+    const text = `${qty} × ${fmt(unit)} = ${fmt(sub)}`;
+    const w = fontRegular.widthOfTextAtSize(text, T.compInline.size);
+    if (w > max) max = w;
+  }
+  return max;
 }
 
 /**
@@ -239,9 +400,14 @@ export function drawEmptyLineBody(page, ctx, cursor) {
 }
 
 /**
- * Render one line item row.
+ * Render one line item row. Compound lines route to a dedicated
+ * renderer with a different geometry (no right-side numeric column,
+ * per-component inline equations, single roll-up total).
  */
 export async function drawLineRow(page, ctx, cursor, line) {
+  if (isCompoundLine(line)) {
+    return drawCompoundLineRow(page, ctx, cursor, line);
+  }
   const { doc, fontBold, fontRegular } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
@@ -324,4 +490,173 @@ export async function drawLineRow(page, ctx, cursor, line) {
   });
 
   return { x: MARGIN_L, y: rowBottom };
+}
+
+/**
+ * Compound line row — one image + family + name header, then a vertical
+ * stack of per-component blocks (name, subtype, ref/dim, optional
+ * description) each with a right-aligned `qty × unit = subtotal`
+ * equation, then a single "TOTAL COMPUESTO" pair at the bottom-right.
+ *
+ * Sized via compoundRowHeight() so the page-break logic in quotePdf.js
+ * still gets an accurate row height for the break decision.
+ */
+async function drawCompoundLineRow(page, ctx, cursor, line) {
+  const { doc, fontBold, fontRegular } = ctx;
+  const cols = compoundColumns();
+  const rowY = cursor.y;
+  const rowH = measureLineRowHeight(ctx, line);
+  const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD;
+  const innerTop = rowY - ROW_TOP_PAD;
+
+  // ---- Image (same chrome as a normal row, top-aligned in the band) -----
+  const img = await embedImageById(doc, line.imageId);
+  // Top-align the image so the family + name header sits next to its
+  // top edge — a centered image floating below the title looked
+  // detached when the component list grew taller than the image.
+  const imgY = innerTop - IMAGE_SIZE;
+  page.drawRectangle({
+    x: cols.img.x, y: imgY, width: IMAGE_SIZE, height: IMAGE_SIZE,
+    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
+  });
+  if (img) {
+    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
+    const w = img.width * scale;
+    const h = img.height * scale;
+    page.drawImage(img, {
+      x: cols.img.x + (IMAGE_SIZE - w) / 2,
+      y: imgY + (IMAGE_SIZE - h) / 2,
+      width: w, height: h,
+    });
+  }
+
+  // ---- Detail column — family + name, then component blocks -------------
+  let sy = innerTop;
+  for (const seg of compoundHeaderSegments(ctx, line, cols.detail.w)) {
+    const f = fontFor(ctx, seg.token);
+    for (const ln of seg.lines) {
+      const baselineY = sy - seg.token.size;
+      page.drawText(ln, {
+        x: cols.detail.x,
+        y: baselineY,
+        size: seg.token.size,
+        font: f,
+        color: seg.token.color,
+        characterSpacing: seg.token.cs || 0,
+      });
+      sy -= seg.token.lh;
+    }
+  }
+  sy -= COMP_HEADER_GAP;
+
+  // Light divider between the header and the component list — mirrors
+  // the on-screen preview's hairline border.
+  page.drawLine({
+    start: { x: cols.detail.x, y: sy + 2 },
+    end:   { x: cols.detail.rightX, y: sy + 2 },
+    thickness: 0.5, color: INK_LINE,
+  });
+
+  const components = line.components || [];
+  const eqWidth = maxEquationWidth(ctx, line);
+  const nameW = Math.max(40, cols.detail.w - eqWidth - 12);
+
+  for (let i = 0; i < components.length; i++) {
+    if (i > 0) {
+      // Hairline between components.
+      page.drawLine({
+        start: { x: cols.detail.x, y: sy + 2 },
+        end:   { x: cols.detail.rightX, y: sy + 2 },
+        thickness: 0.5, color: INK_LINE,
+      });
+      sy -= COMP_TOP_GAP;
+    }
+    sy = drawComponentBlock(page, ctx, sy, cols, components[i], nameW);
+    sy -= COMP_BLOCK_GAP;
+  }
+
+  // ---- Compound roll-up total -------------------------------------------
+  sy -= COMP_TOTAL_GAP;
+  const subtotal = compoundSubtotal(line);
+  const discount = Number(line.lineDiscountPct) || 0;
+  const grandTotal = lineTotal(line);
+  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+
+  if (discount !== 0) {
+    const subText = `Subtotal ${fmt(subtotal)} · descuento –${discount}%`;
+    const subY = sy - T.compSubtotal.size;
+    drawRightAt(
+      page, subText, cols.detail.rightX, subY,
+      T.compSubtotal.size, fontRegular, T.compSubtotal.color,
+    );
+    sy -= T.compSubtotal.lh;
+  }
+  const totalLblY = sy - T.compTotalLabel.size;
+  drawRightAt(
+    page, 'TOTAL COMPUESTO', cols.detail.rightX, totalLblY,
+    T.compTotalLabel.size, fontBold, T.compTotalLabel.color, T.compTotalLabel.cs,
+  );
+  sy -= T.compTotalLabel.lh;
+  const totalValY = sy - T.compTotalValue.size;
+  drawRightAt(
+    page, fmt(grandTotal), cols.detail.rightX, totalValY,
+    T.compTotalValue.size, fontBold, T.compTotalValue.color,
+  );
+
+  // ---- Bottom divider ---------------------------------------------------
+  const rowBottom = rowY - rowH;
+  page.drawLine({
+    start: { x: MARGIN_L, y: rowBottom },
+    end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
+    thickness: 0.5, color: INK_LINE2,
+  });
+
+  return { x: MARGIN_L, y: rowBottom };
+}
+
+// Draws one component block (name + subordinated specs on the left,
+// inline qty × unit = subtotal equation on the right of the first
+// baseline). Returns the y after the block has been drawn.
+function drawComponentBlock(page, ctx, startY, cols, component, nameW) {
+  const { fontRegular } = ctx;
+  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+  const qty = Number(component.qty) || 0;
+  const unit = Number(component.unitPrice) || 0;
+  const sub = componentSubtotal(component);
+  const eqText = `${qty} × ${fmt(unit)} = ${fmt(sub)}`;
+
+  const segs = componentBlockSegments(ctx, component, nameW);
+  let sy = startY;
+  let first = true;
+  for (const seg of segs) {
+    const f = fontFor(ctx, seg.token);
+    for (let i = 0; i < seg.lines.length; i++) {
+      const baselineY = sy - seg.token.size;
+      page.drawText(seg.lines[i], {
+        x: cols.detail.x,
+        y: baselineY,
+        size: seg.token.size,
+        font: f,
+        color: seg.token.color,
+        characterSpacing: seg.token.cs || 0,
+      });
+      // On the very first text line of the block, also emit the
+      // inline equation on the right edge — aligned to the same
+      // baseline as the component name.
+      if (first) {
+        drawRightAt(
+          page, eqText, cols.detail.rightX,
+          // Align the equation to the name's baseline; the equation
+          // uses a slightly smaller size so the visual mass sits a
+          // hair higher than the name. Subtract its own size to land
+          // on its baseline.
+          sy - T.compInline.size,
+          T.compInline.size, fontRegular, T.compInline.color,
+        );
+        first = false;
+      }
+      sy -= seg.token.lh;
+    }
+  }
+  return sy;
 }

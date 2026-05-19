@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import StatCard from '../../components/StatCard.jsx';
 import { formatDateTime, formatMoney } from '../../lib/format.js';
-import { computeTotals } from '../../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 
 /**
  * Admin-only monthly commissions report. The dealer pays out on the
@@ -107,12 +107,7 @@ export default function AdminCommissions() {
     function totalsFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
-        .map((l) => ({
-          qty: l.qty,
-          basePrice: l.unitPrice,
-          lineMarginPct: l.lineMarginPct,
-          lineDiscountPct: l.lineDiscountPct,
-        }));
+        .map(lineForTotals);
       const t = computeTotals(rows, q);
       return { base: t.taxableBase, grandTotal: t.grandTotal };
     }

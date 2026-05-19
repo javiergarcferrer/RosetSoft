@@ -11,7 +11,7 @@ import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals } from '../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 
 /**
@@ -96,12 +96,7 @@ export default function CustomerDetail() {
     function totalFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
-        .map((l) => ({
-          qty: l.qty,
-          basePrice: l.unitPrice,
-          lineMarginPct: l.lineMarginPct,
-          lineDiscountPct: l.lineDiscountPct,
-        }));
+        .map(lineForTotals);
       return computeTotals(rows, q).grandTotal;
     }
 

@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import ImageView from '../ImageView.jsx';
-import { ITBIS_PCT } from '../../lib/pricing.js';
+import {
+  ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
+} from '../../lib/pricing.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 
 /**
@@ -129,6 +131,9 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
 }
 
 function ClientLine({ line, currency, rates, fmt }) {
+  if (isCompoundLine(line)) {
+    return <CompoundClientLine line={line} fmt={fmt} />;
+  }
   const unit = (Number(line.unitPrice) || 0)
     * (1 + (Number(line.lineMarginPct) || 0) / 100)
     * (1 - (Number(line.lineDiscountPct) || 0) / 100);
@@ -218,6 +223,92 @@ function ClientLine({ line, currency, rates, fmt }) {
             <div className="mt-1.5"><PriceCell label="Total" value={fmt(total)} emphasis /></div>
           </div>
         </div>
+      </div>
+    </li>
+  );
+}
+
+// Compound line — one family + one image header, then a stacked list of
+// component rows underneath. Each row has its own name / ref / dim /
+// subtype + its own qty × unit = subtotal. The whole block resolves into
+// a single "Total compuesto" amount.
+function CompoundClientLine({ line, fmt }) {
+  const subtotal = compoundSubtotal(line);
+  const grandTotal = lineTotal(line);
+  const discount = Number(line.lineDiscountPct) || 0;
+  return (
+    <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
+      <div className="flex items-start gap-4 sm:gap-5">
+        {line.imageId ? (
+          <ImageView
+            id={line.imageId}
+            className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0"
+          />
+        ) : (
+          <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          {line.family && (
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
+              {line.family}
+            </div>
+          )}
+          {line.name && (
+            <div className="text-sm font-semibold text-ink-900">{line.name}</div>
+          )}
+          <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
+            {(line.components || []).map((c, i) => (
+              <CompoundComponentRow key={c.id || i} component={c} fmt={fmt} />
+            ))}
+          </ul>
+          <div className="mt-3 pt-2 border-t border-ink-200 flex items-baseline justify-between gap-3 tabular-nums">
+            <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold">
+              Total compuesto
+            </div>
+            <div className="text-right">
+              {discount !== 0 && (
+                <div className="text-[10px] text-ink-500">
+                  Subtotal {fmt(subtotal)} · descuento –{discount}%
+                </div>
+              )}
+              <div className="text-base font-semibold text-ink-900">{fmt(grandTotal)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function CompoundComponentRow({ component, fmt }) {
+  const qty = Number(component.qty) || 0;
+  const unit = Number(component.unitPrice) || 0;
+  const subtotal = componentSubtotal(component);
+  return (
+    <li className="py-2 flex flex-wrap sm:flex-nowrap items-start gap-x-4 gap-y-1">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-ink-900">{component.name || '—'}</div>
+        {component.subtype && (
+          <div className="text-[11px] text-ink-500 mt-0.5">{component.subtype}</div>
+        )}
+        {(component.reference || component.dimensions) && (
+          <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
+            {component.reference && <span className="font-mono">ref {component.reference}</span>}
+            {component.dimensions && <span>{component.dimensions}</span>}
+          </div>
+        )}
+        {component.description && (
+          <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
+            {component.description}
+          </div>
+        )}
+      </div>
+      <div className="text-right tabular-nums whitespace-nowrap text-xs sm:text-sm">
+        <span className="text-ink-700">{qty}</span>
+        <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
+        <span className="text-ink-700">{fmt(unit)}</span>
+        <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
+        <span className="text-ink-900 font-semibold">{fmt(subtotal)}</span>
       </div>
     </li>
   );

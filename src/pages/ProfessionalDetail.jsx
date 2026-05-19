@@ -8,7 +8,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals } from '../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { effectiveCommissionPct, commissionAmount } from '../lib/commissions.js';
 
 /**
@@ -96,16 +96,13 @@ export default function ProfessionalDetail() {
     for (const q of quotes) {
       // Map `unitPrice` → `basePrice` for computeTotals — the pricing
       // module expects the post-catalog price under a different name
-      // than what the DB stores. Sections are stripped: they have no
-      // qty/price, they're just visual dividers in the quote.
+      // than what the DB stores. Compound lines collapse their
+      // components into a single basePrice inside lineForTotals.
+      // Sections are stripped: they have no qty/price, they're just
+      // visual dividers in the quote.
       const lines = (linesByQuote.get(q.id) || [])
         .filter((l) => l.kind !== 'section')
-        .map((l) => ({
-          qty: l.qty,
-          basePrice: l.unitPrice,
-          lineMarginPct: l.lineMarginPct,
-          lineDiscountPct: l.lineDiscountPct,
-        }));
+        .map(lineForTotals);
       const totals = computeTotals(lines, q);
       const pct = effectiveCommissionPct(q, pro);
       // Commissions are paid on the base imponible (pre-ITBIS,

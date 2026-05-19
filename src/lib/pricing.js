@@ -90,3 +90,75 @@ export function applyLineAdjustments(basePrice, marginPct, discountPct) {
   return withMargin * (1 - discount / 100);
 }
 
+/* --------------------------- compound lines --------------------------- */
+
+/**
+ * A "compound" line is one product family (and one photo) that bundles
+ * several priced rows underneath — TOGO settee + loveseat + ottoman, a
+ * modular sectional split across modules + chaise, etc. The components
+ * live in `line.components` as a JSON array; each carries its own name,
+ * reference, subtype, dimensions, qty, unit price.
+ *
+ * When the array is non-empty, the line's own qty / unitPrice are
+ * ignored and the line's base subtotal is the sum of component
+ * subtotals. Line-level margin / discount still apply on top.
+ */
+export function isCompoundLine(line) {
+  return Array.isArray(line?.components) && line.components.length > 0;
+}
+
+export function componentSubtotal(component) {
+  return safeNum(component?.unitPrice, 0) * safeNum(component?.qty, 0);
+}
+
+export function compoundSubtotal(line) {
+  if (!isCompoundLine(line)) return 0;
+  return line.components.reduce((sum, c) => sum + componentSubtotal(c), 0);
+}
+
+/**
+ * Per-unit base price for a line. For a normal line this is unitPrice;
+ * for a compound it's the sum of component subtotals (with qty=1, since
+ * the components carry their own quantities).
+ */
+export function lineBasePrice(line) {
+  if (isCompoundLine(line)) return compoundSubtotal(line);
+  return safeNum(line?.unitPrice, 0);
+}
+
+/** Effective quantity multiplier for a line — always 1 for compounds. */
+export function lineQty(line) {
+  if (isCompoundLine(line)) return 1;
+  return safeNum(line?.qty, 0);
+}
+
+/**
+ * Pre-line-adjustment subtotal: lineBasePrice × lineQty. Useful in
+ * places (breakdown popovers, totals rails) that need the
+ * pre-discount figure for a compound or a normal line uniformly.
+ */
+export function lineSubtotal(line) {
+  return lineBasePrice(line) * lineQty(line);
+}
+
+/** Final per-line total, after line-level margin and discount. */
+export function lineTotal(line) {
+  const base = lineBasePrice(line);
+  return applyLineAdjustments(base, line?.lineMarginPct, line?.lineDiscountPct) * lineQty(line);
+}
+
+/**
+ * Map a raw quote line (item or compound) onto the shape `computeTotals`
+ * expects. Centralizes the compound-vs-normal branch so call sites
+ * (QuoteBuilder, Dashboard, ProfessionalDetail, Commissions, ClientPreview)
+ * don't each have to redo the math.
+ */
+export function lineForTotals(line) {
+  return {
+    qty: lineQty(line),
+    basePrice: lineBasePrice(line),
+    lineMarginPct: line?.lineMarginPct,
+    lineDiscountPct: line?.lineDiscountPct,
+  };
+}
+

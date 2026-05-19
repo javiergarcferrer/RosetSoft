@@ -18,6 +18,14 @@ import {
   clampPct,
   applyLineAdjustments,
   computeTotals,
+  isCompoundLine,
+  componentSubtotal,
+  compoundSubtotal,
+  lineBasePrice,
+  lineQty,
+  lineSubtotal,
+  lineTotal,
+  lineForTotals,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -194,5 +202,132 @@ test('computeTotals: null lines argument behaves like empty', () => {
   const t = computeTotals(null, {});
   assert.equal(t.subtotal, 0);
   assert.equal(t.grandTotal, 0);
+});
+
+/* --------------------------- compound lines --------------------------- */
+
+test('isCompoundLine: false for empty / missing / non-array components', () => {
+  assert.equal(isCompoundLine(null), false);
+  assert.equal(isCompoundLine({}), false);
+  assert.equal(isCompoundLine({ components: null }), false);
+  assert.equal(isCompoundLine({ components: 'nope' }), false);
+  assert.equal(isCompoundLine({ components: [] }), false);
+});
+
+test('isCompoundLine: true for a populated components array', () => {
+  assert.equal(isCompoundLine({ components: [{ qty: 1, unitPrice: 10 }] }), true);
+});
+
+test('componentSubtotal: qty × unitPrice with safe coercion', () => {
+  assert.equal(componentSubtotal({ qty: 2, unitPrice: 100 }), 200);
+  assert.equal(componentSubtotal({ qty: '3', unitPrice: '50' }), 150);
+  assert.equal(componentSubtotal({ qty: NaN, unitPrice: 100 }), 0);
+  assert.equal(componentSubtotal(null), 0);
+});
+
+test('compoundSubtotal: sums every component', () => {
+  const line = {
+    components: [
+      { qty: 1, unitPrice: 1000 },
+      { qty: 2, unitPrice: 500 },   // 1000
+      { qty: 3, unitPrice: 100 },   // 300
+    ],
+  };
+  assert.equal(compoundSubtotal(line), 2300);
+});
+
+test('compoundSubtotal: zero for non-compound lines', () => {
+  assert.equal(compoundSubtotal({}), 0);
+  assert.equal(compoundSubtotal({ unitPrice: 100, qty: 5 }), 0);
+});
+
+test('lineBasePrice / lineQty: normal line carries unitPrice + qty', () => {
+  const line = { qty: 3, unitPrice: 150 };
+  assert.equal(lineBasePrice(line), 150);
+  assert.equal(lineQty(line), 3);
+});
+
+test('lineBasePrice / lineQty: compound line uses sum-of-components and qty=1', () => {
+  const line = {
+    qty: 99,                                    // ignored when compound
+    unitPrice: 999,                             // ignored when compound
+    components: [
+      { qty: 2, unitPrice: 100 },
+      { qty: 1, unitPrice: 300 },
+    ],
+  };
+  assert.equal(lineBasePrice(line), 500);
+  assert.equal(lineQty(line), 1);
+});
+
+test('lineSubtotal: pre-discount sum for both normal and compound', () => {
+  assert.equal(lineSubtotal({ qty: 2, unitPrice: 100 }), 200);
+  assert.equal(lineSubtotal({
+    components: [{ qty: 1, unitPrice: 400 }, { qty: 1, unitPrice: 600 }],
+  }), 1000);
+});
+
+test('lineTotal: applies line-level margin and discount to a compound', () => {
+  // Compound subtotal 1000, line discount 10% → 900
+  const line = {
+    components: [{ qty: 1, unitPrice: 400 }, { qty: 1, unitPrice: 600 }],
+    lineDiscountPct: 10,
+  };
+  assert.equal(lineTotal(line), 900);
+});
+
+test('lineForTotals: maps a compound onto computeTotals input shape', () => {
+  const line = {
+    components: [{ qty: 1, unitPrice: 400 }, { qty: 2, unitPrice: 300 }],
+    lineMarginPct: 10,
+    lineDiscountPct: 5,
+  };
+  const mapped = lineForTotals(line);
+  assert.deepEqual(mapped, {
+    qty: 1,
+    basePrice: 1000,        // 400 + 600
+    lineMarginPct: 10,
+    lineDiscountPct: 5,
+  });
+});
+
+test('lineForTotals: maps a normal line straight through', () => {
+  const line = {
+    qty: 3, unitPrice: 150, lineMarginPct: 0, lineDiscountPct: 0,
+  };
+  assert.deepEqual(lineForTotals(line), {
+    qty: 3, basePrice: 150, lineMarginPct: 0, lineDiscountPct: 0,
+  });
+});
+
+test('computeTotals: a compound line contributes its components sum', () => {
+  // Mix of one regular line + one compound line. Regular: 2 × $100 = $200
+  // Compound: components 1×$300 + 2×$250 = $800. Subtotal $1000.
+  // ITBIS 18% of $1000 = $180. No margin / discount / shipping.
+  const lines = [
+    { qty: 2, basePrice: 100, lineMarginPct: 0, lineDiscountPct: 0 },
+    lineForTotals({
+      components: [
+        { qty: 1, unitPrice: 300 },
+        { qty: 2, unitPrice: 250 },
+      ],
+    }),
+  ];
+  const t = computeTotals(lines, {});
+  assert.equal(t.subtotal, 1000);
+  assert.equal(t.taxAmt, 180);
+  assert.equal(t.grandTotal, 1180);
+});
+
+test('computeTotals: line-level discount on a compound discounts the sum', () => {
+  // Compound 1000, line discount 10% → 900. ITBIS 18% of 900 = 162.
+  // Grand total 900 + 162 = 1062.
+  const line = lineForTotals({
+    components: [{ qty: 1, unitPrice: 400 }, { qty: 1, unitPrice: 600 }],
+    lineDiscountPct: 10,
+  });
+  const t = computeTotals([line], {});
+  assert.equal(t.subtotal, 900);
+  assert.equal(Math.round(t.grandTotal * 100) / 100, 1062);
 });
 

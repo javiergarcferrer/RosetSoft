@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -10,9 +10,13 @@ import { FieldGroup, Field } from '../primitives/FieldGroup.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
-import { applyLineAdjustments, clampPct } from '../../lib/pricing.js';
+import {
+  applyLineAdjustments, clampPct,
+  isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
+} from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
+import { newId } from '../../db/database.js';
 
 /**
  * One quote line — designed as a product card with three vertical bands:
@@ -57,8 +61,9 @@ export default function QuoteLineItem({
 
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
+  const compound = isCompoundLine(line);
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
-  const lineTotal = unit * (line.qty || 0);
+  const rowTotal = compound ? lineTotal(line) : unit * (line.qty || 0);
   const fmt = (v) => formatMoney(v, currency, rates);
   // Only render the adjustment chip when there's a live discount or a
   // legacy margin to explain (new lines never set margin, but old quotes
@@ -67,6 +72,63 @@ export default function QuoteLineItem({
   const discount = Number(line.lineDiscountPct) || 0;
   const margin = Number(line.lineMarginPct) || 0;
   const hasAdjustment = discount !== 0 || margin !== 0;
+
+  // ----- compound mutations -----
+  function addComponent() {
+    const components = Array.isArray(line.components) ? [...line.components] : [];
+    components.push(makeBlankComponent());
+    onChange({ components });
+  }
+  function updateComponent(id, patch) {
+    const components = (line.components || []).map((c) =>
+      c.id === id ? { ...c, ...patch } : c,
+    );
+    onChange({ components });
+  }
+  function removeComponent(id) {
+    const components = (line.components || []).filter((c) => c.id !== id);
+    onChange({ components });
+  }
+  function convertToCompound() {
+    // Promote the current line's own ref/subtype/dimensions/description/
+    // qty/unitPrice into the first component, then clear those columns
+    // on the parent — keeps the dealer's work intact through the
+    // toggle. Family + image + name stay on the parent because they're
+    // the shared identity of the compound.
+    const seed = makeBlankComponent({
+      name: '',
+      reference: line.reference || '',
+      subtype: line.subtype || '',
+      dimensions: line.dimensions || '',
+      description: line.description || '',
+      qty: line.qty ?? 1,
+      unitPrice: line.unitPrice ?? 0,
+    });
+    onChange({
+      components: [seed],
+      reference: '',
+      subtype: '',
+      dimensions: '',
+      description: '',
+      qty: 1,
+      unitPrice: 0,
+    });
+  }
+  function dissolveCompound() {
+    // Promote the first component back onto the parent line and drop
+    // the rest. The dealer can re-add them as separate lines if they
+    // want — silently discarding multi-component work would be worse.
+    const first = (line.components || [])[0];
+    onChange({
+      components: [],
+      reference: first?.reference || line.reference || '',
+      subtype: first?.subtype || line.subtype || '',
+      dimensions: first?.dimensions || line.dimensions || '',
+      description: first?.description || line.description || '',
+      qty: first?.qty ?? line.qty ?? 1,
+      unitPrice: first?.unitPrice ?? line.unitPrice ?? 0,
+    });
+  }
 
   return (
     // qli-row turns each row into its own container-query root, so the
@@ -79,37 +141,84 @@ export default function QuoteLineItem({
       <TopStrip
         family={line.family}
         onPickFamily={(value) => onChange({ family: value || '' })}
+        compound={compound}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
         onDuplicate={onDuplicate}
         onRemove={onRemove}
+        onConvertToCompound={convertToCompound}
+        onDissolveCompound={dissolveCompound}
         dragHandleProps={dragHandleProps}
       />
 
       <div className="qli-body mt-1.5">
         <IdentityBand
           line={line}
+          compound={compound}
           onChange={onChange}
           refInputRef={refInput}
         />
-        <CalculatorBand
-          line={line}
-          unit={unit}
-          lineTotal={lineTotal}
-          fmt={fmt}
-          hasAdjustment={hasAdjustment}
-          breakdownOpen={breakdownOpen}
-          onChange={onChange}
-          onToggleBreakdown={() => setBreakdownOpen((v) => !v)}
-          onCloseBreakdown={() => setBreakdownOpen(false)}
-          currency={currency}
-          rates={rates}
-        />
+        {compound ? (
+          <CompoundCalculatorBand
+            line={line}
+            rowTotal={rowTotal}
+            fmt={fmt}
+            hasAdjustment={hasAdjustment}
+            breakdownOpen={breakdownOpen}
+            onToggleBreakdown={() => setBreakdownOpen((v) => !v)}
+            onCloseBreakdown={() => setBreakdownOpen(false)}
+            currency={currency}
+            rates={rates}
+          />
+        ) : (
+          <CalculatorBand
+            line={line}
+            unit={unit}
+            lineTotal={rowTotal}
+            fmt={fmt}
+            hasAdjustment={hasAdjustment}
+            breakdownOpen={breakdownOpen}
+            onChange={onChange}
+            onToggleBreakdown={() => setBreakdownOpen((v) => !v)}
+            onCloseBreakdown={() => setBreakdownOpen(false)}
+            currency={currency}
+            rates={rates}
+          />
+        )}
       </div>
 
-      {expanded && <DetailsPanel line={line} onChange={onChange} />}
+      {compound && (
+        <ComponentsPanel
+          line={line}
+          currency={currency}
+          rates={rates}
+          fmt={fmt}
+          onAdd={addComponent}
+          onUpdate={updateComponent}
+          onRemove={removeComponent}
+        />
+      )}
+
+      {expanded && <DetailsPanel line={line} compound={compound} onChange={onChange} />}
     </li>
   );
+}
+
+// New compound components start with their own id so React keys stay
+// stable across reorders / edits. Pass overrides to seed values from
+// an existing line being converted to compound.
+function makeBlankComponent(overrides = {}) {
+  return {
+    id: newId(),
+    name: '',
+    reference: '',
+    subtype: '',
+    dimensions: '',
+    description: '',
+    qty: 1,
+    unitPrice: 0,
+    ...overrides,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +230,12 @@ export default function QuoteLineItem({
 // The action cluster stays pinned to the right edge regardless of fill
 // state.
 // ---------------------------------------------------------------------------
-function TopStrip({ family, onPickFamily, expanded, onToggleExpand, onDuplicate, onRemove, dragHandleProps }) {
+function TopStrip({
+  family, onPickFamily, compound,
+  expanded, onToggleExpand, onDuplicate, onRemove,
+  onConvertToCompound, onDissolveCompound,
+  dragHandleProps,
+}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div className="flex items-center gap-2 mb-2.5 -ml-1">
@@ -155,6 +269,15 @@ function TopStrip({ family, onPickFamily, expanded, onToggleExpand, onDuplicate,
           Asignar familia
         </button>
       )}
+      {compound && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
+          title="Artículo compuesto"
+        >
+          <Layers size={10} className="opacity-80" aria-hidden />
+          Compuesto
+        </span>
+      )}
       <div className="flex-1" />
       <button
         type="button"
@@ -165,7 +288,13 @@ function TopStrip({ family, onPickFamily, expanded, onToggleExpand, onDuplicate,
       >
         <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
-      <OverflowMenu onDuplicate={onDuplicate} onRemove={onRemove} />
+      <OverflowMenu
+        compound={compound}
+        onDuplicate={onDuplicate}
+        onRemove={onRemove}
+        onConvertToCompound={onConvertToCompound}
+        onDissolveCompound={onDissolveCompound}
+      />
 
       <FamilyPicker
         open={pickerOpen}
@@ -184,12 +313,19 @@ function TopStrip({ family, onPickFamily, expanded, onToggleExpand, onDuplicate,
 // visible band because fabric grade is what drives price; hiding it behind
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
-function IdentityBand({ line, onChange, refInputRef }) {
+function IdentityBand({ line, compound, onChange, refInputRef }) {
   // qli-identity stacks below the calc band when the container is
   // narrow and sits next to it when it's wide. min-w-0 lets nested
   // flex children shrink down — combined with HeroInput's wrap and
   // the spec-strip's flex-wrap, long names and dimensions flow onto
   // additional lines instead of being clipped or truncated.
+  //
+  // In compound mode the parent only carries the *shared* identity —
+  // family (rendered as a chip in the TopStrip), photo, and a
+  // composition title. The per-product spec strip (ref / dim) and
+  // grade/fabric row migrate down into each individual component, so
+  // we hide them here. Re-rendering them on the parent would imply
+  // they apply to the whole compound, which contradicts the model.
   return (
     <div className="qli-identity">
       <Thumbnail
@@ -200,14 +336,14 @@ function IdentityBand({ line, onChange, refInputRef }) {
       />
       <div className="flex-1 min-w-0 space-y-1.5">
         <HeroInput
-          placeholder="Nombre del artículo"
+          placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
           value={line.name || ''}
           onCommit={(v) => onChange({ name: v })}
           autoCapitalize="words"
           enterKeyHint="next"
         />
-        <GradeFabricRow line={line} onChange={onChange} />
-        <SpecStrip line={line} onChange={onChange} refInputRef={refInputRef} />
+        {!compound && <GradeFabricRow line={line} onChange={onChange} />}
+        {!compound && <SpecStrip line={line} onChange={onChange} refInputRef={refInputRef} />}
       </div>
     </div>
   );
@@ -406,6 +542,195 @@ function CalculatorBand({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Compound calculator band — replaces the qty × unit = total equation
+// with a single read-only "Compound total" because the math now lives
+// per-component below. Still a button so clicking opens the breakdown
+// popover with the same explanation (subtotal of all components, then
+// line-level discount).
+// ---------------------------------------------------------------------------
+function CompoundCalculatorBand({
+  line, rowTotal, fmt, hasAdjustment, breakdownOpen,
+  onToggleBreakdown, onCloseBreakdown, currency, rates,
+}) {
+  const count = (line.components || []).length;
+  return (
+    <div className="qli-calc transition-shadow group-hover:shadow-soft">
+      <div className="flex items-start justify-end gap-3 flex-wrap">
+        <div className="text-[10px] text-ink-500 tabular-nums leading-tight self-center">
+          {count} componente{count === 1 ? '' : 's'}
+        </div>
+        <div className="qli-total-cell relative text-right">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+            Total compuesto
+          </div>
+          <button
+            type="button"
+            onClick={onToggleBreakdown}
+            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+            title="Ver desglose"
+            aria-expanded={breakdownOpen}
+          >
+            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
+              {fmt(rowTotal)}
+            </div>
+            {hasAdjustment ? (
+              <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
+                <AdjustmentChip line={line} />
+              </div>
+            ) : null}
+          </button>
+          {breakdownOpen && (
+            <LineBreakdownPopover
+              line={line}
+              currency={currency}
+              rates={rates}
+              onClose={onCloseBreakdown}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Components panel — the per-component editor that sits below the
+// parent identity in compound mode. Each component is a compact row
+// with its own name, ref, dim, grade/fabric, qty, unit, and total.
+//
+// Layout intent: dense but readable. A component is the same data
+// shape as a line item but rendered as a single horizontal-wrapping
+// strip rather than the full-card vocabulary — three vertical bands
+// nested inside another three vertical bands would be visual noise.
+// ---------------------------------------------------------------------------
+function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove }) {
+  const components = line.components || [];
+  return (
+    <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 divide-y divide-ink-100 overflow-hidden">
+      {components.length === 0 ? (
+        <div className="px-4 py-5 text-center text-xs text-ink-500">
+          Sin componentes todavía. Agrega el primero para empezar.
+        </div>
+      ) : (
+        components.map((c, i) => (
+          <ComponentRow
+            key={c.id || i}
+            index={i}
+            component={c}
+            currency={currency}
+            rates={rates}
+            fmt={fmt}
+            onChange={(patch) => onUpdate(c.id, patch)}
+            onRemove={() => onRemove(c.id)}
+          />
+        ))
+      )}
+      <div className="px-3 py-2 bg-white flex items-center justify-end">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="btn-ghost text-xs"
+          title="Agregar componente"
+        >
+          <Plus size={12} /> Agregar componente
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove }) {
+  const total = componentSubtotal(component);
+  return (
+    <div className="px-3 sm:px-4 py-3 bg-white">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none">
+          Componente {index + 1}
+        </span>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          aria-label="Quitar componente"
+          title="Quitar componente"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
+        <div className="min-w-0 space-y-1">
+          <HeroInput
+            placeholder="Nombre del componente"
+            value={component.name || ''}
+            onCommit={(v) => onChange({ name: v })}
+            autoCapitalize="words"
+          />
+          <GradeFabricRow
+            line={{ subtype: component.subtype }}
+            onChange={({ subtype }) => onChange({ subtype })}
+          />
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
+            <InlineEditor
+              label="Ref."
+              value={component.reference || ''}
+              onCommit={(v) => onChange({ reference: v })}
+              placeholder="—"
+              mono
+              widthClass="min-w-[6.5rem]"
+              autoCapitalize="characters"
+              autoComplete="off"
+            />
+            <InlineEditor
+              label="Dim."
+              value={component.dimensions || ''}
+              onCommit={(v) => onChange({ dimensions: v })}
+              placeholder="H × W × D"
+              mono
+              widthClass="min-w-[6rem]"
+              autoComplete="off"
+            />
+          </div>
+        </div>
+        <div className="flex items-end justify-end gap-2 flex-wrap sm:flex-nowrap">
+          <CalcCell label="Cant.">
+            <DebouncedInput
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              className="min-w-[3rem] w-16 text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+              value={component.qty ?? 1}
+              onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
+              aria-label="Cantidad del componente"
+            />
+          </CalcCell>
+          <Operator className="self-end pb-2">×</Operator>
+          <CalcCell label="Unitario">
+            <MoneyInput
+              currency={currency}
+              value={component.unitPrice}
+              onCommit={(v) => onChange({ unitPrice: v })}
+              widthClass="min-w-[5.5rem]"
+              aria-label="Precio unitario del componente"
+            />
+          </CalcCell>
+          <Operator className="self-end pb-2">=</Operator>
+          <div className="text-right min-w-[5rem]">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+              Total
+            </div>
+            <div className="text-[14px] font-semibold tabular-nums text-ink-900 leading-tight">
+              {fmt(total)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CalcCell({ label, children }) {
   return (
     <div>
@@ -433,7 +758,7 @@ function AdjustmentChip({ line }) {
 // ---------------------------------------------------------------------------
 // Overflow menu — Duplicate / Eliminar. Closes on outside click and Escape.
 // ---------------------------------------------------------------------------
-function OverflowMenu({ onDuplicate, onRemove }) {
+function OverflowMenu({ onDuplicate, onRemove, compound, onConvertToCompound, onDissolveCompound }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -461,7 +786,7 @@ function OverflowMenu({ onDuplicate, onRemove }) {
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 mt-1.5 w-48 rounded-md border border-ink-200 bg-white shadow-pop py-1 z-30">
+        <div role="menu" className="absolute right-0 mt-1.5 w-52 rounded-md border border-ink-200 bg-white shadow-pop py-1 z-30">
           {onDuplicate && (
             <button
               type="button"
@@ -471,6 +796,29 @@ function OverflowMenu({ onDuplicate, onRemove }) {
             >
               <Copy size={14} className="text-ink-500" />
               Duplicar línea
+            </button>
+          )}
+          {compound ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onDissolveCompound(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Convertir el compuesto en un artículo simple"
+            >
+              <Layers size={14} className="text-ink-500" />
+              Disolver compuesto
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onConvertToCompound(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Agrupar varias referencias bajo una misma familia y foto"
+            >
+              <Layers size={14} className="text-ink-500" />
+              Convertir a compuesto
             </button>
           )}
           <button
@@ -496,11 +844,16 @@ function OverflowMenu({ onDuplicate, onRemove }) {
 // duplicate the entry point here. Yardage and line-level margin are
 // intentionally absent — the line model doesn't surface them anymore.
 // ---------------------------------------------------------------------------
-function DetailsPanel({ line, onChange }) {
+function DetailsPanel({ line, compound, onChange }) {
   return (
     <div className="mt-4 pt-4 border-t border-ink-100 space-y-5">
       <FieldGroup title="Ajuste" columns={2}>
-        <Field label="Descuento %" hint="Aplicado al precio unitario de esta línea.">
+        <Field
+          label="Descuento %"
+          hint={compound
+            ? 'Aplicado al subtotal de todos los componentes.'
+            : 'Aplicado al precio unitario de esta línea.'}
+        >
           <DebouncedInput
             type="number"
             inputMode="decimal"
@@ -515,15 +868,17 @@ function DetailsPanel({ line, onChange }) {
       </FieldGroup>
 
       <FieldGroup title="Texto" columns={2}>
-        <Field label="Descripción (visible en el PDF)" widthClass="col-span-2">
-          <DebouncedTextarea
-            className="input min-h-[60px]"
-            placeholder="Descripción del PDF de tarifa…"
-            value={line.description || ''}
-            onCommit={(v) => onChange({ description: v })}
-            autoCapitalize="sentences"
-          />
-        </Field>
+        {!compound && (
+          <Field label="Descripción (visible en el PDF)" widthClass="col-span-2">
+            <DebouncedTextarea
+              className="input min-h-[60px]"
+              placeholder="Descripción del PDF de tarifa…"
+              value={line.description || ''}
+              onCommit={(v) => onChange({ description: v })}
+              autoCapitalize="sentences"
+            />
+          </Field>
+        )}
         <Field label="Notas internas (no se imprimen)" widthClass="col-span-2">
           <DebouncedTextarea
             className="input min-h-[60px]"
