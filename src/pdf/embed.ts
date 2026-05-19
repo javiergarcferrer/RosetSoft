@@ -1,3 +1,4 @@
+import type { PDFDocument, PDFImage } from 'pdf-lib';
 import { downloadImageBytes } from '../db/database.js';
 
 /**
@@ -8,9 +9,15 @@ import { downloadImageBytes } from '../db/database.js';
  * the app stay crisp in the printed PDF (no blurry up-scaled bitmaps and
  * no manual canvas conversion at upload time).
  */
-export async function embedImageById(doc, id) {
+export async function embedImageById(
+  doc: PDFDocument,
+  id: string | null | undefined,
+): Promise<PDFImage | null> {
   if (!id) return null;
-  const res = await downloadImageBytes(id);
+  const res = (await downloadImageBytes(id)) as {
+    bytes: Uint8Array;
+    contentType: string;
+  } | null;
   if (!res?.bytes) return null;
   const ct = (res.contentType || '').toLowerCase();
 
@@ -43,14 +50,17 @@ export async function embedImageById(doc, id) {
  * the browser's default 300×150 fallback — acceptable for a logo, since
  * any real logo will have explicit dimensions.
  */
-async function rasterizeSvgToPng(svgBytes, { targetWidth = 1600 } = {}) {
+async function rasterizeSvgToPng(
+  svgBytes: Uint8Array,
+  { targetWidth = 1600 }: { targetWidth?: number } = {},
+): Promise<Uint8Array | null> {
   if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
 
   const svgText = new TextDecoder('utf-8').decode(svgBytes);
   const blob = new Blob([svgText], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   try {
-    const img = await new Promise((resolve, reject) => {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
       i.onerror = () => reject(new Error('SVG failed to load'));
@@ -68,15 +78,16 @@ async function rasterizeSvgToPng(svgBytes, { targetWidth = 1600 } = {}) {
     canvas.width = w;
     canvas.height = h;
     const cx = canvas.getContext('2d');
+    if (!cx) return null;
     cx.imageSmoothingEnabled = true;
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(img, 0, 0, w, h);
 
-    const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!pngBlob) return null;
     return new Uint8Array(await pngBlob.arrayBuffer());
   } catch (e) {
-    console.warn('[quotePdf] SVG rasterize failed:', e?.message || e);
+    console.warn('[quotePdf] SVG rasterize failed:', (e as Error)?.message || e);
     return null;
   } finally {
     URL.revokeObjectURL(url);

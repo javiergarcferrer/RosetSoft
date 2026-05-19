@@ -1,3 +1,5 @@
+import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
+import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
 import { ITBIS_PCT, quoteSavings } from '../lib/pricing.js';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import {
@@ -5,6 +7,8 @@ import {
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT, BRAND_700,
 } from './constants.js';
 import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
+import type { DrawTextOptions } from './util.js';
+import type { PdfCtx, Cursor } from './types.js';
 
 /**
  * Right-aligned totals panel — mirrors the ClientPreview structure:
@@ -23,10 +27,16 @@ import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
  * specifically asked for the export to match the preview.
  */
 
+// Tone discriminator for the subtotal-stack rows. Drives both color
+// (default/muted/accent) and font weight (bold for the brand-accented
+// discount row, regular for the rest).
+type SubRowTone = 'default' | 'muted' | 'accent';
+type SubRow = [string, number, SubRowTone];
+
 // Rough vertical budget the totals block needs. Used by the page-break
 // heuristic in generateQuotePdf to decide whether to push totals to a
 // new page rather than splitting them off the last line row.
-export function estimateTotalsHeight(quote) {
+export function estimateTotalsHeight(quote: Quote): number {
   let h = 24;            // top spacing
   h += 14 * 4;           // up to four subtotal-style rows (subtotal / discount / itbis / shipping)
   h += 10;               // divider + breathing
@@ -37,7 +47,13 @@ export function estimateTotalsHeight(quote) {
   return h;
 }
 
-export function drawTotals(page, ctx, cursor, totals, lines) {
+export function drawTotals(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  totals: Totals,
+  lines: QuoteLine[],
+): Cursor {
   const { fontBold, fontRegular, quote, settings, currency, rates } = ctx;
   const panelW = 300;
   const leftX = PAGE_W - MARGIN_R - panelW;
@@ -54,7 +70,7 @@ export function drawTotals(page, ctx, cursor, totals, lines) {
   // tone: 'default' | 'muted' | 'accent' — the discount row reads in
   // brand-700 so the customer perceives it, instead of fading into
   // the ITBIS / Envío supporting cast.
-  const subRows = [['Subtotal', totals.subtotal, 'default']];
+  const subRows: SubRow[] = [['Subtotal', totals.subtotal, 'default']];
   if (quote.discountPct) {
     subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, 'accent']);
   }
@@ -64,10 +80,10 @@ export function drawTotals(page, ctx, cursor, totals, lines) {
   }
 
   for (const [label, value, tone] of subRows) {
-    const color = tone === 'accent' ? BRAND_700
+    const color: RGB = tone === 'accent' ? BRAND_700
       : tone === 'muted' ? INK_MID
       : INK_HIGH;
-    const font = tone === 'accent' ? fontBold : fontRegular;
+    const font: PDFFont = tone === 'accent' ? fontBold : fontRegular;
     page.drawText(label, {
       x: leftX, y, size: 10, font, color,
     });
@@ -134,13 +150,13 @@ export function drawTotals(page, ctx, cursor, totals, lines) {
 }
 
 /** Multi-line terms block at the bottom of the last page. */
-export function drawTerms(page, ctx, cursor) {
+export function drawTerms(page: PDFPage, ctx: PdfCtx, cursor: Cursor): Cursor {
   const { fontRegular, fontBold, quote } = ctx;
   let y = cursor.y - 8;
   page.drawText('TÉRMINOS Y CONDICIONES', {
     x: MARGIN_L, y, size: 7.5, font: fontBold, color: INK_MID,
     characterSpacing: 1.4,
-  });
+  } as DrawTextOptions);
   y -= 14;
   const lines = wrapText(quote.terms || '', 95);
   for (const ln of lines) {
@@ -153,7 +169,7 @@ export function drawTerms(page, ctx, cursor) {
 }
 
 /** Per-page footer: company line on the left, "page N / M" on the right. */
-export function drawFooter(page, ctx, pageNum, pageCount) {
+export function drawFooter(page: PDFPage, ctx: PdfCtx, pageNum: number, pageCount: number): void {
   const { fontRegular, settings } = ctx;
   const y = 28;
   page.drawLine({
@@ -173,7 +189,7 @@ export function drawFooter(page, ctx, pageNum, pageCount) {
   drawRightAt(page, pageText, PAGE_W - MARGIN_R, y, 8, fontRegular, INK_MID);
 }
 
-function siteUrlFromEmail(email) {
+function siteUrlFromEmail(email: string | null | undefined): string | null {
   if (!email || !email.includes('@')) return null;
   return email.split('@')[1].toLowerCase();
 }

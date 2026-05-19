@@ -1,3 +1,5 @@
+import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
+import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
   lineTotal, lineListUnit, lineQty,
@@ -7,7 +9,9 @@ import {
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
+import type { DrawTextOptions } from './util.js';
 import { embedImageById } from './embed.js';
+import type { PdfCtx, Cursor } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Line-items layout. Mirrors the on-screen ClientPreview.jsx so the PDF
@@ -68,13 +72,28 @@ const ROW_BOTTOM_PAD = 14;
 const IDENTITY_TO_SPEC_GAP = 6;   // gap between identity block and physical specs
 const SPEC_TO_NUMERIC_PAD = 16;   // breathing room between detail column and numeric column
 
+/**
+ * One entry in the `T` type-token table — a triplet of (size, line-height,
+ * color) plus optional weight / italic / character-spacing modifiers.
+ * The renderer reads these at draw time so a typographic redesign can
+ * rebalance values in one place.
+ */
+interface TypeToken {
+  size: number;
+  lh: number;
+  color: RGB;
+  cs?: number;
+  bold?: boolean;
+  italic?: boolean;
+}
+
 // Type table — kept here so a typographic redesign rebalances in one
 // place. The colors deliberately mirror the ClientPreview tokens.
 //
 // `notes` is intentionally absent: line.notes is labelled "Notas
 // internas (no se imprimen)" in the editor, so it must not appear in
 // the client-facing PDF.
-const T = {
+const T: Record<string, TypeToken> = {
   family:      { size: 7.5, lh: 11, color: BRAND_700, cs: 1.5, bold: true },
   name:        { size: 12,  lh: 15, color: INK,       bold: true },
   subtype:     { size: 10,  lh: 13, color: INK_HIGH },
@@ -109,7 +128,28 @@ const T = {
 
 const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
 
-function lineColumns() {
+/**
+ * One wrapped segment of detail-column text: a token + its (already
+ * wrapped) lines, OR a vertical gap insert. The `kind` discriminator
+ * lets TypeScript narrow which fields are present — see `detailSegments`
+ * for how they're emitted.
+ */
+type DetailSegment =
+  | { kind: 'text'; token: TypeToken; lines: string[] }
+  | { kind: 'gap'; gap: number };
+
+interface LineColumns {
+  img: { x: number; y: number | null; w: number; h: number };
+  detail: { x: number; w: number };
+  numeric: { rightX: number; w: number };
+}
+
+interface CompoundColumns {
+  img: { x: number; w: number; h: number };
+  detail: { x: number; rightX: number; w: number };
+}
+
+function lineColumns(): LineColumns {
   const right = PAGE_W - MARGIN_R;
   const imgX = MARGIN_L;
   const detailX = imgX + IMAGE_SIZE + IMG_GUTTER;
@@ -129,10 +169,15 @@ function lineColumns() {
 // so we never lose visible characters — the caller's hard rule is "never
 // hide data".
 // ---------------------------------------------------------------------------
-function wrapToWidth(text, maxWidth, font, size) {
+function wrapToWidth(
+  text: string | null | undefined,
+  maxWidth: number,
+  font: PDFFont,
+  size: number,
+): string[] {
   const words = (text || '').trim().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  const out = [];
+  const out: string[] = [];
   let cur = '';
   for (const w of words) {
     const next = cur ? cur + ' ' + w : w;
@@ -152,7 +197,7 @@ function wrapToWidth(text, maxWidth, font, size) {
   return out;
 }
 
-function fontFor(ctx, token) {
+function fontFor(ctx: PdfCtx, token: TypeToken): PDFFont {
   if (token.bold) return ctx.fontBold;
   if (token.italic) return ctx.fontItalic || ctx.fontRegular;
   return ctx.fontRegular;
@@ -163,12 +208,12 @@ function fontFor(ctx, token) {
  * already wrapped to the column width. Shared by the measure + draw
  * passes so they can't drift.
  */
-function detailSegments(ctx, line, detailW) {
-  const segs = [];
-  function push(text, token) {
+function detailSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): DetailSegment[] {
+  const segs: DetailSegment[] = [];
+  function push(text: string | null | undefined, token: TypeToken): void {
     if (!text) return;
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
-    if (lines.length) segs.push({ token, lines });
+    if (lines.length) segs.push({ kind: 'text', token, lines });
   }
   push(line.family ? line.family.toUpperCase() : '', T.family);
   push(line.name || '(sin nombre)', T.name);
@@ -181,7 +226,7 @@ function detailSegments(ctx, line, detailW) {
   ].filter(Boolean).join(' · ');
   push(meta, T.meta);
   if (line.description && (line.family || line.name || line.subtype || meta)) {
-    segs.push({ gap: IDENTITY_TO_SPEC_GAP });
+    segs.push({ kind: 'gap', gap: IDENTITY_TO_SPEC_GAP });
   }
   push(line.description, T.description);
   return segs;
@@ -190,10 +235,10 @@ function detailSegments(ctx, line, detailW) {
 /**
  * Total height of the detail column at this line's content.
  */
-function measureDetailHeight(ctx, line, detailW) {
+function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
   let h = 0;
   for (const seg of detailSegments(ctx, line, detailW)) {
-    if (seg.gap) { h += seg.gap; continue; }
+    if (seg.kind === 'gap') { h += seg.gap; continue; }
     h += seg.lines.length * seg.token.lh;
   }
   return h;
@@ -208,7 +253,7 @@ function measureDetailHeight(ctx, line, detailW) {
  * caption lines under UNITARIO (struck-through list price + "–Y%"
  * caption) so the customer can see what they're saving against.
  */
-function numericHeight(line) {
+function numericHeight(line: QuoteLine): number {
   const discount = Number(line?.lineDiscountPct) || 0;
   const extra = discount > 0 ? T.numStrike.lh + T.numDiscount.lh : 0;
   return (
@@ -224,7 +269,7 @@ function numericHeight(line) {
  * into the detail column, and each component contributes its own
  * sub-block (name + meta + inline equation). See compoundRowHeight().
  */
-export function measureLineRowHeight(ctx, line) {
+export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine): number {
   if (isCompoundLine(line)) return compoundRowHeight(ctx, line);
   const cols = lineColumns();
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
@@ -263,7 +308,7 @@ const COMP_BLOCK_GAP  = 4;        // gap between component meta and next divider
 const COMP_TOTAL_GAP  = 10;       // gap between last component and total block
 const COMPOUND_DETAIL_GUTTER = 12; // breathing room between detail and right edge
 
-function compoundColumns() {
+function compoundColumns(): CompoundColumns {
   const right = PAGE_W - MARGIN_R;
   const imgX = MARGIN_L;
   const detailX = imgX + IMAGE_SIZE + IMG_GUTTER;
@@ -278,9 +323,14 @@ function compoundColumns() {
   };
 }
 
-function compoundHeaderSegments(ctx, line, detailW) {
-  const segs = [];
-  function push(text, token) {
+interface CompoundSegment {
+  token: TypeToken;
+  lines: string[];
+}
+
+function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): CompoundSegment[] {
+  const segs: CompoundSegment[] = [];
+  function push(text: string | null | undefined, token: TypeToken): void {
     if (!text) return;
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) segs.push({ token, lines });
@@ -294,15 +344,19 @@ function compoundHeaderSegments(ctx, line, detailW) {
 // (optional) description. The qty × unit = subtotal equation lives on
 // the same baseline as the name, right-aligned, so the column reads
 // as a labelled price row with subordinated specs beneath.
-function componentBlockSegments(ctx, component, detailW) {
+function componentBlockSegments(
+  ctx: PdfCtx,
+  component: LineComponent,
+  detailW: number,
+): CompoundSegment[] {
   // Reserve room on the right for the inline equation so the name
   // wraps before it overlaps. The equation length depends on the
   // formatted numbers, so we measure once and shrink the nameW for
   // wrapping. This means a very long fabric-grade like "Microfibras
   // Mostaza decadente" wraps onto a new line BELOW the equation
   // rather than colliding with it.
-  const nameSegs = [];
-  function push(text, token) {
+  const nameSegs: CompoundSegment[] = [];
+  function push(text: string | null | undefined, token: TypeToken): void {
     if (!text) return;
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) nameSegs.push({ token, lines });
@@ -318,7 +372,7 @@ function componentBlockSegments(ctx, component, detailW) {
   return nameSegs;
 }
 
-function compoundRowHeight(ctx, line) {
+function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
   const cols = compoundColumns();
   // Parent identity (family + name) block.
   let textH = 0;
@@ -359,10 +413,10 @@ function compoundRowHeight(ctx, line) {
 // Widest "qty × unit = subtotal" equation across all components on
 // this line. Used for layout reservation so each row's wrap width
 // accommodates the longest equation it will render.
-function maxEquationWidth(ctx, line) {
+function maxEquationWidth(ctx: PdfCtx, line: QuoteLine): number {
   const { fontRegular } = ctx;
   let max = 0;
-  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+  const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
   for (const c of line.components || []) {
     const qty = Number(c.qty) || 0;
     const unit = Number(c.unitPrice) || 0;
@@ -378,7 +432,12 @@ function maxEquationWidth(ctx, line) {
  * Section header — a brand-color eyebrow line, no chrome. The preview
  * renders "MOBILIARIO DE SALA" this way; the PDF should match.
  */
-export function drawSectionHeader(page, ctx, cursor, label) {
+export function drawSectionHeader(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  label: string,
+): Cursor {
   const { fontBold } = ctx;
   const size = 9;
   const tracking = 1.6;
@@ -387,7 +446,7 @@ export function drawSectionHeader(page, ctx, cursor, label) {
     x: MARGIN_L, y,
     size, font: fontBold, color: BRAND_700,
     characterSpacing: tracking,
-  });
+  } as DrawTextOptions);
   return { x: MARGIN_L, y: y - 18 };
 }
 
@@ -395,7 +454,7 @@ export function drawSectionHeader(page, ctx, cursor, label) {
  * Centered "Sin artículos" placeholder so the totals block doesn't
  * appear to float over empty white space when the quote has no lines.
  */
-export function drawEmptyLineBody(page, ctx, cursor) {
+export function drawEmptyLineBody(page: PDFPage, ctx: PdfCtx, cursor: Cursor): Cursor {
   const { fontRegular, fontItalic } = ctx;
   const boxH = 56;
   const top = cursor.y;
@@ -416,7 +475,12 @@ export function drawEmptyLineBody(page, ctx, cursor) {
  * renderer with a different geometry (no right-side numeric column,
  * per-component inline equations, single roll-up total).
  */
-export async function drawLineRow(page, ctx, cursor, line) {
+export async function drawLineRow(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  line: QuoteLine,
+): Promise<Cursor> {
   if (isCompoundLine(line)) {
     return drawCompoundLineRow(page, ctx, cursor, line);
   }
@@ -452,7 +516,7 @@ export async function drawLineRow(page, ctx, cursor, line) {
   // ---- Detail column — text flows top-to-bottom in hierarchy order -------
   let sy = innerTop;
   for (const seg of detailSegments(ctx, line, cols.detail.w)) {
-    if (seg.gap) { sy -= seg.gap; continue; }
+    if (seg.kind === 'gap') { sy -= seg.gap; continue; }
     const f = fontFor(ctx, seg.token);
     for (const ln of seg.lines) {
       const baselineY = sy - seg.token.size;
@@ -463,7 +527,7 @@ export async function drawLineRow(page, ctx, cursor, line) {
         font: f,
         color: seg.token.color,
         characterSpacing: seg.token.cs || 0,
-      });
+      } as DrawTextOptions);
       sy -= seg.token.lh;
     }
   }
@@ -475,7 +539,12 @@ export async function drawLineRow(page, ctx, cursor, line) {
   const listUnit = lineListUnit(line);
 
   let ny = innerTop;
-  function drawLabelValue(label, value, lblToken, valToken) {
+  function drawLabelValue(
+    label: string,
+    value: string,
+    lblToken: TypeToken,
+    valToken: TypeToken,
+  ): void {
     const lblY = ny - lblToken.size;
     drawRightAt(
       page, label, cols.numeric.rightX, lblY,
@@ -551,7 +620,12 @@ export async function drawLineRow(page, ctx, cursor, line) {
  * Sized via compoundRowHeight() so the page-break logic in quotePdf.js
  * still gets an accurate row height for the break decision.
  */
-async function drawCompoundLineRow(page, ctx, cursor, line) {
+async function drawCompoundLineRow(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  line: QuoteLine,
+): Promise<Cursor> {
   const { doc, fontBold, fontRegular } = ctx;
   const cols = compoundColumns();
   const rowY = cursor.y;
@@ -593,7 +667,7 @@ async function drawCompoundLineRow(page, ctx, cursor, line) {
         font: f,
         color: seg.token.color,
         characterSpacing: seg.token.cs || 0,
-      });
+      } as DrawTextOptions);
       sy -= seg.token.lh;
     }
   }
@@ -630,7 +704,7 @@ async function drawCompoundLineRow(page, ctx, cursor, line) {
   const subtotal = compoundSubtotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
   const grandTotal = lineTotal(line);
-  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+  const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
 
   if (discount !== 0) {
     const subText = `Subtotal ${fmt(subtotal)} · descuento –${discount}%`;
@@ -667,9 +741,16 @@ async function drawCompoundLineRow(page, ctx, cursor, line) {
 // Draws one component block (name + subordinated specs on the left,
 // inline qty × unit = subtotal equation on the right of the first
 // baseline). Returns the y after the block has been drawn.
-function drawComponentBlock(page, ctx, startY, cols, component, nameW) {
+function drawComponentBlock(
+  page: PDFPage,
+  ctx: PdfCtx,
+  startY: number,
+  cols: CompoundColumns,
+  component: LineComponent,
+  nameW: number,
+): number {
   const { fontRegular } = ctx;
-  const fmt = (v) => formatMoney(v, ctx.currency, ctx.rates);
+  const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const sub = componentSubtotal(component);
@@ -689,7 +770,7 @@ function drawComponentBlock(page, ctx, startY, cols, component, nameW) {
         font: f,
         color: seg.token.color,
         characterSpacing: seg.token.cs || 0,
-      });
+      } as DrawTextOptions);
       // On the very first text line of the block, also emit the
       // inline equation on the right edge — aligned to the same
       // baseline as the component name.
