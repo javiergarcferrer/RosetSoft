@@ -133,6 +133,7 @@ export function AppProvider({ children }) {
     settings,
     currentProfile,
     isAdmin: currentProfile?.role === 'admin',
+    isAccounting: currentProfile?.role === 'accounting',
     isActive: !!currentProfile?.active,
     refreshProfiles,
     refreshSettings,
