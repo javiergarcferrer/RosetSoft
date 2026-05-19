@@ -657,9 +657,18 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
 
 function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove }) {
   const total = componentSubtotal(component);
+  // ComponentRow used to be a two-column grid (specs on the left, calc
+  // cells on the right via `sm:grid-cols-[minmax(0,1fr)_auto]`). The
+  // auto-sized right column happily grabbed ~300px for its CANT × UNIT
+  // = TOTAL strip and squeezed a long component name ("RIGHT-ARM SOFA
+  // WITH SHORT UNIT KOBOLD CLASSIC") into a narrow 3-line tower —
+  // visible even on the mid-width screenshots the dealer was sending
+  // in. This row is already inside a sub-card inside a line-item card;
+  // stacking vertically reads cleaner and gives the name the full
+  // row width unconditionally.
   return (
-    <div className="px-3 sm:px-4 py-3 bg-white">
-      <div className="flex items-center gap-2 mb-1.5">
+    <div className="px-3 sm:px-4 py-3 bg-white space-y-2">
+      <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none">
           Componente {index + 1}
         </span>
@@ -674,41 +683,49 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
           <X size={13} />
         </button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
-        <div className="min-w-0 space-y-1">
-          <HeroInput
-            placeholder="Nombre del componente"
-            value={component.name || ''}
-            onCommit={(v) => onChange({ name: v })}
-            autoCapitalize="words"
-          />
-          <GradeFabricRow
-            line={{ subtype: component.subtype }}
-            onChange={({ subtype }) => onChange({ subtype })}
-          />
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
-            <InlineEditor
-              label="Ref."
-              value={component.reference || ''}
-              onCommit={(v) => onChange({ reference: v })}
-              placeholder="—"
-              mono
-              widthClass="min-w-[6.5rem]"
-              autoCapitalize="characters"
-              autoComplete="off"
-            />
-            <InlineEditor
-              label="Dim."
-              value={component.dimensions || ''}
-              onCommit={(v) => onChange({ dimensions: v })}
-              placeholder="H × W × D"
-              mono
-              widthClass="min-w-[6rem]"
-              autoComplete="off"
-            />
-          </div>
-        </div>
-        <div className="flex items-end justify-end gap-2 flex-wrap sm:flex-nowrap">
+
+      <HeroInput
+        placeholder="Nombre del componente"
+        value={component.name || ''}
+        onCommit={(v) => onChange({ name: v })}
+        autoCapitalize="words"
+      />
+
+      <GradeFabricRow
+        line={{ subtype: component.subtype }}
+        onChange={({ subtype }) => onChange({ subtype })}
+      />
+
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
+        <InlineEditor
+          label="Ref."
+          value={component.reference || ''}
+          onCommit={(v) => onChange({ reference: v })}
+          placeholder="—"
+          mono
+          widthClass="min-w-[6.5rem]"
+          autoCapitalize="characters"
+          autoComplete="off"
+        />
+        <InlineEditor
+          label="Dim."
+          value={component.dimensions || ''}
+          onCommit={(v) => onChange({ dimensions: v })}
+          placeholder="H × W × D"
+          mono
+          widthClass="min-w-[6rem]"
+          autoComplete="off"
+        />
+      </div>
+
+      {/* Pricing strip on its own row. Sits on a faint tinted band so
+          it reads as a sub-band of the component card, matching the
+          visual treatment of the main CalculatorBand. Flex-wraps when
+          the row is genuinely too narrow for the inline equation, with
+          the operators dropping out the same way the main calc grid
+          does. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 mt-1 pt-2 border-t border-ink-100">
+        <div className="flex items-end gap-2">
           <CalcCell label="Cant.">
             <DebouncedInput
               type="number"
@@ -731,14 +748,13 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
               aria-label="Precio unitario del componente"
             />
           </CalcCell>
-          <Operator className="self-end pb-2">=</Operator>
-          <div className="text-right min-w-[5rem]">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
-              Total
-            </div>
-            <div className="text-[14px] font-semibold tabular-nums text-ink-900 leading-tight">
-              {fmt(total)}
-            </div>
+        </div>
+        <div className="text-right min-w-[5rem]">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+            Total
+          </div>
+          <div className="text-[14px] font-semibold tabular-nums text-ink-900 leading-tight">
+            {fmt(total)}
           </div>
         </div>
       </div>

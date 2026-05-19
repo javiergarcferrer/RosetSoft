@@ -1,6 +1,12 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  // .ts and .tsx land in the scan set so utility classes used by the
+  // migrated TypeScript modules (Thumbnail, primitives, DebouncedInput,
+  // ImageView, the lib/db/pdf modules' inline class strings) end up in
+  // the production CSS. The previous `.{js,jsx}`-only glob silently
+  // dropped any class that appeared exclusively inside a `.tsx` file —
+  // the bigger-thumbnail visual fix was a recent victim of that.
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       fontFamily: {
