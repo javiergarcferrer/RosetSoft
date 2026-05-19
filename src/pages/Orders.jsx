@@ -8,6 +8,7 @@ import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
@@ -125,7 +126,7 @@ export default function Orders() {
     for (const q of allQuotes) {
       if (!q.orderId) continue;
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       const t = computeTotals(rows, q).grandTotal;
       totalByOrder.set(q.orderId, (totalByOrder.get(q.orderId) || 0) + t);

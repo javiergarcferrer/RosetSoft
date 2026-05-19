@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Hash } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import { LINE_KIND_SECTION } from '../../lib/constants.js';
 
 /**
  * Renders the ordered list of quote lines (mixed items + sections) and owns
@@ -83,7 +84,7 @@ export default function LineItemList({
   return (
     <ul className="divide-y divide-ink-100">
       {lines.map((l) => {
-        const isSection = l.kind === 'section';
+        const isSection = l.kind === LINE_KIND_SECTION;
         const isDragging = draggingId === l.id;
         const isDropTarget = dropTargetId === l.id && draggingId !== l.id;
         const handleProps = {

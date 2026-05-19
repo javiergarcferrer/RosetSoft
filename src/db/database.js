@@ -1,4 +1,5 @@
 import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
+import { snake, toRow, fromRow, fromRows } from './rowMapping.js';
 
 /**
  * Roset Soft cloud data layer.
@@ -7,6 +8,10 @@ import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
  * backed by Supabase Postgres + Storage. The React pages continue to import
  * `db`, `newId`, and the image helpers from this module without knowing
  * they're talking to the cloud.
+ *
+ * Row-name conversion (camelCase ↔ snake_case + timestamp coercion) lives
+ * in `./rowMapping.js` so the contract can be tested without a Supabase
+ * mock.
  *
  * Mutations call `invalidate()` so the `useLiveQuery` hook refetches.
  */
@@ -23,41 +28,11 @@ const TABLES = {
   containers:    { db: 'containers',    pk: 'id' },
 };
 
-function snake(name) {
-  return name.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
-}
-function camel(name) {
-  return name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-}
-function isAtField(camelKey) {
-  return /At$/.test(camelKey);
-}
-function toRow(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj || {})) {
-    let val = v;
-    if (isAtField(k) && typeof v === 'number' && Number.isFinite(v)) {
-      val = new Date(v).toISOString();
-    }
-    out[snake(k)] = val;
-  }
-  return out;
-}
-function fromRow(row) {
-  if (!row || typeof row !== 'object') return row;
-  const out = {};
-  for (const [k, v] of Object.entries(row)) {
-    const ck = camel(k);
-    let val = v;
-    if (isAtField(ck) && typeof v === 'string') {
-      const t = Date.parse(v);
-      if (!Number.isNaN(t)) val = t;
-    }
-    out[ck] = val;
-  }
-  return out;
-}
-const fromRows = (rows) => (rows || []).map(fromRow);
+// Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in
+// `./rowMapping.js` so the conversion contract can be unit-tested
+// without standing up @supabase/supabase-js. The bug the test suite
+// over there catches: reading `profile.commission_pct` on an object
+// that's already been camelCased through fromRow returns undefined.
 
 /* ---------------------------------------------------------------------- */
 /*  Invalidation bus (powers useLiveQuery)                                 */

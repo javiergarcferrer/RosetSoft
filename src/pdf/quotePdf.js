@@ -4,6 +4,7 @@ import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
 import { effectiveRates } from '../lib/exchangeRate.js';
+import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
@@ -170,7 +171,7 @@ function groupBySection(lines) {
   const groups = [];
   let cur = { label: null, items: [] };
   for (const l of lines) {
-    if (l.kind === 'section') {
+    if (l.kind === LINE_KIND_SECTION) {
       if (cur.items.length || cur.label) groups.push(cur);
       cur = { label: l.name || 'Sección', items: [] };
     } else {

@@ -6,6 +6,7 @@ import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { effectiveRates } from '../lib/exchangeRate.js';
+import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
 // gzipped between pdf-lib, fontkit, and the font fetch. Loading it
@@ -135,7 +136,7 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
       await db.quoteLines.put({
         id: newId(),
         quoteId: id,
-        kind: 'item',
+        kind: LINE_KIND_ITEM,
         sortOrder: 0,
         family: '',
         reference: initialRef,
@@ -294,7 +295,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       await db.quoteLines.put({
         id,
         quoteId,
-        kind: 'item',
+        kind: LINE_KIND_ITEM,
         sortOrder: nextSortOrder(),
         family: seed.family || '',
         reference: seed.reference || '',
@@ -325,7 +326,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       await db.quoteLines.put({
         id,
         quoteId,
-        kind: 'section',
+        kind: LINE_KIND_SECTION,
         sortOrder: nextSortOrder(),
         family: '',
         reference: '',
@@ -391,7 +392,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       await db.quoteLines.delete(line.id);
-      const label = line.kind === 'section'
+      const label = line.kind === LINE_KIND_SECTION
         ? `Sección "${line.name || 'sin nombre'}" eliminada`
         : `Artículo "${line.name || line.reference || 'sin nombre'}" eliminado`;
       showUndo(label, async () => {
@@ -419,7 +420,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }
 
   const totals = computeTotals(
-    lines.filter((l) => l.kind !== 'section').map(lineForTotals),
+    lines.filter(isPricedLine).map(lineForTotals),
     { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
   );
 
@@ -615,7 +616,7 @@ function LineItemsCard({
       {lines.length > 0 && (
         <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between gap-2">
           <span className="text-[11px] text-ink-500">
-            {lines.filter((l) => l.kind !== 'section').length} artículo(s) · arrastra
+            {lines.filter(isPricedLine).length} artículo(s) · arrastra
             <span className="font-mono"> ⋮⋮ </span>para reordenar
           </span>
           <div className="flex items-center gap-1.5">

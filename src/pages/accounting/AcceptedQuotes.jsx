@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
 /**
@@ -62,7 +63,7 @@ export default function AcceptedQuotes() {
     const m = new Map();
     for (const qu of quotesQ.data) {
       const rows = (linesByQuote.get(qu.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       m.set(qu.id, computeTotals(rows, qu).grandTotal);
     }
@@ -72,7 +73,7 @@ export default function AcceptedQuotes() {
   const accepted = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return quotesQ.data
-      .filter((qu) => qu.status === 'accepted')
+      .filter((qu) => qu.status === QUOTE_STATUS_ACCEPTED)
       .filter((qu) => {
         if (!needle) return true;
         const cust = customerById.get(qu.customerId);
@@ -206,7 +207,7 @@ function usePdfDownload({ quote, customer, lines, settings }) {
     setBusy(true);
     try {
       const totals = computeTotals(
-        lines.filter((l) => l.kind !== 'section').map(lineForTotals),
+        lines.filter(isPricedLine).map(lineForTotals),
         quote,
       );
       const { generateQuotePdf, downloadBlob } = await safeDynamicImport(

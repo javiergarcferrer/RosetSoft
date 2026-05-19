@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
+import { LINE_KIND_SECTION } from '../../lib/constants.js';
 
 /**
  * The "catalog substitute": derive a deduped list of past line items from
@@ -22,7 +23,7 @@ export function useQuoteAutocomplete() {
   const suggestions = useMemo(() => {
     const byKey = new Map();
     for (const l of allLines) {
-      if (l.kind === 'section') continue;
+      if (l.kind === LINE_KIND_SECTION) continue;
       // Need at least *something* identifying to be a useful suggestion.
       const ident = (l.reference || '').trim() || (l.name || '').trim();
       if (!ident) continue;

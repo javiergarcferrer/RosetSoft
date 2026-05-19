@@ -9,6 +9,7 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../lib/constants.js';
 import { effectiveCommissionPct, commissionAmount } from '../lib/commissions.js';
 
 /**
@@ -101,7 +102,7 @@ export default function ProfessionalDetail() {
       // Sections are stripped: they have no qty/price, they're just
       // visual dividers in the quote.
       const lines = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       const totals = computeTotals(lines, q);
       const pct = effectiveCommissionPct(q, pro);
@@ -145,7 +146,7 @@ export default function ProfessionalDetail() {
       for (const e of entries) {
         totalBase += e.base;
         totalCommission += e.commission;
-        if (status === 'accepted') {
+        if (status === QUOTE_STATUS_ACCEPTED) {
           acceptedBase += e.base;
           acceptedCommission += e.commission;
         }

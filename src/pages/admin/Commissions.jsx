@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import StatCard from '../../components/StatCard.jsx';
 import { formatDateTime, formatMoney } from '../../lib/format.js';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import { isPricedLine } from '../../lib/constants.js';
 import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
@@ -109,7 +110,7 @@ export default function AdminCommissions() {
     }
     function totalsFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       const t = computeTotals(rows, q);
       return { base: t.taxableBase, grandTotal: t.grandTotal };

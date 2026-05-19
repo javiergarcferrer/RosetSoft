@@ -4,6 +4,7 @@ import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings,
 } from '../../lib/pricing.js';
+import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 
 /**
@@ -416,7 +417,7 @@ function groupBySection(lines) {
   const groups = [];
   let cur = { label: null, items: [] };
   for (const l of lines) {
-    if (l.kind === 'section') {
+    if (l.kind === LINE_KIND_SECTION) {
       if (cur.items.length || cur.label) groups.push(cur);
       cur = { label: l.name || 'Sección', items: [] };
     } else {

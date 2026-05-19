@@ -11,6 +11,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
 import { ORDER_STAGE_BY_KEY } from '../lib/orderStages.js';
 
 /**
@@ -129,7 +130,7 @@ export default function Dashboard() {
     const totalByQuote = new Map();
     for (const q of allQuotes) {
       const lines = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       const t = computeTotals(lines, q);
       totalByQuote.set(q.id, t.grandTotal);

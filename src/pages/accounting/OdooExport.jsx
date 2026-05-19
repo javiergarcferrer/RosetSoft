@@ -13,6 +13,7 @@ import {
   computeTotals, applyLineAdjustments, lineForTotals,
   isCompoundLine,
 } from '../../lib/pricing.js';
+import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { cycleEnding, isoDate, clampPct } from '../../lib/commissionCycle.js';
 
 /**
@@ -58,7 +59,7 @@ export default function OdooExport() {
   }, [linesQ.data]);
 
   const acceptedCount = useMemo(
-    () => quotesQ.data.filter((q) => q.status === 'accepted').length,
+    () => quotesQ.data.filter((q) => q.status === QUOTE_STATUS_ACCEPTED).length,
     [quotesQ.data],
   );
 
@@ -106,7 +107,7 @@ export default function OdooExport() {
       'status',
     ];
     const rows = [header];
-    const accepted = quotesQ.data.filter((q) => q.status === 'accepted');
+    const accepted = quotesQ.data.filter((q) => q.status === QUOTE_STATUS_ACCEPTED);
     for (const q of accepted) {
       const customer = q.customerId ? customerById.get(q.customerId) : null;
       const partnerName = customer
@@ -122,7 +123,7 @@ export default function OdooExport() {
       // as its own invoice line, with the line-level margin/discount
       // applied uniformly across components.
       const itemLines = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       for (const l of itemLines) {
         if (isCompoundLine(l)) {
@@ -188,7 +189,7 @@ export default function OdooExport() {
 
     function totalsFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       const t = computeTotals(rows, q);
       return { base: t.taxableBase, grandTotal: t.grandTotal };

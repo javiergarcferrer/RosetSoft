@@ -13,6 +13,7 @@ import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
 import {
   ORDER_STAGES, ORDER_STAGE_BY_KEY,
   currentOrderStage, nextOrderStage, orderStageIndex,
@@ -93,7 +94,7 @@ export default function OrderDetail() {
     const m = new Map();
     for (const q of quotes) {
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       m.set(q.id, computeTotals(rows, q).grandTotal);
     }

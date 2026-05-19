@@ -9,6 +9,7 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 
 const STATUS_PILL_CLASS = {
@@ -120,7 +121,7 @@ export default function Quotes() {
     const m = new Map();
     for (const qu of quotes) {
       const rows = (linesByQuote.get(qu.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       m.set(qu.id, computeTotals(rows, qu).grandTotal);
     }

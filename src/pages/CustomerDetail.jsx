@@ -12,6 +12,7 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 
 /**
@@ -95,7 +96,7 @@ export default function CustomerDetail() {
     }
     function totalFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       return computeTotals(rows, q).grandTotal;
     }

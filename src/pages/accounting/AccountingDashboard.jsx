@@ -11,6 +11,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import StatCard from '../../components/StatCard.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import { isPricedLine } from '../../lib/constants.js';
 import { cycleEnding, formatCycle, clampPct } from '../../lib/commissionCycle.js';
 
 /**
@@ -56,7 +57,7 @@ export default function AccountingDashboard() {
     }
     function totalsFor(q) {
       const rows = (linesByQuote.get(q.id) || [])
-        .filter((l) => l.kind !== 'section')
+        .filter(isPricedLine)
         .map(lineForTotals);
       return computeTotals(rows, q);
     }
