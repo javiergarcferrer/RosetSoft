@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
-import { db, newId, nextSequenceNumber } from '../db/database.js';
+import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { effectiveRates } from '../lib/exchangeRate.js';
@@ -104,9 +104,16 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
     inFlightRef.current = (async () => {
       try {
         // Derive the number from the table's current top, not a stored
-        // counter — see nextSequenceNumber's docstring for why.
-        const number = await nextSequenceNumber('quotes', profileId, 1001);
-        await db.quotes.put({ ...defaults, number, updatedAt: Date.now() });
+        // counter — see nextSequenceNumber's docstring for why. The
+        // assign-helper handles the read+write race under multi-user
+        // load: if another browser took our number, it retries
+        // against the new max instead of failing.
+        await assignSequenceNumber({
+          table: 'quotes',
+          profileId,
+          start: 1001,
+          build: (number) => ({ ...defaults, number, updatedAt: Date.now() }),
+        });
         persistedRef.current = true;
         try { window.history.replaceState(null, '', `#/quotes/${id}`); } catch {}
         return id;

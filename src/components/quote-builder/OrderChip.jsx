@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Package, ArrowRight, Plus } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
-import { db, newId, invalidate, nextSequenceNumber } from '../../db/database.js';
+import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
 
 /**
@@ -89,7 +89,6 @@ export default function OrderChip({ quote, profileId, onAttach }) {
  */
 async function createOrderFromQuote({ quote, profileId, onAttach }) {
   const id = newId();
-  const number = await nextSequenceNumber('orders', profileId, 101);
 
   // Use the linked customer's name when available so the orders list reads
   // human-meaningfully ("Pedido — García & Asociados") instead of "Pedido O-101".
@@ -106,19 +105,25 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
   // Commerce milestones (deposit / balance / delivery) live on the
   // attached quote, not on the order, so we don't pre-record an
   // 'accepted' or 'depositReceived' state here just because a quote
-  // got accepted.
-  await db.orders.put({
-    id,
+  // got accepted. The assign-helper retries against the (profile_id,
+  // number) unique constraint if two browsers race on the same slot.
+  await assignSequenceNumber({
+    table: 'orders',
     profileId,
-    number,
-    name: displayName,
-    customerId: quote.customerId || null,
-    status: 'draft',
-    notes: '',
-    depositAmount: 0,
-    deliveryAddress: '',
-    createdAt: now,
-    updatedAt: now,
+    start: 101,
+    build: (number) => ({
+      id,
+      profileId,
+      number,
+      name: displayName,
+      customerId: quote.customerId || null,
+      status: 'draft',
+      notes: '',
+      depositAmount: 0,
+      deliveryAddress: '',
+      createdAt: now,
+      updatedAt: now,
+    }),
   });
   invalidate();
   if (onAttach) onAttach(id);

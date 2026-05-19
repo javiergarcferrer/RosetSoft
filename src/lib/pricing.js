@@ -9,6 +9,8 @@
  * every quote — there is no per-quote override.
  */
 
+import { isPricedLine } from './constants.js';
+
 export const ITBIS_PCT = 18;
 
 /** Coerce to a finite number, falling back to a default if not. */
@@ -191,7 +193,7 @@ export function lineListUnit(line) {
 export function quoteSavings(lines, totals) {
   let lineSavings = 0;
   for (const l of lines || []) {
-    if (l?.kind === 'section') continue;
+    if (!isPricedLine(l)) continue;
     const discount = clampPct(l?.lineDiscountPct);
     if (discount <= 0) continue;
     const listUnit = lineListUnit(l);

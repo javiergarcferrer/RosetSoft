@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   effectiveDopRate,
   effectiveRates,
+  displayRatesFor,
   rateSourceLabel,
   readBscRates,
 } from '../src/lib/exchangeRate.js';
@@ -93,6 +94,53 @@ test('readBscRates: prefers bsc, falls back to legacy bpd', () => {
     { buy: 58, sell: 60, updatedAt: 99 },
   );
   assert.deepEqual(readBscRates({}), { buy: null, sell: null, updatedAt: null });
+});
+
+/* ---------------------------- displayRatesFor ---------------------------- */
+
+test('displayRatesFor: draft quote → live rates from settings', () => {
+  const settings = { dopRateMode: 'bsc-sell', bsc: { sell: 64 } };
+  const quote = { status: 'draft', rates: { USD: 1, DOP: 55 } };
+  // Live, not snapshot — even though the quote has its own DOP=55, we
+  // overlay 64 because the dealer's still working on the quote and
+  // the workspace shows 64.
+  assert.deepEqual(displayRatesFor(quote, settings), { USD: 1, DOP: 64 });
+});
+
+test('displayRatesFor: sent quote → live rates from settings', () => {
+  const settings = { dopRateMode: 'custom', currencyRates: { DOP: 70 } };
+  const quote = { status: 'sent', rates: { USD: 1, DOP: 55 } };
+  assert.deepEqual(displayRatesFor(quote, settings), { USD: 1, DOP: 70 });
+});
+
+test('displayRatesFor: accepted quote → snapshot (preserve historical rate)', () => {
+  const settings = { dopRateMode: 'bsc-sell', bsc: { sell: 64 } };
+  const quote = { status: 'accepted', rates: { USD: 1, DOP: 55 } };
+  assert.deepEqual(displayRatesFor(quote, settings), { USD: 1, DOP: 55 });
+});
+
+test('displayRatesFor: declined / archived preserve snapshot', () => {
+  const settings = { dopRateMode: 'bsc-sell', bsc: { sell: 64 } };
+  assert.deepEqual(
+    displayRatesFor({ status: 'declined', rates: { DOP: 55 } }, settings),
+    { DOP: 55 },
+  );
+  assert.deepEqual(
+    displayRatesFor({ status: 'archived', rates: { DOP: 55 } }, settings),
+    { DOP: 55 },
+  );
+});
+
+test('displayRatesFor: missing quote → safe USD-only default', () => {
+  assert.deepEqual(displayRatesFor(null, {}), { USD: 1 });
+});
+
+test('displayRatesFor: active quote with no rates snapshot still gets live values', () => {
+  const settings = { dopRateMode: 'bsc-sell', bsc: { sell: 64 } };
+  assert.deepEqual(
+    displayRatesFor({ status: 'draft' }, settings),
+    { USD: 1, DOP: 64 },
+  );
 });
 
 /* --------------------------- rateSourceLabel --------------------------- */

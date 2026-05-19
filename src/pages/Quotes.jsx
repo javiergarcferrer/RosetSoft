@@ -8,6 +8,8 @@ import EmptyState from '../components/EmptyState.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 
 const STATUS_PILL_CLASS = {
   draft: 'status-pill-draft',
@@ -54,7 +56,7 @@ function useQuoteOps(qu) {
 }
 
 export default function Quotes() {
-  const { profileId, profiles } = useApp();
+  const { profileId, profiles, settings } = useApp();
   // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
   // `loaded` so we don't show a misleading "no data" message during the
   // first fetch — that flicker is the bug we're killing.
@@ -102,13 +104,28 @@ export default function Quotes() {
     return m;
   }, [orders]);
 
+  // Per-quote grand total. Previously inline `qty * unitPrice`, which
+  // (a) ignored compound lines (their own qty/unitPrice are 0 by
+  // design — the math lives in `components`) so a compound quote showed
+  // $0 in the list, and (b) ignored every adjustment: line discount,
+  // quote-level margin / discount, ITBIS, shipping. Routes the same way
+  // Dashboard / CustomerDetail / ProfessionalDetail do — single source
+  // of truth for the figure the dealer scans down this column.
   const totalByQuoteId = useMemo(() => {
-    const m = new Map();
+    const linesByQuote = new Map();
     for (const l of allLines) {
-      m.set(l.quoteId, (m.get(l.quoteId) || 0) + (l.qty || 0) * (l.unitPrice || 0));
+      if (!linesByQuote.has(l.quoteId)) linesByQuote.set(l.quoteId, []);
+      linesByQuote.get(l.quoteId).push(l);
+    }
+    const m = new Map();
+    for (const qu of quotes) {
+      const rows = (linesByQuote.get(qu.id) || [])
+        .filter((l) => l.kind !== 'section')
+        .map(lineForTotals);
+      m.set(qu.id, computeTotals(rows, qu).grandTotal);
     }
     return m;
-  }, [allLines]);
+  }, [allLines, quotes]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -192,6 +209,7 @@ export default function Quotes() {
             creator={profileById.get(qu.createdByUserId)}
             order={ordersById.get(qu.orderId)}
             total={totalByQuoteId.get(qu.id) || 0}
+            rates={displayRatesFor(qu, settings)}
           />
         ))}
         {filtered.length === 0 && (
@@ -225,6 +243,7 @@ export default function Quotes() {
                 creator={profileById.get(qu.createdByUserId)}
                 order={ordersById.get(qu.orderId)}
                 total={totalByQuoteId.get(qu.id) || 0}
+                rates={displayRatesFor(qu, settings)}
               />
             ))}
           </tbody>
@@ -252,7 +271,7 @@ function OrderIndicator({ order }) {
   );
 }
 
-function QuoteCard({ qu, customer, creator, order, total }) {
+function QuoteCard({ qu, customer, creator, order, total, rates }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -268,7 +287,7 @@ function QuoteCard({ qu, customer, creator, order, total }) {
             )}
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-medium">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</div>
+            <div className="text-sm font-medium">{formatMoney(total, qu.currencyCode || 'USD', rates)}</div>
             <div className="text-[10px] text-ink-500">{formatDateTime(qu.updatedAt)}</div>
           </div>
         </div>
@@ -286,7 +305,7 @@ function QuoteCard({ qu, customer, creator, order, total }) {
   );
 }
 
-function QuoteRow({ qu, customer, creator, order, total }) {
+function QuoteRow({ qu, customer, creator, order, total, rates }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -300,7 +319,7 @@ function QuoteRow({ qu, customer, creator, order, total }) {
       <td><span className={`status-pill ${STATUS_PILL_CLASS[qu.status] || 'status-pill-draft'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', qu.rates || { USD: 1 })}</td>
+      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
       <td className="text-right w-12">
         <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
           <Trash2 size={14} />

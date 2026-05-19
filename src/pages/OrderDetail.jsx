@@ -12,6 +12,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import {
   ORDER_STAGES, ORDER_STAGE_BY_KEY,
   currentOrderStage, nextOrderStage, orderStageIndex,
@@ -76,13 +77,28 @@ export default function OrderDetail() {
     [],
   );
 
-  // Per-quote totals
+  // Per-quote totals. Goes through the canonical computeTotals path so
+  // compound lines (qty/unitPrice=0 on the parent — math lives in
+  // `components`) roll up correctly and line-level + quote-level
+  // adjustments (discount, ITBIS, shipping) are included. The previous
+  // inline `qty * unitPrice` math showed $0 for compound quotes and
+  // dropped every adjustment.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
   const totalByQuote = useMemo(() => {
+    const linesByQuote = new Map();
+    for (const l of allLines) {
+      if (!linesByQuote.has(l.quoteId)) linesByQuote.set(l.quoteId, []);
+      linesByQuote.get(l.quoteId).push(l);
+    }
     const m = new Map();
-    for (const l of allLines) m.set(l.quoteId, (m.get(l.quoteId) || 0) + (l.qty || 0) * (l.unitPrice || 0));
+    for (const q of quotes) {
+      const rows = (linesByQuote.get(q.id) || [])
+        .filter((l) => l.kind !== 'section')
+        .map(lineForTotals);
+      m.set(q.id, computeTotals(rows, q).grandTotal);
+    }
     return m;
-  }, [allLines]);
+  }, [allLines, quotes]);
 
   const [picker, setPicker] = useState(false);
 

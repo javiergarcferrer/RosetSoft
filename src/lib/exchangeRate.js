@@ -32,6 +32,8 @@
  * rate. New writes always use the bsc shape.
  */
 
+import { isActiveQuoteStatus } from './constants.js';
+
 export const BSC_PUBLIC_URL = 'https://www.bsc.com.do/divisas';
 
 /**
@@ -108,12 +110,31 @@ function normalizeRateMode(mode) {
  * manually-entered rates to take effect immediately — the quote
  * workspace and the PDF generator — instead of the quote.rates
  * snapshot that was frozen at draft time.
- *
- * Historical surfaces (Dashboard, list pages, commissions reports)
- * intentionally keep reading quote.rates so an old quote's totals
- * stay denominated in the rate that was actually quoted to that
- * customer, not today's rate.
  */
 export function effectiveRates(settings) {
   return { USD: 1, DOP: effectiveDopRate(settings) };
+}
+
+/**
+ * Rates to use when displaying totals for a specific quote on list /
+ * detail surfaces (Quotes, Orders, OrderDetail, Dashboard,
+ * CustomerDetail, ProfessionalDetail, AcceptedQuotes, etc.).
+ *
+ * Rule of thumb:
+ *   • Active quotes (draft / sent) → live rates from settings.
+ *     The dealer is still working with the customer; the figure in
+ *     the list should match what the workspace shows.
+ *   • Finalised quotes (accepted / declined / archived) → the
+ *     snapshot the quote was finalised with. The rate quoted to that
+ *     customer is the historical record; today's rate would
+ *     misrepresent what the customer agreed to.
+ *
+ * Falls back to USD-only when both sides are missing so formatMoney
+ * still has a valid map to read.
+ */
+export function displayRatesFor(quote, settings) {
+  if (quote && isActiveQuoteStatus(quote.status)) {
+    return effectiveRates(settings);
+  }
+  return (quote && quote.rates) || { USD: 1 };
 }

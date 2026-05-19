@@ -7,6 +7,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
@@ -108,16 +109,25 @@ export default function Orders() {
   }
 
   const { totalByOrder, quoteCountByOrder, containerCountByOrder } = useMemo(() => {
-    const lineTotalByQuote = new Map();
+    // Group lines by quote, then run each quote through the canonical
+    // computeTotals so compounds (qty/unitPrice=0 by design) roll up
+    // their components and line-level + quote-level adjustments
+    // (discount, ITBIS, shipping) land in the figure. Previously the
+    // inline `qty * unitPrice` math showed $0 for compound quotes and
+    // ignored every adjustment.
+    const linesByQuote = new Map();
     for (const l of allLines) {
-      const t = (l.qty || 0) * (l.unitPrice || 0);
-      lineTotalByQuote.set(l.quoteId, (lineTotalByQuote.get(l.quoteId) || 0) + t);
+      if (!linesByQuote.has(l.quoteId)) linesByQuote.set(l.quoteId, []);
+      linesByQuote.get(l.quoteId).push(l);
     }
     const totalByOrder = new Map();
     const quoteCountByOrder = new Map();
     for (const q of allQuotes) {
       if (!q.orderId) continue;
-      const t = lineTotalByQuote.get(q.id) || 0;
+      const rows = (linesByQuote.get(q.id) || [])
+        .filter((l) => l.kind !== 'section')
+        .map(lineForTotals);
+      const t = computeTotals(rows, q).grandTotal;
       totalByOrder.set(q.orderId, (totalByOrder.get(q.orderId) || 0) + t);
       quoteCountByOrder.set(q.orderId, (quoteCountByOrder.get(q.orderId) || 0) + 1);
     }

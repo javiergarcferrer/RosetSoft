@@ -279,11 +279,15 @@ export const db = Object.fromEntries(
  *     blip, page close), the next create would re-issue N. Computing
  *     from the table itself removes that desync entirely.
  *
- * Concurrency: this app is single-user and offline-first (one dealer in
- * one browser tab), so the "two creates read max simultaneously" race
- * isn't realistic. If that ever changes we'd add a Postgres-side unique
- * `(profile_id, number)` constraint plus client retry — for now the
- * cheap client-side max-query is the right trade-off.
+ * Concurrency: with multiple dealers active in the team, the read
+ * here can race against another browser's read+write. Migration
+ * 20260519160000 added `UNIQUE(profile_id, number)` constraints on
+ * the three numbered tables, so a duplicate INSERT now errors with
+ * Postgres `23505` (unique_violation) instead of silently double-
+ * issuing. Callers that need to be safe under that race should use
+ * `assignSequenceNumber()` below, which wraps the read + insert in a
+ * retry loop. Direct `nextSequenceNumber` callers continue to work
+ * but will see a save error on the (rare) collision.
  *
  *   tableName  one of TABLES keys ('quotes', 'orders', 'containers').
  *   profileId  scopes the query (numbers don't collide across profiles
@@ -308,6 +312,46 @@ export async function nextSequenceNumber(tableName, profileId, start) {
 }
 
 /**
+ * Race-safe assign-and-insert: compute the next sequence number,
+ * build the record with that number, and insert. Retries on
+ * unique-violation (another browser tab won the race) up to
+ * `maxAttempts` times before giving up — by that point we're past
+ * "concurrent click" and into "something else is wrong".
+ *
+ * Callers pass a `build(number)` lambda that returns the row to
+ * insert; the helper takes care of the read → write loop.
+ *
+ *   const id = newId();
+ *   await assignSequenceNumber({
+ *     table: 'quotes',
+ *     profileId,
+ *     start: 1001,
+ *     build: (number) => ({ id, profileId, number, ... }),
+ *   });
+ */
+export async function assignSequenceNumber({
+  table, profileId, start, build, maxAttempts = 5,
+}) {
+  const tbl = db[table];
+  if (!tbl) throw new Error(`Unknown table ${table}`);
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const number = await nextSequenceNumber(table, profileId, start);
+    const record = build(number);
+    try {
+      await tbl.put(record);
+      return record;
+    } catch (err) {
+      lastErr = err;
+      // Postgres unique_violation. Another browser took our slot; loop
+      // back and recompute against the new max.
+      if (err?.code !== '23505') throw err;
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Pure-function core of nextSequenceNumber, extracted so the rule can be
  * unit-tested without a Supabase round-trip.
  *
@@ -328,7 +372,29 @@ export function computeNextSequenceNumber(currentMax, start) {
 /*  IDs                                                                    */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Generate a unique id for a new row.
+ *
+ * crypto.randomUUID() is the source of truth — 122 bits of entropy
+ * gives effectively-zero collision probability even at high write
+ * concurrency, which the previous `Date.now() + 6 base36 chars`
+ * scheme couldn't guarantee (~26 bits of randomness; two clients
+ * writing in the same millisecond could collide, and Supabase would
+ * silently overwrite one of the rows on upsert).
+ *
+ * The fallback covers older browser engines that predate
+ * crypto.randomUUID (Safari < 15.4, etc.) and any non-secure-context
+ * test environment where the API isn't exposed. It's the legacy
+ * scheme — good enough for the rare environments that need it, since
+ * the production app runs on a secure context.
+ *
+ * Existing rows in the DB keep their old-shape ids; both shapes live
+ * side-by-side in TEXT primary-key columns without issue.
+ */
 export function newId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
