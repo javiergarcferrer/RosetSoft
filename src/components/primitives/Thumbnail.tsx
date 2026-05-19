@@ -37,10 +37,13 @@ export interface ThumbnailProps {
  */
 export default function Thumbnail({
   imageId, onChange, kind, ownerId,
-  // Tailwind size class — defaults to 56 px on phones, 64 px on sm+.
-  // Same square footprint regardless of fill state so the row layout
-  // never reflows when an image is added or removed.
-  sizeClass = 'w-14 h-14 sm:w-16 sm:h-16',
+  // Tailwind size class. Sized for visibility: 80 px on phones (the
+  // earlier 56 px tile got lost in the line-item card's busy
+  // composition — the empty-state dashed border + tiny camera icon
+  // read as "ornament" instead of "tappable photo slot", and dealers
+  // missed it entirely on mobile). 96 px from sm up where the card
+  // has more horizontal room.
+  sizeClass = 'w-20 h-20 sm:w-24 sm:h-24',
 }: ThumbnailProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -97,15 +100,26 @@ export default function Thumbnail({
           imageId
             ? 'bg-white border border-ink-200 hover:border-ink-400 overflow-hidden'
             : dragging
-              ? 'border border-dashed border-brand-500 bg-brand-50'
-              : 'border border-dashed border-ink-200 bg-ink-50 hover:bg-ink-100/70 hover:border-ink-300'
+              ? 'border-2 border-dashed border-brand-500 bg-brand-50'
+              : 'border-2 border-dashed border-ink-300 bg-ink-50 hover:bg-ink-100 hover:border-ink-500 active:bg-ink-100'
         }`}
       >
         {imageId ? (
           <ImageView id={imageId} className="w-full h-full object-contain" />
         ) : (
-          <span className="absolute inset-0 flex items-center justify-center text-ink-400">
-            {busy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} strokeWidth={1.5} />}
+          // Stack the camera icon over a small "Foto" caption so the
+          // empty state reads as an explicit slot, not as a decorative
+          // square. Tested on mobile sun-glare — the larger icon +
+          // label is what makes the dealer realise it's tappable.
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-ink-500">
+            {busy
+              ? <Loader2 size={22} className="animate-spin" />
+              : <Camera size={22} strokeWidth={1.5} />}
+            {!busy && (
+              <span className="text-[10px] font-medium uppercase tracking-wide select-none">
+                Foto
+              </span>
+            )}
           </span>
         )}
         {busy && imageId && (
