@@ -71,19 +71,43 @@ const accountingNavGroups = [
   },
 ];
 
+// Admin's window into the same accounting surface — spliced into the
+// full sidebar between Administración and Configuración so the admin
+// can see what Contabilidad sees without switching accounts. The lead
+// item is 'Resumen' (not 'Inicio') so it doesn't compete with the
+// sales Inicio at '/'. The duplicated 'Comisiones' label (also under
+// Administración) is intentional: those two pages target different
+// audiences — Administración → Comisiones is the dealer-side payout
+// review; Contabilidad → Comisiones is the read-only payable view
+// with the CSV export that feeds Odoo.
+const adminAccountingNavGroup = {
+  label: 'Contabilidad',
+  items: [
+    { to: '/accounting',             label: 'Resumen',    icon: LayoutDashboard, end: true },
+    { to: '/accounting/quotes',      label: 'Aceptadas',  icon: FileCheck },
+    { to: '/accounting/commissions', label: 'Comisiones', icon: Wallet },
+    { to: '/accounting/odoo',        label: 'Odoo',       icon: Download },
+  ],
+};
+
 export default function Layout() {
   const { settings, isAdmin, isAccounting } = useApp();
   // Three nav shapes:
   //   • Accounting users → their own home + Contabilidad cluster. No
   //     sales pages, no admin tools — this is a parallel surface.
   //   • Admins → base groups up to "Ventas", then the admin cluster,
-  //     then "Configuración" (also admin-only).
+  //     then a read-only Contabilidad cluster, then "Configuración".
   //   • Employees → base groups minus "Configuración" — they don't
   //     even see the route exist.
   const navGroups = isAccounting
     ? accountingNavGroups
     : isAdmin
-      ? [...baseNavGroups.slice(0, -1), adminNavGroup, baseNavGroups[baseNavGroups.length - 1]]
+      ? [
+          ...baseNavGroups.slice(0, -1),
+          adminNavGroup,
+          adminAccountingNavGroup,
+          baseNavGroups[baseNavGroups.length - 1],
+        ]
       : baseNavGroups.slice(0, -1);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
