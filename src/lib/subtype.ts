@@ -22,6 +22,18 @@
  * "Cuir — Tea") round-trip intact.
  */
 
+/** Parsed projection of a subtype field — both keys always present. */
+export interface ParsedSubtype {
+  grade: string;
+  fabric: string;
+}
+
+/** One row in `GRADE_GROUPS` — a labelled `<optgroup>` worth of grades. */
+export interface GradeGroup {
+  label: string;
+  grades: readonly string[];
+}
+
 /**
  * The full Ligne Roset grade taxonomy, grouped as the price list lays it
  * out. The picker renders these groups as <optgroup>s so the dealer sees
@@ -35,14 +47,14 @@
  * Plus one special non-letter grade we accept: COM (customer's own
  * material).
  */
-export const GRADE_GROUPS = [
+export const GRADE_GROUPS: readonly GradeGroup[] = [
   { label: 'Telas',       grades: ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'] },
   { label: 'Microfibras', grades: ['S'] },
   { label: 'Pieles',      grades: ['U','V','W','X'] },
 ];
 
 /** Special non-letter grades that still get a "Grade —"-less render. */
-export const SPECIAL_GRADES = ['COM'];
+export const SPECIAL_GRADES: readonly string[] = ['COM'];
 
 /**
  * Legacy values that may exist in older quotes but are no longer offered
@@ -51,19 +63,19 @@ export const SPECIAL_GRADES = ['COM'];
  * whenever the current value matches — otherwise a native <select> would
  * silently revert to its first option and lose the dealer's data.
  */
-export const LEGACY_NAMED_GRADES = ['Cuir', 'Leather'];
+export const LEGACY_NAMED_GRADES: readonly string[] = ['Cuir', 'Leather'];
 
 /** Every valid alpha grade across all groups — used by parser + composer. */
-export const ALPHA_GRADES = GRADE_GROUPS.flatMap((g) => g.grades);
+export const ALPHA_GRADES: readonly string[] = GRADE_GROUPS.flatMap((g) => g.grades);
 
 /** Every recognized grade value (alpha + special + legacy). */
-const RECOGNIZED_NAMED = new Set([...SPECIAL_GRADES, ...LEGACY_NAMED_GRADES]);
+const RECOGNIZED_NAMED: ReadonlySet<string> = new Set([...SPECIAL_GRADES, ...LEGACY_NAMED_GRADES]);
 
 /**
  * Parse a stored subtype into { grade, fabric }. Always returns both keys
  * (empty strings, never undefined) so consumers can destructure safely.
  */
-export function parseSubtype(subtype) {
+export function parseSubtype(subtype: string | null | undefined): ParsedSubtype {
   if (!subtype || typeof subtype !== 'string') return { grade: '', fabric: '' };
   const s = subtype.trim();
   if (!s) return { grade: '', fabric: '' };
@@ -94,7 +106,10 @@ export function parseSubtype(subtype) {
  * parseSubtype: composeSubtype(parseSubtype(s)) === canonicalise(s) for
  * any input we'd actually store.
  */
-export function composeSubtype(grade, fabric) {
+export function composeSubtype(
+  grade: string | null | undefined,
+  fabric: string | null | undefined,
+): string {
   const g = (grade || '').trim();
   const f = (fabric || '').trim();
   if (!g && !f) return '';

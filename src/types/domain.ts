@@ -234,7 +234,7 @@ export interface Quote {
 
   /* Accepted-quote milestones (live on the QUOTE, not the order). */
   depositReceivedAt?: number | null;
-  balanceReceivedAt?: number | null;
+  balancePaidAt?: number | null;
   deliveredAt?: number | null;
   depositAmount?: number | null;
 

@@ -10,11 +10,18 @@
  */
 
 import { isPricedLine } from './constants.js';
+import type {
+  QuoteLine,
+  LineComponent,
+  PricingLine,
+  PricingQuote,
+  Totals,
+} from '../types/domain.ts';
 
 export const ITBIS_PCT = 18;
 
 /** Coerce to a finite number, falling back to a default if not. */
-function safeNum(v, fallback = 0) {
+function safeNum(v: unknown, fallback = 0): number {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -24,7 +31,7 @@ function safeNum(v, fallback = 0) {
  * where a negative value would invert the operation and a >100% value is
  * never meaningful. Exported so input widgets can mirror the clamp.
  */
-export function clampPct(v, max = 100) {
+export function clampPct(v: unknown, max = 100): number {
   const n = safeNum(v, 0);
   if (n < 0) return 0;
   if (n > max) return max;
@@ -55,7 +62,10 @@ export function clampPct(v, max = 100) {
  *                       (taxPct is intentionally ignored — ITBIS is fixed)
  * @returns {Object} { subtotal, marginAmt, discountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct }
  */
-export function computeTotals(lines, quote = {}) {
+export function computeTotals(
+  lines: readonly PricingLine[] | null | undefined,
+  quote: PricingQuote = {},
+): Totals {
   const subtotal = (lines || []).reduce((acc, l) => {
     const unit = applyLineAdjustments(l?.basePrice, l?.lineMarginPct, l?.lineDiscountPct);
     return acc + unit * safeNum(l?.qty, 0);
@@ -84,7 +94,11 @@ export function computeTotals(lines, quote = {}) {
   };
 }
 
-export function applyLineAdjustments(basePrice, marginPct, discountPct) {
+export function applyLineAdjustments(
+  basePrice: unknown,
+  marginPct: unknown,
+  discountPct: unknown,
+): number {
   const base = safeNum(basePrice, 0);
   const margin = safeNum(marginPct, 0);
   const discount = clampPct(discountPct);
@@ -105,15 +119,17 @@ export function applyLineAdjustments(basePrice, marginPct, discountPct) {
  * ignored and the line's base subtotal is the sum of component
  * subtotals. Line-level margin / discount still apply on top.
  */
-export function isCompoundLine(line) {
-  return Array.isArray(line?.components) && line.components.length > 0;
+export function isCompoundLine(
+  line: Pick<QuoteLine, 'components'> | null | undefined,
+): line is Pick<QuoteLine, 'components'> & { components: LineComponent[] } {
+  return Array.isArray(line?.components) && line!.components!.length > 0;
 }
 
-export function componentSubtotal(component) {
+export function componentSubtotal(component: LineComponent | null | undefined): number {
   return safeNum(component?.unitPrice, 0) * safeNum(component?.qty, 0);
 }
 
-export function compoundSubtotal(line) {
+export function compoundSubtotal(line: QuoteLine | null | undefined): number {
   if (!isCompoundLine(line)) return 0;
   return line.components.reduce((sum, c) => sum + componentSubtotal(c), 0);
 }
@@ -123,13 +139,13 @@ export function compoundSubtotal(line) {
  * for a compound it's the sum of component subtotals (with qty=1, since
  * the components carry their own quantities).
  */
-export function lineBasePrice(line) {
+export function lineBasePrice(line: QuoteLine | null | undefined): number {
   if (isCompoundLine(line)) return compoundSubtotal(line);
   return safeNum(line?.unitPrice, 0);
 }
 
 /** Effective quantity multiplier for a line — always 1 for compounds. */
-export function lineQty(line) {
+export function lineQty(line: QuoteLine | null | undefined): number {
   if (isCompoundLine(line)) return 1;
   return safeNum(line?.qty, 0);
 }
@@ -139,12 +155,12 @@ export function lineQty(line) {
  * places (breakdown popovers, totals rails) that need the
  * pre-discount figure for a compound or a normal line uniformly.
  */
-export function lineSubtotal(line) {
+export function lineSubtotal(line: QuoteLine | null | undefined): number {
   return lineBasePrice(line) * lineQty(line);
 }
 
 /** Final per-line total, after line-level margin and discount. */
-export function lineTotal(line) {
+export function lineTotal(line: QuoteLine | null | undefined): number {
   const base = lineBasePrice(line);
   return applyLineAdjustments(base, line?.lineMarginPct, line?.lineDiscountPct) * lineQty(line);
 }
@@ -155,7 +171,7 @@ export function lineTotal(line) {
  * (QuoteBuilder, Dashboard, ProfessionalDetail, Commissions, ClientPreview)
  * don't each have to redo the math.
  */
-export function lineForTotals(line) {
+export function lineForTotals(line: QuoteLine | null | undefined): PricingLine {
   return {
     qty: lineQty(line),
     basePrice: lineBasePrice(line),
@@ -172,7 +188,7 @@ export function lineForTotals(line) {
  * price the customer would otherwise have paid) but excludes the
  * line-level discount.
  */
-export function lineListUnit(line) {
+export function lineListUnit(line: QuoteLine | null | undefined): number {
   const base = lineBasePrice(line);
   const margin = safeNum(line?.lineMarginPct, 0);
   return base * (1 + margin / 100);
@@ -190,7 +206,10 @@ export function lineListUnit(line) {
  * negative margin is a markdown the customer doesn't perceive as a
  * discount and is excluded from the figure).
  */
-export function quoteSavings(lines, totals) {
+export function quoteSavings(
+  lines: readonly QuoteLine[] | null | undefined,
+  totals: Pick<Totals, 'discountAmt'> | null | undefined,
+): number {
   let lineSavings = 0;
   for (const l of lines || []) {
     if (!isPricedLine(l)) continue;

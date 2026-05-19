@@ -26,9 +26,9 @@
  */
 const STALE_CHUNK_KEY = 'roset-stale-chunk-reload';
 
-function isStaleChunkError(err) {
+function isStaleChunkError(err: unknown): boolean {
   if (!err) return false;
-  const msg = String(err.message || err).toLowerCase();
+  const msg = String((err as { message?: unknown })?.message || err).toLowerCase();
   return (
     msg.includes('dynamically imported module') ||
     msg.includes('mime type') ||
@@ -37,7 +37,7 @@ function isStaleChunkError(err) {
   );
 }
 
-export async function safeDynamicImport(loader) {
+export async function safeDynamicImport<T>(loader: () => Promise<T>): Promise<T> {
   try {
     const mod = await loader();
     // Clear the recovery flag on success so a future stale-chunk
@@ -47,7 +47,7 @@ export async function safeDynamicImport(loader) {
     return mod;
   } catch (err) {
     if (!isStaleChunkError(err)) throw err;
-    let already = null;
+    let already: string | null = null;
     try { already = sessionStorage.getItem(STALE_CHUNK_KEY); } catch {}
     if (already) {
       // We already reloaded once for this issue; the failure is
@@ -62,6 +62,6 @@ export async function safeDynamicImport(loader) {
     // Hang the promise — the reload tears down the JS context
     // before this ever resolves, so callers don't continue with a
     // half-loaded module.
-    return new Promise(() => {});
+    return new Promise<T>(() => {});
   }
 }

@@ -14,15 +14,24 @@ import { useEffect } from 'react';
  */
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
-function inEditable(target) {
+/** Options accepted by useKeyboardShortcut. */
+export interface KeyboardShortcutOptions {
+  /** When true (default), suppresses the combo if the user is typing in an input. */
+  ignoreInInput?: boolean;
+  /** Master enable flag — `false` un-wires the listener without changing the call site. */
+  enabled?: boolean;
+}
+
+function inEditable(target: EventTarget | null): boolean {
   if (!target) return false;
-  const tag = target.tagName;
+  const el = target as HTMLElement;
+  const tag = el.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (target.isContentEditable) return true;
+  if (el.isContentEditable) return true;
   return false;
 }
 
-function matches(combo, e) {
+function matches(combo: string, e: KeyboardEvent): boolean {
   const parts = combo.toLowerCase().split('+').map((p) => p.trim());
   const key = parts.pop();
   const needMod = parts.includes('mod') || parts.includes('cmd') || parts.includes('ctrl');
@@ -39,14 +48,18 @@ function matches(combo, e) {
   return keyLower === key;
 }
 
-export function useKeyboardShortcut(combo, handler, { ignoreInInput = true, enabled = true } = {}) {
+export function useKeyboardShortcut(
+  combo: string,
+  handler: ((e: KeyboardEvent) => void) | null | undefined,
+  { ignoreInInput = true, enabled = true }: KeyboardShortcutOptions = {},
+): void {
   useEffect(() => {
     if (!enabled || !combo || !handler) return;
-    function onKey(e) {
+    function onKey(e: KeyboardEvent): void {
       if (ignoreInInput && inEditable(e.target) && !combo.toLowerCase().includes('mod')) return;
       if (!matches(combo, e)) return;
       e.preventDefault();
-      handler(e);
+      handler!(e);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -54,7 +67,7 @@ export function useKeyboardShortcut(combo, handler, { ignoreInInput = true, enab
 }
 
 /** "⌘K" on Mac, "Ctrl+K" elsewhere — for display in tooltips/menus. */
-export function shortcutLabel(combo) {
+export function shortcutLabel(combo: string): string {
   return combo
     .split('+')
     .map((part) => {

@@ -5,10 +5,18 @@
  * friendlier label on top of it for the common cases.
  */
 
-export function userMessageFor(err) {
+/** Subset of the fields we look at across Supabase / fetch / generic errors. */
+interface ErrorLike {
+  code?: string | number;
+  status?: string | number;
+  message?: string;
+}
+
+export function userMessageFor(err: unknown): string {
   if (!err) return 'Error desconocido.';
-  const code = err.code || err.status || '';
-  const raw = (err.message || String(err)).toLowerCase();
+  const e = err as ErrorLike;
+  const code = e.code || e.status || '';
+  const raw = (e.message || String(err)).toLowerCase();
 
   // Network / offline
   if (raw.includes('failed to fetch') || raw.includes('networkerror') || raw.includes('load failed')) {
@@ -35,5 +43,5 @@ export function userMessageFor(err) {
   if (raw.includes('502') || raw.includes('503') || raw.includes('504')) {
     return 'El servidor no responde. Vuelve a intentar en un momento.';
   }
-  return err.message || String(err);
+  return e.message || String(err);
 }

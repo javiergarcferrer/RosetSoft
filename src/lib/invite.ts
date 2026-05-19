@@ -1,5 +1,31 @@
 import { SUPABASE_URL } from '../db/supabaseClient.js';
 import { db } from '../db/database.js';
+import type { ProfileRole } from '../types/domain.ts';
+
+/**
+ * Narrow projection of a Supabase auth `Session` — we only ever read
+ * `access_token` off it here, so a structural type keeps the import
+ * surface small and lets callers pass an `AuthSession` from
+ * @supabase/supabase-js OR any local stub with the same shape.
+ */
+export interface InviteSession {
+  access_token: string;
+}
+
+/** Inputs for `inviteUser`. */
+export interface InviteUserParams {
+  session: InviteSession | null | undefined;
+  email: string;
+  name: string;
+  role: ProfileRole;
+  commissionPct: number;
+}
+
+/** Inputs for `deleteUser`. */
+export interface DeleteUserParams {
+  session: InviteSession | null | undefined;
+  id: string;
+}
 
 /**
  * Call the `invite-user` Edge Function to send a team invitation.
@@ -29,7 +55,13 @@ import { db } from '../db/database.js';
  * If step 2 fails, the auth row was still created — the admin can
  * re-invite via the same flow and the function will hit the 409 path.
  */
-export async function inviteUser({ session, email, name, role, commissionPct }) {
+export async function inviteUser({
+  session,
+  email,
+  name,
+  role,
+  commissionPct,
+}: InviteUserParams): Promise<unknown> {
   if (!session?.access_token) {
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }
@@ -54,7 +86,7 @@ export async function inviteUser({ session, email, name, role, commissionPct }) 
     },
     body: JSON.stringify({ email, name, role, commissionPct, redirectTo }),
   });
-  let data = null;
+  let data: { error?: string } | null = null;
   try { data = await res.json(); } catch { /* empty / non-JSON body */ }
   if (!res.ok) {
     throw new Error(data?.error || `No se pudo enviar la invitación (HTTP ${res.status}).`);
@@ -93,7 +125,7 @@ export async function inviteUser({ session, email, name, role, commissionPct }) 
  * success, and the client-side profile delete is a no-op when the
  * row isn't there).
  */
-export async function deleteUser({ session, id }) {
+export async function deleteUser({ session, id }: DeleteUserParams): Promise<{ ok: true }> {
   if (!session?.access_token) {
     throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
   }
@@ -105,7 +137,7 @@ export async function deleteUser({ session, id }) {
   // schema cache), since in those cases the function's step 4
   // (auth.admin.deleteUser) ran successfully before it choked.
   let authGone = false;
-  let hardError = null;
+  let hardError: string | null = null;
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -115,7 +147,7 @@ export async function deleteUser({ session, id }) {
       },
       body: JSON.stringify({ id }),
     });
-    let data = null;
+    let data: { error?: string } | null = null;
     try { data = await res.json(); } catch { /* empty / non-JSON body */ }
     if (res.ok) {
       authGone = true;
@@ -134,7 +166,7 @@ export async function deleteUser({ session, id }) {
   } catch (netErr) {
     // Network blip / function offline. Profile mop-up still runs;
     // the warning is surfaced after.
-    hardError = netErr?.message || String(netErr);
+    hardError = (netErr as { message?: string })?.message || String(netErr);
   }
 
   // Client-side mop-up. Runs whether the function succeeded, failed
@@ -147,7 +179,7 @@ export async function deleteUser({ session, id }) {
     throw new Error(
       hardError
         ? `No se pudo eliminar el usuario: ${hardError}`
-        : (profileErr?.message || 'No se pudo eliminar el perfil.'),
+        : ((profileErr as { message?: string })?.message || 'No se pudo eliminar el perfil.'),
     );
   }
 
