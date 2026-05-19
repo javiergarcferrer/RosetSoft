@@ -457,12 +457,19 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
   }
 
   return (
-    <li className="px-5 py-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        {/* Identity — name is inline-editable; the email below is the
-            stable handle (it's the auth.users key and can't be
-            changed from this page). */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+    <li className="px-4 sm:px-5 py-4">
+      {/* Row layout — two sections that stack on mobile and sit
+          side-by-side on lg+. Earlier the controls cluster used a
+          single flex-wrap and the ActivePill collided with the name
+          input + the role select truncated at w-36 ("Co... dad"
+          where "Contabilidad" should have rendered). The new
+          structure: Identity on top (avatar + name + email +
+          status pill), Controls below (role, commission, activity
+          info, delete). Each section is a self-contained flex row
+          so wrap behaviour is local and predictable. */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:gap-6">
+        {/* Identity */}
+        <div className="flex items-start gap-3 min-w-0 flex-1">
           <Avatar name={profile.name} email={profile.email} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -511,75 +518,83 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
           </div>
         </div>
 
-        {/* Controls — single flex-wrap row at every width. The previous
-            "grid-on-mobile / flex-on-sm" split made the role select and
-            its decorative pill stack on top of the avatar at certain
-            widths because the grid item kept rendering the pill
-            beneath the select. One flat layout dodges that entirely
-            and reads consistently from phone to desktop. */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          <select
-            className="input py-1.5 w-36"
-            value={
-              profile.role === 'admin' || profile.role === 'accounting'
-                ? profile.role
-                : 'employee'
-            }
-            onChange={(e) => setRole(e.target.value)}
-            aria-label="Rol del usuario"
-          >
-            <option value="employee">Vendedor</option>
-            <option value="admin">Administrador</option>
-            <option value="accounting">Contabilidad</option>
-          </select>
+        {/* Controls.
+            Stacked into a labelled grid on mobile (each field on its
+            own row with a small caption) so nothing has to compete
+            for horizontal space, then collapsed back to a compact
+            inline row on lg+. The previous "single flex-wrap" tried
+            to do both at once and the ActivePill kept landing in
+            the gap between the role select and the name — the
+            screenshot the dealer sent shows "Pendiente" floating
+            mid-row over the truncated name input. */}
+        <div className="mt-4 lg:mt-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
+          <label className="flex flex-col gap-1 lg:contents">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 lg:hidden">
+              Rol
+            </span>
+            <select
+              className="input py-1.5 w-full lg:w-44"
+              value={
+                profile.role === 'admin' || profile.role === 'accounting'
+                  ? profile.role
+                  : 'employee'
+              }
+              onChange={(e) => setRole(e.target.value)}
+              aria-label="Rol del usuario"
+            >
+              <option value="employee">Vendedor</option>
+              <option value="admin">Administrador</option>
+              <option value="accounting">Contabilidad</option>
+            </select>
+          </label>
 
-          <div className="relative">
-            <DebouncedInput
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="50"
-              step="0.5"
-              className="input py-1.5 pr-7 tabular-nums w-20"
-              value={profile.commissionPct ?? 0}
-              onCommit={setCommission}
-              aria-label="Comisión"
-            />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
+          <label className="flex flex-col gap-1 lg:contents">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 lg:hidden">
+              Comisión
+            </span>
+            <div className="relative">
+              <DebouncedInput
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="50"
+                step="0.5"
+                className="input py-1.5 pr-7 tabular-nums w-full lg:w-20"
+                value={profile.commissionPct ?? 0}
+                onCommit={setCommission}
+                aria-label="Comisión"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
+            </div>
+          </label>
+
+          {/* Activity status — pinned to the right on lg+, full width
+              row on mobile so the timestamp doesn't get squeezed. */}
+          <div className="col-span-2 lg:col-auto flex flex-col gap-0.5 lg:items-end">
+            <ActivePill profile={profile} />
+            {profile.lastSignInAt ? (
+              <>
+                <span className="text-[11px] text-ink-700 tabular-nums">
+                  Última sesión · {fmtSessionAt(profile.lastSignInAt)}
+                </span>
+                {fmtSessionAgo(profile.lastSignInAt) && (
+                  <span className="text-[10px] text-ink-400">
+                    {fmtSessionAgo(profile.lastSignInAt)}
+                  </span>
+                )}
+              </>
+            ) : invitePending ? (
+              <span className="text-[11px] text-ink-500">
+                Sin iniciar sesión todavía
+              </span>
+            ) : (
+              <span className="text-[11px] text-ink-500">
+                Actualizado {fmtUpdated(profile.updatedAt)}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4 flex-1 sm:flex-initial justify-end">
-            <div className="flex flex-col items-start sm:items-end gap-0.5">
-              <ActivePill profile={profile} />
-              {/* When lastSignInAt is set, we render the precise
-                  clock time ("18 may, 8:26 a. m.") + a short
-                  relative tag underneath ("hace 12 min"). The dealer
-                  asked specifically for "to the minute" — this is
-                  it. When the user has never signed in we say so
-                  explicitly so the admin can tell at a glance which
-                  invitations are still outstanding. */}
-              {profile.lastSignInAt ? (
-                <>
-                  <span className="text-[11px] text-ink-700 tabular-nums">
-                    Última sesión · {fmtSessionAt(profile.lastSignInAt)}
-                  </span>
-                  {fmtSessionAgo(profile.lastSignInAt) && (
-                    <span className="text-[10px] text-ink-400">
-                      {fmtSessionAgo(profile.lastSignInAt)}
-                    </span>
-                  )}
-                </>
-              ) : invitePending ? (
-                <span className="text-[11px] text-ink-500">
-                  Sin iniciar sesión todavía
-                </span>
-              ) : (
-                <span className="text-[11px] text-ink-500">
-                  Actualizado {fmtUpdated(profile.updatedAt)}
-                </span>
-              )}
-            </div>
-
+          <div className="col-span-2 lg:col-auto flex lg:justify-end">
             <button
               type="button"
               onClick={remove}
