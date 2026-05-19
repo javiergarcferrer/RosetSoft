@@ -5,9 +5,18 @@
  *  - `rates` map = { USD: 1, DOP: 60.0, ... } — value × rate gives display amount.
  *  - DOP uses the local "RD$ 1,234" style (whole pesos).
  */
-export function formatMoney(value, code = 'USD', rates = { USD: 1, DOP: 60.0 }) {
+
+import type { CurrencyCode, RatesMap } from '../types/domain.ts';
+
+const DEFAULT_RATES: RatesMap = { USD: 1, DOP: 60.0 };
+
+export function formatMoney(
+  value: number | null | undefined,
+  code: CurrencyCode | string = 'USD',
+  rates: RatesMap | Record<string, number> = DEFAULT_RATES,
+): string {
   if (value == null || Number.isNaN(value)) return '—';
-  const rate = rates?.[code] ?? 1;
+  const rate = (rates as Record<string, number | undefined>)?.[code] ?? 1;
   const converted = value * rate;
   if (code === 'DOP') {
     const rounded = Math.round(converted);
@@ -25,16 +34,20 @@ export function formatMoney(value, code = 'USD', rates = { USD: 1, DOP: 60.0 }) 
 }
 
 /** Short form — no currency symbol, just the rounded number. */
-export function formatMoneyShort(value, code = 'USD', rates = { USD: 1, DOP: 60.0 }) {
+export function formatMoneyShort(
+  value: number | null | undefined,
+  code: CurrencyCode | string = 'USD',
+  rates: RatesMap | Record<string, number> = DEFAULT_RATES,
+): string {
   if (value == null || Number.isNaN(value)) return '—';
-  const rate = rates?.[code] ?? 1;
+  const rate = (rates as Record<string, number | undefined>)?.[code] ?? 1;
   const converted = value * rate;
   return code === 'DOP'
     ? Math.round(converted).toLocaleString('en-US')
     : converted.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
-export function formatDate(ts) {
+export function formatDate(ts: number | null | undefined): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString(undefined, {
     year: 'numeric',
@@ -43,7 +56,7 @@ export function formatDate(ts) {
   });
 }
 
-export function formatDateTime(ts) {
+export function formatDateTime(ts: number | null | undefined): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleString(undefined, {
     year: 'numeric',

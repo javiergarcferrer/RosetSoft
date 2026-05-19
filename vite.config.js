@@ -19,6 +19,21 @@ export default defineConfig(({ mode }) => {
   return {
     base,
     plugins: [react()],
+    resolve: {
+      // The codebase imports with explicit `.js` extensions
+      // (`from '../lib/format.js'`) — an ESM-purist discipline that
+      // predates the TypeScript migration. esbuild's dev pipeline
+      // resolves those to `.ts`/`.tsx` transparently, but Rollup
+      // (the production builder) does not. This alias rewrites any
+      // relative `*.js` import to its extension-less form so Vite's
+      // own resolver can find either `.ts`, `.tsx`, or the original
+      // `.js`. Means we can flip a file from `.js` → `.ts` without
+      // touching every call site.
+      alias: [
+        { find: /^(\.{1,2}\/.*)\.js$/, replacement: '$1' },
+      ],
+      extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+    },
     // Inject ONLY the two public-by-design Supabase vars into the client
     // bundle. SUPABASE_SERVICE_ROLE_KEY / SUPABASE_JWT_SECRET / POSTGRES_*
     // are never referenced here and must never leak into the browser.

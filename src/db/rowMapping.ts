@@ -22,16 +22,19 @@
  * camelCased through here.
  */
 
-export function snake(name) {
+/** Generic dictionary type — what Supabase returns / accepts in JSON. */
+export type Row = Record<string, unknown>;
+
+export function snake(name: string): string {
   return name.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
 }
 
-export function camel(name) {
+export function camel(name: string): string {
   return name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
 /** Field-name convention: anything ending in `At` is a timestamp. */
-export function isAtField(camelKey) {
+export function isAtField(camelKey: string): boolean {
   return /At$/.test(camelKey);
 }
 
@@ -39,10 +42,10 @@ export function isAtField(camelKey) {
  * Camel → snake. Coerces *At numeric timestamps to ISO-8601 strings so
  * Postgres timestamptz columns accept them.
  */
-export function toRow(obj) {
-  const out = {};
+export function toRow(obj: Row | null | undefined): Row {
+  const out: Row = {};
   for (const [k, v] of Object.entries(obj || {})) {
-    let val = v;
+    let val: unknown = v;
     if (isAtField(k) && typeof v === 'number' && Number.isFinite(v)) {
       val = new Date(v).toISOString();
     }
@@ -58,19 +61,22 @@ export function toRow(obj) {
  * that come back as `null` and we don't want to wrap them in an
  * empty object.
  */
-export function fromRow(row) {
-  if (!row || typeof row !== 'object') return row;
-  const out = {};
-  for (const [k, v] of Object.entries(row)) {
+export function fromRow<T = Row>(row: unknown): T | null | undefined {
+  if (row === null) return null;
+  if (row === undefined) return undefined;
+  if (typeof row !== 'object') return row as T;
+  const out: Row = {};
+  for (const [k, v] of Object.entries(row as Row)) {
     const ck = camel(k);
-    let val = v;
+    let val: unknown = v;
     if (isAtField(ck) && typeof v === 'string') {
       const t = Date.parse(v);
       if (!Number.isNaN(t)) val = t;
     }
     out[ck] = val;
   }
-  return out;
+  return out as T;
 }
 
-export const fromRows = (rows) => (rows || []).map(fromRow);
+export const fromRows = <T = Row>(rows: unknown[] | null | undefined): T[] =>
+  (rows || []).map((r) => fromRow<T>(r) as T);

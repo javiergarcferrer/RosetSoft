@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    /* Target + module — modern bundler-driven ESM, no transpilation
+       pollution. esbuild via Vite handles the actual emit. */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "useDefineForClassFields": true,
+
+    /* React 18+ JSX runtime — no `import React` in every file. */
+    "jsx": "react-jsx",
+
+    /* Incremental adoption: existing .js files keep working unmodified.
+       We do NOT typecheck them (checkJs: false) so the migration can
+       progress per-file without a stop-the-world cleanup. */
+    "allowJs": true,
+    "checkJs": false,
+
+    /* Strictness — relaxed entry-level. Once the migration is complete
+       we tighten to "strict": true. The two flags below pay for
+       themselves immediately:
+         strictNullChecks    catches the "undefined silently flows past
+                             a missing optional chain" class of bug.
+         noFallthroughCasesInSwitch  catches an unintentional fallthrough
+                             in the QuoteStatusStepper-shaped switches. */
+    "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Misc hygiene. */
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* The codebase keeps `.js` extensions on its imports (an ESM
+       discipline that predates the TS migration). Vite + esbuild
+       resolve `./foo.js` to `foo.ts` transparently, so we don't have
+       to rewrite every import site. */
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src", "vite-env.d.ts"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
