@@ -18,10 +18,7 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminCommissions from './pages/admin/Commissions.jsx';
-import AccountingDashboard from './pages/accounting/AccountingDashboard.jsx';
-import AcceptedQuotes from './pages/accounting/AcceptedQuotes.jsx';
-import CommissionsToPay from './pages/accounting/CommissionsToPay.jsx';
-import OdooExport from './pages/accounting/OdooExport.jsx';
+import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -207,14 +204,15 @@ function ProtectedApp() {
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/commissions" element={<AdminCommissions />} />
-            {/* Accounting surface. Each page self-gates on the
-                accounting/admin role, same pattern as the admin
-                routes — admins can see them for debugging the Odoo
-                integration. */}
-            <Route path="accounting" element={<AccountingDashboard />} />
-            <Route path="accounting/quotes" element={<AcceptedQuotes />} />
-            <Route path="accounting/commissions" element={<CommissionsToPay />} />
-            <Route path="accounting/odoo" element={<OdooExport />} />
+            {/* Accounting surface — a single workspace page that
+                rolls cotizaciones aceptadas, comisiones por pagar, and
+                the Odoo CSV exports into one table-first view. The
+                three legacy sub-paths redirect here so old bookmarks
+                still work. Self-gates on the accounting/admin role. */}
+            <Route path="accounting" element={<AccountingWorkspace />} />
+            <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
+            <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
+            <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

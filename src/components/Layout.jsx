@@ -9,8 +9,7 @@ import {
   Settings as SettingsIcon,
   Shield,
   Wallet,
-  FileCheck,
-  Download,
+  Calculator,
   Menu,
   X,
 } from 'lucide-react';
@@ -55,48 +54,29 @@ const adminNavGroup = {
 };
 
 // Accounting-only nav. Contabilidad users don't see the sales surfaces
-// at all — they get their own home (read-only KPI dashboard) and a
-// "Contabilidad" cluster with accepted-quote downloads, the payable
-// commissions report, and the Odoo CSV exporter. No /quotes, /orders,
-// /customers, or admin links — they aren't a sales role.
+// at all — they get a single Contabilidad workspace at /accounting that
+// rolls cotizaciones aceptadas + comisiones por pagar + Odoo CSV
+// exports into one table-first view. No sub-pages, no /quotes,
+// /orders, /customers, or admin links — they aren't a sales role.
 const accountingNavGroups = [
-  { items: [{ to: '/accounting', label: 'Inicio', icon: LayoutDashboard, end: true }] },
-  {
-    label: 'Contabilidad',
-    items: [
-      { to: '/accounting/quotes',      label: 'Aceptadas',  icon: FileCheck },
-      { to: '/accounting/commissions', label: 'Comisiones', icon: Wallet },
-      { to: '/accounting/odoo',        label: 'Odoo',       icon: Download },
-    ],
-  },
+  { items: [{ to: '/accounting', label: 'Contabilidad', icon: Calculator, end: true }] },
 ];
 
-// Admin's window into the same accounting surface — spliced into the
-// full sidebar between Administración and Configuración so the admin
-// can see what Contabilidad sees without switching accounts. The lead
-// item is 'Resumen' (not 'Inicio') so it doesn't compete with the
-// sales Inicio at '/'. The duplicated 'Comisiones' label (also under
-// Administración) is intentional: those two pages target different
-// audiences — Administración → Comisiones is the dealer-side payout
-// review; Contabilidad → Comisiones is the read-only payable view
-// with the CSV export that feeds Odoo.
-const adminAccountingNavGroup = {
-  label: 'Contabilidad',
-  items: [
-    { to: '/accounting',             label: 'Resumen',    icon: LayoutDashboard, end: true },
-    { to: '/accounting/quotes',      label: 'Aceptadas',  icon: FileCheck },
-    { to: '/accounting/commissions', label: 'Comisiones', icon: Wallet },
-    { to: '/accounting/odoo',        label: 'Odoo',       icon: Download },
-  ],
+// Admin's read-only entry into the same accounting workspace — one
+// link spliced into the full sidebar between Administración and
+// Configuración so the admin can see what Contabilidad sees without
+// switching accounts.
+const adminAccountingNavItem = {
+  items: [{ to: '/accounting', label: 'Contabilidad', icon: Calculator, end: true }],
 };
 
 export default function Layout() {
   const { settings, isAdmin, isAccounting } = useApp();
   // Three nav shapes:
-  //   • Accounting users → their own home + Contabilidad cluster. No
-  //     sales pages, no admin tools — this is a parallel surface.
+  //   • Accounting users → a single Contabilidad workspace. No sales
+  //     pages, no admin tools — this is a parallel surface.
   //   • Admins → base groups up to "Ventas", then the admin cluster,
-  //     then a read-only Contabilidad cluster, then "Configuración".
+  //     then the Contabilidad workspace link, then "Configuración".
   //   • Employees → base groups minus "Configuración" — they don't
   //     even see the route exist.
   const navGroups = isAccounting
@@ -105,7 +85,7 @@ export default function Layout() {
       ? [
           ...baseNavGroups.slice(0, -1),
           adminNavGroup,
-          adminAccountingNavGroup,
+          adminAccountingNavItem,
           baseNavGroups[baseNavGroups.length - 1],
         ]
       : baseNavGroups.slice(0, -1);
