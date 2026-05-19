@@ -148,10 +148,15 @@
 
   /* Back-link — the "← Volver a …" affordance on every detail
      page (CustomerDetail, ProfessionalDetail, OrderDetail, plus
-     the back-to-list buttons in the quote builder). Same six
-     classes copy-pasted everywhere; this collapses them. Pair
-     with an <ArrowLeft size={12} /> at the call site. */
-  .back-link { @apply text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3; }
+     the back-to-list buttons in the quote builder). Reads as a
+     tappable button: padded surface, hover background, active
+     press state, 36/44 minimum touch target. The -ml-2 cancels
+     the left padding visually so the text still aligns with the
+     page's gutter when at rest. Pair with an <ArrowLeft size={12}/>
+     at the call site. */
+  .back-link {
+    @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 min-h-8 coarse:min-h-10 mb-3 text-xs font-medium text-ink-700 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 transition-colors select-none active:scale-[0.98];
+  }
 
   /* Status pill — the semantic colors for quote status and
      similarly-shaped status indicators. Every page that renders
