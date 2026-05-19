@@ -100,3 +100,20 @@ function normalizeRateMode(mode) {
     default:              return 'bsc-sell';
   }
 }
+
+/**
+ * Build a `formatMoney`-shaped rates map from settings, with USD as
+ * the base unit (1) and DOP populated from whichever rate mode the
+ * dealer picked. Use this in surfaces where the dealer expects
+ * manually-entered rates to take effect immediately — the quote
+ * workspace and the PDF generator — instead of the quote.rates
+ * snapshot that was frozen at draft time.
+ *
+ * Historical surfaces (Dashboard, list pages, commissions reports)
+ * intentionally keep reading quote.rates so an old quote's totals
+ * stay denominated in the rate that was actually quoted to that
+ * customer, not today's rate.
+ */
+export function effectiveRates(settings) {
+  return { USD: 1, DOP: effectiveDopRate(settings) };
+}

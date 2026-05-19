@@ -5,6 +5,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, nextSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { effectiveRates } from '../lib/exchangeRate.js';
 import { formatMoney } from '../lib/format.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
 // gzipped between pdf-lib, fontkit, and the font fetch. Loading it
@@ -163,8 +164,24 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
 
 function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId } = useApp();
-  const liveQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
-  const quote = liveQuote || draftQuote || null;
+  const dbQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
+  const baseQuote = dbQuote || draftQuote || null;
+  // Overlay LIVE exchange rates from Settings onto the quote we hand
+  // down to children (totals rail, line items, client preview, PDF
+  // export). Without this overlay, the editor renders the rates that
+  // were snapshotted at draft time and ignores manual rate changes
+  // made afterwards in Settings — the bug the dealer was hitting
+  // when typing a custom rate and seeing the quote pane keep the
+  // old one.
+  //
+  // Side effect: updateQuote spreads `{ ...quote, ...patch }` into
+  // the DB, so saving the quote also bakes in the current rates.
+  // That's intentional — once the dealer touches the quote with new
+  // rates in view, those rates ARE the deal they're presenting.
+  const quote = useMemo(() => {
+    if (!baseQuote) return null;
+    return { ...baseQuote, rates: effectiveRates(settings) };
+  }, [baseQuote, settings]);
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
     [quoteId],

@@ -3,6 +3,7 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
+import { effectiveRates } from '../lib/exchangeRate.js';
 import { embedImageById } from './embed.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
@@ -70,7 +71,14 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
     settings: settings || {},
     quote,
     customer,
-    rates: quote.rates || { USD: 1 },
+    // Use the LIVE rate from Settings rather than quote.rates so the
+    // PDF body matches the dealer's current setup. The totals block
+    // already pulled the DOP rate from settings via
+    // effectiveDopRate; this extends the same source-of-truth to the
+    // line-item formatting (which previously used quote.rates and
+    // could drift when the dealer updated rates after the quote was
+    // first drafted).
+    rates: effectiveRates(settings),
     currency: quote.currencyCode || 'USD',
   };
 
