@@ -433,13 +433,11 @@ function ContainerRow({ container }) {
             <Package size={14} className="text-ink-500" />
             <span className="text-sm font-semibold">Contenedor #{container.number || '—'}</span>
             {filled ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-medium">
+              <span className="status-pill status-pill-accepted">
                 <CheckCircle2 size={11} /> Lleno · {formatDateTime(container.filledAt)}
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-md bg-ink-100 text-ink-600 px-2 py-0.5 text-[10px] font-medium">
-                Por llenar
-              </span>
+              <span className="status-pill status-pill-draft">Por llenar</span>
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">

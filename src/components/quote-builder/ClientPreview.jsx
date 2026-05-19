@@ -48,7 +48,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-medium uppercase tracking-widest text-ink-500">Cotización</div>
+          <div className="eyebrow">Cotización</div>
           <div className="text-3xl font-semibold tracking-tight">#{quote.number || '—'}</div>
           <div className="text-[11px] text-ink-500 mt-2">{formatDate(quote.updatedAt)}</div>
         </div>
@@ -57,7 +57,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
       {/* Customer block */}
       {customer && (
         <div className="px-6 sm:px-10 py-5 border-b border-ink-100">
-          <div className="text-[10px] font-medium uppercase tracking-widest text-ink-500 mb-1.5">Cliente</div>
+          <div className="eyebrow mb-1.5">Cliente</div>
           <div className="text-sm font-semibold text-ink-900">{customer.name}</div>
           {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
           <div className="text-[11px] text-ink-500 leading-relaxed mt-1">
@@ -113,7 +113,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
       {/* Terms */}
       {quote.terms && (
         <div className="px-6 sm:px-10 py-6 border-t border-ink-100">
-          <div className="text-[10px] font-medium uppercase tracking-widest text-ink-500 mb-2">Términos</div>
+          <div className="eyebrow mb-2">Términos</div>
           <div className="text-xs text-ink-700 leading-relaxed whitespace-pre-line">{quote.terms}</div>
         </div>
       )}

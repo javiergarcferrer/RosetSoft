@@ -96,7 +96,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
       {/* Description + actions */}
       <div className="pt-3 border-t border-ink-100 flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">Estado</div>
+          <div className="eyebrow">Estado</div>
           <div className="text-sm font-semibold mt-0.5">{(terminal ? stageDef.label : QUOTE_STAGE_BY_KEY[stage]?.label) || 'Borrador'}</div>
           <div className="text-xs text-ink-500 mt-1">{(terminal ? stageDef.description : QUOTE_STAGE_BY_KEY[stage]?.description) || ''}</div>
         </div>

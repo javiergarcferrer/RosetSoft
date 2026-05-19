@@ -654,7 +654,7 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
         className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2"
       >
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-wide text-ink-500">Total</div>
+          <div className="eyebrow">Total</div>
           <div className="text-lg font-semibold tabular-nums truncate">
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>

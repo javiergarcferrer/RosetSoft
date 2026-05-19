@@ -45,7 +45,7 @@ export default function Login() {
     <div className="h-full flex items-center justify-center bg-ink-50">
       <div className="card-auth">
         <div className="text-center mb-6">
-          <div className="text-xs uppercase tracking-widest text-ink-500">Roset Soft</div>
+          <div className="eyebrow">Roset Soft</div>
           <h1 className="text-xl font-semibold mt-1">Iniciar sesión</h1>
           <p className="text-xs text-ink-500 mt-1">
             Inicia sesión con el correo y contraseña de tu equipo.

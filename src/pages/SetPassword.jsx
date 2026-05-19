@@ -93,7 +93,7 @@ export default function SetPassword() {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 mb-3">
             <CheckCircle2 size={22} />
           </div>
-          <div className="text-xs uppercase tracking-widest text-ink-500">Roset Soft</div>
+          <div className="eyebrow">Roset Soft</div>
           <h1 className="text-xl font-semibold mt-1">Crea tu contraseña</h1>
           <p className="text-xs text-ink-500 mt-2">
             Bienvenido{currentProfile?.name ? `, ${currentProfile.name.split(' ')[0]}` : ''}.
