@@ -248,10 +248,29 @@ function groupBySection(lines: QuoteLine[]): LineGroup[] {
  * re-thrown so the UI can show a banner.
  */
 export async function downloadBlob(blob: Blob, filename: string): Promise<void> {
+  // Defensive: refuse to deliver an empty blob. A 0-byte file lands as
+  // a corrupted PDF on the dealer's disk and (on Windows with Adobe
+  // installed) opens an "Zero length file" dialog — confusing because
+  // the actual failure was upstream. Surface it as an explicit error
+  // so the caller's catch can show an inline banner.
+  if (!blob || !blob.size) {
+    throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+  }
+
   // Web Share with files — the only path that works in iOS PWA
-  // standalone mode. We have to construct a real File (not just a
-  // Blob) because navigator.canShare({ files }) is strict.
-  if (typeof File !== 'undefined' && navigator.canShare) {
+  // standalone mode (`<a download>` is silently ignored there).
+  //
+  // GATED to PWA-standalone + touch-primary devices on purpose.
+  // Desktop Chrome / Edge on Windows expose navigator.share, but
+  // the Windows share sheet can route the file to Adobe's "Create
+  // Adobe PDF" handler, which receives the share mid-handoff and
+  // surfaces a "Zero length file" dialog — the dealer's PDF
+  // download from the accounting workspace was bumping into this
+  // exact path. Restricting Web Share to the original target
+  // surface (iOS PWA, native mobile share) means desktop falls
+  // through to the anchor click that has worked reliably for years.
+  const prefersWebShare = shouldUseWebShare();
+  if (prefersWebShare && typeof File !== 'undefined' && navigator.canShare) {
     try {
       const file = new File([blob], filename, {
         type: blob.type || 'application/pdf',
@@ -293,4 +312,33 @@ export async function downloadBlob(blob: Blob, filename: string): Promise<void> 
     // blob; 0 ms (the previous behavior) raced the read.
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
+}
+
+/**
+ * Should this device use the Web Share API for the PDF download?
+ *
+ * The intent of the original Web Share path was iOS PWA standalone
+ * mode (where `<a download>` is silently ignored by Safari). It
+ * also happens to be the right path on native Android / iOS browsers
+ * outside the PWA. But desktop Chrome / Edge on Windows expose the
+ * same API and the Windows share sheet introduces fragile routing
+ * (Adobe's "Create PDF" handler grabs the share, then complains the
+ * file is empty mid-handoff). Restrict to the surfaces the share
+ * sheet was designed for.
+ *
+ *   PWA standalone           — display-mode media query + iOS quirk
+ *   Touch-primary devices    — phones / tablets with pointer:coarse
+ *
+ * Desktop with a mouse (pointer:fine) always falls through to the
+ * anchor-click path.
+ */
+function shouldUseWebShare(): boolean {
+  if (typeof window === 'undefined') return false;
+  const mq = (q: string) => window.matchMedia?.(q).matches;
+  const isStandalonePwa =
+    mq('(display-mode: standalone)') ||
+    // iOS Safari sets a non-standard `navigator.standalone` on PWAs.
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  const isTouchPrimary = mq('(pointer: coarse)');
+  return !!(isStandalonePwa || isTouchPrimary);
 }

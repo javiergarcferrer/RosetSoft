@@ -15,6 +15,7 @@ import {
   computeTotals, applyLineAdjustments, lineForTotals, isCompoundLine,
 } from '../../lib/pricing.js';
 import { downloadCsv } from '../../lib/csv.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
@@ -676,7 +677,16 @@ function usePdfDownload({ quote, customer, lines, settings }) {
         lines.filter(isPricedLine).map(lineForTotals),
         quote,
       );
-      const { generateQuotePdf, downloadBlob } = await import('../../pdf/quotePdf.js');
+      // safeDynamicImport recovers from a stale-chunk reference (the
+      // user's tab has the previous deploy's index.html cached, the
+      // hashed quotePdf-<oldHash>.js no longer exists on the server,
+      // and a raw `import()` would reject with the cryptic MIME-type
+      // / "failed to fetch dynamically imported module" error). The
+      // helper reloads once via sessionStorage so the dealer's
+      // second tap succeeds.
+      const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
+        () => import('../../pdf/quotePdf.js'),
+      );
       const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
       await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
     } catch (err) {
