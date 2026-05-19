@@ -1,4 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
+import type { PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
@@ -11,6 +12,15 @@ import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
+import type {
+  Quote,
+  QuoteLine,
+  Customer,
+  Settings,
+  Totals,
+  CurrencyCode,
+} from '../types/domain.ts';
+import type { PdfCtx, Cursor } from './types.js';
 
 /**
  * Generates a branded PDF quote that mirrors the on-screen ClientPreview.
@@ -36,7 +46,21 @@ import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './total
  *  - Final page: totals + FX shadow + terms
  *  - Footer on every page: site URL + page X / Y
  */
-export async function generateQuotePdf({ quote, settings, lines, totals, customer }) {
+export interface GenerateQuotePdfInput {
+  quote: Quote;
+  settings: Settings | null | undefined;
+  lines: QuoteLine[];
+  totals: Totals;
+  customer: Customer | null;
+}
+
+export async function generateQuotePdf({
+  quote,
+  settings,
+  lines,
+  totals,
+  customer,
+}: GenerateQuotePdfInput): Promise<Blob> {
   const doc = await PDFDocument.create();
 
   // Register fontkit BEFORE any custom-font embedding. Without this
@@ -64,12 +88,13 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
   // ~1.2 MB of fonts; subsetted, a typical 1-page quote PDF is
   // 30–80 KB total. Same fidelity, an order of magnitude smaller files.
 
-  const ctx = {
+  const safeSettings: Settings = settings || ({} as Settings);
+  const ctx: PdfCtx = {
     doc,
     fontRegular,
     fontBold,
     fontItalic,
-    settings: settings || {},
+    settings: safeSettings,
     quote,
     customer,
     // Use the LIVE rate from Settings rather than quote.rates so the
@@ -79,14 +104,14 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
     // line-item formatting (which previously used quote.rates and
     // could drift when the dealer updated rates after the quote was
     // first drafted).
-    rates: effectiveRates(settings),
-    currency: quote.currencyCode || 'USD',
+    rates: effectiveRates(safeSettings),
+    currency: (quote.currencyCode || 'USD') as CurrencyCode,
   };
 
-  const logoImage = await embedImageById(doc, settings?.logoImageId);
+  const logoImage = await embedImageById(doc, safeSettings?.logoImageId);
 
-  let page = doc.addPage([PAGE_W, PAGE_H]);
-  let cursor = drawHeader(page, ctx, logoImage);
+  let page: PDFPage = doc.addPage([PAGE_W, PAGE_H]);
+  let cursor: Cursor = drawHeader(page, ctx, logoImage);
   cursor = drawCustomerBlock(page, ctx, cursor);
 
   // ---- Lines, grouped by section ---------------------------------------
@@ -146,7 +171,7 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
   }
 
   const bytes = await doc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([bytes as BlobPart], { type: 'application/pdf' });
 }
 
 /**
@@ -159,7 +184,7 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
  * top-level try/catch in QuoteBuilder.exportPdf can show a banner
  * instead of letting the export silently fail mid-render.
  */
-async function fetchFontBytes(url) {
+async function fetchFontBytes(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`No se pudo cargar la fuente ${url} (HTTP ${res.status}).`);
@@ -167,9 +192,14 @@ async function fetchFontBytes(url) {
   return res.arrayBuffer();
 }
 
-function groupBySection(lines) {
-  const groups = [];
-  let cur = { label: null, items: [] };
+interface LineGroup {
+  label: string | null;
+  items: QuoteLine[];
+}
+
+function groupBySection(lines: QuoteLine[]): LineGroup[] {
+  const groups: LineGroup[] = [];
+  let cur: LineGroup = { label: null, items: [] };
   for (const l of lines) {
     if (l.kind === LINE_KIND_SECTION) {
       if (cur.items.length || cur.label) groups.push(cur);
@@ -217,7 +247,7 @@ function groupBySection(lines) {
  * errors via a try/catch). Errors that aren't user-cancellation are
  * re-thrown so the UI can show a banner.
  */
-export async function downloadBlob(blob, filename) {
+export async function downloadBlob(blob: Blob, filename: string): Promise<void> {
   // Web Share with files — the only path that works in iOS PWA
   // standalone mode. We have to construct a real File (not just a
   // Blob) because navigator.canShare({ files }) is strict.
@@ -233,7 +263,7 @@ export async function downloadBlob(blob, filename) {
     } catch (err) {
       // AbortError = user dismissed the share sheet. That's a valid
       // outcome, not a failure to deliver the file — return quietly.
-      if (err && err.name === 'AbortError') return;
+      if (err && (err as DOMException).name === 'AbortError') return;
       // Anything else: fall through to the anchor-click fallback. Don't
       // re-throw yet; the desktop path may still succeed.
       console.warn('[quotePdf] navigator.share fell through:', err);

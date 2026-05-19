@@ -1,7 +1,10 @@
+import type { PDFPage, PDFImage, PDFFont } from 'pdf-lib';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_R, MARGIN_T,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE,
 } from './constants.js';
+import type { PdfCtx, Cursor } from './types.js';
+import type { DrawTextOptions } from './util.js';
 
 /**
  * Page-1 header. Mirrors the on-screen ClientPreview the dealer shows
@@ -35,7 +38,7 @@ const NUMBER_FONT_SIZE  = 26;
 const EYEBROW_SIZE      = 8;
 const EYEBROW_TRACKING  = 1.4;
 
-function fontItalicOrRegular(ctx) {
+function fontItalicOrRegular(ctx: PdfCtx): PDFFont {
   return ctx.fontItalic || ctx.fontRegular;
 }
 
@@ -44,14 +47,14 @@ function fontItalicOrRegular(ctx) {
  * (left margin, y just under the bottom of the header) for the next
  * renderer.
  */
-export function drawHeader(page, ctx, logoImage) {
+export function drawHeader(page: PDFPage, ctx: PdfCtx, logoImage: PDFImage | null): Cursor {
   const { fontBold, fontRegular, settings, quote } = ctx;
   const top = PAGE_H - MARGIN_T;
 
   // -------- left side: company wordmark + address ---------------------------
   // Show the uploaded logo when present (it usually *is* the wordmark);
   // otherwise typeset the company name at COMPANY_FONT_SIZE.
-  let leftBottomY;
+  let leftBottomY: number;
   if (logoImage) {
     const maxH = 36;
     const maxW = 200;
@@ -73,7 +76,7 @@ export function drawHeader(page, ctx, logoImage) {
     settings.companyAddress,
     settings.companyPhone,
     settings.companyEmail,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
   let ay = leftBottomY;
   for (const ln of addressLines) {
     page.drawText(ln, { x: MARGIN_L, y: ay, size: 9, font: fontRegular, color: INK_MID });
@@ -85,7 +88,7 @@ export function drawHeader(page, ctx, logoImage) {
   // the big number directly below, then the date in muted text under the
   // number — same hierarchy as the preview's right column.
   const rightX = PAGE_W - MARGIN_R;
-  const numbered = quote.number != null && quote.number !== '';
+  const numbered = quote.number != null && (quote.number as unknown as string) !== '';
 
   // Eyebrow
   const eyebrow = 'COTIZACIÓN';
@@ -96,7 +99,7 @@ export function drawHeader(page, ctx, logoImage) {
     y: top - EYEBROW_SIZE,
     size: EYEBROW_SIZE, font: fontRegular, color: INK_MID,
     characterSpacing: EYEBROW_TRACKING,
-  });
+  } as DrawTextOptions);
 
   // Big #number (or BORRADOR when unnumbered — better than "# —")
   const numText = numbered ? `#${quote.number}` : 'BORRADOR';
@@ -143,7 +146,7 @@ export function drawHeader(page, ctx, logoImage) {
  * Falls back to italic "Sin cliente asignado" so the layout doesn't
  * collapse on draft quotes.
  */
-export function drawCustomerBlock(page, ctx, cursor) {
+export function drawCustomerBlock(page: PDFPage, ctx: PdfCtx, cursor: Cursor): Cursor {
   const { fontBold, fontRegular, customer } = ctx;
   const y0 = cursor.y;
 
@@ -151,7 +154,7 @@ export function drawCustomerBlock(page, ctx, cursor) {
     x: MARGIN_L, y: y0,
     size: EYEBROW_SIZE, font: fontRegular, color: INK_MID,
     characterSpacing: EYEBROW_TRACKING,
-  });
+  } as DrawTextOptions);
 
   let y = y0 - 18;
   if (customer) {
