@@ -66,10 +66,7 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      <Link
-        to="/quotes"
-        className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 mb-3"
-      >
+      <Link to="/quotes" className="back-link">
         <ArrowLeft size={12} /> Volver a cotizaciones
       </Link>
 
@@ -81,9 +78,7 @@ export default function QuoteHeader({
             chips for horizontal space on mobile and force them to wrap. */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500">
-              Cotización
-            </div>
+            <div className="eyebrow">Cotización</div>
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
