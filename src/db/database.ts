@@ -822,7 +822,19 @@ export async function ensureDefaultProfile(): Promise<string> {
         patch.role = 'admin';
         patch.active = true;
       }
-      await db.profiles.update(u.id, patch).catch(() => {});
+      // Surface the failure rather than swallow it — the silent
+      // `.catch(() => {})` here previously hid the trigger error
+      // ('42501 No puedes cambiar tu propio estado activo') that
+      // was breaking the invitation acceptance flow. With the
+      // first-acceptance carve-out in migration 20260519220000
+      // this update should now succeed; a console.warn keeps the
+      // boot non-fatal but at least gives a future maintainer a
+      // breadcrumb if the trigger changes again.
+      try {
+        await db.profiles.update(u.id, patch);
+      } catch (e) {
+        console.warn('[ensureDefaultProfile] profile-activation update failed:', e);
+      }
     }
 
     // Self-heal: if a previous failed-delete cycle left an orphan
