@@ -29,7 +29,32 @@
  * mark goods as received before they've packed them.
  */
 
-export const ORDER_STAGES = [
+import type { Order, OrderStatus, Container } from '../types/domain.ts';
+
+/** Order fields ending in `At` that are nullable stage-timestamp slots. */
+export type OrderTimestampField =
+  | 'placedAt'
+  | 'confirmedAt'
+  | 'inTransitAt'
+  | 'inCustomsAt'
+  | 'receivedAt'
+  | 'cancelledAt';
+
+/** One stage definition in the order lifecycle. */
+export interface OrderStage {
+  key: OrderStatus;
+  label: string;
+  description: string;
+  timestampField: OrderTimestampField | null;
+}
+
+/** Options for the placed-gate advance check. */
+export interface AdvanceOpts {
+  totalAmount?: number;
+  threshold?: number;
+}
+
+export const ORDER_STAGES: readonly OrderStage[] = [
   {
     key: 'draft',
     label: 'Borrador',
@@ -68,7 +93,7 @@ export const ORDER_STAGES = [
   },
 ];
 
-export const ORDER_TERMINAL_STAGES = [
+export const ORDER_TERMINAL_STAGES: readonly OrderStage[] = [
   {
     key: 'cancelled',
     label: 'Cancelado',
@@ -77,26 +102,27 @@ export const ORDER_TERMINAL_STAGES = [
   },
 ];
 
-export const ALL_ORDER_STAGES = [...ORDER_STAGES, ...ORDER_TERMINAL_STAGES];
+export const ALL_ORDER_STAGES: readonly OrderStage[] = [...ORDER_STAGES, ...ORDER_TERMINAL_STAGES];
 
-export const ORDER_STAGE_BY_KEY = Object.fromEntries(
-  ALL_ORDER_STAGES.map((s) => [s.key, s]),
-);
+export const ORDER_STAGE_BY_KEY: Readonly<Partial<Record<OrderStatus, OrderStage>>> =
+  Object.fromEntries(
+    ALL_ORDER_STAGES.map((s) => [s.key, s]),
+  );
 
 /** Numeric index in the main stepper (0..5). Cancelled returns -1. */
-export function orderStageIndex(key) {
+export function orderStageIndex(key: string | null | undefined): number {
   return ORDER_STAGES.findIndex((s) => s.key === key);
 }
 
 /** The next main-track stage, or null at the end / when cancelled. */
-export function nextOrderStage(key) {
+export function nextOrderStage(key: string | null | undefined): OrderStage | null {
   const idx = orderStageIndex(key);
   if (idx === -1 || idx >= ORDER_STAGES.length - 1) return null;
   return ORDER_STAGES[idx + 1];
 }
 
 /** Read the current stage from an order row, defaulting to 'draft'. */
-export function currentOrderStage(order) {
+export function currentOrderStage(order: Pick<Order, 'status'> | null | undefined): OrderStatus {
   if (!order) return 'draft';
   const s = order.status;
   if (s && ORDER_STAGE_BY_KEY[s]) return s;
@@ -104,7 +130,7 @@ export function currentOrderStage(order) {
 }
 
 /** Cancelled is the only terminal alt currently. */
-export function isTerminalOrderStage(key) {
+export function isTerminalOrderStage(key: string | null | undefined): boolean {
   return ORDER_TERMINAL_STAGES.some((s) => s.key === key);
 }
 
@@ -133,7 +159,11 @@ export function isTerminalOrderStage(key) {
  * unmet (defensive — better to require the dealer to confirm than to
  * let an under-minimum order through silently).
  */
-export function canAdvanceOrder(order, containers, opts = {}) {
+export function canAdvanceOrder(
+  order: Pick<Order, 'status'> | null | undefined,
+  containers: readonly Pick<Container, 'filledAt'>[] | null | undefined,
+  opts: AdvanceOpts = {},
+): boolean {
   const next = nextOrderStage(currentOrderStage(order));
   if (!next) return false;
   if (next.key === 'placed') {
@@ -154,7 +184,11 @@ export function canAdvanceOrder(order, containers, opts = {}) {
  * Spanish hint, or null if there's no special reason (the button is
  * actually allowed, or there's no next stage).
  */
-export function advanceBlockedReason(order, containers, opts = {}) {
+export function advanceBlockedReason(
+  order: Pick<Order, 'status'> | null | undefined,
+  containers: readonly Pick<Container, 'filledAt'>[] | null | undefined,
+  opts: AdvanceOpts = {},
+): string | null {
   const next = nextOrderStage(currentOrderStage(order));
   if (!next) return null;
   if (next.key === 'placed') {
@@ -164,7 +198,7 @@ export function advanceBlockedReason(order, containers, opts = {}) {
       const shortfall = threshold - total;
       // Use a plain en-US dollar format for the shortfall — keeps the
       // hint terse and avoids loading a money formatter just for this.
-      const fmt = (n) => '$' + Math.round(n).toLocaleString('en-US');
+      const fmt = (n: number): string => '$' + Math.round(n).toLocaleString('en-US');
       return `Faltan ${fmt(shortfall)} para alcanzar el mínimo de despacho (${fmt(threshold)}). El pedido no se puede colocar con Ligne Roset hasta cumplir el mínimo.`;
     }
   }
@@ -187,7 +221,10 @@ export function advanceBlockedReason(order, containers, opts = {}) {
  * minimum from settings`. Doubling the count doubles the minimum;
  * the dealer never enters this number by hand anywhere.
  */
-export function orderDispatchThreshold(containers, perContainerThreshold) {
+export function orderDispatchThreshold(
+  containers: readonly Container[] | null | undefined,
+  perContainerThreshold: number | null | undefined,
+): { containerCount: number; threshold: number } {
   const count = Math.max(1, containers?.length || 0);
   return {
     containerCount: count,

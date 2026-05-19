@@ -19,6 +19,8 @@
  * module just multiplies.
  */
 
+import type { Quote, Professional } from '../types/domain.ts';
+
 /** Hard cap the dealer set: no commission > 20% on a sale. */
 export const COMMISSION_MAX_PCT = 20;
 
@@ -27,7 +29,7 @@ export const COMMISSION_MAX_PCT = 20;
  * (NaN, string typos) collapse to 0 — the conservative direction, so a
  * typo earns the dealer money rather than overpaying the professional.
  */
-export function clampCommissionPct(pct) {
+export function clampCommissionPct(pct: unknown): number {
   const n = Number(pct);
   if (!Number.isFinite(n)) return 0;
   if (n < 0) return 0;
@@ -51,8 +53,11 @@ export function clampCommissionPct(pct) {
  * Returns the clamped value so callers never have to worry about a
  * pre-clamp value sneaking through.
  */
-export function effectiveCommissionPct(quote, professional) {
-  if (quote?.commissionPct != null && quote.commissionPct !== '') {
+export function effectiveCommissionPct(
+  quote: Pick<Quote, 'commissionPct'> | null | undefined,
+  professional: Pick<Professional, 'defaultCommissionPct'> | null | undefined,
+): number {
+  if (quote?.commissionPct != null && (quote.commissionPct as unknown) !== '') {
     return clampCommissionPct(quote.commissionPct);
   }
   if (professional?.defaultCommissionPct != null) {
@@ -73,7 +78,7 @@ export function effectiveCommissionPct(quote, professional) {
  * Multiplication only, no rounding policy — the formatter decides
  * how to display.
  */
-export function commissionAmount(taxableBase, pct) {
+export function commissionAmount(taxableBase: unknown, pct: unknown): number {
   const t = Number(taxableBase);
   if (!Number.isFinite(t)) return 0;
   return t * (clampCommissionPct(pct) / 100);

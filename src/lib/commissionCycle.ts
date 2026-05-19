@@ -8,6 +8,12 @@
  * math here so the two surfaces stay in lockstep.
  */
 
+/** A payout window — start/end as JS millisecond timestamps. */
+export interface CommissionCycle {
+  start: number;
+  end: number;
+}
+
 /**
  * Returns the cycle that *ends* `offsetMonths` months from the current
  * 15th. offset=0 = "active cycle"; offset=-1 = "previous cycle".
@@ -17,7 +23,7 @@
  * coming. Before the 15th, "this" is the current calendar month;
  * from the 16th onward, "this" rolls forward.
  */
-export function cycleEnding(now, offsetMonths) {
+export function cycleEnding(now: Date, offsetMonths: number): CommissionCycle {
   const day = now.getDate();
   const baseEndMonth = day <= 15 ? now.getMonth() : now.getMonth() + 1;
   const endMonth = baseEndMonth + offsetMonths;
@@ -27,7 +33,7 @@ export function cycleEnding(now, offsetMonths) {
   return { start: start.getTime(), end: end.getTime() };
 }
 
-export function isoDate(ms) {
+export function isoDate(ms: number): string {
   const d = new Date(ms);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -35,7 +41,7 @@ export function isoDate(ms) {
   return `${y}-${m}-${day}`;
 }
 
-export function parseISODate(iso, endOfDay = false) {
+export function parseISODate(iso: string | null | undefined, endOfDay = false): number {
   if (!iso) return Date.now();
   const [y, m, d] = iso.split('-').map(Number);
   const date = endOfDay
@@ -44,15 +50,15 @@ export function parseISODate(iso, endOfDay = false) {
   return date.getTime();
 }
 
-export function formatCycle({ start, end }) {
-  const opts = { day: 'numeric', month: 'short' };
+export function formatCycle({ start, end }: CommissionCycle): string {
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
   const s = new Date(start).toLocaleDateString('es-DO', opts);
   const e = new Date(end).toLocaleDateString('es-DO', opts);
   const year = new Date(end).getFullYear();
   return `${s} — ${e}, ${year}`;
 }
 
-export function clampPct(n) {
+export function clampPct(n: unknown): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return 0;
   if (v < 0) return 0;

@@ -33,6 +33,13 @@
  */
 
 import { isActiveQuoteStatus } from './constants.js';
+import type {
+  Settings,
+  BscRates,
+  Quote,
+  RatesMap,
+  DopRateMode,
+} from '../types/domain.ts';
 
 export const BSC_PUBLIC_URL = 'https://www.bsc.com.do/divisas';
 
@@ -42,9 +49,9 @@ export const BSC_PUBLIC_URL = 'https://www.bsc.com.do/divisas';
  * accepted as a fallback so existing dealer accounts don't suddenly
  * lose their stored rate when this code ships.
  */
-export function readBscRates(settings) {
+export function readBscRates(settings: Settings | null | undefined): BscRates {
   if (!settings) return { buy: null, sell: null, updatedAt: null };
-  const src = settings.bsc || settings.bpd || {};
+  const src = settings.bsc || settings.bpd || ({} as Partial<BscRates>);
   return {
     buy: src.buy ?? null,
     sell: src.sell ?? null,
@@ -63,7 +70,7 @@ export function readBscRates(settings) {
  *                        for retail quoting; sell > buy, so quoting
  *                        in sell maximizes the dealer's USD invoice)
  */
-export function effectiveDopRate(settings) {
+export function effectiveDopRate(settings: Settings | null | undefined): number {
   if (!settings) return 60.0;
   const mode = normalizeRateMode(settings.dopRateMode);
   const bsc = readBscRates(settings);
@@ -76,7 +83,7 @@ export function effectiveDopRate(settings) {
 }
 
 /** Friendly label printed on PDFs and in Settings hints. */
-export function rateSourceLabel(settings) {
+export function rateSourceLabel(settings: Settings | null | undefined): string {
   const mode = normalizeRateMode(settings?.dopRateMode);
   switch (mode) {
     case 'bsc-buy':  return 'Banco Santa Cruz — tasa de compra';
@@ -91,7 +98,7 @@ export function rateSourceLabel(settings) {
  * Any unknown / empty value falls through to 'bsc-sell' as the safe
  * retail default.
  */
-function normalizeRateMode(mode) {
+function normalizeRateMode(mode: string | null | undefined): DopRateMode {
   switch (mode) {
     case 'bsc-buy':
     case 'bpd-buy':       return 'bsc-buy';
@@ -111,7 +118,7 @@ function normalizeRateMode(mode) {
  * workspace and the PDF generator — instead of the quote.rates
  * snapshot that was frozen at draft time.
  */
-export function effectiveRates(settings) {
+export function effectiveRates(settings: Settings | null | undefined): RatesMap {
   return { USD: 1, DOP: effectiveDopRate(settings) };
 }
 
@@ -132,7 +139,10 @@ export function effectiveRates(settings) {
  * Falls back to USD-only when both sides are missing so formatMoney
  * still has a valid map to read.
  */
-export function displayRatesFor(quote, settings) {
+export function displayRatesFor(
+  quote: Pick<Quote, 'status' | 'rates'> | null | undefined,
+  settings: Settings | null | undefined,
+): RatesMap {
   if (quote && isActiveQuoteStatus(quote.status)) {
     return effectiveRates(settings);
   }

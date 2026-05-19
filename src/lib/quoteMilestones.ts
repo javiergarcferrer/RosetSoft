@@ -31,6 +31,15 @@
  * pretended to know about quote-level fulfillment.
  */
 
+import type { Quote, Order } from '../types/domain.ts';
+
+/** Snapshot of which of the three milestones are complete on a quote. */
+export interface QuoteMilestoneState {
+  deposit: boolean;
+  balance: boolean;
+  delivered: boolean;
+}
+
 /**
  * Can the dealer mark this quote's deposit as received?
  *
@@ -39,7 +48,7 @@
  * in the UI so the dealer sees what to do next; this just controls
  * the enabled state.)
  */
-export function canMarkDeposit(quote) {
+export function canMarkDeposit(quote: Quote | null | undefined): boolean {
   if (!quote) return false;
   if (quote.status !== 'accepted') return false;
   return !quote.depositReceivedAt;
@@ -51,7 +60,7 @@ export function canMarkDeposit(quote) {
  * order-status precondition — customers sometimes pay the balance
  * while goods are still in transit.
  */
-export function canMarkBalance(quote) {
+export function canMarkBalance(quote: Quote | null | undefined): boolean {
   if (!quote) return false;
   if (!quote.depositReceivedAt) return false;
   return !quote.balancePaidAt;
@@ -68,7 +77,10 @@ export function canMarkBalance(quote) {
  * Both conditions matter; the first is a commerce rule the dealer
  * imposes on themselves, the second is a logistics reality.
  */
-export function canMarkDelivered(quote, order) {
+export function canMarkDelivered(
+  quote: Quote | null | undefined,
+  order: Order | null | undefined,
+): boolean {
   if (!quote) return false;
   if (quote.deliveredAt) return false;
   if (!quote.balancePaidAt) return false;
@@ -81,7 +93,10 @@ export function canMarkDelivered(quote, order) {
  * Returned hint is intended for a button tooltip / disabled-state
  * helper text. Returns null when the action is actually available.
  */
-export function deliveryBlockedReason(quote, order) {
+export function deliveryBlockedReason(
+  quote: Quote | null | undefined,
+  order: Order | null | undefined,
+): string | null {
   if (!quote || quote.deliveredAt) return null;
   if (!quote.depositReceivedAt) {
     return 'Marca el depósito recibido primero.';
@@ -99,7 +114,7 @@ export function deliveryBlockedReason(quote, order) {
  * A small machine-readable snapshot of which quote milestones are
  * complete. Useful for rendering a per-quote progress strip.
  */
-export function quoteMilestoneState(quote) {
+export function quoteMilestoneState(quote: Quote | null | undefined): QuoteMilestoneState {
   return {
     deposit:   !!quote?.depositReceivedAt,
     balance:   !!quote?.balancePaidAt,
