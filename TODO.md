@@ -1,186 +1,167 @@
 # TODO
 
-Outstanding work after the May 2026 watertight pass. Findings that
-weren't shipped, ranked by ROI inside each tier. Every item has a
-rough time estimate and a concrete "done when" so the next session
-can pick one up without re-discovering scope.
+State after the May 2026 watertight passes + TypeScript migration
+kick-off. The bias: **make wrong states unrepresentable** at the
+boundary, via types and validators. Tests aren't required — if the
+shape is right, the bad state can't reach the code that would
+mis-handle it.
 
-Done in the same pass (for reference, not to redo):
+---
 
-- HIGH list-view total bugs in Quotes / Orders / OrderDetail (compound
-  rows showing $0, adjustments ignored)
+## What's already in main
+
+Watertight logic:
+- HIGH list-view total bugs in Quotes / Orders / OrderDetail
+  (compound rows showing $0, adjustments ignored)
 - `displayRatesFor(quote, settings)` so list views match the workspace
   on active drafts
-- Race-safe sequence numbering: `UNIQUE(profile_id, number)` + the
+- Race-safe sequence numbering: `UNIQUE(profile_id, number)` on
+  quotes / orders / containers / professionals + the
   `assignSequenceNumber()` helper, applied to every direct caller
 - `newId()` → `crypto.randomUUID()` (122-bit collision floor)
-- `src/lib/constants.js` (`LINE_KIND_*`, `QUOTE_STATUS_*`,
-  `isPricedLine`, `isActiveQuoteStatus`) with the call sites migrated
-- `src/db/rowMapping.js` extracted from `database.js` so the camel ↔
-  snake + `*At` timestamp converter is its own module
-- Commission read/write fix in admin/Users (`commission_pct` →
-  `commissionPct`) + client-side cap at 50% to match DB CHECK
+- `src/lib/constants` (`LINE_KIND_*`, `QUOTE_STATUS_*`, `isPricedLine`,
+  `isActiveQuoteStatus`) wired into ~25 call sites
+- `src/db/rowMapping` extracted from `database` so the camel ↔ snake +
+  `*At` timestamp converter is its own module
+- Commission read/write fix in admin/Users + client-side cap at 50%
+  matching the DB CHECK
 - Status CHECK constraints on `quotes.status` and `orders.status`
-- SVG logo treatment: white-tinted wordmark over "Roset Soft" eyebrow
-  (no white box) on mobile topbar + sidebar
-- QuoteStatusStepper bottom-row layout fix (description + actions
-  stack on mobile instead of word-towers next to buttons)
+- SVG logo: white-tinted wordmark over "Roset Soft" eyebrow
+- QuoteStatusStepper bottom row: stack on mobile
+- Boundary hardening:
+    – `saveImage()` rejects zero-byte, non-image MIME, and >10 MB
+    – `Query` rejects trailing `where()` without `equals()`, empty
+      field names, non-function `filter()`, non-positive `limit()`
+    – `bulkPut()` validates `chunkSize` / `retries`
+    – `assignSequenceNumber()` validates every parameter at the
+      boundary instead of burning round-trips on bad input
+
+TypeScript migration (incremental, `allowJs: true`):
+- `tsconfig.json`, `vite-env.d.ts`, vite alias for `.js` → `.ts` and
+  `.jsx` → `.tsx` resolution so existing imports don't need
+  rewriting
+- `src/types/domain.ts` — Profile, Settings, Customer, Professional,
+  Quote, QuoteLine, LineComponent, Order, Container, ImageRecord +
+  the discriminator union types + pricing input/output shapes
+- `src/lib/**` converted (12 files): pricing, commissions,
+  exchangeRate, subtype, quoteStages, orderStages, quoteMilestones,
+  commissionCycle, useKeyboardShortcut, dynamicImport, errorMessages,
+  invite. Plus the earlier-converted constants + format
+- `src/db/**` converted (3 files): database (with generic
+  `Table<T>` / `Query<T>`), hooks, supabaseClient. rowMapping already
+  was TS
+- `src/components/primitives/**` + DebouncedInput + ImageView (10
+  files): props interfaces, correct `forwardRef` generics
 
 ---
 
 ## Principle for what follows
 
-The bias is **make-wrong-states-unrepresentable** over test-them-after-
-the-fact. Each task tightens an invariant at the boundary (DB
-constraint, validator, narrowed type-shape, exhaustive switch) so the
-faulty state can't reach the code paths that would mis-handle it.
-Tests aren't required; if the logic is shaped right the wrong state
-isn't reachable.
+Make-wrong-states-unrepresentable over test-them-after-the-fact.
+Each task tightens an invariant — types, validators, exhaustive
+switches, DB constraints. Tests stay only where they pin the shape
+of pure math that types can't express (the existing pricing /
+numbering / quoteMilestones / commissions / subtype suites — 76
+tests total, the pre-session baseline).
 
 ---
 
-## Medium ROI (next-session candidates)
+## In-flight
 
-### 1. Move row-level DB mutations out of page files   ~1 day
+### PDF agent migration   (background)
+`src/pdf/**` agent is still running in its worktree. When it lands:
+typed `PdfCtx` + pdf-lib type imports + converted constants, util,
+embed, header, lines, totals, quotePdf. Will merge into main when
+done.
 
-`src/pages/QuoteBuilder.jsx` (~735 LoC), `src/pages/OrderDetail.jsx`
-(~640 LoC), `src/components/CustomerModal.jsx`, and
-`src/components/ProfessionalModal.jsx` mix UI state with direct
-`db.X.put/update/delete` calls. The page files are big enough that
-the mutations are hard to keep consistent (timestamp stamping, undo
-toast wiring, optimistic state, etc.).
+---
 
-Done when: a page file has zero `db.X.{put,update,delete}` calls; the
-mutations all live in a `useQuoteWorkspace()` / `useOrderDetail()`
-hook named after the page; each mutation in the hook stamps
-`updatedAt`, fires `invalidate()`, and routes through
-`assignSequenceNumber` where applicable.
+## Next — TypeScript completion
 
-### 2. Centralize the inline money + status formatters   ~half day
+### 1. Migrate `src/components/quote-builder/**`   ~half day
+The big quote-builder folder (QuoteLineItem ~37 KB, ClientPreview,
+TotalsRail, QuoteHeader, QuickActions, FamilyPicker, CustomerPicker,
+ProfessionalPicker, etc.). Props interfaces; the line-editor + the
+quote-line state shape map directly to the `QuoteLine` /
+`LineComponent` types in `src/types/domain.ts`.
 
-Same pattern repeated in 4–5 places:
-```js
-const fmt = (v) => formatMoney(v, currency, rates);
-```
-(see `QuoteLineItem.jsx`, `TotalsRail.jsx`, `ClientPreview.jsx`,
-`Dashboard.jsx`). Also `STATUS_PILL_CLASS` / `STATUS_LABELS` are
-declared in both `pages/Quotes.jsx` and `pages/Orders.jsx` with
-different vocabularies — easy to drift.
+### 2. Migrate `src/components/**` remainder   ~couple of hours
+CustomerModal, ProfessionalModal, ImageDrop, EmptyState,
+ErrorBoundary, ListLoading, Modal, PageHeader, ProfileMenu,
+StatCard, Layout. Smaller than quote-builder; mostly props passes.
 
-Done when: a `useMoneyFormatter(quote)` hook is the single creation
-point of `fmt`; `src/lib/quoteStatusDisplay.js` exports the pill
-class + label maps used by every list view; both pull from
-`QUOTE_STATUSES` in `lib/constants.js` so adding a status is one
-edit.
+### 3. Migrate `src/context/**` + `src/pages/**`   ~1 day
+The largest layer. Pages tend to mix `useApp()`, `useLiveQuery()`,
+local state, and mutations — the typing pays back the most here
+because the shapes flow end-to-end.
 
-### 3. Replace remaining `Number(v) || 0` with `safeNum(v, 0)`   ~15 min
+### 4. Once full migration lands: tighten strictness   ~half day
+Flip on `strict: true`, fix any `any` remnants, add `noImplicitAny`.
 
-`safeNum` in `src/lib/pricing.js` is the canonical numeric coercion
-(handles NaN, '', undefined). Patterns like `OrderDetail.jsx:375`
-(`Math.max(0, Number(v) || 0)`) work today but silently swallow a
-future legitimate `0` if a refactor changes the meaning of the
-fallback. Mechanical sweep.
+---
 
-Done when: `grep -rn "Number(.*) || 0"` returns zero hits in
-`src/pages/**` / `src/components/**`.
+## Watertight logic — concrete next-tasks
 
-### 4. `QuickActions` `row.kind` namespace clash   ~10 min
+### 5. Auth Gate as exhaustive switch   ~half day
+`App.jsx` Gate currently chains conditionals over profile
+existence / active flag / `passwordSetAt`. Several edge cases land
+you on post-login routes with partial state (profile but no
+settings, active but `passwordSetAt` is null on a magic-link user).
+Turn the Gate into an exhaustive `switch` over a discriminated
+union (`'loading' | 'unauthenticated' | 'no-profile' |
+'needs-password' | 'inactive' | 'ready'`); each branch returns a
+single component; nothing falls through.
 
+### 6. Move row-level DB mutations out of page files   ~1 day
+`pages/QuoteBuilder.jsx` (~735 LoC), `pages/OrderDetail.jsx`
+(~640 LoC), `components/CustomerModal.jsx`,
+`components/ProfessionalModal.jsx` mix UI state with direct
+`db.X.put/update/delete` calls. Extract into `useQuoteWorkspace()`
+/ `useOrderDetail()` hooks named after the page; each mutation in
+the hook stamps `updatedAt`, fires `invalidate()`, and routes
+through `assignSequenceNumber` where applicable.
+
+### 7. Centralize the inline money + status formatters   ~half day
+`const fmt = (v) => formatMoney(v, currency, rates);` is redeclared
+in `QuoteLineItem`, `TotalsRail`, `ClientPreview`, `Dashboard`.
+`STATUS_PILL_CLASS` / `STATUS_LABELS` are declared in both
+`pages/Quotes` and `pages/Orders` with different vocabularies —
+easy to drift. Done when: `useMoneyFormatter(quote)` is the single
+creation point; `src/lib/quoteStatusDisplay.ts` exports the
+class/label maps used by every list view.
+
+### 8. `safeNum(v, 0)` sweep   ~15 min
+Replace remaining `Number(v) || 0` patterns in `src/pages/**` /
+`src/components/**` with `safeNum`. The `|| 0` fallback silently
+swallows a future legitimate `0`.
+
+### 9. `QuickActions` `row.kind` namespace clash   ~10 min
 `row.kind === 'item' | 'action' | 'customer'` in
-`src/components/quote-builder/QuickActions.jsx` is a *separate*
-namespace from `line.kind === 'item' | 'section'` (the quote_lines
-discriminator). Sharing the string `'item'` across both is a footgun
-— a typo migration could move one but not the other.
+`components/quote-builder/QuickActions.jsx` is a SEPARATE namespace
+from `line.kind === 'item' | 'section'`. Rename `row.kind` →
+`row.type` with an `ACTION_ROW_TYPES` constant.
 
-Done when: `QuickActions` rows use `row.type` instead of `row.kind`,
-backed by an `ACTION_ROW_TYPES` constant in
-`src/components/quote-builder/QuickActions.jsx` or a sibling file.
-
-### 5. Tighten `Query` / `Table` boundary in `db/database.js`   ~half day
-
-The chainable `Query` class accepts any field name through
-`where(field)` and any value through `equals(value)`. Today a typo
-in a field name (`whre`) becomes a no-op runtime call against an
-empty filter. Add a fail-fast guard: pending `where` without
-`equals` throws on `_execute`; `equals` without prior `where` already
-throws — keep that.
-
-Also harden `bulkPut`: `chunkSize` must be ≥ 1, retries ≥ 0; throw
-on invalid. Today negative values silently bypass the loop.
-
-Done when: invalid chain shape throws at the call site instead of
-silently returning [] / nothing.
-
-### 6. Image upload validation at the boundary   ~half day
-
-`saveImage()` in `src/db/database.js` accepts any `File`/`Blob`. No
-size cap, no MIME allowlist, no per-bucket policy. A 50MB upload
-crashes the dealer's tab; a wrong content-type lands in storage and
-ImageView can't render it.
-
-Done when: `saveImage()` rejects (a) non-image MIME types with a
-clear error, (b) files larger than a configurable max (default 10
-MB), (c) zero-byte files. The error surfaces in `ImageDrop`'s
-inline message instead of throwing.
-
----
-
-## Lower ROI (schedule later)
-
-### 7. Auth gate cannot be bypassed by missing data   ~half day
-
-`App.jsx` gates pages on profile existence + active flag + password-
-set timestamp. Several edge cases land you on the post-login routes
-with partial state (profile row but no settings, active but
-`passwordSetAt` is null on a magic-link user, etc.). Tighten each
-gate so a missing piece routes to the correct setup screen rather
-than rendering a half-populated page.
-
-Done when: the Gate component is an exhaustive switch on the
-profile-state union (loading / unauthenticated / no-profile /
-needs-password / inactive / ready); each branch returns a single
-component; nothing falls through.
-
-### 8. PDF row-height + page-break invariants documented   ~1 hour
-
+### 10. PDF row-height + page-break invariants documented   ~1 hour
 `measureLineRowHeight` and the page-break check in
-`pdf/quotePdf.js:generateQuotePdf` work but the math is implicit. Add
-a comment block (or `pdf/LAYOUT.md`) that pins: row-height formula,
-the `PAGE_BREAK_RESERVE` constant's intent, why compound rows have
-their own measurer. Future PDF tweaks will keep failing the same
-geometric way unless the invariants are written down.
-
-### 9. `DESIGN.md` at the repo root   ~half day
-
-State diagrams for: quote lifecycle (`QUOTE_STAGES` in
-`src/lib/quoteStages.js`), order lifecycle (`ORDER_STAGES` in
-`src/lib/orderStages.js`), accepted-quote milestones
-(`quoteMilestones.js`), and the rate-mode resolution path (`bsc-buy`
-/ `bsc-sell` / `custom`, legacy `bpd-*` / `market`). Cross-link to
-the lib files. Unblocks the next maintainer.
-
-### 10. Settings RateCard `saveSettings` dead prop   ~2 min
-
-Passed from `Settings.jsx` into `RateCard` but never used inside.
-Drop the prop.
+`pdf/quotePdf.ts:generateQuotePdf` work but the math is implicit.
+Add a `pdf/LAYOUT.md` (or block comment) pinning the row-height
+formula, the `PAGE_BREAK_RESERVE` intent, and why compound rows
+have their own measurer.
 
 ### 11. Compound article PDF spot-check   ~10 min
+The compound row geometry in `pdf/lines.ts:drawCompoundLineRow`
+was implemented but never visually verified. Export a quote with a
+3-component compound + a line discount and eyeball the alignment.
 
-The compound row geometry in `src/pdf/lines.js:drawCompoundLineRow`
-was written and unit-bounded but never visually inspected. Worth
-running an export with a 3-component compound + a line discount and
-eyeballing the alignment.
+### 12. Settings RateCard `saveSettings` dead prop   ~2 min
+Passed from `Settings.jsx` into `RateCard` but never used. Drop.
 
 ---
 
 ## Out of scope until asked
 
-- **Multi-tenant** — the single-team model bakes `TEAM_PROFILE_ID =
-  'team'` throughout. Needs a real `profile_id` propagation pass and
-  RLS rewrite.
-- **TypeScript migration** — the codebase is JS with JSDoc. Would
-  surface many of the issues above for free but is a multi-week
-  project.
+- **Multi-tenant** — single-team model bakes `TEAM_PROFILE_ID = 'team'`.
+  Needs a real `profile_id` propagation pass + RLS rewrite.
 - **Background sync / offline writes** — `useLiveQuery` invalidates
   on every mutation but assumes online. Flaky LTE can silently lose
   writes.
@@ -189,7 +170,9 @@ eyeballing the alignment.
 
 ## Process notes
 
-- All migrations land in `supabase/migrations/` with a
-  `YYYYMMDDHHMMSS_` prefix; the GitHub integration applies them on
-  push to `main`.
-- Build with `npm run build`. Green at HEAD.
+- Migrations land in `supabase/migrations/` with a
+  `YYYYMMDDHHMMSS_` prefix; the GitHub integration applies on push
+  to `main`.
+- Build: `npm run build`. Type-check: `npm run typecheck`. Tests:
+  `npm test` (76 passing — original pure-math suite, pre-session
+  baseline).
