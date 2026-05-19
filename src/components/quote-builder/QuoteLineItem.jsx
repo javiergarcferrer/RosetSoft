@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -9,6 +9,7 @@ import Select from '../primitives/Select.jsx';
 import { FieldGroup, Field } from '../primitives/FieldGroup.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
+import FamilyPicker from './FamilyPicker.jsx';
 import { applyLineAdjustments, clampPct } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -77,6 +78,7 @@ export default function QuoteLineItem({
     <li className="qli-row group transition-colors duration-150 hover:bg-ink-50/40">
       <TopStrip
         family={line.family}
+        onPickFamily={(value) => onChange({ family: value || '' })}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
         onDuplicate={onDuplicate}
@@ -111,11 +113,16 @@ export default function QuoteLineItem({
 }
 
 // ---------------------------------------------------------------------------
-// Top strip — family chip + row actions. The chip slot always renders (with
-// a muted placeholder when empty) so the action cluster stays pinned to
-// the right edge regardless of fill state.
+// Top strip — family chip + row actions. The chip is a direct button that
+// opens FamilyPicker; previously the only path to set a family was to
+// expand the row, scroll to the Catálogo group, and type the string by
+// hand (the dealer's words: "I don't like that I have to write family
+// name there for it to show up above. That's stupid."). One tap now.
+// The action cluster stays pinned to the right edge regardless of fill
+// state.
 // ---------------------------------------------------------------------------
-function TopStrip({ family, expanded, onToggleExpand, onDuplicate, onRemove, dragHandleProps }) {
+function TopStrip({ family, onPickFamily, expanded, onToggleExpand, onDuplicate, onRemove, dragHandleProps }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div className="flex items-center gap-2 mb-2.5 -ml-1">
       <span
@@ -127,13 +134,26 @@ function TopStrip({ family, expanded, onToggleExpand, onDuplicate, onRemove, dra
         <GripVertical size={14} />
       </span>
       {family ? (
-        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full">
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200 transition-colors px-2 py-0.5 rounded-full"
+          title="Cambiar familia"
+          aria-label={`Familia ${family}. Cambiar`}
+        >
           {family}
-        </span>
+          <ChevronDown size={10} className="-mr-0.5 opacity-70" aria-hidden />
+        </button>
       ) : (
-        <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-ink-300 px-1">
-          Sin familia
-        </span>
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 transition-colors px-2 py-0.5 rounded-full"
+          aria-label="Asignar familia"
+        >
+          <Tag size={10} className="opacity-70" aria-hidden />
+          Asignar familia
+        </button>
       )}
       <div className="flex-1" />
       <button
@@ -146,6 +166,13 @@ function TopStrip({ family, expanded, onToggleExpand, onDuplicate, onRemove, dra
         <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
       <OverflowMenu onDuplicate={onDuplicate} onRemove={onRemove} />
+
+      <FamilyPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(value) => onPickFamily(value)}
+        currentFamily={family || ''}
+      />
     </div>
   );
 }
@@ -463,25 +490,15 @@ function OverflowMenu({ onDuplicate, onRemove }) {
 
 // ---------------------------------------------------------------------------
 // Details panel — fields that aren't part of the always-visible bands:
-// catalog identity (family is editable for autocomplete fallback) and
-// per-line discount, plus the text fields. Yardage and line-level margin
-// are intentionally absent — the line model doesn't surface them anymore.
+// per-line discount + the text fields. Family used to live here too, as a
+// free-text input the dealer had to scroll to and type. It's now editable
+// directly from its chip in the TopStrip via FamilyPicker, so we don't
+// duplicate the entry point here. Yardage and line-level margin are
+// intentionally absent — the line model doesn't surface them anymore.
 // ---------------------------------------------------------------------------
 function DetailsPanel({ line, onChange }) {
   return (
     <div className="mt-4 pt-4 border-t border-ink-100 space-y-5">
-      <FieldGroup title="Catálogo">
-        <Field label="Familia">
-          <DebouncedInput
-            className="input"
-            placeholder="AMÉDÉE, TOGO…"
-            value={line.family || ''}
-            onCommit={(v) => onChange({ family: v })}
-            autoCapitalize="characters"
-          />
-        </Field>
-      </FieldGroup>
-
       <FieldGroup title="Ajuste" columns={2}>
         <Field label="Descuento %" hint="Aplicado al precio unitario de esta línea.">
           <DebouncedInput
