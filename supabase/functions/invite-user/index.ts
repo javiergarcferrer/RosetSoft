@@ -138,8 +138,8 @@ Deno.serve(async (req) => {
   if (!name) {
     return jsonResponse({ error: 'Nombre requerido.' }, 400);
   }
-  if (role !== 'admin' && role !== 'employee') {
-    return jsonResponse({ error: "Rol debe ser 'admin' o 'employee'." }, 400);
+  if (role !== 'admin' && role !== 'employee' && role !== 'accounting') {
+    return jsonResponse({ error: "Rol debe ser 'admin', 'employee' o 'accounting'." }, 400);
   }
 
   // ---- 4. Service-role client for the privileged operations ------------
