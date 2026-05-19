@@ -1,5 +1,22 @@
 import { forwardRef } from 'react';
+import type { ReactNode, SelectHTMLAttributes } from 'react';
 import { ChevronDown } from 'lucide-react';
+
+export type SelectVariant = 'default' | 'chip' | 'ghost';
+
+export interface SelectProps
+  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange' | 'ref' | 'children'> {
+  value: string | number | null | undefined;
+  onChange: (value: string) => void;
+  children?: ReactNode;
+  /**
+   * 'default' = full-width input-style select for forms.
+   * 'chip'    = compact pill-style for inline use next to other chips.
+   * 'ghost'   = borderless click-to-open text-with-chevron.
+   */
+  variant?: SelectVariant;
+  className?: string;
+}
 
 /**
  * Styled wrapper over a native <select>. We use the platform widget (not a
@@ -18,7 +35,7 @@ import { ChevronDown } from 'lucide-react';
  * `chip` variant compresses the control to a pill that visually pairs with
  * other inline editors (e.g. the grade picker on a line item card).
  */
-const Select = forwardRef(function Select({
+const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select({
   value, onChange, children,
   // 'default' = full-width input-style select for forms.
   // 'chip'    = compact pill-style for inline use next to other chips.

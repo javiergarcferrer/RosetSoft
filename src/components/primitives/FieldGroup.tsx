@@ -1,3 +1,11 @@
+import type { ReactNode } from 'react';
+
+export interface FieldGroupProps {
+  title?: ReactNode;
+  children?: ReactNode;
+  columns?: 2 | 3;
+}
+
 /**
  * Grouped form fields with a small section header. Children are arranged
  * in a 2-column grid on phones and a configurable 2- or 3-column grid on
@@ -7,7 +15,7 @@
  * Pair with <Field> for each input cell. For a free-form layout outside
  * of a group, just use <Field> directly.
  */
-export function FieldGroup({ title, children, columns = 3 }) {
+export function FieldGroup({ title, children, columns = 3 }: FieldGroupProps) {
   const cols = columns === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3';
   return (
     <div>
@@ -23,6 +31,13 @@ export function FieldGroup({ title, children, columns = 3 }) {
   );
 }
 
+export interface FieldProps {
+  label?: ReactNode;
+  widthClass?: string;
+  children?: ReactNode;
+  hint?: ReactNode;
+}
+
 /**
  * One labelled cell within a FieldGroup (or anywhere a labelled input is
  * needed). Pass `widthClass` as a grid-column span (e.g. "col-span-2"
@@ -30,7 +45,7 @@ export function FieldGroup({ title, children, columns = 3 }) {
  * spec as the global .label CSS class but at a tighter weight so it sits
  * comfortably above a coarse-target input.
  */
-export function Field({ label, widthClass = '', children, hint }) {
+export function Field({ label, widthClass = '', children, hint }: FieldProps) {
   return (
     <div className={widthClass}>
       <div className="text-[11px] font-medium text-ink-500 mb-1">{label}</div>

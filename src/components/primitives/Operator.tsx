@@ -1,3 +1,10 @@
+import type { ReactNode } from 'react';
+
+export interface OperatorProps {
+  children?: ReactNode;
+  className?: string;
+}
+
 /**
  * Math / syntax glyph for equation-style layouts: qty × unit = total.
  * Rendered in ink-300 so it reads as syntax, not data. The pb-2 nudge
@@ -8,7 +15,7 @@
  * aria-hidden because screen readers already get the labelled inputs;
  * the operator is purely visual sugar.
  */
-export default function Operator({ children, className = '' }) {
+export default function Operator({ children, className = '' }: OperatorProps) {
   return (
     <span className={`text-ink-300 text-base pb-2 select-none ${className}`} aria-hidden>
       {children}

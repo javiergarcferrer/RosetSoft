@@ -1,7 +1,21 @@
 import { useRef, useState } from 'react';
+import type { ClipboardEvent, MouseEvent } from 'react';
 import { Camera, X, Loader2 } from 'lucide-react';
 import { saveImage, deleteImage } from '../../db/database.js';
-import ImageView from '../ImageView.jsx';
+import ImageView from '../ImageView.js';
+
+export interface ThumbnailProps {
+  imageId: string | null | undefined;
+  onChange: (id: string | null) => void;
+  kind: string;
+  ownerId?: string | null;
+  /**
+   * Tailwind size class — defaults to 56 px on phones, 64 px on sm+.
+   * Same square footprint regardless of fill state so the row layout
+   * never reflows when an image is added or removed.
+   */
+  sizeClass?: string;
+}
 
 /**
  * Compact inline image picker — fixed square footprint, three states:
@@ -27,12 +41,12 @@ export default function Thumbnail({
   // Same square footprint regardless of fill state so the row layout
   // never reflows when an image is added or removed.
   sizeClass = 'w-14 h-14 sm:w-16 sm:h-16',
-}) {
-  const inputRef = useRef(null);
+}: ThumbnailProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  async function handleFiles(files) {
+  async function handleFiles(files: FileList | File[] | null | undefined) {
     const file = files?.[0];
     if (!file) return;
     setBusy(true);
@@ -48,14 +62,15 @@ export default function Thumbnail({
     }
   }
 
-  async function handlePaste(e) {
+  async function handlePaste(e: ClipboardEvent<HTMLButtonElement>) {
     const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
     if (!item) return;
     e.preventDefault();
-    await handleFiles([item.getAsFile()]);
+    const file = item.getAsFile();
+    if (file) await handleFiles([file]);
   }
 
-  async function clear(e) {
+  async function clear(e: MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
     e.preventDefault();
     if (imageId) await deleteImage(imageId).catch(() => {});
