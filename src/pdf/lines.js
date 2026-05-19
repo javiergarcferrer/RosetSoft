@@ -1,6 +1,6 @@
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal,
+  lineTotal, lineListUnit, lineQty,
 } from '../lib/pricing.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
@@ -87,6 +87,12 @@ const T = {
   numValue:    { size: 11,  lh: 14, color: INK },
   totalLabel:  { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
   totalValue:  { size: 14,  lh: 18, color: INK,       bold: true },
+  // Discount caption — surfaces under UNITARIO when the line carries a
+  // line-level discount, so the customer can see the list price they're
+  // saving against. Rendered in brand-700 to make the concession
+  // legible at a glance against the otherwise-monochrome numeric column.
+  numStrike:   { size: 9,   lh: 11, color: INK_SOFT },
+  numDiscount: { size: 8.5, lh: 11, color: BRAND_700, bold: true },
   // Compound article — components rendered as a vertical stack
   // beneath the shared family + name. Each component carries its own
   // name, grade/fabric, ref/dim, plus an inline qty × unit = subtotal
@@ -197,11 +203,17 @@ function measureDetailHeight(ctx, line, detailW) {
  * Height of the numeric column: three (label + value + gap) blocks.
  * Constant per line — the column never wraps because money strings
  * stay on one line and the column is wide enough to fit them.
+ *
+ * When the line carries a line-level discount we tack on two extra
+ * caption lines under UNITARIO (struck-through list price + "–Y%"
+ * caption) so the customer can see what they're saving against.
  */
-function numericHeight() {
+function numericHeight(line) {
+  const discount = Number(line?.lineDiscountPct) || 0;
+  const extra = discount > 0 ? T.numStrike.lh + T.numDiscount.lh : 0;
   return (
     T.numLabel.lh + T.numValue.lh + NUMERIC_GAP
-    + T.numLabel.lh + T.numValue.lh + NUMERIC_GAP
+    + T.numLabel.lh + T.numValue.lh + extra + NUMERIC_GAP
     + T.totalLabel.lh + T.totalValue.lh
   );
 }
@@ -216,7 +228,7 @@ export function measureLineRowHeight(ctx, line) {
   if (isCompoundLine(line)) return compoundRowHeight(ctx, line);
   const cols = lineColumns();
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
-  const inner = Math.max(IMAGE_SIZE, detailH, numericHeight());
+  const inner = Math.max(IMAGE_SIZE, detailH, numericHeight(line));
   return ROW_TOP_PAD + inner + ROW_BOTTOM_PAD;
 }
 
@@ -459,6 +471,8 @@ export async function drawLineRow(page, ctx, cursor, line) {
   // ---- Numeric column — three label/value pairs, right-aligned ----------
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
+  const discount = Number(line.lineDiscountPct) || 0;
+  const listUnit = lineListUnit(line);
 
   let ny = innerTop;
   function drawLabelValue(label, value, lblToken, valToken) {
@@ -478,6 +492,42 @@ export async function drawLineRow(page, ctx, cursor, line) {
 
   drawLabelValue('CANTIDAD', String(line.qty || 0), T.numLabel, T.numValue);
   drawLabelValue('UNITARIO', formatMoney(unit,  ctx.currency, ctx.rates), T.numLabel, T.numValue);
+  // Discount caption between UNITARIO and TOTAL — only when a line
+  // discount is set. Shows the list price with a strike-through line
+  // (pdf-lib has no `text-decoration: line-through`, so we draw a
+  // 0.6pt rule through the price string) and a brand-700 "–Y%"
+  // caption underneath. Bumps TOTAL down by `numericHeight`'s extra
+  // budget, which we reserved upstream.
+  if (discount > 0) {
+    // Strike-through list price. ny currently sits at the top of the
+    // next block (post NUMERIC_GAP from UNITARIO). Roll the gap back
+    // so the caption hugs UNITARIO instead of floating midway.
+    ny += NUMERIC_GAP;
+    const listText = formatMoney(listUnit, ctx.currency, ctx.rates);
+    const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
+    const listY = ny - T.numStrike.size;
+    drawRightAt(
+      page, listText, cols.numeric.rightX, listY,
+      T.numStrike.size, fontRegular, T.numStrike.color,
+    );
+    // Horizontal rule through the strike-through text. Centered on
+    // the x-height (~0.4 of the size), 0.6pt thick.
+    const strikeY = listY + T.numStrike.size * 0.32;
+    page.drawLine({
+      start: { x: cols.numeric.rightX - listW, y: strikeY },
+      end:   { x: cols.numeric.rightX,         y: strikeY },
+      thickness: 0.6, color: T.numStrike.color,
+    });
+    ny -= T.numStrike.lh;
+
+    const discText = `Descuento –${discount}%`;
+    const discY = ny - T.numDiscount.size;
+    drawRightAt(
+      page, discText, cols.numeric.rightX, discY,
+      T.numDiscount.size, fontBold, T.numDiscount.color,
+    );
+    ny -= T.numDiscount.lh + NUMERIC_GAP;
+  }
   // No trailing gap after the last block — collapse it back.
   drawLabelValue('TOTAL',    formatMoney(total, ctx.currency, ctx.rates), T.totalLabel, T.totalValue);
 

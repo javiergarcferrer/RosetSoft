@@ -1,8 +1,8 @@
-import { ITBIS_PCT } from '../lib/pricing.js';
+import { ITBIS_PCT, quoteSavings } from '../lib/pricing.js';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
-  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT,
+  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT, BRAND_700,
 } from './constants.js';
 import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
 
@@ -31,12 +31,13 @@ export function estimateTotalsHeight(quote) {
   h += 14 * 4;           // up to four subtotal-style rows (subtotal / discount / itbis / shipping)
   h += 10;               // divider + breathing
   h += 24;               // grand total row
+  h += 16;               // "Ahorras $X" callout (when any discount is set)
   h += 18;               // FX shadow
   if (quote.terms) h += 90;
   return h;
 }
 
-export function drawTotals(page, ctx, cursor, totals) {
+export function drawTotals(page, ctx, cursor, totals, lines) {
   const { fontBold, fontRegular, quote, settings, currency, rates } = ctx;
   const panelW = 300;
   const leftX = PAGE_W - MARGIN_R - panelW;
@@ -50,24 +51,30 @@ export function drawTotals(page, ctx, cursor, totals) {
   const bandTop = cursor.y - 4;
 
   // ---- Subtotal stack ----
-  const subRows = [['Subtotal', totals.subtotal, false]];
+  // tone: 'default' | 'muted' | 'accent' — the discount row reads in
+  // brand-700 so the customer perceives it, instead of fading into
+  // the ITBIS / Envío supporting cast.
+  const subRows = [['Subtotal', totals.subtotal, 'default']];
   if (quote.discountPct) {
-    subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, true]);
+    subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, 'accent']);
   }
-  subRows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, false]);
+  subRows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, 'muted']);
   if (quote.shipping) {
-    subRows.push(['Envío', totals.shipping, false]);
+    subRows.push(['Envío', totals.shipping, 'muted']);
   }
 
-  for (const [label, value, muted] of subRows) {
-    const labelColor = muted ? INK_MID : INK_HIGH;
+  for (const [label, value, tone] of subRows) {
+    const color = tone === 'accent' ? BRAND_700
+      : tone === 'muted' ? INK_MID
+      : INK_HIGH;
+    const font = tone === 'accent' ? fontBold : fontRegular;
     page.drawText(label, {
-      x: leftX, y, size: 10, font: fontRegular, color: labelColor,
+      x: leftX, y, size: 10, font, color,
     });
     drawRightAt(
       page,
       formatMoney(value, currency, rates),
-      rightX, y, 10, fontRegular, INK_HIGH,
+      rightX, y, 10, font, color,
     );
     y -= 16;
   }
@@ -96,6 +103,18 @@ export function drawTotals(page, ctx, cursor, totals) {
     rightX, totalBaselineY, totalValueSize, fontBold, INK,
   );
   y = totalBaselineY - 10;
+
+  // ---- "Ahorras $X" callout -------------------------------------------
+  // Aggregates per-line discounts + the quote-level discount into one
+  // figure so the customer perceives the full concession, not just the
+  // post-discount numbers. Mirrors the on-screen ClientPreview's
+  // "Ahorras X en esta cotización" line.
+  const savings = quoteSavings(lines || [], totals);
+  if (savings > 0) {
+    const text = `Ahorras ${formatMoney(savings, currency, rates)} en esta cotización`;
+    drawRightAt(page, text, rightX, y - 9, 9, fontBold, BRAND_700);
+    y -= 16;
+  }
 
   // ---- Inline FX shadow ----
   // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Replaces the

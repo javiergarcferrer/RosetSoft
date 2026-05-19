@@ -127,7 +127,7 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
     page = doc.addPage([PAGE_W, PAGE_H]);
     cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
   }
-  cursor = drawTotals(page, ctx, cursor, totals);
+  cursor = drawTotals(page, ctx, cursor, totals, lines);
   if (quote.terms) cursor = drawTerms(page, ctx, cursor);
 
   // ---- Footer on every page --------------------------------------------

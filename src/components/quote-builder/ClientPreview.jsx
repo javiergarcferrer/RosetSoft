@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import ImageView from '../ImageView.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
+  quoteSavings,
 } from '../../lib/pricing.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 
@@ -25,6 +26,11 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
   // section before them) live under a null-key group rendered without a
   // heading.
   const groups = useMemo(() => groupBySection(lines), [lines]);
+  // Total cash the customer is saving across line-level + quote-level
+  // discounts. Surfaced under the totals as a one-line callout when
+  // non-zero so the concessions don't read as silent post-discount
+  // numbers.
+  const savings = useMemo(() => quoteSavings(lines, totals), [lines, totals]);
 
   return (
     <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-hidden">
@@ -97,13 +103,26 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
         <div className="ml-auto max-w-sm space-y-1.5 tabular-nums">
           <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
           {quote.discountPct ? (
-            <TotalRow label={`Descuento (${quote.discountPct}%)`} value={`–${fmt(totals.discountAmt)}`} muted />
+            // Discount row reads in brand colour — muted styling made
+            // it look incidental next to the (muted) ITBIS / Envío
+            // lines, which buried the concession the customer was
+            // supposed to perceive.
+            <TotalRow
+              label={`Descuento (${quote.discountPct}%)`}
+              value={`–${fmt(totals.discountAmt)}`}
+              accent
+            />
           ) : null}
           <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted />
           {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
           <div className="border-t border-ink-300 mt-2 pt-2">
             <TotalRow label="Total" value={fmt(totals.grandTotal)} bold />
           </div>
+          {savings > 0 && (
+            <div className="mt-2 text-right text-[12px] font-medium text-brand-700">
+              Ahorras {fmt(savings)} en esta cotización
+            </div>
+          )}
           {dopRate && currency === 'USD' && (
             <div className="text-[11px] text-ink-500 text-right pt-0.5">
               ≈ RD$ {Math.round(totals.grandTotal * dopRate).toLocaleString('en-US')} a {dopRate.toFixed(2)} DOP/USD
@@ -134,10 +153,19 @@ function ClientLine({ line, currency, rates, fmt }) {
   if (isCompoundLine(line)) {
     return <CompoundClientLine line={line} fmt={fmt} />;
   }
-  const unit = (Number(line.unitPrice) || 0)
-    * (1 + (Number(line.lineMarginPct) || 0) / 100)
-    * (1 - (Number(line.lineDiscountPct) || 0) / 100);
-  const total = unit * (Number(line.qty) || 0);
+  const base = Number(line.unitPrice) || 0;
+  const margin = Number(line.lineMarginPct) || 0;
+  const discount = Number(line.lineDiscountPct) || 0;
+  const qty = Number(line.qty) || 0;
+  // List unit = post-margin, pre-discount. That's the catalogue price
+  // the customer would have paid without the discount — so the
+  // strike-through / "antes" line reflects the figure they're saving
+  // against, not the dealer's internal cost basis.
+  const listUnit = base * (1 + margin / 100);
+  const unit = listUnit * (1 - discount / 100);
+  const listTotal = listUnit * qty;
+  const total = unit * qty;
+  const discounted = discount > 0;
   // Layout shape, mobile-first:
   //
   //   row 1   image + text side-by-side
@@ -207,20 +235,57 @@ function ClientLine({ line, currency, rates, fmt }) {
               desktop layout had no width problem and benefits from
               the explicit labels. */}
 
-          {/* Mobile: single-line equation. Hidden at sm+. */}
-          <div className="sm:hidden mt-3 pt-3 border-t border-ink-100 text-right text-sm tabular-nums whitespace-nowrap">
-            <span className="text-ink-700">{line.qty || 0}</span>
-            <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
-            <span className="text-ink-700">{fmt(unit)}</span>
-            <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-            <span className="text-ink-900 font-semibold">{fmt(total)}</span>
+          {/* Mobile: single-line equation. Hidden at sm+.
+              When the line carries a discount we surface a second
+              right-aligned caption ("antes $X · –Y%") so the customer
+              can see what they're saving — the bare equation otherwise
+              shows only the post-discount unit and hides the
+              concession. */}
+          <div className="sm:hidden mt-3 pt-3 border-t border-ink-100 text-right tabular-nums">
+            <div className="text-sm whitespace-nowrap">
+              <span className="text-ink-700">{qty}</span>
+              <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
+              <span className="text-ink-700">{fmt(unit)}</span>
+              <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
+              <span className="text-ink-900 font-semibold">{fmt(total)}</span>
+            </div>
+            {discounted && (
+              <div className="text-[11px] text-brand-700 mt-1 whitespace-nowrap">
+                <span className="line-through text-ink-400 mr-1.5">{fmt(listUnit)}</span>
+                <span>descuento –{discount}%</span>
+              </div>
+            )}
           </div>
 
-          {/* sm+: vertical labelled column. Hidden below sm. */}
-          <div className="hidden sm:block text-right tabular-nums min-w-[110px] flex-shrink-0">
-            <PriceCell label="Cantidad" value={String(line.qty || 0)} />
+          {/* sm+: vertical labelled column. Hidden below sm.
+              Discount, when present, becomes the visual centerpiece:
+              the list price is struck through above Unitario, and a
+              brand-color "Descuento –Y%" caption sits between Unitario
+              and Total so the savings register at a glance. */}
+          <div className="hidden sm:block text-right tabular-nums min-w-[120px] flex-shrink-0">
+            <PriceCell label="Cantidad" value={String(qty)} />
+            {discounted && (
+              <div className="mt-1.5 text-right">
+                <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+                  Precio lista
+                </div>
+                <div className="text-sm text-ink-400 line-through whitespace-nowrap">
+                  {fmt(listUnit)}
+                </div>
+              </div>
+            )}
             <div className="mt-1.5"><PriceCell label="Unitario" value={fmt(unit)} /></div>
+            {discounted && (
+              <div className="text-[11px] text-brand-700 font-medium mt-0.5">
+                Descuento –{discount}%
+              </div>
+            )}
             <div className="mt-1.5"><PriceCell label="Total" value={fmt(total)} emphasis /></div>
+            {discounted && qty > 1 && (
+              <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                ahorras {fmt(listTotal - total)}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -331,11 +396,16 @@ function PriceCell({ label, value, emphasis }) {
   );
 }
 
-function TotalRow({ label, value, muted, bold }) {
+function TotalRow({ label, value, muted, accent, bold }) {
+  const tone = bold
+    ? 'font-semibold text-base text-ink-900'
+    : accent
+    ? 'text-brand-700 font-medium'
+    : muted
+    ? 'text-ink-500'
+    : '';
   return (
-    <div className={`flex justify-between text-sm ${
-      muted ? 'text-ink-500' : ''
-    } ${bold ? 'font-semibold text-base text-ink-900' : ''}`}>
+    <div className={`flex justify-between text-sm ${tone}`}>
       <span>{label}</span>
       <span>{value}</span>
     </div>

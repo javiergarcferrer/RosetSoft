@@ -26,6 +26,8 @@ import {
   lineSubtotal,
   lineTotal,
   lineForTotals,
+  lineListUnit,
+  quoteSavings,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -329,5 +331,63 @@ test('computeTotals: line-level discount on a compound discounts the sum', () =>
   const t = computeTotals([line], {});
   assert.equal(t.subtotal, 900);
   assert.equal(Math.round(t.grandTotal * 100) / 100, 1062);
+});
+
+/* --------------------------- savings display -------------------------- */
+
+test('lineListUnit: post-margin, pre-discount unit price for a normal line', () => {
+  // Base 1000, margin 20%, discount 10% → list 1200, unit 1080.
+  // lineListUnit is the *pre-discount* price the customer would have
+  // paid otherwise, so it includes margin but excludes the discount.
+  assert.equal(lineListUnit({ unitPrice: 1000, lineMarginPct: 20, lineDiscountPct: 10 }), 1200);
+});
+
+test('lineListUnit: pre-discount sum for a compound line', () => {
+  // Components sum 1000; line margin 0 → list = 1000 (discount ignored).
+  assert.equal(lineListUnit({
+    components: [{ qty: 1, unitPrice: 400 }, { qty: 1, unitPrice: 600 }],
+    lineDiscountPct: 25,
+  }), 1000);
+});
+
+test('quoteSavings: only line discounts → sums the saved cash', () => {
+  // Line 1: $1000 with 10% line discount → saves $100
+  // Line 2: $500 × 2 with 20% line discount → saves $100 × 2 = $200
+  const lines = [
+    { unitPrice: 1000, qty: 1, lineDiscountPct: 10 },
+    { unitPrice: 500, qty: 2, lineDiscountPct: 20 },
+  ];
+  const totals = { discountAmt: 0 };
+  assert.equal(quoteSavings(lines, totals), 300);
+});
+
+test('quoteSavings: only quote-level discount → equals discountAmt', () => {
+  const lines = [{ unitPrice: 1000, qty: 1, lineDiscountPct: 0 }];
+  assert.equal(quoteSavings(lines, { discountAmt: 250 }), 250);
+});
+
+test('quoteSavings: combines line + quote discounts', () => {
+  const lines = [{ unitPrice: 1000, qty: 1, lineDiscountPct: 10 }];   // saves 100
+  assert.equal(quoteSavings(lines, { discountAmt: 50 }), 150);
+});
+
+test('quoteSavings: ignores section rows', () => {
+  const lines = [
+    { kind: 'section', name: 'Sala' },
+    { unitPrice: 100, qty: 1, lineDiscountPct: 50 },                  // saves 50
+  ];
+  assert.equal(quoteSavings(lines, { discountAmt: 0 }), 50);
+});
+
+test('quoteSavings: never returns a negative number', () => {
+  // Adversarial: a negative quote-level "discount" would be a markup,
+  // not a saving — clamp the figure to >= 0 so a malformed quote
+  // doesn't surface a negative "ahorras" line.
+  assert.equal(quoteSavings([], { discountAmt: -200 }), 0);
+});
+
+test('quoteSavings: zero when nothing is discounted', () => {
+  const lines = [{ unitPrice: 1000, qty: 1, lineDiscountPct: 0 }];
+  assert.equal(quoteSavings(lines, { discountAmt: 0 }), 0);
 });
 

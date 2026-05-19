@@ -162,3 +162,44 @@ export function lineForTotals(line) {
   };
 }
 
+/**
+ * Per-line "list price" — what each unit would cost WITHOUT the
+ * line-level discount. Used by the customer-facing renderers (PDF +
+ * ClientPreview) to surface the saving with a strike-through next to
+ * the discounted unit. Includes line-level margin (the catalogue
+ * price the customer would otherwise have paid) but excludes the
+ * line-level discount.
+ */
+export function lineListUnit(line) {
+  const base = lineBasePrice(line);
+  const margin = safeNum(line?.lineMarginPct, 0);
+  return base * (1 + margin / 100);
+}
+
+/**
+ * Total cash the customer is saving on this quote across both
+ * line-level discounts AND the quote-level discount. Used by the
+ * "Ahorras $X en esta cotización" callout under the totals block.
+ *
+ *   line savings = Σ ( lineListUnit(line) − unitAfterDiscount ) × qty
+ *   quote savings = totals.discountAmt
+ *
+ * Returns a non-negative number (savings are never negative — a
+ * negative margin is a markdown the customer doesn't perceive as a
+ * discount and is excluded from the figure).
+ */
+export function quoteSavings(lines, totals) {
+  let lineSavings = 0;
+  for (const l of lines || []) {
+    if (l?.kind === 'section') continue;
+    const discount = clampPct(l?.lineDiscountPct);
+    if (discount <= 0) continue;
+    const listUnit = lineListUnit(l);
+    const after = listUnit * (1 - discount / 100);
+    lineSavings += (listUnit - after) * lineQty(l);
+  }
+  const quoteDiscount = safeNum(totals?.discountAmt, 0);
+  const total = lineSavings + quoteDiscount;
+  return total > 0 ? total : 0;
+}
+
