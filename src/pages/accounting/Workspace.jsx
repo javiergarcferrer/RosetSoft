@@ -149,7 +149,12 @@ export default function AccountingWorkspace() {
         customer,
         creator,
         base: t.taxableBase,
-        itbis: t.itbis,
+        // computeTotals exposes the tax amount as `taxAmt` (the
+        // generic field name; ITBIS is just the DR-specific label).
+        // The previous `t.itbis` read undefined and the column
+        // rendered "—" even though base + itbis = grandTotal added
+        // up correctly upstream.
+        itbis: t.taxAmt,
         grandTotal: t.grandTotal,
         commissionPct: pct,
         potentialCommission,
