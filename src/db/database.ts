@@ -1,5 +1,16 @@
 import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
-import { snake, toRow, fromRow, fromRows } from './rowMapping.js';
+import { snake, toRow, fromRow, fromRows, type Row } from './rowMapping.js';
+import type {
+  Profile,
+  Settings,
+  Customer,
+  Professional,
+  Order,
+  Quote,
+  QuoteLine,
+  Container,
+  ImageRecord,
+} from '../types/domain.ts';
 
 /**
  * Roset Soft cloud data layer.
@@ -16,6 +27,22 @@ import { snake, toRow, fromRow, fromRows } from './rowMapping.js';
  * Mutations call `invalidate()` so the `useLiveQuery` hook refetches.
  */
 
+/* ---------------------------------------------------------------------- */
+/*  Table catalog                                                          */
+/* ---------------------------------------------------------------------- */
+
+interface TableDef {
+  /** Postgres relation name (snake_case). */
+  db: string;
+  /** Primary-key property as seen from JS code (camelCase). */
+  pk: string;
+}
+
+/**
+ * Map of JS-side table names → their Postgres relation + PK metadata.
+ * The shape of `TABLES` is the source of truth for `TableName` and the
+ * `db` typed object below.
+ */
 const TABLES = {
   profiles:      { db: 'profiles',      pk: 'id' },
   settings:      { db: 'settings',      pk: 'profileId' },
@@ -26,7 +53,26 @@ const TABLES = {
   quotes:        { db: 'quotes',        pk: 'id' },
   quoteLines:    { db: 'quote_lines',   pk: 'id' },
   containers:    { db: 'containers',    pk: 'id' },
-};
+} as const satisfies Record<string, TableDef>;
+
+export type TableName = keyof typeof TABLES;
+
+/**
+ * JS table name → domain row type. Every entry maps to the camelCased
+ * shape `fromRow` produces; the snake-case Postgres column names never
+ * escape this file.
+ */
+export interface TableRowMap {
+  profiles: Profile;
+  settings: Settings;
+  images: ImageRecord;
+  customers: Customer;
+  professionals: Professional;
+  orders: Order;
+  quotes: Quote;
+  quoteLines: QuoteLine;
+  containers: Container;
+}
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in
 // `./rowMapping.js` so the conversion contract can be unit-tested
@@ -38,12 +84,16 @@ const TABLES = {
 /*  Invalidation bus (powers useLiveQuery)                                 */
 /* ---------------------------------------------------------------------- */
 
-const listeners = new Set();
-export function subscribeInvalidate(cb) {
+type InvalidateCallback = () => void;
+
+const listeners = new Set<InvalidateCallback>();
+export function subscribeInvalidate(cb: InvalidateCallback): () => void {
   listeners.add(cb);
-  return () => listeners.delete(cb);
+  return () => {
+    listeners.delete(cb);
+  };
 }
-export function invalidate() {
+export function invalidate(): void {
   for (const cb of [...listeners]) {
     try { cb(); } catch (e) { console.error(e); }
   }
@@ -53,30 +103,47 @@ export function invalidate() {
 /*  Chainable Query — matches Dexie's where().equals().toArray()/sortBy() */
 /* ---------------------------------------------------------------------- */
 
-class Query {
-  constructor(table) {
+interface Filter {
+  field: string;
+  value: unknown;
+}
+
+/**
+ * `Query<T>` is the chainable builder returned by `Table<T>.where()` /
+ * `Table<T>.orderBy()`. Each chain step returns `this` so call sites
+ * can fluently compose: `db.X.where(...).equals(...).reverse().sortBy(...)`.
+ *
+ * `T` is the camelCased domain row type (`Quote`, `Order`, etc.). The
+ * terminal methods (`toArray`, `sortBy`, `first`) all resolve to that
+ * row shape; `count` resolves to `number`.
+ */
+export class Query<T> implements PromiseLike<T[]> {
+  private t: TableDef;
+  private filters: Filter[] = [];
+  private pending: string | null = null;
+  private orderField: string | null = null;
+  private sortField: string | null = null;
+  private reversed = false;
+  private predicate: ((row: T) => boolean) | null = null;
+  private _limit: number | null = null;
+
+  constructor(table: TableDef) {
     this.t = table;
-    this.filters = [];
-    this.pending = null;
-    this.orderField = null;
-    this.sortField = null;
-    this.reversed = false;
-    this.predicate = null;
-    this._limit = null;
   }
-  where(field)   { this.pending = field; return this; }
-  equals(value)  {
+
+  where(field: (keyof T & string) | string): this { this.pending = field; return this; }
+  equals(value: unknown): this {
     if (this.pending == null) throw new Error('equals() called without where()');
     this.filters.push({ field: this.pending, value });
     this.pending = null;
     return this;
   }
-  orderBy(field) { this.orderField = field; return this; }
-  reverse()      { this.reversed = true; return this; }
-  filter(fn)     { this.predicate = fn; return this; }
-  limit(n)       { this._limit = n; return this; }
+  orderBy(field: (keyof T & string) | string): this { this.orderField = field; return this; }
+  reverse(): this { this.reversed = true; return this; }
+  filter(fn: (row: T) => boolean): this { this.predicate = fn; return this; }
+  limit(n: number): this { this._limit = n; return this; }
 
-  async _execute() {
+  private async _execute(): Promise<T[]> {
     let q = supabase.from(this.t.db).select('*');
     for (const f of this.filters) q = q.eq(snake(f.field), f.value);
     if (this.orderField) {
@@ -85,12 +152,13 @@ class Query {
     if (this._limit) q = q.limit(this._limit);
     const { data, error } = await q;
     if (error) throw error;
-    let rows = fromRows(data);
+    let rows = fromRows<T>(data as unknown[] | null | undefined);
     if (this.predicate) rows = rows.filter(this.predicate);
     if (this.sortField) {
-      const f = this.sortField;
+      const f = this.sortField as keyof T;
       rows.sort((a, b) => {
-        const av = a[f], bv = b[f];
+        const av = a[f] as unknown;
+        const bv = b[f] as unknown;
         if (av == null && bv == null) return 0;
         if (av == null) return 1;
         if (bv == null) return -1;
@@ -102,20 +170,23 @@ class Query {
     return rows;
   }
 
-  async toArray()      { return this._execute(); }
-  async sortBy(field)  { this.sortField = field; return this._execute(); }
-  async first() {
+  async toArray(): Promise<T[]>     { return this._execute(); }
+  async sortBy(field: (keyof T & string) | string): Promise<T[]> {
+    this.sortField = field;
+    return this._execute();
+  }
+  async first(): Promise<T | null> {
     this._limit = 1;
     const rows = await this._execute();
     return rows[0] || null;
   }
-  async count() {
+  async count(): Promise<number> {
     let q = supabase.from(this.t.db).select('*', { count: 'exact', head: !this.predicate });
     for (const f of this.filters) q = q.eq(snake(f.field), f.value);
     if (this.predicate) {
       const { data, error } = await q;
       if (error) throw error;
-      return fromRows(data).filter(this.predicate).length;
+      return fromRows<T>(data as unknown[] | null | undefined).filter(this.predicate).length;
     }
     const { count, error } = await q;
     if (error) throw error;
@@ -123,35 +194,57 @@ class Query {
   }
 
   // Thenable, so `await db.X.where(...).equals(...).reverse().sortBy(...)` works.
-  then(onF, onR) { return this._execute().then(onF, onR); }
+  then<TResult1 = T[], TResult2 = never>(
+    onF?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null | undefined,
+    onR?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null | undefined,
+  ): PromiseLike<TResult1 | TResult2> {
+    return this._execute().then(onF, onR);
+  }
 }
 
-class Table {
-  constructor(jsName) {
+/** Options for `Table.bulkPut`. */
+export interface BulkPutOptions {
+  chunkSize?: number;
+  retries?: number;
+  onProgress?: (done: number, total: number) => void;
+}
+
+/**
+ * `Table<T>` is the Dexie-shaped facade for a single Postgres relation.
+ * The `T` generic parameter is the camelCased domain row type, which
+ * makes `await db.quotes.toArray()` return `Promise<Quote[]>` and
+ * `await db.profiles.get(id)` return `Promise<Profile | null>` without
+ * a manual cast at the call site.
+ */
+export class Table<T> {
+  readonly jsName: TableName;
+  private t: TableDef;
+
+  constructor(jsName: TableName) {
     this.jsName = jsName;
     this.t = TABLES[jsName];
   }
-  where(field)   { return new Query(this.t).where(field); }
-  orderBy(field) { return new Query(this.t).orderBy(field); }
-  toArray()      { return new Query(this.t).toArray(); }
-  count()        { return new Query(this.t).count(); }
+  where(field: (keyof T & string) | string): Query<T>   { return new Query<T>(this.t).where(field); }
+  orderBy(field: (keyof T & string) | string): Query<T> { return new Query<T>(this.t).orderBy(field); }
+  toArray(): Promise<T[]>     { return new Query<T>(this.t).toArray(); }
+  count(): Promise<number>    { return new Query<T>(this.t).count(); }
 
-  async get(id) {
+  async get(id: string | null | undefined): Promise<T | null> {
     if (id == null) return null;
     const pkCol = snake(this.t.pk);
     const { data, error } = await supabase
       .from(this.t.db).select('*').eq(pkCol, id).limit(1).maybeSingle();
     if (error) throw error;
-    return fromRow(data);
+    return (fromRow<T>(data) as T | null) ?? null;
   }
 
-  async put(record) {
-    const row = toRow(record);
+  async put(record: T): Promise<T[keyof T] | undefined> {
+    const row = toRow(record as unknown as Row);
     const { error } = await supabase
       .from(this.t.db).upsert(row, { onConflict: snake(this.t.pk) });
     if (error) throw error;
     invalidate();
-    return record[this.t.pk];
+    return (record as Record<string, unknown>)[this.t.pk] as T[keyof T] | undefined;
   }
 
   /**
@@ -166,14 +259,14 @@ class Table {
    *   retries    extra attempts per batch after the initial try (3 → 4 total)
    *   onProgress (done, total) called after each successful batch
    */
-  async bulkPut(records, { chunkSize = 500, retries = 3, onProgress } = {}) {
-    const rows = records.map(toRow);
+  async bulkPut(records: T[], { chunkSize = 500, retries = 3, onProgress }: BulkPutOptions = {}): Promise<number> {
+    const rows = records.map((r) => toRow(r as unknown as Row));
     if (!rows.length) return 0;
     const conflictKey = snake(this.t.pk);
     let done = 0;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
-      let lastErr = null;
+      let lastErr: { message?: string } | null = null;
       for (let attempt = 0; attempt <= retries; attempt++) {
         const { error } = await supabase
           .from(this.t.db)
@@ -182,7 +275,7 @@ class Table {
         lastErr = error;
         if (attempt < retries) {
           const delay = 600 * Math.pow(2, attempt) + Math.random() * 250;
-          await new Promise(r => setTimeout(r, delay));
+          await new Promise((r) => setTimeout(r, delay));
         }
       }
       if (lastErr) {
@@ -197,22 +290,22 @@ class Table {
     return done;
   }
 
-  async update(id, patch) {
+  async update(id: string, patch: Partial<T>): Promise<void> {
     const pkCol = snake(this.t.pk);
     const { error } = await supabase
-      .from(this.t.db).update(toRow(patch)).eq(pkCol, id);
+      .from(this.t.db).update(toRow(patch as unknown as Row)).eq(pkCol, id);
     if (error) throw error;
     invalidate();
   }
 
-  async delete(id) {
+  async delete(id: string): Promise<void> {
     const pkCol = snake(this.t.pk);
     const { error } = await supabase.from(this.t.db).delete().eq(pkCol, id);
     if (error) throw error;
     invalidate();
   }
 
-  async bulkDelete(ids) {
+  async bulkDelete(ids: string[] | null | undefined): Promise<void> {
     if (!ids?.length) return;
     const pkCol = snake(this.t.pk);
     const { error } = await supabase.from(this.t.db).delete().in(pkCol, ids);
@@ -221,9 +314,16 @@ class Table {
   }
 }
 
-export const db = Object.fromEntries(
-  Object.keys(TABLES).map((k) => [k, new Table(k)]),
-);
+/**
+ * The typed `db` object — `{ profiles: Table<Profile>, settings:
+ * Table<Settings>, ... }`. Each entry is a `Table<T>` where `T` is
+ * the matching domain row type from `TableRowMap`.
+ */
+export type Db = { [K in TableName]: Table<TableRowMap[K]> };
+
+export const db: Db = Object.fromEntries(
+  (Object.keys(TABLES) as TableName[]).map((k) => [k, new Table(k)]),
+) as Db;
 
 /* ---------------------------------------------------------------------- */
 /*  Sequential numbering                                                   */
@@ -272,7 +372,11 @@ export const db = Object.fromEntries(
  *              #1001/#101 since "Cotización #1" looks rookie. Defaults:
  *              quotes 1001, orders 101, containers 101.
  */
-export async function nextSequenceNumber(tableName, profileId, start) {
+export async function nextSequenceNumber(
+  tableName: TableName,
+  profileId: string,
+  start: number,
+): Promise<number> {
   const tbl = TABLES[tableName];
   if (!tbl) throw new Error(`Unknown table ${tableName}`);
   const { data, error } = await supabase
@@ -283,7 +387,18 @@ export async function nextSequenceNumber(tableName, profileId, start) {
     .order('number', { ascending: false })
     .limit(1);
   if (error) throw error;
-  return computeNextSequenceNumber(data?.[0]?.number, start);
+  const rows = data as Array<{ number?: number | string | null }> | null;
+  return computeNextSequenceNumber(rows?.[0]?.number ?? null, start);
+}
+
+/** Arguments to `assignSequenceNumber`. The `build` lambda receives the
+ *  freshly-computed `number` and returns the full row to insert. */
+export interface AssignSequenceNumberArgs<T> {
+  table: TableName;
+  profileId: string;
+  start: number;
+  build: (number: number) => T;
+  maxAttempts?: number;
 }
 
 /**
@@ -304,12 +419,12 @@ export async function nextSequenceNumber(tableName, profileId, start) {
  *     build: (number) => ({ id, profileId, number, ... }),
  *   });
  */
-export async function assignSequenceNumber({
+export async function assignSequenceNumber<T>({
   table, profileId, start, build, maxAttempts = 5,
-}) {
-  const tbl = db[table];
+}: AssignSequenceNumberArgs<T>): Promise<T> {
+  const tbl = db[table] as unknown as Table<T>;
   if (!tbl) throw new Error(`Unknown table ${table}`);
-  let lastErr = null;
+  let lastErr: unknown = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const number = await nextSequenceNumber(table, profileId, start);
     const record = build(number);
@@ -320,7 +435,7 @@ export async function assignSequenceNumber({
       lastErr = err;
       // Postgres unique_violation. Another browser took our slot; loop
       // back and recompute against the new max.
-      if (err?.code !== '23505') throw err;
+      if ((err as { code?: string } | null)?.code !== '23505') throw err;
     }
   }
   throw lastErr;
@@ -338,7 +453,10 @@ export async function assignSequenceNumber({
  * for some PostgREST configurations — without `Number()` we'd land on
  * "10031" instead of 1004.
  */
-export function computeNextSequenceNumber(currentMax, start) {
+export function computeNextSequenceNumber(
+  currentMax: number | string | null | undefined,
+  start: number,
+): number {
   if (currentMax == null) return start;
   return Number(currentMax) + 1;
 }
@@ -366,7 +484,7 @@ export function computeNextSequenceNumber(currentMax, start) {
  * Existing rows in the DB keep their old-shape ids; both shapes live
  * side-by-side in TEXT primary-key columns without issue.
  */
-export function newId() {
+export function newId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -377,20 +495,30 @@ export function newId() {
 /*  Images — backed by the `images` Storage bucket + `images` table       */
 /* ---------------------------------------------------------------------- */
 
-export async function fileToBlob(file) {
+export async function fileToBlob(file: Blob | File): Promise<Blob> {
   if (file instanceof Blob) return file;
-  const buf = await file.arrayBuffer();
-  return new Blob([buf], { type: file.type || 'application/octet-stream' });
+  const buf = await (file as File).arrayBuffer();
+  return new Blob([buf], { type: (file as File).type || 'application/octet-stream' });
 }
 
-function extensionForType(type) {
+function extensionForType(type: string | null | undefined): string {
   if (!type) return 'bin';
   const m = type.match(/^image\/([a-z0-9]+)/i);
   if (!m) return 'bin';
   return m[1].toLowerCase().replace('jpeg', 'jpg');
 }
 
-export async function saveImage({ kind, ownerId, file, label = '' }) {
+/** Arguments to `saveImage`. `kind` is the owning entity ('quoteLine',
+ *  'professional', 'settings-logo', ...); `ownerId` is the owning row's
+ *  primary key. */
+export interface SaveImageArgs {
+  kind: string;
+  ownerId?: string | null;
+  file: Blob | File;
+  label?: string;
+}
+
+export async function saveImage({ kind, ownerId, file, label = '' }: SaveImageArgs): Promise<string> {
   const blob = await fileToBlob(file);
   const id = newId();
   const ext = extensionForType(blob.type);
@@ -415,14 +543,14 @@ export async function saveImage({ kind, ownerId, file, label = '' }) {
   return id;
 }
 
-export async function imageObjectUrl(id) {
+export async function imageObjectUrl(id: string | null | undefined): Promise<string | null> {
   if (!id) return null;
   const rec = await db.images.get(id);
   if (!rec?.storagePath) return null;
   return publicImageUrl(rec.storagePath);
 }
 
-export async function deleteImage(id) {
+export async function deleteImage(id: string | null | undefined): Promise<void> {
   if (!id) return;
   const rec = await db.images.get(id);
   if (rec?.storagePath) {
@@ -432,7 +560,9 @@ export async function deleteImage(id) {
 }
 
 /** Fetch raw image bytes — used by the PDF generator to embed images. */
-export async function downloadImageBytes(id) {
+export async function downloadImageBytes(
+  id: string | null | undefined,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   if (!id) return null;
   const rec = await db.images.get(id);
   if (!rec?.storagePath) return null;
@@ -479,17 +609,17 @@ export const TEAM_PROFILE_ID = 'team';
  * Returns the list of deleted ids so callers can log/notify.
  * Idempotent: a second call on a clean dataset deletes nothing.
  */
-export async function dedupeProfilesByEmail() {
+export async function dedupeProfilesByEmail(): Promise<string[]> {
   const all = await db.profiles.toArray();
-  const byEmail = new Map();
+  const byEmail = new Map<string, Profile[]>();
   for (const p of all) {
     if (!p.email || p.id === TEAM_PROFILE_ID) continue;
     const key = String(p.email).toLowerCase().trim();
     if (!key) continue;
     if (!byEmail.has(key)) byEmail.set(key, []);
-    byEmail.get(key).push(p);
+    byEmail.get(key)!.push(p);
   }
-  const toDelete = [];
+  const toDelete: string[] = [];
   for (const rows of byEmail.values()) {
     if (rows.length < 2) continue;
     rows.sort((a, b) => {
@@ -513,7 +643,7 @@ export async function dedupeProfilesByEmail() {
   return toDelete;
 }
 
-export async function ensureDefaultProfile() {
+export async function ensureDefaultProfile(): Promise<string> {
   // Make sure the team profile + settings row exist (the SQL schema bootstraps
   // these, but we tolerate empty databases too). The 'team' row is special:
   // it holds shared company settings, not a real user, so its `role` is
@@ -532,9 +662,9 @@ export async function ensureDefaultProfile() {
   const u = data?.user;
   if (u) {
     const settings = await db.settings.get(TEAM_PROFILE_ID).catch(() => null);
-    const adminEmails = Array.isArray(settings?.adminEmails) ? settings.adminEmails : [];
+    const adminEmails = Array.isArray(settings?.adminEmails) ? settings!.adminEmails! : [];
     const email = (u.email || '').toLowerCase().trim();
-    const isAllowlistedAdmin = email && adminEmails.map((e) => String(e).toLowerCase().trim()).includes(email);
+    const isAllowlistedAdmin = !!email && adminEmails.map((e) => String(e).toLowerCase().trim()).includes(email);
 
     const existing = await db.profiles.get(u.id).catch(() => null);
     const now = Date.now();
@@ -546,7 +676,7 @@ export async function ensureDefaultProfile() {
       // the user is signing in right now.
       await db.profiles.put({
         id: u.id,
-        name: (u.user_metadata && u.user_metadata.name) || (u.email?.split('@')[0]) || 'Member',
+        name: (u.user_metadata && (u.user_metadata as { name?: string }).name) || (u.email?.split('@')[0]) || 'Member',
         email: u.email || null,
         role: isAllowlistedAdmin ? 'admin' : 'employee',
         active: isAllowlistedAdmin,
@@ -580,7 +710,7 @@ export async function ensureDefaultProfile() {
       // The two patches compose: an invited user whose email is in
       // the admin allowlist arrives as active=true + role=admin in
       // one round-trip.
-      const patch = { lastSignInAt: now };
+      const patch: Partial<Profile> = { lastSignInAt: now };
       const isFirstAcceptance = !existing.active && !existing.lastSignInAt;
       if (isFirstAcceptance) {
         patch.active = true;
@@ -606,11 +736,11 @@ export async function ensureDefaultProfile() {
   return TEAM_PROFILE_ID;
 }
 
-export async function getSettings(profileId) {
+export async function getSettings(profileId: string): Promise<Settings | null> {
   return db.settings.get(profileId);
 }
 
-export async function updateSettings(profileId, patch) {
-  const cur = (await db.settings.get(profileId)) || { profileId };
+export async function updateSettings(profileId: string, patch: Partial<Settings>): Promise<void> {
+  const cur = (await db.settings.get(profileId)) || { profileId } as Settings;
   await db.settings.put({ ...cur, ...patch, profileId });
 }

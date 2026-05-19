@@ -1,8 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // `import.meta.env` is undefined outside Vite (e.g. when a node test imports
 // this transitively); guard the lookup so the module can still load.
-const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+const env: Partial<ImportMetaEnv> =
+  (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const url = env.VITE_SUPABASE_URL;
 const anonKey = env.VITE_SUPABASE_ANON_KEY;
 
@@ -26,9 +27,9 @@ if (typeof window !== 'undefined') {
 // Exported so other modules (e.g. lib/invite.js) can build URLs to
 // Supabase-hosted resources outside the JS SDK — notably the Edge
 // Functions route at `${SUPABASE_URL}/functions/v1/<name>`.
-export const SUPABASE_URL = url || 'http://localhost:54321';
+export const SUPABASE_URL: string = url || 'http://localhost:54321';
 
-export const supabase = createClient(SUPABASE_URL, anonKey || 'anon', {
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, anonKey || 'anon', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -41,11 +42,11 @@ export const supabase = createClient(SUPABASE_URL, anonKey || 'anon', {
   },
 });
 
-export const supabaseConfigured = !!(url && anonKey);
+export const supabaseConfigured: boolean = !!(url && anonKey);
 
 export const IMAGES_BUCKET = 'images';
 
-export function publicImageUrl(path) {
+export function publicImageUrl(path: string | null | undefined): string | null {
   if (!path) return null;
   const { data } = supabase.storage.from(IMAGES_BUCKET).getPublicUrl(path);
   return data?.publicUrl || null;

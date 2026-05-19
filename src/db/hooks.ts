@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DependencyList } from 'react';
 import { subscribeInvalidate } from './database.js';
 
 /**
@@ -17,8 +17,19 @@ import { subscribeInvalidate } from './database.js';
  * "an array, until we know better" and the page can't tell that apart from
  * "the user really has zero rows".
  */
-export function useLiveQuery(asyncFn, deps = [], defaultValue) {
-  return useLiveQueryStatus(asyncFn, deps, defaultValue).data;
+export function useLiveQuery<T>(asyncFn: () => T | Promise<T>): T | undefined;
+export function useLiveQuery<T>(asyncFn: () => T | Promise<T>, deps: DependencyList): T | undefined;
+export function useLiveQuery<T, D = T>(
+  asyncFn: () => T | Promise<T>,
+  deps: DependencyList,
+  defaultValue: D,
+): T | D;
+export function useLiveQuery<T, D>(
+  asyncFn: () => T | Promise<T>,
+  deps: DependencyList = [],
+  defaultValue?: D,
+): T | D | undefined {
+  return useLiveQueryStatus<T, D>(asyncFn, deps, defaultValue as D).data;
 }
 
 /**
@@ -37,8 +48,32 @@ export function useLiveQuery(asyncFn, deps = [], defaultValue) {
  * Return type: `{ data: T, loaded: boolean }`. Destructure at the call
  * site for readable code (`const { data: quotes, loaded } = ...`).
  */
-export function useLiveQueryStatus(asyncFn, deps = [], defaultValue) {
-  const [state, setState] = useState({ data: defaultValue, loaded: false });
+export interface LiveQueryStatus<T> {
+  data: T;
+  loaded: boolean;
+}
+
+export function useLiveQueryStatus<T>(
+  asyncFn: () => T | Promise<T>,
+): LiveQueryStatus<T | undefined>;
+export function useLiveQueryStatus<T>(
+  asyncFn: () => T | Promise<T>,
+  deps: DependencyList,
+): LiveQueryStatus<T | undefined>;
+export function useLiveQueryStatus<T, D = T>(
+  asyncFn: () => T | Promise<T>,
+  deps: DependencyList,
+  defaultValue: D,
+): LiveQueryStatus<T | D>;
+export function useLiveQueryStatus<T, D>(
+  asyncFn: () => T | Promise<T>,
+  deps: DependencyList = [],
+  defaultValue?: D,
+): LiveQueryStatus<T | D | undefined> {
+  const [state, setState] = useState<LiveQueryStatus<T | D | undefined>>({
+    data: defaultValue,
+    loaded: false,
+  });
   const fnRef = useRef(asyncFn);
   fnRef.current = asyncFn;
 
