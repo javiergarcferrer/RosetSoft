@@ -85,13 +85,26 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
     cursor = drawEmptyLineBody(page, ctx, cursor);
   } else {
     const groups = groupBySection(lines);
+    // Bottom-reserve constant for the line/section page-break checks.
+    // The previous value (MARGIN_B + 80 = 136pt) was supposed to keep
+    // "enough space for the next line or the totals" — but the totals
+    // block has its own page-break check below (`estimateTotalsHeight`)
+    // that's the authoritative gate, and lines are now ~200pt each
+    // (quarter-page images). The old reserve was ejecting lines that
+    // would otherwise fit by ~13pt, producing pages with one product
+    // floating awkwardly above the totals block. Tight reserve here
+    // means lines pack until they truly don't fit; totals overflow
+    // cleanly onto their own page when they have to. Footer renders
+    // at y=28 with a divider at y=42, so MARGIN_B + 10 leaves the
+    // last line a comfortable 10pt above the footer hairline.
+    const PAGE_BREAK_RESERVE = MARGIN_B + 10;
     for (const group of groups) {
       if (group.label) {
         const firstRowH = group.items.length
           ? measureLineRowHeight(ctx, group.items[0])
           : 0;
         const reserve = 22 + firstRowH;
-        if (cursor.y - reserve < MARGIN_B + 80) {
+        if (cursor.y - reserve < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
@@ -99,7 +112,7 @@ export async function generateQuotePdf({ quote, settings, lines, totals, custome
       }
       for (const line of group.items) {
         const rowH = measureLineRowHeight(ctx, line);
-        if (cursor.y - rowH - 4 < MARGIN_B + 80) {
+        if (cursor.y - rowH - 4 < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
