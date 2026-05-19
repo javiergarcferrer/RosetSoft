@@ -64,19 +64,56 @@ class Query {
     this.predicate = null;
     this._limit = null;
   }
-  where(field)   { this.pending = field; return this; }
+  where(field) {
+    // A trailing where() without a matching equals() is a bug — the
+    // chain `.where('foo').toArray()` would silently swallow the
+    // filter and return the whole table. Fail-fast at the next call
+    // instead of returning corrupt data.
+    if (typeof field !== 'string' || !field) {
+      throw new Error('where() requires a non-empty field name');
+    }
+    if (this.pending != null) {
+      throw new Error(`where('${field}') called twice without an equals() between them`);
+    }
+    this.pending = field;
+    return this;
+  }
   equals(value)  {
     if (this.pending == null) throw new Error('equals() called without where()');
     this.filters.push({ field: this.pending, value });
     this.pending = null;
     return this;
   }
-  orderBy(field) { this.orderField = field; return this; }
+  orderBy(field) {
+    if (typeof field !== 'string' || !field) {
+      throw new Error('orderBy() requires a non-empty field name');
+    }
+    this.orderField = field;
+    return this;
+  }
   reverse()      { this.reversed = true; return this; }
-  filter(fn)     { this.predicate = fn; return this; }
-  limit(n)       { this._limit = n; return this; }
+  filter(fn) {
+    if (typeof fn !== 'function') {
+      throw new Error('filter() requires a predicate function');
+    }
+    this.predicate = fn;
+    return this;
+  }
+  limit(n) {
+    if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+      throw new Error(`limit() requires a positive integer (got ${n})`);
+    }
+    this._limit = n;
+    return this;
+  }
 
   async _execute() {
+    // Catch the "trailing where() without equals()" shape at execution
+    // time too. The where() guard above prevents back-to-back
+    // where()s, but a single .where('x').toArray() falls through here.
+    if (this.pending != null) {
+      throw new Error(`Incomplete query: .where('${this.pending}') has no matching .equals()`);
+    }
     let q = supabase.from(this.t.db).select('*');
     for (const f of this.filters) q = q.eq(snake(f.field), f.value);
     if (this.orderField) {
@@ -167,6 +204,15 @@ class Table {
    *   onProgress (done, total) called after each successful batch
    */
   async bulkPut(records, { chunkSize = 500, retries = 3, onProgress } = {}) {
+    if (!Array.isArray(records)) {
+      throw new Error('bulkPut: records must be an array');
+    }
+    if (!Number.isInteger(chunkSize) || chunkSize < 1) {
+      throw new Error(`bulkPut: chunkSize must be a positive integer (got ${chunkSize})`);
+    }
+    if (!Number.isInteger(retries) || retries < 0) {
+      throw new Error(`bulkPut: retries must be a non-negative integer (got ${retries})`);
+    }
     const rows = records.map(toRow);
     if (!rows.length) return 0;
     const conflictKey = snake(this.t.pk);
@@ -307,19 +353,40 @@ export async function nextSequenceNumber(tableName, profileId, start) {
 export async function assignSequenceNumber({
   table, profileId, start, build, maxAttempts = 5,
 }) {
+  // Fail-fast at the boundary so a typo'd table name doesn't burn
+  // five round-trips before surfacing.
   const tbl = db[table];
-  if (!tbl) throw new Error(`Unknown table ${table}`);
+  if (!tbl) throw new Error(`assignSequenceNumber: unknown table '${table}'`);
+  if (typeof profileId !== 'string' || !profileId) {
+    throw new Error('assignSequenceNumber: profileId must be a non-empty string');
+  }
+  if (!Number.isInteger(start) || start < 0) {
+    throw new Error(`assignSequenceNumber: start must be a non-negative integer (got ${start})`);
+  }
+  if (typeof build !== 'function') {
+    throw new Error('assignSequenceNumber: build must be a function');
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error(`assignSequenceNumber: maxAttempts must be a positive integer (got ${maxAttempts})`);
+  }
+
   let lastErr = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const number = await nextSequenceNumber(table, profileId, start);
     const record = build(number);
+    if (!record || typeof record !== 'object') {
+      throw new Error('assignSequenceNumber: build() must return a record object');
+    }
     try {
       await tbl.put(record);
       return record;
     } catch (err) {
       lastErr = err;
       // Postgres unique_violation. Another browser took our slot; loop
-      // back and recompute against the new max.
+      // back and recompute against the new max. Anything else is a
+      // real failure — surface immediately rather than burn the retry
+      // budget on an error that won't resolve itself (FK violation,
+      // RLS, network).
       if (err?.code !== '23505') throw err;
     }
   }
@@ -390,8 +457,45 @@ function extensionForType(type) {
   return m[1].toLowerCase().replace('jpeg', 'jpg');
 }
 
+// Per-call defaults for image upload validation. The dealer's photos
+// (line items, logos) are JPEGs and PNGs from phone cameras — usually
+// ~1–3 MB after the browser's HEIC → JPEG conversion. 10 MB is
+// generous headroom; SVG logos are tiny. Anything larger is almost
+// certainly an unintentional upload (a 12 MP raw photo, a screen
+// recording) and should fail fast at the boundary instead of stuck
+// in a slow upload that times out the dealer's flaky LTE.
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;     // 10 MB
+const IMAGE_ALLOWED_MIME = /^image\/(png|jpe?g|webp|gif|svg\+xml|avif|heic|heif)$/i;
+
+/**
+ * Upload a file to the images bucket and write the corresponding
+ * `images` table row. Returns the new image id.
+ *
+ * Throws (rejects) at the boundary on:
+ *   • zero-byte file (the dealer dragged a corrupted preview)
+ *   • non-image MIME type (someone dropped a PDF / docx into ImageDrop)
+ *   • file larger than IMAGE_MAX_BYTES (a stray raw photo)
+ *
+ * The thrown Error message is surfaced inline by ImageDrop — keep it
+ * short and dealer-readable rather than the underlying Supabase
+ * error.
+ */
 export async function saveImage({ kind, ownerId, file, label = '' }) {
+  if (!file) throw new Error('No se recibió ningún archivo.');
   const blob = await fileToBlob(file);
+
+  if (!blob.size || blob.size <= 0) {
+    throw new Error('El archivo está vacío.');
+  }
+  if (blob.size > IMAGE_MAX_BYTES) {
+    const mb = (blob.size / 1024 / 1024).toFixed(1);
+    throw new Error(`Imagen demasiado grande (${mb} MB). Máximo ${Math.round(IMAGE_MAX_BYTES / 1024 / 1024)} MB.`);
+  }
+  const mime = blob.type || '';
+  if (!IMAGE_ALLOWED_MIME.test(mime)) {
+    throw new Error(`Formato no soportado: ${mime || 'desconocido'}. Usa PNG, JPG, WEBP, GIF, SVG, AVIF o HEIC.`);
+  }
+
   const id = newId();
   const ext = extensionForType(blob.type);
   const storagePath = `${id}.${ext}`;
