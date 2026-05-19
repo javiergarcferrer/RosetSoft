@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
 /**
  * Accounting view of every accepted cotización. Read-only: Contabilidad
@@ -208,7 +209,9 @@ function usePdfDownload({ quote, customer, lines, settings }) {
         lines.filter((l) => l.kind !== 'section').map(lineForTotals),
         quote,
       );
-      const { generateQuotePdf, downloadBlob } = await import('../../pdf/quotePdf.js');
+      const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
+        () => import('../../pdf/quotePdf.js'),
+      );
       const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
       await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
     } catch (err) {

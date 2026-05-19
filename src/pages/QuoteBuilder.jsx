@@ -13,6 +13,7 @@ import { formatMoney } from '../lib/format.js';
 // dealer first taps Export PDF — the browser caches the chunk after
 // that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
+import { safeDynamicImport } from '../lib/dynamicImport.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -406,7 +407,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
         : null;
-      const { generateQuotePdf, downloadBlob } = await import('../pdf/quotePdf.js');
+      const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
+        () => import('../pdf/quotePdf.js'),
+      );
       // Pass *all* lines to the generator — including section breaks.
       // The generator's groupBySection() consumes them as headings; the
       // earlier filter that stripped sections out predates the PDF
