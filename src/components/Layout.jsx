@@ -9,11 +9,14 @@ import {
   Settings as SettingsIcon,
   Shield,
   Wallet,
+  FileCheck,
+  Download,
   Menu,
   X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
+import ImageView from './ImageView.jsx';
 
 // Sidebar groups. The two single-item groups at the ends (Inicio and
 // Configuración) sit on their own so the visual rhythm of the nav
@@ -51,15 +54,37 @@ const adminNavGroup = {
   ],
 };
 
+// Accounting-only nav. Contabilidad users don't see the sales surfaces
+// at all — they get their own home (read-only KPI dashboard) and a
+// "Contabilidad" cluster with accepted-quote downloads, the payable
+// commissions report, and the Odoo CSV exporter. No /quotes, /orders,
+// /customers, or admin links — they aren't a sales role.
+const accountingNavGroups = [
+  { items: [{ to: '/accounting', label: 'Inicio', icon: LayoutDashboard, end: true }] },
+  {
+    label: 'Contabilidad',
+    items: [
+      { to: '/accounting/quotes',      label: 'Aceptadas',  icon: FileCheck },
+      { to: '/accounting/commissions', label: 'Comisiones', icon: Wallet },
+      { to: '/accounting/odoo',        label: 'Odoo',       icon: Download },
+    ],
+  },
+];
+
 export default function Layout() {
-  const { settings, isAdmin } = useApp();
-  // Admin navigation: base groups up to "Ventas", then the admin
-  // cluster, then "Configuración" (also admin-only). Employees get
-  // the base groups minus "Configuración" — they don't even see the
-  // route exist.
-  const navGroups = isAdmin
-    ? [...baseNavGroups.slice(0, -1), adminNavGroup, baseNavGroups[baseNavGroups.length - 1]]
-    : baseNavGroups.slice(0, -1);
+  const { settings, isAdmin, isAccounting } = useApp();
+  // Three nav shapes:
+  //   • Accounting users → their own home + Contabilidad cluster. No
+  //     sales pages, no admin tools — this is a parallel surface.
+  //   • Admins → base groups up to "Ventas", then the admin cluster,
+  //     then "Configuración" (also admin-only).
+  //   • Employees → base groups minus "Configuración" — they don't
+  //     even see the route exist.
+  const navGroups = isAccounting
+    ? accountingNavGroups
+    : isAdmin
+      ? [...baseNavGroups.slice(0, -1), adminNavGroup, baseNavGroups[baseNavGroups.length - 1]]
+      : baseNavGroups.slice(0, -1);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = !useMediaQuery('(min-width: 768px)');
@@ -91,9 +116,19 @@ export default function Layout() {
         >
           <Menu size={20} />
         </button>
-        <div className="min-w-0 px-2 text-center">
-          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
-          <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
+        <div className="min-w-0 px-2 flex items-center gap-2">
+          {settings?.logoImageId && (
+            <ImageView
+              id={settings.logoImageId}
+              alt={company + ' logo'}
+              className="w-7 h-7 flex-shrink-0 object-contain bg-white rounded-md"
+              placeholderClassName="w-7 h-7 flex-shrink-0 rounded-md"
+            />
+          )}
+          <div className="min-w-0 text-center">
+            <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
+            <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
+          </div>
         </div>
         <div className="w-11" />
       </header>
@@ -119,10 +154,20 @@ export default function Layout() {
         aria-label="Navegación principal"
       >
         <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between">
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
-            <div className="text-base font-semibold leading-tight mt-0.5 truncate" title={company}>
-              {company}
+          <div className="min-w-0 flex items-center gap-2.5">
+            {settings?.logoImageId && (
+              <ImageView
+                id={settings.logoImageId}
+                alt={company + ' logo'}
+                className="w-9 h-9 flex-shrink-0 object-contain bg-white rounded-md"
+                placeholderClassName="w-9 h-9 flex-shrink-0 rounded-md"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
+              <div className="text-base font-semibold leading-tight mt-0.5 truncate" title={company}>
+                {company}
+              </div>
             </div>
           </div>
           <button

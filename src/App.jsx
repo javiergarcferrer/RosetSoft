@@ -18,6 +18,10 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminCommissions from './pages/admin/Commissions.jsx';
+import AccountingDashboard from './pages/accounting/AccountingDashboard.jsx';
+import AcceptedQuotes from './pages/accounting/AcceptedQuotes.jsx';
+import CommissionsToPay from './pages/accounting/CommissionsToPay.jsx';
+import OdooExport from './pages/accounting/OdooExport.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -164,13 +168,27 @@ function Gate({ children }) {
   return children;
 }
 
+// Role-aware home: accounting users land on /accounting (a payable-
+// oriented view), everyone else gets the sales Dashboard. We can't
+// just `<Navigate>` at the route level because currentProfile isn't
+// available until AppProvider has resolved, so this thin wrapper
+// reads from useApp() at render time and either redirects or
+// delegates to Dashboard. Dashboard itself is untouched.
+function RoleHome() {
+  const { currentProfile } = useApp();
+  if (currentProfile?.role === 'accounting') {
+    return <Navigate to="/accounting" replace />;
+  }
+  return <Dashboard />;
+}
+
 function ProtectedApp() {
   return (
     <AppProvider>
       <Gate>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<RoleHome />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />
@@ -189,6 +207,14 @@ function ProtectedApp() {
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/commissions" element={<AdminCommissions />} />
+            {/* Accounting surface. Each page self-gates on the
+                accounting/admin role, same pattern as the admin
+                routes — admins can see them for debugging the Odoo
+                integration. */}
+            <Route path="accounting" element={<AccountingDashboard />} />
+            <Route path="accounting/quotes" element={<AcceptedQuotes />} />
+            <Route path="accounting/commissions" element={<CommissionsToPay />} />
+            <Route path="accounting/odoo" element={<OdooExport />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

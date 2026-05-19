@@ -276,9 +276,16 @@ function RolePill({ role }) {
       </span>
     );
   }
+  if (role === 'accounting') {
+    return (
+      <span className="badge">
+        Contabilidad
+      </span>
+    );
+  }
   return (
     <span className="badge">
-      Empleado
+      Vendedor
     </span>
   );
 }
@@ -499,12 +506,17 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <select
             className="input py-1.5 w-36"
-            value={profile.role === 'admin' ? 'admin' : 'employee'}
+            value={
+              profile.role === 'admin' || profile.role === 'accounting'
+                ? profile.role
+                : 'employee'
+            }
             onChange={(e) => setRole(e.target.value)}
             aria-label="Rol del usuario"
           >
-            <option value="employee">Empleado</option>
+            <option value="employee">Vendedor</option>
             <option value="admin">Administrador</option>
+            <option value="accounting">Contabilidad</option>
           </select>
 
           <div className="relative">
@@ -749,8 +761,9 @@ function InviteModal({ open, onClose, session, onInvited }) {
               value={role}
               onChange={(e) => setRole(e.target.value)}
             >
-              <option value="employee">Empleado</option>
+              <option value="employee">Vendedor</option>
               <option value="admin">Administrador</option>
+              <option value="accounting">Contabilidad</option>
             </select>
           </div>
           <div>

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wallet, ArrowRight, Calendar, Shield, ChevronRight } from 'lucide-react';
+import {
+  Wallet, Calendar, Shield, ChevronRight, Download,
+} from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -13,43 +15,23 @@ import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
+import { downloadCsv } from '../../lib/csv.js';
 
 /**
- * Admin-only monthly commissions report. The dealer pays out on the
- * 15th of each month, covering a cycle that runs from the 16th of the
- * previous month through the 15th of the current month. This page is
- * the payout review.
+ * Read-only commissions report for Contabilidad. Mirrors the math of
+ * admin/Commissions exactly — same cycle picker, same per-user
+ * breakdown — but framed as "comisiones por pagar" rather than as an
+ * internal HR review.
  *
- * Inputs:
- *   • profiles    — id → name, commission_pct
- *   • quotes      — only those with depositReceivedAt in the window
- *                   AND a created_by_user_id we can attribute to
- *   • quoteLines  — drive each quote's taxableBase via computeTotals.
- *                   Per the dealer's rule, commissions are paid on
- *                   the base imponible (pre-ITBIS, pre-shipping) —
- *                   never on the grand total. We surface the grand
- *                   total in the per-quote drill-down for context.
- *   • customers   — for per-quote drill-down rows
- *
- * Output:
- *   • Cycle picker (this cycle / last cycle / custom)
- *   • Summary card (totals + counts)
- *   • Per-user table sorted by commission earned descending. Each row
- *     expands into the contributing quotes (number, customer, deposit
- *     date, base imponible, grand total c/ ITBIS, commission slice).
- *
- * Quotes without an attributable creator are silently skipped — the
- * monthly payout would be wrong to credit them to a random dealer, so
- * we under-report instead. Those quotes are visible in the rest of
- * the app; they just don't earn commission for anyone.
+ * Extra over the admin page: a CSV export sized for Odoo. Each row is
+ * one contributing quote (no aggregation by employee — downstream Odoo
+ * does that) with the cycle window stamped on every row so the
+ * importer can re-attribute later.
  */
-export default function AdminCommissions() {
+export default function CommissionsToPay() {
   const { profileId, currentProfile } = useApp();
-  const isAdmin = currentProfile?.role === 'admin';
+  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
 
-  // Cycle state lives here as a small state machine. `mode` controls
-  // which preset is active; `customStart` / `customEnd` only matter
-  // when mode === 'custom'.
   const [mode, setMode] = useState('current'); // 'current' | 'previous' | 'custom'
   const today = useMemo(() => new Date(), []);
   const cycles = useMemo(() => {
@@ -60,17 +42,14 @@ export default function AdminCommissions() {
   const [customStart, setCustomStart] = useState(() => isoDate(cycles.curr.start));
   const [customEnd, setCustomEnd]     = useState(() => isoDate(cycles.curr.end));
 
-  const window = useMemo(() => {
+  const cycle = useMemo(() => {
     if (mode === 'current') return cycles.curr;
     if (mode === 'previous') return cycles.prev;
-    // custom — parse the date inputs as local-midnight, end-of-day for end.
     const start = parseISODate(customStart);
     const end   = parseISODate(customEnd, /* endOfDay */ true);
     return { start, end };
   }, [mode, cycles, customStart, customEnd]);
 
-  // Always run the queries — the access-gate early-return below would
-  // change the hook count between renders if we placed it earlier.
   const profilesQ  = useLiveQueryStatus(() => db.profiles.toArray(), [], []);
   const quotesQ    = useLiveQueryStatus(
     () => db.quotes.where('profileId').equals(profileId || '').toArray(),
@@ -88,20 +67,12 @@ export default function AdminCommissions() {
   const customers = customersQ.data;
   const loaded = profilesQ.loaded && quotesQ.loaded && linesQ.loaded && customersQ.loaded;
 
-  // Derive everything from the raw rows in one pass — same shape as
-  // Dashboard.jsx, so we don't re-render six times as queries resolve.
   const derived = useMemo(() => {
     const profilesById = new Map();
     for (const p of profiles) profilesById.set(p.id, p);
     const customersById = new Map();
     for (const c of customers) customersById.set(c.id, c);
 
-    // Per-quote totals, mapping unitPrice → basePrice and stripping
-    // section rows (same dance pricing.computeTotals expects). We
-    // return BOTH the base imponible (commissionable) and the grand
-    // total (informational — useful when the admin wants to see the
-    // invoice headline). Commissions are paid on `base` per the
-    // dealer's rule; grand total never enters the math.
     const linesByQuote = new Map();
     for (const ln of lines) {
       if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
@@ -115,22 +86,19 @@ export default function AdminCommissions() {
       return { base: t.taxableBase, grandTotal: t.grandTotal };
     }
 
-    // Quotes in the window: deposited within window AND attributable
-    // to a user.
     const inWindow = quotes.filter((q) =>
       q.depositReceivedAt &&
-      q.depositReceivedAt >= window.start &&
-      q.depositReceivedAt <= window.end &&
+      q.depositReceivedAt >= cycle.start &&
+      q.depositReceivedAt <= cycle.end &&
       q.createdByUserId
     );
 
-    // Group by creator.
     const byUser = new Map();
     let cycleBase = 0;
     let cycleCommission = 0;
     for (const q of inWindow) {
       const user = profilesById.get(q.createdByUserId);
-      if (!user) continue;          // attributed to a deleted profile
+      if (!user) continue;
       const { base, grandTotal } = totalsFor(q);
       const pct = clampPct(user.commissionPct);
       const commission = base * (pct / 100);
@@ -158,8 +126,6 @@ export default function AdminCommissions() {
     }
 
     const rows = [...byUser.values()]
-      // Don't show 0-commission rows — better to omit than render a
-      // zero that looks like a bug.
       .filter((r) => r.commission > 0 || r.base > 0)
       .sort((a, b) => b.commission - a.commission);
 
@@ -170,26 +136,81 @@ export default function AdminCommissions() {
       depositedCount: inWindow.length,
       activeEmployees: rows.length,
     };
-  }, [profiles, quotes, lines, customers, window]);
+  }, [profiles, quotes, lines, customers, cycle]);
 
-  if (!isAdmin) {
+  function exportCsv() {
+    const header = [
+      'cycle_start',
+      'cycle_end',
+      'employee_name',
+      'employee_email',
+      'quote_number',
+      'customer',
+      'deposit_date',
+      'base_imponible_usd',
+      'grand_total_usd',
+      'commission_pct',
+      'commission_amount_usd',
+    ];
+    const rows = [header];
+    const cycleStartIso = isoDate(cycle.start);
+    const cycleEndIso   = isoDate(cycle.end);
+    for (const r of derived.rows) {
+      for (const e of r.quotes) {
+        const customerLabel = e.customer
+          ? (e.customer.company || e.customer.name || '')
+          : '';
+        rows.push([
+          cycleStartIso,
+          cycleEndIso,
+          r.user.name || '',
+          r.user.email || '',
+          e.quote.number != null ? String(e.quote.number) : '',
+          customerLabel,
+          e.quote.depositReceivedAt ? isoDate(e.quote.depositReceivedAt) : '',
+          // Money columns: plain numbers, two decimals, no thousands
+          // separators — Excel/Odoo parse these as numerics.
+          e.base.toFixed(2),
+          e.grandTotal.toFixed(2),
+          r.pct,
+          e.commission.toFixed(2),
+        ]);
+      }
+    }
+    downloadCsv(`comisiones-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
+  }
+
+  if (!allowed) {
     return (
       <>
-        <PageHeader title="Comisiones" subtitle=" " />
+        <PageHeader title="Comisiones por pagar" subtitle=" " />
         <EmptyState
           icon={Shield}
           title="Acceso restringido"
-          description="Solo administradores pueden ver el reporte de comisiones."
+          description="Sólo el equipo de Contabilidad puede ver esta página."
         />
       </>
     );
   }
 
+  const exportDisabled = !loaded || derived.rows.length === 0;
+
   return (
     <>
       <PageHeader
-        title="Comisiones"
-        subtitle={`Ciclo ${formatCycle(window)}`}
+        title="Comisiones por pagar"
+        subtitle={`Ciclo ${formatCycle(cycle)} — para tu equipo de contabilidad`}
+        actions={
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exportDisabled}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            title={exportDisabled ? 'Sin comisiones para exportar en este ciclo' : 'Descargar CSV para Odoo'}
+          >
+            <Download size={14} /> Exportar CSV
+          </button>
+        }
       />
 
       {/* Cycle picker */}
@@ -238,12 +259,11 @@ export default function AdminCommissions() {
         )}
       </div>
 
-      {/* Summary card */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <StatCard
           tone="emerald"
           icon={Wallet}
-          label="Comisiones del ciclo"
+          label="Comisiones por pagar"
           value={loaded ? formatMoney(derived.cycleCommission, 'USD', { USD: 1 }) : '—'}
           hint={loaded ? `Sobre ${formatMoney(derived.cycleBase, 'USD', { USD: 1 })} en base imponible (sin ITBIS)` : 'Cargando…'}
         />
@@ -252,7 +272,11 @@ export default function AdminCommissions() {
           icon={Wallet}
           label="Ventas depositadas"
           value={loaded ? String(derived.depositedCount) : '—'}
-          hint={loaded ? (derived.depositedCount === 1 ? 'cotización con depósito en el periodo' : 'cotizaciones con depósito en el periodo') : 'Cargando…'}
+          hint={loaded
+            ? (derived.depositedCount === 1
+                ? 'cotización con depósito en el periodo'
+                : 'cotizaciones con depósito en el periodo')
+            : 'Cargando…'}
         />
         <StatCard
           tone="ink"
@@ -267,7 +291,6 @@ export default function AdminCommissions() {
         />
       </div>
 
-      {/* Per-user breakdown */}
       <section className="card overflow-hidden">
         <header className="card-header">
           <h2>Detalle por empleado</h2>
@@ -293,14 +316,20 @@ export default function AdminCommissions() {
 }
 
 // ---------------------------------------------------------------------------
-// Per-user row — collapsed by default. Clicking expands to the list of
-// contributing quotes (deposit date, total, commission slice). React
-// state instead of <details>/<summary> so the chevron icon can rotate
-// in sync with the open state.
+// Per-user row — collapsed by default; clicking expands to the list of
+// contributing quotes. Mirrors admin/Commissions.UserRow visually but
+// links open in the same surface — Contabilidad doesn't have access to
+// /quotes/<id>, so the per-quote rows here are plain text (no link).
 // ---------------------------------------------------------------------------
 function UserRow({ row }) {
   const [open, setOpen] = useState(false);
   const { user, pct, base, commission, quotes } = row;
+  const { currentProfile } = useApp();
+  // Admins viewing this page (for debugging the integration) get the
+  // quote drill-down link to /quotes/<id>; Contabilidad does not (the
+  // route is sales-only — clicking it would route them through
+  // /quotes which they shouldn't see).
+  const canLinkToQuote = currentProfile?.role === 'admin';
 
   return (
     <li>
@@ -332,12 +361,9 @@ function UserRow({ row }) {
 
       {open && (
         <ul className="bg-ink-50/60 border-t border-ink-100 divide-y divide-ink-100">
-          {quotes.map(({ quote, customer, base: b, grandTotal, commission: c }) => (
-            <li key={quote.id} className="px-5 py-2.5 pl-14 flex items-center gap-3">
-              <Link
-                to={`/quotes/${quote.id}`}
-                className="flex-1 min-w-0 hover:text-brand-700 transition-colors"
-              >
+          {quotes.map(({ quote, customer, base: b, grandTotal, commission: c }) => {
+            const main = (
+              <>
                 <div className="text-sm font-medium truncate">
                   #{quote.number || '—'}
                   {customer && (
@@ -347,31 +373,40 @@ function UserRow({ row }) {
                 <div className="text-[11px] text-ink-500">
                   Depósito · {formatDateTime(quote.depositReceivedAt)}
                 </div>
-              </Link>
-              <div className="text-right">
-                <div className="text-sm tabular-nums whitespace-nowrap">
-                  {formatMoney(b, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+              </>
+            );
+            return (
+              <li key={quote.id} className="px-5 py-2.5 pl-14 flex items-center gap-3">
+                {canLinkToQuote ? (
+                  <Link
+                    to={`/quotes/${quote.id}`}
+                    className="flex-1 min-w-0 hover:text-brand-700 transition-colors"
+                  >
+                    {main}
+                  </Link>
+                ) : (
+                  <div className="flex-1 min-w-0">{main}</div>
+                )}
+                <div className="text-right">
+                  <div className="text-sm tabular-nums whitespace-nowrap">
+                    {formatMoney(b, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+                  </div>
+                  <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
+                    Total c/ ITBIS {formatMoney(grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+                  </div>
+                  <div className="text-[11px] text-emerald-700 tabular-nums whitespace-nowrap">
+                    +{formatMoney(c, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+                  </div>
                 </div>
-                <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
-                  Total c/ ITBIS {formatMoney(grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
-                </div>
-                <div className="text-[11px] text-emerald-700 tabular-nums whitespace-nowrap">
-                  +{formatMoney(c, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </li>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Cycle pill — three of these render in a row at the top of the page.
-// Active state inverts to ink-900 to match the rest of the app's button
-// chrome; sub-label is the date range for context.
-// ---------------------------------------------------------------------------
 function CyclePill({ label, sub, active, onClick }) {
   return (
     <button
@@ -404,7 +439,3 @@ function Avatar({ name }) {
     </span>
   );
 }
-
-// Cycle math lives in src/lib/commissionCycle.js — shared with the
-// accounting /accounting/commissions read-only mirror so the two
-// surfaces always agree on what window they're reporting.
