@@ -290,6 +290,54 @@ export interface ImageRecord {
   createdAt?: number;
 }
 
+/* --------------------------------- materials --------------------------------- */
+
+/**
+ * `materials.category`. Fabrics + outdoor are priced per linear yard;
+ * leather is priced per square meter and uses thickness (mm) instead
+ * of width (in).
+ */
+export type MaterialCategory = 'fabric' | 'leather' | 'outdoor';
+
+export interface MaterialColor {
+  name: string;
+  /** LR sku-fragment for the color, e.g. "4479" / "5312". */
+  code: string;
+}
+
+export interface Material {
+  id: string;
+  profileId: string;
+  category: MaterialCategory;
+  /** Display name, e.g. "ALCANTARA - A", "DIVA", "CHARTRES". */
+  name: string;
+  /**
+   * Single-letter grade — drives pricing tier on the parent product.
+   * Maps to GRADE_GROUPS in lib/subtype. May be null on user-added
+   * materials that haven't been graded yet.
+   */
+  grade?: string | null;
+  /** LR wear-resistance code, e.g. "3C", "2B", "A". */
+  wearRating?: string | null;
+  /** Martindale / double-rubs count, e.g. 50000. */
+  wearDoubleRubs?: number | null;
+  /**
+   * Numeric measure — width in inches for fabrics/outdoor, thickness
+   * in millimetres for leather. The companion `measureUnit` field
+   * disambiguates.
+   */
+  measure?: number | null;
+  measureUnit?: 'in' | 'mm' | null;
+  /** USD per `priceUnit`. */
+  price?: number | null;
+  priceUnit?: 'yard' | 'sm' | null;
+  composition?: string | null;
+  colors: MaterialColor[];
+  notes?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 /* ------------------------------ pricing math ------------------------------ */
 
 /**

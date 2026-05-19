@@ -1,0 +1,4364 @@
+[
+  {
+    "category": "fabric",
+    "name": "ACATE",
+    "grade": "A",
+    "measure": "55",
+    "price": 73,
+    "composition": "COTTON 80%, POLYESTER 20%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 50000,
+    "colors": [
+      {
+        "name": "ANIS",
+        "code": "855"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ALCANTARA - A",
+    "grade": "S",
+    "measure": "56",
+    "price": 363,
+    "composition": "POLYESTER 68%, NON FIBROUS POLYURETHANE 32%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "ALMOND",
+        "code": "4479"
+      },
+      {
+        "name": "AMBER GLOW",
+        "code": "4500"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "4522"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "4525"
+      },
+      {
+        "name": "AUBUSSON",
+        "code": "4532"
+      },
+      {
+        "name": "BABY GREY",
+        "code": "4575"
+      },
+      {
+        "name": "BOHEMIAN",
+        "code": "4517"
+      },
+      {
+        "name": "BORDEAUX",
+        "code": "4577"
+      },
+      {
+        "name": "BRITTANY",
+        "code": "4518"
+      },
+      {
+        "name": "BROWN",
+        "code": "4512"
+      },
+      {
+        "name": "CADMIUM",
+        "code": "4547"
+      },
+      {
+        "name": "CAMEL",
+        "code": "4501"
+      },
+      {
+        "name": "CELADON",
+        "code": "4478"
+      },
+      {
+        "name": "CHESNUT",
+        "code": "4576"
+      },
+      {
+        "name": "CHIC",
+        "code": "4499"
+      },
+      {
+        "name": "COMMODORE",
+        "code": "4529"
+      },
+      {
+        "name": "CORN",
+        "code": "110"
+      },
+      {
+        "name": "CURRY",
+        "code": "4561"
+      },
+      {
+        "name": "DARK CAMEL",
+        "code": "4562"
+      },
+      {
+        "name": "DOVE",
+        "code": "4475"
+      },
+      {
+        "name": "EGGSHELL",
+        "code": "4570"
+      },
+      {
+        "name": "GOLD",
+        "code": "4484"
+      },
+      {
+        "name": "GOYA RED",
+        "code": "115"
+      },
+      {
+        "name": "GRAYSH",
+        "code": "4504"
+      },
+      {
+        "name": "ICE",
+        "code": "4555"
+      },
+      {
+        "name": "INFANTA",
+        "code": "4513"
+      },
+      {
+        "name": "IVORY",
+        "code": "112"
+      },
+      {
+        "name": "KIWI",
+        "code": "4566"
+      },
+      {
+        "name": "LICHEN",
+        "code": "4509"
+      },
+      {
+        "name": "LIZARD",
+        "code": "106"
+      },
+      {
+        "name": "NAVY",
+        "code": "107"
+      },
+      {
+        "name": "NILE",
+        "code": "4511"
+      },
+      {
+        "name": "ORANGE",
+        "code": "4563"
+      },
+      {
+        "name": "PALM",
+        "code": "105"
+      },
+      {
+        "name": "PEARL",
+        "code": "4490"
+      },
+      {
+        "name": "POMPEIAN RED",
+        "code": "118"
+      },
+      {
+        "name": "PORCELAIN",
+        "code": "4495"
+      },
+      {
+        "name": "POWDER",
+        "code": "4514"
+      },
+      {
+        "name": "SADDLE",
+        "code": "4571"
+      },
+      {
+        "name": "SEA",
+        "code": "114"
+      },
+      {
+        "name": "SEA SAND",
+        "code": "111"
+      },
+      {
+        "name": "SLATE BLACK",
+        "code": "117"
+      },
+      {
+        "name": "STEEL",
+        "code": "4551"
+      },
+      {
+        "name": "STRING",
+        "code": "4565"
+      },
+      {
+        "name": "TAUPE",
+        "code": "4496"
+      },
+      {
+        "name": "TERRA",
+        "code": "4486"
+      },
+      {
+        "name": "TREKKING",
+        "code": "4527"
+      },
+      {
+        "name": "VELVET",
+        "code": "4503"
+      },
+      {
+        "name": "VIOLET",
+        "code": "4568"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ALCANTARA - B",
+    "grade": "S",
+    "measure": "56",
+    "price": 363,
+    "composition": "POLYESTER 68%, NON FIBROUS POLYURETHANE 32%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "AMARETTO",
+        "code": "128"
+      },
+      {
+        "name": "ANDY",
+        "code": "121"
+      },
+      {
+        "name": "AVIO",
+        "code": "102"
+      },
+      {
+        "name": "BLOOM",
+        "code": "119"
+      },
+      {
+        "name": "CAMEO BROWN",
+        "code": "126"
+      },
+      {
+        "name": "CHIANTI",
+        "code": "137"
+      },
+      {
+        "name": "CONCRETE",
+        "code": "100"
+      },
+      {
+        "name": "DENIM",
+        "code": "101"
+      },
+      {
+        "name": "DUNE",
+        "code": "122"
+      },
+      {
+        "name": "EMERALD",
+        "code": "132"
+      },
+      {
+        "name": "FLAX",
+        "code": "103"
+      },
+      {
+        "name": "FLEECE",
+        "code": "99"
+      },
+      {
+        "name": "KOALA",
+        "code": "127"
+      },
+      {
+        "name": "LUNARGLIDE",
+        "code": "125"
+      },
+      {
+        "name": "MALACHITE",
+        "code": "136"
+      },
+      {
+        "name": "METEORITE",
+        "code": "135"
+      },
+      {
+        "name": "MOCHA",
+        "code": "104"
+      },
+      {
+        "name": "MONKFISH",
+        "code": "138"
+      },
+      {
+        "name": "MUSCATTE",
+        "code": "134"
+      },
+      {
+        "name": "NEVE",
+        "code": "120"
+      },
+      {
+        "name": "NOTTE",
+        "code": "139"
+      },
+      {
+        "name": "PRALINE",
+        "code": "131"
+      },
+      {
+        "name": "SILICA",
+        "code": "123"
+      },
+      {
+        "name": "SILVER",
+        "code": "129"
+      },
+      {
+        "name": "STONE",
+        "code": "124"
+      },
+      {
+        "name": "ULTRA UMBER",
+        "code": "133"
+      },
+      {
+        "name": "WHALE",
+        "code": "130"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ALPA",
+    "grade": "I",
+    "measure": "55",
+    "price": 330,
+    "composition": "COTTON 44%, ALPAGA WOOL 39%, VIRGIN WOOL 17%",
+    "wearRating": "3B",
+    "wearDoubleRubs": 18000,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "573"
+      },
+      {
+        "name": "ARCTIQUE",
+        "code": "570"
+      },
+      {
+        "name": "ARGENT",
+        "code": "571"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "AMALFI",
+    "grade": "B",
+    "measure": "54¼",
+    "price": 101,
+    "composition": "POLYESTER 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "AMANDE",
+        "code": "3807"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "3804"
+      },
+      {
+        "name": "CANARD",
+        "code": "3808"
+      },
+      {
+        "name": "CORAIL",
+        "code": "3806"
+      },
+      {
+        "name": "GRENADE",
+        "code": "3809"
+      },
+      {
+        "name": "SAFRAN",
+        "code": "3805"
+      },
+      {
+        "name": "TAUPE",
+        "code": "3802"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "APPA/FR",
+    "grade": "I",
+    "measure": "61",
+    "price": 330,
+    "composition": "POLYESTER FILLING 60%, POLYAMID 11%, POLYESTER 7%, ELASTHANE 1%, WOOL 21%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 80000,
+    "colors": [
+      {
+        "name": "BOLERO",
+        "code": "3517"
+      },
+      {
+        "name": "BOMBER",
+        "code": "3514"
+      },
+      {
+        "name": "COSSACK",
+        "code": "3512"
+      },
+      {
+        "name": "LODEN",
+        "code": "3511"
+      },
+      {
+        "name": "PARKA",
+        "code": "3516"
+      },
+      {
+        "name": "PEPLUM",
+        "code": "3510"
+      },
+      {
+        "name": "PONCHO",
+        "code": "3515"
+      },
+      {
+        "name": "ROUGE",
+        "code": "3520"
+      },
+      {
+        "name": "SLICKER",
+        "code": "3518"
+      },
+      {
+        "name": "SPENCER",
+        "code": "3539"
+      },
+      {
+        "name": "TRENCH",
+        "code": "3538"
+      },
+      {
+        "name": "TUNIC",
+        "code": "3519"
+      },
+      {
+        "name": "ULSTER",
+        "code": "3513"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ARA",
+    "grade": "C",
+    "measure": "53¼",
+    "price": 129,
+    "composition": "ACRYLIC 35%, VISCOSE 23%, POLYESTER 20%, COTTON 12%, LINEN 10%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "1336"
+      },
+      {
+        "name": "ANIS",
+        "code": "1331"
+      },
+      {
+        "name": "GLACE",
+        "code": "1337"
+      },
+      {
+        "name": "GRIS",
+        "code": "1338"
+      },
+      {
+        "name": "NEIGE",
+        "code": "1332"
+      },
+      {
+        "name": "NOISETTE",
+        "code": "1334"
+      },
+      {
+        "name": "PETROLE",
+        "code": "1333"
+      },
+      {
+        "name": "PRUNE",
+        "code": "1330"
+      },
+      {
+        "name": "VERT",
+        "code": "1335"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ARDA/FR",
+    "grade": "I",
+    "measure": "56",
+    "price": 330,
+    "composition": "VIRGIN WOOL 70%, POLYESTER 21%, POLYAMID 9%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 50000,
+    "colors": [
+      {
+        "name": "ALMANDIN",
+        "code": "609"
+      },
+      {
+        "name": "AUTOMNAL",
+        "code": "610"
+      },
+      {
+        "name": "CONIFERE",
+        "code": "604"
+      },
+      {
+        "name": "ECORCE",
+        "code": "611"
+      },
+      {
+        "name": "GRANITE",
+        "code": "606"
+      },
+      {
+        "name": "HOWLITE",
+        "code": "601"
+      },
+      {
+        "name": "LICHEN",
+        "code": "602"
+      },
+      {
+        "name": "MOUSSE",
+        "code": "603"
+      },
+      {
+        "name": "NOIR SAPHIRE",
+        "code": "608"
+      },
+      {
+        "name": "OCEAN",
+        "code": "605"
+      },
+      {
+        "name": "ROCHE",
+        "code": "607"
+      },
+      {
+        "name": "SABLE",
+        "code": "600"
+      },
+      {
+        "name": "TERRACOTTA",
+        "code": "612"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ARTI",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "COTTON 55%, LINEN 45%",
+    "wearRating": "3B",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "CRAIE",
+        "code": "806"
+      },
+      {
+        "name": "ECRU",
+        "code": "800"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ASATOR",
+    "grade": "E",
+    "measure": "55",
+    "price": 196,
+    "composition": "COTTON 100%",
+    "wearRating": null,
+    "wearDoubleRubs": 800000,
+    "colors": [
+      {
+        "name": "AMANDE",
+        "code": "1575"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "1567"
+      },
+      {
+        "name": "AURORE",
+        "code": "1584"
+      },
+      {
+        "name": "BLEU ROI",
+        "code": "1562"
+      },
+      {
+        "name": "BOUTEILLE",
+        "code": "1577"
+      },
+      {
+        "name": "BRONZE",
+        "code": "1583"
+      },
+      {
+        "name": "CHARBON",
+        "code": "1581"
+      },
+      {
+        "name": "DUNE",
+        "code": "1564"
+      },
+      {
+        "name": "ECRU",
+        "code": "1578"
+      },
+      {
+        "name": "GRIS",
+        "code": "1580"
+      },
+      {
+        "name": "LIN",
+        "code": "1569"
+      },
+      {
+        "name": "MILITAIRE",
+        "code": "1576"
+      },
+      {
+        "name": "NOIR",
+        "code": "1574"
+      },
+      {
+        "name": "NOISETTE",
+        "code": "1563"
+      },
+      {
+        "name": "NUIT",
+        "code": "1561"
+      },
+      {
+        "name": "ORAGE",
+        "code": "1560"
+      },
+      {
+        "name": "PLATRE",
+        "code": "1579"
+      },
+      {
+        "name": "PRUNE",
+        "code": "1565"
+      },
+      {
+        "name": "RACINE",
+        "code": "1570"
+      },
+      {
+        "name": "TAUPE",
+        "code": "1568"
+      },
+      {
+        "name": "VERMILLON",
+        "code": "1571"
+      },
+      {
+        "name": "VERVEINE",
+        "code": "1582"
+      },
+      {
+        "name": "VIEUX ROSE",
+        "code": "1573"
+      },
+      {
+        "name": "VIN",
+        "code": "1572"
+      },
+      {
+        "name": "VIOLET",
+        "code": "1566"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "BOISSARD",
+    "grade": "A",
+    "measure": "55",
+    "price": 73,
+    "composition": "POLYESTER 100%",
+    "wearRating": null,
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "NOIR",
+        "code": "860"
+      },
+      {
+        "name": "TERRA COTTA",
+        "code": "861"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "BYRAM/FR",
+    "grade": "P",
+    "measure": "55",
+    "price": 564,
+    "composition": "MOHAIR 60%, COTTON 40%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 70000,
+    "colors": [
+      {
+        "name": "BORDEAUX",
+        "code": "1284"
+      },
+      {
+        "name": "CANARD",
+        "code": "1280"
+      },
+      {
+        "name": "CELADON",
+        "code": "1281"
+      },
+      {
+        "name": "GRIS",
+        "code": "1287"
+      },
+      {
+        "name": "HORIZON",
+        "code": "1286"
+      },
+      {
+        "name": "MIEL",
+        "code": "1283"
+      },
+      {
+        "name": "OLIVE",
+        "code": "1282"
+      },
+      {
+        "name": "POUDRE",
+        "code": "1285"
+      },
+      {
+        "name": "SOIE",
+        "code": "1289"
+      },
+      {
+        "name": "TAUPE",
+        "code": "1288"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CADENCE",
+    "grade": "F",
+    "measure": "56¾",
+    "price": 229,
+    "composition": "POLYESTER 58%, POLYACRYLIC 42%",
+    "wearRating": null,
+    "wearDoubleRubs": 16000,
+    "colors": [
+      {
+        "name": "NATURE",
+        "code": "156"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CANVAS LAINE 2/FR",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "WOOL 90%, POLYAMID (NYLON) 10%",
+    "wearRating": "2C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "4674"
+      },
+      {
+        "name": "ALBATRE",
+        "code": "4677"
+      },
+      {
+        "name": "AMBRE",
+        "code": "4684"
+      },
+      {
+        "name": "ARGENT",
+        "code": "4673"
+      },
+      {
+        "name": "AZUR",
+        "code": "4665"
+      },
+      {
+        "name": "BLE",
+        "code": "4657"
+      },
+      {
+        "name": "BRONZE",
+        "code": "4680"
+      },
+      {
+        "name": "CACAO",
+        "code": "4656"
+      },
+      {
+        "name": "CANNELLE",
+        "code": "4679"
+      },
+      {
+        "name": "CAROTTE",
+        "code": "4658"
+      },
+      {
+        "name": "CASSIS",
+        "code": "4691"
+      },
+      {
+        "name": "CORAIL",
+        "code": "4687"
+      },
+      {
+        "name": "CURRY",
+        "code": "4683"
+      },
+      {
+        "name": "DENIM",
+        "code": "4695"
+      },
+      {
+        "name": "EBENE",
+        "code": "4682"
+      },
+      {
+        "name": "ECRU",
+        "code": "4655"
+      },
+      {
+        "name": "ECUREUIL",
+        "code": "4685"
+      },
+      {
+        "name": "EMERAUDE",
+        "code": "4670"
+      },
+      {
+        "name": "FLAMENCO",
+        "code": "4661"
+      },
+      {
+        "name": "GRAPHITE",
+        "code": "4676"
+      },
+      {
+        "name": "HERBE",
+        "code": "4668"
+      },
+      {
+        "name": "INDIGO",
+        "code": "4690"
+      },
+      {
+        "name": "KIWI",
+        "code": "4696"
+      },
+      {
+        "name": "KOALA",
+        "code": "4669"
+      },
+      {
+        "name": "LITCHI",
+        "code": "4688"
+      },
+      {
+        "name": "MARINE",
+        "code": "4694"
+      },
+      {
+        "name": "MATELOT",
+        "code": "4664"
+      },
+      {
+        "name": "MENTHE",
+        "code": "4667"
+      },
+      {
+        "name": "MOUSSE",
+        "code": "4697"
+      },
+      {
+        "name": "NUIT",
+        "code": "4666"
+      },
+      {
+        "name": "ORAGE",
+        "code": "4692"
+      },
+      {
+        "name": "OUTREMER",
+        "code": "4662"
+      },
+      {
+        "name": "PAIN BRULE",
+        "code": "4693"
+      },
+      {
+        "name": "PECHE",
+        "code": "4660"
+      },
+      {
+        "name": "PERLE",
+        "code": "4672"
+      },
+      {
+        "name": "PIGEON",
+        "code": "4663"
+      },
+      {
+        "name": "PLOMB",
+        "code": "4675"
+      },
+      {
+        "name": "PRUNE",
+        "code": "4681"
+      },
+      {
+        "name": "ROSE",
+        "code": "4686"
+      },
+      {
+        "name": "ROUILLE",
+        "code": "4659"
+      },
+      {
+        "name": "SANTAL",
+        "code": "4689"
+      },
+      {
+        "name": "SAPIN",
+        "code": "4671"
+      },
+      {
+        "name": "SEIGLE",
+        "code": "4678"
+      },
+      {
+        "name": "GA",
+        "code": "4698"
+      },
+      {
+        "name": "VERT PAON",
+        "code": "4699"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CAPA/FR",
+    "grade": "F",
+    "measure": "54¼",
+    "price": 229,
+    "composition": null,
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "AMANDE",
+        "code": "3798"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "3791"
+      },
+      {
+        "name": "BLEU",
+        "code": "3795"
+      },
+      {
+        "name": "BOUTON D'OR",
+        "code": "3787"
+      },
+      {
+        "name": "BRIQUE",
+        "code": "3788"
+      },
+      {
+        "name": "ECRU",
+        "code": "3790"
+      },
+      {
+        "name": "GREGE",
+        "code": "3796"
+      },
+      {
+        "name": "GRIS",
+        "code": "3797"
+      },
+      {
+        "name": "OUTREMER",
+        "code": "3789"
+      },
+      {
+        "name": "ROSE",
+        "code": "3793"
+      },
+      {
+        "name": "TERRE BRULEE",
+        "code": "3792"
+      },
+      {
+        "name": "VERT",
+        "code": "3794"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CHARTRES",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "ACRYLIC 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "FLANELLE",
+        "code": "2691"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CLOUD",
+    "grade": "D",
+    "measure": "56¾",
+    "price": 162,
+    "composition": "ACRYLIC 56%, POLYESTER 44%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 50000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "2168"
+      },
+      {
+        "name": "BRONZE",
+        "code": "2174"
+      },
+      {
+        "name": "CERISE",
+        "code": "2169"
+      },
+      {
+        "name": "FORET",
+        "code": "2163"
+      },
+      {
+        "name": "GREGE",
+        "code": "2165"
+      },
+      {
+        "name": "KAKI",
+        "code": "2164"
+      },
+      {
+        "name": "LAZULI",
+        "code": "2171"
+      },
+      {
+        "name": "MARINE",
+        "code": "2166"
+      },
+      {
+        "name": "PERLE",
+        "code": "2172"
+      },
+      {
+        "name": "POUDRE",
+        "code": "2173"
+      },
+      {
+        "name": "PRUNE",
+        "code": "2170"
+      },
+      {
+        "name": "SAUGE",
+        "code": "2175"
+      },
+      {
+        "name": "SCHISTE",
+        "code": "2167"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CODA/FR",
+    "grade": "I",
+    "measure": "55",
+    "price": 330,
+    "composition": "WOOL 90%, POLYAMID (NYLON) 10%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "AMANDE",
+        "code": "7558"
+      },
+      {
+        "name": "ARGILE",
+        "code": "7557"
+      },
+      {
+        "name": "BOULEAU",
+        "code": "7559"
+      },
+      {
+        "name": "BRIQUE/NOIR",
+        "code": "4714"
+      },
+      {
+        "name": "CIEL",
+        "code": "7567"
+      },
+      {
+        "name": "CORIANDRE",
+        "code": "7560"
+      },
+      {
+        "name": "CREME/KIWI",
+        "code": "4702"
+      },
+      {
+        "name": "CREME/NOIR",
+        "code": "4701"
+      },
+      {
+        "name": "CREME/ROUGE",
+        "code": "4704"
+      },
+      {
+        "name": "ETANG",
+        "code": "7569"
+      },
+      {
+        "name": "FRAMBOISE",
+        "code": "7566"
+      },
+      {
+        "name": "JAUNE/NOIR",
+        "code": "4713"
+      },
+      {
+        "name": "PETROLE",
+        "code": "7568"
+      },
+      {
+        "name": "RAPHIA",
+        "code": "7563"
+      },
+      {
+        "name": "SAFRAN",
+        "code": "7564"
+      },
+      {
+        "name": "SAUMON",
+        "code": "7565"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "COWO/FR",
+    "grade": "G",
+    "measure": "55",
+    "price": 263,
+    "composition": "WOOL 72%, COTTON 21%, ACRYLIC 3%, POLYAMID 2%, VISCOSE 1%, POLYESTER 1%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "GRIS",
+        "code": "663"
+      },
+      {
+        "name": "MOKA",
+        "code": "662"
+      },
+      {
+        "name": "NATUREL",
+        "code": "664"
+      },
+      {
+        "name": "NOIR",
+        "code": "660"
+      },
+      {
+        "name": "OURS",
+        "code": "661"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "CRAQUELIN",
+    "grade": "D",
+    "measure": "54¾",
+    "price": 162,
+    "composition": "POLYESTER 45%, COTTON 37%, VISCOSE 10%, ACRYLIC 8%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "ARDOISE",
+        "code": "1009"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "1002"
+      },
+      {
+        "name": "BRUME",
+        "code": "1008"
+      },
+      {
+        "name": "NACRE",
+        "code": "1011"
+      },
+      {
+        "name": "OLIVE",
+        "code": "1001"
+      },
+      {
+        "name": "POUDRE",
+        "code": "1004"
+      },
+      {
+        "name": "ROSE",
+        "code": "1003"
+      },
+      {
+        "name": "SABLE",
+        "code": "1007"
+      },
+      {
+        "name": "SOIE",
+        "code": "1010"
+      },
+      {
+        "name": "TERRACOTTA",
+        "code": "1005"
+      },
+      {
+        "name": "VIEIL OR",
+        "code": "1006"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "DAVOS",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "VISCOSE 62%, COTTON 18%, POLYESTER 12%, LINEN 8%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "BOULEAU",
+        "code": "813"
+      },
+      {
+        "name": "EBENE",
+        "code": "812"
+      },
+      {
+        "name": "ECORCE",
+        "code": "811"
+      },
+      {
+        "name": "GREGE",
+        "code": "810"
+      },
+      {
+        "name": "NUIT",
+        "code": "814"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "DIOS",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "COTTON 40%, POLYESTER 25%, ACRYLIC 15%, VISCOSE 10%, WOOL 10%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "785"
+      },
+      {
+        "name": "CRAIE",
+        "code": "780"
+      },
+      {
+        "name": "ECORCE",
+        "code": "783"
+      },
+      {
+        "name": "ECRU",
+        "code": "781"
+      },
+      {
+        "name": "LIN",
+        "code": "782"
+      },
+      {
+        "name": "PIGEON",
+        "code": "784"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ELITE",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "POLYESTER 39%, COTTON 24%, ACRYLIC 21%, VISCOSE 11%, LINEN 5%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ARDOISE",
+        "code": "0954"
+      },
+      {
+        "name": "AZUR",
+        "code": "0955"
+      },
+      {
+        "name": "BRIQUE",
+        "code": "0953"
+      },
+      {
+        "name": "NEIGE",
+        "code": "0951"
+      },
+      {
+        "name": "ORANGE",
+        "code": "0950"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ERPI",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "POLYESTER 32%, ACRYLIC 19%, WOOL 19%, VISCOSE 12%, COTTON 12%, LINEN 6%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ARGILE",
+        "code": "0973"
+      },
+      {
+        "name": "BLEU",
+        "code": "0970"
+      },
+      {
+        "name": "CARMIN",
+        "code": "0971"
+      },
+      {
+        "name": "GRIS",
+        "code": "0972"
+      },
+      {
+        "name": "MIEL",
+        "code": "0974"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "FERNET",
+    "grade": "A",
+    "measure": "55",
+    "price": 73,
+    "composition": "POLYESTER 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "MASTIC",
+        "code": "2752"
+      },
+      {
+        "name": "TERRA COTTA",
+        "code": "2751"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "FESTA/FR",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "POLYESTER 75%, COTTON 10%, VISCOSE 10%, LINEN 5%",
+    "wearRating": null,
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ALEZAN",
+        "code": "163"
+      },
+      {
+        "name": "BLANC",
+        "code": "167"
+      },
+      {
+        "name": "BLEU PAON",
+        "code": "164"
+      },
+      {
+        "name": "BRUME",
+        "code": "166"
+      },
+      {
+        "name": "CACHOU",
+        "code": "162"
+      },
+      {
+        "name": "CAURI",
+        "code": "168"
+      },
+      {
+        "name": "MIMOSA",
+        "code": "161"
+      },
+      {
+        "name": "VERONESE",
+        "code": "165"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "FLORALY",
+    "grade": "R",
+    "measure": "54¼",
+    "price": 693,
+    "composition": "COTTON 82%, POLYESTER 18%",
+    "wearRating": "2C",
+    "wearDoubleRubs": 50000,
+    "colors": [
+      {
+        "name": "CELADON",
+        "code": "377"
+      },
+      {
+        "name": "ETANG",
+        "code": "378"
+      },
+      {
+        "name": "MIEL",
+        "code": "376"
+      },
+      {
+        "name": "PORCELAINE",
+        "code": "379"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "GENTLE/FR",
+    "grade": "N",
+    "measure": "65",
+    "price": 497,
+    "composition": "WOOL 60%, POLYAMID 20%, POLYESTER 20%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 90000,
+    "colors": [
+      {
+        "name": "ABRICOT",
+        "code": "3209"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "3213"
+      },
+      {
+        "name": "BORDEAUX",
+        "code": "3211"
+      },
+      {
+        "name": "BREEZE",
+        "code": "3214"
+      },
+      {
+        "name": "CERISE",
+        "code": "3228"
+      },
+      {
+        "name": "CIEL",
+        "code": "3219"
+      },
+      {
+        "name": "COSMOS",
+        "code": "3217"
+      },
+      {
+        "name": "FIESTA",
+        "code": "3229"
+      },
+      {
+        "name": "FUNGHI",
+        "code": "3225"
+      },
+      {
+        "name": "HERBAL",
+        "code": "3223"
+      },
+      {
+        "name": "IRON",
+        "code": "3215"
+      },
+      {
+        "name": "MARSALA",
+        "code": "3227"
+      },
+      {
+        "name": "MISTY",
+        "code": "3224"
+      },
+      {
+        "name": "ONYX",
+        "code": "3212"
+      },
+      {
+        "name": "PETROLE",
+        "code": "3220"
+      },
+      {
+        "name": "PIN",
+        "code": "3222"
+      },
+      {
+        "name": "PRUNE",
+        "code": "3216"
+      },
+      {
+        "name": "ROI",
+        "code": "3218"
+      },
+      {
+        "name": "ROUILLE",
+        "code": "3210"
+      },
+      {
+        "name": "SARCELLE",
+        "code": "3221"
+      },
+      {
+        "name": "TENDER",
+        "code": "3226"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "HARALD 3",
+    "grade": "E",
+    "measure": "55",
+    "price": 196,
+    "composition": "COTTON 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ABRICOT",
+        "code": "4187"
+      },
+      {
+        "name": "ALBATRE",
+        "code": "4320"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "4306"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "4323"
+      },
+      {
+        "name": "BOUTEILLE",
+        "code": "4315"
+      },
+      {
+        "name": "CANARD",
+        "code": "4317"
+      },
+      {
+        "name": "CARDINAL",
+        "code": "4322"
+      },
+      {
+        "name": "CASSIS",
+        "code": "4327"
+      },
+      {
+        "name": "CELESTE",
+        "code": "4328"
+      },
+      {
+        "name": "CHAMOIS",
+        "code": "4321"
+      },
+      {
+        "name": "CHOCOLAT",
+        "code": "4308"
+      },
+      {
+        "name": "ELEPHANT",
+        "code": "4181"
+      },
+      {
+        "name": "GRIZZLY",
+        "code": "4183"
+      },
+      {
+        "name": "JADE",
+        "code": "4189"
+      },
+      {
+        "name": "MASTIC",
+        "code": "4182"
+      },
+      {
+        "name": "MELEZE",
+        "code": "4314"
+      },
+      {
+        "name": "NOISETTE",
+        "code": "4184"
+      },
+      {
+        "name": "NUIT",
+        "code": "4312"
+      },
+      {
+        "name": "OCRE",
+        "code": "4186"
+      },
+      {
+        "name": "PARME",
+        "code": "4326"
+      },
+      {
+        "name": "PIGEON",
+        "code": "4325"
+      },
+      {
+        "name": "POURPRE",
+        "code": "4324"
+      },
+      {
+        "name": "SANGRIA",
+        "code": "4188"
+      },
+      {
+        "name": "SAPHIR",
+        "code": "4329"
+      },
+      {
+        "name": "SNOW",
+        "code": "4179"
+      },
+      {
+        "name": "SOUFRE",
+        "code": "4309"
+      },
+      {
+        "name": "SOURIS",
+        "code": "4180"
+      },
+      {
+        "name": "VANILLE",
+        "code": "4185"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "JEAN",
+    "grade": "A",
+    "measure": "59",
+    "price": 73,
+    "composition": null,
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "BRUT",
+        "code": "580"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "JOY/FR",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "ACRYLIC 48%, WOOL 24%, POLYESTER 12%, POLYAMID 10%",
+    "wearRating": null,
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ARGILE",
+        "code": "6640"
+      },
+      {
+        "name": "BOUTEILLE",
+        "code": "6653"
+      },
+      {
+        "name": "MOUTARDE",
+        "code": "6641"
+      },
+      {
+        "name": "PRUNE",
+        "code": "6644"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "KERALA",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "COTTON 50%, VISCOSE 35%, LINEN 15%",
+    "wearRating": "2C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "2807"
+      },
+      {
+        "name": "ARGENT",
+        "code": "2801"
+      },
+      {
+        "name": "CRAIE",
+        "code": "2800"
+      },
+      {
+        "name": "FICELLE",
+        "code": "2806"
+      },
+      {
+        "name": "GRAPHITE",
+        "code": "2811"
+      },
+      {
+        "name": "GREGE",
+        "code": "2813"
+      },
+      {
+        "name": "NUIT",
+        "code": "2818"
+      },
+      {
+        "name": "PIGEON",
+        "code": "2808"
+      },
+      {
+        "name": "ROSE",
+        "code": "2816"
+      },
+      {
+        "name": "SAPIN",
+        "code": "2817"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LACO/FR",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "COTTON 72%, WOOL 16%, POLYESTER 12%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "AIGUEMARINE",
+        "code": "694"
+      },
+      {
+        "name": "ANIS",
+        "code": "691"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "683"
+      },
+      {
+        "name": "ARGENT",
+        "code": "682"
+      },
+      {
+        "name": "CELADON",
+        "code": "684"
+      },
+      {
+        "name": "ECRU",
+        "code": "680"
+      },
+      {
+        "name": "EMERAUDE",
+        "code": "685"
+      },
+      {
+        "name": "FRAMBOISE",
+        "code": "692"
+      },
+      {
+        "name": "LIE DE VIN",
+        "code": "689"
+      },
+      {
+        "name": "MARINE",
+        "code": "687"
+      },
+      {
+        "name": "MIEL",
+        "code": "688"
+      },
+      {
+        "name": "MOKA",
+        "code": "690"
+      },
+      {
+        "name": "MOLESKIN",
+        "code": "681"
+      },
+      {
+        "name": "NEIGE",
+        "code": "679"
+      },
+      {
+        "name": "SAPIN",
+        "code": "686"
+      },
+      {
+        "name": "VIEUX ROSE",
+        "code": "693"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LEO",
+    "grade": "G",
+    "measure": "54¼",
+    "price": 263,
+    "composition": "COTTON 52%, VISCOSE 28%, POLYAMID 15%, LINEN 5%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "NATUREL",
+        "code": "145"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LHUIS",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "POLYESTER 78%, COTTON 22%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "0934"
+      },
+      {
+        "name": "BOURGOGNE",
+        "code": "0938"
+      },
+      {
+        "name": "ECRU",
+        "code": "0930"
+      },
+      {
+        "name": "GREGE",
+        "code": "0931"
+      },
+      {
+        "name": "GRIS",
+        "code": "0933"
+      },
+      {
+        "name": "MARINE",
+        "code": "0939"
+      },
+      {
+        "name": "MOUSSE",
+        "code": "0935"
+      },
+      {
+        "name": "MOUTARDE",
+        "code": "0936"
+      },
+      {
+        "name": "TABAC",
+        "code": "0932"
+      },
+      {
+        "name": "TERRA COTTA",
+        "code": "0937"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LINA",
+    "grade": "D",
+    "measure": "54¼",
+    "price": 162,
+    "composition": "COTTON 55%, LINEN 45%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "596"
+      },
+      {
+        "name": "ETAIN",
+        "code": "591"
+      },
+      {
+        "name": "FLOCON",
+        "code": "590"
+      },
+      {
+        "name": "GREGE",
+        "code": "594"
+      },
+      {
+        "name": "MARRON",
+        "code": "593"
+      },
+      {
+        "name": "MINERAL",
+        "code": "595"
+      },
+      {
+        "name": "PLOMB",
+        "code": "597"
+      },
+      {
+        "name": "SABLE",
+        "code": "592"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LITZ",
+    "grade": "B",
+    "measure": "55",
+    "price": 101,
+    "composition": "COTTON 75%, VISCOSE 20%, POLYESTER 5%",
+    "wearRating": "3B",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "CRAIE",
+        "code": "794"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "LUC",
+    "grade": "E",
+    "measure": "54¼",
+    "price": 196,
+    "composition": "VISCOSE 46%, POLYAMID 29%, COTTON 25%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "CREME",
+        "code": "148"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "MATCH/FR",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "COTTON 50%, VISCOSE 33%, LINEN 17%",
+    "wearRating": "3B",
+    "wearDoubleRubs": 35000,
+    "colors": [
+      {
+        "name": "ARDOISE",
+        "code": "3567"
+      },
+      {
+        "name": "ARGENT",
+        "code": "3572"
+      },
+      {
+        "name": "BRIQUE",
+        "code": "3569"
+      },
+      {
+        "name": "EBENE",
+        "code": "3570"
+      },
+      {
+        "name": "ECAILLE",
+        "code": "3571"
+      },
+      {
+        "name": "GREEN",
+        "code": "3568"
+      },
+      {
+        "name": "NUIT",
+        "code": "3573"
+      },
+      {
+        "name": "PERLE",
+        "code": "3574"
+      },
+      {
+        "name": "TEMPETE",
+        "code": "3566"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "MAXI/FR",
+    "grade": "A",
+    "measure": "63",
+    "price": 73,
+    "composition": "POLYESTER 54%, WOOL 32%, POLYAMID 13%, ELASTHANE 1%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 95000,
+    "colors": [
+      {
+        "name": "EARTH",
+        "code": "3371"
+      },
+      {
+        "name": "PRUNE",
+        "code": "3364"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "MILLA/FR",
+    "grade": "G",
+    "measure": "65¼",
+    "price": 263,
+    "composition": null,
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "AUBERGINE",
+        "code": "179"
+      },
+      {
+        "name": "BISON",
+        "code": "178"
+      },
+      {
+        "name": "FLOCON",
+        "code": "177"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "MILLERAIES",
+    "grade": "A",
+    "measure": "54¼",
+    "price": 73,
+    "composition": "POLYESTER 80%, COTTON 20%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "AUBERGINE",
+        "code": "0922"
+      },
+      {
+        "name": "CHATAIGNE",
+        "code": "0927"
+      },
+      {
+        "name": "PLOMB",
+        "code": "0925"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "MOBY/FR",
+    "grade": "H",
+    "measure": "64½",
+    "price": 296,
+    "composition": "POLYESTER 66%, WOOL 23%, POLYAMID 6%, ELASTHANE 5%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 80000,
+    "colors": [
+      {
+        "name": "CHARCOAL",
+        "code": "3382"
+      },
+      {
+        "name": "CHOCOLAT",
+        "code": "3389"
+      },
+      {
+        "name": "FLAME",
+        "code": "3386"
+      },
+      {
+        "name": "GRASS",
+        "code": "3387"
+      },
+      {
+        "name": "HYDRO",
+        "code": "3390"
+      },
+      {
+        "name": "RE",
+        "code": "3384"
+      },
+      {
+        "name": "PRUNE",
+        "code": "3381"
+      },
+      {
+        "name": "ROCK",
+        "code": "3383"
+      },
+      {
+        "name": "ROUGE",
+        "code": "3385"
+      },
+      {
+        "name": "SABLE",
+        "code": "3388"
+      },
+      {
+        "name": "SAFIR",
+        "code": "3380"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "PARADE/FR",
+    "grade": "E",
+    "measure": "55",
+    "price": 196,
+    "composition": "WOOL 30%, POLYESTER 30%, POLYACRYLIC 25%, COTTON 13%, POLYAMID 2%",
+    "wearRating": "2C",
+    "wearDoubleRubs": 20000,
+    "colors": [
+      {
+        "name": "AMANDE",
+        "code": "3921"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "3927"
+      },
+      {
+        "name": "BOUTEILLE",
+        "code": "3924"
+      },
+      {
+        "name": "CAFE",
+        "code": "3929"
+      },
+      {
+        "name": "ECRU",
+        "code": "3922"
+      },
+      {
+        "name": "GREEN BLUE",
+        "code": "3928"
+      },
+      {
+        "name": "INDIGO",
+        "code": "3926"
+      },
+      {
+        "name": "ROSE",
+        "code": "3920"
+      },
+      {
+        "name": "TERRE BRULEE",
+        "code": "3923"
+      },
+      {
+        "name": "VIOLINE",
+        "code": "3925"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "PAUL",
+    "grade": "E",
+    "measure": "54¼",
+    "price": 196,
+    "composition": "COTTON 31%, VISCOSE 30%, POLYAMID 25%, LINEN 14%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 20000,
+    "colors": [
+      {
+        "name": "ALBATRE",
+        "code": "146"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "PHLOX",
+    "grade": "H",
+    "measure": "54¼",
+    "price": 296,
+    "composition": "COTTON 90%, POLYESTER 10%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "1268"
+      },
+      {
+        "name": "AMBRE",
+        "code": "1258"
+      },
+      {
+        "name": "ARDOISE",
+        "code": "1266"
+      },
+      {
+        "name": "ARGILE",
+        "code": "1265"
+      },
+      {
+        "name": "BOUTEILLE",
+        "code": "1264"
+      },
+      {
+        "name": "CERISE",
+        "code": "1260"
+      },
+      {
+        "name": "CHARBON",
+        "code": "1269"
+      },
+      {
+        "name": "ECRU",
+        "code": "1259"
+      },
+      {
+        "name": "RE",
+        "code": "1263"
+      },
+      {
+        "name": "NOIR",
+        "code": "1267"
+      },
+      {
+        "name": "NUIT",
+        "code": "1262"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ROMA",
+    "grade": "F",
+    "measure": "55",
+    "price": 229,
+    "composition": "ACRYLIC 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "CARMIN",
+        "code": "670"
+      },
+      {
+        "name": "CHAUX",
+        "code": "671"
+      },
+      {
+        "name": "CITRUS",
+        "code": "673"
+      },
+      {
+        "name": "PAON",
+        "code": "672"
+      },
+      {
+        "name": "SAUGE",
+        "code": "674"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ROY",
+    "grade": "I",
+    "measure": "54¼",
+    "price": 330,
+    "composition": "COTTON 64%, ALPAGA WOOL 29%, POLYAMID 7%",
+    "wearRating": null,
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "ALPES",
+        "code": "1079"
+      },
+      {
+        "name": "ARDENNES",
+        "code": "1104"
+      },
+      {
+        "name": "BEAUCE",
+        "code": "1082"
+      },
+      {
+        "name": "BRETAGNE",
+        "code": "1105"
+      },
+      {
+        "name": "ETRETAT",
+        "code": "1103"
+      },
+      {
+        "name": "GLACIER",
+        "code": "1078"
+      },
+      {
+        "name": "LANDES",
+        "code": "1083"
+      },
+      {
+        "name": "PYRENEES",
+        "code": "1080"
+      },
+      {
+        "name": "ROUSSILLON",
+        "code": "1084"
+      },
+      {
+        "name": "VERCORS",
+        "code": "1081"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "SCAN",
+    "grade": "D",
+    "measure": "57½",
+    "price": 162,
+    "composition": "COTTON 57%, POLYACRYLIC 23%, POLYESTER 20%",
+    "wearRating": null,
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "ANIS",
+        "code": "1125"
+      },
+      {
+        "name": "ARDOISE",
+        "code": "1120"
+      },
+      {
+        "name": "BEIGE",
+        "code": "1116"
+      },
+      {
+        "name": "BLEU PERSAN",
+        "code": "1117"
+      },
+      {
+        "name": "BRONZE",
+        "code": "1123"
+      },
+      {
+        "name": "CAFE AU LAIT",
+        "code": "1122"
+      },
+      {
+        "name": "LIME",
+        "code": "1126"
+      },
+      {
+        "name": "MYOSOTIS",
+        "code": "1118"
+      },
+      {
+        "name": "NOIR",
+        "code": "1127"
+      },
+      {
+        "name": "POUDRE",
+        "code": "1115"
+      },
+      {
+        "name": "SAUGE",
+        "code": "1119"
+      },
+      {
+        "name": "TOURNESOL",
+        "code": "1124"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "SEA/FR",
+    "grade": "I",
+    "measure": "64¼",
+    "price": 330,
+    "composition": "POLYESTER 74%, WOOL 20%, POLYAMID 6%",
+    "wearRating": null,
+    "wearDoubleRubs": 90000,
+    "colors": [
+      {
+        "name": "ATOLL",
+        "code": "535"
+      },
+      {
+        "name": "AZUR",
+        "code": "536"
+      },
+      {
+        "name": "CORAIL",
+        "code": "533"
+      },
+      {
+        "name": "HUITRE",
+        "code": "538"
+      },
+      {
+        "name": "NACRE",
+        "code": "534"
+      },
+      {
+        "name": "OURSIN",
+        "code": "537"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "SILVERTEX/FR",
+    "grade": "B",
+    "measure": "54",
+    "price": 101,
+    "composition": "PVC 81%, POLYESTER 19%",
+    "wearRating": "A",
+    "wearDoubleRubs": 300000,
+    "colors": [
+      {
+        "name": "ALUMINIUM",
+        "code": "472"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "467"
+      },
+      {
+        "name": "AVOCADO",
+        "code": "476"
+      },
+      {
+        "name": "BALTIC",
+        "code": "468"
+      },
+      {
+        "name": "BASIL",
+        "code": "461"
+      },
+      {
+        "name": "BEIGE",
+        "code": "451"
+      },
+      {
+        "name": "BLACK",
+        "code": "489"
+      },
+      {
+        "name": "BOTTLE",
+        "code": "475"
+      },
+      {
+        "name": "CAMEL",
+        "code": "456"
+      },
+      {
+        "name": "CARBON",
+        "code": "488"
+      },
+      {
+        "name": "CELERY",
+        "code": "471"
+      },
+      {
+        "name": "CHAMPAGNE",
+        "code": "455"
+      },
+      {
+        "name": "CITRUS",
+        "code": "481"
+      },
+      {
+        "name": "COBRE",
+        "code": "433"
+      },
+      {
+        "name": "CORAL",
+        "code": "464"
+      },
+      {
+        "name": "CREAM",
+        "code": "445"
+      },
+      {
+        "name": "DELFT",
+        "code": "473"
+      },
+      {
+        "name": "FOREST",
+        "code": "485"
+      },
+      {
+        "name": "GRAPHITE",
+        "code": "487"
+      },
+      {
+        "name": "GRENADINE",
+        "code": "439"
+      },
+      {
+        "name": "ICE",
+        "code": "435"
+      },
+      {
+        "name": "ICE CREAM",
+        "code": "440"
+      },
+      {
+        "name": "JET",
+        "code": "479"
+      },
+      {
+        "name": "LOTUS",
+        "code": "458"
+      },
+      {
+        "name": "LUGGAGE",
+        "code": "442"
+      },
+      {
+        "name": "MACADAMIA",
+        "code": "431"
+      },
+      {
+        "name": "MAGENTA",
+        "code": "449"
+      },
+      {
+        "name": "MANDARIN",
+        "code": "443"
+      },
+      {
+        "name": "MELON",
+        "code": "470"
+      },
+      {
+        "name": "METEOR",
+        "code": "432"
+      },
+      {
+        "name": "MOCCA",
+        "code": "437"
+      },
+      {
+        "name": "ORANGE",
+        "code": "438"
+      },
+      {
+        "name": "ORCHID",
+        "code": "454"
+      },
+      {
+        "name": "PETROL",
+        "code": "478"
+      },
+      {
+        "name": "PISTACHO",
+        "code": "466"
+      },
+      {
+        "name": "PLATA",
+        "code": "477"
+      },
+      {
+        "name": "RASPBERRY",
+        "code": "452"
+      },
+      {
+        "name": "RED",
+        "code": "444"
+      },
+      {
+        "name": "ROSE",
+        "code": "459"
+      },
+      {
+        "name": "RUBIN",
+        "code": "457"
+      },
+      {
+        "name": "SAFRAN",
+        "code": "465"
+      },
+      {
+        "name": "SAGE",
+        "code": "480"
+      },
+      {
+        "name": "SANDSTONE",
+        "code": "436"
+      },
+      {
+        "name": "SAPPHIRE",
+        "code": "474"
+      },
+      {
+        "name": "SHIITAKE",
+        "code": "446"
+      },
+      {
+        "name": "SISAL",
+        "code": "450"
+      },
+      {
+        "name": "SKYLIGHT",
+        "code": "469"
+      },
+      {
+        "name": "SQUASH",
+        "code": "460"
+      },
+      {
+        "name": "STERLING",
+        "code": "482"
+      },
+      {
+        "name": "STORM",
+        "code": "484"
+      },
+      {
+        "name": "SUNKIST",
+        "code": "448"
+      },
+      {
+        "name": "TAUPE",
+        "code": "441"
+      },
+      {
+        "name": "TEAL",
+        "code": "486"
+      },
+      {
+        "name": "TITANIUM",
+        "code": "483"
+      },
+      {
+        "name": "TOMATO",
+        "code": "434"
+      },
+      {
+        "name": "TURQUOISE",
+        "code": "463"
+      },
+      {
+        "name": "UMBER",
+        "code": "447"
+      },
+      {
+        "name": "WHITE",
+        "code": "430"
+      },
+      {
+        "name": "WINE",
+        "code": "453"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "SPORT",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "RECYCLED POLYESTER 100%",
+    "wearRating": null,
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "AVIRON",
+        "code": "2010"
+      },
+      {
+        "name": "BADMINTON",
+        "code": "2006"
+      },
+      {
+        "name": "BASEBALL",
+        "code": "2004"
+      },
+      {
+        "name": "CRICKET",
+        "code": "2002"
+      },
+      {
+        "name": "CURLING",
+        "code": "2019"
+      },
+      {
+        "name": "CYCLISME",
+        "code": "2016"
+      },
+      {
+        "name": "ESCALADE",
+        "code": "2007"
+      },
+      {
+        "name": "ESCRIME",
+        "code": "2018"
+      },
+      {
+        "name": "GOLF",
+        "code": "2014"
+      },
+      {
+        "name": "GYMNASTIQUE",
+        "code": "2003"
+      },
+      {
+        "name": "HOCKEY",
+        "code": "2021"
+      },
+      {
+        "name": "JUDO",
+        "code": "2017"
+      },
+      {
+        "name": "NATATION",
+        "code": "2011"
+      },
+      {
+        "name": "PATINAGE",
+        "code": "2020"
+      },
+      {
+        "name": "POLO",
+        "code": "2001"
+      },
+      {
+        "name": "SKI",
+        "code": "2005"
+      },
+      {
+        "name": "SURF",
+        "code": "2012"
+      },
+      {
+        "name": "TRIATHLON",
+        "code": "2013"
+      },
+      {
+        "name": "VOILE",
+        "code": "2009"
+      },
+      {
+        "name": "VOLLEY",
+        "code": "2008"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "STEELCUT TRIO 3/FR",
+    "grade": "F",
+    "measure": "55",
+    "price": 229,
+    "composition": "WOOL 90%, POLYAMID 10%",
+    "wearRating": "3B",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "6252"
+      },
+      {
+        "name": "AQUA",
+        "code": "6248"
+      },
+      {
+        "name": "ARDOISE",
+        "code": "6256"
+      },
+      {
+        "name": "AZUR",
+        "code": "6241"
+      },
+      {
+        "name": "BEIGE",
+        "code": "6208"
+      },
+      {
+        "name": "BIS",
+        "code": "6203"
+      },
+      {
+        "name": "BISTRE",
+        "code": "6262"
+      },
+      {
+        "name": "BITUME",
+        "code": "6217"
+      },
+      {
+        "name": "BRONZE",
+        "code": "6212"
+      },
+      {
+        "name": "CENDRE",
+        "code": "6202"
+      },
+      {
+        "name": "COLZA",
+        "code": "6260"
+      },
+      {
+        "name": "CORAIL",
+        "code": "6225"
+      },
+      {
+        "name": "CROCO",
+        "code": "6281"
+      },
+      {
+        "name": "DENIM",
+        "code": "6275"
+      },
+      {
+        "name": "EBONITE",
+        "code": "6206"
+      },
+      {
+        "name": "FRAISE",
+        "code": "6264"
+      },
+      {
+        "name": "FUMEE",
+        "code": "6201"
+      },
+      {
+        "name": "GALETS",
+        "code": "6253"
+      },
+      {
+        "name": "GIRAFE",
+        "code": "6261"
+      },
+      {
+        "name": "GIVRE",
+        "code": "6233"
+      },
+      {
+        "name": "GOJI",
+        "code": "6268"
+      },
+      {
+        "name": "GREGE",
+        "code": "6207"
+      },
+      {
+        "name": "GRENADE",
+        "code": "6224"
+      },
+      {
+        "name": "GRENAT",
+        "code": "6269"
+      },
+      {
+        "name": "HIVER",
+        "code": "6254"
+      },
+      {
+        "name": "IGUANE",
+        "code": "6280"
+      },
+      {
+        "name": "LICHEN",
+        "code": "6278"
+      },
+      {
+        "name": "LUNAIRE",
+        "code": "6276"
+      },
+      {
+        "name": "LYS",
+        "code": "6277"
+      },
+      {
+        "name": "MAKE UP",
+        "code": "6266"
+      },
+      {
+        "name": "MASTIC",
+        "code": "6251"
+      },
+      {
+        "name": "MIEL",
+        "code": "6222"
+      },
+      {
+        "name": "RAL",
+        "code": "6273"
+      },
+      {
+        "name": "MINUIT",
+        "code": "6274"
+      },
+      {
+        "name": "ORAGE",
+        "code": "6242"
+      },
+      {
+        "name": "PERLE",
+        "code": "6200"
+      },
+      {
+        "name": "TROLE",
+        "code": "6272"
+      },
+      {
+        "name": "PIGEON",
+        "code": "6205"
+      },
+      {
+        "name": "PITAYA",
+        "code": "6267"
+      },
+      {
+        "name": "PLOMB",
+        "code": "6249"
+      },
+      {
+        "name": "REFLECT",
+        "code": "6258"
+      },
+      {
+        "name": "ROSE",
+        "code": "6226"
+      },
+      {
+        "name": "ROUILLE",
+        "code": "6259"
+      },
+      {
+        "name": "ROYAL",
+        "code": "6271"
+      },
+      {
+        "name": "SANGRIA",
+        "code": "6265"
+      },
+      {
+        "name": "SAUGE",
+        "code": "6279"
+      },
+      {
+        "name": "SAUMON",
+        "code": "6263"
+      },
+      {
+        "name": "SENOIS",
+        "code": "6228"
+      },
+      {
+        "name": "TAUPE",
+        "code": "6213"
+      },
+      {
+        "name": "VERT PRE",
+        "code": "6246"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "TESS",
+    "grade": "C",
+    "measure": "54¼",
+    "price": 129,
+    "composition": "POLYPROPYLENE 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 60000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "943"
+      },
+      {
+        "name": "COBALT",
+        "code": "944"
+      },
+      {
+        "name": "CRAIE",
+        "code": "940"
+      },
+      {
+        "name": "GALET",
+        "code": "942"
+      },
+      {
+        "name": "SABLE",
+        "code": "941"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "THEO",
+    "grade": "F",
+    "measure": "54¼",
+    "price": 229,
+    "composition": "COTTON 65%, POLYAMID 27%, LINEN 9%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "ECRU",
+        "code": "147"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "TONA",
+    "grade": "E",
+    "measure": "55",
+    "price": 196,
+    "composition": "ACRYLIC 48%, POLYESTER 40%, COTTON 12%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "ARDOISE",
+        "code": "556"
+      },
+      {
+        "name": "GRIS PERLE",
+        "code": "551"
+      },
+      {
+        "name": "NEIGE",
+        "code": "550"
+      },
+      {
+        "name": "NUIT",
+        "code": "555"
+      },
+      {
+        "name": "PRUNEAU",
+        "code": "553"
+      },
+      {
+        "name": "ROYALE",
+        "code": "554"
+      },
+      {
+        "name": "TAUPE",
+        "code": "552"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "TRAMA",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "VISCOSE 52%, POLYESTER 32%, COTTON 16%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 20000,
+    "colors": [
+      {
+        "name": "ARDOISE",
+        "code": "3072"
+      },
+      {
+        "name": "ECRU",
+        "code": "3075"
+      },
+      {
+        "name": "ECUME",
+        "code": "3074"
+      },
+      {
+        "name": "PERLE",
+        "code": "3077"
+      },
+      {
+        "name": "RESEDA",
+        "code": "3073"
+      },
+      {
+        "name": "TITANE",
+        "code": "3071"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ULRIK",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "WOOL 35%, ACRYLIC 30%, POLYESTER 28%, COTTON 7%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 35000,
+    "colors": [
+      {
+        "name": "NOIR",
+        "code": "6620"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "VANIR/FR",
+    "grade": "H",
+    "measure": "55",
+    "price": 296,
+    "composition": "WOOL 92%, POLYAMID 8%",
+    "wearRating": null,
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ANAR",
+        "code": "2040"
+      },
+      {
+        "name": "BOR",
+        "code": "2026"
+      },
+      {
+        "name": "EDDA",
+        "code": "2039"
+      },
+      {
+        "name": "EIR",
+        "code": "2038"
+      },
+      {
+        "name": "FREYA",
+        "code": "2023"
+      },
+      {
+        "name": "FRIGG",
+        "code": "2041"
+      },
+      {
+        "name": "FULLA",
+        "code": "2035"
+      },
+      {
+        "name": "HERMOD",
+        "code": "2034"
+      },
+      {
+        "name": "LOKI",
+        "code": "2024"
+      },
+      {
+        "name": "MAGNI",
+        "code": "2027"
+      },
+      {
+        "name": "NARFI",
+        "code": "2032"
+      },
+      {
+        "name": "NEP",
+        "code": "2028"
+      },
+      {
+        "name": "ODIN",
+        "code": "2022"
+      },
+      {
+        "name": "THOR",
+        "code": "2025"
+      },
+      {
+        "name": "TYR",
+        "code": "2033"
+      },
+      {
+        "name": "ULL",
+        "code": "2029"
+      },
+      {
+        "name": "VALI",
+        "code": "2030"
+      },
+      {
+        "name": "VAR",
+        "code": "2037"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "VERA",
+    "grade": "A",
+    "measure": "55",
+    "price": 73,
+    "composition": "POLYESTER 83%, COTTON 13%, ACRYLIC 3%, OTHER FIBRES 1%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 20000,
+    "colors": [
+      {
+        "name": "MOUTARDE",
+        "code": "2776"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "VIDAR/FR",
+    "grade": "G",
+    "measure": "55",
+    "price": 263,
+    "composition": "WOOL 94%, NYLON 6%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 100000,
+    "colors": [
+      {
+        "name": "ABYSSE",
+        "code": "6569"
+      },
+      {
+        "name": "ACIER",
+        "code": "6564"
+      },
+      {
+        "name": "ALGUE",
+        "code": "6557"
+      },
+      {
+        "name": "ANTHRACITE",
+        "code": "6579"
+      },
+      {
+        "name": "ARDOISE",
+        "code": "6570"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "6554"
+      },
+      {
+        "name": "BORDEAUX",
+        "code": "6553"
+      },
+      {
+        "name": "BOUTON D'OR",
+        "code": "6545"
+      },
+      {
+        "name": "BRUME",
+        "code": "6558"
+      },
+      {
+        "name": "CANARD",
+        "code": "6559"
+      },
+      {
+        "name": "CANARI",
+        "code": "6572"
+      },
+      {
+        "name": "CARAMEL",
+        "code": "6576"
+      },
+      {
+        "name": "CAROTTE",
+        "code": "6555"
+      },
+      {
+        "name": "CHAMALLOW",
+        "code": "6552"
+      },
+      {
+        "name": "CHATAIN",
+        "code": "6575"
+      },
+      {
+        "name": "CREME",
+        "code": "6562"
+      },
+      {
+        "name": "LICHEN",
+        "code": "6561"
+      },
+      {
+        "name": "LILAS",
+        "code": "6551"
+      },
+      {
+        "name": "MARINE",
+        "code": "6546"
+      },
+      {
+        "name": "MARRON",
+        "code": "6543"
+      },
+      {
+        "name": "MASTIC",
+        "code": "6577"
+      },
+      {
+        "name": "MOUSSE",
+        "code": "6544"
+      },
+      {
+        "name": "MOUTARDE",
+        "code": "6571"
+      },
+      {
+        "name": "NEVE",
+        "code": "6548"
+      },
+      {
+        "name": "NOIR",
+        "code": "6580"
+      },
+      {
+        "name": "NUIT",
+        "code": "6547"
+      },
+      {
+        "name": "OUTREMER",
+        "code": "6568"
+      },
+      {
+        "name": "PERLE",
+        "code": "6563"
+      },
+      {
+        "name": "PERROQUET",
+        "code": "6560"
+      },
+      {
+        "name": "PERVENCHE",
+        "code": "6567"
+      },
+      {
+        "name": "PINK",
+        "code": "6542"
+      },
+      {
+        "name": "PLOMB",
+        "code": "6565"
+      },
+      {
+        "name": "QUETSCHE",
+        "code": "6541"
+      },
+      {
+        "name": "SABLE",
+        "code": "6574"
+      },
+      {
+        "name": "SANTA",
+        "code": "6550"
+      },
+      {
+        "name": "SAPIN",
+        "code": "6556"
+      },
+      {
+        "name": "SILICE",
+        "code": "6549"
+      },
+      {
+        "name": "SOURIS",
+        "code": "6578"
+      },
+      {
+        "name": "TERRACOTTA",
+        "code": "6540"
+      },
+      {
+        "name": "VANILLE",
+        "code": "6573"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "WARDA/FR",
+    "grade": "J",
+    "measure": "65",
+    "price": 363,
+    "composition": "POLYESTER 55%, WOOL 29%, POLYAMID 16%",
+    "wearRating": null,
+    "wearDoubleRubs": 80000,
+    "colors": [
+      {
+        "name": "CONIFERE",
+        "code": "659"
+      },
+      {
+        "name": "GRANITE",
+        "code": "654"
+      },
+      {
+        "name": "HOWLITE",
+        "code": "655"
+      },
+      {
+        "name": "MOUSSE",
+        "code": "658"
+      },
+      {
+        "name": "NOIR SAPHIRE",
+        "code": "657"
+      },
+      {
+        "name": "TERRACOTTA",
+        "code": "656"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "fabric",
+    "name": "ZANA",
+    "grade": "B",
+    "measure": "55",
+    "price": 101,
+    "composition": "COTTON 70%, VISCOSE 30%",
+    "wearRating": "2C",
+    "wearDoubleRubs": 35000,
+    "colors": [
+      {
+        "name": "CARMIN",
+        "code": "3661"
+      },
+      {
+        "name": "NOIR",
+        "code": "3660"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "leather",
+    "name": "DIVA",
+    "grade": "V",
+    "measure": "12",
+    "price": 291,
+    "composition": "CATTLE LEATHER, SEMI-ANILINE COW FULL GRAIN PIGMENTED LEATHER",
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "ACIER",
+        "code": "5312"
+      },
+      {
+        "name": "ALBATRE",
+        "code": "5300"
+      },
+      {
+        "name": "AMANDE",
+        "code": "5407"
+      },
+      {
+        "name": "ARDOISE",
+        "code": "5329"
+      },
+      {
+        "name": "BELUGA",
+        "code": "5421"
+      },
+      {
+        "name": "BISQUE",
+        "code": "5165"
+      },
+      {
+        "name": "BLANC",
+        "code": "4999"
+      },
+      {
+        "name": "CACAO",
+        "code": "5420"
+      },
+      {
+        "name": "CACHOU",
+        "code": "5180"
+      },
+      {
+        "name": "CAMEL",
+        "code": "5326"
+      },
+      {
+        "name": "CERISE",
+        "code": "5160"
+      },
+      {
+        "name": "CHAMOIS",
+        "code": "5318"
+      },
+      {
+        "name": "CHANVRE",
+        "code": "5147"
+      },
+      {
+        "name": "COURGE",
+        "code": "5162"
+      },
+      {
+        "name": "CYPRES",
+        "code": "5332"
+      },
+      {
+        "name": "FAUVE",
+        "code": "4993"
+      },
+      {
+        "name": "FUDGE",
+        "code": "5181"
+      },
+      {
+        "name": "GOLD",
+        "code": "5320"
+      },
+      {
+        "name": "GRAPHITE",
+        "code": "5184"
+      },
+      {
+        "name": "GREGE",
+        "code": "5301"
+      },
+      {
+        "name": "ICE",
+        "code": "4990"
+      },
+      {
+        "name": "INDIGO",
+        "code": "5175"
+      },
+      {
+        "name": "LAURIER",
+        "code": "5146"
+      },
+      {
+        "name": "LILAS",
+        "code": "5393"
+      },
+      {
+        "name": "MARINE",
+        "code": "4992"
+      },
+      {
+        "name": "MARRON",
+        "code": "5330"
+      },
+      {
+        "name": "MASTIC",
+        "code": "5316"
+      },
+      {
+        "name": "NOIR",
+        "code": "5012"
+      },
+      {
+        "name": "NOISETTE",
+        "code": "5159"
+      },
+      {
+        "name": "OCRE",
+        "code": "5411"
+      },
+      {
+        "name": "PERLE",
+        "code": "5125"
+      },
+      {
+        "name": "PIERRE",
+        "code": "5315"
+      },
+      {
+        "name": "PLATINE",
+        "code": "5171"
+      },
+      {
+        "name": "ROCHE",
+        "code": "5313"
+      },
+      {
+        "name": "ROUGE",
+        "code": "5167"
+      },
+      {
+        "name": "SABLE",
+        "code": "5157"
+      },
+      {
+        "name": "SILEX",
+        "code": "5153"
+      },
+      {
+        "name": "SILICE",
+        "code": "5302"
+      },
+      {
+        "name": "SOLEIL",
+        "code": "5412"
+      },
+      {
+        "name": "SUNSET",
+        "code": "5409"
+      },
+      {
+        "name": "TAUPE",
+        "code": "5143"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "leather",
+    "name": "INDIANA",
+    "grade": "U",
+    "measure": "12",
+    "price": 157,
+    "composition": "CATTLE LEATHER, COW, EMBOSSED CORRECTED GRAIN PIGMENTED LEATHER",
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "ARGILE",
+        "code": "5099"
+      },
+      {
+        "name": "BLANC",
+        "code": "5090"
+      },
+      {
+        "name": "BRUN",
+        "code": "5092"
+      },
+      {
+        "name": "CRAIE",
+        "code": "5086"
+      },
+      {
+        "name": "EBENE",
+        "code": "5097"
+      },
+      {
+        "name": "GRIS",
+        "code": "5096"
+      },
+      {
+        "name": "LIN",
+        "code": "5094"
+      },
+      {
+        "name": "MASTIC",
+        "code": "5082"
+      },
+      {
+        "name": "NOIR",
+        "code": "5085"
+      },
+      {
+        "name": "SCHISTE",
+        "code": "5098"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "leather",
+    "name": "KYOTO",
+    "grade": "X",
+    "measure": "15",
+    "price": 363,
+    "composition": "CATTLE LEATHER, SEMI-ANILINE GLOSS FINISH FULL GRAIN BULLHIDE",
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "5292"
+      },
+      {
+        "name": "BRONZE",
+        "code": "5289"
+      },
+      {
+        "name": "CAFE",
+        "code": "5290"
+      },
+      {
+        "name": "CHATAIGNE",
+        "code": "5288"
+      },
+      {
+        "name": "FAUVE",
+        "code": "5297"
+      },
+      {
+        "name": "FORET",
+        "code": "5287"
+      },
+      {
+        "name": "GOLD",
+        "code": "5298"
+      },
+      {
+        "name": "GRIS",
+        "code": "5295"
+      },
+      {
+        "name": "IVOIRE",
+        "code": "5293"
+      },
+      {
+        "name": "MAKE UP",
+        "code": "5294"
+      },
+      {
+        "name": "MASTIC",
+        "code": "5296"
+      },
+      {
+        "name": "NOIR",
+        "code": "5291"
+      },
+      {
+        "name": "TAUPE",
+        "code": "5299"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "leather",
+    "name": "SOFT TOUCH",
+    "grade": "X",
+    "measure": "13",
+    "price": 363,
+    "composition": "BULL LEATHER, NUBUCK",
+    "wearRating": null,
+    "wearDoubleRubs": null,
+    "colors": [
+      {
+        "name": "ANTHRACIT",
+        "code": "5030"
+      },
+      {
+        "name": "CHATAIGNE",
+        "code": "5031"
+      },
+      {
+        "name": "GOLD",
+        "code": "5033"
+      },
+      {
+        "name": "TAUPE",
+        "code": "5032"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "CHARTRES",
+    "grade": "D",
+    "measure": "55",
+    "price": 162,
+    "composition": "ACRYLIC 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 25000,
+    "colors": [
+      {
+        "name": "FLANELLE",
+        "code": "2691"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "ELIOS SLING",
+    "grade": "C",
+    "measure": "70¾",
+    "price": 129,
+    "composition": "PVC 65%, POLYESTER 35%",
+    "wearRating": null,
+    "wearDoubleRubs": 50000,
+    "colors": [
+      {
+        "name": "EPIDOTE",
+        "code": "1064"
+      },
+      {
+        "name": "JASPE",
+        "code": "1062"
+      },
+      {
+        "name": "ONYX",
+        "code": "1060"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "GAYAC",
+    "grade": "D",
+    "measure": "54¼",
+    "price": 162,
+    "composition": "POLYPROPYLENE 90%, POLYESTER 10%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 30000,
+    "colors": [
+      {
+        "name": "BOIS",
+        "code": "562"
+      },
+      {
+        "name": "NUAGE",
+        "code": "560"
+      },
+      {
+        "name": "PIERRE",
+        "code": "561"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "ROMA",
+    "grade": "F",
+    "measure": "55",
+    "price": 229,
+    "composition": "ACRYLIC 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 40000,
+    "colors": [
+      {
+        "name": "CARMIN",
+        "code": "670"
+      },
+      {
+        "name": "CHAUX",
+        "code": "671"
+      },
+      {
+        "name": "CITRUS",
+        "code": "673"
+      },
+      {
+        "name": "PAON",
+        "code": "672"
+      },
+      {
+        "name": "SAUGE",
+        "code": "674"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "SILVERTEX/FR",
+    "grade": "B",
+    "measure": "54",
+    "price": 101,
+    "composition": "PVC 81%, POLYESTER 19%",
+    "wearRating": "A",
+    "wearDoubleRubs": 300000,
+    "colors": [
+      {
+        "name": "ALUMINIUM",
+        "code": "472"
+      },
+      {
+        "name": "AUBERGINE",
+        "code": "467"
+      },
+      {
+        "name": "AVOCADO",
+        "code": "476"
+      },
+      {
+        "name": "BALTIC",
+        "code": "468"
+      },
+      {
+        "name": "BASIL",
+        "code": "461"
+      },
+      {
+        "name": "BEIGE",
+        "code": "451"
+      },
+      {
+        "name": "BLACK",
+        "code": "489"
+      },
+      {
+        "name": "BOTTLE",
+        "code": "475"
+      },
+      {
+        "name": "CAMEL",
+        "code": "456"
+      },
+      {
+        "name": "CARBON",
+        "code": "488"
+      },
+      {
+        "name": "CELERY",
+        "code": "471"
+      },
+      {
+        "name": "CHAMPAGNE",
+        "code": "455"
+      },
+      {
+        "name": "CITRUS",
+        "code": "481"
+      },
+      {
+        "name": "COBRE",
+        "code": "433"
+      },
+      {
+        "name": "CORAL",
+        "code": "464"
+      },
+      {
+        "name": "CREAM",
+        "code": "445"
+      },
+      {
+        "name": "DELFT",
+        "code": "473"
+      },
+      {
+        "name": "FOREST",
+        "code": "485"
+      },
+      {
+        "name": "GRAPHITE",
+        "code": "487"
+      },
+      {
+        "name": "GRENADINE",
+        "code": "439"
+      },
+      {
+        "name": "ICE",
+        "code": "435"
+      },
+      {
+        "name": "ICE CREAM",
+        "code": "440"
+      },
+      {
+        "name": "JET",
+        "code": "479"
+      },
+      {
+        "name": "LOTUS",
+        "code": "458"
+      },
+      {
+        "name": "LUGGAGE",
+        "code": "442"
+      },
+      {
+        "name": "MACADAMIA",
+        "code": "431"
+      },
+      {
+        "name": "MAGENTA",
+        "code": "449"
+      },
+      {
+        "name": "MANDARIN",
+        "code": "443"
+      },
+      {
+        "name": "MELON",
+        "code": "470"
+      },
+      {
+        "name": "METEOR",
+        "code": "432"
+      },
+      {
+        "name": "MOCCA",
+        "code": "437"
+      },
+      {
+        "name": "ORANGE",
+        "code": "438"
+      },
+      {
+        "name": "ORCHID",
+        "code": "454"
+      },
+      {
+        "name": "PETROL",
+        "code": "478"
+      },
+      {
+        "name": "PISTACHO",
+        "code": "466"
+      },
+      {
+        "name": "PLATA",
+        "code": "477"
+      },
+      {
+        "name": "RASPBERRY",
+        "code": "452"
+      },
+      {
+        "name": "RED",
+        "code": "444"
+      },
+      {
+        "name": "ROSE",
+        "code": "459"
+      },
+      {
+        "name": "RUBIN",
+        "code": "457"
+      },
+      {
+        "name": "SAFRAN",
+        "code": "465"
+      },
+      {
+        "name": "SAGE",
+        "code": "480"
+      },
+      {
+        "name": "SANDSTONE",
+        "code": "436"
+      },
+      {
+        "name": "SAPPHIRE",
+        "code": "474"
+      },
+      {
+        "name": "SHIITAKE",
+        "code": "446"
+      },
+      {
+        "name": "SISAL",
+        "code": "450"
+      },
+      {
+        "name": "SKYLIGHT",
+        "code": "469"
+      },
+      {
+        "name": "SQUASH",
+        "code": "460"
+      },
+      {
+        "name": "STERLING",
+        "code": "482"
+      },
+      {
+        "name": "STORM",
+        "code": "484"
+      },
+      {
+        "name": "SUNKIST",
+        "code": "448"
+      },
+      {
+        "name": "TAUPE",
+        "code": "441"
+      },
+      {
+        "name": "TEAL",
+        "code": "486"
+      },
+      {
+        "name": "TITANIUM",
+        "code": "483"
+      },
+      {
+        "name": "TOMATO",
+        "code": "434"
+      },
+      {
+        "name": "TURQUOISE",
+        "code": "463"
+      },
+      {
+        "name": "UMBER",
+        "code": "447"
+      },
+      {
+        "name": "WHITE",
+        "code": "430"
+      },
+      {
+        "name": "WINE",
+        "code": "453"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "TESS",
+    "grade": "C",
+    "measure": "54¼",
+    "price": 129,
+    "composition": "POLYPROPYLENE 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 60000,
+    "colors": [
+      {
+        "name": "ANTHRACITE",
+        "code": "943"
+      },
+      {
+        "name": "COBALT",
+        "code": "944"
+      },
+      {
+        "name": "CRAIE",
+        "code": "940"
+      },
+      {
+        "name": "GALET",
+        "code": "942"
+      },
+      {
+        "name": "SABLE",
+        "code": "941"
+      }
+    ],
+    "notes": null
+  },
+  {
+    "category": "outdoor",
+    "name": "TOP",
+    "grade": "C",
+    "measure": "55",
+    "price": 129,
+    "composition": "MULTILAYER COMPOSITE 100%",
+    "wearRating": "3C",
+    "wearDoubleRubs": 120000,
+    "colors": [
+      {
+        "name": "BALTIQUE",
+        "code": "510"
+      },
+      {
+        "name": "BRUME",
+        "code": "529"
+      },
+      {
+        "name": "CAPUCINE",
+        "code": "508"
+      },
+      {
+        "name": "NOIR",
+        "code": "532"
+      },
+      {
+        "name": "NOISETTE",
+        "code": "527"
+      },
+      {
+        "name": "POUDRE",
+        "code": "502"
+      }
+    ],
+    "notes": null
+  }
+]

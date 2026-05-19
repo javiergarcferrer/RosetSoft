@@ -10,6 +10,7 @@ import {
   Shield,
   Wallet,
   Calculator,
+  Layers,
   Menu,
   X,
 } from 'lucide-react';
@@ -50,6 +51,7 @@ const adminNavGroup = {
   items: [
     { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
     { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
+    { to: '/admin/materials',   label: 'Materiales', icon: Layers },
   ],
 };
 
