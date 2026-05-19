@@ -1,5 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { DebouncedTextarea } from '../DebouncedInput.jsx';
+import type { TextareaHTMLAttributes } from 'react';
+import { DebouncedTextarea } from '../DebouncedInput.js';
+
+export interface HeroInputProps
+  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'ref'> {
+  value: string | number | null | undefined;
+  onCommit: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}
 
 /**
  * Borderless title-weight field that doubles as a heading. The kind of
@@ -20,13 +29,13 @@ import { DebouncedTextarea } from '../DebouncedInput.jsx';
  * For form fields with a label above, use <input className="input" />.
  * For meta-strip fields, use <InlineEditor>.
  */
-const HeroInput = forwardRef(function HeroInput({
+const HeroInput = forwardRef<HTMLTextAreaElement, HeroInputProps>(function HeroInput({
   value, onCommit, placeholder, className = '', ...inputProps
 }, ref) {
-  const innerRef = useRef(null);
+  const innerRef = useRef<HTMLTextAreaElement | null>(null);
   // Forward the underlying <textarea> so callers can .focus() / .select() /
   // .scrollIntoView() it directly — same contract as a plain <input>.
-  useImperativeHandle(ref, () => innerRef.current, []);
+  useImperativeHandle(ref, () => innerRef.current as HTMLTextAreaElement, []);
 
   // Resize on every value change. We bypass React's controlled-value latch
   // by reading the DOM node directly because DebouncedTextarea may not
@@ -54,7 +63,7 @@ const HeroInput = forwardRef(function HeroInput({
   );
 });
 
-function autoSize(el) {
+function autoSize(el: HTMLTextAreaElement | null) {
   if (!el) return;
   // Reset to auto first so shrinking content is honored — otherwise the
   // height stays at the previous scrollHeight even after a value is deleted.

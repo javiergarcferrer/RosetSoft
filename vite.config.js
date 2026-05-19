@@ -20,16 +20,18 @@ export default defineConfig(({ mode }) => {
     base,
     plugins: [react()],
     resolve: {
-      // The codebase imports with explicit `.js` extensions
+      // The codebase imports with explicit `.js` / `.jsx` extensions
       // (`from '../lib/format.js'`) — an ESM-purist discipline that
       // predates the TypeScript migration. esbuild's dev pipeline
       // resolves those to `.ts`/`.tsx` transparently, but Rollup
-      // (the production builder) does not. This alias rewrites any
-      // relative `*.js` import to its extension-less form so Vite's
-      // own resolver can find either `.ts`, `.tsx`, or the original
-      // `.js`. Means we can flip a file from `.js` → `.ts` without
-      // touching every call site.
+      // (the production builder) does not. These aliases rewrite any
+      // relative `*.js` / `*.jsx` import to its extension-less form
+      // so Vite's own resolver can find either `.ts`, `.tsx`, or the
+      // original `.js`/`.jsx`. Means we can flip a file from
+      // `.js` → `.ts` (or `.jsx` → `.tsx`) without touching every
+      // call site.
       alias: [
+        { find: /^(\.{1,2}\/.*)\.jsx$/, replacement: '$1' },
         { find: /^(\.{1,2}\/.*)\.js$/, replacement: '$1' },
       ],
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],

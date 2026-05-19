@@ -1,5 +1,24 @@
 import { forwardRef } from 'react';
-import { DebouncedInput } from '../DebouncedInput.jsx';
+import type { InputHTMLAttributes } from 'react';
+import { DebouncedInput } from '../DebouncedInput.js';
+
+export interface MoneyInputProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'ref'> {
+  value: number | string | null | undefined;
+  onCommit: (value: number) => void;
+  currency?: string;
+  placeholder?: string;
+  /**
+   * Min-width class applied directly to the <input>. The input also
+   * carries `field-sizing: content` (via qli-grow) so it grows past
+   * this min when the value has more digits. A 6-figure money string
+   * can't be clipped because the field expands to fit it. max-w-full
+   * keeps it from forcing the parent wider than its own container —
+   * when that happens the parent's flex-wrap drops it onto a new row.
+   */
+  widthClass?: string;
+  className?: string;
+}
 
 /**
  * Number input with a leading currency glyph. Always right-aligned, always
@@ -13,7 +32,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
  *
  * For non-currency numbers, use <DebouncedInput type="number" />.
  */
-const MoneyInput = forwardRef(function MoneyInput({
+const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyInput({
   value,
   onCommit,
   currency = 'USD',
@@ -55,7 +74,7 @@ const MoneyInput = forwardRef(function MoneyInput({
 
 // Just the prefixes that show up in the DR market. Everything else falls
 // back to the ISO code + space so the user still has context.
-function currencyGlyph(code) {
+function currencyGlyph(code: string): string {
   if (code === 'USD' || code === 'DOP') return '$';
   if (code === 'EUR') return '€';
   if (code === 'GBP') return '£';

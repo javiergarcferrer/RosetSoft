@@ -1,4 +1,27 @@
+import type { ReactNode } from 'react';
 import { CheckCircle2, Undo2, ChevronRight, Ban } from 'lucide-react';
+
+export interface StageDef {
+  key: string;
+  label: string;
+  description?: string;
+  /** Property on `row` that carries the timestamp for this stage. */
+  timestampField?: string | null;
+}
+
+export interface StepperProps {
+  stages: readonly StageDef[];
+  currentIndex: number;
+  /** The entity row (order or container); used to read per-stage timestamps. */
+  row?: Record<string, unknown> | null;
+  nextStage?: StageDef | null;
+  prevStage?: StageDef | null;
+  currentLabel?: ReactNode;
+  currentDescription?: ReactNode;
+  onAdvance?: (stage: StageDef) => void;
+  onUndo?: (stage: StageDef) => void;
+  cancelled?: boolean;
+}
 
 /**
  * Horizontal progress stepper. Both the order lifecycle and the container
@@ -39,7 +62,7 @@ export default function Stepper({
   onAdvance,
   onUndo,
   cancelled = false,
-}) {
+}: StepperProps) {
   const lastIdx = stages.length - 1;
   return (
     <div className="card card-pad space-y-4">
@@ -56,7 +79,7 @@ export default function Stepper({
         )}
         <div className="relative flex justify-between gap-1">
           {stages.map((s, i) => {
-            const ts = s.timestampField ? row?.[s.timestampField] : row?.createdAt;
+            const ts = s.timestampField ? (row as Record<string, unknown> | null | undefined)?.[s.timestampField] : (row as Record<string, unknown> | null | undefined)?.createdAt;
             const isPast = i < currentIndex;
             const isCurrent = i === currentIndex;
             const isTerminalCurrent = isCurrent && i === lastIdx;
@@ -91,7 +114,7 @@ export default function Stepper({
                   {s.label}
                 </div>
                 <div className="text-[10px] text-ink-500 mt-0.5">
-                  {ts ? new Date(ts).toLocaleDateString() : '—'}
+                  {ts ? new Date(ts as number | string).toLocaleDateString() : '—'}
                 </div>
               </div>
             );

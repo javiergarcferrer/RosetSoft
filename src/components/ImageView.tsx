@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { db } from '../db/database.js';
 import { publicImageUrl } from '../db/supabaseClient.js';
 import { ImageOff } from 'lucide-react';
+
+export interface ImageViewProps {
+  id: string | null | undefined;
+  alt?: string;
+  className?: string;
+  placeholderClassName?: string;
+  style?: CSSProperties;
+}
 
 /**
  * Renders an image stored in Supabase Storage by its image-table id.
  * Falls back to a neutral placeholder when missing.
  */
-export default function ImageView({ id, alt = '', className = '', placeholderClassName = '', style }) {
-  const [url, setUrl] = useState(null);
+export default function ImageView({ id, alt = '', className = '', placeholderClassName = '', style }: ImageViewProps) {
+  const [url, setUrl] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
@@ -19,7 +28,7 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
       return () => {};
     }
     setMissing(false);
-    db.images.get(id).then((rec) => {
+    db.images.get(id).then((rec: { storagePath?: string } | null | undefined) => {
       if (!active) return;
       const u = rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
       if (!u) {

@@ -1,5 +1,25 @@
 import { forwardRef } from 'react';
-import { DebouncedInput } from '../DebouncedInput.jsx';
+import type { InputHTMLAttributes, ReactNode } from 'react';
+import { DebouncedInput } from '../DebouncedInput.js';
+
+export interface InlineEditorProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'ref'> {
+  label?: ReactNode;
+  value: string | number | null | undefined;
+  onCommit: (value: string) => void;
+  placeholder?: string;
+  /**
+   * Tailwind width utility for the input. Treated as a *min-width* —
+   * the input auto-grows past it via `field-sizing: content` so long
+   * values (long fabric names, full dimensions like "H 28 × L 89 × P 43")
+   * expand the field instead of getting visually clipped. The widthClass
+   * sets the baseline reading length and the min-size when empty.
+   */
+  widthClass?: string;
+  /** mono = render values in the monospaced UI font (refs, codes, dims). */
+  mono?: boolean;
+  className?: string;
+}
 
 /**
  * Inline label:value editor. Reads as flat text until the user hovers or
@@ -11,7 +31,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
  * every field would crush the layout. For form-style fields with labels
  * above the input, use <Field> / <FieldGroup> instead.
  */
-const InlineEditor = forwardRef(function InlineEditor({
+const InlineEditor = forwardRef<HTMLInputElement, InlineEditorProps>(function InlineEditor({
   label,
   value,
   onCommit,
