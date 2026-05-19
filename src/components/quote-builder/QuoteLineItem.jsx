@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -10,6 +10,7 @@ import { FieldGroup, Field } from '../primitives/FieldGroup.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
+import SwatchPicker from './SwatchPicker.jsx';
 import {
   applyLineAdjustments, clampPct,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
@@ -374,6 +375,7 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
 function GradeFabricRow({ line, onChange }) {
   const { grade, fabric } = parseSubtype(line.subtype);
   const commit = (next) => onChange({ subtype: composeSubtype(next.grade, next.fabric) });
+  const [swatchOpen, setSwatchOpen] = useState(false);
   // flex-wrap lets the fabric input drop below the grade Select when
   // there isn't enough room to fit both inline (long fabric names like
   // "Alcantara mostaza decadent edition" no longer get hidden inside
@@ -433,6 +435,27 @@ function GradeFabricRow({ line, onChange }) {
         // max-w-full keeps it from forcing the row wider than its
         // container — when it can't grow further it just wraps.
         className="qli-grow min-w-[8rem] max-w-full bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+      />
+      {/* Swatch-picker shortcut — opens the catalog modal so the dealer
+          can pick a material + color instead of typing the name and
+          guessing the code. Selecting writes back grade + fabric in
+          one shot via composeSubtype; the input above still works for
+          freeform overrides on unusual fabrics. */}
+      <button
+        type="button"
+        onClick={() => setSwatchOpen(true)}
+        className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+        title="Elegir del catálogo de materiales"
+        aria-label="Elegir tela del catálogo"
+      >
+        <Palette size={14} />
+      </button>
+      <SwatchPicker
+        open={swatchOpen}
+        onClose={() => setSwatchOpen(false)}
+        onSelect={(next) => commit(next)}
+        currentGrade={grade}
+        currentFabric={fabric}
       />
     </div>
   );
