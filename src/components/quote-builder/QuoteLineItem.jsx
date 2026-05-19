@@ -269,7 +269,7 @@ function TopStrip({
           Asignar familia
         </button>
       )}
-      {compound && (
+      {compound ? (
         <span
           className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
           title="Artículo compuesto"
@@ -277,6 +277,21 @@ function TopStrip({
           <Layers size={10} className="opacity-80" aria-hidden />
           Compuesto
         </span>
+      ) : (
+        // Discoverable affordance for compound mode. The same action
+        // lives in the overflow menu, but the dealer asked for a
+        // visible entry point — hiding it inside `⋯` made it
+        // effectively invisible.
+        <button
+          type="button"
+          onClick={onConvertToCompound}
+          className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 transition-colors px-2 py-0.5 rounded-full"
+          title="Agrupar varias referencias bajo una misma familia y foto"
+          aria-label="Convertir en artículo compuesto"
+        >
+          <Layers size={10} className="opacity-70" aria-hidden />
+          Compuesto
+        </button>
       )}
       <div className="flex-1" />
       <button
