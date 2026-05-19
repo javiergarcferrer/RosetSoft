@@ -140,19 +140,28 @@ export default function Layout() {
         >
           <Menu size={20} />
         </button>
-        <div className="min-w-0 px-2 flex items-center gap-2">
-          {settings?.logoImageId && (
+        {/* Brand block — the dealer's typographic logo (an SVG, usually a
+            wordmark) rendered in white over the dark bar, with a small
+            "Roset Soft" eyebrow beneath. No background box, no rounded
+            chrome — the logo IS the brand mark and shouldn't sit inside
+            a styled container. `filter: brightness(0) invert(1)` tints any
+            single-color SVG to pure white regardless of its source color
+            (works for solid black/dark wordmarks, which is the usual case;
+            multi-color logos would need a dedicated white-variant upload
+            we don't model yet). */}
+        <div className="min-w-0 px-2 flex flex-col items-center gap-0.5">
+          {settings?.logoImageId ? (
             <ImageView
               id={settings.logoImageId}
               alt={company + ' logo'}
-              className="w-7 h-7 flex-shrink-0 object-contain bg-white rounded-md"
-              placeholderClassName="w-7 h-7 flex-shrink-0 rounded-md"
+              className="h-6 max-w-[140px] object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+              placeholderClassName="h-6 w-24"
             />
-          )}
-          <div className="min-w-0 text-center">
-            <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
+          ) : (
             <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
-          </div>
+          )}
+          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
         </div>
         <div className="w-11" />
       </header>
@@ -177,22 +186,25 @@ export default function Layout() {
         }`}
         aria-label="Navegación principal"
       >
-        <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between">
-          <div className="min-w-0 flex items-center gap-2.5">
-            {settings?.logoImageId && (
+        <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between gap-3">
+          {/* Brand block — typographic logo over "Roset Soft" eyebrow.
+              See the mobile topbar's matching block for the rationale on
+              the white-tint filter and the lack of a background box. */}
+          <div className="min-w-0 flex flex-col items-start gap-1.5">
+            {settings?.logoImageId ? (
               <ImageView
                 id={settings.logoImageId}
                 alt={company + ' logo'}
-                className="w-9 h-9 flex-shrink-0 object-contain bg-white rounded-md"
-                placeholderClassName="w-9 h-9 flex-shrink-0 rounded-md"
+                className="h-9 max-w-[180px] object-contain object-left"
+                style={{ filter: 'brightness(0) invert(1)' }}
+                placeholderClassName="h-9 w-32"
               />
-            )}
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
-              <div className="text-base font-semibold leading-tight mt-0.5 truncate" title={company}>
+            ) : (
+              <div className="text-base font-semibold leading-tight truncate" title={company}>
                 {company}
               </div>
-            </div>
+            )}
+            <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
           </div>
           <button
             onClick={() => setNavOpen(false)}

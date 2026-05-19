@@ -7,7 +7,7 @@ import { ImageOff } from 'lucide-react';
  * Renders an image stored in Supabase Storage by its image-table id.
  * Falls back to a neutral placeholder when missing.
  */
-export default function ImageView({ id, alt = '', className = '', placeholderClassName = '' }) {
+export default function ImageView({ id, alt = '', className = '', placeholderClassName = '', style }) {
   const [url, setUrl] = useState(null);
   const [missing, setMissing] = useState(false);
 
@@ -41,5 +41,5 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
       </div>
     );
   }
-  return <img src={url} alt={alt} className={className} loading="lazy" />;
+  return <img src={url} alt={alt} className={className} style={style} loading="lazy" />;
 }
