@@ -93,14 +93,22 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
         </div>
       </div>
 
-      {/* Description + actions */}
-      <div className="pt-3 border-t border-ink-100 flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
+      {/* Description + actions.
+          Stacked on mobile, side-by-side from sm up. The previous
+          flex+flex-wrap layout squeezed the description column down
+          to ~50px on phones because `min-w-0 flex-1` shrunk before
+          the button cluster ever wrapped — long status descriptions
+          ("Compartida con el cliente; esperando respuesta") ended up
+          breaking word-by-word into a tower. Stacking explicitly
+          gives the description full width on phones and avoids the
+          collision. */}
+      <div className="pt-3 border-t border-ink-100 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 sm:flex-1">
           <div className="eyebrow">Estado</div>
           <div className="text-sm font-semibold mt-0.5">{(terminal ? stageDef.label : QUOTE_STAGE_BY_KEY[stage]?.label) || 'Borrador'}</div>
           <div className="text-xs text-ink-500 mt-1">{(terminal ? stageDef.description : QUOTE_STAGE_BY_KEY[stage]?.description) || ''}</div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
           {(idx > 0 || terminal) && (
             <button
               type="button"
