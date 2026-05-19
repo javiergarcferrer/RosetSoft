@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import Modal from './Modal.jsx';
-import { db, newId, nextSequenceNumber } from '../db/database.js';
+import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { clampCommissionPct } from '../lib/commissions.js';
 
 /**
@@ -58,15 +58,13 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
     const now = Date.now();
     // Sequential number — same numbering rule as customers/quotes:
     // max(number) + 1, or 1 if empty. Start from 1 (no vanity prefix;
-    // professionals are an internal list).
-    const number = isNew
-      ? await nextSequenceNumber('professionals', profileId, 1)
-      : professional.number;
-
-    await db.professionals.put({
+    // professionals are an internal list). New rows go through the
+    // race-safe assignSequenceNumber helper (retries on the
+    // UNIQUE(profile_id, number) constraint added in migration
+    // 20260519180000); edits keep the existing number unchanged.
+    const recordCore = {
       id,
       profileId,
-      number,
       name: data.name.trim(),
       company: data.company.trim(),
       email: data.email.trim(),
@@ -75,7 +73,17 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       defaultCommissionPct: clampCommissionPct(data.defaultCommissionPct),
       createdAt: professional?.createdAt || now,
       updatedAt: now,
-    });
+    };
+    if (isNew) {
+      await assignSequenceNumber({
+        table: 'professionals',
+        profileId,
+        start: 1,
+        build: (number) => ({ ...recordCore, number }),
+      });
+    } else {
+      await db.professionals.put({ ...recordCore, number: professional.number });
+    }
     onClose();
   }
 

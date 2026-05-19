@@ -4,7 +4,7 @@ import { Plus, Package, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useLiveQuery } from '../db/hooks.js';
-import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
+import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
@@ -140,21 +140,27 @@ export default function Orders() {
   }, [allQuotes, allLines, allContainers]);
 
   async function newOrder() {
-    const number = await nextSequenceNumber('orders', profileId, 101);
     const id = newId();
     const now = Date.now();
-    await db.orders.put({
-      id,
+    // Race-safe assign: retries on the UNIQUE(profile_id, number)
+    // constraint if another tab took our slot in flight.
+    await assignSequenceNumber({
+      table: 'orders',
       profileId,
-      number,
-      name: '',
-      customerId: null,
-      status: 'draft',
-      notes: '',
-      depositAmount: 0,
-      deliveryAddress: '',
-      createdAt: now,
-      updatedAt: now,
+      start: 101,
+      build: (number) => ({
+        id,
+        profileId,
+        number,
+        name: '',
+        customerId: null,
+        status: 'draft',
+        notes: '',
+        depositAmount: 0,
+        deliveryAddress: '',
+        createdAt: now,
+        updatedAt: now,
+      }),
     });
     window.location.hash = `#/orders/${id}`;
   }

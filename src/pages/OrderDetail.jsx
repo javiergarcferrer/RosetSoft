@@ -9,7 +9,7 @@ import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
-import { db, newId, invalidate, nextSequenceNumber } from '../db/database.js';
+import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
@@ -186,23 +186,29 @@ export default function OrderDetail() {
   }
 
   async function addContainer() {
-    const number = await nextSequenceNumber('containers', profileId, 101);
     const id = newId();
     const now = Date.now();
     // Containers are now structurally just an identifier + a single
     // filledAt timestamp (nullable). No stage machine, no per-stage
     // timestamps. The dealer marks each as packed when they pack it.
-    await db.containers.put({
-      id,
+    // Race-safe assign — UNIQUE(profile_id, number) catches double-
+    // tap or two-tab collisions and the helper retries.
+    await assignSequenceNumber({
+      table: 'containers',
       profileId,
-      orderId,
-      number,
-      name: '',
-      code: '',
-      filledAt: null,
-      notes: '',
-      createdAt: now,
-      updatedAt: now,
+      start: 101,
+      build: (number) => ({
+        id,
+        profileId,
+        orderId,
+        number,
+        name: '',
+        code: '',
+        filledAt: null,
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      }),
     });
     invalidate();
   }

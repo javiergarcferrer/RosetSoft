@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Plus, X, UserX } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { db, newId, nextSequenceNumber } from '../../db/database.js';
+import { db, newId, assignSequenceNumber } from '../../db/database.js';
 
 /**
  * Modal professional picker with inline create. Mirrors CustomerPicker
@@ -46,20 +46,25 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
     const name = q.trim();
     if (!name) return;
     const id = newId();
-    const number = await nextSequenceNumber('professionals', profileId, 1);
     const now = Date.now();
-    await db.professionals.put({
-      id,
+    // Race-safe assign — retries on UNIQUE(profile_id, number).
+    await assignSequenceNumber({
+      table: 'professionals',
       profileId,
-      number,
-      name,
-      company: '',
-      email: '',
-      phone: '',
-      notes: '',
-      defaultCommissionPct: 10,
-      createdAt: now,
-      updatedAt: now,
+      start: 1,
+      build: (number) => ({
+        id,
+        profileId,
+        number,
+        name,
+        company: '',
+        email: '',
+        phone: '',
+        notes: '',
+        defaultCommissionPct: 10,
+        createdAt: now,
+        updatedAt: now,
+      }),
     });
     onSelect(id);
     onClose();

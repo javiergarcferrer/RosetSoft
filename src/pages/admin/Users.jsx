@@ -408,9 +408,23 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
   }
 
   async function setCommission(raw) {
-    const pct = clampPct(raw);
-    if (pct === (profile.commission_pct ?? 0)) return;
-    await commit({ commission_pct: pct }, 'commission');
+    // Cap at the DB's CHECK constraint (`commission_pct <= 50` from
+    // migration 20260518110000). Without the explicit max here, a
+    // dealer typing 80 would clamp client-side to 80 (clampPct's
+    // default ceiling is 100), then the DB would reject with a
+    // check_violation and the inline-edit handler would surface a
+    // cryptic Postgres error. Capping at 50 keeps client + DB in
+    // sync and the input's max="50" matches.
+    const pct = clampPct(raw, 50);
+    // The profiles list arrives through fromRow() which camelCases
+    // every column — read + write both use the JS-side name. The
+    // previous snake_case `commission_pct` here always read
+    // undefined→0, so the input flickered back to 0 on every refetch
+    // and the dealer assumed the save had failed. The write still
+    // landed in the DB (toRow's snake() is idempotent on already-
+    // snake_case keys) — the visual divergence was the entire bug.
+    if (pct === (profile.commissionPct ?? 0)) return;
+    await commit({ commissionPct: pct }, 'commission');
   }
 
   // Hard-delete: removes the auth.users row (so the user can't sign
@@ -527,7 +541,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
               max="50"
               step="0.5"
               className="input py-1.5 pr-7 tabular-nums w-20"
-              value={profile.commission_pct ?? 0}
+              value={profile.commissionPct ?? 0}
               onCommit={setCommission}
               aria-label="Comisión"
             />
