@@ -204,7 +204,14 @@ function RateCard({ local, set, saveSettings }) {
   // lost on the first render after this code ships — see readBscRates
   // / normalizeRateMode in lib/exchangeRate.js.
   const bsc = local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
-  const mode = (local.dopRateMode || '').startsWith('bsc-')
+  // Recognise every supported mode — the previous startsWith('bsc-')
+  // gate silently dropped 'custom' back to 'bsc-sell', which both
+  // killed the "Personalizada" button highlight and hid the custom-
+  // rate input (`{mode === 'custom' && ...}` further down). So the
+  // dealer would click Personalizada, see no input, no highlight, and
+  // their typed rate never had anywhere to go — landing on the saved
+  // settings as 0 / undefined.
+  const mode = ['bsc-buy', 'bsc-sell', 'custom'].includes(local.dopRateMode)
     ? local.dopRateMode
     : 'bsc-sell';
 
