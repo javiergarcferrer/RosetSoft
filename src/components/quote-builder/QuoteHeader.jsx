@@ -76,7 +76,9 @@ export default function QuoteHeader({
       <div className="space-y-3">
         {/* Title row — the quote is identified by its number alone now
             that the internal-name field is gone. The customer chip in
-            the meta row below is the human label. */}
+            the meta row below is the human label. SaveIndicator lives
+            here (not in the chip row) so it doesn't compete with the
+            chips for horizontal space on mobile and force them to wrap. */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500">
@@ -85,41 +87,17 @@ export default function QuoteHeader({
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
-            {isAdmin ? (
-              // Inline seller assignment — admin-only. A native select
-              // is the right control: zero modal weight, keyboard-
-              // friendly, mobile-friendly, matches the "small
-              // metadata" visual register. The empty option lets the
-              // admin explicitly clear attribution if the quote was
-              // built without a real seller (rare, but possible for
-              // training / sandbox quotes).
-              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-ink-500">
-                <label htmlFor="qh-seller" className="select-none">Vendedor</label>
-                <select
-                  id="qh-seller"
-                  value={quote?.createdByUserId || ''}
-                  onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
-                  className="bg-transparent border border-ink-200 hover:border-ink-400 focus:border-ink-700 rounded px-1.5 py-0.5 text-[11px] text-ink-700 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  aria-label="Vendedor asignado"
-                >
-                  <option value="">— sin vendedor —</option>
-                  {assignableSellers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {(p.name?.trim() || p.email?.split('@')[0] || p.id)}
-                      {p.id === quote?.createdByUserId && !p.active ? ' (inactivo)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : creatorLabel ? (
+            {!isAdmin && creatorLabel && (
               <div className="text-[11px] text-ink-500 mt-1">
                 Creada por <span className="text-ink-700">{creatorLabel}</span>
               </div>
-            ) : null}
+            )}
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap">
+            <SaveIndicator savedAt={savedAt} saving={saving} />
+
             <button
               type="button"
               onClick={onOpenPalette}
@@ -163,8 +141,25 @@ export default function QuoteHeader({
           </div>
         </div>
 
-        {/* Meta row: customer + professional (+ commission %) + order + save */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Meta row: vendor (admin-editable) + customer + professional
+            + order, in one horizontal group. Wraps naturally when the
+            chips don't all fit on a single line. We deliberately kept
+            the chips compact (short labels, narrow name max-widths)
+            so on most phone widths they sit on one row instead of
+            wrapping — "Pedido" lands next to the customer name where
+            it belongs visually, with the professional chip alongside. */}
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Datos de la cotización"
+        >
+          {isAdmin && (
+            <SellerSelect
+              quote={quote}
+              assignableSellers={assignableSellers}
+              onUpdateQuote={onUpdateQuote}
+            />
+          )}
           <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
           <ProfessionalChip
             quote={quote}
@@ -178,8 +173,6 @@ export default function QuoteHeader({
             profileId={profileId}
             onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
-          <div className="flex-1" />
-          <SaveIndicator savedAt={savedAt} saving={saving} />
         </div>
       </div>
 
@@ -192,6 +185,40 @@ export default function QuoteHeader({
         currentId={quote.customerId}
       />
     </div>
+  );
+}
+
+/**
+ * Compact "Vendedor" select rendered as a chip in the meta row so it
+ * sits adjacent to the customer, professional, and order chips
+ * instead of getting its own row above. Visually matches the chip
+ * vocabulary (rounded, ink-200 border, hover state) so the eye reads
+ * the row as a single horizontal group.
+ *
+ * The blank option lets an admin explicitly null out attribution for
+ * training / sandbox quotes. Inactive sellers stay listed only when
+ * they're the current attribution so the row labels itself honestly
+ * — picking someone else effectively "unassigns" the inactive one.
+ */
+function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
+  return (
+    <label className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs">
+      <span className="text-ink-500 select-none">Vendedor</span>
+      <select
+        value={quote?.createdByUserId || ''}
+        onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
+        className="bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer max-w-[110px] sm:max-w-[180px] lg:max-w-[220px] truncate"
+        aria-label="Vendedor asignado"
+      >
+        <option value="">— sin vendedor —</option>
+        {assignableSellers.map((p) => (
+          <option key={p.id} value={p.id}>
+            {(p.name?.trim() || p.email?.split('@')[0] || p.id)}
+            {p.id === quote?.createdByUserId && !p.active ? ' (inactivo)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

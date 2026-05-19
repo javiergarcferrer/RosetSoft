@@ -80,14 +80,17 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         className="inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors max-w-full min-w-0 text-xs overflow-hidden"
         title={[professional.name, professional.company, professional.email].filter(Boolean).join(' · ')}
       >
-        {/* Left segment: avatar + name + chevron, opens the picker */}
+        {/* Left segment: avatar + name + chevron, opens the picker.
+            Name max-width tracks CustomerChip's exact ladder so the
+            two chips truncate at the same point and read as
+            same-size pills in the meta row. */}
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
           className="inline-flex items-center gap-2 pl-2 pr-1.5 min-h-7 coarse:min-h-9 hover:bg-ink-50 transition-colors min-w-0"
         >
           <Avatar name={professional.name} />
-          <span className="font-medium text-ink-900 truncate max-w-[160px] sm:max-w-[200px]">
+          <span className="font-medium text-ink-900 truncate max-w-[110px] sm:max-w-[180px] lg:max-w-[220px]">
             {professional.name}
           </span>
           <ChevronDown size={12} className="text-ink-400 flex-shrink-0" />
@@ -99,8 +102,11 @@ export default function ProfessionalChip({ quote, professional, professionals, p
 
         {/* Right segment: editable percentage. The label is implicit —
             adjacency to the professional name + the trailing % glyph
-            tell the user what they're editing. No "Comisión" prefix. */}
-        <label className="inline-flex items-center gap-0.5 pl-2 pr-2 min-h-7 coarse:min-h-9 hover:bg-ink-50 transition-colors cursor-text">
+            tell the user what they're editing. No "Comisión" prefix.
+            Input width tightened (w-7) so the % segment adds the
+            smallest possible delta vs. CustomerChip — both pills
+            land at near-identical widths for similar-length names. */}
+        <label className="inline-flex items-center gap-0.5 pl-1.5 pr-2 min-h-7 coarse:min-h-9 hover:bg-ink-50 transition-colors cursor-text">
           <DebouncedInput
             type="number"
             inputMode="decimal"
@@ -117,7 +123,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             }}
             placeholder={String(inheritedDefault)}
             aria-label="Comisión (%)"
-            className="w-8 text-right tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder:text-ink-400"
+            className="w-7 text-right tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder:text-ink-400"
           />
           <span className="text-ink-500 select-none" aria-hidden>%</span>
         </label>
