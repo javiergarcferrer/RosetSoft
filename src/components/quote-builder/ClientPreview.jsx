@@ -151,11 +151,18 @@ function ClientLine({ line, currency, rates, fmt }) {
   // vertically into the void.
   return (
     <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
-      <div className="flex items-start gap-4">
+      {/* Image sizing matches the PDF: a "quarter page of space" per
+          dealer's directive. The PDF uses 170pt (~60mm); we land
+          around the same physical scale on screen — w-44 (176px) on
+          phones, w-52 (208px) on tablets+ — so the on-screen preview
+          and the printed PDF read the same. The previous w-20 / w-24
+          (80px / 96px) was small enough that dealers asked for the
+          PDF images to be bigger when the preview "looked fine". */}
+      <div className="flex items-start gap-4 sm:gap-5">
         {line.imageId ? (
-          <ImageView id={line.imageId} className="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0" />
+          <ImageView id={line.imageId} className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0" />
         ) : (
-          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
+          <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
           <div className="min-w-0 sm:flex-1">

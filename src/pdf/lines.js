@@ -43,9 +43,22 @@ import { embedImageById } from './embed.js';
 //     column.
 // ---------------------------------------------------------------------------
 
-const IMAGE_SIZE = 80;          // 80×80 — matches the preview's thumbnail
-const IMG_GUTTER = 16;          // space between image and detail text
-const NUMERIC_COL_W = 110;      // right-aligned, fits "$1,234,567.89"
+// Image sizing — the dealer's directive: "I need bigger images. They
+// should be much bigger. Give each product a quarter page of space."
+// Letter page is 792pt tall; a quarter is 198pt. With the row's top +
+// bottom padding (14 + 14 = 28pt), that leaves 170pt for the image.
+// At 170pt square (~60mm) the product photo is visible from across the
+// dealer's desk; the previous 80pt thumb was easy to miss.
+//
+// The contain-fit scale was bumped from 0.92 → 0.96 to fill more of
+// the box now that the image dominates the row — at the larger size
+// the thin matte that 0.92 reserved no longer reads as "intentional
+// breathing room", it reads as wasted space.
+const IMAGE_SIZE = 170;
+const IMG_GUTTER = 18;
+const NUMERIC_COL_W = 100;    // trimmed from 110 → 100 to give the
+                              // detail column a few extra points now
+                              // that the image eats more of the row.
 
 const ROW_TOP_PAD = 14;
 const ROW_BOTTOM_PAD = 14;
@@ -244,9 +257,11 @@ export async function drawLineRow(page, ctx, cursor, line) {
     color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
   });
   if (img) {
-    // 0.92 contain-scale leaves a thin matte around the photo so it
-    // doesn't touch the box border (reads as intentional, not clipped).
-    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.92;
+    // 0.96 contain-scale leaves the slightest matte so the photo
+    // doesn't touch the box border (reads as intentional, not clipped),
+    // while still filling enough of the 170pt box that the product
+    // dominates the row visually.
+    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
     const w = img.width * scale;
     const h = img.height * scale;
     page.drawImage(img, {
