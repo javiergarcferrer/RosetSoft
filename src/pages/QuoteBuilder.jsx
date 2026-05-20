@@ -492,16 +492,32 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       await db.quoteLines.delete(line.id);
-      // If we just deleted the SELECTED alternative in a group, promote
-      // the next sibling to selected so the group still contributes
-      // exactly one priced line to the total. Otherwise the group
-      // would silently drop out of the math.
-      if (line.alternativeGroup && line.isSelectedAlternative) {
+      // Maintain the alternative-group invariant after the deletion: a
+      // group is either ≥2 members with exactly one selected, or it
+      // doesn't exist. Every surface (editor, preview, PDF, pricing)
+      // keys off `alternativeGroup`, so healing it here is what makes
+      // "Alternativa 1 de 1" impossible. We capture the sibling we
+      // touch so undo can put the group back exactly as it was.
+      let healedSibling = null;
+      if (line.alternativeGroup) {
         const siblings = lines.filter(
           (l) => l.alternativeGroup === line.alternativeGroup && l.id !== line.id,
         );
-        if (siblings.length > 0) {
-          await db.quoteLines.update(siblings[0].id, { isSelectedAlternative: true });
+        if (siblings.length === 1) {
+          // Collapsed to a lone survivor — it's no longer a menu of
+          // choices. Promote it to a standalone line so it neither
+          // shows the singleton caption nor risks dropping out of the
+          // total on a stale isSelectedAlternative flag.
+          healedSibling = siblings[0];
+          await db.quoteLines.update(healedSibling.id, {
+            alternativeGroup: null,
+            isSelectedAlternative: false,
+          });
+        } else if (siblings.length > 1 && line.isSelectedAlternative) {
+          // Removed the selected member of a still-valid group — promote
+          // the first survivor so exactly one line stays priced.
+          healedSibling = siblings[0];
+          await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
         }
       }
       const label = line.kind === LINE_KIND_SECTION
@@ -511,6 +527,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // Restore the row at its original sort_order. The other rows kept
         // their positions, so the slot is still empty.
         await db.quoteLines.put(line);
+        // Roll back the invariant repair so the group reads exactly as
+        // it did before the delete.
+        if (healedSibling) {
+          await db.quoteLines.update(healedSibling.id, {
+            alternativeGroup: healedSibling.alternativeGroup,
+            isSelectedAlternative: !!healedSibling.isSelectedAlternative,
+          });
+        }
       });
     } finally {
       markSaved();
