@@ -108,8 +108,13 @@ export interface Settings {
   companyPhone?: string;
   logoImageId?: string | null;
   defaultCurrency?: CurrencyCode;
-  /** Snapshot of the latest computed effective rate; refreshed on save. */
+  /**
+   * Legacy. The rate's single source of truth is now `bsc` (read via
+   * effectiveDopRate); this column is no longer written or read for
+   * pricing. Kept so older rows still type-check.
+   */
   currencyRates?: RatesMap;
+  /** Single source of truth for the USD↔DOP rate (Banco Popular venta). */
   bsc?: BscRates;
   /** Legacy column. Read-only fallback for pre-bsc-rename data. */
   bpd?: BscRates;

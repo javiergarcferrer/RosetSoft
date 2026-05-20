@@ -139,6 +139,30 @@ export function AppProvider({ children }) {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, refreshProfiles, refreshCurrentProfile]);
 
+  // Realtime: the team settings row (exchange rate, company info) is
+  // shared and changes from other sessions — the daily rate pull, the
+  // "Actualizar ahora" button, or another admin editing settings. Without
+  // a live channel an open session kept a stale cached rate until reload,
+  // so a freshly pulled rate never reached quote panes already on screen.
+  // Migration 20260520140000 adds settings to the supabase_realtime
+  // publication; we re-read on any change so the rate (and everything
+  // settings-derived) updates everywhere at once — one source of truth.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const channel = supabase
+      .channel('rt:public:settings')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        async () => {
+          await refreshSettings();
+          invalidate();
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, refreshSettings]);
+
   const saveSettings = useCallback(async (patch) => {
     await updateSettings(profileId, patch);
     await refreshSettings();

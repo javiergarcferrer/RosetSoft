@@ -28,10 +28,9 @@ export default function Settings() {
     setSaveState('saving');
     setSaveError(null);
     try {
-      // Keep currencyRates.DOP in sync with whichever rate the user chose
-      const dop = effectiveDopRate(local);
-      const next = { ...local, currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: dop } };
-      await saveSettings(next);
+      // The rate's single source of truth is settings.bsc — nothing
+      // derived to keep in sync here, so just persist the form as-is.
+      await saveSettings(local);
       setSaveState('saved');
       // Drop the "Guardado" badge after a beat so the button is reusable.
       setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000);
@@ -41,8 +40,6 @@ export default function Settings() {
       setSaveState('error');
     }
   }
-
-  const rates = local.currencyRates || { USD: 1 };
 
   // Configuración is admin-only: company info, exchange rates,
   // commission defaults, etc. Employees typing /settings in the URL
@@ -246,9 +243,9 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
   }
 
   // Manual override — a stopgap while the BPD subscription is approved.
-  // Writes the same settings.bsc + currency_rates the auto pull writes,
-  // so the whole app quotes on it immediately. A later successful pull
-  // overwrites it; a failed pull (e.g. the current 401) never does.
+  // Writes settings.bsc (the single source of truth), so the whole app
+  // quotes on it immediately. A later successful pull overwrites it; a
+  // failed pull (e.g. a 401) never does.
   const [manualBuy, setManualBuy] = useState('');
   const [manualSell, setManualSell] = useState('');
   const [savingManual, setSavingManual] = useState(false);
@@ -264,10 +261,7 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
     const buy = manualBuy === '' ? sell : Number(manualBuy);
     setSavingManual(true); setManualErr(null); setManualOk(false);
     try {
-      await saveSettings({
-        bsc: { buy, sell, updatedAt: Date.now() },
-        currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: sell },
-      });
+      await saveSettings({ bsc: { buy, sell, updatedAt: Date.now() } });
       setManualOk(true);
     } catch (e) {
       setManualErr(e?.message || 'No se pudo guardar la tasa.');

@@ -11,7 +11,7 @@
 //     request anyway. This proxy does both server-side.
 //
 // On every successful fetch it also writes the rate to the team
-// settings row (settings.bsc + settings.currency_rates) with the
+// settings row (settings.bsc — the single source of truth) with the
 // service-role key, so the number the whole app quotes on is the bank's
 // published rate — nobody types it in. It's called from a logged-in
 // dealer's browser: automatically on the first app load of each day (see
@@ -190,12 +190,12 @@ Deno.serve(async (req) => {
       return json({ error: 'USD rate not found in response', raw: payload }, 502);
     }
 
-    // Persist to the shared team settings row so the rate the whole app
-    // quotes on (effectiveDopRate → settings.bsc) is the bank's published
-    // number, refreshed without anyone touching it. Service-role client
-    // bypasses RLS. `currency_rates.DOP` is kept in lockstep so new-quote
-    // rate snapshots (QuoteBuilder) don't go stale. We quote on venta
-    // (sell). `updatedAt` is ms to match the app's own jsonb writes.
+    // Persist to the shared team settings row — the SINGLE source of
+    // truth for the rate. effectiveDopRate() reads settings.bsc.sell, and
+    // everything else (quote snapshots, PDF, totals) derives from that, so
+    // we write only `bsc` here. Service-role client bypasses RLS. We quote
+    // on venta (sell). `updatedAt` is ms to match the app's jsonb writes.
+    // Realtime (migration 20260520140000) propagates this to open sessions.
     let persisted = false;
     if (SUPABASE_URL && SERVICE_ROLE_KEY) {
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -205,7 +205,6 @@ Deno.serve(async (req) => {
         .from('settings')
         .update({
           bsc: { buy: rates.USD.compra, sell: rates.USD.venta, updatedAt: Date.now() },
-          currency_rates: { USD: 1, DOP: rates.USD.venta },
         })
         .eq('profile_id', 'team');
       if (upErr) {

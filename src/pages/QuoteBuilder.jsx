@@ -86,7 +86,7 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
     orderId: null,
     status: 'draft',
     currencyCode: 'USD',
-    rates: settings?.currencyRates || { USD: 1 },
+    rates: effectiveRates(settings),
     marginPct: settings?.defaultMarginPct || 0,
     discountPct: settings?.defaultDiscountPct || 0,
     shipping: 0,

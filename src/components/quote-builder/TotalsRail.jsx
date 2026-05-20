@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, Info } from 'lucide-react';
+import { ChevronDown, Info, Lock } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
+import { QUOTE_STATUS_DRAFT } from '../../lib/constants.js';
 import { formatMoney } from '../../lib/format.js';
 /**
  * The persistent totals + adjustments rail. Always visible on the right
@@ -30,6 +31,11 @@ export default function TotalsRail({
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
   const dopTotal = dopRate ? totals.grandTotal * dopRate : null;
+  // The rate floats live while the quote is a draft; once sent it's frozen
+  // to the snapshot taken at send time (by design — so a figure the client
+  // has seen can't move). Flag it so the dealer doesn't mistake a locked
+  // rate for a stale one after pulling a newer rate.
+  const rateLocked = !!quote.status && quote.status !== QUOTE_STATUS_DRAFT;
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const fmt = (v) => formatMoney(v, currency, rates);
@@ -62,6 +68,12 @@ export default function TotalsRail({
           <div className="text-[11px] text-ink-500 text-right tabular-nums">
             ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
             <span className="ml-1 text-ink-400">@ {dopRate.toFixed(2)}</span>
+          </div>
+        )}
+        {rateLocked && dopRate && (
+          <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">
+            <Lock size={11} className="mt-0.5 flex-shrink-0" />
+            <span>Tasa fija en {dopRate.toFixed(2)} DOP/USD — se bloqueó al enviar la cotización. Solo los borradores usan la tasa actual de Banco Popular.</span>
           </div>
         )}
 
