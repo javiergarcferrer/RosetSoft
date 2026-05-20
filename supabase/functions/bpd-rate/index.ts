@@ -73,11 +73,20 @@ Deno.serve(async (req) => {
 
   try {
     // 1. OAuth client-credentials token.
+    //
+    // IBM API Connect identifies the confidential app at the gateway via
+    // BOTH the X-IBM-Client-Id AND X-IBM-Client-Secret *headers* (per
+    // BPD's "probar tus APIs" guide — "agrega los encabezados … client-id
+    // y client-secret"). Sending the secret only in the OAuth body is not
+    // enough: without the header the gateway can't authorize the app and
+    // returns `unauthorized_client` / "Invalid client ID or secret, or
+    // client not subscribed to this API" with an empty plan/product.
     const tokenRes = await fetch(`${BASE}/bpd/Authentication/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-IBM-Client-Id': CLIENT_ID,
+        'X-IBM-Client-Secret': CLIENT_SECRET,
         Accept: 'application/json',
       },
       body: new URLSearchParams({
@@ -96,11 +105,13 @@ Deno.serve(async (req) => {
       return json({ error: 'No access_token in token response', detail: tokenText.slice(0, 500) }, 502);
     }
 
-    // 2. Fetch the published rates.
+    // 2. Fetch the published rates. Same gateway app-identification
+    // headers as the token call, plus the Bearer we just minted.
     const rateRes = await fetch(`${BASE}/consultatasa/consultaTasa`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-IBM-Client-Id': CLIENT_ID,
+        'X-IBM-Client-Secret': CLIENT_SECRET,
         Accept: 'application/json',
       },
     });
