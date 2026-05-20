@@ -564,6 +564,23 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (exporting) return;          // de-bounce double-taps
     setExportError(null);
     setExporting(true);
+    // The dealer asked to *look* at the PDF before sending it — not jump
+    // straight to the share sheet. Open a viewer tab synchronously (inside
+    // the click gesture, so the browser doesn't block it as a popup) and
+    // point it at the finished PDF once it's ready. The browser's own PDF
+    // viewer then offers print / download / share after they've reviewed.
+    const viewer = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    if (viewer) {
+      try {
+        viewer.document.write(
+          '<!doctype html><meta charset="utf-8"><title>Generando cotización…</title>' +
+          '<body style="margin:0;font:15px system-ui,sans-serif;color:#555;' +
+          'display:flex;height:100vh;align-items:center;justify-content:center">' +
+          'Generando la cotización…</body>',
+        );
+        viewer.document.close();
+      } catch { /* about:blank write can race on some engines; harmless */ }
+    }
     try {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
@@ -584,12 +601,22 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // ("MOBILIARIO DE SALA") are part of the layout the customer
       // sees in both places.
       const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller });
-      // downloadBlob is async now: it awaits navigator.share on mobile/
-      // PWA. The await here is what made the iOS-PWA "nothing happens"
-      // bug surface — without awaiting we'd never see the share-sheet
-      // rejection that the platform raised silently.
-      await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
+      if (!blob || !blob.size) {
+        throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+      }
+      const url = URL.createObjectURL(blob);
+      if (viewer && !viewer.closed) {
+        // Show the PDF in the viewer tab so the dealer can review it.
+        viewer.location.href = url;
+      } else {
+        // Popup blocked / unavailable — fall back to the native
+        // share/download so the dealer still gets the file.
+        await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
+      }
+      // Hold the blob long enough for the viewer to finish loading it.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
+      if (viewer && !viewer.closed) { try { viewer.close(); } catch { /* noop */ } }
       console.error('[QuoteBuilder] exportPdf failed:', err);
       setExportError(err?.message || 'No se pudo generar el PDF.');
     } finally {
