@@ -9,6 +9,7 @@ import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
+import { supabase } from '../db/supabaseClient.js';
 
 export default function Settings() {
   const { profileId, settings, saveSettings, isAdmin } = useApp();
@@ -219,6 +220,35 @@ function RateCard({ local, set, saveSettings }) {
     set('bsc', { ...bsc, ...patch, updatedAt: Date.now() });
   }
 
+  // Pull today's published rates from Banco Popular via the bpd-rate Edge
+  // Function (the OAuth secret stays server-side). Fills the compra/venta
+  // inputs; the dealer reviews and presses Guardar to persist.
+  const [fetching, setFetching] = useState(false);
+  const [fetchErr, setFetchErr] = useState(null);
+  async function fetchBpdRate() {
+    setFetching(true);
+    setFetchErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('bpd-rate');
+      if (error) {
+        let msg = error.message || 'No se pudo obtener la tasa';
+        try {
+          const body = await error.context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch { /* body already consumed / not JSON */ }
+        throw new Error(msg);
+      }
+      if (!data?.usd || (!data.usd.compra && !data.usd.venta)) {
+        throw new Error(data?.error || 'El banco no devolvió una tasa de USD.');
+      }
+      setBsc({ buy: data.usd.compra || null, sell: data.usd.venta || null });
+    } catch (e) {
+      setFetchErr(e?.message || 'No se pudo obtener la tasa.');
+    } finally {
+      setFetching(false);
+    }
+  }
+
   const eff = effectiveDopRate(local);
   const sample = (10000 / eff).toFixed(2);
   const sampleInverse = (100 * eff).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -261,8 +291,23 @@ function RateCard({ local, set, saveSettings }) {
           </a>
         </div>
         <p className="text-[11px] text-ink-500 mb-3">
-          Actualiza desde la app de BSC o su sitio web. La tasa de venta es la que paga tu cliente al adquirir USD.
+          Actualiza desde la app de BSC o su sitio web, o trae la tasa publicada de Banco Popular automáticamente. La tasa de venta es la que paga tu cliente al adquirir USD.
         </p>
+        <button
+          type="button"
+          onClick={fetchBpdRate}
+          disabled={fetching}
+          className="btn-ghost text-xs mb-3 disabled:opacity-60 disabled:cursor-wait"
+          title="Trae la tasa USD publicada por Banco Popular Dominicano y la coloca abajo"
+        >
+          <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
+          {fetching ? 'Obteniendo…' : 'Obtener tasa de Banco Popular'}
+        </button>
+        {fetchErr && (
+          <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1">
+            <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {fetchErr}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>

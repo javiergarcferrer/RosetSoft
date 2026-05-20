@@ -23,3 +23,8 @@ verify_jwt = false
 
 [functions.delete-user]
 verify_jwt = false
+
+# bpd-rate verifies the caller's JWT itself (so the CORS preflight, which
+# carries no Authorization header, isn't rejected by the gateway).
+[functions.bpd-rate]
+verify_jwt = false
