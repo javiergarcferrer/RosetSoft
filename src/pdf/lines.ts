@@ -240,8 +240,8 @@ function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
     return lines.length ? [{ kind: 'text', token, lines }] : [];
   };
   const meta = [
-    line.reference ? `ref ${line.reference}` : null,
-    line.dimensions,
+    line.reference ? `REF. ${line.reference}` : null,
+    line.dimensions ? `DIM. ${line.dimensions}` : null,
   ].filter(Boolean).join(' · ');
   return {
     head: [
@@ -653,8 +653,8 @@ function componentDetail(
   // Optional components prefix the name with an "OPCIONAL · " eyebrow.
   const namePrefix = component.isOptional ? 'OPCIONAL · ' : '';
   const meta = [
-    component.reference ? `ref ${component.reference}` : null,
-    component.dimensions,
+    component.reference ? `REF. ${component.reference}` : null,
+    component.dimensions ? `DIM. ${component.dimensions}` : null,
   ].filter(Boolean).join(' · ');
   return {
     head: seg(namePrefix + (component.name || '(sin nombre)'), T.compName, nameW),

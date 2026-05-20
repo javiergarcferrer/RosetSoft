@@ -332,8 +332,8 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
                   {line.subtype && <div className="text-[11px] text-ink-500">{line.subtype}</div>}
                   {(line.reference || line.dimensions) && (
                     <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                      {line.reference && <span className="font-mono">ref {line.reference}</span>}
-                      {line.dimensions && <span>{line.dimensions}</span>}
+                      {line.reference && <span className="font-mono">REF. {line.reference}</span>}
+                      {line.dimensions && <span>DIM. {line.dimensions}</span>}
                     </div>
                   )}
                 </div>
@@ -567,8 +567,8 @@ function CompoundComponentRow({ component, fmt }) {
               {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
               {(component.reference || component.dimensions) && (
                 <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                  {component.reference && <span className="font-mono">ref {component.reference}</span>}
-                  {component.dimensions && <span>{component.dimensions}</span>}
+                  {component.reference && <span className="font-mono">REF. {component.reference}</span>}
+                  {component.dimensions && <span>DIM. {component.dimensions}</span>}
                 </div>
               )}
             </div>

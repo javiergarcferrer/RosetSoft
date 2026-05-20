@@ -565,18 +565,18 @@ function GradeFabricRow({ line, onChange }) {
 // the input instead of being clipped). The strip flex-wraps so when
 // an expanded input runs out of room, it drops to the next line.
 function SpecStrip({ line, onChange, refInputRef }) {
-  // No permanent "Ref." / "Dim." labels — the field name lives in the
-  // placeholder and disappears once a value is typed (the value itself is
-  // self-evident: a bare number is the ref, "H × W × D" is the dimensions).
-  // Both share one compact line; `size` keeps each input near its content
-  // so they fit side by side and wrap only when the row is truly too narrow.
+  // Uppercase REF. / DIM. micro-labels — same treatment as the compound
+  // component rows (and mirrored in the PDF), so the spec reads
+  // consistently. Both share one compact line; `size` keeps each input
+  // near its content so they fit side by side and wrap only when narrow.
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 min-w-0">
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 min-w-0">
       <InlineEditor
         ref={refInputRef}
+        label="Ref."
         value={line.reference || ''}
         onCommit={(v) => onChange({ reference: v })}
-        placeholder="Referencia"
+        placeholder="—"
         mono
         size={11}
         widthClass="min-w-0"
@@ -588,9 +588,10 @@ function SpecStrip({ line, onChange, refInputRef }) {
           by autocomplete, QuickActions, and PDF rendering; only the
           edit control has been removed at the dealer's request. */}
       <InlineEditor
+        label="Dim."
         value={line.dimensions || ''}
         onCommit={(v) => onChange({ dimensions: v })}
-        placeholder="Dimensiones"
+        placeholder="H × W × D"
         mono
         size={18}
         widthClass="min-w-0"

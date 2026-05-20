@@ -261,10 +261,12 @@
   }
 
   .qli-calc {
-    background: theme('colors.ink.50');
-    border: 1px solid theme('colors.ink.100');
-    border-radius: 0.5rem;
-    padding: 0.625rem 0.75rem;
+    /* Pricing reads as the LAST ROW of the card (like a compound
+       component) — a faint top divider sets it apart from the identity
+       rows, instead of a boxed rail floating to the right with dead space. */
+    border-top: 1px solid theme('colors.ink.100');
+    padding-top: 0.75rem;
+    margin-top: 0.125rem;
     min-width: 0;
   }
   /* Calc cells flow as a flex row that wraps. When the container is
@@ -294,29 +296,11 @@
     white-space: nowrap;
   }
 
-  @container qli (min-width: 380px) {
-    .qli-calc { padding: 0.75rem 0.875rem; }
-  }
-
-  @container qli (min-width: 640px) {
-    .qli-body {
-      flex-direction: row;
-      align-items: stretch;
-      gap: 1.125rem;
-    }
-    .qli-calc {
-      flex-shrink: 0;
-      /* Min-width, not a fixed width. The calc grows past 360px if the
-         money or unit price needs more room — we never cap it and
-         force ellipsis. */
-      width: auto;
-      min-width: 22.5rem;
-    }
-  }
-
-  @container qli (min-width: 820px) {
-    .qli-calc { min-width: 25rem; }
-  }
+  /* qli-body stays a vertical stack at EVERY width: identity rows, then
+     the pricing row — flowing like a compound component, using the full
+     width with the Total pushed to the right edge. The old >=640px rule
+     split it into identity | boxed-calc columns, which stranded the calc
+     box at min-width 22.5rem with tall dead space on desktop. */
 
   /* Narrow container — operators hide and each cell takes its own
      row. The dealer sees the equation as a stack:
