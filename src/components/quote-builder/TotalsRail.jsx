@@ -66,14 +66,24 @@ export default function TotalsRail({
         </div>
         {dopRate && currency === 'USD' && (
           <div className="text-[11px] text-ink-500 text-right tabular-nums">
-            ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-            <span className="ml-1 text-ink-400">@ {dopRate.toFixed(2)}</span>
-          </div>
-        )}
-        {rateLocked && dopRate && (
-          <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">
-            <Lock size={11} className="mt-0.5 flex-shrink-0" />
-            <span>Tasa fija en {dopRate.toFixed(2)} DOP/USD — se bloqueó al enviar la cotización. Solo los borradores usan la tasa actual de Banco Popular.</span>
+            <div>
+              ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
+              {rateLocked ? (
+                <span
+                  className="ml-1 inline-flex items-center gap-1 rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-amber-800"
+                  title="Tasa bloqueada al enviar la cotización"
+                >
+                  <Lock size={10} /> @ {dopRate.toFixed(2)}
+                </span>
+              ) : (
+                <span className="ml-1 text-ink-400">@ {dopRate.toFixed(2)}</span>
+              )}
+            </div>
+            {rateLocked && quote.sentAt && (
+              <div className="text-[10px] text-amber-700 mt-0.5">
+                {new Date(quote.sentAt).toLocaleDateString('es-DO')}
+              </div>
+            )}
           </div>
         )}
 
