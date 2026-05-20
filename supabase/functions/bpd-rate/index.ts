@@ -13,11 +13,11 @@
 // On every successful fetch it also writes the rate to the team
 // settings row (settings.bsc + settings.currency_rates) with the
 // service-role key, so the number the whole app quotes on is the bank's
-// published rate — nobody types it in. Two callers are allowed:
-//   - a logged-in dealer (the "Actualizar ahora" button), verified by
-//     JWT here; and
-//   - the daily pg_cron job, which authenticates with the service-role
-//     key (see supabase/migrations/*_schedule_bpd_rate_daily.sql).
+// published rate — nobody types it in. It's called from a logged-in
+// dealer's browser: automatically on the first app load of each day (see
+// AppContext / shouldPullDailyRate) and on demand from Settings'
+// "Actualizar ahora" button. Both carry the user's JWT, verified here —
+// no cron, no extra secrets, no manual setup.
 //
 // Endpoints come from the API spec (sandbox by default). Set a
 // BPD_API_BASE secret to point at production without a code change.
@@ -47,19 +47,15 @@ Deno.serve(async (req) => {
     return json({ error: 'Server misconfigured' }, 500);
   }
 
-  // Require *some* bearer so the bank's quota can't be drained by
+  // Require a logged-in dealer so the bank's quota can't be drained by
   // anonymous traffic. verify_jwt is off at the gateway (so the CORS
   // preflight passes — browsers don't send Authorization on OPTIONS); we
-  // authenticate here instead. The daily cron sends the service-role key
-  // (recognised below, skips the user lookup); a dealer sends their JWT,
-  // which we verify.
+  // verify the token here instead.
   const authHeader = req.headers.get('Authorization') || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  if (!bearer) {
+  if (!authHeader.startsWith('Bearer ')) {
     return json({ error: 'Authorization header required' }, 401);
   }
-  const isCron = !!SERVICE_ROLE_KEY && bearer === SERVICE_ROLE_KEY;
-  if (!isCron && SUPABASE_URL && SUPABASE_ANON_KEY) {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false, autoRefreshToken: false },

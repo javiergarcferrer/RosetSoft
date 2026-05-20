@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
+import { shouldPullDailyRate } from '../lib/exchangeRate.js';
 import { useAuth } from './AuthContext.jsx';
 
 const Ctx = createContext(null);
@@ -72,6 +73,23 @@ export function AppProvider({ children }) {
         const s = await getSettings(pid);
         if (cancelled) return;
         setSettings(s);
+
+        // First app load of the day (Santo Domingo time) refreshes the
+        // BPD exchange rate, so the figure everyone quotes on stays
+        // current with no cron and no manual step. Whoever opens the app
+        // first that day triggers it; the Edge Function persists the rate
+        // and we re-read it once it lands. Fire-and-forget — it must
+        // never block app readiness or fail the boot if the bank is down.
+        if (shouldPullDailyRate(s)) {
+          supabase.functions
+            .invoke('bpd-rate')
+            .then(async ({ error }) => {
+              if (error || cancelled) return;
+              const fresh = await getSettings(pid);
+              if (!cancelled) setSettings(fresh);
+            })
+            .catch(() => {});
+        }
 
         const list = await refreshProfiles();
         if (cancelled) return;

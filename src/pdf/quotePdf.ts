@@ -4,7 +4,7 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
-import { effectiveRates } from '../lib/exchangeRate.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
@@ -126,14 +126,11 @@ export async function generateQuotePdf({
     customer,
     professional,
     seller,
-    // Use the LIVE rate from Settings rather than quote.rates so the
-    // PDF body matches the dealer's current setup. The totals block
-    // already pulled the DOP rate from settings via
-    // effectiveDopRate; this extends the same source-of-truth to the
-    // line-item formatting (which previously used quote.rates and
-    // could drift when the dealer updated rates after the quote was
-    // first drafted).
-    rates: effectiveRates(safeSettings),
+    // Resolve the rate by quote status: a draft tracks the live Settings
+    // rate; a sent (or finalised) quote uses the snapshot locked at send
+    // time. This keeps the PDF a client receives from drifting when the
+    // bank's rate changes the next day.
+    rates: displayRatesFor(quote, safeSettings),
     currency: (quote.currencyCode || 'USD') as CurrencyCode,
   };
 

@@ -3,12 +3,12 @@
  *
  * The catalog is priced in USD (Ligne Roset's official list). To quote
  * in pesos the app applies Banco Popular Dominicano's published rate.
- * The rate is pulled automatically — daily at 08:00 America/Santo_Domingo
- * by a scheduled job, plus on demand from Settings — by the `bpd-rate`
- * Edge Function, which writes the bank's compra/venta to the team
- * settings row. Nobody types it in or overrides it; the app shows the
- * bank's number as-is. We quote on the *venta* (sell) rate — what the
- * client pays to acquire USD.
+ * The rate is pulled automatically — on the first app load of each day
+ * (Santo Domingo time; see `shouldPullDailyRate`), plus on demand from
+ * Settings — by the `bpd-rate` Edge Function, which writes the bank's
+ * compra/venta to the team settings row. Nobody types it in or overrides
+ * it; the app shows the bank's number as-is. We quote on the *venta*
+ * (sell) rate — what the client pays to acquire USD.
  *
  * Storage note: the rate lives under `settings.bsc` (a column once used
  * for Banco Santa Cruz rates). It now holds BPD's rate; the name is just
@@ -16,7 +16,7 @@
  * `settings.bpd` shape as a fallback so pre-existing data isn't lost.
  */
 
-import { isActiveQuoteStatus } from './constants.js';
+import { QUOTE_STATUS_DRAFT } from './constants.js';
 import type {
   Settings,
   BscRates,
@@ -72,13 +72,13 @@ export function effectiveRates(settings: Settings | null | undefined): RatesMap 
  * CustomerDetail, ProfessionalDetail, AcceptedQuotes, etc.).
  *
  * Rule of thumb:
- *   • Active quotes (draft / sent) → live rates from settings.
- *     The dealer is still working with the customer; the figure in
- *     the list should match what the workspace shows.
- *   • Finalised quotes (accepted / declined / archived) → the
- *     snapshot the quote was finalised with. The rate quoted to that
- *     customer is the historical record; today's rate would
- *     misrepresent what the customer agreed to.
+ *   • Draft → live rate from settings. The dealer is still building the
+ *     quote; the figure should track today's published rate.
+ *   • Sent and beyond (sent / accepted / declined / archived) → the
+ *     snapshot frozen the moment the quote was sent. Once the client has
+ *     seen a peso figure it must not move under them, even if the bank's
+ *     rate changes the next day. (QuoteBuilder.updateQuote captures this
+ *     snapshot on the send transition.)
  *
  * Falls back to USD-only when both sides are missing so formatMoney
  * still has a valid map to read.
@@ -87,8 +87,32 @@ export function displayRatesFor(
   quote: Pick<Quote, 'status' | 'rates'> | null | undefined,
   settings: Settings | null | undefined,
 ): RatesMap {
-  if (quote && isActiveQuoteStatus(quote.status)) {
+  if (quote && quote.status === QUOTE_STATUS_DRAFT) {
     return effectiveRates(settings);
   }
   return (quote && quote.rates) || { USD: 1 };
+}
+
+/**
+ * AST (America/Santo_Domingo, UTC-4, no DST) calendar-day key for a ms
+ * timestamp, e.g. "2026-05-20".
+ */
+function astDayKey(ms: number): string {
+  return new Date(ms - 4 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * True on the first app load of a new Santo Domingo day — i.e. the
+ * stored rate wasn't pulled today (or was never pulled). AppContext uses
+ * this to refresh the BPD rate once a day without a cron: whoever opens
+ * the app first that day triggers the pull, and the persisted rate
+ * serves everyone else.
+ */
+export function shouldPullDailyRate(
+  settings: Settings | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  const { updatedAt } = readBscRates(settings);
+  if (!updatedAt) return true;
+  return astDayKey(updatedAt) !== astDayKey(now);
 }

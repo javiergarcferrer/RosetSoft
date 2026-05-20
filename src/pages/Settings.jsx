@@ -245,7 +245,7 @@ function RateCard({ local, set, refreshSettings }) {
     <div className="card card-pad">
       <h2 className="font-semibold mb-2">Tasa de cambio USD → DOP</h2>
       <p className="text-xs text-ink-500 mb-4">
-        Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano y se actualiza automáticamente cada día a las 8:00 a.m. (hora de Santo Domingo). Se cotiza con la tasa de venta.
+        Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano y se actualiza automáticamente al abrir la app cada día. Se cotiza con la tasa de venta.
       </p>
 
       {/* Banco Popular — read-only. The dealer can't adjust it; the daily

@@ -5,7 +5,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { effectiveRates } from '../lib/exchangeRate.js';
+import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
@@ -174,21 +174,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId, profiles } = useApp();
   const dbQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
   const baseQuote = dbQuote || draftQuote || null;
-  // Overlay LIVE exchange rates from Settings onto the quote we hand
-  // down to children (totals rail, line items, client preview, PDF
-  // export). Without this overlay, the editor renders the rates that
-  // were snapshotted at draft time and ignores manual rate changes
-  // made afterwards in Settings — the bug the dealer was hitting
-  // when typing a custom rate and seeing the quote pane keep the
-  // old one.
-  //
-  // Side effect: updateQuote spreads `{ ...quote, ...patch }` into
-  // the DB, so saving the quote also bakes in the current rates.
-  // That's intentional — once the dealer touches the quote with new
-  // rates in view, those rates ARE the deal they're presenting.
+  // Resolve the exchange rate the editor (and everything it feeds —
+  // totals rail, line items, client preview, PDF export) renders with.
+  // While a quote is a DRAFT it tracks the live published rate from
+  // Settings, so the dealer always builds against today's number. Once
+  // the quote is SENT the rate is locked to the snapshot taken at send
+  // time (displayRatesFor returns baseQuote.rates), so a later rate
+  // change can't move a figure the client has already seen.
   const quote = useMemo(() => {
     if (!baseQuote) return null;
-    return { ...baseQuote, rates: effectiveRates(settings) };
+    return { ...baseQuote, rates: displayRatesFor(baseQuote, settings) };
   }, [baseQuote, settings]);
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
@@ -277,7 +272,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       await ensurePersisted();
-      await db.quotes.put({ ...quote, ...patch, updatedAt: Date.now() });
+      // Lock the exchange rate the instant the quote is sent: freeze the
+      // current live rate onto the quote so later Settings changes can't
+      // move a figure the client has already seen. `patch.sentAt` is set
+      // only on a real send (the stepper's advance), not on an undo back
+      // to 'sent' — so re-sending after an undo re-locks at the
+      // then-current rate, while undo preserves the existing snapshot.
+      const next = (patch.status === 'sent' && patch.sentAt)
+        ? { ...patch, rates: effectiveRates(settings) }
+        : patch;
+      await db.quotes.put({ ...quote, ...next, updatedAt: Date.now() });
     } finally {
       markSaved();
     }

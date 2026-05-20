@@ -1,7 +1,6 @@
 import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
 import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
 import { ITBIS_PCT, quoteSavings } from '../lib/pricing.js';
-import { effectiveDopRate } from '../lib/exchangeRate.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT, BRAND_700,
@@ -54,7 +53,7 @@ export function drawTotals(
   totals: Totals,
   lines: QuoteLine[],
 ): Cursor {
-  const { fontBold, fontRegular, quote, settings, currency, rates } = ctx;
+  const { fontBold, fontRegular, quote, currency, rates } = ctx;
   const panelW = 300;
   const leftX = PAGE_W - MARGIN_R - panelW;
   const rightX = PAGE_W - MARGIN_R;
@@ -136,7 +135,10 @@ export function drawTotals(
   // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Replaces the
   // verbose "Tipo de cambio / source / Total RD$" stack — preview shows
   // just the shadow and we mirror it.
-  const dopRate = effectiveDopRate(settings);
+  // Use the rate already resolved for this quote (locked snapshot once
+  // sent, live while a draft) so this FX line agrees with the totals
+  // above it instead of re-deriving today's rate from settings.
+  const dopRate = Number(rates?.DOP) || 0;
   if (dopRate && currency === 'USD') {
     const dopTotal = totals.grandTotal * dopRate;
     const fx = `≈ RD$ ${formatPlain(dopTotal)} a ${dopRate.toFixed(2)} DOP/USD`;
