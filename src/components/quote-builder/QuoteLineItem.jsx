@@ -473,88 +473,88 @@ function GradeFabricRow({ line, onChange }) {
   // an overflowing input — they expand the field, and the field wraps
   // to the next row if the line is narrow).
   return (
-    <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 -ml-1.5 min-w-0">
-      <Select
-        variant="ghost"
-        value={grade}
-        onChange={(v) => commit({ grade: v, fabric })}
-        aria-label="Grade"
-        title="Fabric grade"
-      >
-        {/* Option text carries the "Grade " prefix on alpha values so the
-            collapsed select reads as "Grade C" rather than just "C" —
-            a bare letter is unambiguous to a Ligne Roset dealer in
-            isolation but jarring on a card that contains other letters
-            (refs, page numbers, dimensions).
-
-            Groups (Telas / Microfibras / Pieles) and the A..R, S, U..X
-            letter set come from the Ligne Roset price list verbatim;
-            the in-between letters (T, Y, Z) are reserved and never
-            offered. Source of truth: src/lib/subtype.js GRADE_GROUPS. */}
-        <option value="">Grade —</option>
-        {GRADE_GROUPS.map((group) => (
-          <optgroup key={group.label} label={group.label}>
-            {group.grades.map((g) => (
-              <option key={g} value={g}>Grade {g}</option>
-            ))}
-          </optgroup>
-        ))}
-        <optgroup label="Otros">
-          {SPECIAL_GRADES.map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
-          {/* Legacy values that may still live in older quotes — render
-              the matching option ONLY when the current value is one of
-              them, so a native <select> can display it back to the user.
-              Without this, the browser would silently fall back to the
-              first option and we'd lose what the dealer typed. */}
-          {LEGACY_NAMED_GRADES.includes(grade) && (
-            <option value={grade}>{grade} (anterior)</option>
-          )}
-        </optgroup>
-      </Select>
-      {(grade || fabric) ? (
-        <span className="text-ink-300 select-none px-0.5" aria-hidden>·</span>
-      ) : null}
-      <DebouncedInput
-        value={fabric}
-        onCommit={(v) => commit({ grade, fabric: v })}
-        placeholder="Tela o acabado"
-        autoCapitalize="words"
-        // qli-grow + min-w-* lets the input auto-size to the fabric
-        // text without being capped at flex-1's available width.
-        // max-w-full keeps it from forcing the row wider than its
-        // container — when it can't grow further it just wraps.
-        className="qli-grow min-w-[8rem] max-w-full bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
-      />
-      {/* Swatch-picker shortcut — opens the catalog modal so the dealer
-          can pick a material + color instead of typing the name and
-          guessing the code. Selecting writes back grade + fabric in
-          one shot via composeSubtype; the input above still works for
-          freeform overrides on unusual fabrics. */}
-      <button
-        type="button"
-        onClick={() => setSwatchOpen(true)}
-        className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
-        title="Elegir del catálogo de materiales"
-        aria-label="Elegir tela del catálogo"
-      >
-        <Palette size={14} />
-      </button>
-      {/* Fabric swatch photo — the picture the customer sees on the
-          quote. The catalog picker pre-fills it when the chosen color
-          carries a photo; when it doesn't (most of the imported list),
-          this same slot lets the dealer snap / drop / paste one right
-          here. Same uploader primitive as the product image, so the
-          empty state reads as an explicit "add photo" tile and the
-          corner × clears just the swatch. */}
+    <div className="flex items-start gap-2 min-w-0">
+      {/* Swatch pinned to the LEFT so the material reads the same on every
+          line/component no matter how long the fabric name is — mirrors
+          the client preview, which always puts the swatch left of the
+          subtype. The catalog picker pre-fills it; the empty state is an
+          explicit "add photo" tile and the corner × clears just the
+          swatch. */}
       <Thumbnail
         imageId={swatchImageId}
         onChange={(id) => onChange({ swatchImageId: id })}
         kind="quote-line-swatch"
         ownerId={line.id}
-        sizeClass="w-10 h-10 self-center"
+        sizeClass="w-10 h-10 flex-shrink-0"
       />
+      <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 min-w-0 flex-1">
+        <Select
+          variant="ghost"
+          value={grade}
+          onChange={(v) => commit({ grade: v, fabric })}
+          aria-label="Grade"
+          title="Fabric grade"
+        >
+          {/* Option text carries the "Grade " prefix on alpha values so the
+              collapsed select reads as "Grade C" rather than just "C" —
+              a bare letter is unambiguous to a Ligne Roset dealer in
+              isolation but jarring on a card that contains other letters
+              (refs, page numbers, dimensions).
+
+              Groups (Telas / Microfibras / Pieles) and the A..R, S, U..X
+              letter set come from the Ligne Roset price list verbatim;
+              the in-between letters (T, Y, Z) are reserved and never
+              offered. Source of truth: src/lib/subtype.js GRADE_GROUPS. */}
+          <option value="">Grade —</option>
+          {GRADE_GROUPS.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.grades.map((g) => (
+                <option key={g} value={g}>Grade {g}</option>
+              ))}
+            </optgroup>
+          ))}
+          <optgroup label="Otros">
+            {SPECIAL_GRADES.map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+            {/* Legacy values that may still live in older quotes — render
+                the matching option ONLY when the current value is one of
+                them, so a native <select> can display it back to the user.
+                Without this, the browser would silently fall back to the
+                first option and we'd lose what the dealer typed. */}
+            {LEGACY_NAMED_GRADES.includes(grade) && (
+              <option value={grade}>{grade} (anterior)</option>
+            )}
+          </optgroup>
+        </Select>
+        {(grade || fabric) ? (
+          <span className="text-ink-300 select-none px-0.5" aria-hidden>·</span>
+        ) : null}
+        <DebouncedInput
+          value={fabric}
+          onCommit={(v) => commit({ grade, fabric: v })}
+          placeholder="Tela o acabado"
+          autoCapitalize="words"
+          // qli-grow + min-w-* lets the input auto-size to the fabric
+          // text without being capped at flex-1's available width.
+          // max-w-full keeps it from forcing the row wider than its
+          // container — when it can't grow further it just wraps.
+          className="qli-grow min-w-[8rem] max-w-full bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+        />
+        {/* Catalog picker — opens the swatch modal so the dealer can pick a
+            material + color instead of typing the name and guessing the
+            code. Selecting writes back grade + fabric (and the swatch) in
+            one shot; the input above still works for freeform overrides. */}
+        <button
+          type="button"
+          onClick={() => setSwatchOpen(true)}
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+          title="Elegir del catálogo de materiales"
+          aria-label="Elegir tela del catálogo"
+        >
+          <Palette size={14} />
+        </button>
+      </div>
       <SwatchPicker
         open={swatchOpen}
         onClose={() => setSwatchOpen(false)}
