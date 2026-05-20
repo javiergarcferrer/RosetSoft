@@ -341,10 +341,17 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
 // component rows underneath. Each row has its own name / ref / dim /
 // subtype + its own qty × unit = subtotal. The whole block resolves into
 // a single "Total compuesto" amount.
+//
+// The footer mirrors the article line's discount column (PriceCell +
+// Precio lista + Descuento + ahorras) so a customer comparing a single-
+// item discount to a bundle discount reads the same vocabulary in the
+// same position — the "design system" is the shared eyebrow / strike /
+// brand-caption stack, not a one-off composition.
 function CompoundClientLine({ line, fmt, groupInfo }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
+  const discounted = discount > 0;
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
   const isSelected = !!line.isSelectedAlternative;
@@ -392,17 +399,29 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
               <CompoundComponentRow key={c.id || i} component={c} fmt={fmt} />
             ))}
           </ul>
-          <div className="mt-3 pt-2 border-t border-ink-200 flex items-baseline justify-between gap-3 tabular-nums">
-            <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold">
-              Total compuesto
-            </div>
-            <div className="text-right">
-              {discount !== 0 && (
-                <div className="text-[10px] text-ink-500">
-                  Subtotal {fmt(subtotal)} · descuento –{discount}%
+          <div className="mt-3 pt-2 border-t border-ink-200 tabular-nums">
+            <div className="ml-auto w-fit text-right">
+              {discounted && (
+                <>
+                  <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+                    Precio lista
+                  </div>
+                  <div className="text-sm text-ink-400 line-through whitespace-nowrap">
+                    {fmt(subtotal)}
+                  </div>
+                  <div className="text-[11px] text-brand-700 font-medium mt-0.5 whitespace-nowrap">
+                    Descuento –{discount}%
+                  </div>
+                </>
+              )}
+              <div className={discounted ? 'mt-1.5' : ''}>
+                <PriceCell label="Total compuesto" value={fmt(grandTotal)} emphasis />
+              </div>
+              {discounted && (
+                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                  ahorras {fmt(subtotal - grandTotal)}
                 </div>
               )}
-              <div className="text-base font-semibold text-ink-900">{fmt(grandTotal)}</div>
             </div>
           </div>
         </div>

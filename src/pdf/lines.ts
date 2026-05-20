@@ -123,7 +123,6 @@ const T: Record<string, TypeToken> = {
   compInline:      { size: 9.5,  lh: 12,   color: INK },
   compTotalLabel:  { size: 7.5,  lh: 11,   color: BRAND_700, cs: 1.4, bold: true },
   compTotalValue:  { size: 14,   lh: 18,   color: INK,       bold: true },
-  compSubtotal:    { size: 9,    lh: 12,   color: INK_MID },
 };
 
 const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
@@ -439,10 +438,11 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
 
   // Compound total block.
   textH += COMP_TOTAL_GAP + T.compTotalLabel.lh + T.compTotalValue.lh;
-  // If a line-level discount is set, surface a subtotal line above
-  // the grand total ("Subtotal $X · descuento –Y%"). One more lh.
+  // If a line-level discount is set, the footer mirrors the article
+  // numeric column's discount stack: struck-through subtotal +
+  // "Descuento –Y%" caption above the grand total. Two extra lh.
   if (Number(line.lineDiscountPct) || 0) {
-    textH += T.compSubtotal.lh;
+    textH += T.numStrike.lh + T.numDiscount.lh;
   }
 
   const inner = Math.max(IMAGE_SIZE, textH);
@@ -739,6 +739,12 @@ async function drawCompoundLineRow(
   }
 
   // ---- Compound roll-up total -------------------------------------------
+  // Footer is a right-aligned vertical stack with the same shape as the
+  // article line's numeric column: (struck list price, brand "Descuento
+  // –Y%" caption) when discounted, then a TOTAL COMPUESTO label/value
+  // pair. Sharing the vocabulary keeps the design system honest — a
+  // customer reading the quote sees the same discount treatment on a
+  // single article and on a compound bundle.
   sy -= COMP_TOTAL_GAP;
   const subtotal = compoundSubtotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
@@ -746,13 +752,31 @@ async function drawCompoundLineRow(
   const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
 
   if (discount !== 0) {
-    const subText = `Subtotal ${fmt(subtotal)} · descuento –${discount}%`;
-    const subY = sy - T.compSubtotal.size;
+    // Struck-through subtotal — same treatment as the article line's
+    // "antes" strike under UNITARIO. pdf-lib has no text-decoration,
+    // so we draw a 0.6pt rule across the price string at the x-height.
+    const listText = fmt(subtotal);
+    const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
+    const listY = sy - T.numStrike.size;
     drawRightAt(
-      page, subText, cols.detail.rightX, subY,
-      T.compSubtotal.size, fontRegular, T.compSubtotal.color,
+      page, listText, cols.detail.rightX, listY,
+      T.numStrike.size, fontRegular, T.numStrike.color,
     );
-    sy -= T.compSubtotal.lh;
+    const strikeY = listY + T.numStrike.size * 0.32;
+    page.drawLine({
+      start: { x: cols.detail.rightX - listW, y: strikeY },
+      end:   { x: cols.detail.rightX,         y: strikeY },
+      thickness: 0.6, color: T.numStrike.color,
+    });
+    sy -= T.numStrike.lh;
+
+    const discText = `Descuento –${discount}%`;
+    const discY = sy - T.numDiscount.size;
+    drawRightAt(
+      page, discText, cols.detail.rightX, discY,
+      T.numDiscount.size, fontBold, T.numDiscount.color,
+    );
+    sy -= T.numDiscount.lh;
   }
   const totalLblY = sy - T.compTotalLabel.size;
   drawRightAt(
