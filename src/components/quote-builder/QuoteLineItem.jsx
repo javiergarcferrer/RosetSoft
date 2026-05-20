@@ -463,13 +463,11 @@ function GradeFabricRow({ line, onChange }) {
   };
   const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
-  // flex-wrap lets the fabric input drop below the grade Select when
-  // there isn't enough room to fit both inline (long fabric names like
-  // "Alcantara mostaza decadent edition" no longer get hidden inside
-  // an overflowing input — they expand the field, and the field wraps
-  // to the next row if the line is narrow).
+  // Single row: swatch · grade · fabric · picker. The fabric input takes
+  // the remaining width (flex-1 + min-w-0) and scrolls long names rather
+  // than wrapping the row onto a second line.
   return (
-    <div className="flex items-start gap-2 min-w-0">
+    <div className="flex items-center gap-2 min-w-0">
       {/* Swatch pinned to the LEFT so the material reads the same on every
           line/component no matter how long the fabric name is — mirrors
           the client preview, which always puts the swatch left of the
@@ -483,7 +481,7 @@ function GradeFabricRow({ line, onChange }) {
         ownerId={line.id}
         sizeClass="w-10 h-10 flex-shrink-0"
       />
-      <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 min-w-0 flex-1">
+      <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
         <Select
           variant="ghost"
           value={grade}
@@ -531,11 +529,9 @@ function GradeFabricRow({ line, onChange }) {
           onCommit={(v) => commit({ grade, fabric: v })}
           placeholder="Tela o acabado"
           autoCapitalize="words"
-          // qli-grow + min-w-* lets the input auto-size to the fabric
-          // text without being capped at flex-1's available width.
-          // max-w-full keeps it from forcing the row wider than its
-          // container — when it can't grow further it just wraps.
-          className="qli-grow min-w-[8rem] max-w-full bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+          // flex-1 + min-w-0 lets the fabric input take the row's leftover
+          // width and shrink/scroll instead of wrapping to a second line.
+          className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
         />
         {/* Catalog picker — opens the swatch modal so the dealer can pick a
             material + color instead of typing the name and guessing the
@@ -569,20 +565,20 @@ function GradeFabricRow({ line, onChange }) {
 // the input instead of being clipped). The strip flex-wraps so when
 // an expanded input runs out of room, it drops to the next line.
 function SpecStrip({ line, onChange, refInputRef }) {
-  // Ref + Dim share one compact line and wrap responsively when the row
-  // is genuinely too narrow. `size` keeps each input close to its content
-  // (instead of the 20-char browser default) so both fit side by side;
-  // field-sizing still auto-grows them on browsers that support it.
+  // No permanent "Ref." / "Dim." labels — the field name lives in the
+  // placeholder and disappears once a value is typed (the value itself is
+  // self-evident: a bare number is the ref, "H × W × D" is the dimensions).
+  // Both share one compact line; `size` keeps each input near its content
+  // so they fit side by side and wrap only when the row is truly too narrow.
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 min-w-0">
       <InlineEditor
-        label="Ref."
         ref={refInputRef}
         value={line.reference || ''}
         onCommit={(v) => onChange({ reference: v })}
-        placeholder="—"
+        placeholder="Referencia"
         mono
-        size={10}
+        size={11}
         widthClass="min-w-0"
         autoCapitalize="characters"
         autoComplete="off"
@@ -592,10 +588,9 @@ function SpecStrip({ line, onChange, refInputRef }) {
           by autocomplete, QuickActions, and PDF rendering; only the
           edit control has been removed at the dealer's request. */}
       <InlineEditor
-        label="Dim."
         value={line.dimensions || ''}
         onCommit={(v) => onChange({ dimensions: v })}
-        placeholder="H × W × D"
+        placeholder="Dimensiones"
         mono
         size={18}
         widthClass="min-w-0"

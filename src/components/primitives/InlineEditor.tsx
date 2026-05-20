@@ -52,9 +52,11 @@ const InlineEditor = forwardRef<HTMLInputElement, InlineEditorProps>(function In
     // whole label:value unit shift onto a new row when the row runs
     // out of horizontal space.
     <label className="inline-flex items-baseline gap-1.5 max-w-full min-w-0">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none flex-shrink-0">
-        {label}
-      </span>
+      {label != null && label !== '' && (
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none flex-shrink-0">
+          {label}
+        </span>
+      )}
       <DebouncedInput
         ref={ref}
         value={value}
