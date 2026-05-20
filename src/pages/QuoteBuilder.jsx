@@ -591,7 +591,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const seller = quote.createdByUserId
         ? (profiles || []).find((p) => p.id === quote.createdByUserId)
         : null;
-      const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
+      const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
         () => import('../pdf/quotePdf.js'),
       );
       // Pass *all* lines to the generator — including section breaks.
@@ -611,7 +611,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       } else {
         // Popup blocked / unavailable — fall back to the native
         // share/download so the dealer still gets the file.
-        await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
+        await downloadBlob(blob, `${quoteFileName(quote, customer)}.pdf`);
       }
       // Hold the blob long enough for the viewer to finish loading it.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
