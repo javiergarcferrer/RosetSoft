@@ -32,6 +32,25 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
   // non-zero so the concessions don't read as silent post-discount
   // numbers.
   const savings = useMemo(() => quoteSavings(lines, totals), [lines, totals]);
+  // Alternative-group index/total lookup — same shape the editor uses
+  // so the "Alternativa N de M" caption reads identically on both
+  // surfaces. Cheap to compute on every render.
+  const groupInfo = useMemo(() => {
+    const counts = new Map();
+    for (const l of lines) {
+      if (!l.alternativeGroup) continue;
+      counts.set(l.alternativeGroup, (counts.get(l.alternativeGroup) || 0) + 1);
+    }
+    const seen = new Map();
+    const map = new Map();
+    for (const l of lines) {
+      if (!l.alternativeGroup) continue;
+      const idx = (seen.get(l.alternativeGroup) || 0) + 1;
+      seen.set(l.alternativeGroup, idx);
+      map.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) });
+    }
+    return map;
+  }, [lines]);
 
   return (
     <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-hidden">
@@ -91,7 +110,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
               )}
               <ul>
                 {g.items.map((l) => (
-                  <ClientLine key={l.id} line={l} currency={currency} rates={rates} fmt={fmt} />
+                  <ClientLine key={l.id} line={l} currency={currency} rates={rates} fmt={fmt} groupInfo={groupInfo.get(l.id)} />
                 ))}
               </ul>
             </div>
@@ -150,9 +169,9 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
   );
 }
 
-function ClientLine({ line, currency, rates, fmt }) {
+function ClientLine({ line, currency, rates, fmt, groupInfo }) {
   if (isCompoundLine(line)) {
-    return <CompoundClientLine line={line} fmt={fmt} />;
+    return <CompoundClientLine line={line} fmt={fmt} groupInfo={groupInfo} />;
   }
   const base = Number(line.unitPrice) || 0;
   const margin = Number(line.lineMarginPct) || 0;
@@ -183,8 +202,32 @@ function ClientLine({ line, currency, rates, fmt }) {
   // each label/value pair sat on its own row. A horizontal strip
   // uses the width that's already there instead of stacking
   // vertically into the void.
+  const optional = !!line.isOptional;
+  const inGroup = !!line.alternativeGroup;
+  const isSelected = !!line.isSelectedAlternative;
   return (
-    <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
+    <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
+      optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
+    } ${
+      inGroup ? 'border-l-2 border-solid border-brand-300' : ''
+    } ${
+      inGroup && !isSelected ? 'opacity-75' : ''
+    }`}>
+      {(optional || inGroup) && (
+        <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
+          {optional && (
+            <span className="text-ink-500">
+              Opcional · no incluido en el total
+            </span>
+          )}
+          {inGroup && groupInfo && (
+            <span className="text-brand-700 font-semibold">
+              Alternativa {groupInfo.index} de {groupInfo.total}
+              {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
+            </span>
+          )}
+        </div>
+      )}
       {/* Image sizing matches the PDF: a "quarter page of space" per
           dealer's directive. The PDF uses 170pt (~60mm); we land
           around the same physical scale on screen — w-44 (176px) on
@@ -298,12 +341,34 @@ function ClientLine({ line, currency, rates, fmt }) {
 // component rows underneath. Each row has its own name / ref / dim /
 // subtype + its own qty × unit = subtotal. The whole block resolves into
 // a single "Total compuesto" amount.
-function CompoundClientLine({ line, fmt }) {
+function CompoundClientLine({ line, fmt, groupInfo }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
+  const optional = !!line.isOptional;
+  const inGroup = !!line.alternativeGroup;
+  const isSelected = !!line.isSelectedAlternative;
   return (
-    <li className="px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0">
+    <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
+      optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
+    } ${
+      inGroup ? 'border-l-2 border-solid border-brand-300' : ''
+    } ${
+      inGroup && !isSelected ? 'opacity-75' : ''
+    }`}>
+      {(optional || inGroup) && (
+        <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
+          {optional && (
+            <span className="text-ink-500">Opcional · no incluido en el total</span>
+          )}
+          {inGroup && groupInfo && (
+            <span className="text-brand-700 font-semibold">
+              Alternativa {groupInfo.index} de {groupInfo.total}
+              {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex items-start gap-4 sm:gap-5">
         {line.imageId ? (
           <ImageView

@@ -197,6 +197,26 @@ export interface QuoteLine {
   /* Compound article — non-empty array makes this line compound. */
   components?: LineComponent[];
 
+  /* Product options + alternatives.
+   *   isOptional               line excluded from the quote total
+   *                            until the dealer un-toggles (the
+   *                            customer accepted the add-on).
+   *   alternativeGroup         id shared by sibling lines the
+   *                            customer picks between; null means
+   *                            the line is standalone.
+   *   isSelectedAlternative    within a group, exactly one line
+   *                            has this true and is the one that
+   *                            counts toward the total. The others
+   *                            still render so the customer sees
+   *                            the menu.
+   * Pricing math in lib/constants:isPricedLine respects both flags;
+   * a DB CHECK constraint forbids the meaningless combination
+   * (optional + alternative).
+   */
+  isOptional?: boolean;
+  alternativeGroup?: string | null;
+  isSelectedAlternative?: boolean;
+
   /* Internal-only — never rendered in client-facing surfaces. */
   notes?: string;
 }

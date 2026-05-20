@@ -19,8 +19,32 @@ import { LINE_KIND_SECTION } from '../../lib/constants.js';
 export default function LineItemList({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
+  onToggleOptional, onAddAlternative, onSelectAlternative,
   onAddItem, onAddSection,
 }) {
+  // Pre-compute alternative-group sizes so each line knows the
+  // "Alternativa N de M" position without re-scanning the list. The
+  // map is keyed by alternative_group string and carries the
+  // 1-based index of each line in its group + the group's total
+  // size. Computed once per render; cheap for any realistic quote.
+  const groupInfo = (() => {
+    const map = new Map();
+    const counts = new Map();
+    for (const l of lines) {
+      const g = l.alternativeGroup;
+      if (!g) continue;
+      counts.set(g, (counts.get(g) || 0) + 1);
+    }
+    const seen = new Map();
+    for (const l of lines) {
+      const g = l.alternativeGroup;
+      if (!g) continue;
+      const idx = (seen.get(g) || 0) + 1;
+      seen.set(g, idx);
+      map.set(l.id, { index: idx, total: counts.get(g) });
+    }
+    return map;
+  })();
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
 
@@ -118,6 +142,10 @@ export default function LineItemList({
                 onChange={(patch) => onChangeLine(l.id, patch)}
                 onRemove={() => onRemoveLine(l)}
                 onDuplicate={() => onDuplicateLine(l)}
+                onToggleOptional={() => onToggleOptional?.(l)}
+                onAddAlternative={() => onAddAlternative?.(l)}
+                onSelectAlternative={() => onSelectAlternative?.(l)}
+                groupInfo={groupInfo.get(l.id)}
                 autoFocus={l.id === focusLineId}
                 dragHandleProps={handleProps}
               />

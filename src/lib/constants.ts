@@ -28,9 +28,37 @@ export const LINE_KIND_ITEM:    LineKind = 'item';
 export const LINE_KIND_SECTION: LineKind = 'section';
 export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTION];
 
-/** Convenience predicate — filters section rows out of a totals pass. */
-export function isPricedLine(line: Pick<QuoteLine, 'kind'> | null | undefined): boolean {
-  return line?.kind !== LINE_KIND_SECTION;
+/**
+ * Predicate every total-bearing surface (Quotes / Orders / Dashboard /
+ * CustomerDetail / ProfessionalDetail / admin/Commissions / all
+ * accounting/* / ClientPreview / PDF totals) filters by before
+ * computing money. Returns true when this line should contribute to
+ * the quote total — i.e. NOT a section divider, NOT a parked
+ * optional add-on, NOT a non-selected alternative.
+ *
+ * Three exclusions composed in one place so a new exclusion rule in
+ * the future lands once instead of in ~10 call sites:
+ *
+ *   kind = 'section'              visual divider, no math
+ *   isOptional                    add-on the customer hasn't taken
+ *   alternativeGroup && !isSelected  sibling alternative the
+ *                                    customer didn't pick
+ *
+ * Lines that fail this predicate still RENDER in the editor and the
+ * client preview — they're visible options the customer is meant to
+ * see. They're just excluded from the running total.
+ */
+export function isPricedLine(
+  line:
+    | Pick<QuoteLine, 'kind' | 'isOptional' | 'alternativeGroup' | 'isSelectedAlternative'>
+    | null
+    | undefined,
+): boolean {
+  if (!line) return true;
+  if (line.kind === LINE_KIND_SECTION) return false;
+  if (line.isOptional) return false;
+  if (line.alternativeGroup && !line.isSelectedAlternative) return false;
+  return true;
 }
 
 /* ----------------------------------- quote status ----------------------------------- */

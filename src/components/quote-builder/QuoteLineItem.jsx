@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -47,7 +47,10 @@ import { newId } from '../../db/database.js';
  * reading from a paper price list.
  */
 export default function QuoteLineItem({
-  line, quote, onChange, onRemove, onDuplicate, autoFocus, dragHandleProps,
+  line, quote, onChange, onRemove, onDuplicate,
+  onToggleOptional, onAddAlternative, onSelectAlternative,
+  groupInfo,
+  autoFocus, dragHandleProps,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
@@ -138,17 +141,41 @@ export default function QuoteLineItem({
     // full-width builder, in a narrowed editor when the PDF panel is
     // open, or in some future drawer / inspector pane. CSS in
     // src/index.css owns the breakpoints.
-    <li className="qli-row group transition-colors duration-150 hover:bg-ink-50/40">
+    // Visual cues for the two new option flags:
+    //   • optional lines     dashed left accent + faint background tint
+    //                        so the dealer reads them as parked / not
+    //                        in the running total at a glance.
+    //   • alternative groups solid brand-color left accent unifying
+    //                        the contiguous siblings — the rendering
+    //                        order already keeps them adjacent.
+    //   • non-selected sibs  reduced opacity on top of the accent so
+    //                        the selected one wins the eye.
+    <li
+      className={`qli-row group transition-colors duration-150 hover:bg-ink-50/40 ${
+        line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''
+      } ${
+        line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
+      } ${
+        line.alternativeGroup && !line.isSelectedAlternative ? 'opacity-70' : ''
+      }`}
+    >
       <TopStrip
         family={line.family}
         onPickFamily={(value) => onChange({ family: value || '' })}
         compound={compound}
+        isOptional={!!line.isOptional}
+        alternativeGroup={line.alternativeGroup}
+        isSelectedAlternative={!!line.isSelectedAlternative}
+        groupInfo={groupInfo}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
         onDuplicate={onDuplicate}
         onRemove={onRemove}
         onConvertToCompound={convertToCompound}
         onDissolveCompound={dissolveCompound}
+        onToggleOptional={onToggleOptional}
+        onAddAlternative={onAddAlternative}
+        onSelectAlternative={onSelectAlternative}
         dragHandleProps={dragHandleProps}
       />
 
@@ -233,8 +260,10 @@ function makeBlankComponent(overrides = {}) {
 // ---------------------------------------------------------------------------
 function TopStrip({
   family, onPickFamily, compound,
+  isOptional, alternativeGroup, isSelectedAlternative, groupInfo,
   expanded, onToggleExpand, onDuplicate, onRemove,
   onConvertToCompound, onDissolveCompound,
+  onToggleOptional, onAddAlternative, onSelectAlternative,
   dragHandleProps,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -248,6 +277,29 @@ function TopStrip({
       >
         <GripVertical size={14} />
       </span>
+
+      {/* Alternative-radio at the leftmost position when this line is
+          in an alternative group. Clicking flips the group's selection
+          to this line. Reading order: radio → family → status pills
+          → actions. The radio sits BEFORE family because it's the
+          primary affordance for an alternative-group member. */}
+      {alternativeGroup && (
+        <button
+          type="button"
+          onClick={onSelectAlternative}
+          className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors flex-shrink-0 ${
+            isSelectedAlternative
+              ? 'border-brand-500 bg-brand-500 text-white'
+              : 'border-ink-300 bg-white hover:border-brand-400'
+          }`}
+          title={isSelectedAlternative ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
+          aria-pressed={isSelectedAlternative}
+          aria-label="Seleccionar alternativa"
+        >
+          {isSelectedAlternative && <Check size={11} strokeWidth={3} />}
+        </button>
+      )}
+
       {family ? (
         <button
           type="button"
@@ -270,6 +322,11 @@ function TopStrip({
           Asignar familia
         </button>
       )}
+
+      {/* Status chips. Order: Compuesto → Opcional → Alternativa.
+          Multiple can show concurrently when a compound is in an
+          alternative group; isOptional+alternative is forbidden by
+          the DB so those two are visually mutually exclusive too. */}
       {compound ? (
         <span
           className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
@@ -279,10 +336,6 @@ function TopStrip({
           Compuesto
         </span>
       ) : (
-        // Discoverable affordance for compound mode. The same action
-        // lives in the overflow menu, but the dealer asked for a
-        // visible entry point — hiding it inside `⋯` made it
-        // effectively invisible.
         <button
           type="button"
           onClick={onConvertToCompound}
@@ -294,6 +347,25 @@ function TopStrip({
           Compuesto
         </button>
       )}
+
+      {isOptional && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-50 border border-dashed border-ink-300 px-2 py-0.5 rounded-full"
+          title="No se incluye en el total hasta aceptación"
+        >
+          Opcional
+        </span>
+      )}
+
+      {alternativeGroup && groupInfo && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full"
+          title="Esta línea es parte de un grupo de alternativas; solo la seleccionada cuenta en el total"
+        >
+          Alternativa {groupInfo.index}/{groupInfo.total}
+        </span>
+      )}
+
       <div className="flex-1" />
       <button
         type="button"
@@ -306,10 +378,14 @@ function TopStrip({
       </button>
       <OverflowMenu
         compound={compound}
+        isOptional={isOptional}
+        alternativeGroup={alternativeGroup}
         onDuplicate={onDuplicate}
         onRemove={onRemove}
         onConvertToCompound={onConvertToCompound}
         onDissolveCompound={onDissolveCompound}
+        onToggleOptional={onToggleOptional}
+        onAddAlternative={onAddAlternative}
       />
 
       <FamilyPicker
@@ -812,7 +888,12 @@ function AdjustmentChip({ line }) {
 // ---------------------------------------------------------------------------
 // Overflow menu — Duplicate / Eliminar. Closes on outside click and Escape.
 // ---------------------------------------------------------------------------
-function OverflowMenu({ onDuplicate, onRemove, compound, onConvertToCompound, onDissolveCompound }) {
+function OverflowMenu({
+  onDuplicate, onRemove, compound,
+  isOptional, alternativeGroup,
+  onConvertToCompound, onDissolveCompound,
+  onToggleOptional, onAddAlternative,
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -875,6 +956,44 @@ function OverflowMenu({ onDuplicate, onRemove, compound, onConvertToCompound, on
               Convertir a compuesto
             </button>
           )}
+
+          {/* Optional add-on toggle. Hidden when the line is in an
+              alternative group — DB CHECK forbids optional+alternative
+              and the UI shouldn't tempt the dealer to construct it. */}
+          {!alternativeGroup && onToggleOptional && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onToggleOptional(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title={isOptional
+                ? 'Quitar el marcador opcional — la línea volverá al total'
+                : 'Marcar como opcional — la línea se muestra pero no suma al total'}
+            >
+              <Sparkles size={14} className="text-ink-500" />
+              {isOptional ? 'Quitar opcional' : 'Marcar como opcional'}
+            </button>
+          )}
+
+          {/* Add alternative. Hidden when the line is optional (same
+              mutual-exclusion rule). When the line is already in a
+              group, the action label clarifies it's adding ANOTHER
+              alternative to the existing group. */}
+          {!isOptional && onAddAlternative && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onAddAlternative(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title={alternativeGroup
+                ? 'Agregar otra alternativa al grupo existente'
+                : 'Crear un grupo de alternativas con esta línea como la seleccionada por defecto'}
+            >
+              <GitFork size={14} className="text-ink-500" />
+              {alternativeGroup ? 'Agregar otra alternativa' : 'Agregar alternativa'}
+            </button>
+          )}
+
           <button
             type="button"
             role="menuitem"

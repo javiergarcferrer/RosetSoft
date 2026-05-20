@@ -215,7 +215,13 @@ function detailSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): DetailSe
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) segs.push({ kind: 'text', token, lines });
   }
-  push(line.family ? line.family.toUpperCase() : '', T.family);
+  // Prefix the family eyebrow with the option/alternative marker so
+  // the customer reads the line's role at a glance, before name or
+  // pricing. The marker is part of the eyebrow text (no new
+  // typography token), which keeps the row-height measurement
+  // unchanged and respects the existing wrap logic.
+  const familyText = optionMarker(line, /* groupInfo */ null) + (line.family ? line.family.toUpperCase() : '');
+  push(familyText, T.family);
   push(line.name || '(sin nombre)', T.name);
   push(line.subtype, T.subtype);
   // Meta strip — reference + dimensions on one line, ' · ' separator,
@@ -335,9 +341,42 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) segs.push({ token, lines });
   }
-  push(line.family ? line.family.toUpperCase() : '', T.family);
+  const familyText = optionMarker(line, null) + (line.family ? line.family.toUpperCase() : '');
+  push(familyText, T.family);
   push(line.name, T.name);
   return segs;
+}
+
+/**
+ * Brief, uppercase, tracked-eyebrow prefix that signals when a line
+ * is an optional add-on or a member of an alternatives group. Output:
+ *
+ *   ''                                      — regular billed line
+ *   'OPCIONAL · '                           — optional add-on
+ *   'ALTERNATIVA — SELECCIONADA · '         — selected alternative
+ *   'ALTERNATIVA · '                        — non-selected sibling
+ *
+ * Returns a trailing space + middot so the existing family text
+ * concatenates cleanly: 'OPCIONAL · KOBOLD'. When both flags are
+ * false (the common case) the prefix is empty and the family
+ * eyebrow looks unchanged.
+ *
+ * `groupInfo` is reserved for the dealer-facing surfaces; the PDF
+ * skips the index/total (e.g. "2/3") because the customer doesn't
+ * benefit from the internal numbering — just the fact that the
+ * line IS an alternative.
+ */
+function optionMarker(
+  line: QuoteLine,
+  _groupInfo: unknown,
+): string {
+  if (line.isOptional) return 'OPCIONAL · ';
+  if (line.alternativeGroup) {
+    return line.isSelectedAlternative
+      ? 'ALTERNATIVA — SELECCIONADA · '
+      : 'ALTERNATIVA · ';
+  }
+  return '';
 }
 
 // One component block: name + (optional) subtype + (optional) meta +

@@ -388,10 +388,122 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
   }
 
+  /**
+   * Toggle the line's `isOptional` flag. Optional lines render with
+   * a badge in the editor + client preview but isPricedLine excludes
+   * them from totals, so the total adjusts in one round-trip without
+   * any extra recompute on this side.
+   *
+   * Defensive: if the line is currently part of an alternative group
+   * we strip the alternative metadata at the same time — optional +
+   * alternative is forbidden by the DB CHECK and would otherwise
+   * surface a 23514 error on the next sync.
+   */
+  async function toggleOptional(line) {
+    markSaving();
+    try {
+      const next = !line.isOptional;
+      const patch = next
+        ? { isOptional: true, alternativeGroup: null, isSelectedAlternative: false }
+        : { isOptional: false };
+      await db.quoteLines.update(line.id, patch);
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Clone the line into a new (or existing) alternative group.
+   *
+   *   - If the source line is standalone, mint a group id, mark the
+   *     source as the SELECTED alternative, and insert the duplicate
+   *     immediately after it as a non-selected sibling.
+   *   - If the source already lives in a group, just insert another
+   *     non-selected sibling at the end of the group's run.
+   *
+   * Same sortOrder-bump pattern as duplicateLine so the new row
+   * lands adjacent to its siblings.
+   */
+  async function addAlternative(line) {
+    if (line.isOptional) return;  // mutually exclusive — UI hides this option anyway
+    markSaving();
+    try {
+      await ensurePersisted();
+      const groupId = line.alternativeGroup || newId();
+      // If this is the FIRST alternative being created on a previously-
+      // standalone line, mark the source as the selected one.
+      if (!line.alternativeGroup) {
+        await db.quoteLines.update(line.id, {
+          alternativeGroup: groupId,
+          isSelectedAlternative: true,
+        });
+      }
+      // Insert position: directly after the last member of this group
+      // currently in the lines list. Keeps siblings contiguous.
+      const groupMembers = lines.filter((l) => l.alternativeGroup === groupId || l.id === line.id);
+      const lastIdx = Math.max(...groupMembers.map((l) => lines.findIndex((x) => x.id === l.id)));
+      const newSortOrder = (lines[lastIdx]?.sortOrder ?? line.sortOrder ?? 0) + 1;
+      const newId_ = newId();
+      const components = Array.isArray(line.components)
+        ? line.components.map((c) => ({ ...c, id: newId() }))
+        : [];
+      await db.quoteLines.put({
+        ...line,
+        id: newId_,
+        sortOrder: newSortOrder,
+        alternativeGroup: groupId,
+        isSelectedAlternative: false,
+        components,
+      });
+      // Bump everyone after the insertion point to keep ordering tight.
+      for (const l of lines.slice(lastIdx + 1)) {
+        await db.quoteLines.update(l.id, { sortOrder: (l.sortOrder ?? 0) + 1 });
+      }
+      setFocusLineId(newId_);
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Within an alternative group, flip exactly one line to selected.
+   * Sets `isSelectedAlternative=true` on the picked line and false on
+   * its siblings — the invariant is enforced by this writer; the DB
+   * happily allows 0 or N selected sibs at rest, but isPricedLine
+   * would then silently count 0 or N priced lines, which is wrong.
+   */
+  async function selectAlternative(line) {
+    if (!line.alternativeGroup) return;
+    markSaving();
+    try {
+      const siblings = lines.filter((l) => l.alternativeGroup === line.alternativeGroup);
+      for (const s of siblings) {
+        const shouldBeSelected = s.id === line.id;
+        if (!!s.isSelectedAlternative !== shouldBeSelected) {
+          await db.quoteLines.update(s.id, { isSelectedAlternative: shouldBeSelected });
+        }
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
   async function removeLine(line) {
     markSaving();
     try {
       await db.quoteLines.delete(line.id);
+      // If we just deleted the SELECTED alternative in a group, promote
+      // the next sibling to selected so the group still contributes
+      // exactly one priced line to the total. Otherwise the group
+      // would silently drop out of the math.
+      if (line.alternativeGroup && line.isSelectedAlternative) {
+        const siblings = lines.filter(
+          (l) => l.alternativeGroup === line.alternativeGroup && l.id !== line.id,
+        );
+        if (siblings.length > 0) {
+          await db.quoteLines.update(siblings[0].id, { isSelectedAlternative: true });
+        }
+      }
       const label = line.kind === LINE_KIND_SECTION
         ? `Sección "${line.name || 'sin nombre'}" eliminada`
         : `Artículo "${line.name || line.reference || 'sin nombre'}" eliminado`;
@@ -526,6 +638,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               onChangeLine={updateLine}
               onRemoveLine={removeLine}
               onDuplicateLine={duplicateLine}
+              onToggleOptional={toggleOptional}
+              onAddAlternative={addAlternative}
+              onSelectAlternative={selectAlternative}
               onReorder={reorderLines}
               onAddItem={() => addLine()}
               onAddSection={addSection}
@@ -577,6 +692,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 function LineItemsCard({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
+  onToggleOptional, onAddAlternative, onSelectAlternative,
   onAddItem, onAddSection,
 }) {
   return (
@@ -609,6 +725,9 @@ function LineItemsCard({
         onChangeLine={onChangeLine}
         onRemoveLine={onRemoveLine}
         onDuplicateLine={onDuplicateLine}
+        onToggleOptional={onToggleOptional}
+        onAddAlternative={onAddAlternative}
+        onSelectAlternative={onSelectAlternative}
         onReorder={onReorder}
         onAddItem={onAddItem}
         onAddSection={onAddSection}
