@@ -399,7 +399,12 @@ function componentBlockSegments(
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) nameSegs.push({ token, lines });
   }
-  push(component.name || '(sin nombre)', T.compName);
+  // Optional components prefix the name with an "OPCIONAL · " eyebrow
+  // so the customer reads the component's status before reading the
+  // name itself. Same convention as the line-level optional marker
+  // in optionMarker() above.
+  const namePrefix = component.isOptional ? 'OPCIONAL · ' : '';
+  push(namePrefix + (component.name || '(sin nombre)'), T.compName);
   push(component.subtype, T.compSubtype);
   const meta = [
     component.reference ? `ref ${component.reference}` : null,
@@ -817,7 +822,13 @@ function drawComponentBlock(
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const sub = componentSubtotal(component);
-  const eqText = `${qty} × ${fmt(unit)} = ${fmt(sub)}`;
+  // Optional components show the equation with a leading "+ " on the
+  // subtotal, signalling "if you add this, the compound total grows
+  // by X". Mirrors the on-screen ClientPreview treatment so the
+  // customer reads the same convention across surfaces.
+  const eqText = component.isOptional
+    ? `${qty} × ${fmt(unit)} = + ${fmt(sub)}`
+    : `${qty} × ${fmt(unit)} = ${fmt(sub)}`;
 
   const segs = componentBlockSegments(ctx, component, nameW);
   let sy = startY;

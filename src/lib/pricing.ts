@@ -131,7 +131,15 @@ export function componentSubtotal(component: LineComponent | null | undefined): 
 
 export function compoundSubtotal(line: QuoteLine | null | undefined): number {
   if (!isCompoundLine(line)) return 0;
-  return line.components.reduce((sum, c) => sum + componentSubtotal(c), 0);
+  // Optional components render to the customer but don't roll up
+  // into the compound's billable subtotal — same semantic as the
+  // line-level isOptional flag, applied one level down. The filter
+  // is keyed by truthy isOptional so a missing field (default
+  // false on every existing component) leaves prior behaviour
+  // unchanged.
+  return line.components
+    .filter((c) => !c?.isOptional)
+    .reduce((sum, c) => sum + componentSubtotal(c), 0);
 }
 
 /**

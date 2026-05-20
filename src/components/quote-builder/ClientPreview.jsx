@@ -434,10 +434,20 @@ function CompoundComponentRow({ component, fmt }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
+  const optional = !!component.isOptional;
   return (
-    <li className="py-2 flex flex-wrap sm:flex-nowrap items-start gap-x-4 gap-y-1">
+    <li className={`py-2 flex flex-wrap sm:flex-nowrap items-start gap-x-4 gap-y-1 ${
+      optional ? 'pl-3 border-l-2 border-dashed border-ink-300 opacity-90' : ''
+    }`}>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-ink-900">{component.name || '—'}</div>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
+          {optional && (
+            <span className="text-[10px] uppercase tracking-widest text-ink-500">
+              Opcional · no incluido
+            </span>
+          )}
+        </div>
         {component.subtype && (
           <div className="text-[11px] text-ink-500 mt-0.5">{component.subtype}</div>
         )}
@@ -453,12 +463,16 @@ function CompoundComponentRow({ component, fmt }) {
           </div>
         )}
       </div>
-      <div className="text-right tabular-nums whitespace-nowrap text-xs sm:text-sm">
+      <div className={`text-right tabular-nums whitespace-nowrap text-xs sm:text-sm ${
+        optional ? 'text-ink-500' : ''
+      }`}>
         <span className="text-ink-700">{qty}</span>
         <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
         <span className="text-ink-700">{fmt(unit)}</span>
         <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-        <span className="text-ink-900 font-semibold">{fmt(subtotal)}</span>
+        <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
+          {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
+        </span>
       </div>
     </li>
   );

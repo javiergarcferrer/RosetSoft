@@ -756,6 +756,7 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
 
 function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove }) {
   const total = componentSubtotal(component);
+  const optional = !!component.isOptional;
   // ComponentRow used to be a two-column grid (specs on the left, calc
   // cells on the right via `sm:grid-cols-[minmax(0,1fr)_auto]`). The
   // auto-sized right column happily grabbed ~300px for its CANT × UNIT
@@ -766,11 +767,35 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
   // stacking vertically reads cleaner and gives the name the full
   // row width unconditionally.
   return (
-    <div className="px-3 sm:px-4 py-3 bg-white space-y-2">
+    <div className={`px-3 sm:px-4 py-3 bg-white space-y-2 ${
+      optional ? 'border-l-2 border-dashed border-ink-300' : ''
+    }`}>
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none">
           Componente {index + 1}
         </span>
+        {/* Per-component optional toggle. Mirrors the line-level
+            "Marcar como opcional" but at the inner-compound layer
+            so a single sub-piece (e.g. an ottoman in a sectional)
+            can be offered as an add-on without changing the rest of
+            the composition. Pricing math (compoundSubtotal) skips
+            optional components when summing. */}
+        <button
+          type="button"
+          onClick={() => onChange({ isOptional: !optional })}
+          className={`inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] px-2 py-0.5 rounded-full transition-colors ${
+            optional
+              ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
+              : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
+          }`}
+          title={optional
+            ? 'Quitar el marcador opcional — el componente vuelve a sumar al total compuesto'
+            : 'Marcar este componente como opcional — se muestra pero no suma al total'}
+          aria-pressed={optional}
+        >
+          <Sparkles size={10} className="opacity-70" aria-hidden />
+          {optional ? 'Opcional' : 'Hacer opcional'}
+        </button>
         <div className="flex-1" />
         <button
           type="button"

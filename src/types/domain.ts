@@ -170,6 +170,17 @@ export interface LineComponent {
   description?: string;
   qty?: number;
   unitPrice?: number;
+  /**
+   * When true, the component is shown to the customer as an opt-in
+   * add-on but excluded from the compound's subtotal. Mirrors the
+   * line-level isOptional flag — see lib/pricing:compoundSubtotal,
+   * which skips optional components when summing.
+   *
+   * Lives on the JSONB component shape (no DB column change needed
+   * — components are stored as `quote_lines.components`). Default
+   * false on every new component.
+   */
+  isOptional?: boolean;
 }
 
 export interface QuoteLine {
