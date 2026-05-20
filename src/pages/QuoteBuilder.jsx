@@ -171,7 +171,7 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
 /* -------------------------------------------------------------------------- */
 
 function Workspace({ quoteId, navigate, draftQuote, materialize }) {
-  const { settings, profileId } = useApp();
+  const { settings, profileId, profiles } = useApp();
   const dbQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
   const baseQuote = dbQuote || draftQuote || null;
   // Overlay LIVE exchange rates from Settings onto the quote we hand
@@ -568,6 +568,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
         : null;
+      const professional = quote.professionalId
+        ? professionals.find((p) => p.id === quote.professionalId)
+        : null;
+      const seller = quote.createdByUserId
+        ? (profiles || []).find((p) => p.id === quote.createdByUserId)
+        : null;
       const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
         () => import('../pdf/quotePdf.js'),
       );
@@ -577,7 +583,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // matching the on-screen ClientPreview, where section headers
       // ("MOBILIARIO DE SALA") are part of the layout the customer
       // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
+      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller });
       // downloadBlob is async now: it awaits navigator.share on mobile/
       // PWA. The await here is what made the iOS-PWA "nothing happens"
       // bug surface — without awaiting we'd never see the share-sheet
@@ -594,6 +600,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   /* ---------------------------- render ---------------------------- */
 
   const customer = quote.customerId ? customers.find((c) => c.id === quote.customerId) : null;
+  const professional = quote.professionalId ? professionals.find((p) => p.id === quote.professionalId) : null;
+  const seller = quote.createdByUserId ? (profiles || []).find((p) => p.id === quote.createdByUserId) : null;
 
   return (
     <>
@@ -645,6 +653,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           lines={lines}
           totals={totals}
           customer={customer}
+          professional={professional}
+          seller={seller}
         />
       ) : (
         // Left column uses `minmax(0, 1fr)` — not bare `1fr` — so it can

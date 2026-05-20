@@ -48,7 +48,7 @@ function ImageZoom({ id, className, alt = '' }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, totals, customer }) {
+export default function ClientPreview({ quote, settings, lines, totals, customer, professional, seller }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -117,15 +117,41 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
         </div>
       </div>
 
-      {/* Customer block */}
-      {customer && (
-        <div className="px-6 sm:px-10 py-5 border-b border-ink-100">
-          <div className="eyebrow mb-1.5">Cliente</div>
-          <div className="text-sm font-semibold text-ink-900">{customer.name}</div>
-          {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
-          <div className="text-[11px] text-ink-500 leading-relaxed mt-1">
-            {[customer.address, [customer.city, customer.state, customer.zip].filter(Boolean).join(', '), customer.country, customer.email, customer.phone].filter(Boolean).join(' · ')}
+      {/* Customer block — client on the left, who's selling it (vendedor)
+          and the referring professional on the right. */}
+      {(customer || seller || professional) && (
+        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <div className="eyebrow mb-1.5">Cliente</div>
+            {customer ? (
+              <>
+                <div className="text-sm font-semibold text-ink-900">{customer.name}</div>
+                {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
+                <div className="text-[11px] text-ink-500 leading-relaxed mt-1">
+                  {[customer.address, [customer.city, customer.state, customer.zip].filter(Boolean).join(', '), customer.country, customer.email, customer.phone].filter(Boolean).join(' · ')}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-ink-400">Sin cliente asignado</div>
+            )}
           </div>
+          {(seller || professional) && (
+            <div className="text-right shrink-0 space-y-3">
+              {seller && (
+                <div>
+                  <div className="eyebrow mb-0.5">Vendedor</div>
+                  <div className="text-sm font-medium text-ink-900">{seller.name}</div>
+                </div>
+              )}
+              {professional && (
+                <div>
+                  <div className="eyebrow mb-0.5">Profesional</div>
+                  <div className="text-sm font-medium text-ink-900">{professional.name}</div>
+                  {professional.company && <div className="text-[11px] text-ink-500">{professional.company}</div>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

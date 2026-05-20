@@ -2,6 +2,8 @@ import type { PDFDocument, PDFFont } from 'pdf-lib';
 import type {
   Quote,
   Customer,
+  Professional,
+  Profile,
   Settings,
   RatesMap,
   CurrencyCode,
@@ -25,6 +27,10 @@ export interface PdfCtx {
   settings: Settings;
   quote: Quote;
   customer: Customer | null;
+  /** The referring professional (interior designer / architect), if any. */
+  professional?: Professional | null;
+  /** The seller (profile) who owns/closed the quote — commission attribution. */
+  seller?: Profile | null;
   rates: RatesMap;
   currency: CurrencyCode;
 }

@@ -4,6 +4,7 @@ import {
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE,
 } from './constants.js';
 import type { PdfCtx, Cursor } from './types.js';
+import { drawRightAt } from './util.js';
 import type { DrawTextOptions } from './util.js';
 
 /**
@@ -147,14 +148,34 @@ export function drawHeader(page: PDFPage, ctx: PdfCtx, logoImage: PDFImage | nul
  * collapse on draft quotes.
  */
 export function drawCustomerBlock(page: PDFPage, ctx: PdfCtx, cursor: Cursor): Cursor {
-  const { fontBold, fontRegular, customer } = ctx;
+  const { fontBold, fontRegular, customer, professional, seller } = ctx;
   const y0 = cursor.y;
+  const rightX = PAGE_W - MARGIN_R;
 
   page.drawText('CLIENTE', {
     x: MARGIN_L, y: y0,
     size: EYEBROW_SIZE, font: fontRegular, color: INK_MID,
     characterSpacing: EYEBROW_TRACKING,
   } as DrawTextOptions);
+
+  // -------- right column: VENDEDOR (seller) + PROFESIONAL ------------------
+  // Mirrors the on-screen preview's right block. Right-aligned, parallel to
+  // CLIENTE. Commission figures are intentionally NOT shown — this is the
+  // customer's copy.
+  let ry = y0;
+  const rightEntry = (label: string, name: string, sub?: string | null): void => {
+    drawRightAt(page, label, rightX, ry, EYEBROW_SIZE, fontRegular, INK_MID, EYEBROW_TRACKING);
+    ry -= 15;
+    drawRightAt(page, name, rightX, ry, 11, fontBold, INK);
+    ry -= 13;
+    if (sub) {
+      drawRightAt(page, sub, rightX, ry, 9, fontRegular, INK_MID);
+      ry -= 12;
+    }
+    ry -= 6;   // gap before the next entry
+  };
+  if (seller?.name) rightEntry('VENDEDOR', seller.name);
+  if (professional?.name) rightEntry('PROFESIONAL', professional.name, professional.company || null);
 
   let y = y0 - 18;
   if (customer) {
@@ -197,7 +218,9 @@ export function drawCustomerBlock(page: PDFPage, ctx: PdfCtx, cursor: Cursor): C
 
   // Hairline divider below the customer block — same treatment as the
   // header divider, so the page has a consistent letterhead rhythm.
-  const dividerY = y - 4;
+  // Sits below whichever column (client vs vendedor/profesional) runs
+  // deeper, so a long professional block never collides with the rule.
+  const dividerY = Math.min(y, ry) - 4;
   page.drawLine({
     start: { x: MARGIN_L, y: dividerY },
     end:   { x: PAGE_W - MARGIN_R, y: dividerY },

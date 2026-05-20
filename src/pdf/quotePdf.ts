@@ -16,6 +16,8 @@ import type {
   Quote,
   QuoteLine,
   Customer,
+  Professional,
+  Profile,
   Settings,
   Totals,
   CurrencyCode,
@@ -52,6 +54,8 @@ export interface GenerateQuotePdfInput {
   lines: QuoteLine[];
   totals: Totals;
   customer: Customer | null;
+  professional?: Professional | null;
+  seller?: Profile | null;
 }
 
 export async function generateQuotePdf({
@@ -60,6 +64,8 @@ export async function generateQuotePdf({
   lines,
   totals,
   customer,
+  professional = null,
+  seller = null,
 }: GenerateQuotePdfInput): Promise<Blob> {
   const doc = await PDFDocument.create();
 
@@ -97,6 +103,8 @@ export async function generateQuotePdf({
     settings: safeSettings,
     quote,
     customer,
+    professional,
+    seller,
     // Use the LIVE rate from Settings rather than quote.rates so the
     // PDF body matches the dealer's current setup. The totals block
     // already pulled the DOP rate from settings via
