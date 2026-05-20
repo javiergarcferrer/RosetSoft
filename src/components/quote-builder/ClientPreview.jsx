@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import ImageView from '../ImageView.jsx';
+import Modal from '../Modal.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings,
@@ -17,6 +18,36 @@ import { formatMoney, formatDate } from '../../lib/format.js';
  * generous typography honoring the brand and the things you can do in HTML
  * (line item images at scale, hover-cleaner totals, etc.).
  */
+/**
+ * A displayed image that opens a centered lightbox (the shared Modal) on
+ * click so the customer can study the product photo / fabric swatch at
+ * size. Tapping an image to ZOOM is the expected gesture — a download is
+ * not. Falls back to a plain, non-interactive ImageView when there's no
+ * image id (the placeholder box).
+ */
+function ImageZoom({ id, className, alt = '' }) {
+  const [open, setOpen] = useState(false);
+  if (!id) return <ImageView id={id} className={className} alt={alt} />;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex-shrink-0 block appearance-none p-0 bg-transparent border-0 cursor-zoom-in rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1"
+        aria-label="Ampliar imagen"
+        title="Ampliar imagen"
+      >
+        <ImageView id={id} className={className} alt={alt} />
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} size="xl">
+        <div className="flex items-center justify-center">
+          <ImageView id={id} alt={alt} className="max-h-[78vh] w-auto max-w-full object-contain rounded-md" />
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 export default function ClientPreview({ quote, settings, lines, totals, customer }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
@@ -241,7 +272,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
           PDF images to be bigger when the preview "looked fine". */}
       <div className="flex items-start gap-4 sm:gap-5">
         {line.imageId ? (
-          <ImageView id={line.imageId} className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0" />
+          <ImageZoom id={line.imageId} alt={line.name || ''} className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100" />
         ) : (
           <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
         )}
@@ -254,12 +285,12 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
             )}
             <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
             {(line.subtype || line.reference || line.dimensions || line.swatchImageId) && (
-              <div className="flex items-stretch gap-2.5 mt-1">
+              <div className="flex items-start gap-2.5 mt-1">
                 {line.swatchImageId && (
-                  <ImageView
+                  <ImageZoom
                     id={line.swatchImageId}
                     alt="Muestra de tela"
-                    className="w-11 min-h-[2.5rem] object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+                    className="w-11 h-11 object-cover rounded border border-ink-200 bg-white"
                   />
                 )}
                 {/* Subtype + ref/dimensions stacked to the right of the
@@ -406,8 +437,9 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
             scroll past, so it simply sits put — graceful degradation. */}
         <div className="flex-shrink-0 self-start sticky top-4">
           {line.imageId ? (
-            <ImageView
+            <ImageZoom
               id={line.imageId}
+              alt={line.name || ''}
               className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100"
             />
           ) : (
@@ -478,12 +510,12 @@ function CompoundComponentRow({ component, fmt }) {
           )}
         </div>
         {(component.subtype || component.reference || component.dimensions || component.swatchImageId) && (
-          <div className="flex items-stretch gap-2 mt-0.5">
+          <div className="flex items-start gap-2 mt-0.5">
             {component.swatchImageId && (
-              <ImageView
+              <ImageZoom
                 id={component.swatchImageId}
                 alt="Muestra de tela"
-                className="w-9 min-h-[2.25rem] object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+                className="w-11 h-11 object-cover rounded border border-ink-200 bg-white"
               />
             )}
             {/* Subtype + ref/dimensions stacked to the right so the swatch
