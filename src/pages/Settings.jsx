@@ -209,7 +209,7 @@ function RateCard({ local, set, refreshSettings }) {
   // "Actualizar ahora": invoke the bpd-rate Edge Function (OAuth secret
   // stays server-side). The function writes the rate to the team settings
   // row itself; we just re-read settings so the new figure shows up here
-  // and across the app immediately, instead of waiting for the 8 a.m. job.
+  // and across the app immediately, instead of waiting for the daily pull.
   const [fetching, setFetching] = useState(false);
   const [fetchErr, setFetchErr] = useState(null);
   async function fetchNow() {
@@ -220,8 +220,16 @@ function RateCard({ local, set, refreshSettings }) {
       if (error) {
         let msg = error.message || 'No se pudo obtener la tasa';
         try {
+          // The function returns { error, status, detail } on upstream
+          // failures (e.g. the bank's 401 on the OAuth token call). Surface
+          // the status + detail so the cause is visible here rather than
+          // buried in a generic message.
           const body = await error.context?.json?.();
-          if (body?.error) msg = body.error;
+          if (body?.error) {
+            msg = body.error;
+            if (body.status) msg += ` (HTTP ${body.status})`;
+            if (body.detail) msg += ` — ${String(body.detail).slice(0, 200)}`;
+          }
         } catch { /* body already consumed / not JSON */ }
         throw new Error(msg);
       }
