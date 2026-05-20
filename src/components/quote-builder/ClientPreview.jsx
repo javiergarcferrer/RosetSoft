@@ -272,8 +272,14 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
-      inGroup && !isSelected ? 'opacity-75' : ''
+      inGroup && !isSelected ? 'relative [&_img]:relative [&_img]:z-[2]' : ''
     }`}>
+      {/* Non-selected alternative: dim with a white veil instead of row
+          opacity, and lift any image above it (z-2) so the customer can
+          still read the real fabric color / product photo. */}
+      {inGroup && !isSelected && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/30" aria-hidden />
+      )}
       {(optional || inGroup) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
@@ -438,8 +444,14 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
-      inGroup && !isSelected ? 'opacity-75' : ''
+      inGroup && !isSelected ? 'relative [&_img]:relative [&_img]:z-[2]' : ''
     }`}>
+      {/* Non-selected alternative: dim with a white veil instead of row
+          opacity, and lift any image above it (z-2) so the customer can
+          still read the real fabric color / product photo. */}
+      {inGroup && !isSelected && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/30" aria-hidden />
+      )}
       {(optional || inGroup) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
@@ -524,8 +536,13 @@ function CompoundComponentRow({ component, fmt }) {
   const optional = !!component.isOptional;
   return (
     <li className={`py-2 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4 ${
-      optional ? 'pl-3 border-l-2 border-dashed border-ink-300 opacity-60' : ''
+      optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300 [&_img]:relative [&_img]:z-[2]' : ''
     }`}>
+      {/* Optional: dim with a white veil instead of opacity, lifting the
+          swatch above it so the fabric color stays visible to the client. */}
+      {optional && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
+      )}
       <div className="min-w-0 sm:flex-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>

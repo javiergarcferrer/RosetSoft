@@ -1,4 +1,4 @@
-import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
+import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
@@ -292,6 +292,31 @@ async function drawSwatch(
     page.drawImage(swatch, {
       x: x + (size - w) / 2,
       y: boxY + (size - h) / 2,
+      width: w, height: h,
+    });
+  }
+}
+
+/**
+ * The product photo box: a soft-bordered IMAGE_SIZE square with the photo
+ * contain-scaled inside. `bottomY` is the box's bottom edge. Shared by the
+ * initial draw and the redraw-on-top that keeps the photo vivid over an
+ * option/alternative dim wash.
+ */
+function drawProductImage(page: PDFPage, img: PDFImage | null, x: number, bottomY: number): void {
+  page.drawRectangle({
+    x, y: bottomY, width: IMAGE_SIZE, height: IMAGE_SIZE,
+    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
+  });
+  if (img) {
+    // 0.96 contain-scale leaves the slightest matte so the photo doesn't
+    // touch the box border (reads as intentional, not clipped).
+    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
+    const w = img.width * scale;
+    const h = img.height * scale;
+    page.drawImage(img, {
+      x: x + (IMAGE_SIZE - w) / 2,
+      y: bottomY + (IMAGE_SIZE - h) / 2,
       width: w, height: h,
     });
   }
@@ -797,24 +822,7 @@ export async function drawLineRow(
   // ---- Image — vertically centered in the inner content band -------------
   const img = await embedImageById(doc, line.imageId);
   const imgY = innerTop - (inner - IMAGE_SIZE) / 2 - IMAGE_SIZE;
-  page.drawRectangle({
-    x: cols.img.x, y: imgY, width: IMAGE_SIZE, height: IMAGE_SIZE,
-    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
-  });
-  if (img) {
-    // 0.96 contain-scale leaves the slightest matte so the photo
-    // doesn't touch the box border (reads as intentional, not clipped),
-    // while still filling enough of the 170pt box that the product
-    // dominates the row visually.
-    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
-    const w = img.width * scale;
-    const h = img.height * scale;
-    page.drawImage(img, {
-      x: cols.img.x + (IMAGE_SIZE - w) / 2,
-      y: imgY + (IMAGE_SIZE - h) / 2,
-      width: w, height: h,
-    });
-  }
+  drawProductImage(page, img, cols.img.x, imgY);
 
   // ---- Detail column — head (full width), then swatch + spec side by
   //      side, then description (full width); mirrors the client preview.
@@ -912,6 +920,15 @@ export async function drawLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
+    // Redraw the product photo + swatch on top of the wash so the
+    // customer still sees the product and its fabric colour on a dimmed
+    // (optional / non-selected alternative) line.
+    if (style.dim) {
+      drawProductImage(page, img, cols.img.x, imgY);
+      if (line.swatchImageId) {
+        await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
+      }
+    }
   }
 
   // ---- Bottom divider --------------------------------------------------
@@ -956,20 +973,7 @@ async function drawCompoundLineRow(
   // top edge — a centered image floating below the title looked
   // detached when the component list grew taller than the image.
   const imgY = innerTop - IMAGE_SIZE;
-  page.drawRectangle({
-    x: cols.img.x, y: imgY, width: IMAGE_SIZE, height: IMAGE_SIZE,
-    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
-  });
-  if (img) {
-    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
-    const w = img.width * scale;
-    const h = img.height * scale;
-    page.drawImage(img, {
-      x: cols.img.x + (IMAGE_SIZE - w) / 2,
-      y: imgY + (IMAGE_SIZE - h) / 2,
-      width: w, height: h,
-    });
-  }
+  drawProductImage(page, img, cols.img.x, imgY);
 
   // ---- Detail column — family + name, then component blocks -------------
   let sy = innerTop;
@@ -1002,6 +1006,10 @@ async function drawCompoundLineRow(
   const eqWidth = maxEquationWidth(ctx, line);
   const nameW = Math.max(40, cols.detail.w - eqWidth - 12);
 
+  // Swatch positions collected during the loop so they can be redrawn on
+  // top if the whole compound row is later dimmed (non-selected alternative).
+  const compSwatches: { id: string; topY: number }[] = [];
+
   for (let i = 0; i < components.length; i++) {
     if (i > 0) {
       // Hairline between components.
@@ -1014,12 +1022,21 @@ async function drawCompoundLineRow(
     }
     const compTop = sy;
     sy = await drawComponentBlock(page, ctx, sy, cols, components[i], nameW);
+    // The swatch top sits just below the component name (head); used to
+    // redraw the swatch on top of any wash so its fabric colour stays vivid.
+    const swatchTopY = compTop - compSegsHeight(componentDetail(ctx, components[i], cols.detail.w, nameW).head);
+    if (components[i].swatchImageId) {
+      compSwatches.push({ id: components[i].swatchImageId as string, topY: swatchTopY });
+    }
     // Optional components get the same treatment as the on-screen
     // preview: a dashed accent bar in the gutter + a white wash that
     // fades the block so it reads as an opt-in add-on, not part of the
-    // base composition.
+    // base composition. The swatch is redrawn ON TOP so its colour shows.
     if (components[i].isOptional) {
       drawComponentOptional(page, cols, compTop, sy);
+      if (components[i].swatchImageId) {
+        await drawSwatch(page, ctx.doc, components[i].swatchImageId as string, cols.detail.x, swatchTopY, SWATCH_SIZE);
+      }
     }
     sy -= COMP_BLOCK_GAP;
   }
@@ -1082,6 +1099,15 @@ async function drawCompoundLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
+    // Redraw the product photo + every component swatch on top of the
+    // wash so the customer can still read the product and the fabric
+    // colours of a dimmed (alternative) bundle.
+    if (style.dim) {
+      drawProductImage(page, img, cols.img.x, imgY);
+      for (const s of compSwatches) {
+        await drawSwatch(page, ctx.doc, s.id, cols.detail.x, s.topY, SWATCH_SIZE);
+      }
+    }
   }
 
   // ---- Bottom divider ---------------------------------------------------
