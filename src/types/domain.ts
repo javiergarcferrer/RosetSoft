@@ -334,6 +334,14 @@ export interface MaterialColor {
   name: string;
   /** LR sku-fragment for the color, e.g. "4479" / "5312". */
   code: string;
+  /**
+   * Optional swatch image attached to the color, by `images.id`.
+   * When absent the SwatchPicker falls back to the parent material's
+   * `imageId`. Per-color photos are aspirational — the LR seed leaves
+   * this null on all 850 imported colors and the dealer can attach
+   * them as needed.
+   */
+  imageId?: string | null;
 }
 
 export interface Material {
@@ -365,6 +373,13 @@ export interface Material {
   composition?: string | null;
   colors: MaterialColor[];
   notes?: string | null;
+  /**
+   * Optional representative photo for the material itself, by
+   * `images.id`. Renders as the swatch tile on the SwatchPicker's
+   * material-list rows and as the fallback when an individual color
+   * doesn't carry its own imageId.
+   */
+  imageId?: string | null;
   createdAt?: number;
   updatedAt?: number;
 }

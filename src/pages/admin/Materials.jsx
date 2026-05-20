@@ -11,6 +11,8 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import Modal from '../../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInput.jsx';
+import Thumbnail from '../../components/primitives/Thumbnail.jsx';
+import ImageView from '../../components/ImageView.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 import lrSeed from '../../data/lr-materials-2025-10.json';
 
@@ -214,6 +216,7 @@ export default function Materials() {
             <table className="w-full text-sm">
               <thead className="bg-ink-50 text-[10px] uppercase tracking-wide text-ink-500">
                 <tr>
+                  <th className="text-left px-3 py-2 w-12">Foto</th>
                   <th className="text-left px-3 py-2">Categoría</th>
                   <th className="text-left px-3 py-2">Nombre</th>
                   <th className="text-left px-3 py-2">Grade</th>
@@ -226,6 +229,21 @@ export default function Materials() {
               <tbody className="divide-y divide-ink-100">
                 {filtered.map((m) => (
                   <tr key={m.id} className="hover:bg-ink-50/40">
+                    <td className="px-3 py-2">
+                      {m.imageId ? (
+                        <ImageView
+                          id={m.imageId}
+                          alt={m.name}
+                          className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
+                        />
+                      ) : (
+                        <div
+                          className="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
+                          aria-hidden
+                          title="Sin foto"
+                        />
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-[11px] uppercase tracking-wide text-ink-500">
                       {categoryLabel(m.category)}
                     </td>
@@ -260,7 +278,7 @@ export default function Materials() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-ink-500">
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-500">
                       Sin resultados.
                     </td>
                   </tr>
@@ -327,6 +345,7 @@ function MaterialEditor({ material, profileId, onClose }) {
     composition: '',
     colors: [],
     notes: '',
+    imageId: null,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -369,6 +388,7 @@ function MaterialEditor({ material, profileId, onClose }) {
         composition: draft.composition?.trim() || null,
         colors: (draft.colors || []).filter((c) => c.name?.trim() || c.code?.trim()),
         notes: draft.notes?.trim() || null,
+        imageId: draft.imageId || null,
         createdAt: material?.createdAt || now,
         updatedAt: now,
       };
@@ -388,6 +408,26 @@ function MaterialEditor({ material, profileId, onClose }) {
             {error}
           </div>
         )}
+
+        {/* Representative swatch photo for the material. Reuses the
+            same Thumbnail primitive the quote line uses, so the
+            upload pipeline (Supabase Storage + MIME / size validation
+            in db/database.ts saveImage) lands consistently. */}
+        <div className="flex items-start gap-3">
+          <Thumbnail
+            imageId={draft.imageId}
+            onChange={(id) => set({ imageId: id })}
+            kind="material"
+            ownerId={material?.id}
+            sizeClass="w-24 h-24"
+          />
+          <div className="flex-1 text-xs text-ink-500 leading-relaxed">
+            Foto representativa del material — se muestra como vista
+            previa en el selector de telas del editor de cotizaciones.
+            Opcional; cada color también puede cargar su propio swatch
+            abajo.
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
@@ -516,9 +556,22 @@ function MaterialEditor({ material, profileId, onClose }) {
               <Plus size={12} /> Color
             </button>
           </div>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
             {(draft.colors || []).map((c, i) => (
-              <div key={i} className="grid grid-cols-[1fr_120px_auto] gap-2 items-center">
+              <div key={i} className="grid grid-cols-[auto_1fr_120px_auto] gap-2 items-center">
+                {/* Tiny swatch thumbnail per color. Defaults to a
+                    placeholder + camera glyph; clicking opens the
+                    file picker exactly like the material-level
+                    Thumbnail above. Per-color photos are aspirational
+                    — 850 colors imported from LR start with null
+                    imageId and the dealer attaches them as needed. */}
+                <Thumbnail
+                  imageId={c.imageId}
+                  onChange={(id) => updateColor(i, { imageId: id })}
+                  kind="material-color"
+                  ownerId={material?.id}
+                  sizeClass="w-9 h-9"
+                />
                 <DebouncedInput
                   className="input py-1.5 text-sm"
                   value={c.name || ''}

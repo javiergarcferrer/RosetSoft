@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronLeft, Check, Layers } from 'lucide-react';
 import Modal from '../Modal.jsx';
+import ImageView from '../ImageView.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -218,7 +219,25 @@ function MaterialList({
                 activeIdx === idx ? 'bg-ink-100' : 'hover:bg-ink-50'
               }`}
             >
-              <CategoryDot category={m.category} />
+              {/* Representative swatch photo (when uploaded); placeholder
+                  tile otherwise. The category dot remains as the small
+                  colour-coded chip in the corner so the dealer can still
+                  read fabric / leather / outdoor at a glance even when
+                  no photo exists yet. */}
+              <div className="relative w-10 h-10 flex-shrink-0">
+                {m.imageId ? (
+                  <ImageView
+                    id={m.imageId}
+                    alt={m.name}
+                    className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50" aria-hidden />
+                )}
+                <span className="absolute -top-1 -right-1">
+                  <CategoryDot category={m.category} />
+                </span>
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2 min-w-0">
                   <span className="font-medium text-ink-900 truncate">{m.name}</span>
@@ -313,18 +332,35 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
             {colors.map((c) => {
               const active = currentFabric && currentFabric.includes(c.code);
+              // Color swatch: per-color photo when uploaded, falling
+              // back to the parent material's representative photo,
+              // falling back to a dashed placeholder. The hierarchy
+              // means a dealer who only photographed one
+              // representative swatch per material still sees a
+              // visual for every color, while individually-shot
+              // colors take precedence.
+              const swatchId = c.imageId || material.imageId || null;
               return (
                 <button
                   key={c.code}
                   type="button"
                   onClick={() => onPick(c)}
-                  className={`text-left px-3 py-2 rounded border transition-colors flex items-center justify-between gap-2 min-w-0 ${
+                  className={`text-left p-2 rounded border transition-colors flex items-center gap-2 min-w-0 ${
                     active
                       ? 'border-brand-300 bg-brand-50'
                       : 'border-ink-200 hover:border-ink-400 hover:bg-ink-50'
                   }`}
                 >
-                  <span className="text-sm text-ink-900 truncate">{c.name}</span>
+                  {swatchId ? (
+                    <ImageView
+                      id={swatchId}
+                      alt={c.name}
+                      className="w-8 h-8 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0" aria-hidden />
+                  )}
+                  <span className="flex-1 min-w-0 text-sm text-ink-900 truncate">{c.name}</span>
                   <span className="text-[10px] text-ink-500 font-mono tabular-nums flex-shrink-0">
                     #{c.code}
                   </span>
