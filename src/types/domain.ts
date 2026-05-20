@@ -58,9 +58,10 @@ export type OrderStatus =
 export type ProfileRole = 'admin' | 'employee' | 'accounting' | 'team';
 
 /**
- * `settings.dop_rate_mode`. The mode selector for the DOP rate; the
- * application code accepts a few legacy aliases (bpd-*, market) and
- * normalises them — see `lib/exchangeRate.ts:normalizeRateMode`.
+ * `settings.dop_rate_mode`. Legacy: the app used to let the dealer pick
+ * which rate to quote on. The rate is now pulled automatically from
+ * Banco Popular and always quoted on venta (see lib/exchangeRate.ts), so
+ * nothing reads this field anymore — kept only so old rows still type-check.
  */
 export type DopRateMode = 'bsc-buy' | 'bsc-sell' | 'custom';
 
@@ -90,8 +91,8 @@ export interface Profile {
 }
 
 /**
- * Banco Santa Cruz manual rate snapshot. `null` means the dealer
- * hasn't typed today's rate yet.
+ * Published USD↔DOP rate snapshot (Banco Popular Dominicano), written by
+ * the `bpd-rate` Edge Function. `null` means no pull has landed yet.
  */
 export interface BscRates {
   buy: number | null;

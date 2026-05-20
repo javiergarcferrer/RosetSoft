@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, ExternalLink, Check, AlertTriangle, Shield } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Shield } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { effectiveDopRate, BSC_PUBLIC_URL } from '../lib/exchangeRate.js';
+import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
@@ -12,7 +12,7 @@ import { db } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
 
 export default function Settings() {
-  const { profileId, settings, saveSettings, isAdmin } = useApp();
+  const { profileId, settings, saveSettings, refreshSettings, isAdmin } = useApp();
   const [local, setLocal] = useState(settings || {});
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [saveError, setSaveError] = useState(null);
@@ -142,7 +142,7 @@ export default function Settings() {
           </div>
 
           {/* Currency (DR-focused) */}
-          <RateCard local={local} set={set} saveSettings={() => saveSettings(local)} />
+          <RateCard local={local} set={set} refreshSettings={refreshSettings} />
 
           {/* Defaults */}
           <div className="card card-pad">
@@ -199,33 +199,20 @@ function OrdersCard({ local, set }) {
 }
 
 
-function RateCard({ local, set, saveSettings }) {
-  // BSC's buy/sell rates live under `settings.bsc`. We accept the
-  // legacy `settings.bpd` shape transparently so existing data isn't
-  // lost on the first render after this code ships — see readBscRates
-  // / normalizeRateMode in lib/exchangeRate.js.
+function RateCard({ local, set, refreshSettings }) {
+  // Banco Popular's published rate, pulled automatically and stored
+  // under `settings.bsc` (legacy column name). Read-only here: the daily
+  // cron and the button below are the only writers. The older
+  // `settings.bpd` shape is accepted as a fallback — see readBscRates.
   const bsc = local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
-  // Recognise every supported mode — the previous startsWith('bsc-')
-  // gate silently dropped 'custom' back to 'bsc-sell', which both
-  // killed the "Personalizada" button highlight and hid the custom-
-  // rate input (`{mode === 'custom' && ...}` further down). So the
-  // dealer would click Personalizada, see no input, no highlight, and
-  // their typed rate never had anywhere to go — landing on the saved
-  // settings as 0 / undefined.
-  const mode = ['bsc-buy', 'bsc-sell', 'custom'].includes(local.dopRateMode)
-    ? local.dopRateMode
-    : 'bsc-sell';
 
-  function setBsc(patch) {
-    set('bsc', { ...bsc, ...patch, updatedAt: Date.now() });
-  }
-
-  // Pull today's published rates from Banco Popular via the bpd-rate Edge
-  // Function (the OAuth secret stays server-side). Fills the compra/venta
-  // inputs; the dealer reviews and presses Guardar to persist.
+  // "Actualizar ahora": invoke the bpd-rate Edge Function (OAuth secret
+  // stays server-side). The function writes the rate to the team settings
+  // row itself; we just re-read settings so the new figure shows up here
+  // and across the app immediately, instead of waiting for the 8 a.m. job.
   const [fetching, setFetching] = useState(false);
   const [fetchErr, setFetchErr] = useState(null);
-  async function fetchBpdRate() {
+  async function fetchNow() {
     setFetching(true);
     setFetchErr(null);
     try {
@@ -241,7 +228,7 @@ function RateCard({ local, set, saveSettings }) {
       if (!data?.usd || (!data.usd.compra && !data.usd.venta)) {
         throw new Error(data?.error || 'El banco no devolvió una tasa de USD.');
       }
-      setBsc({ buy: data.usd.compra || null, sell: data.usd.venta || null });
+      await refreshSettings();
     } catch (e) {
       setFetchErr(e?.message || 'No se pudo obtener la tasa.');
     } finally {
@@ -252,106 +239,54 @@ function RateCard({ local, set, saveSettings }) {
   const eff = effectiveDopRate(local);
   const sample = (10000 / eff).toFixed(2);
   const sampleInverse = (100 * eff).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toFixed(2));
 
   return (
     <div className="card card-pad">
       <h2 className="font-semibold mb-2">Tasa de cambio USD → DOP</h2>
       <p className="text-xs text-ink-500 mb-4">
-        Los precios del catálogo están en USD (lista oficial Ligne Roset). Aquí defines la tasa de Banco Santa Cruz que se aplica al convertir a pesos dominicanos en cotizaciones.
+        Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano y se actualiza automáticamente cada día a las 8:00 a.m. (hora de Santo Domingo). Se cotiza con la tasa de venta.
       </p>
 
-      {/* Mode selector — three options, all anchored on BSC */}
-      <div className="label">Tasa que usar al cotizar</div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-        {[
-          { key: 'bsc-sell', label: 'BSC — Venta',     hint: 'Para cobrar al cliente' },
-          { key: 'bsc-buy',  label: 'BSC — Compra',    hint: 'Si te paga en USD' },
-          { key: 'custom',   label: 'Personalizada',   hint: 'Manual abajo' },
-        ].map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => set('dopRateMode', opt.key)}
-            className={`text-left rounded-md border px-3 py-2 transition ${mode === opt.key ? 'border-ink-900 bg-ink-900 text-white' : 'border-ink-200 hover:border-ink-400'}`}
-          >
-            <div className="text-sm font-medium">{opt.label}</div>
-            <div className={`text-[10px] mt-0.5 ${mode === opt.key ? 'text-ink-300' : 'text-ink-500'}`}>{opt.hint}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* BSC rates — manual entry. BSC's web app is a Nuxt SPA with no
-          public no-auth endpoint we can fetch, so we link out to their
-          divisas page and let the dealer paste in today's rates. */}
+      {/* Banco Popular — read-only. The dealer can't adjust it; the daily
+          job and the button below are the only writers. */}
       <div className="rounded-md border border-ink-100 bg-ink-50 px-4 py-3 mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-medium text-sm">Banco Santa Cruz</div>
-          <a href={BSC_PUBLIC_URL} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline inline-flex items-center gap-1">
-            bsc.com.do/divisas <ExternalLink size={10} />
-          </a>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-medium text-sm">Banco Popular Dominicano</div>
+          <button
+            type="button"
+            onClick={fetchNow}
+            disabled={fetching}
+            className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait"
+            title="Trae ahora la tasa USD publicada por Banco Popular Dominicano"
+          >
+            <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
+            {fetching ? 'Actualizando…' : 'Actualizar ahora'}
+          </button>
         </div>
-        <p className="text-[11px] text-ink-500 mb-3">
-          Actualiza desde la app de BSC o su sitio web, o trae la tasa publicada de Banco Popular automáticamente. La tasa de venta es la que paga tu cliente al adquirir USD.
-        </p>
-        <button
-          type="button"
-          onClick={fetchBpdRate}
-          disabled={fetching}
-          className="btn-ghost text-xs mb-3 disabled:opacity-60 disabled:cursor-wait"
-          title="Trae la tasa USD publicada por Banco Popular Dominicano y la coloca abajo"
-        >
-          <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
-          {fetching ? 'Obteniendo…' : 'Obtener tasa de Banco Popular'}
-        </button>
         {fetchErr && (
           <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1">
             <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {fetchErr}
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>
-            <input
-              type="number"
-              step="0.01"
-              className="input mt-1"
-              value={bsc.buy ?? ''}
-              onChange={(e) => setBsc({ buy: e.target.value === '' ? null : Number(e.target.value) })}
-              placeholder="58.50"
-            />
+          <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Compra</div>
+            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(bsc.buy)}</div>
+            <div className="text-[10px] text-ink-400">RD$ por 1 USD</div>
           </div>
-          <div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Venta (RD$ por 1 USD)</div>
-            <input
-              type="number"
-              step="0.01"
-              className="input mt-1"
-              value={bsc.sell ?? ''}
-              onChange={(e) => setBsc({ sell: e.target.value === '' ? null : Number(e.target.value) })}
-              placeholder="62.00"
-            />
+          <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Venta</div>
+            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(bsc.sell)}</div>
+            <div className="text-[10px] text-ink-400">RD$ por 1 USD · se cotiza con esta</div>
           </div>
         </div>
-        {bsc.updatedAt && (
-          <div className="text-[10px] text-ink-500 mt-2">
-            Actualizado {formatDateTime(bsc.updatedAt)}
-          </div>
-        )}
+        <div className="text-[10px] text-ink-500 mt-2">
+          {bsc.updatedAt
+            ? <>Actualizado {formatDateTime(bsc.updatedAt)}</>
+            : 'Aún sin datos — presiona “Actualizar ahora”.'}
+        </div>
       </div>
-
-      {/* Custom — only renders when selected */}
-      {mode === 'custom' && (
-        <div className="rounded-md border border-ink-100 px-4 py-3 mb-3">
-          <div className="label">Tasa personalizada (RD$ por 1 USD)</div>
-          <input
-            type="number"
-            step="0.01"
-            className="input"
-            value={local.currencyRates?.DOP ?? ''}
-            onChange={(e) => set('currencyRates', { ...(local.currencyRates || {}), USD: 1, DOP: Number(e.target.value) || 0 })}
-          />
-        </div>
-      )}
 
       {/* Effective */}
       <div className="rounded-md bg-brand-50 border border-brand-200 px-4 py-3">

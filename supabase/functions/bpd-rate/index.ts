@@ -10,6 +10,15 @@
 //     the rate call, and its gateway won't serve a cross-origin browser
 //     request anyway. This proxy does both server-side.
 //
+// On every successful fetch it also writes the rate to the team
+// settings row (settings.bsc + settings.currency_rates) with the
+// service-role key, so the number the whole app quotes on is the bank's
+// published rate — nobody types it in. Two callers are allowed:
+//   - a logged-in dealer (the "Actualizar ahora" button), verified by
+//     JWT here; and
+//   - the daily pg_cron job, which authenticates with the service-role
+//     key (see supabase/migrations/*_schedule_bpd_rate_daily.sql).
+//
 // Endpoints come from the API spec (sandbox by default). Set a
 // BPD_API_BASE secret to point at production without a code change.
 
@@ -30,6 +39,7 @@ Deno.serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const CLIENT_ID = Deno.env.get('BPD_CLIENT_ID');
   const CLIENT_SECRET = Deno.env.get('BPD_CLIENT_SECRET');
   const BASE = (Deno.env.get('BPD_API_BASE') || DEFAULT_BASE).replace(/\/+$/, '');
@@ -37,15 +47,19 @@ Deno.serve(async (req) => {
     return json({ error: 'Server misconfigured' }, 500);
   }
 
-  // Require a logged-in dealer so the bank's quota can't be drained by
+  // Require *some* bearer so the bank's quota can't be drained by
   // anonymous traffic. verify_jwt is off at the gateway (so the CORS
   // preflight passes — browsers don't send Authorization on OPTIONS); we
-  // verify the token here instead.
+  // authenticate here instead. The daily cron sends the service-role key
+  // (recognised below, skips the user lookup); a dealer sends their JWT,
+  // which we verify.
   const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) {
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!bearer) {
     return json({ error: 'Authorization header required' }, 401);
   }
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  const isCron = !!SERVICE_ROLE_KEY && bearer === SERVICE_ROLE_KEY;
+  if (!isCron && SUPABASE_URL && SUPABASE_ANON_KEY) {
     const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -106,11 +120,37 @@ Deno.serve(async (req) => {
       return json({ error: 'USD rate not found in response', raw: payload }, 502);
     }
 
+    // Persist to the shared team settings row so the rate the whole app
+    // quotes on (effectiveDopRate → settings.bsc) is the bank's published
+    // number, refreshed without anyone touching it. Service-role client
+    // bypasses RLS. `currency_rates.DOP` is kept in lockstep so new-quote
+    // rate snapshots (QuoteBuilder) don't go stale. We quote on venta
+    // (sell). `updatedAt` is ms to match the app's own jsonb writes.
+    let persisted = false;
+    if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { error: upErr } = await admin
+        .from('settings')
+        .update({
+          bsc: { buy: rates.USD.compra, sell: rates.USD.venta, updatedAt: Date.now() },
+          currency_rates: { USD: 1, DOP: rates.USD.venta },
+        })
+        .eq('profile_id', 'team');
+      if (upErr) {
+        console.error('bpd-rate: failed to persist rate to settings:', upErr.message);
+      } else {
+        persisted = true;
+      }
+    }
+
     return json({
       ok: true,
       usd: rates.USD,
       eur: rates.EUR ?? null,
       rates,
+      persisted,
       fetchedAt: new Date().toISOString(),
     });
   } catch (e) {
