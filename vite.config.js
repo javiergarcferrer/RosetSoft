@@ -16,9 +16,32 @@ export default defineConfig(({ mode }) => {
   const supabaseUrl  = env.VITE_SUPABASE_URL      || env.SUPABASE_URL      || '';
   const supabaseAnon = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || '';
 
+  // A unique id per build. On Vercel the git commit SHA is the natural
+  // choice (stable per deploy); locally we fall back to a timestamp so
+  // each `npm run build` differs. It's baked into the client (as
+  // VITE_BUILD_ID) AND written to dist/version.json by the plugin below;
+  // the running app polls version.json and reloads when the two diverge,
+  // so an open tab picks up a new deploy without a manual refresh.
+  const buildId =
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    env.VITE_BUILD_ID ||
+    String(Date.now());
+
+  const emitVersion = {
+    name: 'emit-version-json',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ id: buildId }),
+      });
+    },
+  };
+
   return {
     base,
-    plugins: [react()],
+    plugins: [react(), emitVersion],
     resolve: {
       // The codebase imports with explicit `.js` / `.jsx` extensions
       // (`from '../lib/format.js'`) — an ESM-purist discipline that
@@ -42,6 +65,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_SUPABASE_URL':      JSON.stringify(supabaseUrl),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnon),
+      'import.meta.env.VITE_BUILD_ID':          JSON.stringify(buildId),
     },
     build: {
       target: 'es2020',
