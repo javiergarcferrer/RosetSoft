@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
+import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
@@ -450,7 +451,15 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
 // always typed — no migration, no PDF / autocomplete churn.
 function GradeFabricRow({ line, onChange }) {
   const { grade, fabric } = parseSubtype(line.subtype);
-  const commit = (next) => onChange({ subtype: composeSubtype(next.grade, next.fabric) });
+  // commit() always writes the composed subtype. When the picker hands
+  // back a swatchImageId we persist it too; manual grade/fabric edits
+  // (which don't carry the key) leave any existing swatch untouched.
+  const commit = (next) => {
+    const patch = { subtype: composeSubtype(next.grade, next.fabric) };
+    if ('swatchImageId' in next) patch.swatchImageId = next.swatchImageId;
+    onChange(patch);
+  };
+  const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
   // flex-wrap lets the fabric input drop below the grade Select when
   // there isn't enough room to fit both inline (long fabric names like
@@ -526,6 +535,27 @@ function GradeFabricRow({ line, onChange }) {
       >
         <Palette size={14} />
       </button>
+      {/* Swatch preview — the chosen fabric/leather photo. Renders
+          next to the picker button once a swatch has been selected;
+          the corner × clears just the image (keeps the fabric text). */}
+      {swatchImageId && (
+        <span className="relative inline-flex flex-shrink-0 group/swatch">
+          <ImageView
+            id={swatchImageId}
+            alt="Muestra de tela"
+            className="w-8 h-8 object-cover rounded border border-ink-200 bg-white"
+          />
+          <button
+            type="button"
+            onClick={() => onChange({ swatchImageId: null })}
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 inline-flex items-center justify-center bg-white border border-ink-200 rounded-full text-ink-500 hover:text-ink-900 hover:border-ink-400 shadow-sm opacity-0 group-hover/swatch:opacity-100 focus:opacity-100 transition-opacity coarse:opacity-100"
+            aria-label="Quitar muestra de tela"
+            title="Quitar muestra"
+          >
+            <X size={9} />
+          </button>
+        </span>
+      )}
       <SwatchPicker
         open={swatchOpen}
         onClose={() => setSwatchOpen(false)}
@@ -816,8 +846,8 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
       />
 
       <GradeFabricRow
-        line={{ subtype: component.subtype }}
-        onChange={({ subtype }) => onChange({ subtype })}
+        line={{ subtype: component.subtype, swatchImageId: component.swatchImageId }}
+        onChange={(patch) => onChange(patch)}
       />
 
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">

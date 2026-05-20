@@ -240,13 +240,54 @@ function detailSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): DetailSe
 /**
  * Total height of the detail column at this line's content.
  */
+// Fabric-swatch thumbnail rendered in the detail column, below the
+// text segments. Reserved in the measure pass so the row never
+// clips it; drawn (async embed) in drawLineRow.
+const SWATCH_SIZE = 42;
+const SWATCH_GAP  = 6;
+const COMP_SWATCH_SIZE = 30;   // smaller swatch inside compound component blocks
+
 function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
   let h = 0;
   for (const seg of detailSegments(ctx, line, detailW)) {
     if (seg.kind === 'gap') { h += seg.gap; continue; }
     h += seg.lines.length * seg.token.lh;
   }
+  if (line.swatchImageId) h += SWATCH_GAP + SWATCH_SIZE;
   return h;
+}
+
+/**
+ * Draw a fabric swatch as a small framed square. `topY` is the TOP
+ * edge in PDF coordinates (y grows upward), so the box occupies
+ * [topY − size, topY]. Contain-scales the photo inside a soft-bordered
+ * tile so it reads as a material sample, not a second product shot.
+ * No-op when the image can't be embedded (deleted / unreadable).
+ */
+async function drawSwatch(
+  page: PDFPage,
+  doc: PdfCtx['doc'],
+  imageId: string,
+  x: number,
+  topY: number,
+  size: number = SWATCH_SIZE,
+): Promise<void> {
+  const boxY = topY - size;
+  page.drawRectangle({
+    x, y: boxY, width: size, height: size,
+    color: BG_SOFT, borderColor: INK_LINE2, borderWidth: 0.5,
+  });
+  const swatch = await embedImageById(doc, imageId);
+  if (swatch) {
+    const scale = Math.min(size / swatch.width, size / swatch.height);
+    const w = swatch.width * scale;
+    const h = swatch.height * scale;
+    page.drawImage(swatch, {
+      x: x + (size - w) / 2,
+      y: boxY + (size - h) / 2,
+      width: w, height: h,
+    });
+  }
 }
 
 /**
@@ -556,6 +597,7 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
     for (const seg of blockSegs) {
       textH += seg.lines.length * seg.token.lh;
     }
+    if (components[i].swatchImageId) textH += SWATCH_GAP + COMP_SWATCH_SIZE;
     textH += COMP_BLOCK_GAP;
   }
 
@@ -702,6 +744,13 @@ export async function drawLineRow(
       } as DrawTextOptions);
       sy -= seg.token.lh;
     }
+  }
+
+  // ---- Fabric swatch — small framed photo below the detail text --------
+  if (line.swatchImageId) {
+    sy -= SWATCH_GAP;
+    await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, sy);
+    sy -= SWATCH_SIZE;
   }
 
   // ---- Numeric column — three label/value pairs, right-aligned ----------
@@ -882,7 +931,7 @@ async function drawCompoundLineRow(
       });
       sy -= COMP_TOP_GAP;
     }
-    sy = drawComponentBlock(page, ctx, sy, cols, components[i], nameW);
+    sy = await drawComponentBlock(page, ctx, sy, cols, components[i], nameW);
     sy -= COMP_BLOCK_GAP;
   }
 
@@ -960,15 +1009,15 @@ async function drawCompoundLineRow(
 // Draws one component block (name + subordinated specs on the left,
 // inline qty × unit = subtotal equation on the right of the first
 // baseline). Returns the y after the block has been drawn.
-function drawComponentBlock(
+async function drawComponentBlock(
   page: PDFPage,
   ctx: PdfCtx,
   startY: number,
   cols: CompoundColumns,
   component: LineComponent,
   nameW: number,
-): number {
-  const { fontRegular } = ctx;
+): Promise<number> {
+  const { fontRegular, doc } = ctx;
   const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
@@ -1013,6 +1062,13 @@ function drawComponentBlock(
       }
       sy -= seg.token.lh;
     }
+  }
+  // Fabric swatch beneath the component's specs — same convention as
+  // the article row, scaled down to the component tier.
+  if (component.swatchImageId) {
+    sy -= SWATCH_GAP;
+    await drawSwatch(page, doc, component.swatchImageId, cols.detail.x, sy, COMP_SWATCH_SIZE);
+    sy -= COMP_SWATCH_SIZE;
   }
   return sy;
 }

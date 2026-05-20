@@ -83,7 +83,12 @@ export default function SwatchPicker({ open, onClose, onSelect, currentGrade, cu
 
   function commit(material, color) {
     const fabric = composeFabric(material, color);
-    onSelect({ grade: material.grade || '', fabric });
+    // Resolve the swatch image with the same fallback the color grid
+    // uses for its tiles: the color's own photo, else the material's
+    // representative photo, else none. Hand it back so the line can
+    // render the swatch the customer will see.
+    const swatchImageId = (color && color.imageId) || material.imageId || null;
+    onSelect({ grade: material.grade || '', fabric, swatchImageId });
     onClose();
   }
 

@@ -249,7 +249,18 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
               </div>
             )}
             <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
-            {line.subtype && <div className="text-[11px] text-ink-500 mt-0.5">{line.subtype}</div>}
+            {(line.subtype || line.swatchImageId) && (
+              <div className="flex items-center gap-2 mt-1">
+                {line.swatchImageId && (
+                  <ImageView
+                    id={line.swatchImageId}
+                    alt="Muestra de tela"
+                    className="w-9 h-9 object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+                  />
+                )}
+                {line.subtype && <div className="text-[11px] text-ink-500">{line.subtype}</div>}
+              </div>
+            )}
             {(line.reference || line.dimensions) && (
               <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
                 {line.reference && <span className="font-mono">ref {line.reference}</span>}
@@ -448,8 +459,17 @@ function CompoundComponentRow({ component, fmt }) {
             </span>
           )}
         </div>
-        {component.subtype && (
-          <div className="text-[11px] text-ink-500 mt-0.5">{component.subtype}</div>
+        {(component.subtype || component.swatchImageId) && (
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {component.swatchImageId && (
+              <ImageView
+                id={component.swatchImageId}
+                alt="Muestra de tela"
+                className="w-7 h-7 object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+              />
+            )}
+            {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
+          </div>
         )}
         {(component.reference || component.dimensions) && (
           <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">

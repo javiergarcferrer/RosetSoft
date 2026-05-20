@@ -181,6 +181,12 @@ export interface LineComponent {
    * false on every new component.
    */
   isOptional?: boolean;
+  /**
+   * Fabric swatch image (by `images.id`) chosen via the SwatchPicker
+   * for this component. Distinct from the parent line's imageId
+   * (the product photo). Lives inline on the JSONB component shape.
+   */
+  swatchImageId?: string | null;
 }
 
 export interface QuoteLine {
@@ -198,6 +204,13 @@ export interface QuoteLine {
   description?: string;
   pageRef?: string;
   imageId?: string | null;
+  /**
+   * Fabric swatch image (by `images.id`) chosen via the SwatchPicker.
+   * Distinct from `imageId`, which is the product photo (the sofa).
+   * A line can carry both. Renders in the editor's grade/fabric row
+   * and in the client preview + PDF next to the subtype.
+   */
+  swatchImageId?: string | null;
 
   /* Pricing — ignored when `components` is non-empty (compound mode). */
   qty?: number;
