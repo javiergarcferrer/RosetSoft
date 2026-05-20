@@ -41,6 +41,61 @@ const CORS_HEADERS = {
 const DEFAULT_BASE =
   'https://api.us-east-a.apiconnect.ibmappdomain.cloud/apiportalpopular/bpdsandbox';
 
+// Resilience for the upstream BPD calls (BPD cert C.7 + C.10): a hard
+// attempt cap (never an infinite loop), bounded exponential backoff, and
+// a per-attempt timeout so a hung gateway can't stall the function.
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 500;        // backoff: 500ms, 1000ms
+const REQUEST_TIMEOUT_MS = 10_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// fetch with a per-attempt timeout, retrying ONLY transient failures:
+// network errors / timeouts, HTTP 429 (rate limit), and 5xx. Client
+// errors (4xx other than 429) return immediately — retrying a 401/403
+// would just hammer the bank. Honours Retry-After on 429. Emits a trace
+// per attempt (status only, never secrets) for the cert evidence.
+async function fetchWithRetry(label: string, url: string, init: RequestInit): Promise<Response> {
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { ...init, signal: ctrl.signal });
+      clearTimeout(timer);
+      if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const delay = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : BASE_DELAY_MS * 2 ** (attempt - 1);
+        console.warn(`[bpd-rate] ${label}: HTTP ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS}) — backoff ${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+      console.log(`[bpd-rate] ${label}: HTTP ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      return res;
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e;
+      const aborted = (e as Error)?.name === 'AbortError';
+      const delay = BASE_DELAY_MS * 2 ** (attempt - 1);
+      console.warn(`[bpd-rate] ${label}: ${aborted ? `timeout after ${REQUEST_TIMEOUT_MS}ms` : String((e as Error)?.message || e)} (attempt ${attempt}/${MAX_ATTEMPTS})${attempt < MAX_ATTEMPTS ? ` — backoff ${delay}ms` : ''}`);
+      if (attempt < MAX_ATTEMPTS) await sleep(delay);
+    }
+  }
+  throw lastErr ?? new Error(`${label}: failed after ${MAX_ATTEMPTS} attempts`);
+}
+
+// Controlled, differentiated message per upstream status (cert C.3/C.4/C.6).
+function upstreamMessage(kind: string, status: number): string {
+  if (status === 401) return `${kind}: 401 no autorizado (credenciales inválidas o app no suscrita)`;
+  if (status === 403) return `${kind}: 403 prohibido (permisos o scope insuficientes)`;
+  if (status === 404) return `${kind}: 404 recurso no encontrado`;
+  if (status === 429) return `${kind}: 429 límite de solicitudes del banco alcanzado`;
+  if (status >= 500) return `${kind}: ${status} error del servidor del banco`;
+  return `${kind}: ${status}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
@@ -72,6 +127,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('[bpd-rate] start', { base: BASE });
     // 1. OAuth client-credentials token.
     //
     // IBM API Connect identifies the confidential app at the gateway via
@@ -81,7 +137,7 @@ Deno.serve(async (req) => {
     // enough: without the header the gateway can't authorize the app and
     // returns `unauthorized_client` / "Invalid client ID or secret, or
     // client not subscribed to this API" with an empty plan/product.
-    const tokenRes = await fetch(`${BASE}/bpd/Authentication/oauth2/token`, {
+    const tokenRes = await fetchWithRetry('token', `${BASE}/bpd/Authentication/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -98,7 +154,7 @@ Deno.serve(async (req) => {
     });
     const tokenText = await tokenRes.text();
     if (!tokenRes.ok) {
-      return json({ error: 'OAuth token request failed', status: tokenRes.status, detail: tokenText.slice(0, 500) }, 502);
+      return json({ error: upstreamMessage('OAuth token', tokenRes.status), status: tokenRes.status, detail: tokenText.slice(0, 500) }, 502);
     }
     const accessToken = safeJson(tokenText)?.access_token;
     if (!accessToken) {
@@ -107,7 +163,7 @@ Deno.serve(async (req) => {
 
     // 2. Fetch the published rates. Same gateway app-identification
     // headers as the token call, plus the Bearer we just minted.
-    const rateRes = await fetch(`${BASE}/consultatasa/consultaTasa`, {
+    const rateRes = await fetchWithRetry('consultaTasa', `${BASE}/consultatasa/consultaTasa`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-IBM-Client-Id': CLIENT_ID,
@@ -117,7 +173,7 @@ Deno.serve(async (req) => {
     });
     const rateText = await rateRes.text();
     if (!rateRes.ok) {
-      return json({ error: 'consultaTasa request failed', status: rateRes.status, detail: rateText.slice(0, 500) }, 502);
+      return json({ error: upstreamMessage('consultaTasa', rateRes.status), status: rateRes.status, detail: rateText.slice(0, 500) }, 502);
     }
     const payload = safeJson(rateText);
 
@@ -159,6 +215,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log('[bpd-rate] ok', { usd: rates.USD, eur: rates.EUR ?? null, persisted });
     return json({
       ok: true,
       usd: rates.USD,
