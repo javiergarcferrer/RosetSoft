@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
-import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
@@ -535,27 +534,20 @@ function GradeFabricRow({ line, onChange }) {
       >
         <Palette size={14} />
       </button>
-      {/* Swatch preview — the chosen fabric/leather photo. Renders
-          next to the picker button once a swatch has been selected;
-          the corner × clears just the image (keeps the fabric text). */}
-      {swatchImageId && (
-        <span className="relative inline-flex flex-shrink-0 group/swatch">
-          <ImageView
-            id={swatchImageId}
-            alt="Muestra de tela"
-            className="w-8 h-8 object-cover rounded border border-ink-200 bg-white"
-          />
-          <button
-            type="button"
-            onClick={() => onChange({ swatchImageId: null })}
-            className="absolute -top-1.5 -right-1.5 w-4 h-4 inline-flex items-center justify-center bg-white border border-ink-200 rounded-full text-ink-500 hover:text-ink-900 hover:border-ink-400 shadow-sm opacity-0 group-hover/swatch:opacity-100 focus:opacity-100 transition-opacity coarse:opacity-100"
-            aria-label="Quitar muestra de tela"
-            title="Quitar muestra"
-          >
-            <X size={9} />
-          </button>
-        </span>
-      )}
+      {/* Fabric swatch photo — the picture the customer sees on the
+          quote. The catalog picker pre-fills it when the chosen color
+          carries a photo; when it doesn't (most of the imported list),
+          this same slot lets the dealer snap / drop / paste one right
+          here. Same uploader primitive as the product image, so the
+          empty state reads as an explicit "add photo" tile and the
+          corner × clears just the swatch. */}
+      <Thumbnail
+        imageId={swatchImageId}
+        onChange={(id) => onChange({ swatchImageId: id })}
+        kind="quote-line-swatch"
+        ownerId={line.id}
+        sizeClass="w-10 h-10 self-center"
+      />
       <SwatchPicker
         open={swatchOpen}
         onClose={() => setSwatchOpen(false)}

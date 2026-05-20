@@ -83,11 +83,11 @@ export default function SwatchPicker({ open, onClose, onSelect, currentGrade, cu
 
   function commit(material, color) {
     const fabric = composeFabric(material, color);
-    // Resolve the swatch image with the same fallback the color grid
-    // uses for its tiles: the color's own photo, else the material's
-    // representative photo, else none. Hand it back so the line can
-    // render the swatch the customer will see.
-    const swatchImageId = (color && color.imageId) || material.imageId || null;
+    // Pre-fill the swatch from the chosen color's own photo when it has
+    // one. We deliberately do NOT fall back to another color's picture —
+    // a wrong-colour swatch is worse than none. When the color has no
+    // photo the line's swatch slot lets the dealer add it inline.
+    const swatchImageId = (color && color.imageId) || null;
     onSelect({ grade: material.grade || '', fabric, swatchImageId });
     onClose();
   }
@@ -224,15 +224,16 @@ function MaterialList({
                 activeIdx === idx ? 'bg-ink-100' : 'hover:bg-ink-50'
               }`}
             >
-              {/* Representative swatch photo (when uploaded); placeholder
+              {/* Material hero = the first color that carries a photo
+                  (there's no separate material-level image). Placeholder
                   tile otherwise. The category dot remains as the small
                   colour-coded chip in the corner so the dealer can still
                   read fabric / leather / outdoor at a glance even when
                   no photo exists yet. */}
               <div className="relative w-10 h-10 flex-shrink-0">
-                {m.imageId ? (
+                {heroImageId(m) ? (
                   <ImageView
-                    id={m.imageId}
+                    id={heroImageId(m)}
                     alt={m.name}
                     className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
                   />
@@ -337,14 +338,12 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
             {colors.map((c) => {
               const active = currentFabric && currentFabric.includes(c.code);
-              // Color swatch: per-color photo when uploaded, falling
-              // back to the parent material's representative photo,
-              // falling back to a dashed placeholder. The hierarchy
-              // means a dealer who only photographed one
-              // representative swatch per material still sees a
-              // visual for every color, while individually-shot
-              // colors take precedence.
-              const swatchId = c.imageId || material.imageId || null;
+              // Color swatch: the color's own photo, else a dashed
+              // placeholder. No cross-color fallback — showing one
+              // color's picture for another would mislead. Colors get
+              // their photos in /admin/materials or inline from a
+              // quote line's swatch slot.
+              const swatchId = c.imageId || null;
               return (
                 <button
                   key={c.code}
@@ -397,6 +396,16 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
 /* -------------------------------------------------------------------------- */
 /*  helpers                                                                   */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The material's representative thumbnail: the first color that carries
+ * a photo. There is no separate material-level image — a material's
+ * "hero" is simply borrowed from its colors, so the catalog grows a face
+ * as the dealer photographs swatches.
+ */
+function heroImageId(material) {
+  return material?.colors?.find((c) => c.imageId)?.imageId || null;
+}
 
 function CategoryDot({ category }) {
   const palette = {

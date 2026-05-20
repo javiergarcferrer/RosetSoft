@@ -230,9 +230,9 @@ export default function Materials() {
                 {filtered.map((m) => (
                   <tr key={m.id} className="hover:bg-ink-50/40">
                     <td className="px-3 py-2">
-                      {m.imageId ? (
+                      {heroImageId(m) ? (
                         <ImageView
-                          id={m.imageId}
+                          id={heroImageId(m)}
                           alt={m.name}
                           className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
                         />
@@ -300,6 +300,13 @@ export default function Materials() {
   );
 }
 
+// The material's representative thumbnail: the first color that carries
+// a photo. There is no separate material-level image — the catalog grows
+// a face as the dealer photographs individual color swatches.
+function heroImageId(material) {
+  return material?.colors?.find((c) => c.imageId)?.imageId || null;
+}
+
 function categoryLabel(c) {
   switch (c) {
     case 'fabric':  return 'Tela';
@@ -345,7 +352,6 @@ function MaterialEditor({ material, profileId, onClose }) {
     composition: '',
     colors: [],
     notes: '',
-    imageId: null,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -388,7 +394,6 @@ function MaterialEditor({ material, profileId, onClose }) {
         composition: draft.composition?.trim() || null,
         colors: (draft.colors || []).filter((c) => c.name?.trim() || c.code?.trim()),
         notes: draft.notes?.trim() || null,
-        imageId: draft.imageId || null,
         createdAt: material?.createdAt || now,
         updatedAt: now,
       };
@@ -409,25 +414,9 @@ function MaterialEditor({ material, profileId, onClose }) {
           </div>
         )}
 
-        {/* Representative swatch photo for the material. Reuses the
-            same Thumbnail primitive the quote line uses, so the
-            upload pipeline (Supabase Storage + MIME / size validation
-            in db/database.ts saveImage) lands consistently. */}
-        <div className="flex items-start gap-3">
-          <Thumbnail
-            imageId={draft.imageId}
-            onChange={(id) => set({ imageId: id })}
-            kind="material"
-            ownerId={material?.id}
-            sizeClass="w-24 h-24"
-          />
-          <div className="flex-1 text-xs text-ink-500 leading-relaxed">
-            Foto representativa del material — se muestra como vista
-            previa en el selector de telas del editor de cotizaciones.
-            Opcional; cada color también puede cargar su propio swatch
-            abajo.
-          </div>
-        </div>
+        {/* No separate material-level photo: the material's thumbnail is
+            simply the first color that has one (see heroImageId). Add
+            per-color swatches in the Colores section below. */}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
