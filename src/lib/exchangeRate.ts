@@ -10,28 +10,28 @@
  * it; the app shows the bank's number as-is. We quote on the *venta*
  * (sell) rate — what the client pays to acquire USD.
  *
- * Storage note: the rate lives under `settings.bsc` (a column once used
- * for Banco Santa Cruz rates). It now holds BPD's rate; the name is just
- * a column and isn't worth a rename. `readBscRates` also reads the older
- * `settings.bpd` shape as a fallback so pre-existing data isn't lost.
+ * Storage note: the rate lives under `settings.exchangeRate`. The column
+ * was renamed `bsc` (Banco Santa Cruz) → `exchange_rate` once the source
+ * became Banco Popular; `readExchangeRate` still reads the legacy `bsc` /
+ * `bpd` shapes as fallbacks so pre-existing data isn't lost.
  */
 
 import { QUOTE_STATUS_DRAFT } from './constants.js';
 import type {
   Settings,
-  BscRates,
+  ExchangeRate,
   Quote,
   RatesMap,
 } from '../types/domain.ts';
 
 /**
  * Read the stored buy/sell record off a settings row. The shape is
- * `{ buy, sell, updatedAt }` under `settings.bsc`; legacy data under
- * `settings.bpd` is accepted as a fallback.
+ * `{ buy, sell, updatedAt }` under `settings.exchangeRate`; legacy
+ * `settings.bsc` / `settings.bpd` shapes are accepted as fallbacks.
  */
-export function readBscRates(settings: Settings | null | undefined): BscRates {
+export function readExchangeRate(settings: Settings | null | undefined): ExchangeRate {
   if (!settings) return { buy: null, sell: null, updatedAt: null };
-  const src = settings.bsc || settings.bpd || ({} as Partial<BscRates>);
+  const src = settings.exchangeRate || settings.bsc || settings.bpd || ({} as Partial<ExchangeRate>);
   return {
     buy: src.buy ?? null,
     sell: src.sell ?? null,
@@ -45,8 +45,8 @@ export function readBscRates(settings: Settings | null | undefined): BscRates {
  * 60.0, if the automatic pull hasn't landed a figure yet.
  */
 export function effectiveDopRate(settings: Settings | null | undefined): number {
-  const bsc = readBscRates(settings);
-  return Number(bsc.sell) || Number(bsc.buy) || 60.0;
+  const rate = readExchangeRate(settings);
+  return Number(rate.sell) || Number(rate.buy) || 60.0;
 }
 
 /** Friendly label printed on PDFs and in Settings hints. */
@@ -112,7 +112,7 @@ export function shouldPullDailyRate(
   settings: Settings | null | undefined,
   now: number = Date.now(),
 ): boolean {
-  const { updatedAt } = readBscRates(settings);
+  const { updatedAt } = readExchangeRate(settings);
   if (!updatedAt) return true;
   return astDayKey(updatedAt) !== astDayKey(now);
 }

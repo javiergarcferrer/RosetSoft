@@ -94,7 +94,7 @@ export interface Profile {
  * Published USD↔DOP rate snapshot (Banco Popular Dominicano), written by
  * the `bpd-rate` Edge Function. `null` means no pull has landed yet.
  */
-export interface BscRates {
+export interface ExchangeRate {
   buy: number | null;
   sell: number | null;
   updatedAt: number | null;
@@ -109,15 +109,19 @@ export interface Settings {
   logoImageId?: string | null;
   defaultCurrency?: CurrencyCode;
   /**
-   * Legacy. The rate's single source of truth is now `bsc` (read via
-   * effectiveDopRate); this column is no longer written or read for
+   * Legacy. The rate's single source of truth is now `exchangeRate` (read
+   * via effectiveDopRate); this column is no longer written or read for
    * pricing. Kept so older rows still type-check.
    */
   currencyRates?: RatesMap;
   /** Single source of truth for the USD↔DOP rate (Banco Popular venta). */
-  bsc?: BscRates;
-  /** Legacy column. Read-only fallback for pre-bsc-rename data. */
-  bpd?: BscRates;
+  exchangeRate?: ExchangeRate;
+  /**
+   * Legacy aliases of `exchangeRate` (bsc = Banco Santa Cruz, bpd = Banco
+   * Popular Dominicano). Read-only fallbacks for rows not yet migrated.
+   */
+  bsc?: ExchangeRate;
+  bpd?: ExchangeRate;
   dopRateMode?: DopRateMode | string;
   defaultMarginPct?: number;
   defaultDiscountPct?: number;

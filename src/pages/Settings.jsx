@@ -28,7 +28,7 @@ export default function Settings() {
     setSaveState('saving');
     setSaveError(null);
     try {
-      // The rate's single source of truth is settings.bsc — nothing
+      // The rate's single source of truth is settings.exchangeRate — nothing
       // derived to keep in sync here, so just persist the form as-is.
       await saveSettings(local);
       setSaveState('saved');
@@ -197,12 +197,11 @@ function OrdersCard({ local, set }) {
 
 
 function RateCard({ local, set, refreshSettings, saveSettings }) {
-  // Banco Popular's published rate, stored under `settings.bsc` (legacy
-  // column name). The daily auto-pull and "Actualizar ahora" are the
-  // usual writers; the manual override below is a stopgap until the BPD
-  // subscription is live. The older `settings.bpd` shape is accepted as a
-  // fallback — see readBscRates.
-  const bsc = local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
+  // Banco Popular's published rate, stored under `settings.exchangeRate`.
+  // The daily auto-pull and "Actualizar ahora" are the usual writers; the
+  // manual override below is a stopgap until the BPD subscription is live.
+  // Legacy `bsc` / `bpd` shapes are read as fallbacks — see readExchangeRate.
+  const rate = local.exchangeRate || local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
 
   // "Actualizar ahora": invoke the bpd-rate Edge Function (OAuth secret
   // stays server-side). The function writes the rate to the team settings
@@ -243,7 +242,7 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
   }
 
   // Manual override — a stopgap while the BPD subscription is approved.
-  // Writes settings.bsc (the single source of truth), so the whole app
+  // Writes settings.exchangeRate (the single source of truth), so the app
   // quotes on it immediately. A later successful pull overwrites it; a
   // failed pull (e.g. a 401) never does.
   const [manualBuy, setManualBuy] = useState('');
@@ -252,16 +251,16 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
   const [manualErr, setManualErr] = useState(null);
   const [manualOk, setManualOk] = useState(false);
   useEffect(() => {
-    setManualBuy(bsc.buy ?? '');
-    setManualSell(bsc.sell ?? '');
-  }, [bsc.buy, bsc.sell]);
+    setManualBuy(rate.buy ?? '');
+    setManualSell(rate.sell ?? '');
+  }, [rate.buy, rate.sell]);
   async function saveManual() {
     const sell = Number(manualSell);
     if (!sell || sell <= 0) { setManualErr('Ingresa una tasa de venta válida.'); return; }
     const buy = manualBuy === '' ? sell : Number(manualBuy);
     setSavingManual(true); setManualErr(null); setManualOk(false);
     try {
-      await saveSettings({ bsc: { buy, sell, updatedAt: Date.now() } });
+      await saveSettings({ exchangeRate: { buy, sell, updatedAt: Date.now() } });
       setManualOk(true);
     } catch (e) {
       setManualErr(e?.message || 'No se pudo guardar la tasa.');
@@ -306,18 +305,18 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Compra</div>
-            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(bsc.buy)}</div>
+            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.buy)}</div>
             <div className="text-[10px] text-ink-400">RD$ por 1 USD</div>
           </div>
           <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
             <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Venta</div>
-            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(bsc.sell)}</div>
+            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.sell)}</div>
             <div className="text-[10px] text-ink-400">RD$ por 1 USD · se cotiza con esta</div>
           </div>
         </div>
         <div className="text-[10px] text-ink-500 mt-2">
-          {bsc.updatedAt
-            ? <>Actualizado {formatDateTime(bsc.updatedAt)}</>
+          {rate.updatedAt
+            ? <>Actualizado {formatDateTime(rate.updatedAt)}</>
             : 'Aún sin datos — presiona “Actualizar ahora”.'}
         </div>
       </div>
