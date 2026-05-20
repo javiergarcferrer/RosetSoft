@@ -132,7 +132,7 @@ const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
 /**
  * One wrapped segment of detail-column text: a token + its (already
  * wrapped) lines, OR a vertical gap insert. The `kind` discriminator
- * lets TypeScript narrow which fields are present — see `detailSegments`
+ * lets TypeScript narrow which fields are present — see `lineDetail`
  * for how they're emitted.
  */
 type DetailSegment =
@@ -204,57 +204,64 @@ function fontFor(ctx: PdfCtx, token: TypeToken): PDFFont {
   return ctx.fontRegular;
 }
 
+// Swatch geometry. The fabric swatch sits to the LEFT of the spec text
+// (subtype + ref/dims), mirroring the client preview — not below it.
+// That keeps rows short enough to pack onto a page. One square size for
+// every swatch (line + compound component) so the document reads
+// consistently.
+const SWATCH_SIZE = 40;   // square — same size for lines and compound components
+const SWATCH_GAP  = 8;    // horizontal gap between the swatch and the spec text
+
+/** Sum the vertical height of a stack of detail segments. */
+function segsHeight(segs: DetailSegment[]): number {
+  let h = 0;
+  for (const s of segs) h += s.kind === 'gap' ? s.gap : s.lines.length * s.token.lh;
+  return h;
+}
+
+interface LineDetail {
+  head: DetailSegment[];   // family eyebrow + product name (full detail width)
+  spec: DetailSegment[];   // subtype + ref/dims (narrowed to sit beside the swatch)
+  desc: DetailSegment[];   // description (full detail width)
+}
+
 /**
- * Produce the ordered list of detail-column segments for a line, each
- * already wrapped to the column width. Shared by the measure + draw
- * passes so they can't drift.
+ * Split a line's detail column into three stacked bands so the layout
+ * matches the client preview: head (family + name) spans the full width
+ * on top; spec (subtype + ref/dims) is wrapped narrower so it sits to the
+ * RIGHT of the swatch; description spans the full width underneath.
+ * Shared by the measure + draw passes so they can't drift.
  */
-function detailSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): DetailSegment[] {
-  const segs: DetailSegment[] = [];
-  function push(text: string | null | undefined, token: TypeToken): void {
-    if (!text) return;
-    const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
-    if (lines.length) segs.push({ kind: 'text', token, lines });
-  }
-  // Family eyebrow at the top of the detail column. The option /
-  // alternative marker for the line lives on its own caption band
-  // ABOVE the row (see drawOptionAccent) so the family name stays
-  // clean.
-  push(line.family ? line.family.toUpperCase() : '', T.family);
-  push(line.name || '(sin nombre)', T.name);
-  push(line.subtype, T.subtype);
-  // Meta strip — reference + dimensions on one line, ' · ' separator,
-  // same composition the preview uses. Skipped when both are empty.
+function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
+  const specW = line.swatchImageId ? Math.max(60, detailW - SWATCH_SIZE - SWATCH_GAP) : detailW;
+  const seg = (text: string | null | undefined, token: TypeToken, w: number): DetailSegment[] => {
+    if (!text) return [];
+    const lines = wrapToWidth(text, w, fontFor(ctx, token), token.size);
+    return lines.length ? [{ kind: 'text', token, lines }] : [];
+  };
   const meta = [
     line.reference ? `ref ${line.reference}` : null,
     line.dimensions,
   ].filter(Boolean).join(' · ');
-  push(meta, T.meta);
-  if (line.description && (line.family || line.name || line.subtype || meta)) {
-    segs.push({ kind: 'gap', gap: IDENTITY_TO_SPEC_GAP });
-  }
-  push(line.description, T.description);
-  return segs;
+  return {
+    head: [
+      ...seg(line.family ? line.family.toUpperCase() : '', T.family, detailW),
+      ...seg(line.name || '(sin nombre)', T.name, detailW),
+    ],
+    spec: [
+      ...seg(line.subtype, T.subtype, specW),
+      ...seg(meta, T.meta, specW),
+    ],
+    desc: seg(line.description, T.description, detailW),
+  };
 }
 
-/**
- * Total height of the detail column at this line's content.
- */
-// Fabric-swatch thumbnail rendered in the detail column, below the
-// text segments. Reserved in the measure pass so the row never
-// clips it; drawn (async embed) in drawLineRow.
-const SWATCH_SIZE = 42;
-const SWATCH_GAP  = 6;
-const COMP_SWATCH_SIZE = 30;   // smaller swatch inside compound component blocks
-
+/** Total height of the detail column — head + (swatch ∥ spec) + description. */
 function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
-  let h = 0;
-  for (const seg of detailSegments(ctx, line, detailW)) {
-    if (seg.kind === 'gap') { h += seg.gap; continue; }
-    h += seg.lines.length * seg.token.lh;
-  }
-  if (line.swatchImageId) h += SWATCH_GAP + SWATCH_SIZE;
-  return h;
+  const { head, spec, desc } = lineDetail(ctx, line, detailW);
+  const specBlock = line.swatchImageId ? Math.max(SWATCH_SIZE, segsHeight(spec)) : segsHeight(spec);
+  const descGap = desc.length ? IDENTITY_TO_SPEC_GAP : 0;
+  return segsHeight(head) + specBlock + descGap + segsHeight(desc);
 }
 
 /**
@@ -288,6 +295,27 @@ async function drawSwatch(
       width: w, height: h,
     });
   }
+}
+
+/**
+ * Draw a stack of detail segments at column x, flowing down from the top
+ * edge startY. Returns the y after the last line. Shared by the head /
+ * spec / description bands so they all render identically.
+ */
+function drawSegs(page: PDFPage, ctx: PdfCtx, segs: DetailSegment[], x: number, startY: number): number {
+  let sy = startY;
+  for (const s of segs) {
+    if (s.kind === 'gap') { sy -= s.gap; continue; }
+    const f = fontFor(ctx, s.token);
+    for (const ln of s.lines) {
+      page.drawText(ln, {
+        x, y: sy - s.token.size, size: s.token.size, font: f,
+        color: s.token.color, characterSpacing: s.token.cs || 0,
+      } as DrawTextOptions);
+      sy -= s.token.lh;
+    }
+  }
+  return sy;
 }
 
 /**
@@ -541,37 +569,67 @@ function drawOptionDim(
 // (optional) description. The qty × unit = subtotal equation lives on
 // the same baseline as the name, right-aligned, so the column reads
 // as a labelled price row with subordinated specs beneath.
-function componentBlockSegments(
+interface CompDetail {
+  head: CompoundSegment[];   // component name (equation reserved on its first line)
+  spec: CompoundSegment[];   // subtype + ref/dims (narrowed to sit beside the swatch)
+  desc: CompoundSegment[];   // description
+}
+
+/**
+ * Split a component into the same three bands as a line: name on top
+ * (wrapped narrow so it clears the inline qty × unit = subtotal equation),
+ * subtype + ref/dims beside the swatch, description underneath. Mirrors
+ * lineDetail() so components and standalone lines render identically.
+ */
+function componentDetail(
   ctx: PdfCtx,
   component: LineComponent,
   detailW: number,
-): CompoundSegment[] {
-  // Reserve room on the right for the inline equation so the name
-  // wraps before it overlaps. The equation length depends on the
-  // formatted numbers, so we measure once and shrink the nameW for
-  // wrapping. This means a very long fabric-grade like "Microfibras
-  // Mostaza decadente" wraps onto a new line BELOW the equation
-  // rather than colliding with it.
-  const nameSegs: CompoundSegment[] = [];
-  function push(text: string | null | undefined, token: TypeToken): void {
-    if (!text) return;
-    const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
-    if (lines.length) nameSegs.push({ token, lines });
-  }
-  // Optional components prefix the name with an "OPCIONAL · " eyebrow
-  // so the customer reads the component's status before reading the
-  // name itself. Same convention as the line-level optional marker
-  // in optionMarker() above.
+  nameW: number,
+): CompDetail {
+  const specW = component.swatchImageId ? Math.max(60, detailW - SWATCH_SIZE - SWATCH_GAP) : detailW;
+  const seg = (text: string | null | undefined, token: TypeToken, w: number): CompoundSegment[] => {
+    if (!text) return [];
+    const lines = wrapToWidth(text, w, fontFor(ctx, token), token.size);
+    return lines.length ? [{ token, lines }] : [];
+  };
+  // Optional components prefix the name with an "OPCIONAL · " eyebrow.
   const namePrefix = component.isOptional ? 'OPCIONAL · ' : '';
-  push(namePrefix + (component.name || '(sin nombre)'), T.compName);
-  push(component.subtype, T.compSubtype);
   const meta = [
     component.reference ? `ref ${component.reference}` : null,
     component.dimensions,
   ].filter(Boolean).join(' · ');
-  push(meta, T.compMeta);
-  push(component.description, T.compDescription);
-  return nameSegs;
+  return {
+    head: seg(namePrefix + (component.name || '(sin nombre)'), T.compName, nameW),
+    spec: [
+      ...seg(component.subtype, T.compSubtype, specW),
+      ...seg(meta, T.compMeta, specW),
+    ],
+    desc: seg(component.description, T.compDescription, detailW),
+  };
+}
+
+/** Sum the vertical height of a stack of compound segments. */
+function compSegsHeight(segs: CompoundSegment[]): number {
+  let h = 0;
+  for (const s of segs) h += s.lines.length * s.token.lh;
+  return h;
+}
+
+/** Draw compound segments at column x from the top edge startY; returns new y. */
+function drawCompSegs(page: PDFPage, ctx: PdfCtx, segs: CompoundSegment[], x: number, startY: number): number {
+  let sy = startY;
+  for (const s of segs) {
+    const f = fontFor(ctx, s.token);
+    for (const ln of s.lines) {
+      page.drawText(ln, {
+        x, y: sy - s.token.size, size: s.token.size, font: f,
+        color: s.token.color, characterSpacing: s.token.cs || 0,
+      } as DrawTextOptions);
+      sy -= s.token.lh;
+    }
+  }
+  return sy;
 }
 
 function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
@@ -593,11 +651,10 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
 
   for (let i = 0; i < components.length; i++) {
     if (i > 0) textH += COMP_TOP_GAP;       // divider gap before this block
-    const blockSegs = componentBlockSegments(ctx, components[i], nameW);
-    for (const seg of blockSegs) {
-      textH += seg.lines.length * seg.token.lh;
-    }
-    if (components[i].swatchImageId) textH += SWATCH_GAP + COMP_SWATCH_SIZE;
+    const cd = componentDetail(ctx, components[i], cols.detail.w, nameW);
+    const specTextH = compSegsHeight(cd.spec);
+    const specBlockH = components[i].swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
+    textH += compSegsHeight(cd.head) + specBlockH + compSegsHeight(cd.desc);
     textH += COMP_BLOCK_GAP;
   }
 
@@ -727,30 +784,22 @@ export async function drawLineRow(
     });
   }
 
-  // ---- Detail column — text flows top-to-bottom in hierarchy order -------
-  let sy = innerTop;
-  for (const seg of detailSegments(ctx, line, cols.detail.w)) {
-    if (seg.kind === 'gap') { sy -= seg.gap; continue; }
-    const f = fontFor(ctx, seg.token);
-    for (const ln of seg.lines) {
-      const baselineY = sy - seg.token.size;
-      page.drawText(ln, {
-        x: cols.detail.x,
-        y: baselineY,
-        size: seg.token.size,
-        font: f,
-        color: seg.token.color,
-        characterSpacing: seg.token.cs || 0,
-      } as DrawTextOptions);
-      sy -= seg.token.lh;
-    }
-  }
-
-  // ---- Fabric swatch — small framed photo below the detail text --------
+  // ---- Detail column — head (full width), then swatch + spec side by
+  //      side, then description (full width); mirrors the client preview.
+  const detail = lineDetail(ctx, line, cols.detail.w);
+  let sy = drawSegs(page, ctx, detail.head, cols.detail.x, innerTop);
+  const specTop = sy;
   if (line.swatchImageId) {
-    sy -= SWATCH_GAP;
-    await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, sy);
-    sy -= SWATCH_SIZE;
+    await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
+  }
+  const specX = line.swatchImageId ? cols.detail.x + SWATCH_SIZE + SWATCH_GAP : cols.detail.x;
+  const afterSpec = drawSegs(page, ctx, detail.spec, specX, specTop);
+  const specTextH = specTop - afterSpec;
+  const specBlockH = line.swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
+  sy = specTop - specBlockH;
+  if (detail.desc.length) {
+    sy -= IDENTITY_TO_SPEC_GAP;
+    sy = drawSegs(page, ctx, detail.desc, cols.detail.x, sy);
   }
 
   // ---- Numeric column — three label/value pairs, right-aligned ----------
@@ -1030,45 +1079,39 @@ async function drawComponentBlock(
     ? `${qty} × ${fmt(unit)} = + ${fmt(sub)}`
     : `${qty} × ${fmt(unit)} = ${fmt(sub)}`;
 
-  const segs = componentBlockSegments(ctx, component, nameW);
+  const cd = componentDetail(ctx, component, cols.detail.w, nameW);
+  // Head: the component name, with the inline equation right-aligned on
+  // its first line.
   let sy = startY;
   let first = true;
-  for (const seg of segs) {
-    const f = fontFor(ctx, seg.token);
-    for (let i = 0; i < seg.lines.length; i++) {
-      const baselineY = sy - seg.token.size;
-      page.drawText(seg.lines[i], {
-        x: cols.detail.x,
-        y: baselineY,
-        size: seg.token.size,
-        font: f,
-        color: seg.token.color,
-        characterSpacing: seg.token.cs || 0,
+  for (const s of cd.head) {
+    const f = fontFor(ctx, s.token);
+    for (const ln of s.lines) {
+      page.drawText(ln, {
+        x: cols.detail.x, y: sy - s.token.size, size: s.token.size,
+        font: f, color: s.token.color, characterSpacing: s.token.cs || 0,
       } as DrawTextOptions);
-      // On the very first text line of the block, also emit the
-      // inline equation on the right edge — aligned to the same
-      // baseline as the component name.
       if (first) {
         drawRightAt(
-          page, eqText, cols.detail.rightX,
-          // Align the equation to the name's baseline; the equation
-          // uses a slightly smaller size so the visual mass sits a
-          // hair higher than the name. Subtract its own size to land
-          // on its baseline.
-          sy - T.compInline.size,
+          page, eqText, cols.detail.rightX, sy - T.compInline.size,
           T.compInline.size, fontRegular, T.compInline.color,
         );
         first = false;
       }
-      sy -= seg.token.lh;
+      sy -= s.token.lh;
     }
   }
-  // Fabric swatch beneath the component's specs — same convention as
-  // the article row, scaled down to the component tier.
+  // Swatch (left) + subtype/ref-dims (beside it), then description below —
+  // identical band order to the standalone line.
+  const specTop = sy;
   if (component.swatchImageId) {
-    sy -= SWATCH_GAP;
-    await drawSwatch(page, doc, component.swatchImageId, cols.detail.x, sy, COMP_SWATCH_SIZE);
-    sy -= COMP_SWATCH_SIZE;
+    await drawSwatch(page, doc, component.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
   }
+  const specX = component.swatchImageId ? cols.detail.x + SWATCH_SIZE + SWATCH_GAP : cols.detail.x;
+  const afterSpec = drawCompSegs(page, ctx, cd.spec, specX, specTop);
+  const specTextH = specTop - afterSpec;
+  const specBlockH = component.swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
+  sy = specTop - specBlockH;
+  sy = drawCompSegs(page, ctx, cd.desc, cols.detail.x, sy);
   return sy;
 }
