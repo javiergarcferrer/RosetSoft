@@ -523,10 +523,10 @@ function CompoundComponentRow({ component, fmt }) {
   const subtotal = componentSubtotal(component);
   const optional = !!component.isOptional;
   return (
-    <li className={`py-2 flex flex-wrap sm:flex-nowrap items-start gap-x-4 gap-y-1 ${
+    <li className={`py-2 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4 ${
       optional ? 'pl-3 border-l-2 border-dashed border-ink-300 opacity-90' : ''
     }`}>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 sm:flex-1">
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
           {optional && (
