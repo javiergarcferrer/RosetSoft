@@ -431,7 +431,6 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
         onChange={(id) => onChange({ imageId: id })}
         kind="quote-line"
         ownerId={line.id}
-        sizeClass="w-28 h-28 sm:w-40 sm:h-40"
       />
       <div className="flex-1 min-w-0 space-y-1.5">
         <HeroInput
@@ -611,83 +610,74 @@ function SpecStrip({ line, onChange, refInputRef }) {
 //
 // Total is a button — clicking it toggles the breakdown popover with the
 // per-line math (discount applied) broken out.
-// ---------------------------------------------------------------------------
-// Pricing rail — the editable twin of the client preview's right column.
-// Unboxed (no gray panel), right-aligned, brand-eyebrow labels stacked
-// vertically: Cantidad / Unitario / Total, with the line discount shown
-// beneath the total exactly as the customer will see it. qli-rail sits to
-// the right of the identity on wide rows and drops below it (with a top
-// hairline) on narrow ones.
-function RailLabel({ children }) {
-  return (
-    <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
-      {children}
-    </div>
-  );
-}
-
 function CalculatorBand({
   line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
+  // qli-calc owns background, border, padding, and the responsive
+  // sizing — min-width of 360px / 400px at ≥640/820 container widths,
+  // but the calc is free to grow past those mins so the money string
+  // is never clipped. At sub-360px container widths the calc-grid's
+  // cells stack into rows (qty, unit, total) instead of fighting for
+  // one row's worth of horizontal space.
   return (
-    <div className="qli-rail text-right tabular-nums">
-      <div>
-        <RailLabel>Cantidad</RailLabel>
-        <div className="flex justify-end mt-0.5">
+    <div className="qli-calc transition-shadow group-hover:shadow-soft">
+      <div className="qli-calc-grid">
+        <CalcCell label="Cant.">
           <DebouncedInput
             type="number"
             inputMode="decimal"
             min="0"
             step="any"
-            className="qli-grow min-w-[3rem] max-w-full text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2 text-sm"
+            className="qli-grow min-w-[3.25rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
             value={line.qty ?? 1}
             onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
             aria-label="Cantidad"
           />
-        </div>
-      </div>
+        </CalcCell>
 
-      <div className="mt-2.5">
-        <RailLabel>Unitario</RailLabel>
-        <div className="flex justify-end mt-0.5">
+        <Operator className="qli-op">×</Operator>
+
+        <CalcCell label="Unitario">
           <MoneyInput
             currency={currency}
             value={line.unitPrice}
             onCommit={(v) => onChange({ unitPrice: v })}
-            widthClass="min-w-[5rem]"
+            widthClass="min-w-[6rem]"
             aria-label="Precio unitario"
           />
-        </div>
-      </div>
+        </CalcCell>
 
-      <div className="mt-2.5 relative">
-        <RailLabel>Total</RailLabel>
-        <button
-          type="button"
-          onClick={onToggleBreakdown}
-          className="block w-full text-right px-1 py-0.5 -mx-1 rounded hover:bg-ink-50 active:bg-ink-100 transition-colors"
-          title="Ver desglose"
-          aria-expanded={breakdownOpen}
-        >
-          <div className="text-[18px] font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
-            {fmt(lineTotal)}
-          </div>
-          {hasAdjustment ? (
-            <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
-              <span className="whitespace-nowrap">{fmt(unit)} c/u</span>
-              <AdjustmentChip line={line} />
+        <Operator className="qli-op">=</Operator>
+
+        <div className="qli-total-cell relative">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">Total</div>
+          <button
+            type="button"
+            onClick={onToggleBreakdown}
+            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+            title="Ver desglose"
+            aria-expanded={breakdownOpen}
+          >
+            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
+              {fmt(lineTotal)}
             </div>
-          ) : null}
-        </button>
-        {breakdownOpen && (
-          <LineBreakdownPopover
-            line={line}
-            currency={currency}
-            rates={rates}
-            onClose={onCloseBreakdown}
-          />
-        )}
+            {hasAdjustment ? (
+              <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
+                <span className="whitespace-nowrap">{fmt(unit)} c/u</span>
+                <AdjustmentChip line={line} />
+              </div>
+            ) : null}
+          </button>
+          {breakdownOpen && (
+            <LineBreakdownPopover
+              line={line}
+              currency={currency}
+              rates={rates}
+              onClose={onCloseBreakdown}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -706,35 +696,41 @@ function CompoundCalculatorBand({
 }) {
   const count = (line.components || []).length;
   return (
-    <div className="qli-rail text-right tabular-nums relative">
-      <RailLabel>Total compuesto</RailLabel>
-      <button
-        type="button"
-        onClick={onToggleBreakdown}
-        className="block w-full text-right px-1 py-0.5 -mx-1 rounded hover:bg-ink-50 active:bg-ink-100 transition-colors"
-        title="Ver desglose"
-        aria-expanded={breakdownOpen}
-      >
-        <div className="text-[18px] font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
-          {fmt(rowTotal)}
+    <div className="qli-calc transition-shadow group-hover:shadow-soft">
+      <div className="flex items-start justify-end gap-3 flex-wrap">
+        <div className="text-[10px] text-ink-500 tabular-nums leading-tight self-center">
+          {count} componente{count === 1 ? '' : 's'}
         </div>
-        {hasAdjustment ? (
-          <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
-            <AdjustmentChip line={line} />
+        <div className="qli-total-cell relative text-right">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+            Total compuesto
           </div>
-        ) : null}
-      </button>
-      <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-1">
-        {count} componente{count === 1 ? '' : 's'}
+          <button
+            type="button"
+            onClick={onToggleBreakdown}
+            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+            title="Ver desglose"
+            aria-expanded={breakdownOpen}
+          >
+            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
+              {fmt(rowTotal)}
+            </div>
+            {hasAdjustment ? (
+              <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
+                <AdjustmentChip line={line} />
+              </div>
+            ) : null}
+          </button>
+          {breakdownOpen && (
+            <LineBreakdownPopover
+              line={line}
+              currency={currency}
+              rates={rates}
+              onClose={onCloseBreakdown}
+            />
+          )}
+        </div>
       </div>
-      {breakdownOpen && (
-        <LineBreakdownPopover
-          line={line}
-          currency={currency}
-          rates={rates}
-          onClose={onCloseBreakdown}
-        />
-      )}
     </div>
   );
 }

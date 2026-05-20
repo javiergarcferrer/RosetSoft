@@ -260,31 +260,74 @@
     flex: 1;
   }
 
-  /* Pricing rail — the editable twin of the client preview's right
-     column. Unboxed (no gray panel): brand-eyebrow labels with their
-     editable values stacked and right-aligned. On a narrow row it sits
-     below the identity behind a top hairline; once the body becomes a
-     row (≥640px container) it sits to the right, top-aligned, at a
-     compact min-width that still grows for long money strings. */
-  .qli-rail {
+  .qli-calc {
+    background: theme('colors.ink.50');
+    border: 1px solid theme('colors.ink.100');
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
     min-width: 0;
-    border-top: 1px solid theme('colors.ink.100');
-    padding-top: 0.75rem;
+  }
+  /* Calc cells flow as a flex row that wraps. When the container is
+     wide everything fits left-to-right (qty × unit = total). When
+     narrow, cells wrap onto subsequent rows in reading order and the
+     operators (× and =) disappear so the math still reads. Critically,
+     the total cell auto-grows to fit the money string — never gets
+     squeezed below its natural width. */
+  .qli-calc-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.625rem;
+    min-width: 0;
+  }
+  .qli-total-cell {
+    /* flex-grow lets the total cell expand to fill the row when it's
+       on the same line as qty/unit. It's also allowed to wrap to a
+       new row (basis: auto) — when it does, the cell takes the full
+       row width. */
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+  }
+  .qli-total-val {
+    /* Money never wraps mid-string; the surrounding cell makes room. */
+    white-space: nowrap;
+  }
+
+  @container qli (min-width: 380px) {
+    .qli-calc { padding: 0.75rem 0.875rem; }
   }
 
   @container qli (min-width: 640px) {
     .qli-body {
       flex-direction: row;
-      align-items: flex-start;
-      gap: 1.5rem;
+      align-items: stretch;
+      gap: 1.125rem;
     }
-    .qli-rail {
+    .qli-calc {
       flex-shrink: 0;
+      /* Min-width, not a fixed width. The calc grows past 360px if the
+         money or unit price needs more room — we never cap it and
+         force ellipsis. */
       width: auto;
-      min-width: 9rem;
-      border-top: 0;
-      padding-top: 0.125rem;
+      min-width: 22.5rem;
     }
+  }
+
+  @container qli (min-width: 820px) {
+    .qli-calc { min-width: 25rem; }
+  }
+
+  /* Narrow container — operators hide and each cell takes its own
+     row. The dealer sees the equation as a stack:
+         Cant.   [ 1 ]
+         Unitario [ 11310 ]
+         Total   $11,310.00
+     No clipped money, no ellipsis, no horizontal scroll. */
+  @container qli (max-width: 359px) {
+    .qli-calc-grid .qli-op { display: none; }
+    .qli-calc-grid > * { flex: 1 1 100%; min-width: 0; }
+    .qli-total-cell { text-align: left; }
   }
 
   /* Auto-growing single-line inputs. `field-sizing: content` sizes
