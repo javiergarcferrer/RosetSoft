@@ -565,6 +565,38 @@ function drawOptionDim(
   });
 }
 
+/**
+ * Optional-component treatment for a compound block: a dashed accent bar
+ * in the detail gutter + a white wash that fades the block. Mirrors the
+ * client preview's dashed-border + dimmed optional component, so an
+ * opt-in add-on reads the same in both surfaces. `topY` / `bottomY` are
+ * the block's top + bottom in PDF coordinates (y grows upward).
+ */
+function drawComponentOptional(
+  page: PDFPage,
+  cols: CompoundColumns,
+  topY: number,
+  bottomY: number,
+): void {
+  // Wash over the block's content (swatch + specs + equation), fading it.
+  page.drawRectangle({
+    x: cols.detail.x - 4,
+    y: bottomY,
+    width: cols.detail.rightX - (cols.detail.x - 4),
+    height: (topY - bottomY) + 2,
+    color: rgb(1, 1, 1),
+    opacity: 0.5,
+  });
+  // Dashed bar in the gutter, drawn AFTER the wash so it stays vivid.
+  page.drawLine({
+    start: { x: cols.detail.x - 9, y: topY },
+    end:   { x: cols.detail.x - 9, y: bottomY },
+    thickness: 1.5,
+    color: INK_SOFT,
+    dashArray: [2.5, 2.5],
+  });
+}
+
 // One component block: name + (optional) subtype + (optional) meta +
 // (optional) description. The qty × unit = subtotal equation lives on
 // the same baseline as the name, right-aligned, so the column reads
@@ -980,7 +1012,15 @@ async function drawCompoundLineRow(
       });
       sy -= COMP_TOP_GAP;
     }
+    const compTop = sy;
     sy = await drawComponentBlock(page, ctx, sy, cols, components[i], nameW);
+    // Optional components get the same treatment as the on-screen
+    // preview: a dashed accent bar in the gutter + a white wash that
+    // fades the block so it reads as an opt-in add-on, not part of the
+    // base composition.
+    if (components[i].isOptional) {
+      drawComponentOptional(page, cols, compTop, sy);
+    }
     sy -= COMP_BLOCK_GAP;
   }
 

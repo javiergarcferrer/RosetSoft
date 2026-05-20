@@ -524,7 +524,7 @@ function CompoundComponentRow({ component, fmt }) {
   const optional = !!component.isOptional;
   return (
     <li className={`py-2 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4 ${
-      optional ? 'pl-3 border-l-2 border-dashed border-ink-300 opacity-90' : ''
+      optional ? 'pl-3 border-l-2 border-dashed border-ink-300 opacity-60' : ''
     }`}>
       <div className="min-w-0 sm:flex-1">
         <div className="flex items-baseline gap-2 flex-wrap">
