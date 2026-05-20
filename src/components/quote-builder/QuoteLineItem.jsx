@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -91,6 +91,14 @@ export default function QuoteLineItem({
   }
   function removeComponent(id) {
     const components = (line.components || []).filter((c) => c.id !== id);
+    onChange({ components });
+  }
+  function moveComponent(id, dir) {
+    const components = [...(line.components || [])];
+    const i = components.findIndex((c) => c.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= components.length) return;
+    [components[i], components[j]] = [components[j], components[i]];
     onChange({ components });
   }
   function convertToCompound() {
@@ -224,6 +232,7 @@ export default function QuoteLineItem({
           onAdd={addComponent}
           onUpdate={updateComponent}
           onRemove={removeComponent}
+          onMove={moveComponent}
         />
       )}
 
@@ -740,7 +749,7 @@ function CompoundCalculatorBand({
 // strip rather than the full-card vocabulary — three vertical bands
 // nested inside another three vertical bands would be visual noise.
 // ---------------------------------------------------------------------------
-function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove }) {
+function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove, onMove }) {
   const components = line.components || [];
   return (
     <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 divide-y divide-ink-100 overflow-hidden">
@@ -753,12 +762,15 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
           <ComponentRow
             key={c.id || i}
             index={i}
+            count={components.length}
             component={c}
             currency={currency}
             rates={rates}
             fmt={fmt}
             onChange={(patch) => onUpdate(c.id, patch)}
             onRemove={() => onRemove(c.id)}
+            onMoveUp={() => onMove(c.id, -1)}
+            onMoveDown={() => onMove(c.id, +1)}
           />
         ))
       )}
@@ -776,7 +788,7 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
   );
 }
 
-function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove }) {
+function ComponentRow({ index, count, component, currency, rates, fmt, onChange, onRemove, onMoveUp, onMoveDown }) {
   const total = componentSubtotal(component);
   const optional = !!component.isOptional;
   // ComponentRow used to be a two-column grid (specs on the left, calc
@@ -819,6 +831,28 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
           {optional ? 'Opcional' : 'Hacer opcional'}
         </button>
         <div className="flex-1" />
+        {/* Reorder within the compound. Up/down (not drag) so it works
+            cleanly on touch and never fights the line-level drag handle. */}
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={index === 0}
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          aria-label="Subir componente"
+          title="Mover hacia arriba"
+        >
+          <ChevronUp size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={index === count - 1}
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          aria-label="Bajar componente"
+          title="Mover hacia abajo"
+        >
+          <ChevronDown size={14} />
+        </button>
         <button
           type="button"
           onClick={onRemove}

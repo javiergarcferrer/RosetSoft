@@ -253,22 +253,27 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
               </div>
             )}
             <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
-            {(line.subtype || line.swatchImageId) && (
-              <div className="flex items-center gap-2 mt-1">
+            {(line.subtype || line.reference || line.dimensions || line.swatchImageId) && (
+              <div className="flex items-stretch gap-2.5 mt-1">
                 {line.swatchImageId && (
                   <ImageView
                     id={line.swatchImageId}
                     alt="Muestra de tela"
-                    className="w-9 h-9 object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+                    className="w-11 min-h-[2.5rem] object-cover rounded border border-ink-200 bg-white flex-shrink-0"
                   />
                 )}
-                {line.subtype && <div className="text-[11px] text-ink-500">{line.subtype}</div>}
-              </div>
-            )}
-            {(line.reference || line.dimensions) && (
-              <div className="text-[10px] text-ink-500 mt-1 flex flex-wrap gap-x-2">
-                {line.reference && <span className="font-mono">ref {line.reference}</span>}
-                {line.dimensions && <span>{line.dimensions}</span>}
+                {/* Subtype + ref/dimensions stacked to the right of the
+                    swatch so the photo spans both rows instead of sitting
+                    inline with just the grade line. */}
+                <div className="min-w-0">
+                  {line.subtype && <div className="text-[11px] text-ink-500">{line.subtype}</div>}
+                  {(line.reference || line.dimensions) && (
+                    <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
+                      {line.reference && <span className="font-mono">ref {line.reference}</span>}
+                      {line.dimensions && <span>{line.dimensions}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {line.description && (
@@ -472,22 +477,26 @@ function CompoundComponentRow({ component, fmt }) {
             </span>
           )}
         </div>
-        {(component.subtype || component.swatchImageId) && (
-          <div className="flex items-center gap-1.5 mt-0.5">
+        {(component.subtype || component.reference || component.dimensions || component.swatchImageId) && (
+          <div className="flex items-stretch gap-2 mt-0.5">
             {component.swatchImageId && (
               <ImageView
                 id={component.swatchImageId}
                 alt="Muestra de tela"
-                className="w-7 h-7 object-cover rounded border border-ink-200 bg-white flex-shrink-0"
+                className="w-9 min-h-[2.25rem] object-cover rounded border border-ink-200 bg-white flex-shrink-0"
               />
             )}
-            {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
-          </div>
-        )}
-        {(component.reference || component.dimensions) && (
-          <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-            {component.reference && <span className="font-mono">ref {component.reference}</span>}
-            {component.dimensions && <span>{component.dimensions}</span>}
+            {/* Subtype + ref/dimensions stacked to the right so the swatch
+                spans both rows, mirroring the standalone line treatment. */}
+            <div className="min-w-0">
+              {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
+              {(component.reference || component.dimensions) && (
+                <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
+                  {component.reference && <span className="font-mono">ref {component.reference}</span>}
+                  {component.dimensions && <span>{component.dimensions}</span>}
+                </div>
+              )}
+            </div>
           </div>
         )}
         {component.description && (

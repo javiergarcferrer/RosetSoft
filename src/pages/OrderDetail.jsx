@@ -423,7 +423,9 @@ export default function OrderDetail() {
 
 // ---------------------------------------------------------------------------
 // Container row — collapsed from a 6-stage stepper to a single "Lleno"
-// toggle plus inline-editable name + container code. The dealer's words:
+// toggle plus an inline-editable container code (the shipping-line id,
+// e.g. MSCU1234567). There's no free-text name: a container is identified
+// by its number + code, nothing else. The dealer's words:
 // "Los contenedores no tienen estatus cambiantes. Solo se marca si están
 // llenos." A container is now structurally just an identifier with one
 // boolean event — packed at the warehouse, yes or no. All the shipping
@@ -463,15 +465,9 @@ function ContainerRow({ container }) {
               <span className="status-pill status-pill-draft">Por llenar</span>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          <div className="mt-2">
             <DebouncedInput
-              className="input"
-              placeholder='Nombre (e.g. "Cont. Marzo")'
-              value={container.name || ''}
-              onCommit={(v) => update({ name: v })}
-            />
-            <DebouncedInput
-              className="input font-mono text-xs"
+              className="input font-mono text-xs max-w-xs"
               placeholder="MSCU1234567"
               value={container.code || ''}
               onCommit={(v) => update({ code: v })}
