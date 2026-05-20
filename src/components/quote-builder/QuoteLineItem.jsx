@@ -412,37 +412,34 @@ function TopStrip({
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
 function IdentityBand({ line, compound, onChange, refInputRef }) {
-  // qli-identity stacks below the calc band when the container is
-  // narrow and sits next to it when it's wide. min-w-0 lets nested
-  // flex children shrink down — combined with HeroInput's wrap and
-  // the spec-strip's flex-wrap, long names and dimensions flow onto
-  // additional lines instead of being clipped or truncated.
+  // Layout: product photo + name on top; the swatch + material
+  // (grade/fabric) and the ref/dimensions strip stack BELOW them, full
+  // width — not squeezed into a narrow column beside the photo.
   //
   // In compound mode the parent only carries the *shared* identity —
-  // family (rendered as a chip in the TopStrip), photo, and a
-  // composition title. The per-product spec strip (ref / dim) and
-  // grade/fabric row migrate down into each individual component, so
-  // we hide them here. Re-rendering them on the parent would imply
-  // they apply to the whole compound, which contradicts the model.
+  // family (a chip in the TopStrip), photo, and the composition name.
+  // The per-product grade/fabric + spec strip live inside each component.
   return (
-    <div className="qli-identity">
-      <Thumbnail
-        imageId={line.imageId}
-        onChange={(id) => onChange({ imageId: id })}
-        kind="quote-line"
-        ownerId={line.id}
-      />
-      <div className="flex-1 min-w-0 space-y-1.5">
-        <HeroInput
-          placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
-          value={line.name || ''}
-          onCommit={(v) => onChange({ name: v })}
-          autoCapitalize="words"
-          enterKeyHint="next"
+    <div className="flex-1 min-w-0 space-y-2.5">
+      <div className="flex items-start gap-3">
+        <Thumbnail
+          imageId={line.imageId}
+          onChange={(id) => onChange({ imageId: id })}
+          kind="quote-line"
+          ownerId={line.id}
         />
-        {!compound && <GradeFabricRow line={line} onChange={onChange} />}
-        {!compound && <SpecStrip line={line} onChange={onChange} refInputRef={refInputRef} />}
+        <div className="flex-1 min-w-0">
+          <HeroInput
+            placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
+            value={line.name || ''}
+            onCommit={(v) => onChange({ name: v })}
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
+        </div>
       </div>
+      {!compound && <GradeFabricRow line={line} onChange={onChange} />}
+      {!compound && <SpecStrip line={line} onChange={onChange} refInputRef={refInputRef} />}
     </div>
   );
 }
@@ -572,8 +569,12 @@ function GradeFabricRow({ line, onChange }) {
 // the input instead of being clipped). The strip flex-wraps so when
 // an expanded input runs out of room, it drops to the next line.
 function SpecStrip({ line, onChange, refInputRef }) {
+  // Ref + Dim share one compact line and wrap responsively when the row
+  // is genuinely too narrow. `size` keeps each input close to its content
+  // (instead of the 20-char browser default) so both fit side by side;
+  // field-sizing still auto-grows them on browsers that support it.
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
       <InlineEditor
         label="Ref."
         ref={refInputRef}
@@ -581,7 +582,8 @@ function SpecStrip({ line, onChange, refInputRef }) {
         onCommit={(v) => onChange({ reference: v })}
         placeholder="—"
         mono
-        widthClass="min-w-[7rem]"
+        size={10}
+        widthClass="min-w-0"
         autoCapitalize="characters"
         autoComplete="off"
       />
@@ -595,7 +597,8 @@ function SpecStrip({ line, onChange, refInputRef }) {
         onCommit={(v) => onChange({ dimensions: v })}
         placeholder="H × W × D"
         mono
-        widthClass="min-w-[6rem]"
+        size={18}
+        widthClass="min-w-0"
         autoComplete="off"
       />
     </div>
