@@ -52,8 +52,12 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
     return map;
   }, [lines]);
 
+  // overflow-clip (not -hidden) so the rounded corners still clip the
+  // full-bleed banner WITHOUT establishing a scroll container — an
+  // overflow:hidden ancestor would trap the sticky product image in
+  // CompoundClientLine and stop it following the page scroll.
   return (
-    <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-hidden">
+    <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
       {/* Banner so the dealer knows this is a preview, not the live editor */}
       <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between">
         <span>Vista previa del cliente · de solo lectura</span>
@@ -388,14 +392,23 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
         </div>
       )}
       <div className="flex items-start gap-4 sm:gap-5">
-        {line.imageId ? (
-          <ImageView
-            id={line.imageId}
-            className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100 flex-shrink-0"
-          />
-        ) : (
-          <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
-        )}
+        {/* Sticky image column: a compound article can carry a long
+            component list, so the shared product image is pinned to the
+            top of the viewport (offset clears the mobile sticky header)
+            and stays visible as the customer scrolls the components
+            beside it. `self-start` keeps the sticky box confined to this
+            row's height; with a short component list there's nothing to
+            scroll past, so it simply sits put — graceful degradation. */}
+        <div className="flex-shrink-0 self-start sticky top-4">
+          {line.imageId ? (
+            <ImageView
+              id={line.imageId}
+              className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100"
+            />
+          ) : (
+            <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100" />
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           {line.family && (
             <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">

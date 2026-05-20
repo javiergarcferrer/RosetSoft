@@ -477,8 +477,16 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
                   icon — so the admin doesn't have to guess that the
                   name is editable. The previous "transparent until
                   focused" look read as a label and the dealer kept
-                  reporting that name editing didn't work. */}
-              <div className="relative group">
+                  reporting that name editing didn't work.
+
+                  The wrapper takes `flex-1 min-w-0` (with a
+                  `basis-full sm:basis-auto` so it owns its own line on
+                  the narrowest screens before the "(tú)"/badge chips
+                  wrap beside it) so the input's `w-full` resolves
+                  against the real available width instead of collapsing
+                  to its content min-width — that collapse was crushing
+                  the name down to "Ja"/"Te" on mobile. */}
+              <div className="relative group flex-1 min-w-0 basis-full sm:basis-auto">
                 <DebouncedInput
                   type="text"
                   value={profile.name || ''}

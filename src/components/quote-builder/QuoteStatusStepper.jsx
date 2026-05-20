@@ -113,7 +113,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
             <button
               type="button"
               onClick={undo}
-              className="btn-ghost text-xs"
+              className="btn text-xs text-ink-700 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400"
               title="Revertir al estado anterior"
             >
               <Undo2 size={12} /> Volver
@@ -161,7 +161,7 @@ function TerminalMenu({ stage, terminal, onPick }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="btn-ghost text-xs"
+        className="btn text-xs text-ink-700 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400"
       >
         Más <ChevronDown size={12} />
       </button>

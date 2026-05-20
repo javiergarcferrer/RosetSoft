@@ -803,7 +803,7 @@ function OrderOverflow({ cancelled, onCancel, onUncancel }) {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div role="menu" className="absolute right-0 mt-1.5 w-48 rounded-md border border-ink-200 bg-white shadow-pop py-1 z-40">
+          <div role="menu" className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-48 max-w-[calc(100vw-2rem)] rounded-md border border-ink-200 bg-white shadow-pop py-1 z-40">
             {cancelled ? (
               <button
                 type="button"

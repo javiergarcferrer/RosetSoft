@@ -71,14 +71,26 @@ export default function QuoteHeader({
       </Link>
 
       <div className="space-y-3">
-        {/* Title row — the quote is identified by its number alone now
-            that the internal-name field is gone. The customer chip in
-            the meta row below is the human label. SaveIndicator lives
-            here (not in the chip row) so it doesn't compete with the
-            chips for horizontal space on mobile and force them to wrap. */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        {/* Title row. On phones this stacks: the title group sits on top
+            and the actions cluster drops onto its own line directly
+            below, so nothing competes for horizontal space and there's
+            no tall right-hand column inflating the row height (the old
+            `items-start` + wrapping-actions layout left a void beside
+            the short title). From sm: up it returns to title-left /
+            actions-right on a single baseline-aligned row.
+
+            SaveIndicator is pulled OUT of the actions cluster and parked
+            inline with the eyebrow — on a phone the actions row is mostly
+            an icon menu, so keeping the save badge there made it crowd the
+            "Cotización" label and the number. Sitting right after the
+            eyebrow it reads as the title's own status line (matching the
+            component's "badge near the title" intent) and never overlaps. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 flex-1">
-            <div className="eyebrow">Cotización</div>
+            <div className="flex items-center gap-2.5">
+              <div className="eyebrow">Cotización</div>
+              <SaveIndicator savedAt={savedAt} saving={saving} />
+            </div>
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
@@ -89,10 +101,11 @@ export default function QuoteHeader({
             )}
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <SaveIndicator savedAt={savedAt} saving={saving} />
-
+          {/* Actions. The save badge now lives by the title, so this
+              cluster is just the buttons — no `items-start` tall column to
+              leave a void beside the title. On phones it sits on its own
+              line below the title; from sm: up it stays to the right. */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:justify-end sm:shrink-0">
             <button
               type="button"
               onClick={onOpenPalette}
@@ -124,11 +137,12 @@ export default function QuoteHeader({
             </button>
 
             {/* Mobile: condense Export + palette into a single icon-only menu.
-                btn-icon is the 44pt-on-coarse, 36pt-on-fine square target. */}
+                btn-icon is the 44pt-on-coarse, 36pt-on-fine square target.
+                Pushed to the right edge of the stacked actions row. */}
             <button
               type="button"
               onClick={onOpenPalette}
-              className="btn-icon sm:hidden"
+              className="btn-icon sm:hidden ml-auto"
               aria-label="Acciones"
             >
               <MoreHorizontal size={18} />
