@@ -132,6 +132,28 @@ export async function generateQuotePdf({
     // at y=28 with a divider at y=42, so MARGIN_B + 10 leaves the
     // last line a comfortable 10pt above the footer hairline.
     const PAGE_BREAK_RESERVE = MARGIN_B + 10;
+    // Pre-compute alternative-group index/total lookup so the
+    // PDF caption reads "ALTERNATIVA 1 DE 2 · SELECCIONADA" with
+    // the same N/M the editor + ClientPreview show. Built off the
+    // full lines list (NOT the per-section groups) because an
+    // alternative group could in principle straddle a section
+    // divider — the lookup is keyed by line.id so order doesn't
+    // matter.
+    const altGroupInfo = new Map<string, { index: number; total: number }>();
+    {
+      const counts = new Map<string, number>();
+      for (const l of lines) {
+        if (!l.alternativeGroup) continue;
+        counts.set(l.alternativeGroup, (counts.get(l.alternativeGroup) || 0) + 1);
+      }
+      const seen = new Map<string, number>();
+      for (const l of lines) {
+        if (!l.alternativeGroup) continue;
+        const idx = (seen.get(l.alternativeGroup) || 0) + 1;
+        seen.set(l.alternativeGroup, idx);
+        altGroupInfo.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) as number });
+      }
+    }
     for (const group of groups) {
       if (group.label) {
         const firstRowH = group.items.length
@@ -150,7 +172,7 @@ export async function generateQuotePdf({
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
-        cursor = await drawLineRow(page, ctx, cursor, line);
+        cursor = await drawLineRow(page, ctx, cursor, line, altGroupInfo.get(line.id) || null);
       }
     }
   }

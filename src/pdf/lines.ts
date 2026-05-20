@@ -4,9 +4,11 @@ import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
   lineTotal, lineListUnit, lineQty,
 } from '../lib/pricing.js';
+import { rgb } from 'pdf-lib';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
+  BRAND_300, EMERALD_700,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -214,13 +216,11 @@ function detailSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): DetailSe
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) segs.push({ kind: 'text', token, lines });
   }
-  // Prefix the family eyebrow with the option/alternative marker so
-  // the customer reads the line's role at a glance, before name or
-  // pricing. The marker is part of the eyebrow text (no new
-  // typography token), which keeps the row-height measurement
-  // unchanged and respects the existing wrap logic.
-  const familyText = optionMarker(line, /* groupInfo */ null) + (line.family ? line.family.toUpperCase() : '');
-  push(familyText, T.family);
+  // Family eyebrow at the top of the detail column. The option /
+  // alternative marker for the line lives on its own caption band
+  // ABOVE the row (see drawOptionAccent) so the family name stays
+  // clean.
+  push(line.family ? line.family.toUpperCase() : '', T.family);
   push(line.name || '(sin nombre)', T.name);
   push(line.subtype, T.subtype);
   // Meta strip — reference + dimensions on one line, ' · ' separator,
@@ -279,7 +279,12 @@ export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine): number {
   const cols = lineColumns();
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
   const inner = Math.max(IMAGE_SIZE, detailH, numericHeight(line));
-  return ROW_TOP_PAD + inner + ROW_BOTTOM_PAD;
+  // Reserve the caption band when the line is optional / in an
+  // alternative group — same height contract both measure and draw
+  // passes use so the page-break logic in quotePdf.ts always knows
+  // the exact row footprint.
+  const captionBand = lineOptionStyle(line, null) ? CAPTION_H : 0;
+  return ROW_TOP_PAD + captionBand + inner + ROW_BOTTOM_PAD;
 }
 
 /* ----------------------------- compound ------------------------------ */
@@ -340,8 +345,7 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
     const lines = wrapToWidth(text, detailW, fontFor(ctx, token), token.size);
     if (lines.length) segs.push({ token, lines });
   }
-  const familyText = optionMarker(line, null) + (line.family ? line.family.toUpperCase() : '');
-  push(familyText, T.family);
+  push(line.family ? line.family.toUpperCase() : '', T.family);
   push(line.name, T.name);
   return segs;
 }
@@ -365,17 +369,131 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
  * benefit from the internal numbering — just the fact that the
  * line IS an alternative.
  */
-function optionMarker(
+/**
+ * Style descriptor for a line that's an optional add-on or an
+ * alternative-group member. Drives three visual elements that mirror
+ * ClientPreview's accent + caption + opacity treatment:
+ *
+ *   accent   3-pt vertical bar drawn in the page-margin gutter just
+ *            left of MARGIN_L. Brand-300 solid for alternatives, ink-
+ *            soft for optionals — same colours the HTML left-border
+ *            uses.
+ *   caption  short uppercase eyebrow rendered above the row's
+ *            content ("ALTERNATIVA 1 DE 2 · SELECCIONADA",
+ *            "OPCIONAL · NO INCLUIDO"). Lifted into its own band so
+ *            the customer reads the status before scanning the row,
+ *            instead of decoding a prefix glued to the family name.
+ *   dim      when true, the row content gets a semi-transparent
+ *            white wash drawn over it (the image fades, the text
+ *            greys) — replicating the 70% opacity rule ClientPreview
+ *            applies to non-selected alternatives and to optionals.
+ *
+ * Returns null for ordinary lines so the renderer short-circuits and
+ * draws nothing extra.
+ */
+interface LineOptionStyle {
+  accent: RGB;
+  caption: string;
+  captionColor: RGB;
+  dim: boolean;
+}
+
+function lineOptionStyle(
   line: QuoteLine,
-  _groupInfo: unknown,
-): string {
-  if (line.isOptional) return 'OPCIONAL · ';
-  if (line.alternativeGroup) {
-    return line.isSelectedAlternative
-      ? 'ALTERNATIVA — SELECCIONADA · '
-      : 'ALTERNATIVA · ';
+  groupInfo?: { index: number; total: number } | null,
+): LineOptionStyle | null {
+  if (line.isOptional) {
+    return {
+      accent: INK_SOFT,
+      caption: 'OPCIONAL · NO INCLUIDO',
+      captionColor: INK_MID,
+      dim: true,
+    };
   }
-  return '';
+  if (line.alternativeGroup) {
+    const selected = !!line.isSelectedAlternative;
+    const base = groupInfo
+      ? `ALTERNATIVA ${groupInfo.index} DE ${groupInfo.total}`
+      : 'ALTERNATIVA';
+    return {
+      accent: BRAND_300,
+      caption: selected ? `${base} · SELECCIONADA` : base,
+      captionColor: selected ? EMERALD_700 : BRAND_700,
+      dim: !selected,
+    };
+  }
+  return null;
+}
+
+// Geometry of the accent + caption band. Kept here so measure and
+// draw passes can't drift.
+const ACCENT_BAR_W   = 3;
+const ACCENT_BAR_GAP = 6;   // space between bar and content (sits in the page margin)
+const CAPTION_H      = 13;  // additional row-top reserved when caption is active
+const CAPTION_SIZE   = 7.5;
+const CAPTION_CS     = 1.4;
+
+/**
+ * Draws the accent bar in the page-margin gutter + the eyebrow
+ * caption above the row's content. Returns the additional vertical
+ * space the caption consumed so the caller can shift its inner
+ * geometry down. Called BEFORE the row's main content so the
+ * caption stays untouched by any wash overlay drawn after the
+ * content.
+ */
+function drawOptionAccent(
+  page: PDFPage,
+  ctx: PdfCtx,
+  style: LineOptionStyle,
+  rowY: number,
+  rowH: number,
+): number {
+  // Vertical bar — sits in the page margin (left of MARGIN_L) so it
+  // doesn't displace any content column. Same x for every row.
+  page.drawRectangle({
+    x: MARGIN_L - ACCENT_BAR_GAP - ACCENT_BAR_W,
+    y: rowY - rowH,
+    width: ACCENT_BAR_W,
+    height: rowH,
+    color: style.accent,
+  });
+
+  // Caption eyebrow at the row top — small uppercase tracked text in
+  // the row's MARGIN_L column. Sits above the family + image + detail
+  // stack inside the ROW_TOP_PAD band.
+  const captionY = rowY - ROW_TOP_PAD;
+  page.drawText(style.caption, {
+    x: MARGIN_L,
+    y: captionY - CAPTION_SIZE,
+    size: CAPTION_SIZE,
+    font: ctx.fontBold,
+    color: style.captionColor,
+    characterSpacing: CAPTION_CS,
+  } as DrawTextOptions);
+
+  return CAPTION_H;
+}
+
+/**
+ * Draws a semi-transparent white wash over the row's content area so
+ * everything below (image, text, numerics) fades to ~65% — same
+ * legibility rule ClientPreview's 70% opacity applies to non-selected
+ * alternatives and optional rows. Must run AFTER the row's main draw
+ * and BEFORE the accent + caption (those stay vivid).
+ */
+function drawOptionDim(
+  page: PDFPage,
+  rowY: number,
+  rowH: number,
+): void {
+  page.drawRectangle({
+    x: MARGIN_L,
+    y: rowY - rowH,
+    width: CONTENT_W,
+    height: rowH,
+    color: rgb(1, 1, 1),
+    opacity: 0.35,
+  });
 }
 
 // One component block: name + (optional) subtype + (optional) meta +
@@ -451,7 +569,10 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
   }
 
   const inner = Math.max(IMAGE_SIZE, textH);
-  return ROW_TOP_PAD + inner + ROW_BOTTOM_PAD;
+  // Same caption band reservation as the article row — kept in sync
+  // so the page-break logic always sees the row's true footprint.
+  const captionBand = lineOptionStyle(line, null) ? CAPTION_H : 0;
+  return ROW_TOP_PAD + captionBand + inner + ROW_BOTTOM_PAD;
 }
 
 // Widest "qty × unit = subtotal" equation across all components on
@@ -524,16 +645,23 @@ export async function drawLineRow(
   ctx: PdfCtx,
   cursor: Cursor,
   line: QuoteLine,
+  groupInfo?: { index: number; total: number } | null,
 ): Promise<Cursor> {
   if (isCompoundLine(line)) {
-    return drawCompoundLineRow(page, ctx, cursor, line);
+    return drawCompoundLineRow(page, ctx, cursor, line, groupInfo);
   }
   const { doc, fontBold, fontRegular } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
   const rowH = measureLineRowHeight(ctx, line);
-  const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD;
-  const innerTop = rowY - ROW_TOP_PAD;
+  // Caption band sits in ROW_TOP_PAD's region — `inner` and
+  // `innerTop` shift down by CAPTION_H when the line is optional
+  // / in an alternative group, so the image + detail + numeric
+  // stack lands below the caption rather than overlapping it.
+  const style = lineOptionStyle(line, groupInfo);
+  const captionBand = style ? CAPTION_H : 0;
+  const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD - captionBand;
+  const innerTop = rowY - ROW_TOP_PAD - captionBand;
 
   // ---- Image — vertically centered in the inner content band -------------
   const img = await embedImageById(doc, line.imageId);
@@ -644,6 +772,18 @@ export async function drawLineRow(
   // No trailing gap after the last block — collapse it back.
   drawLabelValue('TOTAL',    formatMoney(total, ctx.currency, ctx.rates), T.totalLabel, T.totalValue);
 
+  // ---- Option / alternative treatment ----------------------------------
+  // Three steps, in order: (1) wash overlay fades the row when the
+  // line is optional or a non-selected alternative — mirrors the 70%
+  // opacity rule ClientPreview applies. (2) accent bar in the gutter
+  // and (3) caption above the row content always stay vivid (drawn
+  // AFTER the wash so it can't fade them). Skipped entirely when the
+  // line has no option/alternative state.
+  if (style) {
+    if (style.dim) drawOptionDim(page, rowY, rowH);
+    drawOptionAccent(page, ctx, style, rowY, rowH);
+  }
+
   // ---- Bottom divider --------------------------------------------------
   const rowBottom = rowY - rowH;
   page.drawLine({
@@ -669,13 +809,16 @@ async function drawCompoundLineRow(
   ctx: PdfCtx,
   cursor: Cursor,
   line: QuoteLine,
+  groupInfo?: { index: number; total: number } | null,
 ): Promise<Cursor> {
   const { doc, fontBold, fontRegular } = ctx;
   const cols = compoundColumns();
   const rowY = cursor.y;
   const rowH = measureLineRowHeight(ctx, line);
-  const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD;
-  const innerTop = rowY - ROW_TOP_PAD;
+  const style = lineOptionStyle(line, groupInfo);
+  const captionBand = style ? CAPTION_H : 0;
+  const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD - captionBand;
+  const innerTop = rowY - ROW_TOP_PAD - captionBand;
 
   // ---- Image (same chrome as a normal row, top-aligned in the band) -----
   const img = await embedImageById(doc, line.imageId);
@@ -794,6 +937,14 @@ async function drawCompoundLineRow(
     page, fmt(grandTotal), cols.detail.rightX, totalValY,
     T.compTotalValue.size, fontBold, T.compTotalValue.color,
   );
+
+  // ---- Option / alternative treatment ----------------------------------
+  // Same three-step finish as the article row — wash first, accent +
+  // caption last so they stay vivid against the faded content.
+  if (style) {
+    if (style.dim) drawOptionDim(page, rowY, rowH);
+    drawOptionAccent(page, ctx, style, rowY, rowH);
+  }
 
   // ---- Bottom divider ---------------------------------------------------
   const rowBottom = rowY - rowH;

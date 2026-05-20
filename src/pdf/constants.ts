@@ -32,3 +32,10 @@ export const ACCENT:    RGB = rgb(0.78, 0.42, 0.16);    // brand-500
 // / "TOTAL"). Slightly deeper than ACCENT so it still reads at body-text
 // sizes against the white page.
 export const BRAND_700: RGB = rgb(0.49, 0.24, 0.11);    // brand-700 #7d3e1c
+
+// Lighter brand shade used for the vertical accent that runs down the
+// left edge of an alternative-group row — same role the brand-300
+// solid border plays in ClientPreview.jsx. Slightly desaturated so
+// the bar reads as a marker, not another typographic element.
+export const BRAND_300: RGB = rgb(0.91, 0.65, 0.43);    // brand-300 #e8a76d
+export const EMERALD_700: RGB = rgb(0.02, 0.42, 0.27);  // matches the "seleccionada" callout
