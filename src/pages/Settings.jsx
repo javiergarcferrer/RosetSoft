@@ -142,7 +142,7 @@ export default function Settings() {
           </div>
 
           {/* Currency (DR-focused) */}
-          <RateCard local={local} set={set} refreshSettings={refreshSettings} />
+          <RateCard local={local} set={set} refreshSettings={refreshSettings} saveSettings={saveSettings} />
 
           {/* Defaults */}
           <div className="card card-pad">
@@ -199,11 +199,12 @@ function OrdersCard({ local, set }) {
 }
 
 
-function RateCard({ local, set, refreshSettings }) {
-  // Banco Popular's published rate, pulled automatically and stored
-  // under `settings.bsc` (legacy column name). Read-only here: the daily
-  // cron and the button below are the only writers. The older
-  // `settings.bpd` shape is accepted as a fallback — see readBscRates.
+function RateCard({ local, set, refreshSettings, saveSettings }) {
+  // Banco Popular's published rate, stored under `settings.bsc` (legacy
+  // column name). The daily auto-pull and "Actualizar ahora" are the
+  // usual writers; the manual override below is a stopgap until the BPD
+  // subscription is live. The older `settings.bpd` shape is accepted as a
+  // fallback — see readBscRates.
   const bsc = local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
 
   // "Actualizar ahora": invoke the bpd-rate Edge Function (OAuth secret
@@ -241,6 +242,37 @@ function RateCard({ local, set, refreshSettings }) {
       setFetchErr(e?.message || 'No se pudo obtener la tasa.');
     } finally {
       setFetching(false);
+    }
+  }
+
+  // Manual override — a stopgap while the BPD subscription is approved.
+  // Writes the same settings.bsc + currency_rates the auto pull writes,
+  // so the whole app quotes on it immediately. A later successful pull
+  // overwrites it; a failed pull (e.g. the current 401) never does.
+  const [manualBuy, setManualBuy] = useState('');
+  const [manualSell, setManualSell] = useState('');
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualErr, setManualErr] = useState(null);
+  const [manualOk, setManualOk] = useState(false);
+  useEffect(() => {
+    setManualBuy(bsc.buy ?? '');
+    setManualSell(bsc.sell ?? '');
+  }, [bsc.buy, bsc.sell]);
+  async function saveManual() {
+    const sell = Number(manualSell);
+    if (!sell || sell <= 0) { setManualErr('Ingresa una tasa de venta válida.'); return; }
+    const buy = manualBuy === '' ? sell : Number(manualBuy);
+    setSavingManual(true); setManualErr(null); setManualOk(false);
+    try {
+      await saveSettings({
+        bsc: { buy, sell, updatedAt: Date.now() },
+        currencyRates: { ...(local.currencyRates || {}), USD: 1, DOP: sell },
+      });
+      setManualOk(true);
+    } catch (e) {
+      setManualErr(e?.message || 'No se pudo guardar la tasa.');
+    } finally {
+      setSavingManual(false);
     }
   }
 
@@ -295,6 +327,55 @@ function RateCard({ local, set, refreshSettings }) {
             : 'Aún sin datos — presiona “Actualizar ahora”.'}
         </div>
       </div>
+
+      {/* Manual override — stopgap until the BPD subscription is live. */}
+      <details className="rounded-md border border-ink-100 px-4 py-3 mb-3">
+        <summary className="text-sm font-medium cursor-pointer select-none">Ajustar tasa manualmente</summary>
+        <p className="text-[11px] text-ink-500 mt-2 mb-3">
+          Úsala mientras se conecta la API de Banco Popular. La tasa que guardes aquí se aplica a todas las cotizaciones nuevas hasta la próxima actualización automática.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              className="input mt-1"
+              value={manualBuy}
+              onChange={(e) => { setManualBuy(e.target.value); setManualOk(false); setManualErr(null); }}
+              placeholder="58.50"
+            />
+          </div>
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Venta (se cotiza con esta)</div>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              className="input mt-1"
+              value={manualSell}
+              onChange={(e) => { setManualSell(e.target.value); setManualOk(false); setManualErr(null); }}
+              placeholder="62.00"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <button type="button" onClick={saveManual} disabled={savingManual} className="btn-primary text-xs disabled:opacity-60 disabled:cursor-wait">
+            {savingManual ? 'Guardando…' : 'Guardar tasa manual'}
+          </button>
+          {manualOk && (
+            <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
+              <Check size={12} /> Guardada
+            </span>
+          )}
+          {manualErr && (
+            <span className="text-[11px] text-red-600 inline-flex items-center gap-1">
+              <AlertTriangle size={12} /> {manualErr}
+            </span>
+          )}
+        </div>
+      </details>
 
       {/* Effective */}
       <div className="rounded-md bg-brand-50 border border-brand-200 px-4 py-3">
