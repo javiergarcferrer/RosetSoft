@@ -27,7 +27,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, apikey',
+  // Must list every header the caller sends, or the browser blocks the
+  // request at the CORS preflight. Unlike invite-user/delete-user (called
+  // via a raw fetch with a fixed header set), bpd-rate is called through
+  // `supabase.functions.invoke()`, which adds `x-client-info` and
+  // `x-supabase-api-version`. Omitting them is what produced the
+  // "Failed to send a request to the Edge Function" error.
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-supabase-api-version',
 };
 
 // Sandbox base from BPDConsultaTasa 2.6.1. Token + rate paths hang off it.
