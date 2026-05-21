@@ -12,6 +12,7 @@ import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
+import { shouldUseWebShare } from './shareTarget.js';
 import type {
   Quote,
   QuoteLine,
@@ -360,33 +361,4 @@ export async function downloadBlob(blob: Blob, filename: string): Promise<void> 
     // blob; 0 ms (the previous behavior) raced the read.
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
-}
-
-/**
- * Should this device use the Web Share API for the PDF download?
- *
- * The intent of the original Web Share path was iOS PWA standalone
- * mode (where `<a download>` is silently ignored by Safari). It
- * also happens to be the right path on native Android / iOS browsers
- * outside the PWA. But desktop Chrome / Edge on Windows expose the
- * same API and the Windows share sheet introduces fragile routing
- * (Adobe's "Create PDF" handler grabs the share, then complains the
- * file is empty mid-handoff). Restrict to the surfaces the share
- * sheet was designed for.
- *
- *   PWA standalone           — display-mode media query + iOS quirk
- *   Touch-primary devices    — phones / tablets with pointer:coarse
- *
- * Desktop with a mouse (pointer:fine) always falls through to the
- * anchor-click path.
- */
-function shouldUseWebShare(): boolean {
-  if (typeof window === 'undefined') return false;
-  const mq = (q: string) => window.matchMedia?.(q).matches;
-  const isStandalonePwa =
-    mq('(display-mode: standalone)') ||
-    // iOS Safari sets a non-standard `navigator.standalone` on PWAs.
-    (navigator as unknown as { standalone?: boolean }).standalone === true;
-  const isTouchPrimary = mq('(pointer: coarse)');
-  return !!(isStandalonePwa || isTouchPrimary);
 }
