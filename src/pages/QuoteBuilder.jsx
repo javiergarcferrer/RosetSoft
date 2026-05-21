@@ -206,6 +206,32 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (materialize) await materialize();
   }, [materialize]);
 
+  // Heal legacy quotes that lost their sequence number to the old
+  // updateQuote write-back race (it persisted the stale in-memory quote,
+  // number:null, right after materialize had assigned one). Assign the
+  // next number in place the first time such a quote is opened; race-safe
+  // so two tabs don't double-assign. New drafts can't reach here — they
+  // get their number at materialize and updateQuote now preserves it.
+  useEffect(() => {
+    if (!dbQuote || dbQuote.number != null || !profileId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const fresh = await db.quotes.get(quoteId);
+        if (cancelled || !fresh || fresh.number != null) return;
+        await assignSequenceNumber({
+          table: 'quotes',
+          profileId,
+          start: 1001,
+          build: (number) => ({ ...fresh, number, updatedAt: Date.now() }),
+        });
+      } catch (e) {
+        console.warn('[QuoteBuilder] could not heal missing quote number:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [dbQuote, quoteId, profileId]);
+
   // -------- view + panel state --------
   // The "lista de precios" PDF panel (a `pdfjs-dist` viewer that slid
   // in from the right with the LR price list) was removed entirely —
@@ -282,7 +308,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const next = (patch.status === 'sent' && patch.sentAt)
         ? { ...patch, rates: effectiveRates(settings) }
         : patch;
-      await db.quotes.put({ ...quote, ...next, updatedAt: Date.now() });
+      // ensurePersisted() may have just materialized a brand-new draft and
+      // assigned its sequence number. `quote` is the pre-persist render
+      // value (number: null) — the live query hasn't refreshed yet — so
+      // re-read the row and keep the freshly assigned number instead of
+      // clobbering it back to null.
+      const persisted = await db.quotes.get(quoteId);
+      await db.quotes.put({
+        ...quote,
+        ...next,
+        number: persisted?.number ?? quote.number,
+        updatedAt: Date.now(),
+      });
     } finally {
       markSaved();
     }
