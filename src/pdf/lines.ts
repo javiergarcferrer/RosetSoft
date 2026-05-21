@@ -920,14 +920,11 @@ export async function drawLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + swatch on top of the wash so the
-    // customer still sees the product and its fabric colour on a dimmed
-    // (optional / non-selected alternative) line.
-    if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
-      if (line.swatchImageId) {
-        await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
-      }
+    // Redraw only the swatch on top of the wash so its fabric colour stays
+    // vivid in any state; the product photo dims with the rest of a
+    // deactivated (optional / non-selected alternative) row.
+    if (style.dim && line.swatchImageId) {
+      await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
     }
   }
 
@@ -1099,11 +1096,10 @@ async function drawCompoundLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + every component swatch on top of the
-    // wash so the customer can still read the product and the fabric
-    // colours of a dimmed (alternative) bundle.
+    // Redraw only the component swatches on top of the wash so their
+    // fabric colours stay vivid in any state; the product photo dims with
+    // the rest of a deactivated (optional / non-selected alternative) bundle.
     if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
       for (const s of compSwatches) {
         await drawSwatch(page, ctx.doc, s.id, cols.detail.x, s.topY, SWATCH_SIZE);
       }

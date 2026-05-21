@@ -266,19 +266,20 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
   const isSelected = !!line.isSelectedAlternative;
+  const dimmed = optional || (inGroup && !isSelected);
   return (
     <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
-      inGroup && !isSelected ? 'relative [&_img]:relative [&_img]:z-[2]' : ''
+      dimmed ? 'relative' : ''
     }`}>
-      {/* Non-selected alternative: dim with a white veil instead of row
-          opacity, and lift any image above it (z-2) so the customer can
-          still read the real fabric color / product photo. */}
-      {inGroup && !isSelected && (
-        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/30" aria-hidden />
+      {/* Deactivated (optional) or non-selected alternative: fade the row
+          with a white veil. Only the swatch is lifted above it (z-[2]); the
+          product photo dims with the rest, matching the editor + PDF. */}
+      {dimmed && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
       {(optional || inGroup) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
@@ -322,7 +323,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
                   <ImageZoom
                     id={line.swatchImageId}
                     alt="Muestra de tela"
-                    className="w-11 h-11 object-cover rounded border border-ink-200 bg-white"
+                    className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
                   />
                 )}
                 {/* Subtype + ref/dimensions stacked to the right of the
@@ -438,19 +439,20 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
   const isSelected = !!line.isSelectedAlternative;
+  const dimmed = optional || (inGroup && !isSelected);
   return (
     <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
-      inGroup && !isSelected ? 'relative [&_img]:relative [&_img]:z-[2]' : ''
+      dimmed ? 'relative' : ''
     }`}>
-      {/* Non-selected alternative: dim with a white veil instead of row
-          opacity, and lift any image above it (z-2) so the customer can
-          still read the real fabric color / product photo. */}
-      {inGroup && !isSelected && (
-        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/30" aria-hidden />
+      {/* Deactivated (optional) or non-selected alternative: fade the row
+          with a white veil. Only the swatch is lifted above it (z-[2]); the
+          product photo dims with the rest, matching the editor + PDF. */}
+      {dimmed && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
       {(optional || inGroup) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
@@ -536,10 +538,10 @@ function CompoundComponentRow({ component, fmt }) {
   const optional = !!component.isOptional;
   return (
     <li className={`py-2 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4 ${
-      optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300 [&_img]:relative [&_img]:z-[2]' : ''
+      optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''
     }`}>
-      {/* Optional: dim with a white veil instead of opacity, lifting the
-          swatch above it so the fabric color stays visible to the client. */}
+      {/* Optional: dim with a white veil; the swatch carries its own
+          z-[2] so the fabric colour stays visible to the client. */}
       {optional && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
@@ -558,7 +560,7 @@ function CompoundComponentRow({ component, fmt }) {
               <ImageZoom
                 id={component.swatchImageId}
                 alt="Muestra de tela"
-                className="w-11 h-11 object-cover rounded border border-ink-200 bg-white"
+                className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
               />
             )}
             {/* Subtype + ref/dimensions stacked to the right so the swatch
