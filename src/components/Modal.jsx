@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
@@ -21,9 +22,16 @@ export default function Modal({ open, onClose, title, children, footer, size = '
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
   const widths = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
-  return (
+  // Render at <body> via a portal. A modal must NOT live inside the DOM of
+  // whatever opened it: an ancestor with `opacity` (e.g. a dimmed
+  // non-selected alternative line, opacity-70) tints its whole subtree —
+  // including this fixed overlay — making the dialog translucent with the
+  // page bleeding through; and an ancestor with `container-type` (the
+  // quote-line container queries) or `transform` re-bases `position: fixed`
+  // to that box instead of the viewport. Portaling to body escapes both.
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
       role="dialog"
@@ -57,6 +65,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
