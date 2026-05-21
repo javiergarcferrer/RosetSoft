@@ -11,11 +11,13 @@ import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
+import { currentQuoteStage } from '../lib/quoteStages.js';
 
 const STATUS_PILL_CLASS = {
   draft: 'status-pill-draft',
   sent: 'status-pill-sent',
   accepted: 'status-pill-accepted',
+  deposito_recibido: 'status-pill-deposito',
   declined: 'status-pill-declined',
   archived: 'status-pill-archived',
 };
@@ -24,6 +26,7 @@ const STATUS_LABELS = {
   draft: 'Borrador',
   sent: 'Enviada',
   accepted: 'Aceptada',
+  deposito_recibido: 'Depósito recibido',
   declined: 'Rechazada',
   archived: 'Archivada',
 };
@@ -131,7 +134,7 @@ export default function Quotes() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return quotes
-      .filter((q) => (status ? q.status === status : true))
+      .filter((q) => (status ? currentQuoteStage(q) === status : true))
       .filter((qu) => {
         if (!needle) return true;
         const cust = customerById.get(qu.customerId);
@@ -195,6 +198,7 @@ export default function Quotes() {
           <option value="draft">Borrador</option>
           <option value="sent">Enviada</option>
           <option value="accepted">Aceptada</option>
+          <option value="deposito_recibido">Depósito recibido</option>
           <option value="declined">Rechazada</option>
           <option value="archived">Archivada</option>
         </select>
@@ -294,7 +298,7 @@ function QuoteCard({ qu, customer, creator, order, total, rates }) {
         </div>
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
-        <span className={`status-pill ${STATUS_PILL_CLASS[qu.status] || 'status-pill-draft'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span>
+        <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
@@ -317,7 +321,7 @@ function QuoteRow({ qu, customer, creator, order, total, rates }) {
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
       </td>
-      <td><span className={`status-pill ${STATUS_PILL_CLASS[qu.status] || 'status-pill-draft'}`}>{STATUS_LABELS[qu.status] || 'Borrador'}</span></td>
+      <td><span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span></td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>

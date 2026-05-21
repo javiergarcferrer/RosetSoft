@@ -29,7 +29,12 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
 
   function advance(stageKey) {
     const def = QUOTE_STAGE_BY_KEY[stageKey];
-    const patch = { status: stageKey };
+    // Milestone stages (depósito recibido) are backed by their timestamp
+    // only, NOT a status value — depositReceivedAt is the single source of
+    // truth, shared with the order's deposit milestone. So we stamp the
+    // timestamp and leave `status` untouched (the order page writing the
+    // same field keeps the two in sync automatically).
+    const patch = def.milestone ? {} : { status: stageKey };
     if (def.timestampField) patch[def.timestampField] = Date.now();
     onTransition(patch);
   }
@@ -131,7 +136,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
           )}
           {!terminal && !next && (
             <span className="inline-flex items-center gap-1 text-emerald-700 text-sm font-medium">
-              <CheckCircle2 size={14} /> Aceptada
+              <CheckCircle2 size={14} /> {stageDef?.label || 'Listo'}
             </span>
           )}
           <TerminalMenu stage={stage} terminal={terminal} onPick={advance} />
