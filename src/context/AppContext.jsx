@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
 import { shouldPullDailyRate } from '../lib/exchangeRate.js';
+import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { useAuth } from './AuthContext.jsx';
 
 const Ctx = createContext(null);
@@ -80,7 +81,9 @@ export function AppProvider({ children }) {
         // first that day triggers it; the Edge Function persists the rate
         // and we re-read it once it lands. Fire-and-forget — it must
         // never block app readiness or fail the boot if the bank is down.
-        if (shouldPullDailyRate(s)) {
+        // Gated off until production (EXCHANGE_RATE_PULL_ENABLED); the
+        // stored rate and the manual override in Settings stay in effect.
+        if (EXCHANGE_RATE_PULL_ENABLED && shouldPullDailyRate(s)) {
           supabase.functions
             .invoke('bpd-rate')
             .then(async ({ error }) => {
