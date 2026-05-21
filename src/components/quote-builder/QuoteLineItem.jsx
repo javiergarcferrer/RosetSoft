@@ -4,7 +4,6 @@ import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
-import Operator from '../primitives/Operator.jsx';
 import Select from '../primitives/Select.jsx';
 import { FieldGroup, Field } from '../primitives/FieldGroup.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
@@ -439,7 +438,15 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
         </div>
       </div>
       {!compound && <GradeFabricRow line={line} onChange={onChange} />}
-      {!compound && <SpecStrip line={line} onChange={onChange} refInputRef={refInputRef} />}
+      {!compound && (
+        <SpecStrip
+          reference={line.reference}
+          dimensions={line.dimensions}
+          onChangeReference={(v) => onChange({ reference: v })}
+          onChangeDimensions={(v) => onChange({ dimensions: v })}
+          refInputRef={refInputRef}
+        />
+      )}
     </div>
   );
 }
@@ -558,28 +565,32 @@ function GradeFabricRow({ line, onChange }) {
   );
 }
 
-// Compact inline strip of identifying meta — ref, page, dimensions.
-// `widthClass` values are MIN-widths, not fixed widths: each input
-// has `field-sizing: content` so it grows past the min when the value
-// is long (a full dimension string like "H 28 × L 89 × P 43" expands
-// the input instead of being clipped). The strip flex-wraps so when
-// an expanded input runs out of room, it drops to the next line.
-function SpecStrip({ line, onChange, refInputRef }) {
-  // Uppercase REF. / DIM. micro-labels — same treatment as the compound
-  // component rows (and mirrored in the PDF), so the spec reads
-  // consistently. Both share one compact line; `size` keeps each input
-  // near its content so they fit side by side and wrap only when narrow.
+// Compact inline strip of identifying meta — REF. + DIM. The uppercase
+// micro-labels match the compound component rows (and the PDF / client
+// preview), so the spec reads consistently across all three surfaces.
+//
+// Shared by the article line AND the compound ComponentRow (passing
+// `value`/`onCommit` for `reference` + `dimensions`) so the two have an
+// identical spec layout. The inputs auto-grow via field-sizing:content;
+// `widthClass` is the MIN width (REF. is short, DIM. holds a full
+// "H 28 × L 89 × P 43" string), and the .qli-grow 2.5rem floor keeps an
+// empty placeholder-only field from collapsing. The strip flex-wraps so a
+// long value drops the second field to its own line instead of forcing
+// horizontal scroll. (Previously the article passed widthClass="min-w-0",
+// which re-zeroed the floor and let the placeholder clip to nothing.)
+function SpecStrip({
+  reference, dimensions, onChangeReference, onChangeDimensions, refInputRef,
+}) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 min-w-0">
+    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 min-w-0">
       <InlineEditor
         ref={refInputRef}
         label="Ref."
-        value={line.reference || ''}
-        onCommit={(v) => onChange({ reference: v })}
+        value={reference || ''}
+        onCommit={onChangeReference}
         placeholder="—"
         mono
-        size={11}
-        widthClass="min-w-0"
+        widthClass="min-w-[5rem]"
         autoCapitalize="characters"
         autoComplete="off"
       />
@@ -589,12 +600,11 @@ function SpecStrip({ line, onChange, refInputRef }) {
           edit control has been removed at the dealer's request. */}
       <InlineEditor
         label="Dim."
-        value={line.dimensions || ''}
-        onCommit={(v) => onChange({ dimensions: v })}
+        value={dimensions || ''}
+        onCommit={onChangeDimensions}
         placeholder="H × W × D"
         mono
-        size={18}
-        widthClass="min-w-0"
+        widthClass="min-w-[7rem]"
         autoComplete="off"
       />
     </div>
@@ -602,82 +612,130 @@ function SpecStrip({ line, onChange, refInputRef }) {
 }
 
 // ---------------------------------------------------------------------------
-// Calculator band — the only place numbers live on a line. Reads as an
-// equation: Cantidad × Unitario = TOTAL. Total is the heaviest element
-// (~1.4× the input typography). Sits on a faint inset surface so the
-// math reads as one unit, distinct from identity.
-//
-// Total is a button — clicking it toggles the breakdown popover with the
-// per-line math (discount applied) broken out.
+// Pricing row — the ONE primitive that renders `Cant. × Unitario = Total`
+// for both the standalone article line and every compound component. It
+// owns the grid (.qli-pricing-grid in src/index.css) so the equation reads
+// as a single right-aligned cluster on wide cards and reflows to a labelled
+// stack on narrow ones. Article and component differ only in the size of
+// the Total and whether the Total opens a breakdown popover — passed as
+// props so the structure, spacing, operators, and min-widths stay identical
+// across the two surfaces. (Fixes the prior split where the article used a
+// flex calc-grid with a stranded total cell and the component used a
+// hand-rolled justify-between row with no operators.)
+function PricingRow({
+  qty, unitPrice, total, fmt, currency,
+  onQtyChange, onUnitChange,
+  // Total presentation: 'lg' on the article line, 'md' inside a component.
+  totalSize = 'lg',
+  totalLabel = 'Total',
+  // When provided, the Total is a button that toggles the breakdown popover
+  // and renders the c/u adjustment caption. Components pass none of these
+  // (their total is a plain read-out; the parent line owns the breakdown).
+  onToggleBreakdown, breakdownOpen, breakdown, adjustmentLine, unitForCaption, hasAdjustment,
+  qtyAriaLabel = 'Cantidad', unitAriaLabel = 'Precio unitario',
+}) {
+  const totalValCls = totalSize === 'lg'
+    ? 'qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight'
+    : 'qli-total-val text-[15px] font-semibold tabular-nums text-ink-900 leading-tight';
+  const totalEl = (
+    <div className={totalValCls}>{fmt(total)}</div>
+  );
+  return (
+    <div className="qli-pricing-grid">
+      <CalcCell label="Cant.">
+        <DebouncedInput
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="any"
+          className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+          value={qty ?? 1}
+          onCommit={(v) => onQtyChange(Math.max(0, Number(v) || 0))}
+          aria-label={qtyAriaLabel}
+        />
+      </CalcCell>
+
+      <span className="qli-pricing-op text-base" aria-hidden>×</span>
+
+      <CalcCell label="Unitario">
+        <MoneyInput
+          currency={currency}
+          value={unitPrice}
+          onCommit={onUnitChange}
+          widthClass="min-w-[6rem]"
+          aria-label={unitAriaLabel}
+        />
+      </CalcCell>
+
+      <span className="qli-pricing-op text-base" aria-hidden>=</span>
+
+      <div className="qli-pricing-cell qli-pricing-total relative">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+          {totalLabel}
+        </div>
+        {onToggleBreakdown ? (
+          <>
+            <button
+              type="button"
+              onClick={onToggleBreakdown}
+              className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+              title="Ver desglose"
+              aria-expanded={breakdownOpen}
+            >
+              {totalEl}
+              {hasAdjustment ? (
+                <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
+                  {unitForCaption != null && (
+                    <span className="whitespace-nowrap">{fmt(unitForCaption)} c/u</span>
+                  )}
+                  {adjustmentLine && <AdjustmentChip line={adjustmentLine} />}
+                </div>
+              ) : null}
+            </button>
+            {breakdownOpen && breakdown}
+          </>
+        ) : (
+          totalEl
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Calculator band — the article line's pricing. Reads as the card's last
+// row (faint top divider via .qli-pricing), right-aligned equation. The
+// Total is a button — clicking it toggles the per-line breakdown popover.
 function CalculatorBand({
   line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
-  // qli-calc owns background, border, padding, and the responsive
-  // sizing — min-width of 360px / 400px at ≥640/820 container widths,
-  // but the calc is free to grow past those mins so the money string
-  // is never clipped. At sub-360px container widths the calc-grid's
-  // cells stack into rows (qty, unit, total) instead of fighting for
-  // one row's worth of horizontal space.
   return (
-    <div className="qli-calc transition-shadow group-hover:shadow-soft">
-      <div className="qli-calc-grid">
-        <CalcCell label="Cant.">
-          <DebouncedInput
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
-            className="qli-grow min-w-[3.25rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
-            value={line.qty ?? 1}
-            onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
-            aria-label="Cantidad"
-          />
-        </CalcCell>
-
-        <Operator className="qli-op">×</Operator>
-
-        <CalcCell label="Unitario">
-          <MoneyInput
+    <div className="qli-pricing">
+      <PricingRow
+        qty={line.qty}
+        unitPrice={line.unitPrice}
+        total={lineTotal}
+        fmt={fmt}
+        currency={currency}
+        onQtyChange={(q) => onChange({ qty: q })}
+        onUnitChange={(v) => onChange({ unitPrice: v })}
+        totalSize="lg"
+        totalLabel="Total"
+        onToggleBreakdown={onToggleBreakdown}
+        breakdownOpen={breakdownOpen}
+        hasAdjustment={hasAdjustment}
+        unitForCaption={unit}
+        adjustmentLine={line}
+        breakdown={(
+          <LineBreakdownPopover
+            line={line}
             currency={currency}
-            value={line.unitPrice}
-            onCommit={(v) => onChange({ unitPrice: v })}
-            widthClass="min-w-[6rem]"
-            aria-label="Precio unitario"
+            rates={rates}
+            onClose={onCloseBreakdown}
           />
-        </CalcCell>
-
-        <Operator className="qli-op">=</Operator>
-
-        <div className="qli-total-cell relative">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">Total</div>
-          <button
-            type="button"
-            onClick={onToggleBreakdown}
-            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
-            title="Ver desglose"
-            aria-expanded={breakdownOpen}
-          >
-            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
-              {fmt(lineTotal)}
-            </div>
-            {hasAdjustment ? (
-              <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
-                <span className="whitespace-nowrap">{fmt(unit)} c/u</span>
-                <AdjustmentChip line={line} />
-              </div>
-            ) : null}
-          </button>
-          {breakdownOpen && (
-            <LineBreakdownPopover
-              line={line}
-              currency={currency}
-              rates={rates}
-              onClose={onCloseBreakdown}
-            />
-          )}
-        </div>
-      </div>
+        )}
+      />
     </div>
   );
 }
@@ -695,12 +753,12 @@ function CompoundCalculatorBand({
 }) {
   const count = (line.components || []).length;
   return (
-    <div className="qli-calc transition-shadow group-hover:shadow-soft">
-      <div className="flex items-start justify-end gap-3 flex-wrap">
-        <div className="text-[10px] text-ink-500 tabular-nums leading-tight self-center">
+    <div className="qli-pricing">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-[11px] text-ink-500 tabular-nums leading-tight">
           {count} componente{count === 1 ? '' : 's'}
         </div>
-        <div className="qli-total-cell relative text-right">
+        <div className="relative text-right ml-auto">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
             Total compuesto
           </div>
@@ -910,76 +968,46 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         onChange={(patch) => onChange(patch)}
       />
 
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 pt-0.5 min-w-0">
-        <InlineEditor
-          label="Ref."
-          value={component.reference || ''}
-          onCommit={(v) => onChange({ reference: v })}
-          placeholder="—"
-          mono
-          widthClass="min-w-[6.5rem]"
-          autoCapitalize="characters"
-          autoComplete="off"
-        />
-        <InlineEditor
-          label="Dim."
-          value={component.dimensions || ''}
-          onCommit={(v) => onChange({ dimensions: v })}
-          placeholder="H × W × D"
-          mono
-          widthClass="min-w-[6rem]"
-          autoComplete="off"
+      <div className="pt-0.5">
+        <SpecStrip
+          reference={component.reference}
+          dimensions={component.dimensions}
+          onChangeReference={(v) => onChange({ reference: v })}
+          onChangeDimensions={(v) => onChange({ dimensions: v })}
         />
       </div>
 
-      {/* Pricing strip on its own row. Sits on a faint tinted band so
-          it reads as a sub-band of the component card, matching the
-          visual treatment of the main CalculatorBand. Flex-wraps when
-          the row is genuinely too narrow for the inline equation, with
-          the operators dropping out the same way the main calc grid
-          does. */}
-      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 mt-1 pt-2 border-t border-ink-100">
-        <div className="flex items-end gap-2">
-          <CalcCell label="Cant.">
-            <DebouncedInput
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="any"
-              className="min-w-[3rem] w-16 text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
-              value={component.qty ?? 1}
-              onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
-              aria-label="Cantidad del componente"
-            />
-          </CalcCell>
-          <Operator className="self-end pb-2">×</Operator>
-          <CalcCell label="Unitario">
-            <MoneyInput
-              currency={currency}
-              value={component.unitPrice}
-              onCommit={(v) => onChange({ unitPrice: v })}
-              widthClass="min-w-[5.5rem]"
-              aria-label="Precio unitario del componente"
-            />
-          </CalcCell>
-        </div>
-        <div className="text-right min-w-[5rem]">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
-            Total
-          </div>
-          <div className="text-[14px] font-semibold tabular-nums text-ink-900 leading-tight">
-            {fmt(total)}
-          </div>
-        </div>
+      {/* Pricing row — the SAME <PricingRow> primitive the article line
+          uses, so the equation reads identically (right-aligned cluster
+          on wide widths, labelled stack when narrow). The component total
+          is a plain read-out (no breakdown button — the parent line owns
+          the compound breakdown) and rendered one size down ('md'). */}
+      <div className="qli-pricing">
+        <PricingRow
+          qty={component.qty}
+          unitPrice={component.unitPrice}
+          total={total}
+          fmt={fmt}
+          currency={currency}
+          onQtyChange={(q) => onChange({ qty: q })}
+          onUnitChange={(v) => onChange({ unitPrice: v })}
+          totalSize="md"
+          totalLabel="Total"
+          qtyAriaLabel="Cantidad del componente"
+          unitAriaLabel="Precio unitario del componente"
+        />
       </div>
     </div>
   );
 }
 
+// Labelled input cell for the pricing grid: an uppercase micro-label
+// (CANT. / UNITARIO) stacked over its input. Uses .qli-pricing-cell so it
+// shares the grid's stacking + min-width contract with the Total cell.
 function CalcCell({ label, children }) {
   return (
-    <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+    <div className="qli-pricing-cell">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
         {label}
       </div>
       {children}

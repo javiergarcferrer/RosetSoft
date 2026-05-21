@@ -260,58 +260,109 @@
     flex: 1;
   }
 
-  .qli-calc {
-    /* Pricing reads as the LAST ROW of the card (like a compound
-       component) — a faint top divider sets it apart from the identity
-       rows, instead of a boxed rail floating to the right with dead space. */
+  /* -----------------------------------------------------------------
+     Pricing row — ONE primitive shared by the standalone article line
+     and every compound component (see <PricingRow> in
+     QuoteLineItem.jsx). Reads as the last row of the card: a faint top
+     divider sets the math apart from the identity rows above it.
+
+     The equation `Cant. × Unitario = Total` is laid out as a CSS grid
+     of content-sized columns packed flush to the RIGHT of the row (via
+     `justify-content: end`), so the equation reads as one deliberate,
+     tight cluster aligned to the card's right edge — never an element
+     stranded across a dead gap. This is the fix for the "Cant × Unit on
+     the left, TOTAL flung to the far right" complaint: the operators,
+     inputs, and total now travel together as a unit.
+
+     At every width the Total carries the heaviest type. On narrow
+     containers the grid reflows to a labelled two-up stack (qty + unit
+     side-by-side, Total on its own full-width row) — see the container
+     query below. */
+  .qli-pricing {
     border-top: 1px solid theme('colors.ink.100');
     padding-top: 0.75rem;
     margin-top: 0.125rem;
     min-width: 0;
   }
-  /* Calc cells flow as a flex row that wraps. When the container is
-     wide everything fits left-to-right (qty × unit = total). When
-     narrow, cells wrap onto subsequent rows in reading order and the
-     operators (× and =) disappear so the math still reads. Critically,
-     the total cell auto-grows to fit the money string — never gets
-     squeezed below its natural width. */
-  .qli-calc-grid {
+  .qli-pricing-grid {
+    display: grid;
+    /* qty · × · unit · = · total — every column auto-sized to its
+       content. The grid spans the full row width, and `justify-content:
+       end` packs the columns flush against the RIGHT edge with no gaps
+       between them (grid only ever distributes *surplus* space, and we
+       send all of it to the left). That makes the equation read as one
+       tight, deliberate cluster aligned to the card's right edge — the
+       fix for the stranded-total / mid-row dead-gap bug, without any
+       fragile max-content width math. */
+    grid-template-columns: auto auto auto auto auto;
+    justify-content: end;
+    align-items: center;
+    column-gap: 0.625rem;
+    row-gap: 0.5rem;
+    min-width: 0;
+    width: 100%;
+    justify-items: start;
+  }
+  /* Each labelled cell (Cant. / Unitario / Total) stacks its eyebrow
+     over its value; the cell owns its own min-width so the column can't
+     collapse the input to zero. */
+  .qli-pricing-cell {
+    min-width: 0;
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 0.5rem 0.625rem;
-    min-width: 0;
+    flex-direction: column;
+    gap: 0.125rem;
   }
-  .qli-total-cell {
-    /* flex-grow lets the total cell expand to fill the row when it's
-       on the same line as qty/unit. It's also allowed to wrap to a
-       new row (basis: auto) — when it does, the cell takes the full
-       row width. */
-    flex: 1 1 auto;
-    min-width: 0;
+  .qli-pricing-total {
+    /* Total is the right-most column; its content right-aligns so the
+       money string hugs the card edge and stacks cleanly with the
+       totals rail beside it. */
     text-align: right;
+    align-items: flex-end;
   }
-  .qli-total-val {
-    /* Money never wraps mid-string; the surrounding cell makes room. */
-    white-space: nowrap;
+  .qli-pricing-total .qli-total-val {
+    white-space: nowrap;   /* money never breaks mid-string */
+  }
+  /* Operators are pure syntax. They live on the input baseline — the
+     grid centers each item, and because the operator has no eyebrow
+     row it would float above the inputs; the self-end pulls it down to
+     align with the value, replacing the old hand-tuned pb-2 nudge. */
+  .qli-pricing-op {
+    align-self: end;
+    padding-bottom: 0.5rem;
+    color: theme('colors.ink.300');
+    user-select: none;
+    line-height: 1;
   }
 
-  /* qli-body stays a vertical stack at EVERY width: identity rows, then
-     the pricing row — flowing like a compound component, using the full
-     width with the Total pushed to the right edge. The old >=640px rule
-     split it into identity | boxed-calc columns, which stranded the calc
-     box at min-width 22.5rem with tall dead space on desktop. */
-
-  /* Narrow container — operators hide and each cell takes its own
-     row. The dealer sees the equation as a stack:
-         Cant.   [ 1 ]
-         Unitario [ 11310 ]
-         Total   $11,310.00
-     No clipped money, no ellipsis, no horizontal scroll. */
+  /* Narrow container — the inline equation no longer fits comfortably
+     (its natural cluster width is ~300–330px). Below 360px we collapse
+     to a labelled stack: qty + unit share the top row, the operators
+     disappear (the labels carry the meaning), and the Total drops to
+     its own full-width row, left-aligned and emphasised. This guarantees
+     the inline form only ever renders with ≥360px of room, so the money
+     string can't be clipped and the row can't force horizontal scroll. */
   @container qli (max-width: 359px) {
-    .qli-calc-grid .qli-op { display: none; }
-    .qli-calc-grid > * { flex: 1 1 100%; min-width: 0; }
-    .qli-total-cell { text-align: left; }
+    .qli-pricing-grid {
+      width: 100%;
+      margin-inline-start: 0;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 0.75rem;
+    }
+    .qli-pricing-op { display: none; }
+    .qli-pricing-cell { min-width: 0; }
+    .qli-pricing-total {
+      grid-column: 1 / -1;
+      align-items: stretch;
+      text-align: left;
+      border-top: 1px solid theme('colors.ink.100');
+      padding-top: 0.5rem;
+      margin-top: 0.125rem;
+    }
+    /* Neutralise the Total button's right-alignment so the stacked,
+       full-width Total row reads left-aligned with its label and the
+       qty/unit cells above it. */
+    .qli-pricing-total > button { text-align: left; }
+    .qli-pricing-total .qli-total-val { text-align: left; }
   }
 
   /* Auto-growing single-line inputs. `field-sizing: content` sizes
@@ -319,9 +370,22 @@
      min, not a max. Browser support is Chrome 123+, Safari 17.4+,
      Firefox 123+ (early 2024). Pre-support fallback: the input renders
      at its declared width — same as the previous behavior, no
-     regression. */
+     regression.
+
+     `min-width: 2.5rem` is a floor so an EMPTY field (or one with only
+     a short placeholder like "—") can't collapse to ~0 under
+     field-sizing — without it, a placeholder-only ref/dim input clipped
+     to nothing on supporting browsers.
+
+     Cascade note: Tailwind's `min-w-*` utilities live in the `utilities`
+     layer, which is emitted AFTER this `components` layer, so any caller
+     that passes an explicit `min-w-*` overrides this floor (intended —
+     a caller asking for a wider min gets it). The bug was callers that
+     passed `min-w-0`, re-zeroing the floor; those have been changed to
+     stop passing it so this 2.5rem floor applies. */
   .qli-grow {
     field-sizing: content;
+    min-width: 2.5rem;
     max-width: 100%;
   }
 }
