@@ -470,9 +470,9 @@ function GradeFabricRow({ line, onChange }) {
   };
   const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
-  // Single row: swatch · grade · fabric · picker. The fabric input takes
-  // the remaining width (flex-1 + min-w-0) and scrolls long names rather
-  // than wrapping the row onto a second line.
+  // Single row: swatch · grade · fabric · picker. The fabric input sizes
+  // to its content (field-sizing) so it's only as wide as the material
+  // name; the picker button sits right after it, not across the row.
   return (
     <div className="flex items-center gap-2 min-w-0">
       {/* Swatch pinned to the LEFT so the material reads the same on every
@@ -536,9 +536,11 @@ function GradeFabricRow({ line, onChange }) {
           onCommit={(v) => commit({ grade, fabric: v })}
           placeholder="Tela o acabado"
           autoCapitalize="words"
-          // flex-1 + min-w-0 lets the fabric input take the row's leftover
-          // width and shrink/scroll instead of wrapping to a second line.
-          className="flex-1 min-w-0 bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+          // Sizes to its content (field-sizing via .qli-grow): only as wide
+          // as the material name (or the placeholder when empty), never
+          // stretched across the row. Capped at 100% so a very long name
+          // still wraps/scrolls within the row instead of overflowing.
+          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
         />
         {/* Catalog picker — opens the swatch modal so the dealer can pick a
             material + color instead of typing the name and guessing the
