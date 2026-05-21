@@ -689,11 +689,11 @@ function usePdfDownload({ quote, customer, lines, settings }) {
       // / "failed to fetch dynamically imported module" error). The
       // helper reloads once via sessionStorage so the dealer's
       // second tap succeeds.
-      const { generateQuotePdf, downloadBlob } = await safeDynamicImport(
+      const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
         () => import('../../pdf/quotePdf.js'),
       );
       const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
-      await downloadBlob(blob, `Cotizacion-${quote.number || 'borrador'}.pdf`);
+      await downloadBlob(blob, `${quoteFileName(quote, customer)}.pdf`);
     } catch (err) {
       console.error('[Contabilidad] PDF download failed:', err);
       setError(err?.message || 'No se pudo generar el PDF.');

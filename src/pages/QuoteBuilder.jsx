@@ -16,6 +16,7 @@ import { formatMoney } from '../lib/format.js';
 // that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
+import { shouldUseWebShare } from '../pdf/shareTarget.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -568,12 +569,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (exporting) return;          // de-bounce double-taps
     setExportError(null);
     setExporting(true);
-    // The dealer asked to *look* at the PDF before sending it — not jump
-    // straight to the share sheet. Open a viewer tab synchronously (inside
-    // the click gesture, so the browser doesn't block it as a popup) and
-    // point it at the finished PDF once it's ready. The browser's own PDF
-    // viewer then offers print / download / share after they've reviewed.
-    const viewer = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    // Phones / tablets / installed PWAs hand the actual PDF File to the
+    // native share sheet (see downloadBlob). Sharing the File posts a real
+    // document to WhatsApp named "<Client> - Cotizacion <N>.pdf"; the old
+    // path opened a blob: preview tab, and sharing *that tab* to WhatsApp
+    // posted a useless "blob:https://…" text message instead.
+    const shareFile = shouldUseWebShare();
+    // Desktop keeps the review-first flow: the dealer asked to *look* at
+    // the PDF before sending. Open a viewer tab synchronously (inside the
+    // click gesture, so the browser doesn't block it as a popup) and point
+    // it at the finished PDF once it's ready. The browser's own PDF viewer
+    // then offers print / download after they've reviewed.
+    const viewer = !shareFile && typeof window !== 'undefined' ? window.open('', '_blank') : null;
     if (viewer) {
       try {
         viewer.document.write(
@@ -608,6 +615,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       if (!blob || !blob.size) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
+      const filename = `${quoteFileName(quote, customer)}.pdf`;
+      if (shareFile) {
+        // Touch / PWA: hand the File to the share sheet directly.
+        // downloadBlob owns the blob-URL lifecycle on this path.
+        await downloadBlob(blob, filename);
+        return;
+      }
       const url = URL.createObjectURL(blob);
       if (viewer && !viewer.closed) {
         // Show the PDF in the viewer tab so the dealer can review it.
@@ -615,7 +629,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       } else {
         // Popup blocked / unavailable — fall back to the native
         // share/download so the dealer still gets the file.
-        await downloadBlob(blob, `${quoteFileName(quote, customer)}.pdf`);
+        await downloadBlob(blob, filename);
       }
       // Hold the blob long enough for the viewer to finish loading it.
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
