@@ -28,6 +28,19 @@ export const LINE_KIND_ITEM:    LineKind = 'item';
 export const LINE_KIND_SECTION: LineKind = 'section';
 export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTION];
 
+/* ---------------------------------- feature flags --------------------------------- */
+
+/**
+ * Auto-pull of the Banco Popular Dominicano exchange rate. When true the
+ * app pulls the rate once per day on first login and shows the "Actualizar
+ * ahora" button in Settings (both call the `bpd-rate` edge function, which
+ * hits the bank's live API). Disabled until we move to production — the
+ * stored rate, the manual override in Settings, the rate locked onto sent
+ * quotes, and all rate display keep working. Flip to `true` (and ensure the
+ * BPD_* edge-function secrets are set) when going live.
+ */
+export const EXCHANGE_RATE_PULL_ENABLED = false;
+
 /**
  * Predicate every total-bearing surface (Quotes / Orders / Dashboard /
  * CustomerDetail / ProfessionalDetail / admin/Commissions / all

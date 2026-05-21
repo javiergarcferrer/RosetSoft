@@ -5,6 +5,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
+import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
@@ -210,6 +211,9 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
   const [fetching, setFetching] = useState(false);
   const [fetchErr, setFetchErr] = useState(null);
   async function fetchNow() {
+    // Disabled until production — see EXCHANGE_RATE_PULL_ENABLED. The button
+    // is hidden in this mode, so this is just a defensive guard.
+    if (!EXCHANGE_RATE_PULL_ENABLED) return;
     setFetching(true);
     setFetchErr(null);
     try {
@@ -278,7 +282,9 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
     <div className="card card-pad">
       <h2 className="font-semibold mb-2">Tasa de cambio USD → DOP</h2>
       <p className="text-xs text-ink-500 mb-4">
-        Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano y se actualiza automáticamente al abrir la app cada día. Se cotiza con la tasa de venta.
+        Los precios del catálogo están en USD (lista oficial Ligne Roset). {EXCHANGE_RATE_PULL_ENABLED
+          ? 'La tasa la publica Banco Popular Dominicano y se actualiza automáticamente al abrir la app cada día.'
+          : 'Ajusta la tasa manualmente más abajo (la actualización automática de Banco Popular se activará en producción).'} Se cotiza con la tasa de venta.
       </p>
 
       {/* Banco Popular — read-only. The dealer can't adjust it; the daily
@@ -286,16 +292,18 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
       <div className="rounded-md border border-ink-100 bg-ink-50 px-4 py-3 mb-3">
         <div className="flex items-center justify-between mb-3">
           <div className="font-medium text-sm">Banco Popular Dominicano</div>
-          <button
-            type="button"
-            onClick={fetchNow}
-            disabled={fetching}
-            className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait"
-            title="Trae ahora la tasa USD publicada por Banco Popular Dominicano"
-          >
-            <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
-            {fetching ? 'Actualizando…' : 'Actualizar ahora'}
-          </button>
+          {EXCHANGE_RATE_PULL_ENABLED && (
+            <button
+              type="button"
+              onClick={fetchNow}
+              disabled={fetching}
+              className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait"
+              title="Trae ahora la tasa USD publicada por Banco Popular Dominicano"
+            >
+              <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
+              {fetching ? 'Actualizando…' : 'Actualizar ahora'}
+            </button>
+          )}
         </div>
         {fetchErr && (
           <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1">
@@ -317,7 +325,9 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
         <div className="text-[10px] text-ink-500 mt-2">
           {rate.updatedAt
             ? <>Actualizado {formatDateTime(rate.updatedAt)}</>
-            : 'Aún sin datos — presiona “Actualizar ahora”.'}
+            : (EXCHANGE_RATE_PULL_ENABLED
+                ? 'Aún sin datos — presiona “Actualizar ahora”.'
+                : 'Aún sin datos — ajústala manualmente más abajo.')}
         </div>
       </div>
 
