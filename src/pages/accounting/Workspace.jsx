@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Shield, Wallet, FileCheck, Users as UsersIcon, Download, Search,
+  Shield, Wallet, FileCheck, Users as UsersIcon, Download,
   Loader2, AlertCircle, Calendar, ChevronDown,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import StatCard from '../../components/StatCard.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import {
@@ -192,18 +193,101 @@ export default function AccountingWorkspace() {
     };
   }, [quotesQ.data, cycle, customerById, profileById, linesByQuote]);
 
-  // Search filter applied on top of the cycle-scoped entries.
+  // Search-header query state, applied on top of the cycle-scoped entries.
+  // The cycle picker above stays the page's PRIMARY window; the deposit
+  // tab is an additive dimension within it. Secondary `filters` hold
+  // {creator: <profileId>}; sort defaults to acceptedAt-desc.
   const [q, setQ] = useState('');
+  const [tab, setTab] = useState('all'); // 'all' | 'recibido' | 'pendiente'
+  const [filters, setFilters] = useState({}); // { creator: <profileId> }
+  const [sort, setSort] = useState({ key: 'accepted', dir: 'desc' });
+
+  // Deposit tabs — a Recibido / Pendiente dimension off depositReceivedAt,
+  // counted across the whole cycle's entries (independent of the search
+  // needle / vendedor filter, so each tab reads "how many would I see").
+  const tabs = useMemo(() => {
+    let recibido = 0;
+    for (const e of derived.entries) {
+      if (e.quote.depositReceivedAt) recibido += 1;
+    }
+    return [
+      { key: 'all', label: 'Todas', count: derived.entries.length },
+      { key: 'recibido', label: 'Recibido', count: recibido },
+      { key: 'pendiente', label: 'Pendiente', count: derived.entries.length - recibido },
+    ];
+  }, [derived.entries]);
+
+  // Secondary filter: vendedor (the quote's creator). Options are the
+  // distinct creators actually present in the cycle's entries, so the
+  // dropdown never lists someone with nothing in the window.
+  const creatorFilter = useMemo(() => {
+    const seen = new Map();
+    for (const e of derived.entries) {
+      const id = e.creator?.id;
+      if (!id || seen.has(id)) continue;
+      const label = creatorDisplay(e.creator);
+      if (label) seen.set(id, label);
+    }
+    const options = [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return {
+      key: 'creator',
+      label: 'Vendedor',
+      type: 'select',
+      placeholder: 'Todos',
+      options,
+    };
+  }, [derived.entries]);
+
+  const sortOptions = [
+    { key: 'accepted', label: 'Aceptada' },
+    { key: 'total', label: 'Total' },
+    { key: 'commission', label: 'Comisión' },
+    { key: 'customer', label: 'Cliente A–Z' },
+  ];
+
   const filteredEntries = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return derived.entries;
-    return derived.entries.filter((e) => {
-      const num = String(e.quote.number || '');
-      const cust = (e.customer?.company || e.customer?.name || '').toLowerCase();
-      const vend = (e.creator?.name || e.creator?.email || '').toLowerCase();
-      return num.includes(needle) || cust.includes(needle) || vend.includes(needle);
+    const creator = filters.creator;
+    const rows = derived.entries
+      .filter((e) => {
+        if (tab === 'recibido') return Boolean(e.quote.depositReceivedAt);
+        if (tab === 'pendiente') return !e.quote.depositReceivedAt;
+        return true;
+      })
+      .filter((e) => (creator ? e.creator?.id === creator : true))
+      .filter((e) => {
+        if (!needle) return true;
+        const num = String(e.quote.number || '');
+        const cust = (e.customer?.company || e.customer?.name || '').toLowerCase();
+        const vend = (e.creator?.name || e.creator?.email || '').toLowerCase();
+        return num.includes(needle) || cust.includes(needle) || vend.includes(needle);
+      });
+
+    // Sort. derived.entries already comes acceptedAt-desc; re-sorting here
+    // keeps the direction toggle honest. Direction multiplier flips asc/desc;
+    // 'customer' uses localeCompare for A–Z.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    const sorted = [...rows].sort((a, b) => {
+      if (sort.key === 'total') {
+        return (a.grandTotal - b.grandTotal) * mul;
+      }
+      if (sort.key === 'commission') {
+        const ac = a.depositIn ? a.earnedCommission : a.potentialCommission;
+        const bc = b.depositIn ? b.earnedCommission : b.potentialCommission;
+        return (ac - bc) * mul;
+      }
+      if (sort.key === 'customer') {
+        const an = (a.customer?.company || a.customer?.name || '').toLowerCase();
+        const bn = (b.customer?.company || b.customer?.name || '').toLowerCase();
+        return an.localeCompare(bn) * mul;
+      }
+      // accepted
+      return ((a.quote.acceptedAt || 0) - (b.quote.acceptedAt || 0)) * mul;
     });
-  }, [derived.entries, q]);
+    return sorted;
+  }, [derived.entries, q, tab, filters, sort]);
 
   // Export busy state — one key at a time, three buttons.
   const [exportBusy, setExportBusy] = useState(null);
@@ -403,25 +487,25 @@ export default function AccountingWorkspace() {
         />
       </div>
 
-      {/* Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-9"
-            type="search"
-            inputMode="search"
-            enterKeyHint="search"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por número, cliente o vendedor…"
-          />
-        </div>
-      </div>
+      {/* Search / filter header — search + deposit tabs + vendedor filter +
+          sort. The cycle picker above stays the primary dimension; this
+          refines within the selected window. */}
+      <ListSearchHeader
+        searchValue={q}
+        onSearchChange={setQ}
+        searchPlaceholder="Buscar por número, cliente o vendedor…"
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        filters={[creatorFilter]}
+        activeFilters={filters}
+        onFiltersChange={setFilters}
+        sortOptions={sortOptions}
+        sort={sort}
+        onSortChange={setSort}
+        resultCount={filteredEntries.length}
+        resultNoun={['cotización', 'cotizaciones']}
+      />
 
       {/* Main table — every accepted quote in the cycle */}
       <section className="card overflow-hidden mb-6">
