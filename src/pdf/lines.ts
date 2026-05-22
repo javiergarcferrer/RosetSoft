@@ -474,7 +474,7 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
  *            uses.
  *   caption  short uppercase eyebrow rendered above the row's
  *            content ("ALTERNATIVA 1 DE 2 · SELECCIONADA",
- *            "OPCIONAL · NO INCLUIDO"). Lifted into its own band so
+ *            "OPCIONAL · NO INCLUIDO EN EL TOTAL"). Lifted into its own band so
  *            the customer reads the status before scanning the row,
  *            instead of decoding a prefix glued to the family name.
  *   dim      when true, the row content gets a semi-transparent
@@ -499,7 +499,7 @@ function lineOptionStyle(
   if (line.isOptional) {
     return {
       accent: INK_SOFT,
-      caption: 'OPCIONAL · NO INCLUIDO',
+      caption: 'OPCIONAL · NO INCLUIDO EN EL TOTAL',
       captionColor: INK_MID,
       dim: true,
     };
