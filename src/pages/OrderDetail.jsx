@@ -78,6 +78,19 @@ export default function OrderDetail() {
     [],
   );
 
+  // Customers for this profile, indexed by id — used to label each quote
+  // (attached and candidate) with its client name.
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const customerById = useMemo(() => {
+    const m = new Map();
+    for (const c of customers) m.set(c.id, c);
+    return m;
+  }, [customers]);
+
   // Per-quote totals. Goes through the canonical computeTotals path so
   // compound lines (qty/unitPrice=0 on the parent — math lives in
   // `components`) roll up correctly and line-level + quote-level
@@ -92,14 +105,18 @@ export default function OrderDetail() {
       linesByQuote.get(l.quoteId).push(l);
     }
     const m = new Map();
-    for (const q of quotes) {
+    // Both the attached quotes AND the unattached candidates need totals —
+    // the attach picker lists candidates, so omitting them showed $0.00 for
+    // every row in the "Añadir cotización al pedido" sheet.
+    for (const q of [...quotes, ...unattachedQuotes]) {
+      if (m.has(q.id)) continue;
       const rows = (linesByQuote.get(q.id) || [])
         .filter(isPricedLine)
         .map(lineForTotals);
       m.set(q.id, computeTotals(rows, q).grandTotal);
     }
     return m;
-  }, [allLines, quotes]);
+  }, [allLines, quotes, unattachedQuotes]);
 
   const [picker, setPicker] = useState(false);
 
@@ -415,6 +432,7 @@ export default function OrderDetail() {
           candidates={unattachedQuotes}
           onPick={attachQuote}
           totalByQuote={totalByQuote}
+          customerById={customerById}
         />
       </Modal>
     </>
@@ -748,7 +766,7 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
   );
 }
 
-function QuoteAttachList({ candidates, onPick, totalByQuote }) {
+function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
   if (!candidates.length) {
     return (
       <div className="text-sm text-ink-500 text-center py-8">
@@ -758,7 +776,9 @@ function QuoteAttachList({ candidates, onPick, totalByQuote }) {
   }
   return (
     <ul className="divide-y divide-ink-100">
-      {candidates.map((q) => (
+      {candidates.map((q) => {
+        const client = customerById?.get(q.customerId);
+        return (
         <li key={q.id}>
           <button
             type="button"
@@ -767,10 +787,10 @@ function QuoteAttachList({ candidates, onPick, totalByQuote }) {
           >
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate">
-                #{q.number || '—'}
+                {client?.name || 'Sin cliente asignado'}
               </div>
-              <div className="text-[11px] text-ink-500">
-                {q.status} · {formatDateTime(q.updatedAt)}
+              <div className="text-[11px] text-ink-500 truncate">
+                #{q.number || '—'} · {q.status} · {formatDateTime(q.updatedAt)}
               </div>
             </div>
             <div className="text-sm font-medium tabular-nums">
@@ -778,7 +798,8 @@ function QuoteAttachList({ candidates, onPick, totalByQuote }) {
             </div>
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
