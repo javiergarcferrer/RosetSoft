@@ -138,6 +138,13 @@ export default function QuoteLineItem({
     });
   }
 
+  // Deactivated (optional) or non-selected alternative: the row reads as
+  // "off". We fade it with a white veil overlay (not row opacity) so the
+  // fabric swatch — lifted to z-[2] in GradeFabricRow — stays full-colour
+  // while the product photo, text and prices dim. Same treatment the
+  // client preview and the PDF export use.
+  const dimmed = !!line.isOptional || (!!line.alternativeGroup && !line.isSelectedAlternative);
+
   return (
     // qli-row turns each row into its own container-query root, so the
     // body below reflows based on this row's width — not the viewport's.
@@ -145,24 +152,23 @@ export default function QuoteLineItem({
     // full-width builder, in a narrowed editor when the PDF panel is
     // open, or in some future drawer / inspector pane. CSS in
     // src/index.css owns the breakpoints.
-    // Visual cues for the two new option flags:
+    // Visual cues for the option flags:
     //   • optional lines     dashed left accent + faint background tint
-    //                        so the dealer reads them as parked / not
-    //                        in the running total at a glance.
+    //                        + white veil (deactivated).
     //   • alternative groups solid brand-color left accent unifying
-    //                        the contiguous siblings — the rendering
-    //                        order already keeps them adjacent.
-    //   • non-selected sibs  reduced opacity on top of the accent so
-    //                        the selected one wins the eye.
+    //                        the contiguous siblings.
+    //   • non-selected sibs  white veil on top of the accent so the
+    //                        selected one wins the eye.
     <li
-      className={`qli-row group transition-colors duration-150 hover:bg-ink-50/40 ${
+      className={`qli-row group relative transition-colors duration-150 hover:bg-ink-50/40 ${
         line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''
       } ${
         line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
-      } ${
-        line.alternativeGroup && !line.isSelectedAlternative ? 'opacity-70' : ''
       }`}
     >
+      {dimmed && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+      )}
       <TopStrip
         family={line.family}
         onPickFamily={(value) => onChange({ family: value || '' })}
@@ -481,13 +487,17 @@ function GradeFabricRow({ line, onChange }) {
           subtype. The catalog picker pre-fills it; the empty state is an
           explicit "add photo" tile and the corner × clears just the
           swatch. */}
-      <Thumbnail
-        imageId={swatchImageId}
-        onChange={(id) => onChange({ swatchImageId: id })}
-        kind="quote-line-swatch"
-        ownerId={line.id}
-        sizeClass="w-10 h-10 flex-shrink-0"
-      />
+      {/* z-[2] keeps the swatch above any deactivated/non-selected veil
+          (z-[1]) so the fabric colour is never dimmed — in any state. */}
+      <span className="relative z-[2] inline-flex shrink-0">
+        <Thumbnail
+          imageId={swatchImageId}
+          onChange={(id) => onChange({ swatchImageId: id })}
+          kind="quote-line-swatch"
+          ownerId={line.id}
+          sizeClass="w-10 h-10"
+        />
+      </span>
       <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
         <Select
           variant="ghost"
@@ -909,9 +919,14 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
   // stacking vertically reads cleaner and gives the name the full
   // row width unconditionally.
   return (
-    <div className={`group/comprow px-3 sm:px-4 py-3 bg-white space-y-2 ${
+    <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-white space-y-2 ${
       optional ? 'border-l-2 border-dashed border-ink-300' : ''
     }`}>
+      {/* Deactivated (optional) component: white veil fades the block;
+          the swatch (z-[2] in GradeFabricRow) stays full-colour. */}
+      {optional && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+      )}
       <div className="flex items-center gap-2">
         <span
           {...(dragHandleProps || {})}

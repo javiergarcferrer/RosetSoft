@@ -467,7 +467,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
           status pill), Controls below (role, commission, activity
           info, delete). Each section is a self-contained flex row
           so wrap behaviour is local and predictable. */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:gap-6">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:gap-6">
         {/* Identity */}
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <Avatar name={profile.name} email={profile.email} />
@@ -535,7 +535,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
             the gap between the role select and the name — the
             screenshot the dealer sent shows "Pendiente" floating
             mid-row over the truncated name input. */}
-        <div className="mt-4 lg:mt-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
+        <div className="mt-4 xl:mt-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
           <label className="flex flex-col gap-1 lg:contents">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 lg:hidden">
               Rol

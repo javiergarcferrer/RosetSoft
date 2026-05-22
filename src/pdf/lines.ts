@@ -474,7 +474,7 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
  *            uses.
  *   caption  short uppercase eyebrow rendered above the row's
  *            content ("ALTERNATIVA 1 DE 2 · SELECCIONADA",
- *            "OPCIONAL · NO INCLUIDO"). Lifted into its own band so
+ *            "OPCIONAL · NO INCLUIDO EN EL TOTAL"). Lifted into its own band so
  *            the customer reads the status before scanning the row,
  *            instead of decoding a prefix glued to the family name.
  *   dim      when true, the row content gets a semi-transparent
@@ -499,7 +499,7 @@ function lineOptionStyle(
   if (line.isOptional) {
     return {
       accent: INK_SOFT,
-      caption: 'OPCIONAL · NO INCLUIDO',
+      caption: 'OPCIONAL · NO INCLUIDO EN EL TOTAL',
       captionColor: INK_MID,
       dim: true,
     };
@@ -920,14 +920,11 @@ export async function drawLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + swatch on top of the wash so the
-    // customer still sees the product and its fabric colour on a dimmed
-    // (optional / non-selected alternative) line.
-    if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
-      if (line.swatchImageId) {
-        await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
-      }
+    // Redraw only the swatch on top of the wash so its fabric colour stays
+    // vivid in any state; the product photo dims with the rest of a
+    // deactivated (optional / non-selected alternative) row.
+    if (style.dim && line.swatchImageId) {
+      await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
     }
   }
 
@@ -1099,11 +1096,10 @@ async function drawCompoundLineRow(
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
     drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + every component swatch on top of the
-    // wash so the customer can still read the product and the fabric
-    // colours of a dimmed (alternative) bundle.
+    // Redraw only the component swatches on top of the wash so their
+    // fabric colours stay vivid in any state; the product photo dims with
+    // the rest of a deactivated (optional / non-selected alternative) bundle.
     if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
       for (const s of compSwatches) {
         await drawSwatch(page, ctx.doc, s.id, cols.detail.x, s.topY, SWATCH_SIZE);
       }
