@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  Layers, Plus, Search, Pencil, Trash2, Shield, Download, Check,
-  Loader2, X,
+  Layers, Plus, Search, Pencil, Trash2, Shield, Check,
+  Loader2, X, GripVertical,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -14,7 +14,6 @@ import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInp
 import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
-import lrSeed from '../../data/lr-materials-2025-10.json';
 
 /**
  * Materials catalog admin page.
@@ -46,9 +45,6 @@ export default function Materials() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState(''); // '' | 'fabric' | 'leather' | 'outdoor'
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
-  const [importBusy, setImportBusy] = useState(false);
-  const [importDone, setImportDone] = useState(0);
-  const [importError, setImportError] = useState(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -86,55 +82,6 @@ export default function Materials() {
     await db.materials.delete(material.id);
   }
 
-  async function importSeed() {
-    if (importBusy) return;
-    setImportError(null);
-    setImportBusy(true);
-    setImportDone(0);
-    try {
-      // Dedupe against what's already loaded: skip any material whose
-      // (category, name) already exists. The DB has a UNIQUE index on
-      // (profile_id, category, lower(name)) so even if the dedupe slip
-      // we'd surface a clean error rather than silently duplicate.
-      const existing = new Set(
-        materials.map((m) => `${m.category}::${(m.name || '').toLowerCase()}`),
-      );
-      const now = Date.now();
-      const rows = lrSeed
-        .filter((s) => !existing.has(`${s.category}::${(s.name || '').toLowerCase()}`))
-        .map((s) => ({
-          id: newId(),
-          profileId,
-          category: s.category,
-          name: s.name,
-          grade: s.grade || null,
-          wearRating: s.wearRating || null,
-          wearDoubleRubs: s.wearDoubleRubs ?? null,
-          measure: s.measure ? parseMeasure(s.measure) : null,
-          measureUnit: s.category === 'leather' ? 'mm' : 'in',
-          price: typeof s.price === 'number' ? s.price : null,
-          priceUnit: s.category === 'leather' ? 'sm' : 'yard',
-          composition: s.composition || null,
-          colors: Array.isArray(s.colors) ? s.colors : [],
-          notes: s.notes || null,
-          createdAt: now,
-          updatedAt: now,
-        }));
-
-      // bulkPut chunks the writes and retries; surfaces the count via
-      // the onProgress callback so the import button shows live
-      // progress on the bigger insertions.
-      await db.materials.bulkPut(rows, {
-        chunkSize: 50,
-        onProgress: (done) => setImportDone(done),
-      });
-    } catch (e) {
-      setImportError(e?.message || 'No se pudo importar el catálogo.');
-    } finally {
-      setImportBusy(false);
-    }
-  }
-
   return (
     <>
       <PageHeader
@@ -142,17 +89,6 @@ export default function Materials() {
         subtitle={loaded ? `${materials.length} en catálogo` : ' '}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={importSeed}
-              disabled={importBusy}
-              className="btn-ghost disabled:opacity-60 disabled:cursor-wait"
-              title="Importar el catálogo Ligne Roset 10.2025 (USD) sin duplicar nada"
-            >
-              {importBusy
-                ? <><Loader2 size={14} className="animate-spin" /> Importando… {importDone || ''}</>
-                : <><Download size={14} /> Importar Ligne Roset 10.2025</>}
-            </button>
             <button
               type="button"
               onClick={() => setEditing('new')}
@@ -163,12 +99,6 @@ export default function Materials() {
           </div>
         }
       />
-
-      {importError && (
-        <div role="alert" className="card card-pad mb-4 text-sm text-red-700 bg-red-50 border-red-200">
-          No se pudo importar: {importError}
-        </div>
-      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-md">
@@ -325,14 +255,6 @@ function GradePill({ grade }) {
   );
 }
 
-function parseMeasure(raw) {
-  // Width values in the LR price list include fractions like "54¼".
-  // Coerce them into decimal so they sort and display sensibly.
-  const s = String(raw).replace('¼', '.25').replace('½', '.5').replace('¾', '.75');
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
-}
-
 /* -------------------------------------------------------------------------- */
 /*  Editor modal                                                              */
 /* -------------------------------------------------------------------------- */
@@ -355,6 +277,11 @@ function MaterialEditor({ material, profileId, onClose }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Color drag-reorder — same HTML5 DnD pattern as the quote line list
+  // (LineItemList): the handle is draggable, the row is the drop target,
+  // and the indicator sits above the hovered row.
+  const [dragColor, setDragColor] = useState(null);
+  const [dropColor, setDropColor] = useState(null);
 
   function set(patch) { setDraft((d) => ({ ...d, ...patch })); }
 
@@ -368,6 +295,15 @@ function MaterialEditor({ material, profileId, onClose }) {
   }
   function removeColor(i) {
     set({ colors: draft.colors.filter((_, idx) => idx !== i) });
+  }
+  function moveColor(from, to) {
+    if (from == null || to == null || from === to) return;
+    const next = [...(draft.colors || [])];
+    const [moved] = next.splice(from, 1);
+    // Indicator renders above the target, so insert before it; dragging
+    // downward shifts indices down by one after the splice.
+    next.splice(from < to ? to - 1 : to, 0, moved);
+    set({ colors: next });
   }
 
   async function save() {
@@ -546,8 +482,44 @@ function MaterialEditor({ material, profileId, onClose }) {
             </button>
           </div>
           <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-            {(draft.colors || []).map((c, i) => (
-              <div key={i} className="grid grid-cols-[auto_1fr_120px_auto] gap-2 items-center">
+            {(draft.colors || []).map((c, i) => {
+              const isDragging = dragColor === i;
+              const isDropTarget = dropColor === i && dragColor !== i;
+              return (
+              <div
+                key={i}
+                onDragOver={(e) => {
+                  if (dragColor == null || dragColor === i) return;
+                  e.preventDefault();
+                  setDropColor(i);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  moveColor(dragColor, i);
+                  setDragColor(null);
+                  setDropColor(null);
+                }}
+                className={`relative grid grid-cols-[auto_auto_1fr_120px_auto] gap-2 items-center ${isDragging ? 'opacity-40' : ''}`}
+              >
+                {isDropTarget && (
+                  <div className="absolute left-0 right-0 -top-1 h-0.5 bg-brand-500 z-10 pointer-events-none" />
+                )}
+                {/* Drag handle — only the handle is draggable so the inputs
+                    stay selectable/editable. Same affordance as the quote
+                    line list. */}
+                <span
+                  draggable
+                  onDragStart={(e) => {
+                    setDragColor(i);
+                    try { e.dataTransfer.effectAllowed = 'move'; } catch {}
+                  }}
+                  onDragEnd={() => { setDragColor(null); setDropColor(null); }}
+                  className="cursor-grab text-ink-300 hover:text-ink-600 inline-flex items-center justify-center w-4"
+                  title="Arrastra para reordenar"
+                  aria-label="Reordenar color"
+                >
+                  <GripVertical size={14} />
+                </span>
                 {/* Tiny swatch thumbnail per color. Defaults to a
                     placeholder + camera glyph; clicking opens the
                     file picker exactly like the material-level
@@ -583,7 +555,8 @@ function MaterialEditor({ material, profileId, onClose }) {
                   <X size={13} />
                 </button>
               </div>
-            ))}
+              );
+            })}
             {!(draft.colors || []).length && (
               <div className="text-xs text-ink-500 italic py-2">Sin colores.</div>
             )}
