@@ -14,6 +14,7 @@ import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInp
 import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
+import { backfillSwatchesFromQuotes } from '../../lib/swatchCatalog.js';
 import lrSeed from '../../data/lr-materials-2025-10.json';
 
 /**
@@ -49,6 +50,8 @@ export default function Materials() {
   const [importBusy, setImportBusy] = useState(false);
   const [importDone, setImportDone] = useState(0);
   const [importError, setImportError] = useState(null);
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -84,6 +87,28 @@ export default function Materials() {
   async function remove(material) {
     if (!confirm(`¿Eliminar “${material.name}” del catálogo?`)) return;
     await db.materials.delete(material.id);
+  }
+
+  // One-shot: pull swatch photos that dealers attached inline on quote
+  // lines back into the catalog colors they belong to, so future quotes
+  // pre-fill them. Fill-empty + idempotent — safe to re-run.
+  async function runBackfill() {
+    if (backfillBusy) return;
+    setBackfillMsg(null);
+    setBackfillBusy(true);
+    try {
+      const r = await backfillSwatchesFromQuotes(profileId);
+      setBackfillMsg(
+        r.filled > 0
+          ? `Se rellenaron ${r.filled} muestra(s) en el catálogo desde ${r.matched} línea(s) con color del catálogo.`
+          : 'No había muestras nuevas que rellenar (las líneas con color del catálogo ya tienen foto, o eran de texto libre).',
+      );
+    } catch (err) {
+      console.error('[Materiales] backfill failed:', err);
+      setBackfillMsg(`No se pudo rellenar: ${err?.message || 'error desconocido'}`);
+    } finally {
+      setBackfillBusy(false);
+    }
   }
 
   async function importSeed() {
@@ -155,6 +180,17 @@ export default function Materials() {
             </button>
             <button
               type="button"
+              onClick={runBackfill}
+              disabled={backfillBusy}
+              className="btn-ghost disabled:opacity-60 disabled:cursor-wait"
+              title="Copiar al catálogo las muestras que se adjuntaron en líneas de cotización (solo colores del catálogo, sin sobrescribir)"
+            >
+              {backfillBusy
+                ? <><Loader2 size={14} className="animate-spin" /> Rellenando muestras…</>
+                : <><Layers size={14} /> Rellenar muestras desde cotizaciones</>}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditing('new')}
               className="btn-primary"
             >
@@ -167,6 +203,15 @@ export default function Materials() {
       {importError && (
         <div role="alert" className="card card-pad mb-4 text-sm text-red-700 bg-red-50 border-red-200">
           No se pudo importar: {importError}
+        </div>
+      )}
+
+      {backfillMsg && (
+        <div className="card card-pad mb-4 text-sm text-ink-700 flex items-start justify-between gap-3">
+          <span>{backfillMsg}</span>
+          <button type="button" onClick={() => setBackfillMsg(null)} className="text-ink-400 hover:text-ink-700" aria-label="Cerrar">
+            <X size={14} />
+          </button>
         </div>
       )}
 

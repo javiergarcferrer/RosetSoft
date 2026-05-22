@@ -10,6 +10,8 @@ import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
+import { useApp } from '../../context/AppContext.jsx';
+import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
 import {
   applyLineAdjustments, clampPct,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
@@ -465,7 +467,19 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
 // composeSubtype, so on-disk format is identical to what dealers have
 // always typed — no migration, no PDF / autocomplete churn.
 function GradeFabricRow({ line, onChange }) {
+  const { profileId } = useApp();
   const { grade, fabric } = parseSubtype(line.subtype);
+  // When a swatch is attached inline, also remember it in the catalog so
+  // the next quote that picks the same material/color is pre-filled. Only
+  // bites when the subtype came from the picker (carries a "(#code)") and
+  // the catalog color has no photo yet; hand-typed fabrics are skipped.
+  // Fire-and-forget — never blocks or fails the line edit.
+  const setSwatch = (id) => {
+    onChange({ swatchImageId: id });
+    if (id && profileId) {
+      rememberSwatchInCatalog({ profileId, subtype: line.subtype, imageId: id });
+    }
+  };
   // commit() always writes the composed subtype. When the picker hands
   // back a swatchImageId we persist it too; manual grade/fabric edits
   // (which don't carry the key) leave any existing swatch untouched.
@@ -492,7 +506,7 @@ function GradeFabricRow({ line, onChange }) {
       <span className="relative z-[2] inline-flex shrink-0">
         <Thumbnail
           imageId={swatchImageId}
-          onChange={(id) => onChange({ swatchImageId: id })}
+          onChange={setSwatch}
           kind="quote-line-swatch"
           ownerId={line.id}
           sizeClass="w-10 h-10"
