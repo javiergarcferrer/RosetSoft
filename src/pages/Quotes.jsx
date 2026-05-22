@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
-import { Plus, Search, FileText, Trash2 } from 'lucide-react';
+import { Plus, FileText, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -84,8 +85,13 @@ export default function Quotes() {
   // recent quotes and an order of magnitude cheaper for the full list page.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
+  // Search header query state. The status dimension is the primary tab
+  // strip ('all' = Todas); secondary filters (currently just vendedor)
+  // live in `activeFilters` as {key: value}; sort defaults to most-recent.
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
+  const [tab, setTab] = useState('all');
+  const [filters, setFilters] = useState({}); // { creator: <profileId> }
+  const [sort, setSort] = useState({ key: 'recent', dir: 'desc' });
 
   const customerById = useMemo(() => {
     const m = new Map();
@@ -131,10 +137,65 @@ export default function Quotes() {
     return m;
   }, [allLines, quotes]);
 
+  // Tabs for the primary status dimension. Counts are computed off the
+  // full list so each tab shows "how many would I see if I tapped this",
+  // independent of the search needle / secondary filters (Shopify's saved
+  // views behave this way — the count reflects the view, not the search).
+  const tabs = useMemo(() => {
+    // Count by the derived lifecycle stage (currentQuoteStage), so a quote
+    // with a deposit shows under "Depósito recibido" — same dimension the
+    // status pill and the order page use.
+    const counts = { draft: 0, sent: 0, accepted: 0, deposito_recibido: 0, declined: 0, archived: 0 };
+    for (const qu of quotes) {
+      const stage = currentQuoteStage(qu);
+      if (stage in counts) counts[stage] += 1;
+    }
+    return [
+      { key: 'all', label: 'Todas', count: quotes.length },
+      { key: 'draft', label: 'Borrador', count: counts.draft },
+      { key: 'sent', label: 'Enviada', count: counts.sent },
+      { key: 'accepted', label: 'Aceptada', count: counts.accepted },
+      { key: 'deposito_recibido', label: 'Depósito recibido', count: counts.deposito_recibido },
+      { key: 'declined', label: 'Rechazada', count: counts.declined },
+      { key: 'archived', label: 'Archivada', count: counts.archived },
+    ];
+  }, [quotes]);
+
+  // Secondary filter: vendedor (the quote's creator). Options are the
+  // distinct creators actually present on this team's quotes, so the
+  // dropdown never lists someone who's authored nothing.
+  const creatorFilter = useMemo(() => {
+    const seen = new Map();
+    for (const qu of quotes) {
+      const id = qu.createdByUserId;
+      if (!id || seen.has(id)) continue;
+      const label = creatorDisplay(profileById.get(id));
+      if (label) seen.set(id, label);
+    }
+    const options = [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return {
+      key: 'creator',
+      label: 'Vendedor',
+      type: 'select',
+      placeholder: 'Todos',
+      options,
+    };
+  }, [quotes, profileById]);
+
+  const sortOptions = [
+    { key: 'recent', label: 'Más reciente' },
+    { key: 'amount', label: 'Monto' },
+    { key: 'customer', label: 'Cliente' },
+  ];
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return quotes
-      .filter((q) => (status ? currentQuoteStage(q) === status : true))
+    const creator = filters.creator;
+    const rows = quotes
+      .filter((qu) => (tab === 'all' ? true : currentQuoteStage(qu) === tab))
+      .filter((qu) => (creator ? qu.createdByUserId === creator : true))
       .filter((qu) => {
         if (!needle) return true;
         const cust = customerById.get(qu.customerId);
@@ -144,7 +205,26 @@ export default function Quotes() {
           (cust?.company || '').toLowerCase().includes(needle)
         );
       });
-  }, [quotes, q, status, customerById]);
+
+    // Sort. 'recent' rides updatedAt (the query already comes pre-sorted
+    // most-recent-first, but re-sorting here keeps the direction toggle
+    // honest); 'amount' uses the derived grand total; 'customer' the
+    // customer display name. Direction multiplier flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    const sorted = [...rows].sort((a, b) => {
+      if (sort.key === 'amount') {
+        return ((totalByQuoteId.get(a.id) || 0) - (totalByQuoteId.get(b.id) || 0)) * mul;
+      }
+      if (sort.key === 'customer') {
+        const an = (customerById.get(a.customerId)?.name || '').toLowerCase();
+        const bn = (customerById.get(b.customerId)?.name || '').toLowerCase();
+        return an.localeCompare(bn) * mul;
+      }
+      // recent
+      return ((a.updatedAt || 0) - (b.updatedAt || 0)) * mul;
+    });
+    return sorted;
+  }, [quotes, q, tab, filters, sort, customerById, totalByQuoteId]);
 
   if (!loaded) {
     return (
@@ -176,33 +256,22 @@ export default function Quotes() {
         actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>}
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-9"
-            type="search"
-            inputMode="search"
-            enterKeyHint="search"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por número o cliente…"
-          />
-        </div>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="input max-w-[160px]">
-          <option value="">Todos los estados</option>
-          <option value="draft">Borrador</option>
-          <option value="sent">Enviada</option>
-          <option value="accepted">Aceptada</option>
-          <option value="deposito_recibido">Depósito recibido</option>
-          <option value="declined">Rechazada</option>
-          <option value="archived">Archivada</option>
-        </select>
-      </div>
+      <ListSearchHeader
+        searchValue={q}
+        onSearchChange={setQ}
+        searchPlaceholder="Buscar por número o cliente…"
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        filters={[creatorFilter]}
+        activeFilters={filters}
+        onFiltersChange={setFilters}
+        sortOptions={sortOptions}
+        sort={sort}
+        onSortChange={setSort}
+        resultCount={filtered.length}
+        resultNoun={['cotización', 'cotizaciones']}
+      />
 
       {/* Mobile: cards */}
       <div className="md:hidden space-y-2">
