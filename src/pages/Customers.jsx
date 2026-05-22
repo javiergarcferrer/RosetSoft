@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQueryStatus } from '../db/hooks.js';
-import { Plus, Search, Users, Mail, Phone, MapPin, ChevronRight, ArrowRight } from 'lucide-react';
+import { Plus, Users, Mail, Phone, MapPin, ChevronRight, ArrowRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
+import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -34,16 +35,69 @@ export default function Customers() {
   );
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
+  // Search header query state. There's no status dimension here (no tabs);
+  // secondary filters live in `activeFilters` as {key: value} — currently
+  // just ciudad; sort defaults to name A–Z.
+  const [filters, setFilters] = useState({}); // { city: <city> }
+  const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+
+  // Secondary filter: ciudad. Options are the distinct non-empty city
+  // values actually present on this team's customers, so the dropdown
+  // never lists a city nobody lives in.
+  const cityFilter = useMemo(() => {
+    const seen = new Set();
+    for (const c of customers) {
+      const city = (c.city || '').trim();
+      if (city) seen.add(city);
+    }
+    const options = [...seen]
+      .sort((a, b) => a.localeCompare(b))
+      .map((city) => ({ value: city, label: city }));
+    return {
+      key: 'city',
+      label: 'Ciudad',
+      type: 'select',
+      placeholder: 'Todas',
+      options,
+    };
+  }, [customers]);
+
+  const sortOptions = [
+    { key: 'name', label: 'Nombre A–Z' },
+    { key: 'company', label: 'Empresa' },
+    { key: 'recent', label: 'Recientes' },
+  ];
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return customers;
-    return customers.filter((c) =>
-      c.name?.toLowerCase().includes(needle) ||
-      c.company?.toLowerCase().includes(needle) ||
-      c.email?.toLowerCase().includes(needle)
-    );
-  }, [customers, q]);
+    const city = filters.city;
+    const rows = customers
+      .filter((c) => (city ? (c.city || '').trim() === city : true))
+      .filter((c) => {
+        if (!needle) return true;
+        return (
+          c.name?.toLowerCase().includes(needle) ||
+          c.company?.toLowerCase().includes(needle) ||
+          c.email?.toLowerCase().includes(needle)
+        );
+      });
+
+    // Sort. 'name' / 'company' are locale-aware string compares;
+    // 'recent' rides updatedAt (falling back to createdAt). Direction
+    // multiplier flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    const sorted = [...rows].sort((a, b) => {
+      if (sort.key === 'company') {
+        return (a.company || '').toLowerCase().localeCompare((b.company || '').toLowerCase()) * mul;
+      }
+      if (sort.key === 'recent') {
+        return ((a.updatedAt || a.createdAt || 0) - (b.updatedAt || b.createdAt || 0)) * mul;
+      }
+      // name
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
+    });
+    return sorted;
+  }, [customers, q, filters, sort]);
 
   return (
     <>
@@ -64,24 +118,19 @@ export default function Customers() {
         />
       ) : (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-            <div className="relative flex-1 max-w-md">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input
-                type="search"
-                inputMode="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar clientes…"
-                className="input pl-9"
-              />
-            </div>
-          </div>
+          <ListSearchHeader
+            searchValue={q}
+            onSearchChange={setQ}
+            searchPlaceholder="Buscar clientes…"
+            filters={[cityFilter]}
+            activeFilters={filters}
+            onFiltersChange={setFilters}
+            sortOptions={sortOptions}
+            sort={sort}
+            onSortChange={setSort}
+            resultCount={filtered.length}
+            resultNoun={['cliente', 'clientes']}
+          />
 
           {/* Mobile cards — whole card navigates to the detail page;
               no inline edit affordance (the detail page has its own

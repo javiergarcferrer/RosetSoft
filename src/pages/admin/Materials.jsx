@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Layers, Plus, Search, Pencil, Trash2, Shield, Check,
+  Layers, Plus, Pencil, Trash2, Shield, Check,
   Loader2, X, GripVertical,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -13,6 +13,7 @@ import Modal from '../../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInput.jsx';
 import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
+import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 
 /**
@@ -43,26 +44,82 @@ export default function Materials() {
   );
 
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState(''); // '' | 'fabric' | 'leather' | 'outdoor'
+  const [category, setCategory] = useState(''); // '' = todas | 'fabric' | 'leather' | 'outdoor'
+  const [filters, setFilters] = useState({}); // { grade: <grade> }
+  const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
+
+  // Category tabs (the primary dimension). Counts ride the full materials
+  // list so each tab shows "how many would I see if I tapped this",
+  // independent of the search needle / secondary filters. The '' key is the
+  // "Todas" view — the existing empty-string category already means "all".
+  const tabs = useMemo(() => {
+    const counts = { fabric: 0, leather: 0, outdoor: 0 };
+    for (const m of materials) {
+      if (m.category in counts) counts[m.category] += 1;
+    }
+    return [
+      { key: '', label: 'Todas', count: materials.length },
+      { key: 'fabric', label: 'Telas', count: counts.fabric },
+      { key: 'leather', label: 'Pieles', count: counts.leather },
+      { key: 'outdoor', label: 'Outdoor', count: counts.outdoor },
+    ];
+  }, [materials]);
+
+  // Secondary filter: grade. Options are the catalog's known grades —
+  // the alpha grades flattened out of GRADE_GROUPS plus the special
+  // non-letter grades (COM, …).
+  const gradeFilter = useMemo(() => ({
+    key: 'grade',
+    label: 'Grade',
+    type: 'select',
+    placeholder: 'Todos',
+    options: [
+      ...GRADE_GROUPS.flatMap((g) => g.grades).map((g) => ({ value: g, label: `Grade ${g}` })),
+      ...SPECIAL_GRADES.map((g) => ({ value: g, label: g })),
+    ],
+  }), []);
+
+  const sortOptions = [
+    { key: 'category', label: 'Categoría + Nombre' },
+    { key: 'name', label: 'Nombre A–Z' },
+    { key: 'price', label: 'Precio' },
+    { key: 'colors', label: '# colores' },
+  ];
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return materials
+    const grade = filters.grade;
+    const rows = materials
       .filter((m) => (category ? m.category === category : true))
+      .filter((m) => (grade ? m.grade === grade : true))
       .filter((m) => {
         if (!q) return true;
         if (m.name?.toLowerCase().includes(q)) return true;
         if (m.grade?.toLowerCase().includes(q)) return true;
         if (m.colors?.some((c) => c.name?.toLowerCase().includes(q) || c.code?.includes(q))) return true;
         return false;
-      })
-      .sort((a, b) => {
-        const ca = a.category.localeCompare(b.category);
-        if (ca) return ca;
-        return (a.name || '').localeCompare(b.name || '');
       });
-  }, [materials, search, category]);
+
+    // Sort. 'category' is the default (category then name); the other keys
+    // sort by a single field. Direction multiplier flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sort.key === 'name') {
+        return (a.name || '').localeCompare(b.name || '') * mul;
+      }
+      if (sort.key === 'price') {
+        return ((a.price || 0) - (b.price || 0)) * mul;
+      }
+      if (sort.key === 'colors') {
+        return ((a.colors?.length || 0) - (b.colors?.length || 0)) * mul;
+      }
+      // category (+ name)
+      const ca = a.category.localeCompare(b.category);
+      if (ca) return ca * mul;
+      return (a.name || '').localeCompare(b.name || '') * mul;
+    });
+  }, [materials, search, category, filters, sort]);
 
   if (!isAdmin) {
     return (
@@ -100,37 +157,22 @@ export default function Materials() {
         }
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-9"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, grade o color…"
-          />
-        </div>
-        <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs">
-          {[
-            { k: '', label: 'Todos' },
-            { k: 'fabric', label: 'Telas' },
-            { k: 'leather', label: 'Pieles' },
-            { k: 'outdoor', label: 'Outdoor' },
-          ].map((c, i) => (
-            <button
-              key={c.k}
-              type="button"
-              onClick={() => setCategory(c.k)}
-              className={`px-3 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <ListSearchHeader
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar por nombre, grade o color…"
+        tabs={tabs}
+        activeTab={category}
+        onTabChange={setCategory}
+        filters={[gradeFilter]}
+        activeFilters={filters}
+        onFiltersChange={setFilters}
+        sortOptions={sortOptions}
+        sort={sort}
+        onSortChange={setSort}
+        resultCount={filtered.length}
+        resultNoun={['material', 'materiales']}
+      />
 
       {!loaded ? (
         <div className="card overflow-hidden"><ListLoading rows={6} /></div>

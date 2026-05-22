@@ -1,14 +1,47 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, UserSquare2, ArrowRight, Mail, Phone, ChevronRight } from 'lucide-react';
+import { Plus, UserSquare2, ArrowRight, Mail, Phone, ChevronRight } from 'lucide-react';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
+import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
+
+// The commission % a row displays — the stored default, clamped into the
+// legal [0,20] range, falling back to the house 10% when unset. Kept as a
+// single helper so the band filter, the sort, and the rendered cells all
+// read the same number (otherwise a row could fall in one band but sort
+// as if it were in another).
+function commissionOf(p) {
+  return clampCommissionPct(p.defaultCommissionPct ?? 10);
+}
+
+// Secondary filter: bucket the (clamped) commission % into bands. The
+// cap is 20%, so four bands cover the whole range without overlap.
+const COMMISSION_BANDS = [
+  { value: '0', label: '0%', test: (pct) => pct === 0 },
+  { value: '1-5', label: '1–5%', test: (pct) => pct >= 1 && pct <= 5 },
+  { value: '6-10', label: '6–10%', test: (pct) => pct >= 6 && pct <= 10 },
+  { value: '10+', label: '>10%', test: (pct) => pct > 10 },
+];
+
+const COMMISSION_FILTER = {
+  key: 'commission',
+  label: 'Comisión',
+  type: 'select',
+  placeholder: 'Todas',
+  options: COMMISSION_BANDS.map(({ value, label }) => ({ value, label })),
+};
+
+const SORT_OPTIONS = [
+  { key: 'name', label: 'Nombre A–Z' },
+  { key: 'commission', label: 'Comisión %' },
+  { key: 'company', label: 'Empresa' },
+];
 
 // Two-letter initial pair for the avatar circle. Picks the first letter
 // of the name, then the first letter of the company (if any) or of the
@@ -44,18 +77,43 @@ export default function Professionals() {
     [],
   );
 
+  // Search-header query state. The parent owns it all (the header is
+  // presentational): `q` is the search needle, `filters` holds the
+  // secondary commission-band selection as { commission: <value> }, and
+  // `sort` defaults to name A–Z. No status dimension here, so no tabs.
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
+  const [filters, setFilters] = useState({}); // { commission: '1-5' | … }
+  const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return pros;
-    return pros.filter((p) =>
-      p.name?.toLowerCase().includes(needle) ||
-      p.company?.toLowerCase().includes(needle) ||
-      p.email?.toLowerCase().includes(needle)
-    );
-  }, [pros, q]);
+    const band = COMMISSION_BANDS.find((b) => b.value === filters.commission);
+    const rows = pros.filter((p) => {
+      if (band && !band.test(commissionOf(p))) return false;
+      if (!needle) return true;
+      return (
+        p.name?.toLowerCase().includes(needle) ||
+        p.company?.toLowerCase().includes(needle) ||
+        p.email?.toLowerCase().includes(needle)
+      );
+    });
+
+    // Sort. 'name' / 'company' are locale string compares; 'commission'
+    // rides the same clamped % the cells render. Direction multiplier
+    // flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sort.key === 'commission') {
+        return (commissionOf(a) - commissionOf(b)) * mul;
+      }
+      if (sort.key === 'company') {
+        return (a.company || '').toLowerCase().localeCompare((b.company || '').toLowerCase()) * mul;
+      }
+      // name
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
+    });
+  }, [pros, q, filters, sort]);
 
   return (
     <>
@@ -80,24 +138,19 @@ export default function Professionals() {
         />
       ) : (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-            <div className="relative flex-1 max-w-md">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input
-                type="search"
-                inputMode="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar profesionales…"
-                className="input pl-9"
-              />
-            </div>
-          </div>
+          <ListSearchHeader
+            searchValue={q}
+            onSearchChange={setQ}
+            searchPlaceholder="Buscar profesionales…"
+            filters={[COMMISSION_FILTER]}
+            activeFilters={filters}
+            onFiltersChange={setFilters}
+            sortOptions={SORT_OPTIONS}
+            sort={sort}
+            onSortChange={setSort}
+            resultCount={filtered.length}
+            resultNoun={['profesional', 'profesionales']}
+          />
 
           {/* Mobile cards — whole card navigates to the detail page;
               no inline edit affordance (the detail page has its own
