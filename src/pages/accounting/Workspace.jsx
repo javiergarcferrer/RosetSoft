@@ -659,7 +659,6 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
 
       <div className="sm:ml-auto sm:w-72 text-xs tabular-nums">
         <TotalLine label="Subtotal" value={fmt(totals.subtotal)} />
-        {totals.marginAmt > 0 && <TotalLine label="Margen" value={fmt(totals.marginAmt)} />}
         {totals.discountAmt > 0 && <TotalLine label="Descuento" value={`–${fmt(totals.discountAmt)}`} />}
         <TotalLine label="Base imponible" value={fmt(totals.taxableBase)} />
         <TotalLine label={`ITBIS (${totals.taxPct}%)`} value={fmt(totals.taxAmt)} />
