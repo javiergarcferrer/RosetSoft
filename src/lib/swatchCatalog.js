@@ -24,7 +24,6 @@
  */
 
 import { db, saveImage, downloadImageBytes } from '../db/database.js';
-import { isCompoundLine } from './pricing.js';
 import { colorCodeFromSubtype, locateColor } from './swatchMatch.js';
 
 // Copy an existing image into a new material-owned image so deleting the
@@ -58,61 +57,4 @@ export async function rememberSwatchInCatalog({ profileId, subtype, imageId }) {
     console.error('[swatchCatalog] rememberSwatchInCatalog failed:', err);
     return false;
   }
-}
-
-// Every (subtype, imageId) swatch source on a line: the line itself plus
-// each compound component that carries its own swatch.
-function swatchSourcesOf(line) {
-  const out = [];
-  if (line.swatchImageId) out.push({ subtype: line.subtype, imageId: line.swatchImageId });
-  if (isCompoundLine(line)) {
-    for (const c of line.components || []) {
-      if (c.swatchImageId) out.push({ subtype: c.subtype, imageId: c.swatchImageId });
-    }
-  }
-  return out;
-}
-
-/**
- * One-shot backfill: scan every quote line + component and copy any swatch
- * whose subtype maps to an empty catalog color into that color. Idempotent
- * (fill-empty), safe to re-run. Returns { scanned, matched, filled }.
- */
-export async function backfillSwatchesFromQuotes(profileId) {
-  const result = { scanned: 0, matched: 0, filled: 0 };
-  if (!profileId) return result;
-
-  const materials = await db.materials.where('profileId').equals(profileId).toArray();
-  // Work on cloned color arrays so we batch one DB write per changed
-  // material and so fills made earlier in this run are seen by later lines.
-  const working = new Map(); // materialId → cloned colors[]
-  const dirty = new Set();
-  const colorsOf = (material) => {
-    if (!working.has(material.id)) {
-      working.set(material.id, (material.colors || []).map((c) => ({ ...c })));
-    }
-    return working.get(material.id);
-  };
-
-  const lines = await db.quoteLines.toArray();
-  for (const line of lines) {
-    for (const src of swatchSourcesOf(line)) {
-      result.scanned++;
-      const hit = locateColor(materials, src.subtype);
-      if (!hit) continue;
-      result.matched++;
-      const colors = colorsOf(hit.material);
-      if (colors[hit.idx].imageId) continue; // already filled (catalog or earlier this run)
-      const copyId = await copyImageForMaterial(src.imageId, hit.material.id);
-      if (!copyId) continue;
-      colors[hit.idx] = { ...colors[hit.idx], imageId: copyId };
-      dirty.add(hit.material.id);
-      result.filled++;
-    }
-  }
-
-  for (const materialId of dirty) {
-    await db.materials.update(materialId, { colors: working.get(materialId), updatedAt: Date.now() });
-  }
-  return result;
 }
