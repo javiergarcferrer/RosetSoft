@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Shield, Wallet, FileCheck, Users as UsersIcon, Download, Search,
-  Loader2, AlertCircle, Calendar,
+  Loader2, AlertCircle, Calendar, ChevronDown,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -156,6 +156,9 @@ export default function AccountingWorkspace() {
         // up correctly upstream.
         itbis: t.taxAmt,
         grandTotal: t.grandTotal,
+        // Full totals object for the per-row dropdown's breakdown
+        // (subtotal / margin / discount / base / ITBIS / shipping / total).
+        totals: t,
         commissionPct: pct,
         potentialCommission,
         earnedCommission,
@@ -233,50 +236,15 @@ export default function AccountingWorkspace() {
   async function exportInvoices() {
     // Every accepted quote, regardless of cycle — accountants book
     // invoices as they're accepted, and Odoo dedupes on quote_number,
-    // so a full export is safe to re-run any time.
-    const header = [
-      'partner_name', 'invoice_date', 'quote_number', 'product_name',
-      'qty', 'price_unit', 'price_subtotal', 'currency', 'status',
-    ];
-    const rows = [header];
+    // so a full export is safe to re-run any time. The per-line math is
+    // shared with the per-row dropdown and the per-quote CSV via
+    // invoiceLinesForQuote so the three surfaces can't drift.
+    const rows = [ODOO_INVOICE_HEADER];
     for (const qu of quotesQ.data) {
       if (qu.status !== QUOTE_STATUS_ACCEPTED) continue;
       const customer = qu.customerId ? customerById.get(qu.customerId) : null;
-      const partnerName = customer ? (customer.company || customer.name || '') : '';
-      const invoiceDate = qu.acceptedAt ? isoDate(qu.acceptedAt) : '';
-      const currency = qu.currencyCode || 'USD';
-      const itemLines = (linesByQuote.get(qu.id) || [])
-        .filter(isPricedLine)
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      for (const l of itemLines) {
-        if (isCompoundLine(l)) {
-          // Compound → one CSV row per priced component so Odoo books
-          // each as its own invoice line, line-level adjustments
-          // applied uniformly.
-          const familyName = (l.name || '').trim();
-          for (const c of l.components || []) {
-            const unit = applyLineAdjustments(c.unitPrice, l.lineMarginPct, l.lineDiscountPct);
-            const cqty = Number(c.qty) || 0;
-            const subtotal = unit * cqty;
-            const componentName = [c.name, c.reference, c.dimensions]
-              .map((s) => (s || '').trim()).filter(Boolean).join(' · ');
-            const productName = familyName ? `${familyName} — ${componentName}` : componentName;
-            rows.push([
-              partnerName, invoiceDate, qu.number != null ? String(qu.number) : '',
-              productName, cqty, unit.toFixed(2), subtotal.toFixed(2), currency, qu.status,
-            ]);
-          }
-        } else {
-          const unit = applyLineAdjustments(l.unitPrice, l.lineMarginPct, l.lineDiscountPct);
-          const lqty = Number(l.qty) || 0;
-          const subtotal = unit * lqty;
-          const productName = [l.name, l.reference, l.dimensions]
-            .map((s) => (s || '').trim()).filter(Boolean).join(' · ');
-          rows.push([
-            partnerName, invoiceDate, qu.number != null ? String(qu.number) : '',
-            productName, lqty, unit.toFixed(2), subtotal.toFixed(2), currency, qu.status,
-          ]);
-        }
+      for (const il of invoiceLinesForQuote(qu, linesByQuote.get(qu.id) || [])) {
+        rows.push(invoiceCsvRow(qu, customer, il));
       }
     }
     downloadCsv(`odoo-facturas-${todayIso}.csv`, rows);
@@ -478,6 +446,7 @@ export default function AccountingWorkspace() {
             <table className="table">
               <thead>
                 <tr>
+                  <th className="w-8" aria-label="Detalle"></th>
                   <th>#</th>
                   <th>Aceptada</th>
                   <th>Cliente</th>
@@ -566,13 +535,27 @@ export default function AccountingWorkspace() {
 /* -------------------------------------------------------------------------- */
 
 function EntryRow({ entry, lines, settings }) {
-  const { quote, customer, creator, base, itbis, grandTotal,
+  const { quote, customer, creator, base, itbis, grandTotal, totals,
           commissionPct, potentialCommission, earnedCommission, depositIn } = entry;
   const pdf = usePdfDownload({ quote, customer, lines, settings });
+  const [open, setOpen] = useState(false);
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
+  const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
   return (
-    <tr>
+    <>
+    <tr className={open ? 'bg-ink-50/60' : undefined}>
+      <td className="w-8">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-ink-800 hover:bg-ink-100 transition-colors"
+          aria-expanded={open}
+          aria-label={open ? 'Ocultar detalle' : 'Ver detalle para facturar'}
+        >
+          <ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </td>
       <td className="font-medium whitespace-nowrap">#{quote.number || '—'}</td>
       <td className="text-ink-500 whitespace-nowrap">{formatDate(quote.acceptedAt)}</td>
       <td className="text-ink-700 truncate max-w-[220px]" title={customer?.company || customer?.name || ''}>
@@ -609,6 +592,92 @@ function EntryRow({ entry, lines, settings }) {
         )}
       </td>
     </tr>
+    {open && (
+      <tr className="bg-ink-50/40">
+        <td colSpan={11} className="px-3 sm:px-4 py-3">
+          <QuoteAccountingDetail
+            invLines={invLines}
+            totals={totals}
+            currency={currency}
+            rates={rates}
+            onExportCsv={() => downloadQuoteInvoiceCsv(quote, customer, lines)}
+          />
+        </td>
+      </tr>
+    )}
+    </>
+  );
+}
+
+/**
+ * Expanded per-quote accounting detail: the invoice lines exactly as
+ * they'll book in Odoo (one row per product / per compound component)
+ * plus the totals breakdown, and a one-click per-quote Odoo CSV. Gives
+ * the accountant everything to key the invoice without opening the PDF.
+ */
+function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv }) {
+  const fmt = (v) => formatMoney(v, currency, rates);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+          Detalle para facturar
+        </h3>
+        <button type="button" onClick={onExportCsv} className="btn-ghost text-xs">
+          <Download size={12} /> CSV Odoo
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border border-ink-100 bg-white">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-ink-500 border-b border-ink-100">
+              <th className="font-medium py-1.5 px-2.5">Producto</th>
+              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Cant.</th>
+              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Precio unit.</th>
+              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invLines.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="text-center text-ink-400 py-3">
+                  Sin líneas facturables
+                </td>
+              </tr>
+            ) : invLines.map((il, i) => (
+              <tr key={i} className="border-b border-ink-50 last:border-0">
+                <td className="py-1.5 px-2.5 text-ink-800">{il.name || '—'}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums">{il.qty}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap">{fmt(il.unit)}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap">{fmt(il.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="sm:ml-auto sm:w-72 text-xs tabular-nums">
+        <TotalLine label="Subtotal" value={fmt(totals.subtotal)} />
+        {totals.marginAmt > 0 && <TotalLine label="Margen" value={fmt(totals.marginAmt)} />}
+        {totals.discountAmt > 0 && <TotalLine label="Descuento" value={`–${fmt(totals.discountAmt)}`} />}
+        <TotalLine label="Base imponible" value={fmt(totals.taxableBase)} />
+        <TotalLine label={`ITBIS (${totals.taxPct}%)`} value={fmt(totals.taxAmt)} />
+        {totals.shipping > 0 && <TotalLine label="Envío" value={fmt(totals.shipping)} />}
+        <TotalLine label="Total" value={fmt(totals.grandTotal)} strong />
+      </div>
+    </div>
+  );
+}
+
+function TotalLine({ label, value, strong }) {
+  return (
+    <div className={`flex items-center justify-between py-1 border-b border-ink-100 last:border-b-0 ${
+      strong ? 'font-semibold text-ink-900' : 'text-ink-600'
+    }`}>
+      <span>{label}</span>
+      <span className="whitespace-nowrap">{value}</span>
+    </div>
   );
 }
 
@@ -709,4 +778,75 @@ function creatorDisplay(creator) {
   if (creator.name && creator.name.trim()) return creator.name.trim();
   if (creator.email) return creator.email.split('@')[0];
   return '';
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Odoo invoice lines — single source of truth                               */
+/* -------------------------------------------------------------------------- */
+
+// CSV column order for the Odoo invoice import. Shared by the bulk
+// "Facturas" export and the per-quote CSV so they stay identical.
+const ODOO_INVOICE_HEADER = [
+  'partner_name', 'invoice_date', 'quote_number', 'product_name',
+  'qty', 'price_unit', 'price_subtotal', 'currency', 'status',
+];
+
+/**
+ * Build the bookable invoice lines for one quote: one entry per priced
+ * product, with compound lines expanded to one entry per component and
+ * line-level margin/discount folded into each unit price. Excludes
+ * optional and non-selected-alternative lines (isPricedLine). Shared by
+ * the per-row dropdown, the per-quote CSV, and the bulk export so all
+ * three agree on product name, qty and price math.
+ */
+function invoiceLinesForQuote(quote, lines) {
+  const out = [];
+  const itemLines = (lines || [])
+    .filter(isPricedLine)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  for (const l of itemLines) {
+    if (isCompoundLine(l)) {
+      const familyName = (l.name || '').trim();
+      for (const c of l.components || []) {
+        const unit = applyLineAdjustments(c.unitPrice, l.lineMarginPct, l.lineDiscountPct);
+        const qty = Number(c.qty) || 0;
+        const componentName = [c.name, c.reference, c.dimensions]
+          .map((s) => (s || '').trim()).filter(Boolean).join(' · ');
+        out.push({
+          name: familyName ? `${familyName} — ${componentName}` : componentName,
+          qty, unit, subtotal: unit * qty,
+        });
+      }
+    } else {
+      const unit = applyLineAdjustments(l.unitPrice, l.lineMarginPct, l.lineDiscountPct);
+      const qty = Number(l.qty) || 0;
+      out.push({
+        name: [l.name, l.reference, l.dimensions]
+          .map((s) => (s || '').trim()).filter(Boolean).join(' · '),
+        qty, unit, subtotal: unit * qty,
+      });
+    }
+  }
+  return out;
+}
+
+// One CSV row from a quote + customer + an invoiceLinesForQuote entry.
+function invoiceCsvRow(quote, customer, il) {
+  const partnerName = customer ? (customer.company || customer.name || '') : '';
+  const invoiceDate = quote.acceptedAt ? isoDate(quote.acceptedAt) : '';
+  const currency = quote.currencyCode || 'USD';
+  return [
+    partnerName, invoiceDate, quote.number != null ? String(quote.number) : '',
+    il.name, il.qty, il.unit.toFixed(2), il.subtotal.toFixed(2), currency, quote.status,
+  ];
+}
+
+// Per-quote Odoo invoice CSV (the single-quote counterpart of the bulk
+// "Facturas" export), triggered from the per-row accounting dropdown.
+function downloadQuoteInvoiceCsv(quote, customer, lines) {
+  const rows = [ODOO_INVOICE_HEADER];
+  for (const il of invoiceLinesForQuote(quote, lines)) {
+    rows.push(invoiceCsvRow(quote, customer, il));
+  }
+  downloadCsv(`odoo-factura-${quote.number || quote.id}-${isoDate(Date.now())}.csv`, rows);
 }
