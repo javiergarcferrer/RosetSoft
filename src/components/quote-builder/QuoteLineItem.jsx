@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
@@ -50,7 +50,8 @@ import { newId } from '../../db/database.js';
 export default function QuoteLineItem({
   line, quote, onChange, onRemove, onDuplicate,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  groupInfo,
+  onJoinSet, onSeparateFromSet, canJoinAbove,
+  groupInfo, setInfo,
   autoFocus, dragHandleProps,
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -178,7 +179,10 @@ export default function QuoteLineItem({
         isOptional={!!line.isOptional}
         alternativeGroup={line.alternativeGroup}
         isSelectedAlternative={!!line.isSelectedAlternative}
+        setGroup={line.setGroup}
         groupInfo={groupInfo}
+        setInfo={setInfo}
+        canJoinAbove={canJoinAbove}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
         onDuplicate={onDuplicate}
@@ -188,6 +192,8 @@ export default function QuoteLineItem({
         onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
         onSelectAlternative={onSelectAlternative}
+        onJoinSet={onJoinSet}
+        onSeparateFromSet={onSeparateFromSet}
         dragHandleProps={dragHandleProps}
       />
 
@@ -274,9 +280,11 @@ function makeBlankComponent(overrides = {}) {
 function TopStrip({
   family, onPickFamily, compound,
   isOptional, alternativeGroup, isSelectedAlternative, groupInfo,
+  setGroup, setInfo, canJoinAbove,
   expanded, onToggleExpand, onDuplicate, onRemove,
   onConvertToCompound, onDissolveCompound,
   onToggleOptional, onAddAlternative, onSelectAlternative,
+  onJoinSet, onSeparateFromSet,
   dragHandleProps,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -379,6 +387,20 @@ function TopStrip({
         </span>
       )}
 
+      {/* Conjunto chip — this line is part of a take-all set; every
+          member is priced and rolls up to one "Total del conjunto".
+          Violet token keeps it distinct from the brand-colored
+          Alternativa chip. */}
+      {setGroup && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full"
+          title="Esta línea forma parte de un conjunto; todas las piezas se cotizan y suman al total"
+        >
+          <Boxes size={10} className="opacity-80" aria-hidden />
+          Conjunto{setInfo ? ` ${setInfo.index}/${setInfo.total}` : ''}
+        </span>
+      )}
+
       <div className="flex-1" />
       <button
         type="button"
@@ -393,12 +415,16 @@ function TopStrip({
         compound={compound}
         isOptional={isOptional}
         alternativeGroup={alternativeGroup}
+        setGroup={setGroup}
+        canJoinAbove={canJoinAbove}
         onDuplicate={onDuplicate}
         onRemove={onRemove}
         onConvertToCompound={onConvertToCompound}
         onDissolveCompound={onDissolveCompound}
         onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
+        onJoinSet={onJoinSet}
+        onSeparateFromSet={onSeparateFromSet}
       />
 
       <FamilyPicker
@@ -1065,8 +1091,10 @@ function AdjustmentChip({ line }) {
 function OverflowMenu({
   onDuplicate, onRemove, compound,
   isOptional, alternativeGroup,
+  setGroup, canJoinAbove,
   onConvertToCompound, onDissolveCompound,
   onToggleOptional, onAddAlternative,
+  onJoinSet, onSeparateFromSet,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1165,6 +1193,38 @@ function OverflowMenu({
             >
               <GitFork size={14} className="text-ink-500" />
               {alternativeGroup ? 'Agregar otra alternativa' : 'Agregar alternativa'}
+            </button>
+          )}
+
+          {/* Conjunto (set) actions. "Unir al conjunto de arriba" joins
+              the line above into a take-all set; hidden on the first row
+              (nothing above) and when the line is optional / alternative
+              (mutually exclusive — those flags get stripped on join, but
+              we don't surface a path that mixes the mental models).
+              When already in a set, offer to leave it instead. */}
+          {!setGroup && canJoinAbove && !isOptional && !alternativeGroup && onJoinSet && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onJoinSet(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Agrupar esta línea con la de arriba como un conjunto que se vende junto"
+            >
+              <Boxes size={14} className="text-ink-500" />
+              Unir al conjunto de arriba
+            </button>
+          )}
+
+          {setGroup && onSeparateFromSet && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onSeparateFromSet(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Sacar esta línea del conjunto; vuelve a ser una línea independiente"
+            >
+              <Boxes size={14} className="text-ink-500" />
+              Separar del conjunto
             </button>
           )}
 

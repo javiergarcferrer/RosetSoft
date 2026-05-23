@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Plus, Hash } from 'lucide-react';
+import { Plus, Hash, Boxes } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
+import { setSubtotal } from '../../lib/pricing.js';
+import { formatMoney } from '../../lib/format.js';
 
 /**
  * Renders the ordered list of quote lines (mixed items + sections) and owns
@@ -20,6 +22,7 @@ export default function LineItemList({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
+  onJoinSet, onSeparateFromSet,
   onAddItem, onAddSection,
 }) {
   // Pre-compute alternative-group sizes so each line knows the
@@ -45,6 +48,31 @@ export default function LineItemList({
     }
     return map;
   })();
+
+  // Same "Conjunto N de M" position map for sets — set members are all
+  // priced (take-all), so unlike alternatives we don't track selection,
+  // only group position + size.
+  const setInfo = (() => {
+    const map = new Map();
+    const counts = new Map();
+    for (const l of lines) {
+      const g = l.setGroup;
+      if (!g) continue;
+      counts.set(g, (counts.get(g) || 0) + 1);
+    }
+    const seen = new Map();
+    for (const l of lines) {
+      const g = l.setGroup;
+      if (!g) continue;
+      const idx = (seen.get(g) || 0) + 1;
+      seen.set(g, idx);
+      map.set(l.id, { index: idx, total: counts.get(g) });
+    }
+    return map;
+  })();
+
+  const currency = quote?.currencyCode || 'USD';
+  const rates = quote?.rates || { USD: 1 };
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
 
@@ -107,7 +135,7 @@ export default function LineItemList({
 
   return (
     <ul className="divide-y divide-ink-100">
-      {lines.map((l) => {
+      {lines.map((l, i) => {
         const isSection = l.kind === LINE_KIND_SECTION;
         const isDragging = draggingId === l.id;
         const isDropTarget = dropTargetId === l.id && draggingId !== l.id;
@@ -117,12 +145,31 @@ export default function LineItemList({
           onDragEnd,
           'data-dragging': isDragging ? 'true' : 'false',
         };
+
+        // Conjunto (set) run detection. A run is a maximal stretch of
+        // adjacent lines sharing the same setGroup. The shared LEFT
+        // accent (a violet token, distinct from alternatives' brand
+        // border) is drawn on every member; the "Total del conjunto"
+        // footer is appended once, after the LAST member of the run.
+        const prev = lines[i - 1];
+        const setGroup = l.setGroup || null;
+        const inSet = !!setGroup;
+        const isFirstInSet = inSet && prev?.setGroup !== setGroup;
+        const next = lines[i + 1];
+        const isLastInSet = inSet && next?.setGroup !== setGroup;
+        // The "Unir al conjunto de arriba" action only makes sense when
+        // there's a real item line above to join — not the first row, and
+        // not a section divider (a section can't belong to a set).
+        const canJoinAbove = i > 0 && lines[i - 1]?.kind !== LINE_KIND_SECTION;
+
         return (
           <div
             key={l.id}
             onDragOver={(e) => onDragOver(e, l.id)}
             onDrop={(e) => onDrop(e, l.id)}
-            className={`relative ${isDragging ? 'opacity-40' : ''}`}
+            className={`relative ${isDragging ? 'opacity-40' : ''} ${
+              inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+            }`}
           >
             {isDropTarget && (
               <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
@@ -145,10 +192,28 @@ export default function LineItemList({
                 onToggleOptional={() => onToggleOptional?.(l)}
                 onAddAlternative={() => onAddAlternative?.(l)}
                 onSelectAlternative={() => onSelectAlternative?.(l)}
+                onJoinSet={() => onJoinSet?.(l)}
+                onSeparateFromSet={() => onSeparateFromSet?.(l)}
+                canJoinAbove={canJoinAbove}
                 groupInfo={groupInfo.get(l.id)}
+                setInfo={setInfo.get(l.id)}
                 autoFocus={l.id === focusLineId}
                 dragHandleProps={handleProps}
               />
+            )}
+            {/* Conjunto footer — one "Total del conjunto" row after the
+                last member of each contiguous set run. The total is the
+                simple SUM of each member's own line total (setSubtotal). */}
+            {isLastInSet && (
+              <div className="border-l-2 border-solid border-violet-300 bg-violet-50/40 px-4 py-2 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-700">
+                  <Boxes size={12} className="opacity-80" aria-hidden />
+                  Conjunto · Total del conjunto
+                </span>
+                <span className="text-sm font-semibold text-ink-900 tabular-nums">
+                  {formatMoney(setSubtotal(lines, setGroup), currency, rates)}
+                </span>
+              </div>
             )}
           </div>
         );
