@@ -60,6 +60,14 @@ export const EXCHANGE_RATE_PULL_ENABLED = false;
  * Lines that fail this predicate still RENDER in the editor and the
  * client preview — they're visible options the customer is meant to
  * see. They're just excluded from the running total.
+ *
+ * NOTE on Conjuntos (sets, `setGroup`): set members are ALWAYS priced —
+ * a Conjunto is "take ALL", so every member counts toward the total
+ * exactly like a standalone line. This predicate therefore needs NO
+ * `setGroup` case; it's intentionally absent. (A set member can't be
+ * optional or an alternative — that's forbidden by the type's
+ * exclusivity rule and a DB CHECK — so the existing branches never
+ * spuriously exclude one.)
  */
 export function isPricedLine(
   line:

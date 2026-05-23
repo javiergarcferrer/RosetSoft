@@ -18,6 +18,8 @@ import {
   clampPct,
   applyLineAdjustments,
   computeTotals,
+  setSubtotal,
+  setGroupInfo,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -194,5 +196,59 @@ test('computeTotals: null lines argument behaves like empty', () => {
   const t = computeTotals(null, {});
   assert.equal(t.subtotal, 0);
   assert.equal(t.grandTotal, 0);
+});
+
+/* ------------------------------ setSubtotal --------------------------- */
+
+test('setSubtotal: sums lineTotal over members of the set', () => {
+  // Two members of set "s1": 2×100 = 200 and 1×50 = 50 → 250.
+  // A third line in a different set "s2" and a standalone line must
+  // NOT contribute.
+  const lines = [
+    { id: 'a', setGroup: 's1', qty: 2, unitPrice: 100 },
+    { id: 'b', setGroup: 's1', qty: 1, unitPrice: 50 },
+    { id: 'c', setGroup: 's2', qty: 1, unitPrice: 999 },
+    { id: 'd', qty: 5, unitPrice: 10 },
+  ];
+  assert.equal(setSubtotal(lines, 's1'), 250);
+  assert.equal(setSubtotal(lines, 's2'), 999);
+});
+
+test('setSubtotal: respects each member\'s own discount/margin', () => {
+  // 100 with 10% line discount → 90, ×2 = 180. Member b: 200 →  200.
+  const lines = [
+    { id: 'a', setGroup: 's1', qty: 2, unitPrice: 100, lineDiscountPct: 10 },
+    { id: 'b', setGroup: 's1', qty: 1, unitPrice: 200 },
+  ];
+  assert.equal(setSubtotal(lines, 's1'), 380);
+});
+
+test('setSubtotal: falsy group or no members yields 0', () => {
+  const lines = [{ id: 'a', setGroup: 's1', qty: 1, unitPrice: 100 }];
+  assert.equal(setSubtotal(lines, null), 0);
+  assert.equal(setSubtotal(lines, undefined), 0);
+  assert.equal(setSubtotal(lines, 'nope'), 0);
+  assert.equal(setSubtotal(null, 's1'), 0);
+});
+
+/* ------------------------------ setGroupInfo -------------------------- */
+
+test('setGroupInfo: maps each member to its 1-based position + size', () => {
+  const lines = [
+    { id: 'a', setGroup: 's1' },
+    { id: 'b', setGroup: 's1' },
+    { id: 'c' },
+    { id: 'd', setGroup: 's1' },
+  ];
+  const info = setGroupInfo(lines);
+  assert.deepEqual(info.get('a'), { index: 1, total: 3 });
+  assert.deepEqual(info.get('b'), { index: 2, total: 3 });
+  assert.deepEqual(info.get('d'), { index: 3, total: 3 });
+  assert.equal(info.has('c'), false);
+});
+
+test('setGroupInfo: empty/null input yields an empty map', () => {
+  assert.equal(setGroupInfo(null).size, 0);
+  assert.equal(setGroupInfo([]).size, 0);
 });
 

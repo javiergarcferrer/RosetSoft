@@ -251,6 +251,30 @@ export interface QuoteLine {
   alternativeGroup?: string | null;
   isSelectedAlternative?: boolean;
 
+  /**
+   * Conjunto ("set") — the TAKE-ALL twin of `alternativeGroup`. Lines
+   * sharing the same `setGroup` string are distinct standalone products
+   * SOLD TOGETHER (e.g. an armchair + an ottoman). UNLIKE alternatives,
+   * EVERY member is priced normally and counts toward the quote total;
+   * they're just visually grouped and roll up to one "Total del
+   * conjunto" = the simple SUM of each member's own `lineTotal` (see
+   * lib/pricing:setSubtotal). There is NO separate set price and NO
+   * set-level discount — each piece keeps its own price / qty / discount.
+   *
+   * null / undefined means the line is standalone.
+   *
+   * Mutually exclusive with `isOptional` and `alternativeGroup`: a line
+   * in a set must be neither optional nor an alternative (the take-all
+   * "all of these" semantic contradicts "maybe this" and "pick one").
+   * The QuoteBuilder handlers strip those flags when a line joins a set
+   * and a DB CHECK constraint (migration 20260523120000) forbids the
+   * combination — mirroring the existing optional-xor-alternative rule.
+   *
+   * Because every set member is priced, isPricedLine (lib/constants)
+   * needs NO special case for sets.
+   */
+  setGroup?: string | null;
+
   /* Internal-only — never rendered in client-facing surfaces. */
   notes?: string;
 }

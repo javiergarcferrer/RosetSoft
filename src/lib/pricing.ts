@@ -232,3 +232,67 @@ export function quoteSavings(
   return total > 0 ? total : 0;
 }
 
+/* ------------------------------ conjuntos (sets) ------------------------------ */
+
+/**
+ * "Total del conjunto" — the rolled-up total of a Conjunto (set).
+ *
+ * A Conjunto is a TAKE-ALL group: distinct standalone products sold
+ * together (see QuoteLine.setGroup). Every member is priced normally,
+ * so the set's total is the simple SUM of each member's own
+ * `lineTotal` (margin + discount + qty already baked in per member).
+ * There is NO separate set price and NO set-level discount — this is
+ * sum-only.
+ *
+ * @param {Array}  lines     all quote lines (the full list — this filters)
+ * @param {string} setGroup  the set's group id
+ * @returns {number} Σ lineTotal(member) over lines with that setGroup.
+ *                   Returns 0 for a falsy setGroup or no members.
+ */
+export function setSubtotal(
+  lines: readonly QuoteLine[] | null | undefined,
+  setGroup: string | null | undefined,
+): number {
+  if (!setGroup) return 0;
+  return (lines || [])
+    .filter((l) => l?.setGroup === setGroup)
+    .reduce((sum, l) => sum + lineTotal(l), 0);
+}
+
+/**
+ * Per-line "Conjunto N de M" position info, keyed by line id.
+ *
+ * Mirrors the alternative-group `groupInfo` computed in
+ * LineItemList / ClientPreview so set members can show a quiet
+ * "Conjunto N de M" eyebrow. Position is the line's 1-based order
+ * within its set as it appears in `lines`; total is the set size.
+ * Lines with no `setGroup` are absent from the map.
+ *
+ * The preview / PDF renderers can call this once per render and look
+ * up each line by id — the same shape (`{ index, total }`) the
+ * alternative caption already consumes.
+ *
+ * @param {Array} lines  all quote lines
+ * @returns {Map<string, { index: number, total: number }>}
+ */
+export function setGroupInfo(
+  lines: readonly QuoteLine[] | null | undefined,
+): Map<string, { index: number; total: number }> {
+  const map = new Map<string, { index: number; total: number }>();
+  const counts = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l?.setGroup;
+    if (!g) continue;
+    counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l?.setGroup;
+    if (!g) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(l.id, { index: idx, total: counts.get(g) as number });
+  }
+  return map;
+}
+

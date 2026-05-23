@@ -530,6 +530,74 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
   }
 
+  /**
+   * Join `line` into the Conjunto (set) of the line DIRECTLY ABOVE it.
+   *
+   *   - If the line above already has a `setGroup`, adopt it.
+   *   - Otherwise mint a new id and stamp it on BOTH the line above
+   *     AND this line (a Conjunto is born with its two members).
+   *
+   * A set is "take ALL", so it's mutually exclusive with optional /
+   * alternative: any line entering the set has those flags stripped
+   * (mirrors toggleOptional's defensive strip + the DB CHECK). Members
+   * are already contiguous in the list because we only ever join the
+   * line immediately above; we don't reorder.
+   *
+   * No-op when there's no line above (the first row). The UI hides /
+   * disables the menu item there via `canJoinAbove`, but we guard here
+   * too in case the handler is called directly.
+   */
+  async function joinSet(line) {
+    markSaving();
+    try {
+      const idx = lines.findIndex((l) => l.id === line.id);
+      if (idx <= 0) return;                       // no line above — nothing to join
+      const above = lines[idx - 1];
+      if (!above || above.kind === LINE_KIND_SECTION) return; // can't join a section
+      const groupId = above.setGroup || newId();
+      // If the line above is standalone, fold it into the new set first
+      // (strip any optional/alternative metadata it carried).
+      if (!above.setGroup) {
+        await db.quoteLines.update(above.id, {
+          setGroup: groupId,
+          isOptional: false,
+          alternativeGroup: null,
+          isSelectedAlternative: false,
+        });
+      }
+      await db.quoteLines.update(line.id, {
+        setGroup: groupId,
+        isOptional: false,
+        alternativeGroup: null,
+        isSelectedAlternative: false,
+      });
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Remove `line` from its Conjunto, then HEAL singletons: a Conjunto
+   * with exactly one remaining member is meaningless (a "set of 1"), so
+   * the lone survivor's `setGroup` is cleared too. Exactly mirrors the
+   * alternative singleton-healing in removeLine.
+   */
+  async function separateFromSet(line) {
+    if (!line.setGroup) return;
+    markSaving();
+    try {
+      await db.quoteLines.update(line.id, { setGroup: null });
+      const survivors = lines.filter(
+        (l) => l.setGroup === line.setGroup && l.id !== line.id,
+      );
+      if (survivors.length === 1) {
+        await db.quoteLines.update(survivors[0].id, { setGroup: null });
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
   async function removeLine(line) {
     markSaving();
     try {
@@ -562,6 +630,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
         }
       }
+      // Same singleton-healing for Conjuntos (sets): a set left with one
+      // member is meaningless, so clear the lone survivor's setGroup.
+      // Captured separately from the alternative sibling so undo can
+      // restore each independently (a line is never both at once).
+      let healedSetSibling = null;
+      if (line.setGroup) {
+        const setSurvivors = lines.filter(
+          (l) => l.setGroup === line.setGroup && l.id !== line.id,
+        );
+        if (setSurvivors.length === 1) {
+          healedSetSibling = setSurvivors[0];
+          await db.quoteLines.update(healedSetSibling.id, { setGroup: null });
+        }
+      }
       const label = line.kind === LINE_KIND_SECTION
         ? `Sección "${line.name || 'sin nombre'}" eliminada`
         : `Artículo "${line.name || line.reference || 'sin nombre'}" eliminado`;
@@ -575,6 +657,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           await db.quoteLines.update(healedSibling.id, {
             alternativeGroup: healedSibling.alternativeGroup,
             isSelectedAlternative: !!healedSibling.isSelectedAlternative,
+          });
+        }
+        if (healedSetSibling) {
+          await db.quoteLines.update(healedSetSibling.id, {
+            setGroup: healedSetSibling.setGroup,
           });
         }
       });
@@ -757,6 +844,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               onToggleOptional={toggleOptional}
               onAddAlternative={addAlternative}
               onSelectAlternative={selectAlternative}
+              onJoinSet={joinSet}
+              onSeparateFromSet={separateFromSet}
               onReorder={reorderLines}
               onAddItem={() => addLine()}
               onAddSection={addSection}
@@ -809,6 +898,7 @@ function LineItemsCard({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
+  onJoinSet, onSeparateFromSet,
   onAddItem, onAddSection,
 }) {
   return (
@@ -844,6 +934,8 @@ function LineItemsCard({
         onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
         onSelectAlternative={onSelectAlternative}
+        onJoinSet={onJoinSet}
+        onSeparateFromSet={onSeparateFromSet}
         onReorder={onReorder}
         onAddItem={onAddItem}
         onAddSection={onAddSection}
