@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
+import { Boxes } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import Modal from '../Modal.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  quoteSavings,
+  quoteSavings, setSubtotal, setGroupInfo,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
@@ -82,6 +83,11 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
     }
     return map;
   }, [lines]);
+  // Conjunto (set) "Conjunto N de M" position lookup — keyed by line id,
+  // SAME { index, total } shape as the alternative groupInfo above. We
+  // import the shared helper rather than re-deriving it so the caption
+  // reads identically across editor / preview / PDF.
+  const setInfo = useMemo(() => setGroupInfo(lines), [lines]);
 
   // overflow-clip (not -hidden) so the rounded corners still clip the
   // full-bleed banner WITHOUT establishing a scroll container — an
@@ -170,9 +176,35 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
                 </div>
               )}
               <ul>
-                {g.items.map((l) => (
-                  <ClientLine key={l.id} line={l} currency={currency} rates={rates} fmt={fmt} groupInfo={groupInfo.get(l.id)} />
-                ))}
+                {g.items.map((l, i) => {
+                  // Conjunto (set) run detection — mirrors the editor's
+                  // LineItemList: a run is a maximal stretch of ADJACENT
+                  // lines sharing the same setGroup. Set members render
+                  // normally (priced, undimmed); the run gets a shared
+                  // violet left accent and one "Total del conjunto" footer
+                  // after its LAST member. Sections never appear in
+                  // g.items (groupBySection strips them), so a run can't
+                  // straddle a section boundary.
+                  const setGroup = l.setGroup || null;
+                  const inSet = !!setGroup;
+                  const isFirstInSet = inSet && g.items[i - 1]?.setGroup !== setGroup;
+                  const isLastInSet = inSet && g.items[i + 1]?.setGroup !== setGroup;
+                  return (
+                    <ClientLine
+                      key={l.id}
+                      line={l}
+                      currency={currency}
+                      rates={rates}
+                      fmt={fmt}
+                      groupInfo={groupInfo.get(l.id)}
+                      setInfo={inSet ? setInfo.get(l.id) : undefined}
+                      inSet={inSet}
+                      isFirstInSet={isFirstInSet}
+                      isLastInSet={isLastInSet}
+                      setFooter={isLastInSet ? fmt(setSubtotal(lines, setGroup)) : null}
+                    />
+                  );
+                })}
               </ul>
             </div>
           ))
@@ -230,9 +262,28 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, groupInfo }) {
+function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isFirstInSet, isLastInSet, setFooter }) {
+  // The "Total del conjunto" roll-up renders as a sibling row after the
+  // last member of a contiguous set run. It is purely presentational —
+  // setSubtotal is the SUM of each member's own line total (computed by
+  // the parent), so it doesn't touch the grand-total math. Set members
+  // are never dimmed (every member is priced / take-all).
+  const footer = isLastInSet && setFooter != null ? <SetFooter value={setFooter} /> : null;
   if (isCompoundLine(line)) {
-    return <CompoundClientLine line={line} fmt={fmt} groupInfo={groupInfo} />;
+    return (
+      <>
+        <CompoundClientLine
+          line={line}
+          fmt={fmt}
+          groupInfo={groupInfo}
+          setInfo={setInfo}
+          inSet={inSet}
+          isFirstInSet={isFirstInSet}
+          isLastInSet={isLastInSet}
+        />
+        {footer}
+      </>
+    );
   }
   const base = Number(line.unitPrice) || 0;
   const margin = Number(line.lineMarginPct) || 0;
@@ -268,10 +319,16 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
   const isSelected = !!line.isSelectedAlternative;
   const dimmed = optional || (inGroup && !isSelected);
   return (
+    <>
     <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
+    } ${
+      // Conjunto member: shared violet left accent + tint, distinct from
+      // the alternative's brand accent. Members are NEVER dimmed (every
+      // piece is priced / take-all), so no veil here.
+      inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
     } ${
       dimmed ? 'relative' : ''
     }`}>
@@ -281,7 +338,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || inGroup) && (
+      {(optional || inGroup || inSet) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
             <span className="text-ink-500">
@@ -292,6 +349,12 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
+            </span>
+          )}
+          {inSet && setInfo && (
+            <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
+              <Boxes size={11} className="opacity-80" aria-hidden />
+              Conjunto {setInfo.index} de {setInfo.total}
             </span>
           )}
         </div>
@@ -418,6 +481,8 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
         </div>
       </div>
     </li>
+    {footer}
+    </>
   );
 }
 
@@ -431,7 +496,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo }) {
 // item discount to a bundle discount reads the same vocabulary in the
 // same position — the "design system" is the shared eyebrow / strike /
 // brand-caption stack, not a one-off composition.
-function CompoundClientLine({ line, fmt, groupInfo }) {
+function CompoundClientLine({ line, fmt, groupInfo, setInfo, inSet }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
@@ -446,6 +511,10 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
+      // Conjunto member (a set member may itself be a compound article):
+      // shared violet left accent + tint, never dimmed.
+      inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+    } ${
       dimmed ? 'relative' : ''
     }`}>
       {/* Deactivated (optional) or non-selected alternative: fade the row
@@ -454,7 +523,7 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || inGroup) && (
+      {(optional || inGroup || inSet) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
             <span className="text-ink-500">Opcional · no incluido en el total</span>
@@ -463,6 +532,12 @@ function CompoundClientLine({ line, fmt, groupInfo }) {
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
+            </span>
+          )}
+          {inSet && setInfo && (
+            <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
+              <Boxes size={11} className="opacity-80" aria-hidden />
+              Conjunto {setInfo.index} de {setInfo.total}
             </span>
           )}
         </div>
@@ -611,6 +686,24 @@ function PriceCell({ label, value, emphasis }) {
         {value}
       </div>
     </div>
+  );
+}
+
+// Conjunto (set) roll-up footer — rendered once after the last member of
+// a contiguous set run. Mirrors the editor's LineItemList treatment
+// (violet left accent + tint, Boxes icon, "Total del conjunto"). The
+// value is setSubtotal(): the simple SUM of each member's own line total,
+// computed by the parent. Purely presentational — it does NOT feed the
+// grand total (members already counted individually via isPricedLine).
+function SetFooter({ value }) {
+  return (
+    <li className="border-l-2 border-solid border-violet-300 bg-violet-50/40 px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2 border-b border-ink-100 last:border-b-0">
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-700">
+        <Boxes size={12} className="opacity-80" aria-hidden />
+        Total del conjunto
+      </span>
+      <span className="text-sm font-semibold text-ink-900 tabular-nums">{value}</span>
+    </li>
   );
 }
 

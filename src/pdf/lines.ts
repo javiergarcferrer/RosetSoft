@@ -2,13 +2,13 @@ import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal, lineListUnit, lineQty,
+  lineTotal, lineListUnit, lineQty, setSubtotal,
 } from '../lib/pricing.js';
 import { rgb } from 'pdf-lib';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
-  BRAND_300, EMERALD_700,
+  BRAND_300, EMERALD_700, VIOLET_300, VIOLET_700,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -516,6 +516,25 @@ function lineOptionStyle(
       dim: !selected,
     };
   }
+  // Conjunto (set) member — the take-all twin of an alternative group.
+  // Mutually exclusive with the two branches above (DB CHECK enforces
+  // it), so this only runs for a pure set member. UNLIKE alternatives /
+  // optionals it is NEVER dimmed: every member is fully priced and
+  // counts toward the total, so it must read at full weight. Reuses the
+  // `groupInfo` channel for its "N DE M" position (the caller passes the
+  // set's index/total here for set lines). Violet accent + caption to
+  // match the on-screen preview's violet-300 border + violet-700 eyebrow.
+  if (line.setGroup) {
+    const base = groupInfo
+      ? `CONJUNTO ${groupInfo.index} DE ${groupInfo.total}`
+      : 'CONJUNTO';
+    return {
+      accent: VIOLET_300,
+      caption: base,
+      captionColor: VIOLET_700,
+      dim: false,
+    };
+  }
   return null;
 }
 
@@ -769,6 +788,85 @@ export function drawSectionHeader(
     characterSpacing: tracking,
   } as DrawTextOptions);
   return { x: MARGIN_L, y: y - 18 };
+}
+
+/* ----------------------------- conjunto footer ----------------------------- */
+//
+// "TOTAL DEL CONJUNTO" roll-up row. Drawn ONCE after the last member of
+// each contiguous setGroup run (the run-boundary detection lives in the
+// row-iteration caller, quotePdf.ts). Presentational only — every member
+// is already priced into the grand total, so this is a SUM of the run's
+// member line totals (setSubtotal), not a new charge. Mirrors the
+// on-screen preview's violet "Conjunto · Total del conjunto" footer:
+//   - a violet accent bar in the same page-margin gutter the option /
+//     alternative accent uses, so the run reads as one bracketed group;
+//   - a violet uppercase "TOTAL DEL CONJUNTO" eyebrow on the left;
+//   - the formatted sum right-aligned to the right page margin.
+
+const SET_FOOTER_TOP_PAD    = 8;    // gap above the footer caption
+const SET_FOOTER_BOTTOM_PAD = 12;   // gap below before the next row
+const SET_FOOTER_LABEL_SIZE = 8.5;
+const SET_FOOTER_LABEL_CS   = 1.4;
+const SET_FOOTER_VALUE_SIZE = 11;
+
+/**
+ * Vertical footprint of the "TOTAL DEL CONJUNTO" footer row. The caller
+ * adds this to its page-break budget for the run's last member so the
+ * footer never gets orphaned onto a fresh page away from its set.
+ */
+export function measureSetFooterHeight(): number {
+  return SET_FOOTER_TOP_PAD + Math.max(SET_FOOTER_LABEL_SIZE, SET_FOOTER_VALUE_SIZE) + SET_FOOTER_BOTTOM_PAD;
+}
+
+/**
+ * Draw the "TOTAL DEL CONJUNTO <amount>" footer for one set run. `lines`
+ * is the full quote line list (setSubtotal filters by `setGroup`). Same
+ * money formatter the rest of the file uses. Returns the cursor below
+ * the footer so the caller can keep flowing rows.
+ */
+export function drawSetFooterRow(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  lines: QuoteLine[],
+  setGroup: string,
+): Cursor {
+  const { fontBold } = ctx;
+  const rightX = PAGE_W - MARGIN_R;
+  const subtotal = setSubtotal(lines, setGroup);
+
+  // Baseline for the single label/value line, dropped below the top pad.
+  const lineTop = cursor.y - SET_FOOTER_TOP_PAD;
+  const baselineY = lineTop - SET_FOOTER_VALUE_SIZE;
+  const rowBottom = lineTop - SET_FOOTER_VALUE_SIZE - SET_FOOTER_BOTTOM_PAD;
+
+  // Violet accent bar in the page-margin gutter — same x as the
+  // option/alternative accent so a contiguous set reads as one bracket.
+  page.drawRectangle({
+    x: MARGIN_L - ACCENT_BAR_GAP - ACCENT_BAR_W,
+    y: rowBottom,
+    width: ACCENT_BAR_W,
+    height: cursor.y - rowBottom,
+    color: VIOLET_300,
+  });
+
+  // Left eyebrow — violet uppercase tracked caption.
+  page.drawText('TOTAL DEL CONJUNTO', {
+    x: MARGIN_L,
+    y: baselineY,
+    size: SET_FOOTER_LABEL_SIZE,
+    font: fontBold,
+    color: VIOLET_700,
+    characterSpacing: SET_FOOTER_LABEL_CS,
+  } as DrawTextOptions);
+
+  // Right-aligned amount in ink, bold — same money formatter as the rows.
+  drawRightAt(
+    page, formatMoney(subtotal, ctx.currency, ctx.rates), rightX, baselineY,
+    SET_FOOTER_VALUE_SIZE, fontBold, INK,
+  );
+
+  return { x: MARGIN_L, y: rowBottom };
 }
 
 /**
