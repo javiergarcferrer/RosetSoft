@@ -7,9 +7,11 @@ import {
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
+import { setGroupInfo } from '../lib/pricing.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
+  drawSetFooterRow, measureSetFooterHeight,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 import { shouldUseWebShare } from './shareTarget.js';
@@ -181,6 +183,11 @@ export async function generateQuotePdf({
         altGroupInfo.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) as number });
       }
     }
+    // Same "Conjunto N de M" position lookup for set members. Built off
+    // the full lines list (keyed by id) so it survives section grouping.
+    // A line is never both a set member and an alternative (DB CHECK), so
+    // the two maps never collide on the same id.
+    const setInfo = setGroupInfo(lines);
     for (const group of groups) {
       if (group.label) {
         const firstRowH = group.items.length
@@ -193,13 +200,31 @@ export async function generateQuotePdf({
         }
         cursor = drawSectionHeader(page, ctx, cursor, group.label);
       }
-      for (const line of group.items) {
+      for (let i = 0; i < group.items.length; i++) {
+        const line = group.items[i];
+        // A set member shows its "CONJUNTO N de M" caption; otherwise the
+        // alternative caption (mutually exclusive — see the maps above).
+        const groupInfo = (line.setGroup ? setInfo.get(line.id) : altGroupInfo.get(line.id)) || null;
+        // Conjunto run-boundary detection: this member is the LAST of a
+        // contiguous setGroup run when the next item in the section has a
+        // different (or no) setGroup. The footer is emitted right after it.
+        const setGroup = line.setGroup || null;
+        const next = group.items[i + 1];
+        const isLastInSetRun = !!setGroup && (next?.setGroup || null) !== setGroup;
+
         const rowH = measureLineRowHeight(ctx, line);
-        if (cursor.y - rowH - 4 < PAGE_BREAK_RESERVE) {
+        // Reserve the set footer alongside the last member so the
+        // "Total del conjunto" roll-up never lands orphaned on a fresh
+        // page away from the products it sums.
+        const footerReserve = isLastInSetRun ? measureSetFooterHeight() : 0;
+        if (cursor.y - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
-        cursor = await drawLineRow(page, ctx, cursor, line, altGroupInfo.get(line.id) || null);
+        cursor = await drawLineRow(page, ctx, cursor, line, groupInfo);
+        if (isLastInSetRun) {
+          cursor = drawSetFooterRow(page, ctx, cursor, lines, setGroup as string);
+        }
       }
     }
   }

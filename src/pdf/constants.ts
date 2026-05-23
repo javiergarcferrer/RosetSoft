@@ -39,3 +39,12 @@ export const BRAND_700: RGB = rgb(0.49, 0.24, 0.11);    // brand-700 #7d3e1c
 // the bar reads as a marker, not another typographic element.
 export const BRAND_300: RGB = rgb(0.91, 0.65, 0.43);    // brand-300 #e8a76d
 export const EMERALD_700: RGB = rgb(0.02, 0.42, 0.27);  // matches the "seleccionada" callout
+
+// Violet shades for the Conjunto (set) treatment — the take-all twin of
+// the alternative group. ClientPreview / LineItemList mark set members
+// with a violet-300 solid left border + a violet-700 "Conjunto" eyebrow;
+// these mirror those Tailwind tokens so the PDF reads the same as the
+// on-screen preview. Distinct from the brand accent so a customer can
+// tell "sold together" (violet) apart from "pick one" (brand).
+export const VIOLET_300: RGB = rgb(0.77, 0.71, 0.97);   // violet-300 #c4b5fd
+export const VIOLET_700: RGB = rgb(0.42, 0.24, 0.80);   // violet-700 #6d28d9
