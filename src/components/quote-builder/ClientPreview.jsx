@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Boxes } from 'lucide-react';
+import { Boxes, GitFork } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import Modal from '../Modal.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings, setSubtotal, setGroupInfo,
+  alternativeSubtotal, groupRuns,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
@@ -168,46 +169,78 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
             Aún no hay artículos en esta cotización.
           </div>
         ) : (
-          groups.map((g, gi) => (
-            <div key={gi} className="mb-2">
-              {g.label && (
-                <div className="px-4 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-700">
-                  {g.label}
-                </div>
-              )}
-              <ul>
-                {g.items.map((l, i) => {
-                  // Conjunto (set) run detection — mirrors the editor's
-                  // LineItemList: a run is a maximal stretch of ADJACENT
-                  // lines sharing the same setGroup. Set members render
-                  // normally (priced, undimmed); the run gets a shared
-                  // violet left accent and one "Total del conjunto" footer
-                  // after its LAST member. Sections never appear in
-                  // g.items (groupBySection strips them), so a run can't
-                  // straddle a section boundary.
-                  const setGroup = l.setGroup || null;
-                  const inSet = !!setGroup;
-                  const isFirstInSet = inSet && g.items[i - 1]?.setGroup !== setGroup;
-                  const isLastInSet = inSet && g.items[i + 1]?.setGroup !== setGroup;
-                  return (
-                    <ClientLine
-                      key={l.id}
-                      line={l}
-                      currency={currency}
-                      rates={rates}
-                      fmt={fmt}
-                      groupInfo={groupInfo.get(l.id)}
-                      setInfo={inSet ? setInfo.get(l.id) : undefined}
-                      inSet={inSet}
-                      isFirstInSet={isFirstInSet}
-                      isLastInSet={isLastInSet}
-                      setFooter={isLastInSet ? fmt(setSubtotal(lines, setGroup)) : null}
-                    />
-                  );
-                })}
-              </ul>
-            </div>
-          ))
+          groups.map((g, gi) => {
+            // groupRuns is THE shared source of truth for card boundaries —
+            // the SAME helper the editor (LineItemList) uses. We run it over
+            // this section's items (sections are stripped by groupBySection,
+            // so a run never straddles a section boundary) and render each
+            // run: 'single' → a flat row as before; 'set' / 'alternative' →
+            // a bordered container card (header eyebrow + member rows + one
+            // footer total), mirroring the editor's GroupCard with the
+            // read-only customer treatment.
+            const byId = new Map(g.items.map((l) => [l.id, l]));
+            const runs = groupRuns(g.items);
+            return (
+              <div key={gi} className="mb-2">
+                {g.label && (
+                  <div className="px-4 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-700">
+                    {g.label}
+                  </div>
+                )}
+                <ul>
+                  {runs.map((run) => {
+                    if (run.type === 'single') {
+                      // Ungrouped line — render the row flat, exactly as
+                      // before. (Sections never appear here.)
+                      const l = byId.get(run.lineIds[0]);
+                      if (!l) return null;
+                      return (
+                        <ClientLine
+                          key={l.id}
+                          line={l}
+                          currency={currency}
+                          rates={rates}
+                          fmt={fmt}
+                          groupInfo={groupInfo.get(l.id)}
+                          setInfo={undefined}
+                          insideGroupCard={false}
+                        />
+                      );
+                    }
+
+                    // Group run → a container card wrapping the member rows.
+                    const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
+                    const isSet = run.type === 'set';
+                    const footerValue = isSet
+                      ? setSubtotal(lines, run.groupId)
+                      : alternativeSubtotal(lines, run.groupId);
+                    return (
+                      <ClientGroupCard
+                        key={`grp-${run.groupId}-${run.start}`}
+                        type={run.type}
+                        memberCount={members.length}
+                        footerLabel={isSet ? 'Total del conjunto' : 'Total'}
+                        footerValue={fmt(footerValue)}
+                      >
+                        {members.map((l) => (
+                          <ClientLine
+                            key={l.id}
+                            line={l}
+                            currency={currency}
+                            rates={rates}
+                            fmt={fmt}
+                            groupInfo={groupInfo.get(l.id)}
+                            setInfo={isSet ? setInfo.get(l.id) : undefined}
+                            insideGroupCard
+                          />
+                        ))}
+                      </ClientGroupCard>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -262,27 +295,20 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isFirstInSet, isLastInSet, setFooter }) {
-  // The "Total del conjunto" roll-up renders as a sibling row after the
-  // last member of a contiguous set run. It is purely presentational —
-  // setSubtotal is the SUM of each member's own line total (computed by
-  // the parent), so it doesn't touch the grand-total math. Set members
-  // are never dimmed (every member is priced / take-all).
-  const footer = isLastInSet && setFooter != null ? <SetFooter value={setFooter} /> : null;
+function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGroupCard }) {
+  // A set member may itself be a Compuesto — the group card just nests the
+  // compound row cleanly. When the row lives inside a group card the card
+  // owns the accent + eyebrow + footer, so the row suppresses its own group
+  // border / eyebrow (insideGroupCard) to avoid doubling.
   if (isCompoundLine(line)) {
     return (
-      <>
-        <CompoundClientLine
-          line={line}
-          fmt={fmt}
-          groupInfo={groupInfo}
-          setInfo={setInfo}
-          inSet={inSet}
-          isFirstInSet={isFirstInSet}
-          isLastInSet={isLastInSet}
-        />
-        {footer}
-      </>
+      <CompoundClientLine
+        line={line}
+        fmt={fmt}
+        groupInfo={groupInfo}
+        setInfo={setInfo}
+        insideGroupCard={insideGroupCard}
+      />
     );
   }
   const base = Number(line.unitPrice) || 0;
@@ -316,19 +342,29 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isF
   // vertically into the void.
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
+  const inSet = !!line.setGroup;
   const isSelected = !!line.isSelectedAlternative;
   const dimmed = optional || (inGroup && !isSelected);
+  // Inside a group card the card owns the left accent + the full group
+  // eyebrow + the footer, so the row drops its own per-row group border /
+  // tint / standalone eyebrow to avoid doubling. The optional treatment
+  // and the alternative dimming (so the customer sees which option is
+  // selected) are preserved either way.
+  const showRowGroupChrome = !insideGroupCard;
+  // A compact in-card eyebrow still flags the SELECTED alternative so the
+  // read-only menu reads clearly without a radio.
+  const showSelectedFlag = insideGroupCard && inGroup && isSelected;
   return (
-    <>
     <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
-      inGroup ? 'border-l-2 border-solid border-brand-300' : ''
+      showRowGroupChrome && inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
       // Conjunto member: shared violet left accent + tint, distinct from
       // the alternative's brand accent. Members are NEVER dimmed (every
-      // piece is priced / take-all), so no veil here.
-      inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+      // piece is priced / take-all), so no veil here. Suppressed inside a
+      // group card (the card draws the violet accent itself).
+      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
     } ${
       dimmed ? 'relative' : ''
     }`}>
@@ -338,23 +374,28 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isF
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || inGroup || inSet) && (
+      {(optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
             <span className="text-ink-500">
               Opcional · no incluido en el total
             </span>
           )}
-          {inGroup && groupInfo && (
+          {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
             </span>
           )}
-          {inSet && setInfo && (
+          {showRowGroupChrome && inSet && setInfo && (
             <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
               <Boxes size={11} className="opacity-80" aria-hidden />
               Conjunto {setInfo.index} de {setInfo.total}
+            </span>
+          )}
+          {showSelectedFlag && (
+            <span className="text-emerald-700 font-semibold normal-case">
+              Seleccionada
             </span>
           )}
         </div>
@@ -481,8 +522,6 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isF
         </div>
       </div>
     </li>
-    {footer}
-    </>
   );
 }
 
@@ -496,24 +535,32 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, inSet, isF
 // item discount to a bundle discount reads the same vocabulary in the
 // same position — the "design system" is the shared eyebrow / strike /
 // brand-caption stack, not a one-off composition.
-function CompoundClientLine({ line, fmt, groupInfo, setInfo, inSet }) {
+function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
   const discounted = discount > 0;
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
+  const inSet = !!line.setGroup;
   const isSelected = !!line.isSelectedAlternative;
   const dimmed = optional || (inGroup && !isSelected);
+  // Inside a group card the card owns the accent + eyebrow + footer, so a
+  // compound member suppresses its own per-row group border / tint /
+  // standalone eyebrow to avoid doubling. Optional treatment + alternative
+  // dimming are preserved.
+  const showRowGroupChrome = !insideGroupCard;
+  const showSelectedFlag = insideGroupCard && inGroup && isSelected;
   return (
     <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
-      inGroup ? 'border-l-2 border-solid border-brand-300' : ''
+      showRowGroupChrome && inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     } ${
       // Conjunto member (a set member may itself be a compound article):
-      // shared violet left accent + tint, never dimmed.
-      inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+      // shared violet left accent + tint, never dimmed. Suppressed inside a
+      // group card (the card draws the violet accent itself).
+      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
     } ${
       dimmed ? 'relative' : ''
     }`}>
@@ -523,21 +570,26 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, inSet }) {
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || inGroup || inSet) && (
+      {(optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && (
             <span className="text-ink-500">Opcional · no incluido en el total</span>
           )}
-          {inGroup && groupInfo && (
+          {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
             </span>
           )}
-          {inSet && setInfo && (
+          {showRowGroupChrome && inSet && setInfo && (
             <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
               <Boxes size={11} className="opacity-80" aria-hidden />
               Conjunto {setInfo.index} de {setInfo.total}
+            </span>
+          )}
+          {showSelectedFlag && (
+            <span className="text-emerald-700 font-semibold normal-case">
+              Seleccionada
             </span>
           )}
         </div>
@@ -689,20 +741,58 @@ function PriceCell({ label, value, emphasis }) {
   );
 }
 
-// Conjunto (set) roll-up footer — rendered once after the last member of
-// a contiguous set run. Mirrors the editor's LineItemList treatment
-// (violet left accent + tint, Boxes icon, "Total del conjunto"). The
-// value is setSubtotal(): the simple SUM of each member's own line total,
-// computed by the parent. Purely presentational — it does NOT feed the
-// grand total (members already counted individually via isPricedLine).
-function SetFooter({ value }) {
+// Container card wrapping a contiguous group run (Conjunto or Alternativa)
+// on the customer-facing preview. Mirrors the editor's LineItemList
+// GroupCard visual language — a bordered card with a header eyebrow on
+// top, the member rows inside, and one footer total at the bottom — with
+// the read-only customer treatment (no radios; the selected alternative is
+// flagged inside its own row, non-selected members stay dimmed by their
+// own row markup). The accent color distinguishes a set (violet) from an
+// alternative (brand). The card owns the border + footer so the member
+// rows inside don't re-draw their own group accent/eyebrow.
+//
+//   - Conjunto: violet accent, header "Conjunto", footer
+//     "Total del conjunto" = setSubtotal (sum of ALL members — take-all).
+//   - Alternativa: brand accent, header "Alternativas — elige una", footer
+//     "Total" = alternativeSubtotal (only the SELECTED option is billed).
+//
+// The footers are presentational roll-ups: set members are each already
+// priced into the grand total, and only the selected alternative is — the
+// card footer never re-feeds those numbers.
+function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children }) {
+  const isSet = type === 'set';
+  // Tailwind needs literal class names — branch rather than interpolate.
+  const ring = isSet ? 'border-violet-300' : 'border-brand-300';
+  const headBg = isSet ? 'bg-violet-50/60' : 'bg-brand-50/50';
+  const footBg = isSet ? 'bg-violet-50/50' : 'bg-brand-50/40';
+  const eyebrowColor = isSet ? 'text-violet-700' : 'text-brand-700';
+  const Icon = isSet ? Boxes : GitFork;
+  const eyebrow = isSet ? 'Conjunto' : 'Alternativas — elige una';
   return (
-    <li className="border-l-2 border-solid border-violet-300 bg-violet-50/40 px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2 border-b border-ink-100 last:border-b-0">
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-violet-700">
-        <Boxes size={12} className="opacity-80" aria-hidden />
-        Total del conjunto
-      </span>
-      <span className="text-sm font-semibold text-ink-900 tabular-nums">{value}</span>
+    // Inset card so the surrounding list rows don't bleed into it. Rendered
+    // as a list item so it sits naturally in the <ul> alongside flat rows.
+    <li className="px-1 sm:px-2 py-3 list-none">
+      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white`}>
+        <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+            <Icon size={13} className="opacity-80" aria-hidden />
+            {eyebrow}
+          </span>
+          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400 tabular-nums">
+            {memberCount} {isSet ? 'piezas' : 'opciones'}
+          </span>
+        </div>
+        <ul>{children}</ul>
+        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex items-center justify-between gap-2`}>
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+            <Icon size={12} className="opacity-80" aria-hidden />
+            {footerLabel}
+          </span>
+          <span className="text-sm font-semibold text-ink-900 tabular-nums">
+            {footerValue}
+          </span>
+        </div>
+      </div>
     </li>
   );
 }

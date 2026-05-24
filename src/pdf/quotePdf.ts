@@ -7,11 +7,11 @@ import {
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
-import { setGroupInfo } from '../lib/pricing.js';
+import { setGroupInfo, groupRuns } from '../lib/pricing.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
-  drawSetFooterRow, measureSetFooterHeight,
+  drawGroupFooterRow, measureGroupFooterHeight, groupFooterSpec,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 import { shouldUseWebShare } from './shareTarget.js';
@@ -200,30 +200,53 @@ export async function generateQuotePdf({
         }
         cursor = drawSectionHeader(page, ctx, cursor, group.label);
       }
-      for (let i = 0; i < group.items.length; i++) {
-        const line = group.items[i];
-        // A set member shows its "CONJUNTO N de M" caption; otherwise the
-        // alternative caption (mutually exclusive — see the maps above).
-        const groupInfo = (line.setGroup ? setInfo.get(line.id) : altGroupInfo.get(line.id)) || null;
-        // Conjunto run-boundary detection: this member is the LAST of a
-        // contiguous setGroup run when the next item in the section has a
-        // different (or no) setGroup. The footer is emitted right after it.
-        const setGroup = line.setGroup || null;
-        const next = group.items[i + 1];
-        const isLastInSetRun = !!setGroup && (next?.setGroup || null) !== setGroup;
+      // groupRuns(group.items) is THE shared source of truth for run
+      // boundaries — the same helper the editor (LineItemList) and the
+      // on-screen ClientPreview consume. Each 'set' / 'alternative' run is a
+      // contiguous block whose members draw as today, capped by ONE footer
+      // total after the last member; 'single' runs render as a lone row.
+      // (Sections are stripped by groupBySection, so a run never straddles a
+      // section divider.) We index members by id within this section so a
+      // run's lineIds resolve to the right QuoteLine.
+      const byId = new Map(group.items.map((l) => [l.id, l]));
+      const runs = groupRuns(group.items);
+      for (const run of runs) {
+        const members = run.lineIds
+          .map((id) => byId.get(id))
+          .filter((l): l is QuoteLine => !!l);
+        const isGrouped = run.type === 'set' || run.type === 'alternative';
+        // Footer presentation for a grouped run — Spanish uppercase eyebrow,
+        // rolled-up amount, and accent palette. Conjunto → "TOTAL DEL
+        // CONJUNTO"/setSubtotal/violet; Alternativa → "TOTAL"/
+        // alternativeSubtotal/brand. Presentational only — the grand total in
+        // totals.ts is untouched (members already priced / only the selected
+        // alternative billed).
+        const footer = isGrouped && run.groupId
+          ? groupFooterSpec(run.type as 'set' | 'alternative', lines, run.groupId)
+          : null;
 
-        const rowH = measureLineRowHeight(ctx, line);
-        // Reserve the set footer alongside the last member so the
-        // "Total del conjunto" roll-up never lands orphaned on a fresh
-        // page away from the products it sums.
-        const footerReserve = isLastInSetRun ? measureSetFooterHeight() : 0;
-        if (cursor.y - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
-          page = doc.addPage([PAGE_W, PAGE_H]);
-          cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
-        }
-        cursor = await drawLineRow(page, ctx, cursor, line, groupInfo);
-        if (isLastInSetRun) {
-          cursor = drawSetFooterRow(page, ctx, cursor, lines, setGroup as string);
+        for (let m = 0; m < members.length; m++) {
+          const line = members[m];
+          // A set member shows its "CONJUNTO N de M" caption; an alternative
+          // its "ALTERNATIVA N de M" (mutually exclusive — see the maps above).
+          const groupInfo = (line.setGroup ? setInfo.get(line.id) : altGroupInfo.get(line.id)) || null;
+          const isLastInRun = m === members.length - 1;
+
+          const rowH = measureLineRowHeight(ctx, line);
+          // Reserve the group footer alongside the run's LAST member so the
+          // roll-up total never lands orphaned on a fresh page away from the
+          // block it sums. Mirrors the previous Conjunto-only reservation.
+          const footerReserve = (isLastInRun && footer) ? measureGroupFooterHeight() : 0;
+          if (cursor.y - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
+            page = doc.addPage([PAGE_W, PAGE_H]);
+            cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
+          }
+          cursor = await drawLineRow(page, ctx, cursor, line, groupInfo);
+          if (isLastInRun && footer) {
+            cursor = drawGroupFooterRow(
+              page, ctx, cursor, footer.label, footer.amount, footer.accent,
+            );
+          }
         }
       }
     }
