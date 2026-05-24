@@ -116,7 +116,7 @@ export default function Thumbnail({
               ? <Loader2 size={22} className="animate-spin" />
               : <Camera size={22} strokeWidth={1.5} />}
             {!busy && (
-              <span className="text-[10px] font-medium uppercase tracking-wide select-none">
+              <span className="eyebrow-xs font-medium tracking-wide select-none">
                 Foto
               </span>
             )}

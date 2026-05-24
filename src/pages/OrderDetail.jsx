@@ -735,7 +735,7 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
     <div className="card card-pad mt-4 space-y-2">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-ink-500">
+          <div className="eyebrow tracking-wide">
             Mínimo de despacho
           </div>
           <div className="text-sm font-semibold mt-0.5">

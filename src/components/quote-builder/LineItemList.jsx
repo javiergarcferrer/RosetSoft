@@ -363,17 +363,17 @@ function GroupCard({ type, accent, memberCount, footerLabel, footerValue, childr
     <div className="px-3 sm:px-4 py-3">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={13} className="opacity-80" aria-hidden />
             {eyebrow}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400 tabular-nums">
+          <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
             {memberCount} {isSet ? 'piezas' : 'opciones'}
           </span>
         </div>
         {children}
         <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={12} className="opacity-80" aria-hidden />
             {footerLabel}
           </span>

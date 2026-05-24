@@ -17,7 +17,7 @@ export default function ProfileMenu() {
     <div className="border-t border-ink-800 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] relative">
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 bg-ink-800 rounded-md border border-ink-700 shadow-xl py-1">
-          <div className="px-3 py-2 text-[10px] uppercase tracking-wide text-ink-400">Sesión iniciada como</div>
+          <div className="px-3 py-2 eyebrow-xs font-normal tracking-wide text-ink-400">Sesión iniciada como</div>
           <div className="px-3 pb-2 text-xs text-ink-200 truncate" title={user?.email || ''}>
             {user?.email || '—'}
           </div>
@@ -36,7 +36,7 @@ export default function ProfileMenu() {
         className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-ink-800"
       >
         <div className="text-left min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-ink-400">Cuenta</div>
+          <div className="eyebrow-xs font-normal tracking-wide text-ink-400">Cuenta</div>
           <div className="text-sm font-medium text-ink-100 truncate" title={displayName}>{displayName}</div>
         </div>
         <ChevronUp size={16} className={`text-ink-400 transition-transform ${open ? '' : 'rotate-180'}`} />

@@ -704,7 +704,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+        <h3 className="eyebrow font-semibold tracking-wide text-ink-600">
           Detalle para facturar
         </h3>
         <button type="button" onClick={onExportCsv} className="btn-ghost text-xs">

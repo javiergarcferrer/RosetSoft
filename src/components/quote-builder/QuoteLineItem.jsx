@@ -338,7 +338,7 @@ function TopStrip({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200 transition-colors px-2 py-0.5 rounded-full"
+          className="chip text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200"
           title="Cambiar familia"
           aria-label={`Familia ${family}. Cambiar`}
         >
@@ -349,7 +349,7 @@ function TopStrip({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 transition-colors px-2 py-0.5 rounded-full"
+          className="chip font-medium text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500"
           aria-label="Asignar familia"
         >
           <Tag size={10} className="opacity-70" aria-hidden />
@@ -365,7 +365,7 @@ function TopStrip({
           mark optional) live in the per-line LineFooter. */}
       {compound && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
+          className="chip text-ink-600 bg-ink-100 border border-ink-200"
           title="Artículo compuesto"
         >
           <Layers size={10} className="opacity-80" aria-hidden />
@@ -378,7 +378,7 @@ function TopStrip({
           the footer. Hidden for grouped lines, where optional is forbidden. */}
       {isOptional && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-50 border border-dashed border-ink-300 px-2 py-0.5 rounded-full"
+          className="chip text-ink-600 bg-ink-50 border border-dashed border-ink-300"
           title="Línea opcional — se muestra pero no suma al total"
         >
           <Sparkles size={10} className="opacity-80" aria-hidden />
@@ -393,7 +393,7 @@ function TopStrip({
           mid-edit single line) the full labelled chip still shows. */}
       {alternativeGroup && groupInfo && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full"
+          className="chip text-brand-700 bg-brand-50 border border-brand-100"
           title="Esta línea es parte de un grupo de alternativas; solo la seleccionada cuenta en el total"
         >
           {insideGroupCard ? `${groupInfo.index}/${groupInfo.total}` : `Alternativa ${groupInfo.index}/${groupInfo.total}`}
@@ -402,7 +402,7 @@ function TopStrip({
 
       {setGroup && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
+          className="chip text-ink-600 bg-ink-100 border border-ink-200"
           title="Esta línea forma parte de un conjunto; todas las piezas se cotizan y suman al total"
         >
           <Boxes size={10} className="opacity-80" aria-hidden />
@@ -513,7 +513,7 @@ function AutoGrowTextarea({ value, onCommit, label, placeholder, ...rest }) {
       placeholder={placeholder}
       aria-label={label || placeholder}
       onInput={(e) => autoSize(e.currentTarget)}
-      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded resize-none overflow-hidden text-[13px] coarse:text-[14px] leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:shadow-[inset_0_0_0_1px_theme('colors.ink.200')] focus:outline-none transition-colors"
+      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:shadow-[inset_0_0_0_1px_theme('colors.ink.200')] focus:outline-none transition-colors"
       {...rest}
     />
   );
@@ -662,7 +662,7 @@ function GradeFabricRow({ line, onChange }) {
           // as the material name (or the placeholder when empty), never
           // stretched across the row. Capped at 100% so a very long name
           // still wraps/scrolls within the row instead of overflowing.
-          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
         />
         {/* Catalog picker — opens the swatch modal so the dealer can pick a
             material + color instead of typing the name and guessing the
@@ -759,7 +759,7 @@ function PricingRow({
   qtyAriaLabel = 'Cantidad', unitAriaLabel = 'Precio unitario',
 }) {
   const totalValCls = totalSize === 'lg'
-    ? 'qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight'
+    ? 'qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight'
     : 'qli-total-val text-[15px] font-semibold tabular-nums text-ink-900 leading-tight';
   const totalEl = (
     <div className={totalValCls}>{fmt(total)}</div>
@@ -794,7 +794,7 @@ function PricingRow({
       <span className="qli-pricing-op text-base" aria-hidden>=</span>
 
       <div className="qli-pricing-cell qli-pricing-total relative">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+        <div className="eyebrow-xs tracking-wide">
           {totalLabel}
         </div>
         {onToggleBreakdown ? (
@@ -883,7 +883,7 @@ function CompoundCalculatorBand({
           {count} componente{count === 1 ? '' : 's'}
         </div>
         <div className="relative text-right ml-auto">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+          <div className="eyebrow-xs tracking-wide mb-0.5">
             Total compuesto
           </div>
           <button
@@ -893,7 +893,7 @@ function CompoundCalculatorBand({
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
-            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
+            <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight">
               {fmt(rowTotal)}
             </div>
             {hasAdjustment ? (
@@ -1048,7 +1048,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         >
           <GripVertical size={13} />
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none">
+        <span className="eyebrow-xs tracking-wide text-ink-400 select-none">
           Componente {index + 1}
         </span>
         {/* Per-component optional toggle. Mirrors the line-level
@@ -1060,7 +1060,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         <button
           type="button"
           onClick={() => onChange({ isOptional: !optional })}
-          className={`inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] px-2 py-0.5 rounded-full transition-colors ${
+          className={`chip font-medium ${
             optional
               ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
               : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
@@ -1136,7 +1136,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
 function CalcCell({ label, children }) {
   return (
     <div className="qli-pricing-cell">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+      <div className="eyebrow-xs tracking-wide">
         {label}
       </div>
       {children}

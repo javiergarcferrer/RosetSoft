@@ -56,7 +56,7 @@ export default function FilterChips({ filters, activeFilters, onFiltersChange })
       {chips.map(({ filter, text }) => (
         <span
           key={filter.key}
-          className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-ink-50 py-1 pl-2.5 pr-1 text-[12px] text-ink-700"
+          className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-ink-50 py-1 pl-2.5 pr-1 text-xs text-ink-700"
         >
           <span className="text-ink-500">{filter.label}:</span>
           <span className="font-medium text-ink-900">{text}</span>
@@ -73,7 +73,7 @@ export default function FilterChips({ filters, activeFilters, onFiltersChange })
       <button
         type="button"
         onClick={clearAll}
-        className="text-[12px] font-medium text-ink-500 underline-offset-2 hover:text-ink-900 hover:underline"
+        className="text-xs font-medium text-ink-500 underline-offset-2 hover:text-ink-900 hover:underline"
       >
         Limpiar todo
       </button>

@@ -134,7 +134,7 @@ export default function ListSearchHeader({
 
       {/* Row 4 — quiet result count. */}
       {typeof resultCount === 'number' && (
-        <p className="text-[12px] text-ink-500" aria-live="polite">
+        <p className="text-xs text-ink-500" aria-live="polite">
           {resultCount} {resultCount === 1 ? resultNoun[0] : resultNoun[1]}
         </p>
       )}

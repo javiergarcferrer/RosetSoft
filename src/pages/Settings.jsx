@@ -312,12 +312,12 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Compra</div>
+            <div className="eyebrow-xs font-medium tracking-wide">Compra</div>
             <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.buy)}</div>
             <div className="text-[10px] text-ink-400">RD$ por 1 USD</div>
           </div>
           <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">Venta</div>
+            <div className="eyebrow-xs font-medium tracking-wide">Venta</div>
             <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.sell)}</div>
             <div className="text-[10px] text-ink-400">RD$ por 1 USD · se cotiza con esta</div>
           </div>
@@ -339,7 +339,7 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>
+            <div className="eyebrow-xs font-medium tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>
             <input
               type="number"
               step="0.01"
@@ -351,7 +351,7 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
             />
           </div>
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-ink-600">Venta (se cotiza con esta)</div>
+            <div className="eyebrow-xs font-medium tracking-wide text-ink-600">Venta (se cotiza con esta)</div>
             <input
               type="number"
               step="0.01"
@@ -382,7 +382,7 @@ function RateCard({ local, set, refreshSettings, saveSettings }) {
 
       {/* Effective */}
       <div className="rounded-md bg-brand-50 border border-brand-200 px-4 py-3">
-        <div className="text-[10px] font-medium uppercase tracking-wider text-brand-700">Tasa efectiva</div>
+        <div className="eyebrow-xs font-medium tracking-wider text-brand-700">Tasa efectiva</div>
         <div className="text-xl font-semibold text-brand-900 mt-0.5">
           1 USD = {eff.toFixed(2)} DOP
         </div>

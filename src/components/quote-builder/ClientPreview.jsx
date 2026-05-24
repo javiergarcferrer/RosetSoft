@@ -183,7 +183,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
             return (
               <div key={gi} className="mb-2">
                 {g.label && (
-                  <div className="px-4 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-700">
+                  <div className="px-4 pt-5 pb-1.5 eyebrow font-semibold tracking-[0.12em] text-brand-700">
                     {g.label}
                   </div>
                 )}
@@ -265,7 +265,7 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
             <TotalRow label="Total" value={fmt(totals.grandTotal)} bold />
           </div>
           {savings > 0 && (
-            <div className="mt-2 text-right text-[12px] font-medium text-brand-700">
+            <div className="mt-2 text-right text-xs font-medium text-brand-700">
               Ahorras {fmt(savings)} en esta cotización
             </div>
           )}
@@ -416,7 +416,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
         <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
           <div className="min-w-0 sm:flex-1">
             {line.family && (
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
+              <div className="eyebrow-xs tracking-widest text-brand-700 mb-0.5">
                 {line.family}
               </div>
             )}
@@ -498,7 +498,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
             <PriceCell label="Cantidad" value={String(qty)} />
             {discounted && (
               <div className="mt-1.5 text-right">
-                <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+                <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
                   Precio lista
                 </div>
                 <div className="text-sm text-ink-400 line-through whitespace-nowrap">
@@ -615,7 +615,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
         </div>
         <div className="flex-1 min-w-0">
           {line.family && (
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mb-0.5">
+            <div className="eyebrow-xs tracking-widest text-brand-700 mb-0.5">
               {line.family}
             </div>
           )}
@@ -631,7 +631,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
             <div className="ml-auto w-fit text-right">
               {discounted && (
                 <>
-                  <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+                  <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
                     Precio lista
                   </div>
                   <div className="text-sm text-ink-400 line-through whitespace-nowrap">
@@ -676,7 +676,7 @@ function CompoundComponentRow({ component, fmt }) {
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
           {optional && (
-            <span className="text-[10px] uppercase tracking-widest text-ink-500">
+            <span className="eyebrow-xs font-normal tracking-widest">
               Opcional · no incluido
             </span>
           )}
@@ -731,7 +731,7 @@ function CompoundComponentRow({ component, fmt }) {
 function PriceCell({ label, value, emphasis }) {
   return (
     <div className="text-right">
-      <div className="text-[10px] uppercase tracking-wide text-brand-700 font-semibold whitespace-nowrap">
+      <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
         {label}
       </div>
       <div className={`whitespace-nowrap ${emphasis ? 'text-base font-semibold text-ink-900' : 'text-sm font-medium text-ink-900'}`}>
@@ -774,17 +774,17 @@ function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children
     <li className="px-1 sm:px-2 py-3 list-none">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={13} className="opacity-80" aria-hidden />
             {eyebrow}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400 tabular-nums">
+          <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
             {memberCount} {isSet ? 'piezas' : 'opciones'}
           </span>
         </div>
         <ul>{children}</ul>
         <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] ${eyebrowColor}`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={12} className="opacity-80" aria-hidden />
             {footerLabel}
           </span>
