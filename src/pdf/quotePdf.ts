@@ -11,7 +11,8 @@ import { setGroupInfo, groupRuns } from '../lib/pricing.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
-  drawGroupFooterRow, measureGroupFooterHeight, groupFooterSpec,
+  drawGroupHeaderBand, drawGroupFooterBand, measureGroupHeaderHeight,
+  measureGroupFooterHeight, groupFooterSpec, groupZoneFor,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 import { shouldUseWebShare } from './shareTarget.js';
@@ -190,13 +191,18 @@ export async function generateQuotePdf({
     const setInfo = setGroupInfo(lines);
     for (const group of groups) {
       if (group.label) {
-        const firstRowH = group.items.length
-          ? measureLineRowHeight(ctx, group.items[0])
+        // The first item under the header may open a grouped zone — reserve
+        // its in-zone row height + the opening header band so a section header
+        // never lands orphaned at a page bottom away from its first block.
+        const firstItem = group.items[0] || null;
+        const firstGrouped = !!(firstItem && (firstItem.setGroup || firstItem.alternativeGroup));
+        const firstRowH = firstItem
+          ? measureLineRowHeight(ctx, firstItem, firstGrouped)
           : 0;
+        const firstBand = firstGrouped ? measureGroupHeaderHeight() : 0;
         // Section header now consumes ~34pt (11pt eyebrow + terracotta
-        // rule + spacing); reserve that plus the first row so a header
-        // never lands orphaned at a page bottom away from its items.
-        const reserve = 34 + firstRowH;
+        // rule + spacing); reserve that plus the first block.
+        const reserve = 34 + firstBand + firstRowH;
         if (cursor.y - reserve < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
@@ -218,9 +224,14 @@ export async function generateQuotePdf({
           .map((id) => byId.get(id))
           .filter((l): l is QuoteLine => !!l);
         const isGrouped = run.type === 'set' || run.type === 'alternative';
+        // A grouped run renders as a bounded, shaded ZONE: an opening header
+        // band, per-member tint + left rail, and a closing footer band — so
+        // two runs back-to-back read as distinct containers separated by a
+        // white gutter, and a split run still reads as one zone across pages.
+        const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
         // Footer presentation for a grouped run — Spanish uppercase eyebrow,
-        // rolled-up amount, and accent palette. Conjunto → "TOTAL DEL
-        // CONJUNTO"/setSubtotal/violet; Alternativa → "TOTAL"/
+        // rolled-up amount, and zone palette. Conjunto → "TOTAL DEL
+        // CONJUNTO"/setSubtotal/neutral; Alternativa → "TOTAL"/
         // alternativeSubtotal/brand. Presentational only — the grand total in
         // totals.ts is untouched (members already priced / only the selected
         // alternative billed).
@@ -232,22 +243,34 @@ export async function generateQuotePdf({
           const line = members[m];
           // A set member shows its "CONJUNTO N de M" caption; an alternative
           // its "ALTERNATIVA N de M" (mutually exclusive — see the maps above).
+          // Inside a zone the member draws no caption (identity is in the
+          // header band), but the lookup is harmless / unused there.
           const groupInfo = (line.setGroup ? setInfo.get(line.id) : altGroupInfo.get(line.id)) || null;
+          const isFirstInRun = m === 0;
           const isLastInRun = m === members.length - 1;
 
-          const rowH = measureLineRowHeight(ctx, line);
-          // Reserve the group footer alongside the run's LAST member so the
-          // roll-up total never lands orphaned on a fresh page away from the
-          // block it sums. Mirrors the previous Conjunto-only reservation.
+          const rowH = measureLineRowHeight(ctx, line, !!zone);
+          // First member of a zone carries the opening header band; reserve it
+          // so the band + first row never split. Last member carries the
+          // closing footer band; reserve it so the roll-up never lands orphaned
+          // on a fresh page away from the block it sums. Continuation members
+          // reserve nothing extra — the tint + rail simply resume on the new
+          // page, keeping a split zone reading as one container.
+          const headerReserve = (isFirstInRun && zone) ? measureGroupHeaderHeight() : 0;
           const footerReserve = (isLastInRun && footer) ? measureGroupFooterHeight() : 0;
-          if (cursor.y - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
+          if (cursor.y - headerReserve - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
             page = doc.addPage([PAGE_W, PAGE_H]);
             cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
           }
-          cursor = await drawLineRow(page, ctx, cursor, line, groupInfo);
-          if (isLastInRun && footer) {
-            cursor = drawGroupFooterRow(
-              page, ctx, cursor, footer.label, footer.amount, footer.accent,
+          // Opening header band — drawn ONCE, only at the run's true start
+          // (never repeated on a continuation page).
+          if (isFirstInRun && zone) {
+            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, members.length);
+          }
+          cursor = await drawLineRow(page, ctx, cursor, line, groupInfo, zone);
+          if (isLastInRun && footer && zone) {
+            cursor = drawGroupFooterBand(
+              page, ctx, cursor, zone, footer.label, footer.amount,
             );
           }
         }
