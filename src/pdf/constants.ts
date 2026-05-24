@@ -48,3 +48,36 @@ export const EMERALD_700: RGB = rgb(0.02, 0.42, 0.27);  // matches the "seleccio
 // tell "sold together" (violet) apart from "pick one" (brand).
 export const VIOLET_300: RGB = rgb(0.77, 0.71, 0.97);   // violet-300 #c4b5fd
 export const VIOLET_700: RGB = rgb(0.42, 0.24, 0.80);   // violet-700 #6d28d9
+
+// Grand-total band — the headline of the "confident commercial" redesign.
+// A solid near-black bar anchors the total; the label reads in a muted
+// cream tone inside the band, the value in pure white. These two tones
+// only ever appear inside the band, so they live here as band-specific
+// palette entries rather than reusing the page ink scale.
+export const BAND_INK:   RGB = rgb(0.07, 0.065, 0.055);  // band fill — ink-950, near black
+export const BAND_CREAM: RGB = rgb(0.82, 0.79, 0.72);    // "TOTAL" label inside the band
+export const WHITE:      RGB = rgb(1, 1, 1);
+
+/**
+ * Type scale — collapsed to ~6 roles for the "confident commercial"
+ * redesign. Every draw* function maps onto one of these named sizes
+ * instead of one-off magic numbers, so the hierarchy rebalances in one
+ * place. Roles:
+ *
+ *   DISPLAY     company wordmark (header, left)
+ *   NUMBER      quote # (header, right) — deliberately quieter than the total
+ *   TOTAL_BIG   the grand-total value — the unmistakable visual climax
+ *   TITLE       product name + customer name
+ *   EYEBROW     section headers, CLIENTE/VENDEDOR labels, status captions
+ *   BODY        descriptions, addresses, subtotal-stack rows
+ *   META        ref/dim, FX shadow, footer
+ *   EYEBROW_SM  family eyebrow, compact money-cell line
+ */
+export const FS_DISPLAY    = 22;
+export const FS_NUMBER     = 15;
+export const FS_TOTAL_BIG  = 24;
+export const FS_TITLE      = 13;
+export const FS_EYEBROW    = 11;
+export const FS_BODY       = 9.5;
+export const FS_META       = 8.5;
+export const FS_EYEBROW_SM = 8;

@@ -9,6 +9,7 @@ import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
   BRAND_300, EMERALD_700,
+  FS_TITLE, FS_EYEBROW, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -96,38 +97,43 @@ interface TypeToken {
 // internas (no se imprimen)" in the editor, so it must not appear in
 // the client-facing PDF.
 const T: Record<string, TypeToken> = {
-  family:      { size: 7.5, lh: 11, color: BRAND_700, cs: 1.5, bold: true },
-  name:        { size: 12,  lh: 15, color: INK,       bold: true },
-  subtype:     { size: 10,  lh: 13, color: INK_HIGH },
+  // Family eyebrow — RECLAIMED from terracotta to a neutral ink grey.
+  // Terracotta now reads only on section headers + the grand total, so
+  // sections become the brand-coloured landmarks instead of every row
+  // shouting in brand colour.
+  family:      { size: FS_EYEBROW_SM, lh: 11, color: INK_MID, cs: 1.5, bold: true },
+  name:        { size: FS_TITLE,      lh: 16, color: INK,     bold: true },
+  subtype:     { size: 10,            lh: 13, color: INK_HIGH },
   // Meta strip: "ref <code> · <dimensions>" — combined into one
   // segment to mirror the preview's compact meta row.
-  meta:        { size: 9,   lh: 12, color: INK_MID },
-  description: { size: 9,   lh: 12, color: INK_HIGH },
-  // Numeric column type
-  numLabel:    { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
-  numValue:    { size: 11,  lh: 14, color: INK },
-  totalLabel:  { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
-  totalValue:  { size: 14,  lh: 18, color: INK,       bold: true },
-  // Discount caption — surfaces under UNITARIO when the line carries a
-  // line-level discount, so the customer can see the list price they're
-  // saving against. Rendered in brand-700 to make the concession
-  // legible at a glance against the otherwise-monochrome numeric column.
-  numStrike:   { size: 9,   lh: 11, color: INK_SOFT },
-  numDiscount: { size: 8.5, lh: 11, color: BRAND_700, bold: true },
+  meta:        { size: FS_BODY,       lh: 12, color: INK_MID },
+  description: { size: FS_BODY,       lh: 12, color: INK_HIGH },
+  // Compact money cell ----------------------------------------------------
+  // ONE muted "n × $unit" line (`moneyLine`) sits above the bold line
+  // TOTAL (`totalValue`). The repeated CANTIDAD / UNITARIO / TOTAL
+  // eyebrows are gone — the equation + a single bold anchor carry the
+  // meaning with far less noise.
+  moneyLine:   { size: FS_META,       lh: 12, color: INK_MID },
+  totalValue:  { size: 12,            lh: 16, color: INK,     bold: true },
+  // Discount captions inside the money cell — struck list price + "−Y%".
+  // Rendered just under the "n × $unit" line so the customer sees what
+  // they're saving against. Brand-700 keeps the concession legible.
+  numStrike:   { size: FS_META,       lh: 11, color: INK_SOFT },
+  numDiscount: { size: FS_EYEBROW_SM, lh: 11, color: BRAND_700, bold: true },
   // Compound article — components rendered as a vertical stack
   // beneath the shared family + name. Each component carries its own
   // name, grade/fabric, ref/dim, plus an inline qty × unit = subtotal
   // equation right-aligned with the component name.
   compName:        { size: 10.5, lh: 13.5, color: INK,      bold: true },
   compSubtype:     { size: 9,    lh: 12,   color: INK_HIGH },
-  compMeta:        { size: 8.5,  lh: 11,   color: INK_MID },
-  compDescription: { size: 8.5,  lh: 11,   color: INK_HIGH },
-  compInline:      { size: 9.5,  lh: 12,   color: INK },
-  compTotalLabel:  { size: 7.5,  lh: 11,   color: BRAND_700, cs: 1.4, bold: true },
-  compTotalValue:  { size: 14,   lh: 18,   color: INK,       bold: true },
+  compMeta:        { size: FS_META, lh: 11, color: INK_MID },
+  compDescription: { size: FS_META, lh: 11, color: INK_HIGH },
+  compInline:      { size: FS_BODY, lh: 12, color: INK_MID },
+  compTotalLabel:  { size: FS_EYEBROW_SM, lh: 12, color: INK_MID, cs: 1.4, bold: true },
+  compTotalValue:  { size: 13,   lh: 17,   color: INK,      bold: true },
 };
 
-const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
+const NUMERIC_GAP = 6;   // vertical gap between the money-cell line and the total
 
 /**
  * One wrapped segment of detail-column text: a token + its (already
@@ -344,22 +350,22 @@ function drawSegs(page: PDFPage, ctx: PdfCtx, segs: DetailSegment[], x: number, 
 }
 
 /**
- * Height of the numeric column: three (label + value + gap) blocks.
- * Constant per line — the column never wraps because money strings
- * stay on one line and the column is wide enough to fit them.
+ * Height of the compact money cell:
  *
- * When the line carries a line-level discount we tack on two extra
- * caption lines under UNITARIO (struck-through list price + "–Y%"
- * caption) so the customer can see what they're saving against.
+ *     2 × $1,606.50          ← moneyLine (qty × unit)
+ *     $1,890.00              ← struck list price   ┐ only when the
+ *     −15%                   ← discount caption     ┘ line is discounted
+ *                            ← NUMERIC_GAP
+ *     $3,213.00              ← line TOTAL (bold anchor)
+ *
+ * No CANTIDAD / UNITARIO / TOTAL eyebrows any more — the equation plus a
+ * single bold total carry the meaning. Constant per line; money strings
+ * never wrap because the cell is wide enough to fit them.
  */
 function numericHeight(line: QuoteLine): number {
   const discount = Number(line?.lineDiscountPct) || 0;
   const extra = discount > 0 ? T.numStrike.lh + T.numDiscount.lh : 0;
-  return (
-    T.numLabel.lh + T.numValue.lh + NUMERIC_GAP
-    + T.numLabel.lh + T.numValue.lh + extra + NUMERIC_GAP
-    + T.totalLabel.lh + T.totalValue.lh
-  );
+  return T.moneyLine.lh + extra + NUMERIC_GAP + T.totalValue.lh;
 }
 
 /**
@@ -779,7 +785,7 @@ export function drawSectionHeader(
   label: string,
 ): Cursor {
   const { fontBold } = ctx;
-  const size = 9;
+  const size = FS_EYEBROW;   // 11pt — sections are the brand-coloured landmarks
   const tracking = 1.6;
   const y = cursor.y - size;
   page.drawText((label || '').toUpperCase(), {
@@ -787,8 +793,21 @@ export function drawSectionHeader(
     size, font: fontBold, color: BRAND_700,
     characterSpacing: tracking,
   } as DrawTextOptions);
-  return { x: MARGIN_L, y: y - 18 };
+  // Short terracotta rule under the eyebrow so the section reads as a
+  // deliberate brand landmark, not just larger text. Now that no per-row
+  // label is terracotta, this rule + the eyebrow are the only brand marks
+  // in the body — exactly the "reclaimed accent" the redesign wants.
+  const ruleY = y - 7;
+  page.drawLine({
+    start: { x: MARGIN_L, y: ruleY },
+    end:   { x: MARGIN_L + SECTION_RULE_W, y: ruleY },
+    thickness: 1.5, color: BRAND_700,
+  });
+  return { x: MARGIN_L, y: ruleY - 16 };
 }
+
+// Width of the short terracotta rule beneath a section eyebrow.
+const SECTION_RULE_W = 34;
 
 /* ----------------------------- group footer ----------------------------- */
 //
@@ -994,73 +1013,52 @@ export async function drawLineRow(
     sy = drawSegs(page, ctx, detail.desc, cols.detail.x, sy);
   }
 
-  // ---- Numeric column — three label/value pairs, right-aligned ----------
+  // ---- Compact money cell — right-aligned to the shared money column ----
+  // One muted "qty × $unit" line, an optional struck-list/−Y% discount
+  // pair, then the line TOTAL as the bold anchor. No CANTIDAD / UNITARIO /
+  // TOTAL eyebrows — they repeated on every row and competed with the
+  // section landmarks for attention. The TOTAL aligns on the same right
+  // money column as compound subtotals and group-footer values.
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
   const discount = Number(line.lineDiscountPct) || 0;
   const listUnit = lineListUnit(line);
+  const moneyRight = cols.numeric.rightX;
 
   let ny = innerTop;
-  function drawLabelValue(
-    label: string,
-    value: string,
-    lblToken: TypeToken,
-    valToken: TypeToken,
-  ): void {
-    const lblY = ny - lblToken.size;
-    drawRightAt(
-      page, label, cols.numeric.rightX, lblY,
-      lblToken.size, fontBold, lblToken.color, lblToken.cs || 0,
-    );
-    ny -= lblToken.lh;
-    const valY = ny - valToken.size;
-    drawRightAt(
-      page, value, cols.numeric.rightX, valY,
-      valToken.size, valToken.bold ? fontBold : fontRegular, valToken.color,
-    );
-    ny -= valToken.lh + NUMERIC_GAP;
-  }
+  // "qty × $unit" — the per-unit story in one compact muted line.
+  const eq = `${line.qty || 0} × ${formatMoney(unit, ctx.currency, ctx.rates)}`;
+  drawRightAt(page, eq, moneyRight, ny - T.moneyLine.size, T.moneyLine.size, fontRegular, T.moneyLine.color);
+  ny -= T.moneyLine.lh;
 
-  drawLabelValue('CANTIDAD', String(line.qty || 0), T.numLabel, T.numValue);
-  drawLabelValue('UNITARIO', formatMoney(unit,  ctx.currency, ctx.rates), T.numLabel, T.numValue);
-  // Discount caption between UNITARIO and TOTAL — only when a line
-  // discount is set. Shows the list price with a strike-through line
-  // (pdf-lib has no `text-decoration: line-through`, so we draw a
-  // 0.6pt rule through the price string) and a brand-700 "–Y%"
-  // caption underneath. Bumps TOTAL down by `numericHeight`'s extra
-  // budget, which we reserved upstream.
+  // Discount: struck list price + "−Y%" caption, hugging the equation.
+  // pdf-lib has no text-decoration, so we draw a 0.6pt rule across the
+  // list-price string at the x-height.
   if (discount > 0) {
-    // Strike-through list price. ny currently sits at the top of the
-    // next block (post NUMERIC_GAP from UNITARIO). Roll the gap back
-    // so the caption hugs UNITARIO instead of floating midway.
-    ny += NUMERIC_GAP;
     const listText = formatMoney(listUnit, ctx.currency, ctx.rates);
     const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
     const listY = ny - T.numStrike.size;
-    drawRightAt(
-      page, listText, cols.numeric.rightX, listY,
-      T.numStrike.size, fontRegular, T.numStrike.color,
-    );
-    // Horizontal rule through the strike-through text. Centered on
-    // the x-height (~0.4 of the size), 0.6pt thick.
+    drawRightAt(page, listText, moneyRight, listY, T.numStrike.size, fontRegular, T.numStrike.color);
     const strikeY = listY + T.numStrike.size * 0.32;
     page.drawLine({
-      start: { x: cols.numeric.rightX - listW, y: strikeY },
-      end:   { x: cols.numeric.rightX,         y: strikeY },
+      start: { x: moneyRight - listW, y: strikeY },
+      end:   { x: moneyRight,         y: strikeY },
       thickness: 0.6, color: T.numStrike.color,
     });
     ny -= T.numStrike.lh;
 
-    const discText = `Descuento –${discount}%`;
-    const discY = ny - T.numDiscount.size;
-    drawRightAt(
-      page, discText, cols.numeric.rightX, discY,
-      T.numDiscount.size, fontBold, T.numDiscount.color,
-    );
-    ny -= T.numDiscount.lh + NUMERIC_GAP;
+    const discText = `−${discount}%`;
+    drawRightAt(page, discText, moneyRight, ny - T.numDiscount.size, T.numDiscount.size, fontBold, T.numDiscount.color);
+    ny -= T.numDiscount.lh;
   }
-  // No trailing gap after the last block — collapse it back.
-  drawLabelValue('TOTAL',    formatMoney(total, ctx.currency, ctx.rates), T.totalLabel, T.totalValue);
+
+  // Line TOTAL — the bold ink-900 anchor, ~12pt so it never rivals the
+  // 24pt grand total but clearly owns the row's price.
+  ny -= NUMERIC_GAP;
+  drawRightAt(
+    page, formatMoney(total, ctx.currency, ctx.rates), moneyRight,
+    ny - T.totalValue.size, T.totalValue.size, fontBold, T.totalValue.color,
+  );
 
   // ---- Option / alternative treatment ----------------------------------
   // Three steps, in order: (1) wash overlay fades the row when the
