@@ -86,7 +86,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
                     accent === 'red' ? <X size={12} /> : <CheckCircle2 size={12} />
                   )}
                 </div>
-                <div className={`mt-1.5 text-[10px] font-semibold uppercase tracking-wide truncate w-full ${labelMute}`} title={label}>
+                <div className={`mt-1.5 eyebrow-xs tracking-wide truncate w-full ${labelMute}`} title={label}>
                   {label}
                 </div>
                 <div className="text-[10px] text-ink-500 mt-0.5">

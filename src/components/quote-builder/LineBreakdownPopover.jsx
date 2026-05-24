@@ -53,7 +53,7 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
         anchor === 'right' ? 'right-0' : 'left-0'
       }`}
     >
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-500 mb-2">
+      <div className="eyebrow font-semibold tracking-wide mb-2">
         Cómo se calcula
       </div>
       {compound && (

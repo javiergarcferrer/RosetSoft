@@ -537,7 +537,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
             mid-row over the truncated name input. */}
         <div className="mt-4 xl:mt-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
           <label className="flex flex-col gap-1 lg:contents">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 lg:hidden">
+            <span className="eyebrow-xs tracking-wide lg:hidden">
               Rol
             </span>
             <select
@@ -557,7 +557,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
           </label>
 
           <label className="flex flex-col gap-1 lg:contents">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 lg:hidden">
+            <span className="eyebrow-xs tracking-wide lg:hidden">
               Comisión
             </span>
             <div className="relative">

@@ -216,7 +216,7 @@ export default function Materials() {
                         />
                       )}
                     </td>
-                    <td className="px-3 py-2 text-[11px] uppercase tracking-wide text-ink-500">
+                    <td className="px-3 py-2 eyebrow font-normal tracking-wide">
                       {categoryLabel(m.category)}
                     </td>
                     <td className="px-3 py-2 font-medium text-ink-900">{m.name}</td>
