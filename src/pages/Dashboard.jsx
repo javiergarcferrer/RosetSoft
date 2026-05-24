@@ -6,6 +6,7 @@ import {
 import { useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import ListLoading from '../components/ListLoading.jsx';
+import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
@@ -30,9 +31,6 @@ import { isPricedLine } from '../lib/constants.js';
  * Per-quote deal value is shown (it helps prioritise), but no aggregate
  * "sales number" — that's an admin concern, not a seller's daily driver.
  */
-
-const SCOPE_MINE = 'mias';
-const SCOPE_TEAM = 'equipo';
 
 // Accepted-quote next step, from the quote-level milestone chain
 // (deposit → balance → delivery). `rank` sorts the most-pending to the top.
@@ -122,24 +120,7 @@ export default function Dashboard() {
         subtitle={settings?.companyName || 'Tu empresa'}
         actions={
           <div className="flex items-center gap-2">
-            {meId && (
-              <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => setScope(SCOPE_MINE)}
-                  className={scope === SCOPE_MINE ? 'px-3 py-1.5 bg-ink-900 text-ink-50' : 'px-3 py-1.5 text-ink-600 hover:bg-ink-100'}
-                >
-                  Mías
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScope(SCOPE_TEAM)}
-                  className={scope === SCOPE_TEAM ? 'px-3 py-1.5 bg-ink-900 text-ink-50' : 'px-3 py-1.5 text-ink-600 hover:bg-ink-100'}
-                >
-                  Equipo
-                </button>
-              </div>
-            )}
+            {meId && <ScopeToggle scope={scope} onChange={setScope} />}
             <Link to="/quotes/new" className="btn-primary">
               <Plus size={14} /> Nueva cotización
             </Link>

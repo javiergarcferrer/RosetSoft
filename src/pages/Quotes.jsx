@@ -5,6 +5,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import { Plus, FileText, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -61,7 +62,13 @@ function useQuoteOps(qu) {
 }
 
 export default function Quotes() {
-  const { profileId, profiles, settings } = useApp();
+  const { profileId, profiles, settings, currentProfile } = useApp();
+  // Mías / Equipo scope — defaults to the signed-in seller's own quotes
+  // (same toggle the home uses). Falls back to team when the current user
+  // isn't known yet.
+  const meId = currentProfile?.id || null;
+  const [scope, setScope] = useState(SCOPE_MINE);
+  const effectiveScope = meId ? scope : SCOPE_TEAM;
   // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
   // `loaded` so we don't show a misleading "no data" message during the
   // first fetch — that flicker is the bug we're killing.
@@ -137,21 +144,30 @@ export default function Quotes() {
     return m;
   }, [allLines, quotes]);
 
+  // Apply the Mías / Equipo scope FIRST — every downstream view (tab
+  // counts, the vendedor filter options, the result list) reads from this
+  // so the whole page reflects the toggle, not just the rows.
+  const scopedQuotes = useMemo(
+    () => (effectiveScope === SCOPE_TEAM
+      ? quotes
+      : quotes.filter((qu) => qu.createdByUserId === meId)),
+    [quotes, effectiveScope, meId],
+  );
+
   // Tabs for the primary status dimension. Counts are computed off the
-  // full list so each tab shows "how many would I see if I tapped this",
-  // independent of the search needle / secondary filters (Shopify's saved
-  // views behave this way — the count reflects the view, not the search).
+  // scoped list so each tab shows "how many would I see if I tapped this"
+  // within the current scope, independent of the search needle.
   const tabs = useMemo(() => {
     // Count by the derived lifecycle stage (currentQuoteStage), so a quote
     // with a deposit shows under "Depósito recibido" — same dimension the
     // status pill and the order page use.
     const counts = { draft: 0, sent: 0, accepted: 0, deposito_recibido: 0, declined: 0, archived: 0 };
-    for (const qu of quotes) {
+    for (const qu of scopedQuotes) {
       const stage = currentQuoteStage(qu);
       if (stage in counts) counts[stage] += 1;
     }
     return [
-      { key: 'all', label: 'Todas', count: quotes.length },
+      { key: 'all', label: 'Todas', count: scopedQuotes.length },
       { key: 'draft', label: 'Borrador', count: counts.draft },
       { key: 'sent', label: 'Enviada', count: counts.sent },
       { key: 'accepted', label: 'Aceptada', count: counts.accepted },
@@ -159,7 +175,7 @@ export default function Quotes() {
       { key: 'declined', label: 'Rechazada', count: counts.declined },
       { key: 'archived', label: 'Archivada', count: counts.archived },
     ];
-  }, [quotes]);
+  }, [scopedQuotes]);
 
   // Secondary filter: vendedor (the quote's creator). Options are the
   // distinct creators actually present on this team's quotes, so the
@@ -192,8 +208,10 @@ export default function Quotes() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const creator = filters.creator;
-    const rows = quotes
+    // The vendedor filter only applies in team scope — under "Mías" you're
+    // already scoped to yourself, so it's hidden and ignored.
+    const creator = effectiveScope === SCOPE_TEAM ? filters.creator : null;
+    const rows = scopedQuotes
       .filter((qu) => (tab === 'all' ? true : currentQuoteStage(qu) === tab))
       .filter((qu) => (creator ? qu.createdByUserId === creator : true))
       .filter((qu) => {
@@ -224,7 +242,7 @@ export default function Quotes() {
       return ((a.updatedAt || 0) - (b.updatedAt || 0)) * mul;
     });
     return sorted;
-  }, [quotes, q, tab, filters, sort, customerById, totalByQuoteId]);
+  }, [scopedQuotes, effectiveScope, q, tab, filters, sort, customerById, totalByQuoteId]);
 
   if (!loaded) {
     return (
@@ -252,8 +270,13 @@ export default function Quotes() {
     <>
       <PageHeader
         title="Cotizaciones"
-        subtitle={`${quotes.length} ${quotes.length === 1 ? 'cotización' : 'cotizaciones'}`}
-        actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>}
+        subtitle={`${scopedQuotes.length} ${scopedQuotes.length === 1 ? 'cotización' : 'cotizaciones'}`}
+        actions={
+          <div className="flex items-center gap-2">
+            {meId && <ScopeToggle scope={scope} onChange={setScope} />}
+            <Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>
+          </div>
+        }
       />
 
       <ListSearchHeader
@@ -263,7 +286,7 @@ export default function Quotes() {
         tabs={tabs}
         activeTab={tab}
         onTabChange={setTab}
-        filters={[creatorFilter]}
+        filters={effectiveScope === SCOPE_TEAM ? [creatorFilter] : []}
         activeFilters={filters}
         onFiltersChange={setFilters}
         sortOptions={sortOptions}
