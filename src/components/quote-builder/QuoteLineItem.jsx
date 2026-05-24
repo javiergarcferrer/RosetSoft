@@ -50,7 +50,7 @@ import { newId } from '../../db/database.js';
 export default function QuoteLineItem({
   line, quote, onChange, onRemove, onDuplicate,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onJoinSet, onSeparateFromSet, canJoinAbove,
+  onSeparateFromSet, onUngroup, insideGroupCard,
   groupInfo, setInfo,
   autoFocus, dragHandleProps,
 }) {
@@ -166,7 +166,11 @@ export default function QuoteLineItem({
       className={`qli-row group relative transition-colors duration-150 hover:bg-ink-50/40 ${
         line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''
       } ${
-        line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
+        // Per-line group accents are drawn by the wrapping GroupCard when
+        // this line lives inside one (insideGroupCard) — don't double them.
+        // A standalone alternative line (mid-edit, before the card forms)
+        // keeps its own accent as a fallback.
+        !insideGroupCard && line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
       }`}
     >
       {dimmed && (
@@ -182,7 +186,7 @@ export default function QuoteLineItem({
         setGroup={line.setGroup}
         groupInfo={groupInfo}
         setInfo={setInfo}
-        canJoinAbove={canJoinAbove}
+        insideGroupCard={insideGroupCard}
         expanded={expanded}
         onToggleExpand={() => setExpanded((v) => !v)}
         onDuplicate={onDuplicate}
@@ -192,8 +196,8 @@ export default function QuoteLineItem({
         onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
         onSelectAlternative={onSelectAlternative}
-        onJoinSet={onJoinSet}
         onSeparateFromSet={onSeparateFromSet}
+        onUngroup={onUngroup}
         dragHandleProps={dragHandleProps}
       />
 
@@ -280,13 +284,17 @@ function makeBlankComponent(overrides = {}) {
 function TopStrip({
   family, onPickFamily, compound,
   isOptional, alternativeGroup, isSelectedAlternative, groupInfo,
-  setGroup, setInfo, canJoinAbove,
+  setGroup, setInfo, insideGroupCard,
   expanded, onToggleExpand, onDuplicate, onRemove,
   onConvertToCompound, onDissolveCompound,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onJoinSet, onSeparateFromSet,
+  onSeparateFromSet, onUngroup,
   dragHandleProps,
 }) {
+  // Optional toggle is meaningless for a grouped line — a set member is
+  // always priced (take-all) and an alternative is priced-when-selected;
+  // both are mutually exclusive with isOptional (DB CHECK + type rule).
+  const canToggleOptional = !alternativeGroup && !setGroup;
   const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div className="flex items-center gap-2 mb-2.5 -ml-1">
@@ -369,35 +377,52 @@ function TopStrip({
         </button>
       )}
 
-      {isOptional && (
-        <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-50 border border-dashed border-ink-300 px-2 py-0.5 rounded-full"
-          title="No se incluye en el total hasta aceptación"
+      {/* Opcional toggle — a visible on/off pill (promoted out of the
+          overflow menu), mirroring the component-level optional toggle.
+          Hidden when the line is grouped (set / alternative), where
+          optional is meaningless and forbidden. */}
+      {canToggleOptional && onToggleOptional && (
+        <button
+          type="button"
+          onClick={onToggleOptional}
+          className={`inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] px-2 py-0.5 rounded-full transition-colors ${
+            isOptional
+              ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
+              : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
+          }`}
+          title={isOptional
+            ? 'Quitar el marcador opcional — la línea vuelve a sumar al total'
+            : 'Marcar como opcional — la línea se muestra pero no suma al total'}
+          aria-pressed={isOptional}
         >
-          Opcional
-        </span>
+          <Sparkles size={10} className="opacity-70" aria-hidden />
+          {isOptional ? 'Opcional' : 'Hacer opcional'}
+        </button>
       )}
 
+      {/* Group position chips. When the line is wrapped in a GroupCard the
+          card's header/footer already carries the "Conjunto" / "Alternativas"
+          identity, so we render only a quiet "N/M" position pill inside the
+          card to avoid doubling the label. Outside a card (a momentary
+          mid-edit single line) the full labelled chip still shows. */}
       {alternativeGroup && groupInfo && (
         <span
           className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full"
           title="Esta línea es parte de un grupo de alternativas; solo la seleccionada cuenta en el total"
         >
-          Alternativa {groupInfo.index}/{groupInfo.total}
+          {insideGroupCard ? `${groupInfo.index}/${groupInfo.total}` : `Alternativa ${groupInfo.index}/${groupInfo.total}`}
         </span>
       )}
 
-      {/* Conjunto chip — this line is part of a take-all set; every
-          member is priced and rolls up to one "Total del conjunto".
-          Violet token keeps it distinct from the brand-colored
-          Alternativa chip. */}
       {setGroup && (
         <span
           className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full"
           title="Esta línea forma parte de un conjunto; todas las piezas se cotizan y suman al total"
         >
           <Boxes size={10} className="opacity-80" aria-hidden />
-          Conjunto{setInfo ? ` ${setInfo.index}/${setInfo.total}` : ''}
+          {insideGroupCard
+            ? (setInfo ? `${setInfo.index}/${setInfo.total}` : 'Conjunto')
+            : `Conjunto${setInfo ? ` ${setInfo.index}/${setInfo.total}` : ''}`}
         </span>
       )}
 
@@ -416,15 +441,13 @@ function TopStrip({
         isOptional={isOptional}
         alternativeGroup={alternativeGroup}
         setGroup={setGroup}
-        canJoinAbove={canJoinAbove}
         onDuplicate={onDuplicate}
         onRemove={onRemove}
         onConvertToCompound={onConvertToCompound}
         onDissolveCompound={onDissolveCompound}
-        onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
-        onJoinSet={onJoinSet}
         onSeparateFromSet={onSeparateFromSet}
+        onUngroup={onUngroup}
       />
 
       <FamilyPicker
@@ -1091,10 +1114,10 @@ function AdjustmentChip({ line }) {
 function OverflowMenu({
   onDuplicate, onRemove, compound,
   isOptional, alternativeGroup,
-  setGroup, canJoinAbove,
+  setGroup,
   onConvertToCompound, onDissolveCompound,
-  onToggleOptional, onAddAlternative,
-  onJoinSet, onSeparateFromSet,
+  onAddAlternative,
+  onSeparateFromSet, onUngroup,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1159,29 +1182,11 @@ function OverflowMenu({
             </button>
           )}
 
-          {/* Optional add-on toggle. Hidden when the line is in an
-              alternative group — DB CHECK forbids optional+alternative
-              and the UI shouldn't tempt the dealer to construct it. */}
-          {!alternativeGroup && onToggleOptional && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onToggleOptional(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title={isOptional
-                ? 'Quitar el marcador opcional — la línea volverá al total'
-                : 'Marcar como opcional — la línea se muestra pero no suma al total'}
-            >
-              <Sparkles size={14} className="text-ink-500" />
-              {isOptional ? 'Quitar opcional' : 'Marcar como opcional'}
-            </button>
-          )}
-
-          {/* Add alternative. Hidden when the line is optional (same
-              mutual-exclusion rule). When the line is already in a
-              group, the action label clarifies it's adding ANOTHER
-              alternative to the existing group. */}
-          {!isOptional && onAddAlternative && (
+          {/* Add alternative (secondary path — multi-select is primary).
+              Hidden when the line is optional or in a set (mutual
+              exclusion). When the line is already in an alternative
+              group, the label clarifies it adds ANOTHER alternative. */}
+          {!isOptional && !setGroup && onAddAlternative && (
             <button
               type="button"
               role="menuitem"
@@ -1196,25 +1201,8 @@ function OverflowMenu({
             </button>
           )}
 
-          {/* Conjunto (set) actions. "Unir al conjunto de arriba" joins
-              the line above into a take-all set; hidden on the first row
-              (nothing above) and when the line is optional / alternative
-              (mutually exclusive — those flags get stripped on join, but
-              we don't surface a path that mixes the mental models).
-              When already in a set, offer to leave it instead. */}
-          {!setGroup && canJoinAbove && !isOptional && !alternativeGroup && onJoinSet && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onJoinSet(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title="Agrupar esta línea con la de arriba como un conjunto que se vende junto"
-            >
-              <Boxes size={14} className="text-ink-500" />
-              Unir al conjunto de arriba
-            </button>
-          )}
-
+          {/* Leave the Conjunto (set). Creation is via multi-select; this
+              is the per-line "Separar del conjunto". */}
           {setGroup && onSeparateFromSet && (
             <button
               type="button"
@@ -1225,6 +1213,22 @@ function OverflowMenu({
             >
               <Boxes size={14} className="text-ink-500" />
               Separar del conjunto
+            </button>
+          )}
+
+          {/* Leave the Alternativa group. Same "Separar" verb as the set
+              path; the handler heals the group's singleton/selection
+              invariants in QuoteBuilder. */}
+          {alternativeGroup && onUngroup && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onUngroup(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Sacar esta línea del grupo de alternativas; vuelve a ser una línea independiente"
+            >
+              <GitFork size={14} className="text-ink-500" />
+              Separar de las alternativas
             </button>
           )}
 
