@@ -2,7 +2,7 @@ import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal, lineListUnit, lineQty, setSubtotal,
+  lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
 } from '../lib/pricing.js';
 import { rgb } from 'pdf-lib';
 import {
@@ -790,83 +790,137 @@ export function drawSectionHeader(
   return { x: MARGIN_L, y: y - 18 };
 }
 
-/* ----------------------------- conjunto footer ----------------------------- */
+/* ----------------------------- group footer ----------------------------- */
 //
-// "TOTAL DEL CONJUNTO" roll-up row. Drawn ONCE after the last member of
-// each contiguous setGroup run (the run-boundary detection lives in the
-// row-iteration caller, quotePdf.ts). Presentational only — every member
-// is already priced into the grand total, so this is a SUM of the run's
-// member line totals (setSubtotal), not a new charge. Mirrors the
-// on-screen preview's violet "Conjunto · Total del conjunto" footer:
-//   - a violet accent bar in the same page-margin gutter the option /
-//     alternative accent uses, so the run reads as one bracketed group;
-//   - a violet uppercase "TOTAL DEL CONJUNTO" eyebrow on the left;
-//   - the formatted sum right-aligned to the right page margin.
+// Footer roll-up row drawn ONCE after the last member of a contiguous
+// grouped run — a Conjunto (setGroup) OR an Alternativa (alternativeGroup).
+// The run-boundary detection lives in the row-iteration caller (quotePdf.ts),
+// which walks `groupRuns(lines)`. Presentational only — the members are
+// already priced into the grand total (a set sums all members; an
+// alternative bills only the selected option), so the footer never adds a
+// charge. Mirrors the on-screen editor / preview group cards:
+//   Conjunto    → violet accent, "TOTAL DEL CONJUNTO", setSubtotal.
+//   Alternativa → brand accent, "TOTAL",            alternativeSubtotal.
+//
+// Each footer paints:
+//   - an accent bar in the same page-margin gutter the per-member option /
+//     alternative accent uses, so the whole run reads as one bracketed block;
+//   - an uppercase tracked eyebrow on the left in the run's accent colour;
+//   - the formatted amount right-aligned to the right page margin.
 
-const SET_FOOTER_TOP_PAD    = 8;    // gap above the footer caption
-const SET_FOOTER_BOTTOM_PAD = 12;   // gap below before the next row
-const SET_FOOTER_LABEL_SIZE = 8.5;
-const SET_FOOTER_LABEL_CS   = 1.4;
-const SET_FOOTER_VALUE_SIZE = 11;
+const GROUP_FOOTER_TOP_PAD    = 8;    // gap above the footer caption
+const GROUP_FOOTER_BOTTOM_PAD = 12;   // gap below before the next row
+const GROUP_FOOTER_LABEL_SIZE = 8.5;
+const GROUP_FOOTER_LABEL_CS   = 1.4;
+const GROUP_FOOTER_VALUE_SIZE = 11;
 
 /**
- * Vertical footprint of the "TOTAL DEL CONJUNTO" footer row. The caller
- * adds this to its page-break budget for the run's last member so the
- * footer never gets orphaned onto a fresh page away from its set.
+ * Vertical footprint of a group footer row (Conjunto or Alternativa). The
+ * caller adds this to its page-break budget for the run's last member so the
+ * footer never gets orphaned onto a fresh page away from its block.
  */
-export function measureSetFooterHeight(): number {
-  return SET_FOOTER_TOP_PAD + Math.max(SET_FOOTER_LABEL_SIZE, SET_FOOTER_VALUE_SIZE) + SET_FOOTER_BOTTOM_PAD;
+export function measureGroupFooterHeight(): number {
+  return GROUP_FOOTER_TOP_PAD
+    + Math.max(GROUP_FOOTER_LABEL_SIZE, GROUP_FOOTER_VALUE_SIZE)
+    + GROUP_FOOTER_BOTTOM_PAD;
 }
 
 /**
- * Draw the "TOTAL DEL CONJUNTO <amount>" footer for one set run. `lines`
- * is the full quote line list (setSubtotal filters by `setGroup`). Same
- * money formatter the rest of the file uses. Returns the cursor below
- * the footer so the caller can keep flowing rows.
+ * Visual palette for a group footer / enclosing accent: the lighter `bar`
+ * tone (300) for the gutter accent bar — matching the editor card's 2px
+ * border — and the darker `label` tone (700) for the eyebrow text. Pair
+ * built per group type by the caller (see GROUP_ACCENTS).
  */
-export function drawSetFooterRow(
+interface GroupAccent {
+  bar: RGB;
+  label: RGB;
+}
+
+// The two group palettes, mirroring the editor's GroupCard rings + eyebrow
+// colours: Conjunto → violet, Alternativa → brand.
+const GROUP_ACCENTS: { set: GroupAccent; alternative: GroupAccent } = {
+  set:         { bar: VIOLET_300, label: VIOLET_700 },
+  alternative: { bar: BRAND_300,  label: BRAND_700 },
+};
+
+/**
+ * Draw a grouped-run footer: "<label> <amount>" with a colored accent bar
+ * spanning the row in the page-margin gutter. Generic over both group
+ * types — the caller passes the eyebrow label, the pre-computed amount, and
+ * the accent palette (violet for a Conjunto, brand for an Alternativa). The
+ * lighter `bar` tone paints the gutter accent; the darker `label` tone the
+ * eyebrow text — matching the editor card. Same money formatter as the
+ * rows. Returns the cursor below the footer so the caller can keep flowing.
+ */
+export function drawGroupFooterRow(
   page: PDFPage,
   ctx: PdfCtx,
   cursor: Cursor,
-  lines: QuoteLine[],
-  setGroup: string,
+  label: string,
+  amount: number,
+  accent: GroupAccent,
 ): Cursor {
   const { fontBold } = ctx;
   const rightX = PAGE_W - MARGIN_R;
-  const subtotal = setSubtotal(lines, setGroup);
 
   // Baseline for the single label/value line, dropped below the top pad.
-  const lineTop = cursor.y - SET_FOOTER_TOP_PAD;
-  const baselineY = lineTop - SET_FOOTER_VALUE_SIZE;
-  const rowBottom = lineTop - SET_FOOTER_VALUE_SIZE - SET_FOOTER_BOTTOM_PAD;
+  const lineTop = cursor.y - GROUP_FOOTER_TOP_PAD;
+  const baselineY = lineTop - GROUP_FOOTER_VALUE_SIZE;
+  const rowBottom = lineTop - GROUP_FOOTER_VALUE_SIZE - GROUP_FOOTER_BOTTOM_PAD;
 
-  // Violet accent bar in the page-margin gutter — same x as the
-  // option/alternative accent so a contiguous set reads as one bracket.
+  // Accent bar in the page-margin gutter — same x as the per-member
+  // option/alternative accent so a contiguous run reads as one bracket.
   page.drawRectangle({
     x: MARGIN_L - ACCENT_BAR_GAP - ACCENT_BAR_W,
     y: rowBottom,
     width: ACCENT_BAR_W,
     height: cursor.y - rowBottom,
-    color: VIOLET_300,
+    color: accent.bar,
   });
 
-  // Left eyebrow — violet uppercase tracked caption.
-  page.drawText('TOTAL DEL CONJUNTO', {
+  // Left eyebrow — uppercase tracked caption in the run's darker accent tone.
+  page.drawText(label, {
     x: MARGIN_L,
     y: baselineY,
-    size: SET_FOOTER_LABEL_SIZE,
+    size: GROUP_FOOTER_LABEL_SIZE,
     font: fontBold,
-    color: VIOLET_700,
-    characterSpacing: SET_FOOTER_LABEL_CS,
+    color: accent.label,
+    characterSpacing: GROUP_FOOTER_LABEL_CS,
   } as DrawTextOptions);
 
   // Right-aligned amount in ink, bold — same money formatter as the rows.
   drawRightAt(
-    page, formatMoney(subtotal, ctx.currency, ctx.rates), rightX, baselineY,
-    SET_FOOTER_VALUE_SIZE, fontBold, INK,
+    page, formatMoney(amount, ctx.currency, ctx.rates), rightX, baselineY,
+    GROUP_FOOTER_VALUE_SIZE, fontBold, INK,
   );
 
   return { x: MARGIN_L, y: rowBottom };
+}
+
+/**
+ * Resolve a group run's footer presentation — the Spanish uppercase eyebrow
+ * label, the rolled-up amount, and the accent palette — for a `set` or
+ * `alternative` run. `lines` is the full quote list (the subtotal helpers
+ * filter by groupId). Centralised so the caller (quotePdf.ts) stays a thin
+ * loop and both group types share one footer code path.
+ */
+export function groupFooterSpec(
+  type: 'set' | 'alternative',
+  lines: QuoteLine[],
+  groupId: string,
+): { label: string; amount: number; accent: GroupAccent } {
+  if (type === 'set') {
+    return {
+      label: 'TOTAL DEL CONJUNTO',
+      amount: setSubtotal(lines, groupId),
+      accent: GROUP_ACCENTS.set,
+    };
+  }
+  return {
+    label: 'TOTAL',
+    amount: alternativeSubtotal(lines, groupId),
+    accent: GROUP_ACCENTS.alternative,
+  };
 }
 
 /**
