@@ -119,7 +119,9 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
         </div>
         <div className="text-right">
           <div className="eyebrow">Cotización</div>
-          <div className="text-3xl font-semibold tracking-tight">#{quote.number || '—'}</div>
+          {/* Quieter quote number — it shouldn't out-shout the company
+              wordmark or (on the totals) the grand total. */}
+          <div className="text-xl font-semibold tracking-tight">#{quote.number || '—'}</div>
           <div className="text-[11px] text-ink-500 mt-2">{formatDate(quote.updatedAt)}</div>
         </div>
       </div>
@@ -132,7 +134,9 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
             <div className="eyebrow mb-1.5">Cliente</div>
             {customer ? (
               <>
-                <div className="text-sm font-semibold text-ink-900">{customer.name}</div>
+                {/* Up-weighted recipient — the second-most prominent
+                    identity after the company, matching the PDF. */}
+                <div className="text-lg font-semibold text-ink-900">{customer.name}</div>
                 {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
                 <div className="text-[11px] text-ink-500 leading-relaxed mt-1">
                   {[customer.address, [customer.city, customer.state, customer.zip].filter(Boolean).join(', '), customer.country, customer.email, customer.phone].filter(Boolean).join(' · ')}
@@ -183,8 +187,15 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
             return (
               <div key={gi} className="mb-2">
                 {g.label && (
-                  <div className="px-4 pt-5 pb-1.5 eyebrow font-semibold tracking-[0.12em] text-brand-700">
-                    {g.label}
+                  // Section landmark — terracotta eyebrow + a short
+                  // terracotta rule, the only brand-coloured marks in the
+                  // line body now (per-row labels are neutral). Mirrors the
+                  // PDF's section treatment.
+                  <div className="px-4 pt-6 pb-2">
+                    <div className="eyebrow font-semibold tracking-[0.12em] text-brand-700">
+                      {g.label}
+                    </div>
+                    <div className="mt-1.5 h-[2px] w-9 bg-brand-700 rounded-full" />
                   </div>
                 )}
                 <ul>
@@ -244,25 +255,32 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
         )}
       </div>
 
-      {/* Totals */}
-      <div className="px-6 sm:px-10 py-6 border-t border-ink-100 bg-ink-50/50">
-        <div className="ml-auto max-w-sm space-y-1.5 tabular-nums">
-          <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
-          {quote.discountPct ? (
-            // Discount row reads in brand colour — muted styling made
-            // it look incidental next to the (muted) ITBIS / Envío
-            // lines, which buried the concession the customer was
-            // supposed to perceive.
-            <TotalRow
-              label={`Descuento (${quote.discountPct}%)`}
-              value={`–${fmt(totals.discountAmt)}`}
-              accent
-            />
-          ) : null}
-          <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted />
-          {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
-          <div className="border-t border-ink-300 mt-2 pt-2">
-            <TotalRow label="Total" value={fmt(totals.grandTotal)} bold />
+      {/* Totals — the grand total is anchored in a solid ink-900 band,
+          the visual climax. Sub-rows above stay right-aligned body text
+          (Descuento in brand); the savings line + FX shadow sit below the
+          band. Mirrors the redesigned PDF. */}
+      <div className="px-6 sm:px-10 py-7 border-t border-ink-100">
+        <div className="ml-auto max-w-sm tabular-nums">
+          <div className="space-y-1.5">
+            <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
+            {quote.discountPct ? (
+              // Discount row reads in brand colour — muted styling made
+              // it look incidental next to the (muted) ITBIS / Envío
+              // lines, which buried the concession the customer was
+              // supposed to perceive.
+              <TotalRow
+                label={`Descuento (${quote.discountPct}%)`}
+                value={`–${fmt(totals.discountAmt)}`}
+                accent
+              />
+            ) : null}
+            <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted />
+            {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
+          </div>
+          {/* The anchored grand-total band. */}
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-ink-900 px-5 py-3.5">
+            <span className="eyebrow-xs tracking-[0.18em] text-ink-200">Total</span>
+            <span className="text-2xl font-semibold text-white">{fmt(totals.grandTotal)}</span>
           </div>
           {savings > 0 && (
             <div className="mt-2 text-right text-xs font-medium text-brand-700">
@@ -416,7 +434,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
         <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
           <div className="min-w-0 sm:flex-1">
             {line.family && (
-              <div className="eyebrow-xs tracking-widest text-brand-700 mb-0.5">
+              <div className="eyebrow-xs tracking-widest text-ink-500 mb-0.5">
                 {line.family}
               </div>
             )}
@@ -467,52 +485,27 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
               desktop layout had no width problem and benefits from
               the explicit labels. */}
 
-          {/* Mobile: single-line equation. Hidden at sm+.
-              When the line carries a discount we surface a second
-              right-aligned caption ("antes $X · –Y%") so the customer
-              can see what they're saving — the bare equation otherwise
-              shows only the post-discount unit and hides the
-              concession. */}
-          <div className="sm:hidden mt-3 pt-3 border-t border-ink-100 text-right tabular-nums">
-            <div className="text-sm whitespace-nowrap">
-              <span className="text-ink-700">{qty}</span>
-              <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
-              <span className="text-ink-700">{fmt(unit)}</span>
-              <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-              <span className="text-ink-900 font-semibold">{fmt(total)}</span>
+          {/* Compact money cell — the SAME shape on every breakpoint now,
+              matching the redesigned PDF: a muted "n × $unit" line, an
+              optional struck-list/−Y% discount pair, then the line TOTAL
+              as the bold ink-900 anchor. The repeated CANTIDAD / UNITARIO
+              / TOTAL eyebrows are gone — they competed with the section
+              landmarks for attention and repeated on every row. On mobile
+              it sits under a hairline at the card bottom; on sm+ it floats
+              right of the detail column. */}
+          <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
+            <div className="text-[13px] text-ink-500 whitespace-nowrap">
+              {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
             </div>
             {discounted && (
-              <div className="text-[11px] text-brand-700 mt-1 whitespace-nowrap">
-                <span className="line-through text-ink-400 mr-1.5">{fmt(listUnit)}</span>
-                <span>descuento –{discount}%</span>
+              <div className="mt-0.5 whitespace-nowrap">
+                <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
+                <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
               </div>
             )}
-          </div>
-
-          {/* sm+: vertical labelled column. Hidden below sm.
-              Discount, when present, becomes the visual centerpiece:
-              the list price is struck through above Unitario, and a
-              brand-color "Descuento –Y%" caption sits between Unitario
-              and Total so the savings register at a glance. */}
-          <div className="hidden sm:block text-right tabular-nums min-w-[120px] flex-shrink-0">
-            <PriceCell label="Cantidad" value={String(qty)} />
-            {discounted && (
-              <div className="mt-1.5 text-right">
-                <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
-                  Precio lista
-                </div>
-                <div className="text-sm text-ink-400 line-through whitespace-nowrap">
-                  {fmt(listUnit)}
-                </div>
-              </div>
-            )}
-            <div className="mt-1.5"><PriceCell label="Unitario" value={fmt(unit)} /></div>
-            {discounted && (
-              <div className="text-[11px] text-brand-700 font-medium mt-0.5">
-                Descuento –{discount}%
-              </div>
-            )}
-            <div className="mt-1.5"><PriceCell label="Total" value={fmt(total)} emphasis /></div>
+            <div className="mt-1.5 text-lg font-semibold text-ink-900 whitespace-nowrap">
+              {fmt(total)}
+            </div>
             {discounted && qty > 1 && (
               <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
                 ahorras {fmt(listTotal - total)}
@@ -530,11 +523,11 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
 // subtype + its own qty × unit = subtotal. The whole block resolves into
 // a single "Total compuesto" amount.
 //
-// The footer mirrors the article line's discount column (PriceCell +
-// Precio lista + Descuento + ahorras) so a customer comparing a single-
-// item discount to a bundle discount reads the same vocabulary in the
-// same position — the "design system" is the shared eyebrow / strike /
-// brand-caption stack, not a one-off composition.
+// The footer mirrors the article line's compact money cell (struck list
+// price + −Y% caption + bold total anchor) so a customer comparing a
+// single-item discount to a bundle discount reads the same vocabulary in
+// the same position — the shared compact-cell shape is the design system,
+// not a one-off composition.
 function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
@@ -627,23 +620,22 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
               <CompoundComponentRow key={c.id || i} component={c} fmt={fmt} />
             ))}
           </ul>
-          <div className="mt-3 pt-2 border-t border-ink-200 tabular-nums">
+          {/* Compound roll-up — a neutral "Total compuesto" caption +
+              bold total anchor, matching the redesigned PDF footer. The
+              optional struck list price / −Y% sit above when discounted. */}
+          <div className="mt-3 pt-2 border-t border-ink-100 tabular-nums">
             <div className="ml-auto w-fit text-right">
               {discounted && (
-                <>
-                  <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
-                    Precio lista
-                  </div>
-                  <div className="text-sm text-ink-400 line-through whitespace-nowrap">
-                    {fmt(subtotal)}
-                  </div>
-                  <div className="text-[11px] text-brand-700 font-medium mt-0.5 whitespace-nowrap">
-                    Descuento –{discount}%
-                  </div>
-                </>
+                <div className="whitespace-nowrap">
+                  <span className="text-[13px] text-ink-400 line-through">{fmt(subtotal)}</span>
+                  <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+                </div>
               )}
-              <div className={discounted ? 'mt-1.5' : ''}>
-                <PriceCell label="Total compuesto" value={fmt(grandTotal)} emphasis />
+              <div className="eyebrow-xs tracking-wide text-ink-500 whitespace-nowrap mt-0.5">
+                Total compuesto
+              </div>
+              <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+                {fmt(grandTotal)}
               </div>
               {discounted && (
                 <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
@@ -724,23 +716,6 @@ function CompoundComponentRow({ component, fmt }) {
   );
 }
 
-// Small label/value pair used inside the line-item summary strip.
-// label = brand-700 eyebrow; value = ink-900. On mobile each cell sits
-// inline with its siblings (label-above-value still, just compact);
-// on sm+ they stack vertically and right-align as part of the column.
-function PriceCell({ label, value, emphasis }) {
-  return (
-    <div className="text-right">
-      <div className="eyebrow-xs tracking-wide text-brand-700 whitespace-nowrap">
-        {label}
-      </div>
-      <div className={`whitespace-nowrap ${emphasis ? 'text-base font-semibold text-ink-900' : 'text-sm font-medium text-ink-900'}`}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
 // Container card wrapping a contiguous group run (Conjunto or Alternativa)
 // on the customer-facing preview. Mirrors the editor's LineItemList
 // GroupCard visual language — a bordered card with a header eyebrow on
@@ -797,10 +772,11 @@ function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children
   );
 }
 
-function TotalRow({ label, value, muted, accent, bold }) {
-  const tone = bold
-    ? 'font-semibold text-base text-ink-900'
-    : accent
+// Supporting sub-total row above the grand-total band. The grand total
+// itself lives in the dark band, so this only renders the muted / accent
+// (Descuento) supporting cast — no bold variant any more.
+function TotalRow({ label, value, muted, accent }) {
+  const tone = accent
     ? 'text-brand-700 font-medium'
     : muted
     ? 'text-ink-500'

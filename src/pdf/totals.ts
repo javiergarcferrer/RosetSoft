@@ -3,7 +3,9 @@ import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
 import { ITBIS_PCT, quoteSavings } from '../lib/pricing.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
-  INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, BG_SOFT, BRAND_700,
+  INK_HIGH, INK_MID, INK_LINE, BRAND_700,
+  BAND_INK, BAND_CREAM, WHITE,
+  FS_TOTAL_BIG, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
 import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -35,13 +37,22 @@ type SubRow = [string, number, SubRowTone];
 // Rough vertical budget the totals block needs. Used by the page-break
 // heuristic in generateQuotePdf to decide whether to push totals to a
 // new page rather than splitting them off the last line row.
+// Geometry of the anchored grand-total band — the headline of the
+// redesign. Kept as named constants so estimateTotalsHeight and
+// drawTotals can't drift.
+const BAND_W   = 300;   // right-aligned block width
+const BAND_H   = 46;    // band height
+const BAND_PAD = 16;    // inner horizontal padding (label / value insets)
+const SUB_ROW_LH = 15;  // line-height of each subtotal-stack row
+
 export function estimateTotalsHeight(quote: Quote): number {
-  let h = 24;            // top spacing
-  h += 14 * 4;           // up to four subtotal-style rows (subtotal / discount / itbis / shipping)
-  h += 10;               // divider + breathing
-  h += 24;               // grand total row
-  h += 16;               // "Ahorras $X" callout (when any discount is set)
-  h += 18;               // FX shadow
+  let h = 22;                 // top spacing before the sub-rows
+  h += SUB_ROW_LH * 4;        // up to four subtotal rows (subtotal / discount / itbis / shipping)
+  h += 12;                    // breathing before the band
+  h += BAND_H;                // the grand-total band
+  h += 18;                    // "Ahorras $X" callout (when any discount is set)
+  h += 18;                    // FX shadow
+  h += 10;                    // trailing breathing
   if (quote.terms) h += 90;
   return h;
 }
@@ -54,21 +65,15 @@ export function drawTotals(
   lines: QuoteLine[],
 ): Cursor {
   const { fontBold, fontRegular, quote, currency, rates } = ctx;
-  const panelW = 300;
-  const leftX = PAGE_W - MARGIN_R - panelW;
+  const leftX = PAGE_W - MARGIN_R - BAND_W;
   const rightX = PAGE_W - MARGIN_R;
 
-  // A subtle tinted band behind the totals — same treatment as the
-  // preview, where the totals section sits on a soft ink-50 panel.
-  // Geometry: starts at cursor.y, runs down to just under the FX
-  // shadow. We pre-measure to keep the band's bottom edge accurate.
   let y = cursor.y - 22;
-  const bandTop = cursor.y - 4;
 
   // ---- Subtotal stack ----
-  // tone: 'default' | 'muted' | 'accent' — the discount row reads in
-  // brand-700 so the customer perceives it, instead of fading into
-  // the ITBIS / Envío supporting cast.
+  // Right-aligned supporting cast above the band. Body text (~9.5pt);
+  // the discount row reads in brand-700 so the customer perceives the
+  // concession instead of it fading into the ITBIS / Envío rows.
   const subRows: SubRow[] = [['Subtotal', totals.subtotal, 'default']];
   if (quote.discountPct) {
     subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, 'accent']);
@@ -84,68 +89,73 @@ export function drawTotals(
       : INK_HIGH;
     const font: PDFFont = tone === 'accent' ? fontBold : fontRegular;
     page.drawText(label, {
-      x: leftX, y, size: 10, font, color,
+      x: leftX, y, size: FS_BODY, font, color,
     });
     drawRightAt(
       page,
       formatMoney(value, currency, rates),
-      rightX, y, 10, font, color,
+      rightX, y, FS_BODY, font, color,
     );
-    y -= 16;
+    y -= SUB_ROW_LH;
   }
 
-  // ---- Divider above grand total ----
-  y -= 4;
-  page.drawLine({
-    start: { x: leftX, y },
-    end:   { x: rightX, y },
-    thickness: 0.6, color: INK,
+  // ---- The anchored grand-total band — the visual climax ---------------
+  // A solid near-black bar spans the right BAND_W. "TOTAL" reads in a
+  // muted cream tone on the left inside the band; the grand-total value
+  // in WHITE at 24pt bold on the right. Far heavier than any line total,
+  // so the eye lands here first.
+  y -= 12;                       // breathing between sub-rows and the band
+  const bandTop = y;
+  const bandBottom = bandTop - BAND_H;
+  page.drawRectangle({
+    x: leftX, y: bandBottom, width: BAND_W, height: BAND_H, color: BAND_INK,
   });
-  y -= 10;
 
-  // ---- Grand total ----
-  const totalLabelSize = 13;
-  const totalValueSize = 15;
-  const ascUnits = fontBold.heightAtSize(totalValueSize, { descender: false });
-  const totalBaselineY = y - ascUnits;
-  page.drawText('Total', {
-    x: leftX, y: totalBaselineY,
-    size: totalLabelSize, font: fontBold, color: INK,
-  });
+  // Vertically center both label + value on the band. Use the value's
+  // cap height (24pt) as the dominant element to find the baseline.
+  const valueAsc = fontBold.heightAtSize(FS_TOTAL_BIG, { descender: false });
+  const valueBaseline = bandBottom + (BAND_H - valueAsc) / 2;
+  // "TOTAL" label — cream, left inside the band, optically aligned to
+  // the value's vertical center.
+  const labelText = 'TOTAL';
+  const labelSize = FS_EYEBROW_SM;
+  const labelAsc = fontBold.heightAtSize(labelSize, { descender: false });
+  const labelBaseline = bandBottom + (BAND_H - labelAsc) / 2;
+  page.drawText(labelText, {
+    x: leftX + BAND_PAD, y: labelBaseline,
+    size: labelSize, font: fontBold, color: BAND_CREAM,
+    characterSpacing: 2,
+  } as DrawTextOptions);
   drawRightAt(
     page,
     formatMoney(totals.grandTotal, currency, rates),
-    rightX, totalBaselineY, totalValueSize, fontBold, INK,
+    rightX - BAND_PAD, valueBaseline, FS_TOTAL_BIG, fontBold, WHITE,
   );
-  y = totalBaselineY - 10;
+  y = bandBottom - 14;
 
-  // ---- "Ahorras $X" callout -------------------------------------------
+  // ---- "Ahorras $X" callout (below the band, right-aligned) -----------
   // Aggregates per-line discounts + the quote-level discount into one
-  // figure so the customer perceives the full concession, not just the
-  // post-discount numbers. Mirrors the on-screen ClientPreview's
-  // "Ahorras X en esta cotización" line.
+  // figure so the customer perceives the full concession. Brand-700 so
+  // it reads as the savings line, mirroring the on-screen ClientPreview.
   const savings = quoteSavings(lines || [], totals);
   if (savings > 0) {
     const text = `Ahorras ${formatMoney(savings, currency, rates)} en esta cotización`;
-    drawRightAt(page, text, rightX, y - 9, 9, fontBold, BRAND_700);
-    y -= 16;
+    drawRightAt(page, text, rightX, y - FS_BODY, FS_BODY, fontBold, BRAND_700);
+    y -= 18;
   }
 
-  // ---- Inline FX shadow ----
-  // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Replaces the
-  // verbose "Tipo de cambio / source / Total RD$" stack — preview shows
-  // just the shadow and we mirror it.
-  // Use the rate already resolved for this quote (locked snapshot once
-  // sent, live while a draft) so this FX line agrees with the totals
-  // above it instead of re-deriving today's rate from settings.
+  // ---- Inline FX shadow (below the savings line, muted ink) -----------
+  // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Use the rate
+  // already resolved for this quote (locked snapshot once sent, live
+  // while a draft) so this FX line agrees with the band above it.
   const dopRate = Number(rates?.DOP) || 0;
   if (dopRate && currency === 'USD') {
     const dopTotal = totals.grandTotal * dopRate;
     const fx = `≈ RD$ ${formatPlain(dopTotal)} a ${dopRate.toFixed(2)} DOP/USD`;
-    drawRightAt(page, fx, rightX, y - 8, 9, fontRegular, INK_MID);
-    y -= 22;
+    drawRightAt(page, fx, rightX, y - FS_META, FS_META, fontRegular, INK_MID);
+    y -= 20;
   } else {
-    y -= 4;
+    y -= 6;
   }
 
   return { x: MARGIN_L, y };

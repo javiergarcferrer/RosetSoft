@@ -193,7 +193,10 @@ export async function generateQuotePdf({
         const firstRowH = group.items.length
           ? measureLineRowHeight(ctx, group.items[0])
           : 0;
-        const reserve = 22 + firstRowH;
+        // Section header now consumes ~34pt (11pt eyebrow + terracotta
+        // rule + spacing); reserve that plus the first row so a header
+        // never lands orphaned at a page bottom away from its items.
+        const reserve = 34 + firstRowH;
         if (cursor.y - reserve < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
