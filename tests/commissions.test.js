@@ -12,6 +12,8 @@ import {
   clampCommissionPct,
   effectiveCommissionPct,
   commissionAmount,
+  decoratorBilling,
+  isTradeDiscount,
 } from '../src/lib/commissions.js';
 
 test('the max commission is the 20% cap the dealer asked for', () => {
@@ -98,6 +100,35 @@ test('amount with non-finite total is 0', () => {
 test('amount clamps the pct before multiplying', () => {
   // 99% would otherwise produce 990; clamped to 20 → 200.
   assert.equal(commissionAmount(1000, 99), 200);
+});
+
+/* ----------------------------- decoratorBilling ----------------------- */
+
+test('decoratorBilling defaults to commission when unset/null/missing', () => {
+  // Every legacy quote (and any quote that hasn't picked a modality)
+  // must resolve to the prior, only behavior: a commission.
+  assert.equal(decoratorBilling(undefined), 'commission');
+  assert.equal(decoratorBilling(null), 'commission');
+  assert.equal(decoratorBilling({}), 'commission');
+  assert.equal(decoratorBilling({ decoratorBilling: null }), 'commission');
+  assert.equal(decoratorBilling({ decoratorBilling: 'commission' }), 'commission');
+});
+
+test('decoratorBilling recognizes the trade discount modality', () => {
+  assert.equal(decoratorBilling({ decoratorBilling: 'trade_discount' }), 'trade_discount');
+});
+
+test('an unknown modality value falls back to commission (safe default)', () => {
+  // A typo / future value must never silently behave as a trade discount,
+  // which would mis-route the invoice to the decorator.
+  assert.equal(decoratorBilling({ decoratorBilling: 'garbage' }), 'commission');
+});
+
+test('isTradeDiscount is true only for the trade_discount modality', () => {
+  assert.equal(isTradeDiscount({ decoratorBilling: 'trade_discount' }), true);
+  assert.equal(isTradeDiscount({ decoratorBilling: 'commission' }), false);
+  assert.equal(isTradeDiscount({}), false);
+  assert.equal(isTradeDiscount(null), false);
 });
 
 test('amount is taken from the taxable base, not the grand total', () => {

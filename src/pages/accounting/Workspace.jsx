@@ -21,6 +21,7 @@ import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
+import { effectiveCommissionPct, commissionAmount, isTradeDiscount } from '../../lib/commissions.js';
 
 /**
  * Contabilidad — single-pane accounting workspace.
@@ -86,14 +87,24 @@ export default function AccountingWorkspace() {
     [profileId], [],
   );
   const linesQ     = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
+  const professionalsQ = useLiveQueryStatus(
+    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
 
-  const loaded = quotesQ.loaded && customersQ.loaded && linesQ.loaded;
+  const loaded = quotesQ.loaded && customersQ.loaded && linesQ.loaded && professionalsQ.loaded;
 
   const customerById = useMemo(() => {
     const m = new Map();
     for (const c of customersQ.data) m.set(c.id, c);
     return m;
   }, [customersQ.data]);
+
+  const professionalById = useMemo(() => {
+    const m = new Map();
+    for (const p of professionalsQ.data) m.set(p.id, p);
+    return m;
+  }, [professionalsQ.data]);
 
   const profileById = useMemo(() => {
     const m = new Map();
@@ -136,8 +147,17 @@ export default function AccountingWorkspace() {
 
       const customer = q.customerId ? customerById.get(q.customerId) : null;
       const creator  = q.createdByUserId ? profileById.get(q.createdByUserId) : null;
+      const professional = q.professionalId ? professionalById.get(q.professionalId) : null;
       const t = totalsFor(q);
       const pct = clampPct(creator?.commissionPct);
+
+      // Decorator settlement modality (internal only — never touches the
+      // figures the client sees). When a quote is a trade discount we flag
+      // the accountant to bill the DECORATOR at their % off instead of the
+      // client; the amount is computed off the same base imponible.
+      const trade = professional ? isTradeDiscount(q) : false;
+      const decoratorPct = trade ? effectiveCommissionPct(q, professional) : 0;
+      const tradeDiscount = trade ? commissionAmount(t.taxableBase, decoratorPct) : 0;
       // Commission is *earned* only once the deposit has been received
       // (same rule as the admin payout report). Until then we still
       // surface the would-be amount in italic so the accountant knows
@@ -149,6 +169,10 @@ export default function AccountingWorkspace() {
         quote: q,
         customer,
         creator,
+        professional,
+        trade,
+        decoratorPct,
+        tradeDiscount,
         base: t.taxableBase,
         // computeTotals exposes the tax amount as `taxAmt` (the
         // generic field name; ITBIS is just the DR-specific label).
@@ -191,7 +215,7 @@ export default function AccountingWorkspace() {
       totalCommission,
       vendedoresWithCommission: vendedorRows.length,
     };
-  }, [quotesQ.data, cycle, customerById, profileById, linesByQuote]);
+  }, [quotesQ.data, cycle, customerById, profileById, professionalById, linesByQuote]);
 
   // Search-header query state, applied on top of the cycle-scoped entries.
   // The cycle picker above stays the page's PRIMARY window; the deposit
@@ -619,8 +643,9 @@ export default function AccountingWorkspace() {
 /* -------------------------------------------------------------------------- */
 
 function EntryRow({ entry, lines, settings }) {
-  const { quote, customer, creator, base, itbis, grandTotal, totals,
-          commissionPct, potentialCommission, earnedCommission, depositIn } = entry;
+  const { quote, customer, creator, professional, trade, decoratorPct, base,
+          itbis, grandTotal, totals, commissionPct, potentialCommission,
+          earnedCommission, depositIn } = entry;
   const pdf = usePdfDownload({ quote, customer, lines, settings });
   const [open, setOpen] = useState(false);
   const currency = quote.currencyCode || 'USD';
@@ -642,8 +667,18 @@ function EntryRow({ entry, lines, settings }) {
       </td>
       <td className="font-medium whitespace-nowrap">#{quote.number || '—'}</td>
       <td className="text-ink-500 whitespace-nowrap">{formatDate(quote.acceptedAt)}</td>
-      <td className="text-ink-700 truncate max-w-[220px]" title={customer?.company || customer?.name || ''}>
-        {customer?.company || customer?.name || '—'}
+      <td className="max-w-[220px]">
+        <div className="text-ink-700 truncate" title={customer?.company || customer?.name || ''}>
+          {customer?.company || customer?.name || '—'}
+        </div>
+        {trade && (
+          <div
+            className="text-[10px] text-amber-700 font-medium truncate"
+            title={`Trade discount: facturar al decorador ${professional?.name || ''} con ${decoratorPct}% de descuento (no al cliente)`}
+          >
+            Facturar a {professional?.name || 'decorador'} · −{decoratorPct}% trade
+          </div>
+        )}
       </td>
       <td className="text-ink-700 truncate max-w-[160px]" title={creatorDisplay(creator)}>
         {creatorDisplay(creator) || '—'}

@@ -14,6 +14,25 @@ import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { currentQuoteStage } from '../lib/quoteStages.js';
+import { isTradeDiscount } from '../lib/commissions.js';
+
+/**
+ * Small amber flag for quotes settled as a decorator trade discount —
+ * accounting bills the decorator (not the client), no commission. The
+ * common 'commission' modality (and quotes with no professional) get no
+ * marker, so the flag draws the eye only to the exceptional path.
+ */
+function TradeFlag({ quote }) {
+  if (!quote.professionalId || !isTradeDiscount(quote)) return null;
+  return (
+    <span
+      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"
+      title="Trade discount: facturar al decorador (sin comisión)"
+    >
+      Trade
+    </span>
+  );
+}
 
 const STATUS_PILL_CLASS = {
   draft: 'status-pill-draft',
@@ -391,6 +410,7 @@ function QuoteCard({ qu, customer, creator, order, total, rates }) {
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
         <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+        <TradeFlag quote={qu} />
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
@@ -413,7 +433,12 @@ function QuoteRow({ qu, customer, creator, order, total, rates }) {
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
       </td>
-      <td><span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span></td>
+      <td>
+        <div className="flex items-center gap-1.5">
+          <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+          <TradeFlag quote={qu} />
+        </div>
+      </td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>

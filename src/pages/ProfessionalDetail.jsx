@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../lib/constants.js';
-import { effectiveCommissionPct, commissionAmount } from '../lib/commissions.js';
+import { effectiveCommissionPct, commissionAmount, isTradeDiscount } from '../lib/commissions.js';
 
 /**
  * Detail view for one professional — the financial roll-up the
@@ -106,19 +106,22 @@ export default function ProfessionalDetail() {
         .map(lineForTotals);
       const totals = computeTotals(lines, q);
       const pct = effectiveCommissionPct(q, pro);
-      // Commissions are paid on the base imponible (pre-ITBIS,
-      // pre-shipping), per the dealer's rule. We keep grandTotal
-      // around for context — the row shows both so the math is
-      // obvious to the professional reading it ("base × pct =
-      // commission" lines up).
-      const commission = commissionAmount(totals.taxableBase, pct);
+      // Same rate, two AR directions. The $ amount is computed once off
+      // the base imponible (pre-ITBIS, pre-shipping); whether it lands as
+      // a commission WE pay or a trade discount WE bill the decorator is
+      // the per-quote modality. Trade discount accrues no commission.
+      const amount = commissionAmount(totals.taxableBase, pct);
+      const trade = isTradeDiscount(q);
       const entry = {
         quote: q,
         customer: q.customerId ? customerById.get(q.customerId) : null,
         base: totals.taxableBase,
         grandTotal: totals.grandTotal,
         pct,
-        commission,
+        trade,
+        amount,
+        commission: trade ? 0 : amount,
+        tradeDiscount: trade ? amount : 0,
       };
       const key = q.status || 'draft';
       if (!byStatus.has(key)) byStatus.set(key, []);
@@ -140,19 +143,26 @@ export default function ProfessionalDetail() {
     // and the commission column always line up arithmetically.
     let totalBase = 0;
     let totalCommission = 0;
+    let totalTrade = 0;
     let acceptedBase = 0;
     let acceptedCommission = 0;
+    let acceptedTrade = 0;
     for (const [status, entries] of grouped) {
       for (const e of entries) {
         totalBase += e.base;
         totalCommission += e.commission;
+        totalTrade += e.tradeDiscount;
         if (status === QUOTE_STATUS_ACCEPTED) {
           acceptedBase += e.base;
           acceptedCommission += e.commission;
+          acceptedTrade += e.tradeDiscount;
         }
       }
     }
-    return { totalBase, totalCommission, acceptedBase, acceptedCommission };
+    return {
+      totalBase, totalCommission, totalTrade,
+      acceptedBase, acceptedCommission, acceptedTrade,
+    };
   }, [grouped]);
 
   if (!pro) {
@@ -221,14 +231,28 @@ export default function ProfessionalDetail() {
         <StatCard
           label="Base aceptada (sin ITBIS)"
           value={formatMoney(summary.acceptedBase, 'USD', { USD: 1 })}
-          hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.acceptedCommission, 'USD', { USD: 1 })}</span></>}
+          hint={
+            <>
+              Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.acceptedCommission, 'USD', { USD: 1 })}</span>
+              {summary.acceptedTrade > 0 && (
+                <> · Trade discount: <span className="font-medium text-amber-700 tabular-nums">{formatMoney(summary.acceptedTrade, 'USD', { USD: 1 })}</span></>
+              )}
+            </>
+          }
           tone="emerald"
           accent
         />
         <StatCard
           label="Base total en pipeline"
           value={formatMoney(summary.totalBase, 'USD', { USD: 1 })}
-          hint={<>Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.totalCommission, 'USD', { USD: 1 })}</span></>}
+          hint={
+            <>
+              Comisión: <span className="font-medium text-ink-900 tabular-nums">{formatMoney(summary.totalCommission, 'USD', { USD: 1 })}</span>
+              {summary.totalTrade > 0 && (
+                <> · Trade discount: <span className="font-medium text-amber-700 tabular-nums">{formatMoney(summary.totalTrade, 'USD', { USD: 1 })}</span></>
+              )}
+            </>
+          }
           tone="ink"
           accent
         />
@@ -262,6 +286,7 @@ export default function ProfessionalDetail() {
 function StatusGroup({ status, entries }) {
   const totalBase = entries.reduce((s, e) => s + e.base, 0);
   const totalCommission = entries.reduce((s, e) => s + e.commission, 0);
+  const totalTrade = entries.reduce((s, e) => s + e.tradeDiscount, 0);
   return (
     <section className="card overflow-hidden">
       <header className="card-header flex-wrap">
@@ -273,7 +298,12 @@ function StatusGroup({ status, entries }) {
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold tabular-nums">{formatMoney(totalBase, 'USD', { USD: 1 })}</div>
-          <div className="text-[11px] text-ink-500 tabular-nums">Comisión {formatMoney(totalCommission, 'USD', { USD: 1 })}</div>
+          <div className="text-[11px] text-ink-500 tabular-nums">
+            Comisión {formatMoney(totalCommission, 'USD', { USD: 1 })}
+            {totalTrade > 0 && (
+              <span className="text-amber-700"> · Trade {formatMoney(totalTrade, 'USD', { USD: 1 })}</span>
+            )}
+          </div>
         </div>
       </header>
       <ul className="divide-y divide-ink-100">
@@ -291,6 +321,14 @@ function StatusGroup({ status, entries }) {
                 Act. {formatDateTime(e.quote.updatedAt)}
               </div>
             </Link>
+            {e.trade && (
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"
+                title="Trade discount: facturar al decorador (menos su %), sin comisión por pagar"
+              >
+                Trade · facturar al decorador
+              </span>
+            )}
             <div className="text-right">
               <div className="text-sm font-medium tabular-nums whitespace-nowrap">
                 {formatMoney(e.base, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
@@ -298,8 +336,8 @@ function StatusGroup({ status, entries }) {
               <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
                 Total c/ ITBIS {formatMoney(e.grandTotal, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
               </div>
-              <div className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">
-                {e.pct}% → {formatMoney(e.commission, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+              <div className={`text-[11px] tabular-nums whitespace-nowrap ${e.trade ? 'text-amber-700' : 'text-ink-500'}`}>
+                {e.pct}%{e.trade ? ' trade' : ''} → {formatMoney(e.amount, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
               </div>
             </div>
             <Link

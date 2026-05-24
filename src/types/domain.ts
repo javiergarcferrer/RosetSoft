@@ -37,6 +37,15 @@ export type QuoteStatus =
   | 'archived';
 
 /**
+ * How an assigned professional's cut is settled — chosen per quote.
+ * Internal/accounting only; never affects the client PDF (the client
+ * always sees the full price). See `lib/commissions.ts`.
+ *   • 'commission'     — invoice the client, pay the decorator a commission.
+ *   • 'trade_discount' — invoice the decorator at their % off; no commission.
+ */
+export type DecoratorBilling = 'commission' | 'trade_discount';
+
+/**
  * `orders.status` lifecycle — six main stages + cancelled.
  * Pinned by CHECK constraint (migration 20260519200000).
  * Source of truth for labels/timestamps: `lib/orderStages.js`.
@@ -293,6 +302,14 @@ export interface Quote {
 
   /** Quote-level commission override for the professional. null = inherit. */
   commissionPct?: number | null;
+
+  /**
+   * How the assigned professional's cut is settled for accounting — the
+   * SAME rate, two AR directions. Internal only; the client PDF always
+   * shows the full price. Defaults to 'commission'. Only meaningful when
+   * `professionalId` is set.
+   */
+  decoratorBilling?: DecoratorBilling;
 
   currencyCode?: CurrencyCode;
   /** Snapshot at draft time; live-overlaid in the workspace + PDF. */

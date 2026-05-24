@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, UserSquare2 } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
 import { DebouncedInput } from '../DebouncedInput.jsx';
-import { clampCommissionPct } from '../../lib/commissions.js';
+import { clampCommissionPct, decoratorBilling } from '../../lib/commissions.js';
 
 /**
  * Chip that displays the assigned professional (architect / decorator
@@ -129,6 +129,8 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         </label>
       </span>
 
+      <DecoratorBillingChip quote={quote} onUpdateQuote={onUpdateQuote} />
+
       <ProfessionalPicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -143,6 +145,45 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         currentId={quote.professionalId}
       />
     </>
+  );
+}
+
+/**
+ * How this deal settles the professional's cut — chosen per quote, shown
+ * only when a professional is assigned. The SAME % (the segment next door)
+ * is realized either as a commission we pay the decorator, or as a trade
+ * discount we bill the decorator. INTERNAL ONLY: it never touches the
+ * client PDF (the client always sees the full price); it just tells
+ * accounting how & whom to invoice. Trade-discount mode tints amber so it
+ * reads as the exceptional path at a glance.
+ */
+function DecoratorBillingChip({ quote, onUpdateQuote }) {
+  const mode = decoratorBilling(quote);
+  const trade = mode === 'trade_discount';
+  return (
+    <label
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-xs transition-colors ${
+        trade
+          ? 'border-amber-300 bg-amber-50 text-amber-800'
+          : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400'
+      }`}
+      title={
+        trade
+          ? 'Trade discount: se factura al decorador (menos su %), no se paga comisión. No aparece en el PDF del cliente.'
+          : 'Comisión: se factura al cliente (precio completo) y se paga la comisión al decorador.'
+      }
+    >
+      <span className="select-none">Facturación</span>
+      <select
+        value={mode}
+        onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
+        className="bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 cursor-pointer"
+        aria-label="Modalidad de facturación con el decorador"
+      >
+        <option value="commission">Comisión al decorador</option>
+        <option value="trade_discount">Trade discount · facturar al decorador</option>
+      </select>
+    </label>
   );
 }
 

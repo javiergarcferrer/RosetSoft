@@ -19,10 +19,38 @@
  * module just multiplies.
  */
 
-import type { Quote, Professional } from '../types/domain.ts';
+import type { Quote, Professional, DecoratorBilling } from '../types/domain.ts';
 
 /** Hard cap the dealer set: no commission > 20% on a sale. */
 export const COMMISSION_MAX_PCT = 20;
+
+/**
+ * How the assigned professional's cut is realized. The SAME percentage
+ * (the professional's rate) is used either way — only the accounting
+ * direction differs:
+ *
+ *   • 'commission'     — invoice the client at full price and pay the
+ *                        decorator their % as a commission.
+ *   • 'trade_discount' — invoice the DECORATOR at their % off; pay no
+ *                        commission (they already took their cut via the
+ *                        discount).
+ *
+ * Internal/accounting only — the client PDF always shows the full price.
+ * Anything not explicitly 'trade_discount' resolves to 'commission' (the
+ * legacy default), so a missing/null field is safe.
+ */
+export function decoratorBilling(
+  quote: Pick<Quote, 'decoratorBilling'> | null | undefined,
+): DecoratorBilling {
+  return quote?.decoratorBilling === 'trade_discount' ? 'trade_discount' : 'commission';
+}
+
+/** True when the quote settles the decorator via a trade discount. */
+export function isTradeDiscount(
+  quote: Pick<Quote, 'decoratorBilling'> | null | undefined,
+): boolean {
+  return decoratorBilling(quote) === 'trade_discount';
+}
 
 /**
  * Clamp a commission % into the legal range [0, 20]. Non-finite values
