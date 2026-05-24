@@ -14,7 +14,8 @@
  * on the preview-tab / anchor-click path it has used reliably for years.
  *
  *   PWA standalone        — display-mode media query + iOS quirk
- *   Touch-primary devices — phones / tablets with pointer:coarse
+ *   Touch-primary devices — phones / tablets (pointer: coarse + hover: none,
+ *                           so hovering touch laptops fall through to desktop)
  *
  * Lives in its own module (no pdf-lib import) so QuoteBuilder can call it
  * synchronously inside the export click gesture — before the heavy
@@ -28,6 +29,12 @@ export function shouldUseWebShare(): boolean {
     mq('(display-mode: standalone)') ||
     // iOS Safari sets a non-standard `navigator.standalone` on PWAs.
     (navigator as unknown as { standalone?: boolean }).standalone === true;
-  const isTouchPrimary = mq('(pointer: coarse)');
+  // A phone / tablet: the primary pointer is coarse AND it can't hover.
+  // The extra `(hover: none)` keeps Windows touch laptops and convertibles
+  // — which report `pointer: coarse` but still expose a hovering
+  // mouse/trackpad — on the desktop preview-tab path, away from the fragile
+  // Windows share-sheet route (Adobe's "Create PDF" grabs the file and
+  // reports it empty mid-handoff).
+  const isTouchPrimary = mq('(pointer: coarse)') && mq('(hover: none)');
   return !!(isStandalonePwa || isTouchPrimary);
 }

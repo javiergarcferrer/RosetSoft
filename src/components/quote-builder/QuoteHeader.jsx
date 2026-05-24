@@ -123,11 +123,14 @@ export default function QuoteHeader({
               type="button"
               onClick={onExportPdf}
               disabled={exporting}
+              aria-busy={exporting}
               // Hidden on phones — the mobile sticky bottom bar carries
               // an equivalent export action so the desktop header
               // doesn't compete for tap space.
               className="btn-primary hidden md:inline-flex disabled:opacity-60 disabled:cursor-wait"
-              title="Descargar PDF"
+              // Desktop opens a review tab (not a direct download); the
+              // browser's PDF viewer then offers print / save from there.
+              title="Previsualizar y descargar PDF"
             >
               {exporting ? (
                 <><Loader2 size={14} className="animate-spin" /> Generando…</>

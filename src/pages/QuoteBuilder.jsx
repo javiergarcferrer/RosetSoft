@@ -254,6 +254,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+  // On mobile the only export trigger is the bottom sticky bar, but the
+  // error banner renders at the top of the page — so a failed export would
+  // stop the spinner with the explanation scrolled far out of sight,
+  // recreating the "I tapped it and nothing happened" silence the banner
+  // exists to prevent. Scroll the banner into view whenever it appears.
+  const exportErrorRef = useRef(null);
+  useEffect(() => {
+    if (exportError) {
+      exportErrorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+  }, [exportError]);
   // Counter of in-flight writes so concurrent edits don't flicker the badge.
   const inFlight = useRef(0);
 
@@ -831,7 +842,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           the dealer sees a dismissible banner with the underlying
           message instead of just "I tapped it and nothing happened". */}
       {exportError && (
-        <div role="alert" className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
+        <div ref={exportErrorRef} role="alert" className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="font-medium">No se pudo exportar el PDF</div>
@@ -1067,6 +1078,7 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
           type="button"
           onClick={onExport}
           disabled={exporting}
+          aria-busy={exporting}
           className="btn-primary disabled:opacity-60 disabled:cursor-wait"
           aria-label="Exportar PDF"
         >
