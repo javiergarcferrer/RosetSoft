@@ -20,6 +20,9 @@ import {
   computeTotals,
   setSubtotal,
   setGroupInfo,
+  selectedAlternative,
+  alternativeSubtotal,
+  groupRuns,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -250,5 +253,150 @@ test('setGroupInfo: maps each member to its 1-based position + size', () => {
 test('setGroupInfo: empty/null input yields an empty map', () => {
   assert.equal(setGroupInfo(null).size, 0);
   assert.equal(setGroupInfo([]).size, 0);
+});
+
+/* --------------------------- selectedAlternative ---------------------- */
+
+test('selectedAlternative: returns the member flagged isSelectedAlternative', () => {
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: false },
+    { id: 'b', alternativeGroup: 'g1', isSelectedAlternative: true },
+    { id: 'c', alternativeGroup: 'g1', isSelectedAlternative: false },
+  ];
+  assert.equal(selectedAlternative(lines, 'g1').id, 'b');
+});
+
+test('selectedAlternative: falls back to the first member when none selected', () => {
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1' },
+    { id: 'b', alternativeGroup: 'g1' },
+  ];
+  assert.equal(selectedAlternative(lines, 'g1').id, 'a');
+});
+
+test('selectedAlternative: null for falsy group or empty group', () => {
+  const lines = [{ id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true }];
+  assert.equal(selectedAlternative(lines, null), null);
+  assert.equal(selectedAlternative(lines, undefined), null);
+  assert.equal(selectedAlternative(lines, 'nope'), null);
+  assert.equal(selectedAlternative(null, 'g1'), null);
+});
+
+/* --------------------------- alternativeSubtotal ---------------------- */
+
+test('alternativeSubtotal: equals the SELECTED member line total only', () => {
+  // Selected member: 2 × 100 = 200. Non-selected members must NOT count.
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: false, qty: 1, unitPrice: 999 },
+    { id: 'b', alternativeGroup: 'g1', isSelectedAlternative: true, qty: 2, unitPrice: 100 },
+    { id: 'c', alternativeGroup: 'g1', isSelectedAlternative: false, qty: 5, unitPrice: 999 },
+  ];
+  assert.equal(alternativeSubtotal(lines, 'g1'), 200);
+});
+
+test('alternativeSubtotal: respects the selected member discount', () => {
+  // 100 with 10% line discount → 90, × 2 = 180.
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true, qty: 2, unitPrice: 100, lineDiscountPct: 10 },
+    { id: 'b', alternativeGroup: 'g1', isSelectedAlternative: false, qty: 1, unitPrice: 9999 },
+  ];
+  assert.equal(alternativeSubtotal(lines, 'g1'), 180);
+});
+
+test('alternativeSubtotal: 0 for falsy group / empty group', () => {
+  assert.equal(alternativeSubtotal([], 'g1'), 0);
+  assert.equal(alternativeSubtotal(null, 'g1'), 0);
+  assert.equal(alternativeSubtotal([{ id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true, qty: 1, unitPrice: 10 }], null), 0);
+});
+
+/* ------------------------------- groupRuns ---------------------------- */
+
+test('groupRuns: ungrouped lines are each their own single run', () => {
+  const lines = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 3);
+  assert.deepEqual(runs.map((r) => r.type), ['single', 'single', 'single']);
+  assert.deepEqual(runs.map((r) => r.lineIds), [['a'], ['b'], ['c']]);
+});
+
+test('groupRuns: contiguous setGroup members collapse into one set run', () => {
+  const lines = [
+    { id: 'a' },
+    { id: 'b', setGroup: 's1' },
+    { id: 'c', setGroup: 's1' },
+    { id: 'd' },
+  ];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 3);
+  assert.deepEqual(runs[0], { type: 'single', groupId: null, lineIds: ['a'], start: 0 });
+  assert.deepEqual(runs[1], { type: 'set', groupId: 's1', lineIds: ['b', 'c'], start: 1 });
+  assert.deepEqual(runs[2], { type: 'single', groupId: null, lineIds: ['d'], start: 3 });
+});
+
+test('groupRuns: alternative members collapse into one alternative run', () => {
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true },
+    { id: 'b', alternativeGroup: 'g1' },
+  ];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].type, 'alternative');
+  assert.equal(runs[0].groupId, 'g1');
+  assert.deepEqual(runs[0].lineIds, ['a', 'b']);
+});
+
+test('groupRuns: a non-contiguous split of one group yields TWO runs', () => {
+  // A reorder dropped an ungrouped line into the middle of set s1.
+  const lines = [
+    { id: 'a', setGroup: 's1' },
+    { id: 'x' },
+    { id: 'b', setGroup: 's1' },
+  ];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 3);
+  assert.deepEqual(runs.map((r) => r.type), ['set', 'single', 'set']);
+  assert.deepEqual(runs[0].lineIds, ['a']);
+  assert.deepEqual(runs[2].lineIds, ['b']);
+  assert.equal(runs[0].groupId, 's1');
+  assert.equal(runs[2].groupId, 's1');
+});
+
+test('groupRuns: two different adjacent sets stay separate runs', () => {
+  const lines = [
+    { id: 'a', setGroup: 's1' },
+    { id: 'b', setGroup: 's2' },
+  ];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs.map((r) => r.groupId), ['s1', 's2']);
+});
+
+test('groupRuns: a compound member is still just a member of its run', () => {
+  // A "conjunto de compuestos" — one member carries components.
+  const lines = [
+    { id: 'a', setGroup: 's1', components: [{ id: 'c1', qty: 1, unitPrice: 10 }] },
+    { id: 'b', setGroup: 's1' },
+  ];
+  const runs = groupRuns(lines);
+  assert.equal(runs.length, 1);
+  assert.deepEqual(runs[0].lineIds, ['a', 'b']);
+});
+
+test('groupRuns: concatenating run lineIds reproduces input order', () => {
+  const lines = [
+    { id: 'a' },
+    { id: 'b', setGroup: 's1' },
+    { id: 'c', setGroup: 's1' },
+    { id: 'd', alternativeGroup: 'g1', isSelectedAlternative: true },
+    { id: 'e', alternativeGroup: 'g1' },
+    { id: 'f' },
+  ];
+  const flat = groupRuns(lines).flatMap((r) => r.lineIds);
+  assert.deepEqual(flat, ['a', 'b', 'c', 'd', 'e', 'f']);
+});
+
+test('groupRuns: empty/null input yields an empty array', () => {
+  assert.deepEqual(groupRuns(null), []);
+  assert.deepEqual(groupRuns([]), []);
 });
 
