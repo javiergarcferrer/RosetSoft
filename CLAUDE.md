@@ -24,6 +24,9 @@ images go to Supabase Storage. It is NOT browser IndexedDB and is NOT siloed
 per user. `db/rowMapping.ts` auto-converts camelCase ↔ snake_case, so a new
 field persists once its column exists (add a migration).
 
+**Database schema reference:** see `supabase/CLAUDE.md` for the live tables,
+constraints, RLS, numbering, and migration conventions.
+
 ## Verifying before pushing
 Run all three; they must pass:
 - `npm run typecheck` — `tsc --noEmit`
