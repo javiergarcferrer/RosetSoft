@@ -40,6 +40,17 @@ export const BRAND_700: RGB = rgb(0.49, 0.24, 0.11);    // brand-700 #7d3e1c
 export const BRAND_300: RGB = rgb(0.91, 0.65, 0.43);    // brand-300 #e8a76d
 export const EMERALD_700: RGB = rgb(0.02, 0.42, 0.27);  // matches the "seleccionada" callout
 
+// Group-zone fills — the page-break-safe CONTAINER tints that bracket a
+// Conjunto / Alternativa run (mirrors ClientPreview's GroupCard head/body/
+// foot backgrounds). Kept distinct from BG_SOFT (ink-50) so a shaded group
+// zone reads as a deliberate band against the plain-white standalone rows.
+//   Conjunto    → warm neutral: members on ink-50, header/footer on ink-100.
+//   Alternativa → brand-tinted: members on a whisper of brand, bands deeper.
+export const BG_GROUP_SET:    RGB = rgb(0.955, 0.95, 0.94);  // member tint — ink-50, a hair warmer
+export const BAND_GROUP_SET:  RGB = rgb(0.915, 0.905, 0.885); // header/footer band — ~ink-100
+export const BRAND_50:        RGB = rgb(0.985, 0.955, 0.925); // alternativa member tint — brand-50
+export const BAND_GROUP_ALT:  RGB = rgb(0.975, 0.925, 0.875); // alternativa header/footer band — brand-50 deeper
+
 // Violet shades for the Conjunto (set) treatment — the take-all twin of
 // the alternative group. ClientPreview / LineItemList mark set members
 // with a violet-300 solid left border + a violet-700 "Conjunto" eyebrow;
