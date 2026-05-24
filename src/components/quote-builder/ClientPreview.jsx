@@ -364,7 +364,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
       // the alternative's brand accent. Members are NEVER dimmed (every
       // piece is priced / take-all), so no veil here. Suppressed inside a
       // group card (the card draws the violet accent itself).
-      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-ink-300 bg-ink-50/30' : ''
     } ${
       dimmed ? 'relative' : ''
     }`}>
@@ -388,7 +388,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
             </span>
           )}
           {showRowGroupChrome && inSet && setInfo && (
-            <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
+            <span className="inline-flex items-center gap-1 text-ink-600 font-semibold">
               <Boxes size={11} className="opacity-80" aria-hidden />
               Conjunto {setInfo.index} de {setInfo.total}
             </span>
@@ -560,7 +560,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
       // Conjunto member (a set member may itself be a compound article):
       // shared violet left accent + tint, never dimmed. Suppressed inside a
       // group card (the card draws the violet accent itself).
-      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-violet-300 bg-violet-50/20' : ''
+      showRowGroupChrome && inSet ? 'border-l-2 border-solid border-ink-300 bg-ink-50/30' : ''
     } ${
       dimmed ? 'relative' : ''
     }`}>
@@ -582,7 +582,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
             </span>
           )}
           {showRowGroupChrome && inSet && setInfo && (
-            <span className="inline-flex items-center gap-1 text-violet-700 font-semibold">
+            <span className="inline-flex items-center gap-1 text-ink-600 font-semibold">
               <Boxes size={11} className="opacity-80" aria-hidden />
               Conjunto {setInfo.index} de {setInfo.total}
             </span>
@@ -762,10 +762,10 @@ function PriceCell({ label, value, emphasis }) {
 function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children }) {
   const isSet = type === 'set';
   // Tailwind needs literal class names — branch rather than interpolate.
-  const ring = isSet ? 'border-violet-300' : 'border-brand-300';
-  const headBg = isSet ? 'bg-violet-50/60' : 'bg-brand-50/50';
-  const footBg = isSet ? 'bg-violet-50/50' : 'bg-brand-50/40';
-  const eyebrowColor = isSet ? 'text-violet-700' : 'text-brand-700';
+  const ring = isSet ? 'border-ink-300' : 'border-brand-300';
+  const headBg = isSet ? 'bg-ink-50' : 'bg-brand-50/50';
+  const footBg = isSet ? 'bg-ink-50/70' : 'bg-brand-50/40';
+  const eyebrowColor = isSet ? 'text-ink-600' : 'text-brand-700';
   const Icon = isSet ? Boxes : GitFork;
   const eyebrow = isSet ? 'Conjunto' : 'Alternativas — elige una';
   return (
