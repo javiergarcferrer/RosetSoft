@@ -8,7 +8,7 @@ import { rgb } from 'pdf-lib';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
-  BRAND_300, EMERALD_700, VIOLET_300, VIOLET_700,
+  BRAND_300, EMERALD_700,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -522,16 +522,16 @@ function lineOptionStyle(
   // optionals it is NEVER dimmed: every member is fully priced and
   // counts toward the total, so it must read at full weight. Reuses the
   // `groupInfo` channel for its "N DE M" position (the caller passes the
-  // set's index/total here for set lines). Violet accent + caption to
-  // match the on-screen preview's violet-300 border + violet-700 eyebrow.
+  // set's index/total here for set lines). Neutral ink accent + caption to
+  // match the on-screen preview's neutral Conjunto card (no purple).
   if (line.setGroup) {
     const base = groupInfo
       ? `CONJUNTO ${groupInfo.index} DE ${groupInfo.total}`
       : 'CONJUNTO';
     return {
-      accent: VIOLET_300,
+      accent: INK_LINE2,
       caption: base,
-      captionColor: VIOLET_700,
+      captionColor: INK_MID,
       dim: false,
     };
   }
@@ -837,10 +837,10 @@ interface GroupAccent {
 }
 
 // The two group palettes, mirroring the editor's GroupCard rings + eyebrow
-// colours: Conjunto → violet, Alternativa → brand.
+// colours: Conjunto → neutral ink (no purple), Alternativa → brand.
 const GROUP_ACCENTS: { set: GroupAccent; alternative: GroupAccent } = {
-  set:         { bar: VIOLET_300, label: VIOLET_700 },
-  alternative: { bar: BRAND_300,  label: BRAND_700 },
+  set:         { bar: INK_LINE2, label: INK_MID },
+  alternative: { bar: BRAND_300, label: BRAND_700 },
 };
 
 /**

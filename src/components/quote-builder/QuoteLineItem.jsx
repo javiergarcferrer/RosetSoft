@@ -50,7 +50,7 @@ import { newId } from '../../db/database.js';
 export default function QuoteLineItem({
   line, quote, onChange, onRemove, onDuplicate,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, insideGroupCard,
+  onSeparateFromSet, onUngroup, onJoinSet, canJoinAbove, insideGroupCard,
   groupInfo, setInfo,
   autoFocus, dragHandleProps,
 }) {
@@ -198,6 +198,8 @@ export default function QuoteLineItem({
         onSelectAlternative={onSelectAlternative}
         onSeparateFromSet={onSeparateFromSet}
         onUngroup={onUngroup}
+        onJoinSet={onJoinSet}
+        canJoinAbove={canJoinAbove}
         dragHandleProps={dragHandleProps}
       />
 
@@ -288,7 +290,7 @@ function TopStrip({
   expanded, onToggleExpand, onDuplicate, onRemove,
   onConvertToCompound, onDissolveCompound,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup,
+  onSeparateFromSet, onUngroup, onJoinSet, canJoinAbove,
   dragHandleProps,
 }) {
   // Optional toggle is meaningless for a grouped line — a set member is
@@ -416,7 +418,7 @@ function TopStrip({
 
       {setGroup && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full"
+          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
           title="Esta línea forma parte de un conjunto; todas las piezas se cotizan y suman al total"
         >
           <Boxes size={10} className="opacity-80" aria-hidden />
@@ -448,6 +450,8 @@ function TopStrip({
         onAddAlternative={onAddAlternative}
         onSeparateFromSet={onSeparateFromSet}
         onUngroup={onUngroup}
+        onJoinSet={onJoinSet}
+        canJoinAbove={canJoinAbove}
       />
 
       <FamilyPicker
@@ -1117,7 +1121,7 @@ function OverflowMenu({
   setGroup,
   onConvertToCompound, onDissolveCompound,
   onAddAlternative,
-  onSeparateFromSet, onUngroup,
+  onSeparateFromSet, onUngroup, onJoinSet, canJoinAbove,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1201,8 +1205,23 @@ function OverflowMenu({
             </button>
           )}
 
-          {/* Leave the Conjunto (set). Creation is via multi-select; this
-              is the per-line "Separar del conjunto". */}
+          {/* Create / join a Conjunto with the line directly above. Hidden
+              on the first row + when the line above is a section (canJoinAbove),
+              and when this line is optional / already grouped. */}
+          {!setGroup && !isOptional && !alternativeGroup && canJoinAbove && onJoinSet && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onJoinSet(); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+              title="Unir esta línea con la de arriba en un conjunto que se vende junto"
+            >
+              <Boxes size={14} className="text-ink-500" />
+              Unir al conjunto de arriba
+            </button>
+          )}
+
+          {/* Leave the Conjunto (set) — the per-line "Separar del conjunto". */}
           {setGroup && onSeparateFromSet && (
             <button
               type="button"

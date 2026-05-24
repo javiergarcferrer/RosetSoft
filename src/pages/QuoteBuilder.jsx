@@ -553,113 +553,45 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }
 
   /**
-   * Group the selected lines into a Conjunto (take-all set). Built for
-   * the multi-select action bar: the dealer ticks ≥2 eligible lines and
-   * taps "Agrupar en conjunto".
+   * Join `line` into the Conjunto (take-all set) of the item line DIRECTLY
+   * ABOVE it — the per-line "Unir al conjunto de arriba" action.
    *
-   *   - Only real item lines are eligible (sections can't belong to a set).
-   *   - A shared `setGroup` id is stamped on every member; conflicting
-   *     flags (optional / alternative) are stripped — a set is mutually
-   *     exclusive with both (DB CHECK + type rule).
-   *   - The members are made CONTIGUOUS: they're re-sorted so they sit in
-   *     one uninterrupted run starting at the topmost selected line's
-   *     position, preserving their relative order. Everything else keeps
-   *     its order.
+   *   - If the line above already has a `setGroup`, adopt it; otherwise
+   *     mint a new id and stamp it on BOTH lines (a Conjunto is born with
+   *     its two members).
+   *   - A set is "take ALL", mutually exclusive with optional / alternative,
+   *     so those flags are stripped off any line entering it (DB CHECK +
+   *     type rule).
+   *   - Members are already contiguous because we only ever join the line
+   *     immediately above; no reorder needed.
    *
-   * No-op (returns false) when fewer than 2 eligible lines are selected.
+   * No-op when there's no line above or the line above is a section — the
+   * row hides the action via `canJoinAbove`, but we guard here too.
    */
-  async function groupAsSet(lineIds) {
-    const ids = new Set(lineIds || []);
-    const members = lines.filter((l) => ids.has(l.id) && l.kind !== LINE_KIND_SECTION);
-    if (members.length < 2) return false;
+  async function joinSet(line) {
     markSaving();
     try {
-      await ensurePersisted();
-      const groupId = newId();
-      await contiguateAndPatch(members, (l) => ({
-        ...l,
+      const idx = lines.findIndex((l) => l.id === line.id);
+      if (idx <= 0) return;
+      const above = lines[idx - 1];
+      if (!above || above.kind === LINE_KIND_SECTION) return;
+      const groupId = above.setGroup || newId();
+      if (!above.setGroup) {
+        await db.quoteLines.update(above.id, {
+          setGroup: groupId,
+          isOptional: false,
+          alternativeGroup: null,
+          isSelectedAlternative: false,
+        });
+      }
+      await db.quoteLines.update(line.id, {
         setGroup: groupId,
         isOptional: false,
         alternativeGroup: null,
         isSelectedAlternative: false,
-      }));
-      return true;
+      });
     } finally {
       markSaved();
-    }
-  }
-
-  /**
-   * Group the selected lines into an Alternativa group (pick-one). Built
-   * for the multi-select action bar's "Agrupar como alternativas".
-   *
-   *   - Only real item lines are eligible (sections excluded).
-   *   - A shared `alternativeGroup` id is stamped on every member; the
-   *     topmost selected line becomes the one SELECTED alternative, the
-   *     rest non-selected. Conflicting flags (optional / setGroup) are
-   *     stripped.
-   *   - Members are made contiguous, same as groupAsSet.
-   *
-   * No-op (returns false) when fewer than 2 eligible lines are selected.
-   */
-  async function groupAsAlternatives(lineIds) {
-    const ids = new Set(lineIds || []);
-    const members = lines.filter((l) => ids.has(l.id) && l.kind !== LINE_KIND_SECTION);
-    if (members.length < 2) return false;
-    markSaving();
-    try {
-      await ensurePersisted();
-      const groupId = newId();
-      // The first member (topmost in list order) is the default selection.
-      const firstId = members[0].id;
-      await contiguateAndPatch(members, (l) => ({
-        ...l,
-        alternativeGroup: groupId,
-        isSelectedAlternative: l.id === firstId,
-        isOptional: false,
-        setGroup: null,
-      }));
-      return true;
-    } finally {
-      markSaved();
-    }
-  }
-
-  /**
-   * Stamp a patch onto each member AND renumber sort_order so the members
-   * form one contiguous run anchored at the topmost member's slot. Members
-   * keep their relative order; non-members keep theirs, shifted around the
-   * run. Shared by groupAsSet / groupAsAlternatives.
-   *
-   * Strategy: rebuild the full id order with the members pulled together
-   * at the topmost member's index, then write 0..N-1 sortOrder over the
-   * result (same renormalisation reorderLines uses).
-   */
-  async function contiguateAndPatch(members, patchFor) {
-    const memberIds = new Set(members.map((m) => m.id));
-    const anchorIdx = Math.min(...members.map((m) => lines.findIndex((l) => l.id === m.id)));
-    const rest = lines.filter((l) => !memberIds.has(l.id));
-    // Insert the contiguous member block at the anchor position within the
-    // remaining lines. anchorIdx counts positions in the ORIGINAL list; the
-    // number of non-members before it is how far into `rest` the block goes.
-    const before = lines.slice(0, anchorIdx).filter((l) => !memberIds.has(l.id));
-    const reordered = [
-      ...rest.slice(0, before.length),
-      ...members,
-      ...rest.slice(before.length),
-    ];
-    for (let i = 0; i < reordered.length; i++) {
-      const l = reordered[i];
-      const isMember = memberIds.has(l.id);
-      const patch = isMember
-        ? { ...patchFor(l), sortOrder: i }
-        : (l.sortOrder !== i ? { sortOrder: i } : null);
-      if (isMember) {
-        const { id, quoteId, kind, ...rest2 } = patch; // eslint-disable-line no-unused-vars
-        await db.quoteLines.update(l.id, { ...rest2, sortOrder: i });
-      } else if (patch) {
-        await db.quoteLines.update(l.id, patch);
-      }
     }
   }
 
@@ -950,8 +882,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               onSelectAlternative={selectAlternative}
               onSeparateFromSet={separateFromSet}
               onUngroup={ungroupLine}
-              onGroupAsSet={groupAsSet}
-              onGroupAsAlternatives={groupAsAlternatives}
+              onJoinSet={joinSet}
               onReorder={reorderLines}
               onAddItem={() => addLine()}
               onAddSection={addSection}
@@ -1004,7 +935,7 @@ function LineItemsCard({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onGroupAsSet, onGroupAsAlternatives,
+  onSeparateFromSet, onUngroup, onJoinSet,
   onAddItem, onAddSection,
 }) {
   return (
@@ -1042,8 +973,7 @@ function LineItemsCard({
         onSelectAlternative={onSelectAlternative}
         onSeparateFromSet={onSeparateFromSet}
         onUngroup={onUngroup}
-        onGroupAsSet={onGroupAsSet}
-        onGroupAsAlternatives={onGroupAsAlternatives}
+        onJoinSet={onJoinSet}
         onReorder={onReorder}
         onAddItem={onAddItem}
         onAddSection={onAddSection}

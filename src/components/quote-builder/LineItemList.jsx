@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Hash, Boxes, GitFork, Check, X } from 'lucide-react';
+import { Plus, Hash, Boxes, GitFork } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
@@ -43,7 +43,7 @@ export default function LineItemList({
   lines, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onGroupAsSet, onGroupAsAlternatives,
+  onSeparateFromSet, onUngroup, onJoinSet,
   onAddItem, onAddSection,
 }) {
   // Pre-compute alternative-group sizes so each line knows the
@@ -90,36 +90,6 @@ export default function LineItemList({
   const currency = quote?.currencyCode || 'USD';
   const rates = quote?.rates || { USD: 1 };
   const byId = new Map(lines.map((l) => [l.id, l]));
-
-  // -------- multi-select state --------
-  // A Set of selected line ids. Selecting ≥1 line reveals the action bar.
-  const [selected, setSelected] = useState(() => new Set());
-  function toggleSelect(id) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-  function clearSelection() { setSelected(new Set()); }
-  // Eligible = real item lines (sections never groupable). Count only the
-  // ones that still exist + aren't sections so the bar enables correctly.
-  const eligibleSelectedIds = [...selected].filter((id) => {
-    const l = byId.get(id);
-    return l && l.kind !== LINE_KIND_SECTION;
-  });
-  const canGroup = eligibleSelectedIds.length >= 2;
-  const selectionActive = selected.size > 0;
-
-  async function doGroupAsSet() {
-    const ok = await onGroupAsSet?.(eligibleSelectedIds);
-    if (ok !== false) clearSelection();
-  }
-  async function doGroupAsAlternatives() {
-    const ok = await onGroupAsAlternatives?.(eligibleSelectedIds);
-    if (ok !== false) clearSelection();
-  }
 
   // -------- drag-reorder --------
   const [draggingId, setDraggingId] = useState(null);
@@ -198,47 +168,21 @@ export default function LineItemList({
       onDragEnd,
       'data-dragging': isDragging ? 'true' : 'false',
     };
-    const isSelected = selected.has(l.id);
+    // "Unir al conjunto de arriba" is offered only when the row directly
+    // above is a real item line (not a section, not the first row).
+    const idx = lines.findIndex((x) => x.id === l.id);
+    const aboveLine = idx > 0 ? lines[idx - 1] : null;
+    const canJoinAbove = !!aboveLine && aboveLine.kind !== LINE_KIND_SECTION;
 
     return (
       <div
         key={l.id}
         onDragOver={(e) => onDragOver(e, l.id)}
         onDrop={(e) => onDrop(e, l.id)}
-        className={`relative ${isDragging ? 'opacity-40' : ''} ${
-          selectionActive && !isSection ? 'pl-9 sm:pl-10' : ''
-        } ${isSelected ? 'bg-brand-50/40' : ''}`}
+        className={`relative ${isDragging ? 'opacity-40' : ''}`}
       >
         {isDropTarget && (
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
-        )}
-        {/* Multi-select checkbox — sections aren't selectable. Always
-            mounted, positioned absolute in the top-left corner so it never
-            shifts the layout when idle. Visibility is device-aware so it's
-            reachable on touch (no hover): faint-but-visible on coarse
-            pointers at all times, hover-revealed on fine pointers, full
-            opacity once selected or a selection is active. When a selection
-            is active the row reserves a left gutter (pl-9) so the tick can't
-            overlap the row content. */}
-        {!isSection && (
-          <button
-            type="button"
-            onClick={() => toggleSelect(l.id)}
-            className={`absolute left-2 sm:left-3 top-3 z-[3] inline-flex items-center justify-center w-6 h-6 coarse:w-7 coarse:h-7 rounded-md border transition-colors ${
-              isSelected
-                ? 'border-brand-500 bg-brand-500 text-white'
-                : 'border-ink-300 bg-white text-transparent hover:border-brand-400'
-            } ${
-              isSelected || selectionActive
-                ? 'opacity-100'
-                : 'opacity-0 coarse:opacity-50 group-hover/list:opacity-60 focus:opacity-100 hover:!opacity-100'
-            }`}
-            aria-pressed={isSelected}
-            aria-label={isSelected ? 'Quitar de la selección' : 'Seleccionar para agrupar'}
-            title={isSelected ? 'Quitar de la selección' : 'Seleccionar para agrupar'}
-          >
-            <Check size={14} strokeWidth={3} />
-          </button>
         )}
         {isSection ? (
           <SectionDivider
@@ -260,6 +204,8 @@ export default function LineItemList({
             onSelectAlternative={() => onSelectAlternative?.(l)}
             onSeparateFromSet={() => onSeparateFromSet?.(l)}
             onUngroup={() => onUngroup?.(l)}
+            onJoinSet={() => onJoinSet?.(l)}
+            canJoinAbove={canJoinAbove}
             insideGroupCard={insideGroupCard}
             groupInfo={groupInfo.get(l.id)}
             setInfo={setInfo.get(l.id)}
@@ -304,51 +250,6 @@ export default function LineItemList({
           );
         })}
       </ul>
-
-      {/* Floating / sticky action bar — appears whenever ≥1 line is
-          selected. Mobile-first: anchored above the bottom sticky totals
-          bar on phones, centered. The group buttons enable only with ≥2
-          eligible selected lines. */}
-      {selectionActive && (
-        <div
-          role="toolbar"
-          aria-label="Acciones de agrupación"
-          className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6 z-30 flex justify-center px-3 pointer-events-none"
-        >
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-ink-200 bg-white shadow-pop px-2.5 py-2 max-w-full">
-            <span className="text-[11px] font-medium text-ink-600 px-1.5 whitespace-nowrap tabular-nums">
-              {eligibleSelectedIds.length} sel.
-            </span>
-            <button
-              type="button"
-              onClick={doGroupAsSet}
-              disabled={!canGroup}
-              className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              title="Agrupar las líneas seleccionadas en un conjunto que se vende junto"
-            >
-              <Boxes size={13} /> <span className="hidden sm:inline">Agrupar en </span>conjunto
-            </button>
-            <button
-              type="button"
-              onClick={doGroupAsAlternatives}
-              disabled={!canGroup}
-              className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              title="Agrupar las líneas seleccionadas como alternativas; el cliente elige una"
-            >
-              <GitFork size={13} /> <span className="hidden sm:inline">Agrupar como </span>alternativas
-            </button>
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="inline-flex items-center justify-center w-8 h-8 coarse:w-9 coarse:h-9 rounded-full text-ink-500 hover:text-ink-900 hover:bg-ink-100 transition-colors"
-              aria-label="Cancelar selección"
-              title="Cancelar selección"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -364,10 +265,10 @@ export default function LineItemList({
 function GroupCard({ type, accent, memberCount, footerLabel, footerValue, children }) {
   const isSet = type === 'set';
   // Tailwind needs literal class names — branch rather than interpolate.
-  const ring = isSet ? 'border-violet-300' : 'border-brand-300';
-  const headBg = isSet ? 'bg-violet-50/60' : 'bg-brand-50/50';
-  const footBg = isSet ? 'bg-violet-50/50' : 'bg-brand-50/40';
-  const eyebrowColor = isSet ? 'text-violet-700' : 'text-brand-700';
+  const ring = isSet ? 'border-ink-300' : 'border-brand-300';
+  const headBg = isSet ? 'bg-ink-50' : 'bg-brand-50/50';
+  const footBg = isSet ? 'bg-ink-50/70' : 'bg-brand-50/40';
+  const eyebrowColor = isSet ? 'text-ink-600' : 'text-brand-700';
   const Icon = isSet ? Boxes : GitFork;
   const eyebrow = isSet ? 'Conjunto' : 'Alternativas — elige una';
   return (
