@@ -366,6 +366,28 @@
     .qli-pricing-total .qli-total-val { text-align: left; }
   }
 
+  /* Per-line footer action row (LineFooter in QuoteLineItem.jsx). The
+     actions used to hide behind a "⋯" menu; now they live in the open at
+     the bottom of every card. On FINE pointers (mouse) the row sits quiet
+     — dimmed to ~55% — so a dense desktop list stays calm, and lifts to
+     full opacity when the row is hovered or anything inside it is focused
+     (keyboard reachability). On COARSE pointers (touch) it's always full
+     opacity: phone/tablet dealers can't hover, so the actions must be
+     visible and tappable at rest. */
+  .qli-footer {
+    opacity: 0.55;
+    transition: opacity 150ms ease;
+  }
+  .qli-row:hover .qli-footer,
+  .qli-row:focus-within .qli-footer,
+  .qli-footer:hover,
+  .qli-footer:focus-within {
+    opacity: 1;
+  }
+  @media (pointer: coarse) {
+    .qli-footer { opacity: 1; }
+  }
+
   /* Auto-growing single-line inputs. `field-sizing: content` sizes
      the input to its value; the widthClass on the JSX side becomes a
      min, not a max. Browser support is Chrome 123+, Safari 17.4+,

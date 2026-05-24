@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Hash, Boxes, GitFork } from 'lucide-react';
+import { Plus, Hash, Boxes, GitFork, PlusCircle } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
@@ -8,7 +8,7 @@ import { formatMoney } from '../../lib/format.js';
 
 /**
  * Renders the ordered list of quote lines (mixed items + sections) and owns
- * the drag-reorder interaction + the multi-select grouping flow.
+ * the drag-reorder interaction + the Conjunto between-lines connector.
  *
  * GROUP CARDS (the gold-standard pattern, mirroring Compuesto):
  *   Contiguous runs of lines sharing the same `setGroup` (Conjunto) or
@@ -24,13 +24,14 @@ import { formatMoney } from '../../lib/format.js';
  *     - Alternativa: brand accent, footer = the SELECTED option's line total
  *       (alternativeSubtotal); non-selected members stay dimmed with a radio.
  *
- * MULTI-SELECT + ACTION BAR (group creation, mobile-first):
- *   Each item row carries an unobtrusive checkbox tap-target. Selecting ≥1
- *   line reveals a floating/sticky action bar with "Agrupar en conjunto" and
- *   "Agrupar como alternativas" (enabled only with ≥2 eligible selected
- *   lines). Grouping assigns the shared group id, makes the members
- *   contiguous, strips conflicting flags, then clears the selection.
- *   Sections are never selectable.
+ * CONJUNTO via BETWEEN-LINES CONNECTOR (set creation):
+ *   In the gap between two ADJACENT item lines (both non-section, not already
+ *   in the same setGroup) we render a slim centered "⊕ Unir en conjunto"
+ *   chip. Clicking it joins those two neighbours into a Conjunto by calling
+ *   onJoinSet on the LOWER line — joinSet() in QuoteBuilder stamps a shared
+ *   setGroup on it and the line directly above. The connector is suppressed
+ *   inside a set GroupCard (same-setGroup members) and next to a section.
+ *   Leaving a set ("Separar del conjunto") lives in the per-line footer.
  *
  * Drag-reorder (per line):
  *   - HTML5 drag-and-drop (desktop only; mobile users add a new line where
@@ -168,11 +169,10 @@ export default function LineItemList({
       onDragEnd,
       'data-dragging': isDragging ? 'true' : 'false',
     };
-    // "Unir al conjunto de arriba" is offered only when the row directly
-    // above is a real item line (not a section, not the first row).
-    const idx = lines.findIndex((x) => x.id === l.id);
-    const aboveLine = idx > 0 ? lines[idx - 1] : null;
-    const canJoinAbove = !!aboveLine && aboveLine.kind !== LINE_KIND_SECTION;
+    // Joining a set now happens via the between-lines connector chip (see
+    // SetConnector below), which calls onJoinSet on the LOWER of the two
+    // neighbours — joining it with the line directly above. The per-line row
+    // no longer carries a "Unir al conjunto de arriba" action.
 
     return (
       <div
@@ -204,8 +204,6 @@ export default function LineItemList({
             onSelectAlternative={() => onSelectAlternative?.(l)}
             onSeparateFromSet={() => onSeparateFromSet?.(l)}
             onUngroup={() => onUngroup?.(l)}
-            onJoinSet={() => onJoinSet?.(l)}
-            canJoinAbove={canJoinAbove}
             insideGroupCard={insideGroupCard}
             groupInfo={groupInfo.get(l.id)}
             setInfo={setInfo.get(l.id)}
@@ -217,40 +215,129 @@ export default function LineItemList({
     );
   }
 
+  // Renders one run (a flat list of single rows OR a group card). Returns an
+  // array of nodes so the caller can interleave between-line connectors.
+  function renderRun(run) {
+    if (run.type === 'single') {
+      // A "single" run can hold several consecutive ungrouped / section
+      // lines. Interleave a connector between each adjacent pair so two
+      // neighbouring item lines can be joined into a Conjunto in one tap.
+      const ids = run.lineIds;
+      const nodes = [];
+      ids.forEach((id, i) => {
+        const l = byId.get(id);
+        nodes.push(renderRow(l, { insideGroupCard: false }));
+        const next = ids[i + 1] ? byId.get(ids[i + 1]) : null;
+        if (next && canConnectSet(l, next)) {
+          nodes.push(
+            <SetConnector key={`conn-${id}-${next.id}`} onJoin={() => onJoinSet?.(next)} />,
+          );
+        }
+      });
+      return nodes;
+    }
+
+    // Group run → a container card wrapping the member rows.
+    const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
+    const isSet = run.type === 'set';
+    const accent = isSet ? 'violet' : 'brand';
+    const footerValue = isSet
+      ? setSubtotal(lines, run.groupId)
+      : alternativeSubtotal(lines, run.groupId);
+
+    return (
+      <GroupCard
+        key={`grp-${run.groupId}-${run.start}`}
+        type={run.type}
+        accent={accent}
+        memberCount={members.length}
+        footerLabel={isSet ? 'Total del conjunto' : 'Total'}
+        footerValue={formatMoney(footerValue, currency, rates)}
+      >
+        <ul className="divide-y divide-ink-100">
+          {members.map((l) => renderRow(l, { insideGroupCard: true }))}
+        </ul>
+      </GroupCard>
+    );
+  }
+
   return (
     <div className="group/list">
       <ul className="divide-y divide-ink-100">
-        {runs.map((run) => {
-          // Single / ungrouped / section run — render the row(s) flat.
-          if (run.type === 'single') {
-            return run.lineIds.map((id) => renderRow(byId.get(id), { insideGroupCard: false }));
+        {runs.map((run, ri) => {
+          const node = renderRun(run);
+          // Connector at the boundary between this run and the next, joining
+          // the LAST line of this run with the FIRST line of the next. Lets a
+          // standalone line snap onto the row that opens the next block (and
+          // vice-versa) without dragging. Suppressed when either boundary
+          // line is a section or the two already share a setGroup.
+          const nextRun = runs[ri + 1];
+          let connector = null;
+          if (nextRun) {
+            const upper = byId.get(run.lineIds[run.lineIds.length - 1]);
+            const lower = byId.get(nextRun.lineIds[0]);
+            if (upper && lower && canConnectSet(upper, lower)) {
+              connector = (
+                <SetConnector
+                  key={`conn-${upper.id}-${lower.id}`}
+                  onJoin={() => onJoinSet?.(lower)}
+                />
+              );
+            }
           }
-
-          // Group run → a container card wrapping the member rows.
-          const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
-          const isSet = run.type === 'set';
-          const accent = isSet ? 'violet' : 'brand';
-          const footerValue = isSet
-            ? setSubtotal(lines, run.groupId)
-            : alternativeSubtotal(lines, run.groupId);
-
-          return (
-            <GroupCard
-              key={`grp-${run.groupId}-${run.start}`}
-              type={run.type}
-              accent={accent}
-              memberCount={members.length}
-              footerLabel={isSet ? 'Total del conjunto' : 'Total'}
-              footerValue={formatMoney(footerValue, currency, rates)}
-            >
-              <ul className="divide-y divide-ink-100">
-                {members.map((l) => renderRow(l, { insideGroupCard: true }))}
-              </ul>
-            </GroupCard>
-          );
+          return [node, connector];
         })}
       </ul>
     </div>
+  );
+}
+
+// Two adjacent lines can be offered the "Unir en conjunto" connector when
+// joining them is CLEAN and non-destructive. Clicking fires joinSet(lower),
+// which stamps `lower` (and, when standalone, `upper`) with a shared setGroup
+// and strips conflicting flags. So we only show it when:
+//   - both are real item lines (not sections),
+//   - the LOWER line is ungrouped (no setGroup / alternativeGroup) — otherwise
+//     a click would yank it out of its existing group, and
+//   - the UPPER line isn't in an alternative group — otherwise joining a
+//     standalone lower would strip the upper out of its alternatives.
+// (Adding a line to an EXISTING set still works: an ungrouped line below a set
+// member adopts that member's setGroup. To extend a set the dealer keeps the
+// new line just under the set.)
+function canConnectSet(upper, lower) {
+  if (!upper || !lower) return false;
+  if (upper.kind === LINE_KIND_SECTION || lower.kind === LINE_KIND_SECTION) return false;
+  if (lower.setGroup || lower.alternativeGroup) return false;
+  if (upper.alternativeGroup) return false;
+  return true;
+}
+
+/**
+ * Slim centered connector that sits in the GAP between two adjacent item
+ * lines and offers to join them into a Conjunto. A hairline rule with a small
+ * "⊕ Unir en conjunto" chip floated over its midpoint. Unobtrusive at rest;
+ * the chip strengthens on hover/focus on desktop and stays tappable on touch.
+ * Clicking calls onJoin, which fires joinSet on the LOWER line (joining it
+ * with the line directly above — the existing handler).
+ */
+function SetConnector({ onJoin }) {
+  // A real (short) row, not a zero-height overlay, so the chip lives in its
+  // own space instead of overlapping the footer above or the row below. The
+  // list's own `divide-y` hairlines bracket this short gap; the chip floats
+  // centred in it. Unobtrusive at rest (60% on desktop), it lifts to full on
+  // hover/focus and is always full + tappable on touch.
+  return (
+    <li className="relative list-none py-1.5 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={onJoin}
+        className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2.5 py-1 coarse:py-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-ink-400 shadow-sm transition-colors opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 focus:outline-none coarse:opacity-100"
+        title="Unir esta línea con la de arriba en un conjunto que se vende junto"
+      >
+        <PlusCircle size={11} className="opacity-80" aria-hidden />
+        Unir en conjunto
+      </button>
+    </li>
   );
 }
 
