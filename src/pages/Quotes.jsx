@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import { Plus, FileText, Trash2 } from 'lucide-react';
@@ -52,6 +52,13 @@ const STATUS_LABELS = {
   archived: 'Archivada',
 };
 
+// Tab keys the list understands. A `?status=` deep-link (e.g. from the
+// dashboard's "Ver aceptadas") is honored only if it names one of these;
+// anything else falls back to "Todas".
+const VALID_TABS = new Set([
+  'all', 'draft', 'sent', 'accepted', 'deposito_recibido', 'declined', 'archived',
+]);
+
 // "#1001" or "borrador" — the internal-name field was removed; the
 // number plus the customer chip in each row already identify the quote.
 function describeQuote(q) {
@@ -86,7 +93,13 @@ export default function Quotes() {
   // (same toggle the home uses). Falls back to team when the current user
   // isn't known yet.
   const meId = currentProfile?.id || null;
-  const [scope, setScope] = useState(SCOPE_MINE);
+  // Honor a `?scope=` deep-link (the dashboard carries its Mías/Equipo
+  // state across when you tap a status card) — else default to "mine".
+  const [searchParams] = useSearchParams();
+  const [scope, setScope] = useState(() => {
+    const s = searchParams.get('scope');
+    return s === SCOPE_TEAM || s === SCOPE_MINE ? s : SCOPE_MINE;
+  });
   const effectiveScope = meId ? scope : SCOPE_TEAM;
   // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
   // `loaded` so we don't show a misleading "no data" message during the
@@ -115,7 +128,12 @@ export default function Quotes() {
   // strip ('all' = Todas); secondary filters (currently just vendedor)
   // live in `activeFilters` as {key: value}; sort defaults to most-recent.
   const [q, setQ] = useState('');
-  const [tab, setTab] = useState('all');
+  // Initialize the status tab from `?status=` so deep-links (dashboard
+  // "Ver enviadas / aceptadas / borradores") land pre-filtered.
+  const [tab, setTab] = useState(() => {
+    const s = searchParams.get('status');
+    return s && VALID_TABS.has(s) ? s : 'all';
+  });
   const [filters, setFilters] = useState({}); // { creator: <profileId> }
   const [sort, setSort] = useState({ key: 'recent', dir: 'desc' });
 

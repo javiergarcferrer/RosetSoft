@@ -140,7 +140,7 @@ export default function Dashboard() {
                 <span className="badge">{derived.sent.length}</span>
               )}
             </h2>
-            <Link to="/quotes?status=sent" className="card-header-action">
+            <Link to={`/quotes?status=sent&scope=${effectiveScope}`} className="card-header-action">
               Ver enviadas <ArrowRight size={12} />
             </Link>
           </header>
@@ -183,7 +183,7 @@ export default function Dashboard() {
                 <span className="badge">{derived.accepted.length}</span>
               )}
             </h2>
-            <Link to="/quotes?status=accepted" className="card-header-action">
+            <Link to={`/quotes?status=accepted&scope=${effectiveScope}`} className="card-header-action">
               Ver aceptadas <ArrowRight size={12} />
             </Link>
           </header>
@@ -220,7 +220,7 @@ export default function Dashboard() {
               <span className="badge">{derived.drafts.length}</span>
             )}
           </h2>
-          <Link to="/quotes?status=draft" className="card-header-action">
+          <Link to={`/quotes?status=draft&scope=${effectiveScope}`} className="card-header-action">
             Ver borradores <ArrowRight size={12} />
           </Link>
         </header>
