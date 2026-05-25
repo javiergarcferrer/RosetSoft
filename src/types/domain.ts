@@ -338,6 +338,11 @@ export interface Quote {
    * in lib/commissions for when it becomes owed. */
   commissionPaidAt?: number | null;
 
+  /* When the SELLER (vendedor) commission on this quote was paid out.
+   * null = pending. The seller's cut is earned once the deposit lands;
+   * this is its sibling of commissionPaidAt (the professional's cut). */
+  sellerCommissionPaidAt?: number | null;
+
   createdAt?: number;
   updatedAt?: number;
 }

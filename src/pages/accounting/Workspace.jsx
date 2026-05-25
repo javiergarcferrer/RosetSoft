@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Shield, Wallet, FileCheck, Users as UsersIcon, Download,
-  Loader2, AlertCircle, Calendar, ChevronDown, Briefcase, Check,
+  Loader2, Calendar, ChevronDown, Briefcase, Check,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -10,7 +10,6 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
-import StatCard from '../../components/StatCard.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import {
   computeTotals, applyLineAdjustments, lineForTotals, isCompoundLine,
@@ -22,47 +21,36 @@ import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
 import {
-  effectiveCommissionPct, commissionAmount, isTradeDiscount,
-  commissionOwedAt, isCommissionPaid,
+  effectiveCommissionPct, commissionAmount, decoratorBilling, commissionOwedAt,
 } from '../../lib/commissions.js';
 
 /**
- * Contabilidad — single-pane accounting workspace.
- *
- * Replaces the earlier four-page split (Resumen / Aceptadas /
- * Comisiones / Odoo). An accountant needs to see every accepted
- * cotización of the cycle as a table with all the fields that drive
- * their work — quote number, customer, vendedor, base imponible,
- * ITBIS, grand total, deposit status, commission owed — and trigger
- * their three exports from the same screen. Splitting that across
- * four tabs forced them to jump back and forth; this is one scroll.
+ * Contabilidad — single-pane accounting workspace, organized around the
+ * SALE. The accountant works one cycle at a time and, for each sale, needs
+ * two things together: what to key into Odoo, and what commissions the sale
+ * owes (and to whom). So every sale is one expandable card holding both —
+ * no jumping between a "facturas" view and a separate "comisiones" view.
  *
  * Sections, top to bottom:
- *   1. Header with the three Odoo CSV export buttons (clientes,
- *      facturas, comisiones-del-ciclo).
+ *   1. Header with the Odoo CSV export buttons (clientes, facturas,
+ *      comisiones del vendedor, comisiones de profesionales).
  *   2. Cycle picker (ciclo actual / anterior / personalizado).
- *   3. KPI strip — total facturado, comisiones por pagar, count of
- *      vendedores who earned in the cycle.
- *   4. Main table — every accepted quote whose acceptedAt OR
- *      depositReceivedAt falls inside the cycle window. Columns are
- *      ordered the way an accountant reads them: identity →
- *      attribution → money → status → action (PDF).
- *   5. Per-vendedor commission rollup. Compact table that aggregates
- *      the same per-quote commission entries from section 4, so the
- *      accountant sees "pay María RD$X, pay Carlos RD$Y" at a glance.
- *   6. Comisiones por profesional — the OUTSIDE professional (decorator/
- *      architect) payout, a separate stream from the seller commission.
- *      Owed once the deal is collected (balance on order-linked quotes,
- *      deposit on floor sales); each entry can be marked paid/pending so
- *      accounting can follow up on what's outstanding. Plus a per-pro
- *      rollup with one-click bulk pay.
+ *   3. Search / filter header (search + deposit tabs + vendedor + sort).
+ *   4. Ventas del ciclo — one expandable card per accepted quote whose
+ *      acceptedAt OR depositReceivedAt falls in the window. Collapsed:
+ *      #, cliente, vendedor, total, commission status. Expanded: the Odoo
+ *      invoice detail (per-product lines + totals + per-quote CSV) followed
+ *      by BOTH commissions owed on the sale — vendedor and, if assigned,
+ *      profesional (with its invoicing mode: comisión vs trade discount).
+ *      Each commission is tickable paid once earned (deposit for the seller
+ *      / balance for an order-linked professional).
+ *   5–6. Resumen por vendedor / por profesional — the same per-sale numbers
+ *      grouped, split paid vs pendiente, so payouts can be batched.
  *
- * Mostly read-only: the only writes are the section-6 "mark commission
- * paid" toggles (a `commission_paid_at` timestamp on the quote; RLS is
- * single-tenant team-write so the accounting role is authorized). The PDF
- * download per row reuses the same `generateQuotePdf` the sales team uses;
- * the CSV exports use the `downloadCsv` helper that produces UTF-8 BOM CSV
- * that Excel and Odoo's standard CSV import both parse correctly.
+ * Writes: the per-sale "marcar pagada" toggles set sellerCommissionPaidAt /
+ * commissionPaidAt on the quote (RLS is single-tenant team-write, so the
+ * accounting role is authorized). The per-sale PDF reuses the sales team's
+ * `generateQuotePdf`; CSV exports use `downloadCsv` (UTF-8 BOM, Odoo-safe).
  */
 export default function AccountingWorkspace() {
   const { profileId, profiles, currentProfile, settings } = useApp();
@@ -139,16 +127,23 @@ export default function AccountingWorkspace() {
     return computeTotals(rows, q);
   }
 
-  // Cycle-scoped derivation. An entry per accepted quote whose
-  // acceptedAt OR depositReceivedAt lands inside the window — wider
-  // than the admin Commissions report (which is deposit-only) so the
-  // accountant sees every cotización they may have to invoice this
-  // cycle, even if the deposit hasn't landed yet.
+  // Cycle-scoped derivation — ONE entry per accepted quote ("sale") whose
+  // acceptedAt OR depositReceivedAt lands inside the window. Each entry
+  // carries everything the accountant needs in one place: the figures to
+  // book in Odoo AND both commission streams owed on the sale —
+  //   • the SELLER (vendedor) cut: their profile commission_pct on the base
+  //     imponible, earned once the deposit lands.
+  //   • the PROFESSIONAL (decorator/architect) cut: their %, owed per
+  //     commissionOwedAt (balance on orders, deposit on floor sales) and
+  //     only when the modality is 'commission' (a 'trade_discount' is
+  //     settled through the invoice, no payout).
+  // Each cut is marked paid independently (sellerCommissionPaidAt /
+  // commissionPaidAt). The two rollups below aggregate the same per-sale
+  // numbers so the accountant can batch payouts.
   const derived = useMemo(() => {
     const entries = [];
-    let totalBilled = 0;
-    let totalCommission = 0;
     const vendedorRoll = new Map();
+    const profRoll = new Map();
 
     for (const q of quotesQ.data) {
       if (q.status !== QUOTE_STATUS_ACCEPTED) continue;
@@ -160,130 +155,114 @@ export default function AccountingWorkspace() {
       const creator  = q.createdByUserId ? profileById.get(q.createdByUserId) : null;
       const professional = q.professionalId ? professionalById.get(q.professionalId) : null;
       const t = totalsFor(q);
-      const pct = clampPct(creator?.commissionPct);
 
-      // Decorator settlement modality (internal only — never touches the
-      // figures the client sees). When a quote is a trade discount we flag
-      // the accountant to bill the DECORATOR at their % off instead of the
-      // client; the amount is computed off the same base imponible.
-      const trade = professional ? isTradeDiscount(q) : false;
-      const decoratorPct = trade ? effectiveCommissionPct(q, professional) : 0;
-      const tradeDiscount = trade ? commissionAmount(t.taxableBase, decoratorPct) : 0;
-      // Commission is *earned* only once the deposit has been received
-      // (same rule as the admin payout report). Until then we still
-      // surface the would-be amount in italic so the accountant knows
-      // what's coming, but it doesn't roll into the cycle total.
+      // ── Seller (vendedor) commission ──────────────────────────────────
+      const pct = clampPct(creator?.commissionPct);
       const potentialCommission = t.taxableBase * (pct / 100);
+      // Earned once the deposit lands within the cycle (the payout rule the
+      // admin report uses). `sellerPayable` is the laxer "deposit received
+      // at all" gate that lets the accountant tick it paid.
       const earnedCommission = depositIn ? potentialCommission : 0;
+      const sellerPayable = Boolean(q.depositReceivedAt);
+      const sellerPaid = Boolean(q.sellerCommissionPaidAt);
+
+      // ── Professional (decorator/architect) settlement ─────────────────
+      const mode = professional ? decoratorBilling(q) : null;
+      const trade = mode === 'trade_discount';
+      const proPct = professional ? effectiveCommissionPct(q, professional) : 0;
+      const proAmount = professional ? commissionAmount(t.taxableBase, proPct) : 0;
+      // Trade discount: bill the DECORATOR at their % off (no commission).
+      const decoratorPct = trade ? proPct : 0;
+      const tradeDiscount = trade ? proAmount : 0;
+      // Commission modality only: owed per commissionOwedAt.
+      const proOwedAt = mode === 'commission' ? commissionOwedAt(q) : null;
+      const proOwed = proOwedAt != null;
+      const proPayable = proOwed;                       // can be ticked paid
+      const proPaid = Boolean(q.commissionPaidAt);
 
       entries.push({
         quote: q,
         customer,
         creator,
         professional,
+        mode,
         trade,
         decoratorPct,
         tradeDiscount,
         base: t.taxableBase,
-        // computeTotals exposes the tax amount as `taxAmt` (the
-        // generic field name; ITBIS is just the DR-specific label).
-        // The previous `t.itbis` read undefined and the column
-        // rendered "—" even though base + itbis = grandTotal added
-        // up correctly upstream.
+        // computeTotals exposes the tax amount as `taxAmt`; ITBIS is just
+        // the DR-specific label for the same figure.
         itbis: t.taxAmt,
         grandTotal: t.grandTotal,
-        // Full totals object for the per-row dropdown's breakdown
-        // (subtotal / margin / discount / base / ITBIS / shipping / total).
         totals: t,
+        acceptedIn,
+        depositIn,
+        // seller cut
         commissionPct: pct,
         potentialCommission,
         earnedCommission,
-        acceptedIn,
-        depositIn,
+        sellerPayable,
+        sellerPaid,
+        // professional cut
+        proPct,
+        proAmount,
+        proOwedAt,
+        proOwed,
+        proPayable,
+        proPaid,
       });
-      totalBilled += t.grandTotal;
-      totalCommission += earnedCommission;
 
       if (creator && earnedCommission > 0) {
         if (!vendedorRoll.has(creator.id)) {
-          vendedorRoll.set(creator.id, { user: creator, pct, count: 0, base: 0, commission: 0 });
+          vendedorRoll.set(creator.id, {
+            user: creator, pct, count: 0, base: 0, commission: 0, paid: 0, pending: 0,
+          });
         }
         const row = vendedorRoll.get(creator.id);
         row.count += 1;
         row.base += t.taxableBase;
         row.commission += earnedCommission;
+        if (sellerPaid) row.paid += earnedCommission; else row.pending += earnedCommission;
+      }
+
+      if (professional && mode === 'commission' && proOwed) {
+        if (!profRoll.has(professional.id)) {
+          profRoll.set(professional.id, {
+            professional, count: 0, commission: 0, paid: 0, pending: 0,
+          });
+        }
+        const row = profRoll.get(professional.id);
+        row.count += 1;
+        row.commission += proAmount;
+        if (proPaid) row.paid += proAmount; else row.pending += proAmount;
       }
     }
 
     entries.sort((a, b) => (b.quote.acceptedAt || 0) - (a.quote.acceptedAt || 0));
-    const vendedorRows = [...vendedorRoll.values()]
-      .sort((a, b) => b.commission - a.commission);
+    const vendedorRows = [...vendedorRoll.values()].sort((a, b) => b.pending - a.pending);
+    const profRows = [...profRoll.values()].sort((a, b) => b.pending - a.pending);
 
-    return {
-      entries,
-      vendedorRows,
-      totalBilled,
-      totalCommission,
-      vendedoresWithCommission: vendedorRows.length,
-    };
+    return { entries, vendedorRows, profRows };
   }, [quotesQ.data, cycle, customerById, profileById, professionalById, linesByQuote]);
 
-  // Professional (decorator/architect) commissions owed in the cycle.
-  // Separate stream from the vendedor (internal seller) rollup above: the
-  // % comes from the PROFESSIONAL, and the dealer owes the payout once the
-  // deal is collected — balance on order-linked quotes, deposit on floor
-  // sales (commissionOwedAt encodes the rule). One entry PER SALE (quote),
-  // each tracking whether it's been paid (commissionPaidAt) so accounting
-  // can follow up. Presented sale-by-sale (not grouped by professional).
-  const proDerived = useMemo(() => {
-    const entries = [];
-    let paidTotal = 0;
-    let pendingTotal = 0;
-
-    for (const qq of quotesQ.data) {
-      const owedAt = commissionOwedAt(qq);
-      if (owedAt == null) continue;
-      if (owedAt < cycle.start || owedAt > cycle.end) continue;
-      const professional = qq.professionalId ? professionalById.get(qq.professionalId) : null;
-      if (!professional) continue;  // assigned pro was deleted — nothing to pay
-      const customer = qq.customerId ? customerById.get(qq.customerId) : null;
-      const t = totalsFor(qq);
-      const pct = effectiveCommissionPct(qq, professional);
-      const amount = commissionAmount(t.taxableBase, pct);
-      const paid = isCommissionPaid(qq);
-
-      entries.push({
-        quote: qq,
-        professional,
-        customer,
-        base: t.taxableBase,
-        pct,
-        amount,
-        owedAt,
-        viaOrder: !!qq.orderId,
-        paid,
-      });
-
-      if (paid) paidTotal += amount; else pendingTotal += amount;
-    }
-
-    entries.sort((a, b) => (b.owedAt || 0) - (a.owedAt || 0));
-    return { entries, paidTotal, pendingTotal };
-  }, [quotesQ.data, cycle, customerById, professionalById, linesByQuote]);
-
-  // Mark / unmark a professional commission as paid. First write the
-  // accounting role makes — RLS is single-tenant "team can write", so an
-  // accounting user is authorized. The live query refreshes the derived
-  // totals automatically; `savingPaid` just disables the row while in flight.
-  const [savingPaid, setSavingPaid] = useState(null); // quote id mid-write
-  async function setCommissionPaid(quoteId, paid) {
-    setSavingPaid(quoteId);
+  // Mark / unmark a commission as paid (seller or professional, per quote).
+  // These are the only writes Contabilidad makes — RLS is single-tenant
+  // "team can write", so the accounting role is authorized. The live query
+  // refreshes the derived numbers; `savingPaid` (keyed `seller:<id>` /
+  // `pro:<id>`) just disables the control mid-write.
+  const [savingPaid, setSavingPaid] = useState(null);
+  async function setPaid(key, quoteId, patch) {
+    setSavingPaid(key);
     try {
-      await db.quotes.update(quoteId, { commissionPaidAt: paid ? Date.now() : null });
+      await db.quotes.update(quoteId, patch);
     } finally {
-      setSavingPaid((cur) => (cur === quoteId ? null : cur));
+      setSavingPaid((cur) => (cur === key ? null : cur));
     }
   }
+  const setSellerPaid = (quoteId, paid) =>
+    setPaid(`seller:${quoteId}`, quoteId, { sellerCommissionPaidAt: paid ? Date.now() : null });
+  const setProPaid = (quoteId, paid) =>
+    setPaid(`pro:${quoteId}`, quoteId, { commissionPaidAt: paid ? Date.now() : null });
 
   // Search-header query state, applied on top of the cycle-scoped entries.
   // The cycle picker above stays the page's PRIMARY window; the deposit
@@ -433,6 +412,7 @@ export default function AccountingWorkspace() {
       'cycle_start', 'cycle_end', 'employee_name', 'employee_email',
       'quote_number', 'customer', 'deposit_date',
       'base_imponible_usd', 'grand_total_usd', 'commission_pct', 'commission_amount_usd',
+      'estado', 'pagada_fecha',
     ];
     const rows = [header];
     for (const e of derived.entries) {
@@ -450,6 +430,8 @@ export default function AccountingWorkspace() {
         e.grandTotal.toFixed(2),
         e.commissionPct,
         e.earnedCommission.toFixed(2),
+        e.sellerPaid ? 'pagada' : 'pendiente',
+        e.sellerPaid ? isoDate(e.quote.sellerCommissionPaidAt) : '',
       ]);
     }
     downloadCsv(`comisiones-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
@@ -465,7 +447,9 @@ export default function AccountingWorkspace() {
       'estado', 'pagada_fecha',
     ];
     const rows = [header];
-    for (const e of proDerived.entries) {
+    for (const e of derived.entries) {
+      // Only commission-modality entries that are actually owed have a payout.
+      if (!e.professional || e.mode !== 'commission' || !e.proOwed) continue;
       rows.push([
         cycleStartIso, cycleEndIso,
         e.professional.name || '',
@@ -473,13 +457,13 @@ export default function AccountingWorkspace() {
         e.professional.email || '',
         e.quote.number != null ? String(e.quote.number) : '',
         e.customer ? (e.customer.company || e.customer.name || '') : '',
-        e.viaOrder ? 'balance' : 'deposito',
-        isoDate(e.owedAt),
+        e.quote.orderId ? 'balance' : 'deposito',
+        isoDate(e.proOwedAt),
         e.base.toFixed(2),
-        e.pct,
-        e.amount.toFixed(2),
-        e.paid ? 'pagada' : 'pendiente',
-        e.paid ? isoDate(e.quote.commissionPaidAt) : '',
+        e.proPct,
+        e.proAmount.toFixed(2),
+        e.proPaid ? 'pagada' : 'pendiente',
+        e.proPaid ? isoDate(e.quote.commissionPaidAt) : '',
       ]);
     }
     downloadCsv(`comisiones-profesionales-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
@@ -530,7 +514,7 @@ export default function AccountingWorkspace() {
               icon={Briefcase}
               label="Com. profesionales"
               busy={exportBusy === 'pro-commissions'}
-              disabled={!loaded || proDerived.entries.length === 0}
+              disabled={!loaded || !derived.entries.some((e) => e.professional && e.mode === 'commission' && e.proOwed)}
               onClick={withBusy('pro-commissions', exportProCommissions)}
             />
           </div>
@@ -585,37 +569,6 @@ export default function AccountingWorkspace() {
         )}
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-        <StatCard
-          tone="brand"
-          icon={FileCheck}
-          label="Total facturado"
-          value={loaded ? formatMoney(derived.totalBilled, 'USD', { USD: 1 }) : '—'}
-          hint={loaded
-            ? `${derived.entries.length} ${derived.entries.length === 1 ? 'cotización en el ciclo' : 'cotizaciones en el ciclo'}`
-            : 'Cargando…'}
-        />
-        <StatCard
-          tone="emerald"
-          icon={Wallet}
-          label="Comisiones por pagar"
-          value={loaded ? formatMoney(derived.totalCommission, 'USD', { USD: 1 }) : '—'}
-          hint={loaded
-            ? 'Sobre las cotizaciones con depósito recibido'
-            : 'Cargando…'}
-        />
-        <StatCard
-          tone="ink"
-          icon={UsersIcon}
-          label="Vendedores con comisión"
-          value={loaded ? String(derived.vendedoresWithCommission) : '—'}
-          hint={loaded
-            ? (derived.vendedoresWithCommission === 1 ? 'vendedor a pagar' : 'vendedores a pagar')
-            : 'Cargando…'}
-        />
-      </div>
-
       {/* Search / filter header — search + deposit tabs + vendedor filter +
           sort. The cycle picker above stays the primary dimension; this
           refines within the selected window. */}
@@ -633,13 +586,18 @@ export default function AccountingWorkspace() {
         sort={sort}
         onSortChange={setSort}
         resultCount={filteredEntries.length}
-        resultNoun={['cotización', 'cotizaciones']}
+        resultNoun={['venta', 'ventas']}
       />
 
-      {/* Main table — every accepted quote in the cycle */}
+      {/* Ventas del ciclo — one expandable card per sale. Collapsed: the
+          identity + total + commission status the accountant scans.
+          Expanded: the Odoo invoice detail (ref + per-product lines +
+          totals) followed by BOTH commissions owed on the sale (vendedor +
+          profesional, with the professional's invoicing mode), each
+          tickable as paid once it's earned. */}
       <section className="card overflow-hidden mb-6">
         <header className="card-header">
-          <h2>Cotizaciones del ciclo</h2>
+          <h2>Ventas del ciclo</h2>
           <span className="badge">{filteredEntries.length}</span>
         </header>
         {!loaded ? (
@@ -648,219 +606,263 @@ export default function AccountingWorkspace() {
           <EmptyState
             icon={FileCheck}
             title={derived.entries.length === 0
-              ? 'Sin cotizaciones aceptadas en este ciclo'
+              ? 'Sin ventas aceptadas en este ciclo'
               : 'Sin coincidencias'}
             description={derived.entries.length === 0
               ? 'Cambia el ciclo o espera a que se acepten cotizaciones del periodo.'
               : 'Ajusta la búsqueda o limpia el campo.'}
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="w-8" aria-label="Detalle"></th>
-                  <th>#</th>
-                  <th>Aceptada</th>
-                  <th>Cliente</th>
-                  <th>Vendedor</th>
-                  <th className="text-right whitespace-nowrap">Base imponible</th>
-                  <th className="text-right whitespace-nowrap">ITBIS</th>
-                  <th className="text-right whitespace-nowrap">Total</th>
-                  <th>Depósito</th>
-                  <th className="text-right whitespace-nowrap">Comisión</th>
-                  <th className="text-right">PDF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEntries.map((e) => (
-                  <EntryRow
-                    key={e.quote.id}
-                    entry={e}
-                    lines={linesByQuote.get(e.quote.id) || []}
-                    settings={settings}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Per-vendedor commission rollup — the "who do I pay how much" view */}
-      {loaded && derived.vendedorRows.length > 0 && (
-        <section className="card overflow-hidden">
-          <header className="card-header">
-            <h2>Comisiones por vendedor</h2>
-            <span className="badge">{derived.vendedorRows.length}</span>
-          </header>
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Vendedor</th>
-                  <th className="text-right whitespace-nowrap"># ventas</th>
-                  <th className="text-right whitespace-nowrap">Base imponible</th>
-                  <th className="text-right whitespace-nowrap">%</th>
-                  <th className="text-right whitespace-nowrap">Comisión</th>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.vendedorRows.map((row) => (
-                  <tr key={row.user.id}>
-                    <td className="font-medium">
-                      {row.user.name || row.user.email || '—'}
-                      {row.user.email && row.user.name && (
-                        <div className="text-[11px] text-ink-500">{row.user.email}</div>
-                      )}
-                    </td>
-                    <td className="text-right tabular-nums">{row.count}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(row.base, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right tabular-nums">{row.pct}%</td>
-                    <td className="text-right tabular-nums whitespace-nowrap font-medium text-emerald-700">
-                      {formatMoney(row.commission, 'USD', { USD: 1 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-ink-50">
-                  <td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-600">
-                    Total a pagar
-                  </td>
-                  <td className="text-right tabular-nums whitespace-nowrap font-semibold text-emerald-700">
-                    {formatMoney(derived.totalCommission, 'USD', { USD: 1 })}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* Comisiones por profesional — the decorator/architect payout the
-          dealer owes once the deal is collected. One row PER SALE (quote),
-          each an expandable dropdown with the full breakdown + the
-          pending/paid toggle. Sale-by-sale (not grouped by professional)
-          and built as a card list, not a wide table, so it reads on a
-          phone where the table columns ran off-screen. */}
-      <section className="card overflow-hidden mt-6">
-        <header className="card-header">
-          <div className="flex items-center gap-2">
-            <Briefcase size={15} className="text-ink-500" />
-            <h2>Comisiones por profesional</h2>
-            <span className="badge">{proDerived.entries.length}</span>
-          </div>
-          {loaded && proDerived.entries.length > 0 && (
-            <div className="text-xs text-ink-500 whitespace-nowrap">
-              Por pagar{' '}
-              <span className="font-semibold text-amber-700">
-                {formatMoney(proDerived.pendingTotal, 'USD', { USD: 1 })}
-              </span>
-              {' · '}Pagado{' '}
-              <span className="font-semibold text-emerald-700">
-                {formatMoney(proDerived.paidTotal, 'USD', { USD: 1 })}
-              </span>
-            </div>
-          )}
-        </header>
-
-        {!loaded ? (
-          <ListLoading rows={4} />
-        ) : proDerived.entries.length === 0 ? (
-          <EmptyState
-            icon={Briefcase}
-            title="Sin comisiones de profesionales en este ciclo"
-            description="Aparecerán aquí cuando una cotización aceptada con profesional asignado reciba su depósito (venta de piso) o su balance (pedido)."
-          />
-        ) : (
           <ul className="divide-y divide-ink-100">
-            {proDerived.entries.map((e) => (
-              <ProSaleItem
+            {filteredEntries.map((e) => (
+              <SaleCard
                 key={e.quote.id}
                 entry={e}
-                busy={savingPaid === e.quote.id}
-                onTogglePaid={(next) => setCommissionPaid(e.quote.id, next)}
+                lines={linesByQuote.get(e.quote.id) || []}
+                settings={settings}
+                savingPaid={savingPaid}
+                onSellerPaid={setSellerPaid}
+                onProPaid={setProPaid}
               />
             ))}
           </ul>
         )}
       </section>
+
+      {/* Payout rollups — batch "who do I pay how much" for the cycle.
+          Same per-sale numbers as the cards above, grouped, with paid vs
+          pending split so the accountant can settle each in one go. */}
+      {loaded && derived.vendedorRows.length > 0 && (
+        <SummaryTable
+          title="Resumen por vendedor"
+          icon={UsersIcon}
+          rows={derived.vendedorRows}
+          keyOf={(r) => r.user.id}
+          nameOf={(r) => r.user.name || r.user.email || '—'}
+          subOf={(r) => (r.user.email && r.user.name ? r.user.email : null)}
+        />
+      )}
+      {loaded && derived.profRows.length > 0 && (
+        <SummaryTable
+          title="Resumen por profesional"
+          icon={Briefcase}
+          rows={derived.profRows}
+          keyOf={(r) => r.professional.id}
+          nameOf={(r) => r.professional.name || '—'}
+          subOf={(r) => r.professional.company || null}
+        />
+      )}
     </>
   );
 }
 
 /**
- * One professional commission, per SALE. Collapsed it shows just what fits
- * a phone — quote #, professional, customer, the commission amount and its
- * pending/paid state. Tap to expand the full breakdown (base imponible, %,
- * devengo) and the pending/paid toggle.
+ * One sale (accepted quote) as the accountant reads it. Collapsed: quote #,
+ * customer, vendedor + date, the grand total and a one-glance commission
+ * status. Expanded: the Odoo invoice detail (lines + totals + CSV) and then
+ * BOTH commissions owed on the sale — vendedor and, if assigned, the
+ * profesional (with the invoicing mode), each tickable as paid once earned.
  */
-function ProSaleItem({ entry, busy, onTogglePaid }) {
-  const { quote, professional, customer, base, pct, amount, owedAt, viaOrder, paid } = entry;
+function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid }) {
+  const {
+    quote, customer, creator, professional, mode, decoratorPct, base, grandTotal, totals,
+    commissionPct, potentialCommission, sellerPayable, sellerPaid,
+    proPct, proAmount, proPayable, proPaid,
+  } = entry;
   const [open, setOpen] = useState(false);
+  const pdf = usePdfDownload({ quote, customer, lines, settings });
+  const currency = quote.currencyCode || 'USD';
+  const rates = quote.rates || { USD: 1 };
+  const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
   const customerName = customer?.company || customer?.name || '—';
+
+  const anyPayable = sellerPayable || proPayable;
+  const anyPending = (sellerPayable && !sellerPaid) || (proPayable && !proPaid);
+  const chip = !anyPayable
+    ? { cls: 'text-ink-400', text: 'Comisión tras depósito' }
+    : anyPending
+      ? { cls: 'text-amber-700', text: 'Comisión pendiente' }
+      : { cls: 'text-emerald-700', text: 'Comisiones pagadas' };
+
   return (
-    <li className={paid ? 'bg-emerald-50/30' : undefined}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-ink-50 transition-colors"
-        aria-expanded={open}
-      >
-        <ChevronDown
-          size={16}
-          className={`flex-shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-medium whitespace-nowrap">#{quote.number || '—'}</span>
-            <span className="text-ink-700 truncate">{professional.name || '—'}</span>
+    <li className="bg-white">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          aria-expanded={open}
+        >
+          <ChevronDown
+            size={16}
+            className={`flex-shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium whitespace-nowrap">#{quote.number || '—'}</span>
+              <span className="text-ink-700 truncate">{customerName}</span>
+            </div>
+            <div className="text-[11px] text-ink-500 truncate">
+              {creatorDisplay(creator) || 'Sin vendedor'} · {formatDate(quote.acceptedAt)}
+            </div>
           </div>
-          <div className="text-[11px] text-ink-500 truncate">{customerName}</div>
-        </div>
-        <div className="flex-shrink-0 text-right">
-          <div className="tabular-nums font-medium whitespace-nowrap">
-            {formatMoney(amount, 'USD', { USD: 1 })}
+          <div className="flex-shrink-0 text-right">
+            <div className="tabular-nums font-medium whitespace-nowrap">
+              {formatMoney(grandTotal, currency, rates)}
+            </div>
+            <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>
           </div>
-          <span className={`text-[10px] font-semibold ${paid ? 'text-emerald-700' : 'text-amber-700'}`}>
-            {paid ? 'Pagada' : 'Pendiente'}
-          </span>
-        </div>
-      </button>
+        </button>
+        <PdfButton pdf={pdf} />
+      </div>
 
       {open && (
-        <div className="px-4 pb-4 sm:pl-11 space-y-3">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-            <DetailCell label="Profesional" value={professional.name || '—'} sub={professional.company} />
-            <DetailCell label="Cliente" value={customerName} />
-            <DetailCell label="Devengada" value={formatDate(owedAt)} sub={`vía ${viaOrder ? 'balance' : 'depósito'}`} />
-            <DetailCell label="Base imponible" value={formatMoney(base, 'USD', { USD: 1 })} />
-            <DetailCell label="Comisión" value={`${formatMoney(amount, 'USD', { USD: 1 })} · ${pct}%`} />
-          </dl>
-          <PaidToggle paid={paid} busy={busy} onToggle={onTogglePaid} />
+        <div className="px-4 pb-4 sm:pl-10 space-y-4 bg-ink-50/40">
+          <QuoteAccountingDetail
+            invLines={invLines}
+            totals={totals}
+            currency={currency}
+            rates={rates}
+            onExportCsv={() => downloadQuoteInvoiceCsv(quote, customer, lines)}
+          />
+
+          <div className="space-y-2">
+            <h3 className="eyebrow font-semibold tracking-wide text-ink-600">
+              Comisiones de esta venta
+            </h3>
+
+            <CommissionLine
+              role="Vendedor"
+              who={creatorDisplay(creator) || '—'}
+              detail={`Base ${formatMoney(base, 'USD', { USD: 1 })} · ${commissionPct}% = ${formatMoney(potentialCommission, 'USD', { USD: 1 })}`}
+              action={sellerPayable ? (
+                <PaidToggle
+                  paid={sellerPaid}
+                  busy={savingPaid === `seller:${quote.id}`}
+                  onToggle={(n) => onSellerPaid(quote.id, n)}
+                />
+              ) : (
+                <span className="text-[11px] text-ink-400 italic whitespace-nowrap">Tras depósito</span>
+              )}
+            />
+
+            {professional && (
+              <CommissionLine
+                role="Profesional"
+                who={professional.name || '—'}
+                badge={mode === 'trade_discount' ? 'Trade discount' : 'Comisión'}
+                detail={mode === 'trade_discount'
+                  ? `Facturar al decorador −${decoratorPct}% (sin comisión)`
+                  : `Base ${formatMoney(base, 'USD', { USD: 1 })} · ${proPct}% = ${formatMoney(proAmount, 'USD', { USD: 1 })}`}
+                action={mode === 'trade_discount' ? null : (proPayable ? (
+                  <PaidToggle
+                    paid={proPaid}
+                    busy={savingPaid === `pro:${quote.id}`}
+                    onToggle={(n) => onProPaid(quote.id, n)}
+                  />
+                ) : (
+                  <span className="text-[11px] text-ink-400 italic whitespace-nowrap">
+                    Tras {quote.orderId ? 'balance' : 'depósito'}
+                  </span>
+                ))}
+              />
+            )}
+          </div>
         </div>
       )}
     </li>
   );
 }
 
-function DetailCell({ label, value, sub }) {
+/** One commission row inside a sale card (vendedor or profesional). */
+function CommissionLine({ role, who, badge, detail, action }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-ink-400">{label}</dt>
-      <dd className="text-ink-800 tabular-nums truncate" title={value}>{value}</dd>
-      {sub && <dd className="text-[10px] text-ink-400 truncate">{sub}</dd>}
+    <div className="flex items-center justify-between gap-3 rounded-md border border-ink-100 bg-white px-3 py-2">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{role}</span>
+          <span className="text-sm text-ink-800 truncate">{who}</span>
+          {badge && (
+            <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+              badge === 'Trade discount' ? 'bg-amber-100 text-amber-800' : 'bg-ink-100 text-ink-600'
+            }`}>
+              {badge}
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-ink-500 truncate">{detail}</div>
+      </div>
+      {action && <div className="flex-shrink-0">{action}</div>}
     </div>
   );
 }
 
+/** Payout rollup card — name, # ventas, comisión, pagado, pendiente. */
+function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
+  const pendingTotal = rows.reduce((s, r) => s + r.pending, 0);
+  return (
+    <section className="card overflow-hidden mt-6">
+      <header className="card-header">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon size={15} className="text-ink-500" />}
+          <h2>{title}</h2>
+        </div>
+        <span className="badge">{rows.length}</span>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th className="text-right whitespace-nowrap"># ventas</th>
+              <th className="text-right whitespace-nowrap">Comisión</th>
+              <th className="text-right whitespace-nowrap">Pagado</th>
+              <th className="text-right whitespace-nowrap">Pendiente</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const sub = subOf(r);
+              return (
+                <tr key={keyOf(r)}>
+                  <td className="font-medium">
+                    {nameOf(r)}
+                    {sub && <div className="text-[11px] text-ink-500">{sub}</div>}
+                  </td>
+                  <td className="text-right tabular-nums">{r.count}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">
+                    {formatMoney(r.commission, 'USD', { USD: 1 })}
+                  </td>
+                  <td className="text-right tabular-nums whitespace-nowrap text-emerald-700">
+                    {formatMoney(r.paid, 'USD', { USD: 1 })}
+                  </td>
+                  <td className="text-right tabular-nums whitespace-nowrap font-medium text-amber-700">
+                    {formatMoney(r.pending, 'USD', { USD: 1 })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-ink-50">
+              <td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-600">
+                Pendiente total
+              </td>
+              <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700">
+                {formatMoney(pendingTotal, 'USD', { USD: 1 })}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 /**
- * Pending ↔ paid toggle for a single professional commission. Paid shows
- * a green confirmed chip (click to revert); pending shows a neutral
- * "Marcar pagada" button.
+ * Pending ↔ paid toggle for a single commission (seller or professional).
+ * Paid shows a green confirmed chip (click to revert); pending shows a
+ * neutral "Marcar pagada" button.
  */
 function PaidToggle({ paid, busy, onToggle }) {
   if (paid) {
@@ -886,96 +888,6 @@ function PaidToggle({ paid, busy, onToggle }) {
     >
       {busy ? <Loader2 size={12} className="animate-spin" /> : null}Marcar pagada
     </button>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Row + helpers                                                             */
-/* -------------------------------------------------------------------------- */
-
-function EntryRow({ entry, lines, settings }) {
-  const { quote, customer, creator, professional, trade, decoratorPct, base,
-          itbis, grandTotal, totals, commissionPct, potentialCommission,
-          earnedCommission, depositIn } = entry;
-  const pdf = usePdfDownload({ quote, customer, lines, settings });
-  const [open, setOpen] = useState(false);
-  const currency = quote.currencyCode || 'USD';
-  const rates = quote.rates || { USD: 1 };
-  const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
-  return (
-    <>
-    <tr className={open ? 'bg-ink-50/60' : undefined}>
-      <td className="w-8">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-ink-800 hover:bg-ink-100 transition-colors"
-          aria-expanded={open}
-          aria-label={open ? 'Ocultar detalle' : 'Ver detalle para facturar'}
-        >
-          <ChevronDown size={15} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        </button>
-      </td>
-      <td className="font-medium whitespace-nowrap">#{quote.number || '—'}</td>
-      <td className="text-ink-500 whitespace-nowrap">{formatDate(quote.acceptedAt)}</td>
-      <td className="max-w-[220px]">
-        <div className="text-ink-700 truncate" title={customer?.company || customer?.name || ''}>
-          {customer?.company || customer?.name || '—'}
-        </div>
-        {trade && (
-          <div
-            className="text-[10px] text-amber-700 font-medium truncate"
-            title={`Trade discount: facturar al decorador ${professional?.name || ''} con ${decoratorPct}% de descuento (no al cliente)`}
-          >
-            Facturar a {professional?.name || 'decorador'} · −{decoratorPct}% trade
-          </div>
-        )}
-      </td>
-      <td className="text-ink-700 truncate max-w-[160px]" title={creatorDisplay(creator)}>
-        {creatorDisplay(creator) || '—'}
-      </td>
-      <td className="text-right tabular-nums whitespace-nowrap">{formatMoney(base, currency, rates)}</td>
-      <td className="text-right tabular-nums whitespace-nowrap text-ink-500">{formatMoney(itbis, currency, rates)}</td>
-      <td className="text-right tabular-nums whitespace-nowrap font-medium">{formatMoney(grandTotal, currency, rates)}</td>
-      <td><DepositPill at={quote.depositReceivedAt} /></td>
-      <td className="text-right tabular-nums whitespace-nowrap">
-        {depositIn ? (
-          <span className="font-medium text-emerald-700">
-            {formatMoney(earnedCommission, 'USD', { USD: 1 })}
-          </span>
-        ) : (
-          <span className="italic text-ink-400" title="Aún sin depósito — comisión proyectada">
-            {formatMoney(potentialCommission, 'USD', { USD: 1 })}
-          </span>
-        )}
-        {commissionPct > 0 && (
-          <div className="text-[10px] text-ink-400">{commissionPct}%</div>
-        )}
-      </td>
-      <td className="text-right w-20">
-        <PdfButton pdf={pdf} />
-        {pdf.error && (
-          <div role="alert" className="text-[10px] text-red-700 mt-1 max-w-[180px] inline-flex items-start gap-1">
-            <AlertCircle size={10} className="mt-0.5 flex-shrink-0" />
-            <span className="truncate" title={pdf.error}>{pdf.error}</span>
-          </div>
-        )}
-      </td>
-    </tr>
-    {open && (
-      <tr className="bg-ink-50/40">
-        <td colSpan={11} className="px-3 sm:px-4 py-3">
-          <QuoteAccountingDetail
-            invLines={invLines}
-            totals={totals}
-            currency={currency}
-            rates={rates}
-            onExportCsv={() => downloadQuoteInvoiceCsv(quote, customer, lines)}
-          />
-        </td>
-      </tr>
-    )}
-    </>
   );
 }
 
@@ -1083,13 +995,6 @@ function CyclePill({ label, sub, active, onClick }) {
       <div className={`text-[10px] mt-0.5 ${active ? 'text-ink-300' : 'text-ink-500'}`}>{sub}</div>
     </button>
   );
-}
-
-function DepositPill({ at }) {
-  if (at) {
-    return <span className="status-pill status-pill-accepted whitespace-nowrap">{formatDate(at)}</span>;
-  }
-  return <span className="status-pill status-pill-sent whitespace-nowrap">Pendiente</span>;
 }
 
 function PdfButton({ pdf }) {
