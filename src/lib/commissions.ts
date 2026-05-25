@@ -95,6 +95,56 @@ export function effectiveCommissionPct(
 }
 
 /**
+ * When (if ever) the assigned professional's commission on a quote becomes
+ * PAYABLE — i.e. the date the dealer actually owes the payout. Returns the
+ * milestone timestamp that triggers it, or null if it isn't owed yet.
+ *
+ * The dealer's rule for *when* a professional's cut is owed:
+ *
+ *   • Quote tied to an ORDER (`orderId` set): owed once the BALANCE is paid
+ *     (`balancePaidAt`). On a special order the deposit alone isn't enough —
+ *     the commission rides on full collection.
+ *   • Standalone quote (no order — a "venta de piso", floor sale): owed once
+ *     the DEPOSIT is received (`depositReceivedAt`).
+ *
+ * Only ACCEPTED quotes that have a professional and settle via the
+ * 'commission' modality can owe a payout. 'trade_discount' quotes settle
+ * the decorator through the invoice (billed at their % off), so there's no
+ * commission to pay and this returns null.
+ *
+ * The returned timestamp also tells Contabilidad which cycle the payout
+ * falls in (mirrors how seller commissions key off the deposit date).
+ */
+export function commissionOwedAt(
+  quote:
+    | Pick<
+        Quote,
+        | 'status'
+        | 'professionalId'
+        | 'orderId'
+        | 'depositReceivedAt'
+        | 'balancePaidAt'
+        | 'decoratorBilling'
+      >
+    | null
+    | undefined,
+): number | null {
+  if (!quote) return null;
+  if (quote.status !== 'accepted') return null;   // mirrors QUOTE_STATUS_ACCEPTED
+  if (!quote.professionalId) return null;
+  if (isTradeDiscount(quote)) return null;
+  const owed = quote.orderId ? quote.balancePaidAt : quote.depositReceivedAt;
+  return owed ?? null;
+}
+
+/** True once the professional's commission on the quote has been paid out. */
+export function isCommissionPaid(
+  quote: Pick<Quote, 'commissionPaidAt'> | null | undefined,
+): boolean {
+  return quote?.commissionPaidAt != null;
+}
+
+/**
  * Commission $ amount on a quote's *taxable base* (base imponible).
  *
  * The dealer's rule: commission is paid on the amount BEFORE ITBIS

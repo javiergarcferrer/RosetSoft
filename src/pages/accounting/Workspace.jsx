@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Shield, Wallet, FileCheck, Users as UsersIcon, Download,
-  Loader2, AlertCircle, Calendar, ChevronDown,
+  Loader2, AlertCircle, Calendar, ChevronDown, Briefcase, Check,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -21,7 +21,10 @@ import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
-import { effectiveCommissionPct, commissionAmount, isTradeDiscount } from '../../lib/commissions.js';
+import {
+  effectiveCommissionPct, commissionAmount, isTradeDiscount,
+  commissionOwedAt, isCommissionPaid,
+} from '../../lib/commissions.js';
 
 /**
  * Contabilidad — single-pane accounting workspace.
@@ -47,11 +50,19 @@ import { effectiveCommissionPct, commissionAmount, isTradeDiscount } from '../..
  *   5. Per-vendedor commission rollup. Compact table that aggregates
  *      the same per-quote commission entries from section 4, so the
  *      accountant sees "pay María RD$X, pay Carlos RD$Y" at a glance.
+ *   6. Comisiones por profesional — the OUTSIDE professional (decorator/
+ *      architect) payout, a separate stream from the seller commission.
+ *      Owed once the deal is collected (balance on order-linked quotes,
+ *      deposit on floor sales); each entry can be marked paid/pending so
+ *      accounting can follow up on what's outstanding. Plus a per-pro
+ *      rollup with one-click bulk pay.
  *
- * Read-only throughout. The PDF download per row reuses the same
- * `generateQuotePdf` the sales team uses; the CSV exports use the
- * `downloadCsv` helper that produces UTF-8 BOM CSV that Excel and
- * Odoo's standard CSV import both parse correctly.
+ * Mostly read-only: the only writes are the section-6 "mark commission
+ * paid" toggles (a `commission_paid_at` timestamp on the quote; RLS is
+ * single-tenant team-write so the accounting role is authorized). The PDF
+ * download per row reuses the same `generateQuotePdf` the sales team uses;
+ * the CSV exports use the `downloadCsv` helper that produces UTF-8 BOM CSV
+ * that Excel and Odoo's standard CSV import both parse correctly.
  */
 export default function AccountingWorkspace() {
   const { profileId, profiles, currentProfile, settings } = useApp();
@@ -216,6 +227,88 @@ export default function AccountingWorkspace() {
       vendedoresWithCommission: vendedorRows.length,
     };
   }, [quotesQ.data, cycle, customerById, profileById, professionalById, linesByQuote]);
+
+  // Professional (decorator/architect) commissions owed in the cycle.
+  // Separate stream from the vendedor (internal seller) rollup above: the
+  // % comes from the PROFESSIONAL, and the dealer owes the payout once the
+  // deal is collected — balance on order-linked quotes, deposit on floor
+  // sales (commissionOwedAt encodes the rule). Each entry tracks whether
+  // it's already been paid (commissionPaidAt) so accounting can follow up.
+  const proDerived = useMemo(() => {
+    const entries = [];
+    const roll = new Map();
+    let paidTotal = 0;
+    let pendingTotal = 0;
+
+    for (const qq of quotesQ.data) {
+      const owedAt = commissionOwedAt(qq);
+      if (owedAt == null) continue;
+      if (owedAt < cycle.start || owedAt > cycle.end) continue;
+      const professional = qq.professionalId ? professionalById.get(qq.professionalId) : null;
+      if (!professional) continue;  // assigned pro was deleted — nothing to pay
+      const customer = qq.customerId ? customerById.get(qq.customerId) : null;
+      const t = totalsFor(qq);
+      const pct = effectiveCommissionPct(qq, professional);
+      const amount = commissionAmount(t.taxableBase, pct);
+      const paid = isCommissionPaid(qq);
+
+      entries.push({
+        quote: qq,
+        professional,
+        customer,
+        base: t.taxableBase,
+        pct,
+        amount,
+        owedAt,
+        viaOrder: !!qq.orderId,
+        paid,
+      });
+
+      if (paid) paidTotal += amount; else pendingTotal += amount;
+
+      if (!roll.has(professional.id)) {
+        roll.set(professional.id, {
+          professional, count: 0, base: 0, commission: 0,
+          paid: 0, pending: 0, pendingQuoteIds: [],
+        });
+      }
+      const r = roll.get(professional.id);
+      r.count += 1;
+      r.base += t.taxableBase;
+      r.commission += amount;
+      if (paid) r.paid += amount;
+      else { r.pending += amount; r.pendingQuoteIds.push(qq.id); }
+    }
+
+    entries.sort((a, b) => (b.owedAt || 0) - (a.owedAt || 0));
+    const rows = [...roll.values()].sort((a, b) => b.pending - a.pending);
+    return { entries, rows, paidTotal, pendingTotal };
+  }, [quotesQ.data, cycle, customerById, professionalById, linesByQuote]);
+
+  // Mark / unmark a professional commission as paid. First write the
+  // accounting role makes — RLS is single-tenant "team can write", so an
+  // accounting user is authorized. The live query refreshes the derived
+  // totals automatically; `savingPaid` just disables the row while in flight.
+  const [savingPaid, setSavingPaid] = useState(null); // quote id mid-write, or 'bulk:<proId>'
+  async function setCommissionPaid(quoteId, paid) {
+    setSavingPaid(quoteId);
+    try {
+      await db.quotes.update(quoteId, { commissionPaidAt: paid ? Date.now() : null });
+    } finally {
+      setSavingPaid((cur) => (cur === quoteId ? null : cur));
+    }
+  }
+  async function markManyPaid(professionalId, quoteIds) {
+    if (!quoteIds.length) return;
+    const key = `bulk:${professionalId}`;
+    setSavingPaid(key);
+    try {
+      const now = Date.now();
+      for (const id of quoteIds) await db.quotes.update(id, { commissionPaidAt: now });
+    } finally {
+      setSavingPaid((cur) => (cur === key ? null : cur));
+    }
+  }
 
   // Search-header query state, applied on top of the cycle-scoped entries.
   // The cycle picker above stays the page's PRIMARY window; the deposit
@@ -387,6 +480,36 @@ export default function AccountingWorkspace() {
     downloadCsv(`comisiones-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
   }
 
+  async function exportProCommissions() {
+    const cycleStartIso = isoDate(cycle.start);
+    const cycleEndIso   = isoDate(cycle.end);
+    const header = [
+      'cycle_start', 'cycle_end', 'profesional', 'empresa', 'email',
+      'quote_number', 'customer', 'devengada_via', 'devengada_fecha',
+      'base_imponible_usd', 'commission_pct', 'commission_amount_usd',
+      'estado', 'pagada_fecha',
+    ];
+    const rows = [header];
+    for (const e of proDerived.entries) {
+      rows.push([
+        cycleStartIso, cycleEndIso,
+        e.professional.name || '',
+        e.professional.company || '',
+        e.professional.email || '',
+        e.quote.number != null ? String(e.quote.number) : '',
+        e.customer ? (e.customer.company || e.customer.name || '') : '',
+        e.viaOrder ? 'balance' : 'deposito',
+        isoDate(e.owedAt),
+        e.base.toFixed(2),
+        e.pct,
+        e.amount.toFixed(2),
+        e.paid ? 'pagada' : 'pendiente',
+        e.paid ? isoDate(e.quote.commissionPaidAt) : '',
+      ]);
+    }
+    downloadCsv(`comisiones-profesionales-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
+  }
+
   if (!allowed) {
     return (
       <>
@@ -427,6 +550,13 @@ export default function AccountingWorkspace() {
               busy={exportBusy === 'commissions'}
               disabled={!loaded}
               onClick={withBusy('commissions', exportCommissions)}
+            />
+            <ExportButton
+              icon={Briefcase}
+              label="Com. profesionales"
+              busy={exportBusy === 'pro-commissions'}
+              disabled={!loaded || proDerived.entries.length === 0}
+              onClick={withBusy('pro-commissions', exportProCommissions)}
             />
           </div>
         }
@@ -634,7 +764,207 @@ export default function AccountingWorkspace() {
           </div>
         </section>
       )}
+
+      {/* Comisiones por profesional — the decorator/architect payout the
+          dealer owes once the deal is collected. Pending vs paid tracking
+          lives here so accounting can follow up. */}
+      <section className="card overflow-hidden mt-6">
+        <header className="card-header">
+          <div className="flex items-center gap-2">
+            <Briefcase size={15} className="text-ink-500" />
+            <h2>Comisiones por profesional</h2>
+            <span className="badge">{proDerived.entries.length}</span>
+          </div>
+          {loaded && proDerived.entries.length > 0 && (
+            <div className="text-xs text-ink-500 whitespace-nowrap">
+              Por pagar{' '}
+              <span className="font-semibold text-amber-700">
+                {formatMoney(proDerived.pendingTotal, 'USD', { USD: 1 })}
+              </span>
+              {' · '}Pagado{' '}
+              <span className="font-semibold text-emerald-700">
+                {formatMoney(proDerived.paidTotal, 'USD', { USD: 1 })}
+              </span>
+            </div>
+          )}
+        </header>
+
+        {!loaded ? (
+          <ListLoading rows={4} />
+        ) : proDerived.entries.length === 0 ? (
+          <EmptyState
+            icon={Briefcase}
+            title="Sin comisiones de profesionales en este ciclo"
+            description="Aparecerán aquí cuando una cotización aceptada con profesional asignado reciba su depósito (venta de piso) o su balance (pedido)."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Profesional</th>
+                  <th>Cliente</th>
+                  <th className="whitespace-nowrap">Devengada</th>
+                  <th className="text-right whitespace-nowrap">Base imponible</th>
+                  <th className="text-right whitespace-nowrap">%</th>
+                  <th className="text-right whitespace-nowrap">Comisión</th>
+                  <th className="text-right whitespace-nowrap">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proDerived.entries.map((e) => (
+                  <tr key={e.quote.id} className={e.paid ? 'bg-emerald-50/30' : undefined}>
+                    <td className="font-medium whitespace-nowrap">#{e.quote.number || '—'}</td>
+                    <td className="max-w-[180px]">
+                      <div className="text-ink-800 truncate" title={e.professional.name || ''}>
+                        {e.professional.name || '—'}
+                      </div>
+                      {e.professional.company && (
+                        <div className="text-[11px] text-ink-500 truncate">{e.professional.company}</div>
+                      )}
+                    </td>
+                    <td className="max-w-[180px] text-ink-700 truncate" title={e.customer?.company || e.customer?.name || ''}>
+                      {e.customer?.company || e.customer?.name || '—'}
+                    </td>
+                    <td className="text-ink-500 whitespace-nowrap">
+                      {formatDate(e.owedAt)}
+                      <div className="text-[10px] text-ink-400">
+                        vía {e.viaOrder ? 'balance' : 'depósito'}
+                      </div>
+                    </td>
+                    <td className="text-right tabular-nums whitespace-nowrap">
+                      {formatMoney(e.base, 'USD', { USD: 1 })}
+                    </td>
+                    <td className="text-right tabular-nums">{e.pct}%</td>
+                    <td className="text-right tabular-nums whitespace-nowrap font-medium">
+                      {formatMoney(e.amount, 'USD', { USD: 1 })}
+                    </td>
+                    <td className="text-right">
+                      <PaidToggle
+                        paid={e.paid}
+                        busy={savingPaid === e.quote.id}
+                        onToggle={(next) => setCommissionPaid(e.quote.id, next)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Resumen por profesional — "who do I still owe how much" rollup
+          with a one-click bulk pay for everything pending in the cycle. */}
+      {loaded && proDerived.rows.length > 0 && (
+        <section className="card overflow-hidden mt-6">
+          <header className="card-header">
+            <h2>Resumen por profesional</h2>
+            <span className="badge">{proDerived.rows.length}</span>
+          </header>
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Profesional</th>
+                  <th className="text-right whitespace-nowrap"># ventas</th>
+                  <th className="text-right whitespace-nowrap">Comisión total</th>
+                  <th className="text-right whitespace-nowrap">Pagado</th>
+                  <th className="text-right whitespace-nowrap">Pendiente</th>
+                  <th className="text-right whitespace-nowrap">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proDerived.rows.map((row) => (
+                  <tr key={row.professional.id}>
+                    <td className="font-medium">
+                      {row.professional.name || '—'}
+                      {row.professional.company && (
+                        <div className="text-[11px] text-ink-500">{row.professional.company}</div>
+                      )}
+                    </td>
+                    <td className="text-right tabular-nums">{row.count}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">
+                      {formatMoney(row.commission, 'USD', { USD: 1 })}
+                    </td>
+                    <td className="text-right tabular-nums whitespace-nowrap text-emerald-700">
+                      {formatMoney(row.paid, 'USD', { USD: 1 })}
+                    </td>
+                    <td className="text-right tabular-nums whitespace-nowrap font-medium text-amber-700">
+                      {formatMoney(row.pending, 'USD', { USD: 1 })}
+                    </td>
+                    <td className="text-right">
+                      {row.pendingQuoteIds.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => markManyPaid(row.professional.id, row.pendingQuoteIds)}
+                          disabled={savingPaid === `bulk:${row.professional.id}`}
+                          className="btn-ghost text-xs disabled:opacity-50"
+                          title={`Marcar ${row.pendingQuoteIds.length} comisión(es) pendiente(s) como pagadas`}
+                        >
+                          {savingPaid === `bulk:${row.professional.id}`
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : <Check size={12} />}
+                          {' '}Marcar pagadas
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-emerald-600 inline-flex items-center gap-1">
+                          <Check size={12} /> Al día
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-ink-50">
+                  <td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-600">
+                    Pendiente total
+                  </td>
+                  <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700">
+                    {formatMoney(proDerived.pendingTotal, 'USD', { USD: 1 })}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+      )}
     </>
+  );
+}
+
+/**
+ * Pending ↔ paid toggle for a single professional commission. Paid shows
+ * a green confirmed chip (click to revert); pending shows a neutral
+ * "Marcar pagada" button.
+ */
+function PaidToggle({ paid, busy, onToggle }) {
+  if (paid) {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(false)}
+        disabled={busy}
+        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-wait"
+        title="Pagada — clic para revertir a pendiente"
+      >
+        {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Pagada
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(true)}
+      disabled={busy}
+      className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-2 py-1 text-xs font-medium text-ink-700 hover:border-ink-400 disabled:opacity-50 disabled:cursor-wait"
+      title="Marcar comisión como pagada"
+    >
+      {busy ? <Loader2 size={12} className="animate-spin" /> : null}Marcar pagada
+    </button>
   );
 }
 

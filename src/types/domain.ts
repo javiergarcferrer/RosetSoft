@@ -333,6 +333,11 @@ export interface Quote {
   deliveredAt?: number | null;
   depositAmount?: number | null;
 
+  /* When the assigned professional's commission on this quote was PAID
+   * OUT (Contabilidad tracking). null = pending. See commissionOwedAt()
+   * in lib/commissions for when it becomes owed. */
+  commissionPaidAt?: number | null;
+
   createdAt?: number;
   updatedAt?: number;
 }
