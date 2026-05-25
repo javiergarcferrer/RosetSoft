@@ -16,7 +16,6 @@ import { formatMoney } from '../lib/format.js';
 // that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
-import { shouldUseWebShare } from '../pdf/shareTarget.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -26,7 +25,6 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
-import PdfPreviewModal from '../components/quote-builder/PdfPreviewModal.jsx';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is
@@ -261,12 +259,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
-  // The freshly generated PDF, held for the preview modal so the dealer can
-  // review it before sharing/downloading. { url, blob, filename, shareMode,
-  // share } — `share` is the (dynamically imported) downloadBlob, stashed so
-  // confirming can call navigator.share inside the click gesture without an
-  // await-before-share that some browsers treat as breaking the gesture.
-  const [preview, setPreview] = useState(null);
   // On mobile the only export trigger is the bottom sticky bar, but the
   // error banner renders at the top of the page — so a failed export would
   // stop the spinner with the explanation scrolled far out of sight,
@@ -857,7 +849,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   );
 
   async function exportPdf() {
-    if (exporting || preview) return;   // de-bounce double-taps
+    if (exporting) return;   // de-bounce double-taps
     setExportError(null);
     setExporting(true);
     try {
@@ -884,40 +876,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
       const filename = `${quoteFileName(quote, customer)}.pdf`;
-      // Don't share/download yet — show the preview modal first. shareMode
-      // decides the confirm button (Compartir on touch/PWA, Descargar on
-      // desktop). `share` is the imported downloadBlob, stashed so the
-      // confirm click can reach navigator.share without an await first.
-      const url = URL.createObjectURL(blob);
-      setPreview({ url, blob, filename, shareMode: shouldUseWebShare(), share: downloadBlob });
+      // Deliver the file straight away. downloadBlob picks Web Share on the
+      // surfaces that need it (iOS PWA / touch) and an <a download> anchor
+      // everywhere else, so desktop just gets the file in the downloads tray.
+      await downloadBlob(blob, filename);
     } catch (err) {
       console.error('[QuoteBuilder] exportPdf failed:', err);
       setExportError(err?.message || 'No se pudo generar el PDF.');
     } finally {
       setExporting(false);
     }
-  }
-
-  // Confirm from the preview modal: share (touch/PWA) or download (desktop)
-  // the already-built blob, then close. preview.share === downloadBlob, and
-  // it's invoked synchronously here so navigator.share keeps the gesture.
-  async function confirmExport() {
-    if (!preview) return;
-    try {
-      await preview.share(preview.blob, preview.filename);
-    } catch (err) {
-      console.error('[QuoteBuilder] share/download failed:', err);
-      setExportError(err?.message || 'No se pudo entregar el PDF.');
-    } finally {
-      closePreview();
-    }
-  }
-
-  function closePreview() {
-    setPreview((p) => {
-      if (p?.url) { try { URL.revokeObjectURL(p.url); } catch { /* noop */ } }
-      return null;
-    });
   }
 
   /* ---------------------------- render ---------------------------- */
@@ -1045,12 +1013,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       />
 
       {undoToast}
-
-      <PdfPreviewModal
-        preview={preview}
-        onConfirm={confirmExport}
-        onClose={closePreview}
-      />
     </>
   );
 }
