@@ -232,11 +232,11 @@ export default function AccountingWorkspace() {
   // Separate stream from the vendedor (internal seller) rollup above: the
   // % comes from the PROFESSIONAL, and the dealer owes the payout once the
   // deal is collected — balance on order-linked quotes, deposit on floor
-  // sales (commissionOwedAt encodes the rule). Each entry tracks whether
-  // it's already been paid (commissionPaidAt) so accounting can follow up.
+  // sales (commissionOwedAt encodes the rule). One entry PER SALE (quote),
+  // each tracking whether it's been paid (commissionPaidAt) so accounting
+  // can follow up. Presented sale-by-sale (not grouped by professional).
   const proDerived = useMemo(() => {
     const entries = [];
-    const roll = new Map();
     let paidTotal = 0;
     let pendingTotal = 0;
 
@@ -265,48 +265,23 @@ export default function AccountingWorkspace() {
       });
 
       if (paid) paidTotal += amount; else pendingTotal += amount;
-
-      if (!roll.has(professional.id)) {
-        roll.set(professional.id, {
-          professional, count: 0, base: 0, commission: 0,
-          paid: 0, pending: 0, pendingQuoteIds: [],
-        });
-      }
-      const r = roll.get(professional.id);
-      r.count += 1;
-      r.base += t.taxableBase;
-      r.commission += amount;
-      if (paid) r.paid += amount;
-      else { r.pending += amount; r.pendingQuoteIds.push(qq.id); }
     }
 
     entries.sort((a, b) => (b.owedAt || 0) - (a.owedAt || 0));
-    const rows = [...roll.values()].sort((a, b) => b.pending - a.pending);
-    return { entries, rows, paidTotal, pendingTotal };
+    return { entries, paidTotal, pendingTotal };
   }, [quotesQ.data, cycle, customerById, professionalById, linesByQuote]);
 
   // Mark / unmark a professional commission as paid. First write the
   // accounting role makes — RLS is single-tenant "team can write", so an
   // accounting user is authorized. The live query refreshes the derived
   // totals automatically; `savingPaid` just disables the row while in flight.
-  const [savingPaid, setSavingPaid] = useState(null); // quote id mid-write, or 'bulk:<proId>'
+  const [savingPaid, setSavingPaid] = useState(null); // quote id mid-write
   async function setCommissionPaid(quoteId, paid) {
     setSavingPaid(quoteId);
     try {
       await db.quotes.update(quoteId, { commissionPaidAt: paid ? Date.now() : null });
     } finally {
       setSavingPaid((cur) => (cur === quoteId ? null : cur));
-    }
-  }
-  async function markManyPaid(professionalId, quoteIds) {
-    if (!quoteIds.length) return;
-    const key = `bulk:${professionalId}`;
-    setSavingPaid(key);
-    try {
-      const now = Date.now();
-      for (const id of quoteIds) await db.quotes.update(id, { commissionPaidAt: now });
-    } finally {
-      setSavingPaid((cur) => (cur === key ? null : cur));
     }
   }
 
@@ -766,8 +741,11 @@ export default function AccountingWorkspace() {
       )}
 
       {/* Comisiones por profesional — the decorator/architect payout the
-          dealer owes once the deal is collected. Pending vs paid tracking
-          lives here so accounting can follow up. */}
+          dealer owes once the deal is collected. One row PER SALE (quote),
+          each an expandable dropdown with the full breakdown + the
+          pending/paid toggle. Sale-by-sale (not grouped by professional)
+          and built as a card list, not a wide table, so it reads on a
+          phone where the table columns ran off-screen. */}
       <section className="card overflow-hidden mt-6">
         <header className="card-header">
           <div className="flex items-center gap-2">
@@ -798,141 +776,84 @@ export default function AccountingWorkspace() {
             description="Aparecerán aquí cuando una cotización aceptada con profesional asignado reciba su depósito (venta de piso) o su balance (pedido)."
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Profesional</th>
-                  <th>Cliente</th>
-                  <th className="whitespace-nowrap">Devengada</th>
-                  <th className="text-right whitespace-nowrap">Base imponible</th>
-                  <th className="text-right whitespace-nowrap">%</th>
-                  <th className="text-right whitespace-nowrap">Comisión</th>
-                  <th className="text-right whitespace-nowrap">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proDerived.entries.map((e) => (
-                  <tr key={e.quote.id} className={e.paid ? 'bg-emerald-50/30' : undefined}>
-                    <td className="font-medium whitespace-nowrap">#{e.quote.number || '—'}</td>
-                    <td className="max-w-[180px]">
-                      <div className="text-ink-800 truncate" title={e.professional.name || ''}>
-                        {e.professional.name || '—'}
-                      </div>
-                      {e.professional.company && (
-                        <div className="text-[11px] text-ink-500 truncate">{e.professional.company}</div>
-                      )}
-                    </td>
-                    <td className="max-w-[180px] text-ink-700 truncate" title={e.customer?.company || e.customer?.name || ''}>
-                      {e.customer?.company || e.customer?.name || '—'}
-                    </td>
-                    <td className="text-ink-500 whitespace-nowrap">
-                      {formatDate(e.owedAt)}
-                      <div className="text-[10px] text-ink-400">
-                        vía {e.viaOrder ? 'balance' : 'depósito'}
-                      </div>
-                    </td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(e.base, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right tabular-nums">{e.pct}%</td>
-                    <td className="text-right tabular-nums whitespace-nowrap font-medium">
-                      {formatMoney(e.amount, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right">
-                      <PaidToggle
-                        paid={e.paid}
-                        busy={savingPaid === e.quote.id}
-                        onToggle={(next) => setCommissionPaid(e.quote.id, next)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-ink-100">
+            {proDerived.entries.map((e) => (
+              <ProSaleItem
+                key={e.quote.id}
+                entry={e}
+                busy={savingPaid === e.quote.id}
+                onTogglePaid={(next) => setCommissionPaid(e.quote.id, next)}
+              />
+            ))}
+          </ul>
         )}
       </section>
-
-      {/* Resumen por profesional — "who do I still owe how much" rollup
-          with a one-click bulk pay for everything pending in the cycle. */}
-      {loaded && proDerived.rows.length > 0 && (
-        <section className="card overflow-hidden mt-6">
-          <header className="card-header">
-            <h2>Resumen por profesional</h2>
-            <span className="badge">{proDerived.rows.length}</span>
-          </header>
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Profesional</th>
-                  <th className="text-right whitespace-nowrap"># ventas</th>
-                  <th className="text-right whitespace-nowrap">Comisión total</th>
-                  <th className="text-right whitespace-nowrap">Pagado</th>
-                  <th className="text-right whitespace-nowrap">Pendiente</th>
-                  <th className="text-right whitespace-nowrap">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proDerived.rows.map((row) => (
-                  <tr key={row.professional.id}>
-                    <td className="font-medium">
-                      {row.professional.name || '—'}
-                      {row.professional.company && (
-                        <div className="text-[11px] text-ink-500">{row.professional.company}</div>
-                      )}
-                    </td>
-                    <td className="text-right tabular-nums">{row.count}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {formatMoney(row.commission, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right tabular-nums whitespace-nowrap text-emerald-700">
-                      {formatMoney(row.paid, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right tabular-nums whitespace-nowrap font-medium text-amber-700">
-                      {formatMoney(row.pending, 'USD', { USD: 1 })}
-                    </td>
-                    <td className="text-right">
-                      {row.pendingQuoteIds.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => markManyPaid(row.professional.id, row.pendingQuoteIds)}
-                          disabled={savingPaid === `bulk:${row.professional.id}`}
-                          className="btn-ghost text-xs disabled:opacity-50"
-                          title={`Marcar ${row.pendingQuoteIds.length} comisión(es) pendiente(s) como pagadas`}
-                        >
-                          {savingPaid === `bulk:${row.professional.id}`
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : <Check size={12} />}
-                          {' '}Marcar pagadas
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-emerald-600 inline-flex items-center gap-1">
-                          <Check size={12} /> Al día
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-ink-50">
-                  <td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-600">
-                    Pendiente total
-                  </td>
-                  <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700">
-                    {formatMoney(proDerived.pendingTotal, 'USD', { USD: 1 })}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </section>
-      )}
     </>
+  );
+}
+
+/**
+ * One professional commission, per SALE. Collapsed it shows just what fits
+ * a phone — quote #, professional, customer, the commission amount and its
+ * pending/paid state. Tap to expand the full breakdown (base imponible, %,
+ * devengo) and the pending/paid toggle.
+ */
+function ProSaleItem({ entry, busy, onTogglePaid }) {
+  const { quote, professional, customer, base, pct, amount, owedAt, viaOrder, paid } = entry;
+  const [open, setOpen] = useState(false);
+  const customerName = customer?.company || customer?.name || '—';
+  return (
+    <li className={paid ? 'bg-emerald-50/30' : undefined}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-ink-50 transition-colors"
+        aria-expanded={open}
+      >
+        <ChevronDown
+          size={16}
+          className={`flex-shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium whitespace-nowrap">#{quote.number || '—'}</span>
+            <span className="text-ink-700 truncate">{professional.name || '—'}</span>
+          </div>
+          <div className="text-[11px] text-ink-500 truncate">{customerName}</div>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <div className="tabular-nums font-medium whitespace-nowrap">
+            {formatMoney(amount, 'USD', { USD: 1 })}
+          </div>
+          <span className={`text-[10px] font-semibold ${paid ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {paid ? 'Pagada' : 'Pendiente'}
+          </span>
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 sm:pl-11 space-y-3">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+            <DetailCell label="Profesional" value={professional.name || '—'} sub={professional.company} />
+            <DetailCell label="Cliente" value={customerName} />
+            <DetailCell label="Devengada" value={formatDate(owedAt)} sub={`vía ${viaOrder ? 'balance' : 'depósito'}`} />
+            <DetailCell label="Base imponible" value={formatMoney(base, 'USD', { USD: 1 })} />
+            <DetailCell label="Comisión" value={`${formatMoney(amount, 'USD', { USD: 1 })} · ${pct}%`} />
+          </dl>
+          <PaidToggle paid={paid} busy={busy} onToggle={onTogglePaid} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function DetailCell({ label, value, sub }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-ink-400">{label}</dt>
+      <dd className="text-ink-800 tabular-nums truncate" title={value}>{value}</dd>
+      {sub && <dd className="text-[10px] text-ink-400 truncate">{sub}</dd>}
+    </div>
   );
 }
 
