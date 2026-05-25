@@ -873,17 +873,30 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
         () => import('../pdf/quotePdf.js'),
       );
-      // Pass *all* lines to the generator — including section breaks.
-      // The generator's groupBySection() consumes them as headings; the
-      // earlier filter that stripped sections out predates the PDF
-      // matching the on-screen ClientPreview, where section headers
-      // ("MOBILIARIO DE SALA") are part of the layout the customer
-      // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller });
+      const filename = `${quoteFileName(quote, customer)}.pdf`;
+      // Pass *all* lines to the generators — including section breaks. The
+      // section headers ("MOBILIARIO DE SALA") are part of the layout the
+      // customer sees in both the on-screen preview and the PDF.
+      const props = { quote, settings, lines, totals, customer, professional, seller };
+
+      // Primary path: render the actual ClientPreview HTML with headless
+      // Chromium (Playwright) so the PDF matches the preview pixel-for-pixel.
+      // If that service is unreachable (offline, cold-start timeout, local
+      // `vite dev` where /api isn't served), fall back to the pdf-lib
+      // generator so the dealer always gets *a* PDF.
+      let blob;
+      try {
+        const { generateQuotePdfViaServer } = await safeDynamicImport(
+          () => import('../pdf/htmlQuotePdf.jsx'),
+        );
+        blob = await generateQuotePdfViaServer(props, filename);
+      } catch (serverErr) {
+        console.warn('[QuoteBuilder] server PDF failed, falling back to pdf-lib:', serverErr);
+        blob = await generateQuotePdf(props);
+      }
       if (!blob || !blob.size) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
-      const filename = `${quoteFileName(quote, customer)}.pdf`;
       // Don't share/download yet — show the preview modal first. shareMode
       // decides the confirm button (Compartir on touch/PWA, Descargar on
       // desktop). `share` is the imported downloadBlob, stashed so the
