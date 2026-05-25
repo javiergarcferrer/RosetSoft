@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2 } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -28,6 +28,10 @@ export default function QuoteHeader({
   onOpenPalette,
   onExportPdf,
   onUpdateQuote,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   savedAt,
   saving,
   exporting,
@@ -106,6 +110,13 @@ export default function QuoteHeader({
               leave a void beside the title. On phones it sits on its own
               line below the title; from sm: up it stays to the right. */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:justify-end sm:shrink-0">
+            <UndoRedo
+              onUndo={onUndo}
+              onRedo={onRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+            />
+
             <button
               type="button"
               onClick={onOpenPalette}
@@ -231,6 +242,39 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * Undo / redo for the whole quote workspace — line edits, prices,
+ * margins, customer/professional, notes. Rendered as a compact segmented
+ * pair in the actions cluster; each button disables when its stack is
+ * empty. Keyboard equivalents (⌘Z / ⌘⇧Z) are wired in QuoteBuilder.
+ */
+function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
+  return (
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
+      <button
+        type="button"
+        onClick={onUndo}
+        disabled={!canUndo}
+        className="px-2 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-700 hover:bg-ink-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        title={`Deshacer (${shortcutLabel('mod+z')})`}
+        aria-label="Deshacer"
+      >
+        <Undo2 size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={onRedo}
+        disabled={!canRedo}
+        className="px-2 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-700 hover:bg-ink-50 border-l border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        title={`Rehacer (${shortcutLabel('mod+shift+z')})`}
+        aria-label="Rehacer"
+      >
+        <Redo2 size={14} />
+      </button>
+    </div>
   );
 }
 

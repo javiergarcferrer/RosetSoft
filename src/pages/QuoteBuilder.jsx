@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
@@ -26,6 +26,12 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
+import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
+
+// How many edit steps the workspace remembers for undo/redo. Each step is
+// a whole-quote snapshot (the quote row + all its lines); 50 covers a long
+// editing session without unbounded memory growth.
+const HISTORY_LIMIT = 50;
 
 /**
  * The Quote Workspace — the redesigned quote builder.
@@ -283,6 +289,45 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // -------- undo toast --------
   const { show: showUndo, element: undoToast } = useUndoToast();
 
+  /* ---------------------------- undo / redo --------------------------
+   * The builder writes every edit straight to the DB, so undo is a stack
+   * of whole-quote snapshots ({ quote, lines }). We push the PRE-edit
+   * snapshot before each user action (see `hx` below), and undo restores
+   * the previous one. Stacks live in refs (no stale-closure surprises);
+   * a version counter forces the toolbar buttons to re-evaluate
+   * canUndo/canRedo. Reset whenever we switch quotes.
+   *
+   * These hooks sit above the `!quote` guard so the hook count is stable;
+   * the imperative helpers (snapshotNow/applySnapshot/undo/redo/hx) are
+   * hoisted function declarations defined below the guard. */
+  const undoRef = useRef([]);
+  const redoRef = useRef([]);
+  const [, bumpHistory] = useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    undoRef.current = [];
+    redoRef.current = [];
+    bumpHistory();
+  }, [quoteId]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      // Let the browser's native text undo win while the caret is in a
+      // field — otherwise Cmd+Z mid-typing would revert the whole quote.
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      e.preventDefault();
+      if (k === 'y' || e.shiftKey) redo();
+      else undo();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
    *   ⌘K       — open the command palette (the universal launcher)
@@ -299,10 +344,78 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
    * keypress, by which point `quote` is populated.
    */
   useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
-  useKeyboardShortcut('mod+enter', () => addLine(), { ignoreInInput: false });
+  useKeyboardShortcut('mod+enter', () => { pushUndo(snapshotNow()); addLine(); }, { ignoreInInput: false });
   useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
+
+  /* ---------------------------- undo / redo helpers ------------------ */
+
+  // Deep copy of the current quote + lines — the unit of undo. structuredClone
+  // is safe here: rows are plain JSON-ish objects (numbers, strings, nested
+  // `components` arrays), no functions or DOM nodes.
+  function snapshotNow() {
+    return { quote: structuredClone(quote), lines: structuredClone(lines) };
+  }
+
+  function pushUndo(snap) {
+    undoRef.current = boundedPush(undoRef.current, snap, HISTORY_LIMIT);
+    redoRef.current = [];   // a fresh edit invalidates the redo branch
+    bumpHistory();
+  }
+
+  // Write a snapshot back to the DB, making the quote + its lines match it
+  // exactly. Preserves the live sequence number the same way updateQuote
+  // does, so an undo can never clobber a freshly assigned `number`.
+  async function applySnapshot(snap) {
+    markSaving();
+    try {
+      const persisted = await db.quotes.get(quoteId);
+      await db.quotes.put({
+        ...snap.quote,
+        number: persisted?.number ?? snap.quote.number,
+        updatedAt: Date.now(),
+      });
+      const current = await db.quoteLines.where('quoteId').equals(quoteId).toArray();
+      const { toDelete, toPut } = diffLinesForRestore(current, snap.lines);
+      for (const id of toDelete) await db.quoteLines.delete(id);
+      for (const l of toPut) await db.quoteLines.put(l);
+    } finally {
+      markSaved();
+    }
+  }
+
+  async function undo() {
+    if (!undoRef.current.length) return;
+    const prev = undoRef.current[undoRef.current.length - 1];
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = boundedPush(redoRef.current, snapshotNow(), HISTORY_LIMIT);
+    bumpHistory();
+    await applySnapshot(prev);
+  }
+
+  async function redo() {
+    if (!redoRef.current.length) return;
+    const next = redoRef.current[redoRef.current.length - 1];
+    redoRef.current = redoRef.current.slice(0, -1);
+    undoRef.current = boundedPush(undoRef.current, snapshotNow(), HISTORY_LIMIT);
+    bumpHistory();
+    await applySnapshot(next);
+  }
+
+  // Wrap a mutation so it records a pre-edit snapshot first. One snapshot
+  // per user gesture: handlers that delegate (e.g. ungroupLine →
+  // separateFromSet) call the RAW inner function, never another wrapped
+  // one, so a single action is a single undo step.
+  function hx(fn) {
+    return (...args) => {
+      pushUndo(snapshotNow());
+      return fn(...args);
+    };
+  }
+
+  const canUndo = undoRef.current.length > 0;
+  const canRedo = redoRef.current.length > 0;
 
   /* ---------------------------- mutations ---------------------------- */
 
@@ -830,7 +943,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onViewChange={setView}
         onOpenPalette={() => setPaletteOpen(true)}
         onExportPdf={exportPdf}
-        onUpdateQuote={updateQuote}
+        onUpdateQuote={hx(updateQuote)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         savedAt={savedAt}
         saving={saving}
         exporting={exporting}
@@ -885,26 +1002,26 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               lines={lines}
               quote={quote}
               focusLineId={focusLineId}
-              onChangeLine={updateLine}
-              onRemoveLine={removeLine}
-              onDuplicateLine={duplicateLine}
-              onToggleOptional={toggleOptional}
-              onAddAlternative={addAlternative}
-              onSelectAlternative={selectAlternative}
-              onSeparateFromSet={separateFromSet}
-              onUngroup={ungroupLine}
-              onJoinSet={joinSet}
-              onReorder={reorderLines}
-              onAddItem={() => addLine()}
-              onAddSection={addSection}
+              onChangeLine={hx(updateLine)}
+              onRemoveLine={hx(removeLine)}
+              onDuplicateLine={hx(duplicateLine)}
+              onToggleOptional={hx(toggleOptional)}
+              onAddAlternative={hx(addAlternative)}
+              onSelectAlternative={hx(selectAlternative)}
+              onSeparateFromSet={hx(separateFromSet)}
+              onUngroup={hx(ungroupLine)}
+              onJoinSet={hx(joinSet)}
+              onReorder={hx(reorderLines)}
+              onAddItem={hx(() => addLine())}
+              onAddSection={hx(addSection)}
             />
-            <NotesAndTermsCard quote={quote} onUpdateQuote={updateQuote} />
+            <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           </div>
 
           {/* Right column: totals rail, sticky on desktop. The price-list
               PDF panel that used to alternate into this slot is gone. */}
           <div className="lg:sticky lg:top-4 lg:self-start">
-            <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+            <TotalsRail quote={quote} totals={totals} onUpdateQuote={hx(updateQuote)} />
           </div>
         </div>
       )}
@@ -913,7 +1030,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <MobileStickyTotals
         quote={quote}
         totals={totals}
-        onAdd={() => addLine()}
+        onAdd={hx(() => addLine())}
         onExport={exportPdf}
         exporting={exporting}
       />
@@ -923,9 +1040,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onClose={() => setPaletteOpen(false)}
         customers={customers}
         currentCustomerId={quote.customerId}
-        onInsertLine={(seed) => addLine(seed)}
-        onAddSection={addSection}
-        onSelectCustomer={(id) => updateQuote({ customerId: id })}
+        onInsertLine={hx((seed) => addLine(seed))}
+        onAddSection={hx(addSection)}
+        onSelectCustomer={hx((id) => updateQuote({ customerId: id }))}
         onExportPdf={exportPdf}
         onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
         clientView={view === 'client'}
