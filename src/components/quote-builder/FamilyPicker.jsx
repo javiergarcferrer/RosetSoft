@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Plus, X, Tag } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { useQuoteAutocomplete } from './useQuoteAutocomplete.js';
+import { useLiveQuery } from '../../db/hooks.js';
+import { db } from '../../db/database.js';
 
 /**
  * Modal picker for a line item's `family` (AMÉDÉE / TOGO / TOGO ULTRA / …).
@@ -19,8 +20,11 @@ import { useQuoteAutocomplete } from './useQuoteAutocomplete.js';
  *   - Search input autofocuses on open.
  *   - List below shows every distinct family already used across the
  *     team's quotes, sorted by how often it's been used so the most
- *     common ones surface first. Source: useQuoteAutocomplete, the
- *     "catalog substitute" already powering ⌘K recent items.
+ *     common ones surface first. Source: a direct scan of every quote
+ *     line's `family` field — NOT useQuoteAutocomplete, which drops any
+ *     line lacking a reference/name and so silently hid families created
+ *     on a still-unnamed line (the "created family doesn't come back"
+ *     bug). Here a family counts the moment any line carries it.
  *   - When the typed query doesn't exactly match an existing family, a
  *     "Crear familia: 'XYZ'" row appears at the top — picking it sets
  *     the line's family to the new string. No separate families table
@@ -40,28 +44,26 @@ export default function FamilyPicker({ open, onClose, onSelect, currentFamily })
   const [q, setQ] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef(null);
-  const { suggestions } = useQuoteAutocomplete();
+  const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
-  // Build a deduped, frequency-sorted list of family strings from every
-  // past quote line. Comparison is case-insensitive, but we preserve the
-  // most common casing so "AMÉDÉE" doesn't become "amédée" on re-pick.
+  // Build a deduped, frequency-sorted list of family strings straight from
+  // every quote line that carries one. Comparison is case-insensitive but
+  // we keep the first casing seen so "AMÉDÉE" doesn't become "amédée" on
+  // re-pick. Counting raw line occurrences (not deduped suggestions) means
+  // a family shows up the instant any line references it — including a line
+  // that has no name/reference yet.
   const families = useMemo(() => {
     const byKey = new Map();
-    for (const s of suggestions) {
-      const raw = (s.family || '').trim();
+    for (const l of allLines) {
+      const raw = (l.family || '').trim();
       if (!raw) continue;
       const key = raw.toLowerCase();
       const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, { label: raw, useCount: s.useCount || 1 });
-      } else {
-        prev.useCount += s.useCount || 1;
-        // Keep the casing that's used most often. Ties break on first-
-        // seen, which is fine — both are equivalent strings.
-      }
+      if (!prev) byKey.set(key, { label: raw, useCount: 1 });
+      else prev.useCount += 1;
     }
     return [...byKey.values()].sort((a, b) => b.useCount - a.useCount);
-  }, [suggestions]);
+  }, [allLines]);
 
   useEffect(() => {
     if (!open) return;
