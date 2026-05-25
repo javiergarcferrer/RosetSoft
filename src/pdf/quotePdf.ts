@@ -72,7 +72,10 @@ export interface GenerateQuotePdfInput {
  */
 export function quoteFileName(quote: Quote, customer: Customer | null): string {
   const num = quote?.number != null ? `Cotizacion ${quote.number}` : 'Cotizacion (borrador)';
-  const client = (customer?.name || '').trim();
+  // Prefer the company name, fall back to the contact name — a customer
+  // filed under a company (name empty) otherwise dropped out of the
+  // filename entirely, leaving just "Cotizacion N".
+  const client = (customer?.company || customer?.name || '').trim();
   const base = client ? `${client} - ${num}` : num;
   // Strip characters illegal in filenames; keep the " - " separator.
   return base.replace(/[/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();

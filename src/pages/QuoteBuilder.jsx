@@ -26,6 +26,7 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
+import PdfPreviewModal from '../components/quote-builder/PdfPreviewModal.jsx';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is
@@ -260,6 +261,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+  // The freshly generated PDF, held for the preview modal so the dealer can
+  // review it before sharing/downloading. { url, blob, filename, shareMode,
+  // share } — `share` is the (dynamically imported) downloadBlob, stashed so
+  // confirming can call navigator.share inside the click gesture without an
+  // await-before-share that some browsers treat as breaking the gesture.
+  const [preview, setPreview] = useState(null);
   // On mobile the only export trigger is the bottom sticky bar, but the
   // error banner renders at the top of the page — so a failed export would
   // stop the spinner with the explanation scrolled far out of sight,
@@ -850,32 +857,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   );
 
   async function exportPdf() {
-    if (exporting) return;          // de-bounce double-taps
+    if (exporting || preview) return;   // de-bounce double-taps
     setExportError(null);
     setExporting(true);
-    // Phones / tablets / installed PWAs hand the actual PDF File to the
-    // native share sheet (see downloadBlob). Sharing the File posts a real
-    // document to WhatsApp named "<Client> - Cotizacion <N>.pdf"; the old
-    // path opened a blob: preview tab, and sharing *that tab* to WhatsApp
-    // posted a useless "blob:https://…" text message instead.
-    const shareFile = shouldUseWebShare();
-    // Desktop keeps the review-first flow: the dealer asked to *look* at
-    // the PDF before sending. Open a viewer tab synchronously (inside the
-    // click gesture, so the browser doesn't block it as a popup) and point
-    // it at the finished PDF once it's ready. The browser's own PDF viewer
-    // then offers print / download after they've reviewed.
-    const viewer = !shareFile && typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (viewer) {
-      try {
-        viewer.document.write(
-          '<!doctype html><meta charset="utf-8"><title>Generando cotización…</title>' +
-          '<body style="margin:0;font:15px system-ui,sans-serif;color:#555;' +
-          'display:flex;height:100vh;align-items:center;justify-content:center">' +
-          'Generando la cotización…</body>',
-        );
-        viewer.document.close();
-      } catch { /* about:blank write can race on some engines; harmless */ }
-    }
     try {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
@@ -900,30 +884,40 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
       const filename = `${quoteFileName(quote, customer)}.pdf`;
-      if (shareFile) {
-        // Touch / PWA: hand the File to the share sheet directly.
-        // downloadBlob owns the blob-URL lifecycle on this path.
-        await downloadBlob(blob, filename);
-        return;
-      }
+      // Don't share/download yet — show the preview modal first. shareMode
+      // decides the confirm button (Compartir on touch/PWA, Descargar on
+      // desktop). `share` is the imported downloadBlob, stashed so the
+      // confirm click can reach navigator.share without an await first.
       const url = URL.createObjectURL(blob);
-      if (viewer && !viewer.closed) {
-        // Show the PDF in the viewer tab so the dealer can review it.
-        viewer.location.href = url;
-      } else {
-        // Popup blocked / unavailable — fall back to the native
-        // share/download so the dealer still gets the file.
-        await downloadBlob(blob, filename);
-      }
-      // Hold the blob long enough for the viewer to finish loading it.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setPreview({ url, blob, filename, shareMode: shouldUseWebShare(), share: downloadBlob });
     } catch (err) {
-      if (viewer && !viewer.closed) { try { viewer.close(); } catch { /* noop */ } }
       console.error('[QuoteBuilder] exportPdf failed:', err);
       setExportError(err?.message || 'No se pudo generar el PDF.');
     } finally {
       setExporting(false);
     }
+  }
+
+  // Confirm from the preview modal: share (touch/PWA) or download (desktop)
+  // the already-built blob, then close. preview.share === downloadBlob, and
+  // it's invoked synchronously here so navigator.share keeps the gesture.
+  async function confirmExport() {
+    if (!preview) return;
+    try {
+      await preview.share(preview.blob, preview.filename);
+    } catch (err) {
+      console.error('[QuoteBuilder] share/download failed:', err);
+      setExportError(err?.message || 'No se pudo entregar el PDF.');
+    } finally {
+      closePreview();
+    }
+  }
+
+  function closePreview() {
+    setPreview((p) => {
+      if (p?.url) { try { URL.revokeObjectURL(p.url); } catch { /* noop */ } }
+      return null;
+    });
   }
 
   /* ---------------------------- render ---------------------------- */
@@ -1051,6 +1045,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       />
 
       {undoToast}
+
+      <PdfPreviewModal
+        preview={preview}
+        onConfirm={confirmExport}
+        onClose={closePreview}
+      />
     </>
   );
 }
