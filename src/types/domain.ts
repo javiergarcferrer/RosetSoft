@@ -174,6 +174,45 @@ export interface Professional {
   updatedAt?: number;
 }
 
+/** A channel asset attached to a promotion (distribution phase). */
+export interface PromotionAsset {
+  channel?: string;
+  lang?: string;
+  url?: string;
+}
+
+/**
+ * A marketing "activation" — the dealer's reusable record of a Ligne Roset
+ * promo package (name, code, validity window, discount, eligible/excluded
+ * models). Captured once; applied to quotes from the quote builder. v1 is
+ * "materialized": applying writes the discount onto eligible lines'
+ * `lineDiscountPct` and stamps `quote.promotionId`.
+ */
+export interface Promotion {
+  id: string;
+  profileId: string;
+  name: string;
+  /** Customer-facing / registration code, e.g. "BED26". */
+  code?: string;
+  /** Validity window as JS-ms timestamps (inclusive). */
+  startsAt?: number | null;
+  endsAt?: number | null;
+  /** Customer-facing discount applied to eligible lines, e.g. 20. */
+  discountPct?: number;
+  /** Dealer's share of the discount on a normal model (informational in v1). */
+  dealerFundedPct?: number | null;
+  /** Model codes where the dealer absorbs the full discount (no Roset co-fund). */
+  dealerFullRefs?: string[];
+  /** Keywords/references used to suggest which lines qualify. */
+  eligibleKeywords?: string[];
+  terms?: string;
+  assets?: PromotionAsset[];
+  isEnabled?: boolean;
+  notes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 /**
  * One component inside a compound quote line. Each carries its own
  * spec + pricing; the parent line contributes the shared family +
@@ -294,6 +333,8 @@ export interface Quote {
   customerId?: string | null;
   professionalId?: string | null;
   orderId?: string | null;
+  /** The marketing activation applied to this quote, if any. */
+  promotionId?: string | null;
   /** auth.uid() of the user who closed the deal; commission attribution. */
   createdByUserId?: string | null;
 

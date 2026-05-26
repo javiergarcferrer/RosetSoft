@@ -11,6 +11,7 @@ import {
   Wallet,
   Calculator,
   Layers,
+  Tag,
   Menu,
   X,
 } from 'lucide-react';
@@ -49,9 +50,10 @@ const baseNavGroups = [
 const adminNavGroup = {
   label: 'Administración',
   items: [
-    { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
-    { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
-    { to: '/admin/materials',   label: 'Materiales', icon: Layers },
+    { to: '/admin/users',       label: 'Usuarios',     icon: Shield },
+    { to: '/admin/commissions', label: 'Comisiones',   icon: Wallet },
+    { to: '/admin/materials',   label: 'Materiales',   icon: Layers },
+    { to: '/admin/promotions',  label: 'Promociones',  icon: Tag },
   ],
 };
 
