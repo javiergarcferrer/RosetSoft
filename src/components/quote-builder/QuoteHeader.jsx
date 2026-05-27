@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2, Tag } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -23,8 +23,6 @@ export default function QuoteHeader({
   customers,
   professionals,
   profileId,
-  promotion,
-  onOpenPromotion,
   view,
   onViewChange,
   onOpenPalette,
@@ -198,7 +196,6 @@ export default function QuoteHeader({
             profileId={profileId}
             onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
-          <PromoChip promotion={promotion} onOpen={onOpenPromotion} />
         </div>
       </div>
 
@@ -245,38 +242,6 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
         ))}
       </select>
     </label>
-  );
-}
-
-/**
- * Promotion chip — opens the apply-promotion modal. Shows the applied promo's
- * code (or name) when one is attached, or a quiet "Promoción" prompt when not.
- * Matches the chip vocabulary of the customer / professional / order chips.
- */
-function PromoChip({ promotion, onOpen }) {
-  if (promotion) {
-    const label = promotion.code || promotion.name || 'Promoción';
-    return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 text-brand-800 hover:border-brand-400 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs font-medium"
-        title="Promoción aplicada"
-      >
-        <Tag size={12} />
-        <span className="truncate max-w-[140px]">{label}</span>
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 text-ink-500 hover:border-ink-400 hover:text-ink-700 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs"
-    >
-      <Tag size={12} />
-      Promoción
-    </button>
   );
 }
 

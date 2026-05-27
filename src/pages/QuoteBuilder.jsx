@@ -25,7 +25,6 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
-import PromotionApplyModal from '../components/quote-builder/PromotionApplyModal.jsx';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is
@@ -207,11 +206,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     [profileId],
     [],
   );
-  const promotions = useLiveQuery(
-    () => db.promotions.where('profileId').equals(profileId || '').toArray(),
-    [profileId],
-    [],
-  );
 
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
@@ -265,7 +259,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
-  const [promoOpen, setPromoOpen] = useState(false);
   // On mobile the only export trigger is the bottom sticky bar, but the
   // error banner renders at the top of the page — so a failed export would
   // stop the spinner with the explanation scrolled far out of sight,
@@ -525,43 +518,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try { await db.quoteLines.update(id, patch); }
     finally { markSaved(); }
-  }
-
-  // Apply a promotion to the quote: write its discount onto each chosen line
-  // (materialized model — see lib/promotions) and stamp the quote so it knows
-  // which activation it carries.
-  async function applyPromotion(promo, lineIds) {
-    markSaving();
-    try {
-      await ensurePersisted();
-      for (const id of lineIds) {
-        await db.quoteLines.update(id, { lineDiscountPct: promo.discountPct || 0 });
-      }
-      await updateQuote({ promotionId: promo.id });
-    } finally {
-      markSaved();
-    }
-  }
-
-  // Remove the applied promotion: clear the stamp and reset the line discounts
-  // that match the promo's rate (best-effort — a manually-set discount of a
-  // different value is left untouched).
-  async function removePromotion() {
-    const promo = (promotions || []).find((p) => p.id === quote.promotionId);
-    markSaving();
-    try {
-      if (promo) {
-        const pct = Number(promo.discountPct) || 0;
-        for (const l of lines) {
-          if ((Number(l.lineDiscountPct) || 0) === pct) {
-            await db.quoteLines.update(l.id, { lineDiscountPct: 0 });
-          }
-        }
-      }
-      await updateQuote({ promotionId: null });
-    } finally {
-      markSaved();
-    }
   }
 
   async function duplicateLine(line) {
@@ -945,8 +901,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         customers={customers}
         professionals={professionals}
         profileId={profileId}
-        promotion={(promotions || []).find((p) => p.id === quote.promotionId) || null}
-        onOpenPromotion={() => setPromoOpen(true)}
         view={view}
         onViewChange={setView}
         onOpenPalette={() => setPaletteOpen(true)}
@@ -1056,16 +1010,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         clientView={view === 'client'}
         currency={quote.currencyCode || 'USD'}
         rates={quote.rates || { USD: 1 }}
-      />
-
-      <PromotionApplyModal
-        open={promoOpen}
-        onClose={() => setPromoOpen(false)}
-        promotions={promotions}
-        quote={quote}
-        lines={lines}
-        onApply={applyPromotion}
-        onRemove={removePromotion}
       />
 
       {undoToast}
