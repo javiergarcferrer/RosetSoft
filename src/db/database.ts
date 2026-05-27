@@ -11,6 +11,7 @@ import type {
   Container,
   ImageRecord,
   Material,
+  QuoteGroup,
 } from '../types/domain.ts';
 
 /**
@@ -53,6 +54,7 @@ const TABLES = {
   orders:        { db: 'orders',        pk: 'id' },
   quotes:        { db: 'quotes',        pk: 'id' },
   quoteLines:    { db: 'quote_lines',   pk: 'id' },
+  quoteGroups:   { db: 'quote_groups',  pk: 'id' },
   containers:    { db: 'containers',    pk: 'id' },
   materials:     { db: 'materials',     pk: 'id' },
 } as const satisfies Record<string, TableDef>;
@@ -73,6 +75,7 @@ export interface TableRowMap {
   orders: Order;
   quotes: Quote;
   quoteLines: QuoteLine;
+  quoteGroups: QuoteGroup;
   containers: Container;
   materials: Material;
 }

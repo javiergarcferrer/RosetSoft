@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, Hash, Boxes, GitFork, PlusCircle } from 'lucide-react';
+import { Plus, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { setSubtotal, alternativeSubtotal, groupRuns } from '../../lib/pricing.js';
+import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -41,10 +42,10 @@ import { formatMoney } from '../../lib/format.js';
  *     simply yields the new contiguous runs the card layout reflects.
  */
 export default function LineItemList({
-  lines, quote, focusLineId,
+  lines, groups, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onJoinSet,
+  onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
   onAddItem, onAddSection,
 }) {
   // Pre-compute alternative-group sizes so each line knows the
@@ -241,9 +242,10 @@ export default function LineItemList({
     const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
     const isSet = run.type === 'set';
     const accent = isSet ? 'violet' : 'brand';
+    const optional = isGroupOptional(groups, run.groupId);
     const footerValue = isSet
       ? setSubtotal(lines, run.groupId)
-      : alternativeSubtotal(lines, run.groupId);
+      : alternativeSubtotal(lines, run.groupId, { allowNone: optional });
 
     return (
       <GroupCard
@@ -251,6 +253,10 @@ export default function LineItemList({
         type={run.type}
         accent={accent}
         memberCount={members.length}
+        optional={optional}
+        onToggleOptional={
+          onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId, run.type) : undefined
+        }
         footerLabel={isSet ? 'Total del conjunto' : 'Total'}
         footerValue={formatMoney(footerValue, currency, rates)}
       >
@@ -349,7 +355,7 @@ function SetConnector({ onJoin }) {
  * alternative (brand). The card owns the border + footer so the member rows
  * inside don't re-draw their own.
  */
-function GroupCard({ type, accent, memberCount, footerLabel, footerValue, children }) {
+function GroupCard({ type, accent, memberCount, optional, onToggleOptional, footerLabel, footerValue, children }) {
   const isSet = type === 'set';
   // Tailwind needs literal class names — branch rather than interpolate.
   const ring = isSet ? 'border-ink-300' : 'border-brand-300';
@@ -357,18 +363,42 @@ function GroupCard({ type, accent, memberCount, footerLabel, footerValue, childr
   const footBg = isSet ? 'bg-ink-50/70' : 'bg-brand-50/40';
   const eyebrowColor = isSet ? 'text-ink-600' : 'text-brand-700';
   const Icon = isSet ? Boxes : GitFork;
-  const eyebrow = isSet ? 'Conjunto' : 'Alternativas — elige una';
+  const eyebrow = isSet
+    ? (optional ? 'Conjunto opcional' : 'Conjunto')
+    : (optional ? 'Alternativas — elige una o ninguna' : 'Alternativas — elige una');
   return (
     // Inset card so the surrounding row dividers don't bleed into it.
     <div className="px-3 sm:px-4 py-3">
-      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white`}>
+      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={13} className="opacity-80" aria-hidden />
             {eyebrow}
           </span>
-          <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
-            {memberCount} {isSet ? 'piezas' : 'opciones'}
+          <span className="inline-flex items-center gap-2">
+            <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
+              {memberCount} {isSet ? 'piezas' : 'opciones'}
+            </span>
+            {onToggleOptional && (
+              <button
+                type="button"
+                onClick={onToggleOptional}
+                aria-pressed={!!optional}
+                className={`chip font-medium border border-dashed ${
+                  optional
+                    ? 'text-ink-600 bg-ink-50 border-ink-300 hover:border-ink-500'
+                    : 'text-ink-400 border-ink-200 hover:text-ink-700 hover:border-ink-400'
+                }`}
+                title={optional
+                  ? 'Quitar opcional — el grupo vuelve a sumar al total'
+                  : (isSet
+                    ? 'Marcar el conjunto como opcional (todo o nada, no suma al total)'
+                    : 'Permitir no elegir ninguna (el grupo no suma al total)')}
+              >
+                <Sparkles size={10} className="opacity-70" aria-hidden />
+                {optional ? 'Opcional' : 'Hacer opcional'}
+              </button>
+            )}
           </span>
         </div>
         {children}
@@ -376,6 +406,7 @@ function GroupCard({ type, accent, memberCount, footerLabel, footerValue, childr
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={12} className="opacity-80" aria-hidden />
             {footerLabel}
+            {optional && <span className="normal-case font-normal text-ink-400">· no incluido</span>}
           </span>
           <span className="text-sm font-semibold text-ink-900 tabular-nums">
             {footerValue}

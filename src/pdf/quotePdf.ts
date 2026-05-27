@@ -8,6 +8,7 @@ import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
 import { setGroupInfo, groupRuns } from '../lib/pricing.js';
+import { isGroupOptional } from '../lib/quoteGroups.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
@@ -25,6 +26,7 @@ import type {
   Settings,
   Totals,
   CurrencyCode,
+  QuoteGroup,
 } from '../types/domain.ts';
 import type { PdfCtx, Cursor } from './types.js';
 
@@ -60,6 +62,7 @@ export interface GenerateQuotePdfInput {
   customer: Customer | null;
   professional?: Professional | null;
   seller?: Profile | null;
+  quoteGroups?: QuoteGroup[];
 }
 
 /**
@@ -89,6 +92,7 @@ export async function generateQuotePdf({
   customer,
   professional = null,
   seller = null,
+  quoteGroups = [],
 }: GenerateQuotePdfInput): Promise<Blob> {
   const doc = await PDFDocument.create();
 
@@ -232,6 +236,9 @@ export async function generateQuotePdf({
         // two runs back-to-back read as distinct containers separated by a
         // white gutter, and a split run still reads as one zone across pages.
         const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
+        // Whole-group "optional" state (a Conjunto opcional / pick-one-or-none
+        // Alternativa). Drives the band captions; the totals already exclude it.
+        const groupOptional = isGrouped ? isGroupOptional(quoteGroups, run.groupId) : false;
         // Footer presentation for a grouped run — Spanish uppercase eyebrow,
         // rolled-up amount, and zone palette. Conjunto → "TOTAL DEL
         // CONJUNTO"/setSubtotal/neutral; Alternativa → "TOTAL"/
@@ -239,7 +246,7 @@ export async function generateQuotePdf({
         // totals.ts is untouched (members already priced / only the selected
         // alternative billed).
         const footer = isGrouped && run.groupId
-          ? groupFooterSpec(run.type as 'set' | 'alternative', lines, run.groupId)
+          ? groupFooterSpec(run.type as 'set' | 'alternative', lines, run.groupId, groupOptional)
           : null;
 
         for (let m = 0; m < members.length; m++) {
@@ -268,7 +275,7 @@ export async function generateQuotePdf({
           // Opening header band — drawn ONCE, only at the run's true start
           // (never repeated on a continuation page).
           if (isFirstInRun && zone) {
-            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, members.length);
+            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, members.length, groupOptional);
           }
           cursor = await drawLineRow(page, ctx, cursor, line, groupInfo, zone);
           if (isLastInRun && footer && zone) {

@@ -1015,6 +1015,7 @@ export function drawGroupHeaderBand(
   cursor: Cursor,
   zone: GroupZone,
   memberCount: number,
+  optional: boolean = false,
 ): Cursor {
   const { fontBold } = ctx;
   const top = cursor.y - GROUP_GAP_BEFORE;          // white gutter above
@@ -1033,8 +1034,8 @@ export function drawGroupHeaderBand(
 
   // Eyebrow: bold tracked label + a quieter descriptor.
   const label = zone.type === 'set'
-    ? `CONJUNTO · ${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`
-    : 'ALTERNATIVAS · ELIGE UNA';
+    ? `CONJUNTO${optional ? ' OPCIONAL' : ''} · ${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`
+    : (optional ? 'ALTERNATIVAS · ELIGE UNA O NINGUNA' : 'ALTERNATIVAS · ELIGE UNA');
   page.drawText(label, {
     x: MARGIN_L + GROUP_RAIL_W + 8,
     y: bottom + GROUP_HEADER_PAD_B,
@@ -1111,17 +1112,18 @@ export function groupFooterSpec(
   type: 'set' | 'alternative',
   lines: QuoteLine[],
   groupId: string,
+  optional: boolean = false,
 ): { label: string; amount: number; zone: GroupZone } {
   if (type === 'set') {
     return {
-      label: 'TOTAL DEL CONJUNTO',
+      label: optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO',
       amount: setSubtotal(lines, groupId),
       zone: GROUP_ZONES.set,
     };
   }
   return {
-    label: 'TOTAL',
-    amount: alternativeSubtotal(lines, groupId),
+    label: optional ? 'TOTAL · NO INCLUIDO' : 'TOTAL',
+    amount: alternativeSubtotal(lines, groupId, { allowNone: optional }),
     zone: GROUP_ZONES.alternative,
   };
 }

@@ -8,6 +8,7 @@ import {
   alternativeSubtotal, groupRuns,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
+import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 
 /**
@@ -50,7 +51,7 @@ function ImageZoom({ id, className, alt = '' }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, totals, customer, professional, seller }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -222,14 +223,16 @@ export default function ClientPreview({ quote, settings, lines, totals, customer
                     // Group run → a container card wrapping the member rows.
                     const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
                     const isSet = run.type === 'set';
+                    const optional = isGroupOptional(quoteGroups, run.groupId);
                     const footerValue = isSet
                       ? setSubtotal(lines, run.groupId)
-                      : alternativeSubtotal(lines, run.groupId);
+                      : alternativeSubtotal(lines, run.groupId, { allowNone: optional });
                     return (
                       <ClientGroupCard
                         key={`grp-${run.groupId}-${run.start}`}
                         type={run.type}
                         memberCount={members.length}
+                        optional={optional}
                         footerLabel={isSet ? 'Total del conjunto' : 'Total'}
                         footerValue={fmt(footerValue)}
                       >
@@ -734,7 +737,7 @@ function CompoundComponentRow({ component, fmt }) {
 // The footers are presentational roll-ups: set members are each already
 // priced into the grand total, and only the selected alternative is — the
 // card footer never re-feeds those numbers.
-function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children }) {
+function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue, children }) {
   const isSet = type === 'set';
   // Tailwind needs literal class names — branch rather than interpolate.
   const ring = isSet ? 'border-ink-300' : 'border-brand-300';
@@ -742,12 +745,14 @@ function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children
   const footBg = isSet ? 'bg-ink-50/70' : 'bg-brand-50/40';
   const eyebrowColor = isSet ? 'text-ink-600' : 'text-brand-700';
   const Icon = isSet ? Boxes : GitFork;
-  const eyebrow = isSet ? 'Conjunto' : 'Alternativas — elige una';
+  const eyebrow = isSet
+    ? (optional ? 'Conjunto opcional' : 'Conjunto')
+    : (optional ? 'Alternativas — elige una o ninguna' : 'Alternativas — elige una');
   return (
     // Inset card so the surrounding list rows don't bleed into it. Rendered
     // as a list item so it sits naturally in the <ul> alongside flat rows.
     <li className="px-1 sm:px-2 py-3 list-none">
-      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white`}>
+      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={13} className="opacity-80" aria-hidden />
@@ -762,6 +767,7 @@ function ClientGroupCard({ type, memberCount, footerLabel, footerValue, children
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
             <Icon size={12} className="opacity-80" aria-hidden />
             {footerLabel}
+            {optional && <span className="normal-case font-normal text-ink-400">· no incluido en el total</span>}
           </span>
           <span className="text-sm font-semibold text-ink-900 tabular-nums">
             {footerValue}

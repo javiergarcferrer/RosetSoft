@@ -5,6 +5,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isGroupOptional, desiredSelectedId } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
@@ -193,6 +194,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }, [baseQuote, settings]);
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
+    [quoteId],
+    [],
+  );
+  // Per-group attributes (is_optional) for Conjuntos / Alternativas, keyed by
+  // the same id the lines carry in setGroup / alternativeGroup.
+  const groups = useLiveQuery(
+    () => db.quoteGroups.where('quoteId').equals(quoteId).toArray(),
     [quoteId],
     [],
   );
@@ -642,8 +650,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       const siblings = lines.filter((l) => l.alternativeGroup === line.alternativeGroup);
+      // In an OPTIONAL ("pick one or none") group, clicking the selected line
+      // deselects it → none. In a mandatory group it's a plain radio.
+      const allowNone = isGroupOptional(groups, line.alternativeGroup);
+      const desired = desiredSelectedId(siblings, line.id, allowNone);
       for (const s of siblings) {
-        const shouldBeSelected = s.id === line.id;
+        const shouldBeSelected = s.id === desired;
         if (!!s.isSelectedAlternative !== shouldBeSelected) {
           await db.quoteLines.update(s.id, { isSelectedAlternative: shouldBeSelected });
         }
@@ -663,12 +675,54 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (!line.setGroup) return;
     markSaving();
     try {
-      await db.quoteLines.update(line.id, { setGroup: null });
-      const survivors = lines.filter(
-        (l) => l.setGroup === line.setGroup && l.id !== line.id,
-      );
+      const groupId = line.setGroup;
+      // Leaving the conjunto: it becomes a standalone, non-optional line
+      // (its optional state belonged to the group, not the line).
+      await db.quoteLines.update(line.id, { setGroup: null, isOptional: false });
+      const survivors = lines.filter((l) => l.setGroup === groupId && l.id !== line.id);
       if (survivors.length === 1) {
-        await db.quoteLines.update(survivors[0].id, { setGroup: null });
+        await db.quoteLines.update(survivors[0].id, { setGroup: null, isOptional: false });
+        await db.quoteGroups.delete(groupId);
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Toggle a whole Conjunto / Alternativa as optional, persisting the flag on
+   * the quote_groups row (source of truth).
+   *   - set: materialize is_optional onto the member lines so every total
+   *     surface (isPricedLine) stays correct without per-surface changes.
+   *   - alternative: "pick one or none" — when turning the flag OFF while the
+   *     menu sits at zero selected, restore the must-pick-one invariant.
+   */
+  async function toggleGroupOptional(groupId, type) {
+    if (!groupId) return;
+    markSaving();
+    try {
+      await ensurePersisted();
+      const current = groups.find((g) => g.id === groupId);
+      const nextOptional = !current?.isOptional;
+      await db.quoteGroups.put({
+        id: groupId,
+        quoteId,
+        type,
+        isOptional: nextOptional,
+        createdAt: current?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+      });
+      if (type === 'set') {
+        for (const m of lines.filter((l) => l.setGroup === groupId)) {
+          if (!!m.isOptional !== nextOptional) {
+            await db.quoteLines.update(m.id, { isOptional: nextOptional });
+          }
+        }
+      } else if (type === 'alternative' && !nextOptional) {
+        const members = lines.filter((l) => l.alternativeGroup === groupId);
+        if (members.length && !members.some((m) => m.isSelectedAlternative)) {
+          await db.quoteLines.update(members[0].id, { isSelectedAlternative: true });
+        }
       }
     } finally {
       markSaved();
@@ -699,6 +753,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const above = lines[idx - 1];
       if (!above || above.kind === LINE_KIND_SECTION) return;
       const groupId = above.setGroup || newId();
+      // A line joining an OPTIONAL conjunto inherits its optional state
+      // (materialized so isPricedLine keeps the total correct). A brand-new
+      // set is not optional.
+      const inheritOptional = isGroupOptional(groups, above.setGroup);
       if (!above.setGroup) {
         await db.quoteLines.update(above.id, {
           setGroup: groupId,
@@ -709,7 +767,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       }
       await db.quoteLines.update(line.id, {
         setGroup: groupId,
-        isOptional: false,
+        isOptional: inheritOptional,
         alternativeGroup: null,
         isSelectedAlternative: false,
       });
@@ -749,7 +807,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           alternativeGroup: null,
           isSelectedAlternative: false,
         });
-      } else if (survivors.length > 1 && line.isSelectedAlternative) {
+        await db.quoteGroups.delete(line.alternativeGroup);
+      } else if (
+        survivors.length > 1 &&
+        line.isSelectedAlternative &&
+        !isGroupOptional(groups, line.alternativeGroup)
+      ) {
+        // Mandatory group: keep exactly one priced. An optional ("or none")
+        // group legitimately stays at zero selected.
         await db.quoteLines.update(survivors[0].id, { isSelectedAlternative: true });
       }
     } finally {
@@ -782,9 +847,15 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             alternativeGroup: null,
             isSelectedAlternative: false,
           });
-        } else if (siblings.length > 1 && line.isSelectedAlternative) {
-          // Removed the selected member of a still-valid group — promote
-          // the first survivor so exactly one line stays priced.
+          await db.quoteGroups.delete(line.alternativeGroup);
+        } else if (
+          siblings.length > 1 &&
+          line.isSelectedAlternative &&
+          !isGroupOptional(groups, line.alternativeGroup)
+        ) {
+          // Removed the selected member of a still-valid MANDATORY group —
+          // promote the first survivor so exactly one line stays priced. An
+          // optional ("or none") group may legitimately stay at zero selected.
           healedSibling = siblings[0];
           await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
         }
@@ -800,7 +871,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         );
         if (setSurvivors.length === 1) {
           healedSetSibling = setSurvivors[0];
-          await db.quoteLines.update(healedSetSibling.id, { setGroup: null });
+          await db.quoteLines.update(healedSetSibling.id, { setGroup: null, isOptional: false });
+          await db.quoteGroups.delete(line.setGroup);
         }
       }
       const label = line.kind === LINE_KIND_SECTION
@@ -820,6 +892,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         }
         if (healedSetSibling) {
           await db.quoteLines.update(healedSetSibling.id, {
+            isOptional: !!healedSetSibling.isOptional,
             setGroup: healedSetSibling.setGroup,
           });
         }
@@ -871,7 +944,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // matching the on-screen ClientPreview, where section headers
       // ("MOBILIARIO DE SALA") are part of the layout the customer
       // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller });
+      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups });
       if (!blob || !blob.size) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
@@ -946,6 +1019,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           quote={quote}
           settings={settings}
           lines={lines}
+          quoteGroups={groups}
           totals={totals}
           customer={customer}
           professional={professional}
@@ -962,8 +1036,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           <div className="space-y-5 min-w-0">
             <LineItemsCard
               lines={lines}
+              groups={groups}
               quote={quote}
               focusLineId={focusLineId}
+              onToggleGroupOptional={toggleGroupOptional}
               onChangeLine={hx(updateLine)}
               onRemoveLine={hx(removeLine)}
               onDuplicateLine={hx(duplicateLine)}
@@ -1022,10 +1098,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 /* -------------------------------------------------------------------------- */
 
 function LineItemsCard({
-  lines, quote, focusLineId,
+  lines, groups, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onJoinSet,
+  onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
   onAddItem, onAddSection,
 }) {
   return (
@@ -1053,8 +1129,10 @@ function LineItemsCard({
       </header>
       <LineItemList
         lines={lines}
+        groups={groups}
         quote={quote}
         focusLineId={focusLineId}
+        onToggleGroupOptional={onToggleGroupOptional}
         onChangeLine={onChangeLine}
         onRemoveLine={onRemoveLine}
         onDuplicateLine={onDuplicateLine}

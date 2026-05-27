@@ -288,6 +288,23 @@ export interface QuoteLine {
   notes?: string;
 }
 
+/**
+ * Per-group attributes for a Conjunto (set) or Alternativa, keyed by the same
+ * id the member lines carry in `setGroup` / `alternativeGroup`. The flat
+ * grouping + groupRuns are unchanged; this just hangs state off the group.
+ *
+ *   set + isOptional         → optional add-on, take-all-or-nothing.
+ *   alternative + isOptional → "pick one or none" (menu may be left empty).
+ */
+export interface QuoteGroup {
+  id: string;
+  quoteId: string;
+  type: 'set' | 'alternative';
+  isOptional?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Quote {
   id: string;
   profileId: string;
