@@ -206,6 +206,7 @@ export default function Materials() {
                         <ImageView
                           id={heroImageId(m)}
                           alt={m.name}
+                          hoverPreview
                           className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
                         />
                       ) : (

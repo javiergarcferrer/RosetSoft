@@ -447,6 +447,7 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
           onChange={(id) => onChange({ imageId: id })}
           kind="quote-line"
           ownerId={line.id}
+          hoverPreview
         />
         <div className="flex-1 min-w-0">
           <HeroInput
@@ -608,6 +609,7 @@ function GradeFabricRow({ line, onChange }) {
           kind="quote-line-swatch"
           ownerId={line.id}
           sizeClass="w-10 h-10"
+          hoverPreview
         />
       </span>
       <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
