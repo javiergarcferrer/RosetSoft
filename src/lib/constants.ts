@@ -34,12 +34,18 @@ export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTIO
  * Auto-pull of the Banco Popular Dominicano exchange rate. When true the
  * app pulls the rate once per day on first login and shows the "Actualizar
  * ahora" button in Settings (both call the `bpd-rate` edge function, which
- * hits the bank's live API). Disabled until we move to production — the
- * stored rate, the manual override in Settings, the rate locked onto sent
- * quotes, and all rate display keep working. Flip to `true` (and ensure the
- * BPD_* edge-function secrets are set) when going live.
+ * hits the bank's live API at apipublico.bpd.com.do).
+ *
+ * PRODUCTION IS FULLY WIRED: the function's DEFAULT_BASE points at the prod
+ * gateway and the BPD_* secrets are set in Supabase. This stays OFF until
+ * BPD approves the production app's subscription to BPDConsultaTasa — until
+ * then the live pull returns 401 (unauthorized_client / not subscribed). In
+ * the meantime the manual override in Settings is the active rate source and
+ * everything else (stored rate, rate locked onto sent quotes, all display)
+ * keeps working. Flip to `true` the moment the subscription is approved — no
+ * other change needed.
  */
-export const EXCHANGE_RATE_PULL_ENABLED = true;
+export const EXCHANGE_RATE_PULL_ENABLED = false;
 
 /**
  * Predicate every total-bearing surface (Quotes / Orders / Dashboard /
