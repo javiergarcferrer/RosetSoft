@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Sparkles } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { db, newId } from '../db/database.js';
 import { clampPct } from '../lib/pricing.js';
+import { parsePromotionEmail } from '../lib/promotions.js';
 
 /**
  * Promotion create/edit modal. Opened from the Promociones admin page.
@@ -20,8 +21,14 @@ export default function PromotionModal({ promotion, onClose, profileId }) {
   const open = !!promotion;
   const isNew = !promotion?.id;
   const [data, setData] = useState(null);
+  // "Importar pegando el correo" — the dealer pastes the Roset promo email and
+  // the parser pre-fills every field below, removing the manual data entry.
+  const [pasteText, setPasteText] = useState('');
+  const [importMsg, setImportMsg] = useState('');
 
   if (open && data?.__id !== (promotion?.id || 'new')) {
+    setPasteText('');
+    setImportMsg('');
     setData({
       __id: promotion?.id || 'new',
       name: promotion?.name || '',
@@ -40,6 +47,27 @@ export default function PromotionModal({ promotion, onClose, profileId }) {
   if (!open || !data) return <Modal open={false} onClose={onClose} title="" />;
 
   function set(k, v) { setData((d) => ({ ...d, [k]: v })); }
+
+  function fillFromEmail() {
+    const d = parsePromotionEmail(pasteText);
+    const found = d.name || d.code || d.discountPct != null || d.startsAt || (d.dealerFullRefs && d.dealerFullRefs.length);
+    if (!found) {
+      setImportMsg('No reconocí los datos. Revisa que pegaste el correo completo.');
+      return;
+    }
+    setData((cur) => ({
+      ...cur,
+      name: d.name || cur.name,
+      code: d.code || cur.code,
+      discountPct: d.discountPct != null ? d.discountPct : cur.discountPct,
+      startsAt: d.startsAt ? msToDateInput(d.startsAt) : cur.startsAt,
+      endsAt: d.endsAt ? msToDateInput(d.endsAt) : cur.endsAt,
+      dealerFullRefs: d.dealerFullRefs && d.dealerFullRefs.length ? d.dealerFullRefs.join(', ') : cur.dealerFullRefs,
+      eligibleKeywords: d.eligibleKeywords && d.eligibleKeywords.length ? d.eligibleKeywords.join(', ') : cur.eligibleKeywords,
+      terms: d.terms || cur.terms,
+    }));
+    setImportMsg('Campos rellenados desde el correo. Revisa y guarda.');
+  }
 
   async function save() {
     if (!data.name.trim()) return;
@@ -88,6 +116,29 @@ export default function PromotionModal({ promotion, onClose, profileId }) {
         </>
       }
     >
+      {/* Paste-to-import: the headline shortcut so the dealer doesn't type the
+          fields by hand — paste the Roset email, tap Rellenar, review, save. */}
+      <div className="rounded-md border border-dashed border-ink-300 bg-ink-50/60 p-3 mb-4">
+        <div className="label">Importar desde el correo de Roset</div>
+        <textarea
+          className="input min-h-[80px]"
+          value={pasteText}
+          onChange={(e) => setPasteText(e.target.value)}
+          placeholder="Pega aquí el correo de la promoción (texto o contenido enriquecido) y toca Rellenar campos."
+        />
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <button
+            type="button"
+            onClick={fillFromEmail}
+            disabled={!pasteText.trim()}
+            className="btn-ghost text-xs border border-ink-200 disabled:opacity-50"
+          >
+            <Sparkles size={13} /> Rellenar campos
+          </button>
+          {importMsg && <span className="text-[11px] text-ink-600">{importMsg}</span>}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <div className="label">Nombre *</div>
