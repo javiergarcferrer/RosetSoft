@@ -9,9 +9,11 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
-import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
+import { currentOrderStage } from '../lib/orderStages.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
+import StatusPill from '../components/StatusPill.jsx';
+import { orderStatusPill } from '../lib/statusPill.js';
 
 /**
  * Orders list view — every order across the team, sorted by recency.
@@ -22,20 +24,6 @@ import ListLoading from '../components/ListLoading.jsx';
  * total (summed across the quotes attached). The status badge mirrors the
  * five-stage stepper that lives on the detail page.
  */
-
-// Status palette mirroring the new 6-stage order lifecycle. Mapped onto
-// the design-system status pills: confirmed reads as "committed money"
-// (accepted-tone), received as "active", cancelled as "declined", and
-// the two in-flight stages share the sent/pending blues + ambers.
-const STATUS_PILL_CLASS = {
-  draft:       'status-pill-draft',
-  placed:      'status-pill-sent',
-  confirmed:   'status-pill-accepted',
-  in_transit:  'status-pill-sent',
-  in_customs:  'status-pill-pending',
-  received:    'status-pill-active',
-  cancelled:   'status-pill-declined',
-};
 
 export default function Orders() {
   const { profileId } = useApp();
@@ -260,12 +248,7 @@ export default function Orders() {
 }
 
 function StatusBadge({ status }) {
-  const def = ORDER_STAGE_BY_KEY[status];
-  return (
-    <span className={`status-pill ${STATUS_PILL_CLASS[status] || STATUS_PILL_CLASS.draft}`}>
-      {def?.label || 'Borrador'}
-    </span>
-  );
+  return <StatusPill {...orderStatusPill(status)} />;
 }
 
 function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {

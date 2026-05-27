@@ -12,6 +12,8 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
+import StatusPill from '../components/StatusPill.jsx';
+import { quoteStagePill } from '../lib/statusPill.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { currentQuoteStage } from '../lib/quoteStages.js';
 import { isTradeDiscount } from '../lib/commissions.js';
@@ -33,24 +35,6 @@ function TradeFlag({ quote }) {
     </span>
   );
 }
-
-const STATUS_PILL_CLASS = {
-  draft: 'status-pill-draft',
-  sent: 'status-pill-sent',
-  accepted: 'status-pill-accepted',
-  deposito_recibido: 'status-pill-deposito',
-  declined: 'status-pill-declined',
-  archived: 'status-pill-archived',
-};
-
-const STATUS_LABELS = {
-  draft: 'Borrador',
-  sent: 'Enviada',
-  accepted: 'Aceptada',
-  deposito_recibido: 'Depósito recibido',
-  declined: 'Rechazada',
-  archived: 'Archivada',
-};
 
 // Tab keys the list understands. A `?status=` deep-link (e.g. from the
 // dashboard's "Ver aceptadas") is honored only if it names one of these;
@@ -427,7 +411,7 @@ function QuoteCard({ qu, customer, creator, order, total, rates }) {
         </div>
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
-        <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+        <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
         <TradeFlag quote={qu} />
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
@@ -453,7 +437,7 @@ function QuoteRow({ qu, customer, creator, order, total, rates }) {
       </td>
       <td>
         <div className="flex items-center gap-1.5">
-          <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+          <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
           <TradeFlag quote={qu} />
         </div>
       </td>
