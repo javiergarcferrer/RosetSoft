@@ -1032,10 +1032,11 @@ export function drawGroupHeaderBand(
     color: zone.rail,
   });
 
-  // Eyebrow: bold tracked label + a quieter descriptor.
+  // Eyebrow: bold tracked label + a quieter descriptor. Only a Conjunto can
+  // be optional; an Alternativa always uses one option.
   const label = zone.type === 'set'
     ? `CONJUNTO${optional ? ' OPCIONAL' : ''} · ${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`
-    : (optional ? 'ALTERNATIVAS · ELIGE UNA O NINGUNA' : 'ALTERNATIVAS · ELIGE UNA');
+    : 'ALTERNATIVAS · ELIGE UNA';
   page.drawText(label, {
     x: MARGIN_L + GROUP_RAIL_W + 8,
     y: bottom + GROUP_HEADER_PAD_B,
@@ -1122,8 +1123,8 @@ export function groupFooterSpec(
     };
   }
   return {
-    label: optional ? 'TOTAL · NO INCLUIDO' : 'TOTAL',
-    amount: alternativeSubtotal(lines, groupId, { allowNone: optional }),
+    label: 'TOTAL',
+    amount: alternativeSubtotal(lines, groupId),
     zone: GROUP_ZONES.alternative,
   };
 }

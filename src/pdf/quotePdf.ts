@@ -236,9 +236,10 @@ export async function generateQuotePdf({
         // two runs back-to-back read as distinct containers separated by a
         // white gutter, and a split run still reads as one zone across pages.
         const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
-        // Whole-group "optional" state (a Conjunto opcional / pick-one-or-none
-        // Alternativa). Drives the band captions; the totals already exclude it.
-        const groupOptional = isGrouped ? isGroupOptional(quoteGroups, run.groupId) : false;
+        // Whole-Conjunto "optional" state (take-all-or-nothing add-on). Drives
+        // the band captions; the totals already exclude its members. Only sets
+        // can be optional — an Alternativa always uses one option.
+        const groupOptional = run.type === 'set' ? isGroupOptional(quoteGroups, run.groupId) : false;
         // Footer presentation for a grouped run — Spanish uppercase eyebrow,
         // rolled-up amount, and zone palette. Conjunto → "TOTAL DEL
         // CONJUNTO"/setSubtotal/neutral; Alternativa → "TOTAL"/

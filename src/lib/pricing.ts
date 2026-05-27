@@ -315,17 +315,11 @@ export function setGroupInfo(
 export function selectedAlternative(
   lines: readonly QuoteLine[] | null | undefined,
   groupId: string | null | undefined,
-  opts: { allowNone?: boolean } = {},
 ): QuoteLine | null {
   if (!groupId) return null;
   const members = (lines || []).filter((l) => l?.alternativeGroup === groupId);
   if (members.length === 0) return null;
-  const sel = members.find((l) => l?.isSelectedAlternative);
-  if (sel) return sel;
-  // No member selected: an optional ("pick one or none") group legitimately
-  // contributes nothing, so return null. A mandatory group falls back to the
-  // first member so a footer/total never reads empty.
-  return opts.allowNone ? null : members[0];
+  return members.find((l) => l?.isSelectedAlternative) || members[0];
 }
 
 /**
@@ -342,9 +336,8 @@ export function selectedAlternative(
 export function alternativeSubtotal(
   lines: readonly QuoteLine[] | null | undefined,
   groupId: string | null | undefined,
-  opts: { allowNone?: boolean } = {},
 ): number {
-  const sel = selectedAlternative(lines, groupId, opts);
+  const sel = selectedAlternative(lines, groupId);
   return sel ? lineTotal(sel) : 0;
 }
 

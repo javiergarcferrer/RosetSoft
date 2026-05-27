@@ -5,7 +5,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isGroupOptional, desiredSelectedId } from '../lib/quoteGroups.js';
+import { isGroupOptional } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
@@ -650,12 +650,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       const siblings = lines.filter((l) => l.alternativeGroup === line.alternativeGroup);
-      // In an OPTIONAL ("pick one or none") group, clicking the selected line
-      // deselects it → none. In a mandatory group it's a plain radio.
-      const allowNone = isGroupOptional(groups, line.alternativeGroup);
-      const desired = desiredSelectedId(siblings, line.id, allowNone);
       for (const s of siblings) {
-        const shouldBeSelected = s.id === desired;
+        const shouldBeSelected = s.id === line.id;
         if (!!s.isSelectedAlternative !== shouldBeSelected) {
           await db.quoteLines.update(s.id, { isSelectedAlternative: shouldBeSelected });
         }
@@ -690,14 +686,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }
 
   /**
-   * Toggle a whole Conjunto / Alternativa as optional, persisting the flag on
-   * the quote_groups row (source of truth).
-   *   - set: materialize is_optional onto the member lines so every total
-   *     surface (isPricedLine) stays correct without per-surface changes.
-   *   - alternative: "pick one or none" — when turning the flag OFF while the
-   *     menu sits at zero selected, restore the must-pick-one invariant.
+   * Toggle a whole Conjunto as optional, persisting the flag on the
+   * quote_groups row (source of truth) and materializing is_optional onto the
+   * member lines so every total surface (isPricedLine) stays correct without
+   * per-surface changes. Only Conjuntos can be optional — an Alternativa
+   * always uses at least one option, so it always counts toward the total.
    */
-  async function toggleGroupOptional(groupId, type) {
+  async function toggleGroupOptional(groupId) {
     if (!groupId) return;
     markSaving();
     try {
@@ -707,21 +702,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       await db.quoteGroups.put({
         id: groupId,
         quoteId,
-        type,
+        type: 'set',
         isOptional: nextOptional,
         createdAt: current?.createdAt || Date.now(),
         updatedAt: Date.now(),
       });
-      if (type === 'set') {
-        for (const m of lines.filter((l) => l.setGroup === groupId)) {
-          if (!!m.isOptional !== nextOptional) {
-            await db.quoteLines.update(m.id, { isOptional: nextOptional });
-          }
-        }
-      } else if (type === 'alternative' && !nextOptional) {
-        const members = lines.filter((l) => l.alternativeGroup === groupId);
-        if (members.length && !members.some((m) => m.isSelectedAlternative)) {
-          await db.quoteLines.update(members[0].id, { isSelectedAlternative: true });
+      for (const m of lines.filter((l) => l.setGroup === groupId)) {
+        if (!!m.isOptional !== nextOptional) {
+          await db.quoteLines.update(m.id, { isOptional: nextOptional });
         }
       }
     } finally {
@@ -807,14 +795,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           alternativeGroup: null,
           isSelectedAlternative: false,
         });
-        await db.quoteGroups.delete(line.alternativeGroup);
-      } else if (
-        survivors.length > 1 &&
-        line.isSelectedAlternative &&
-        !isGroupOptional(groups, line.alternativeGroup)
-      ) {
-        // Mandatory group: keep exactly one priced. An optional ("or none")
-        // group legitimately stays at zero selected.
+      } else if (survivors.length > 1 && line.isSelectedAlternative) {
         await db.quoteLines.update(survivors[0].id, { isSelectedAlternative: true });
       }
     } finally {
@@ -847,15 +828,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             alternativeGroup: null,
             isSelectedAlternative: false,
           });
-          await db.quoteGroups.delete(line.alternativeGroup);
-        } else if (
-          siblings.length > 1 &&
-          line.isSelectedAlternative &&
-          !isGroupOptional(groups, line.alternativeGroup)
-        ) {
-          // Removed the selected member of a still-valid MANDATORY group —
-          // promote the first survivor so exactly one line stays priced. An
-          // optional ("or none") group may legitimately stay at zero selected.
+        } else if (siblings.length > 1 && line.isSelectedAlternative) {
+          // Removed the selected member of a still-valid group — promote the
+          // first survivor so exactly one line stays priced.
           healedSibling = siblings[0];
           await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
         }

@@ -242,10 +242,11 @@ export default function LineItemList({
     const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
     const isSet = run.type === 'set';
     const accent = isSet ? 'violet' : 'brand';
-    const optional = isGroupOptional(groups, run.groupId);
+    // Only Conjuntos can be optional — an Alternativa always uses one option.
+    const optional = isSet && isGroupOptional(groups, run.groupId);
     const footerValue = isSet
       ? setSubtotal(lines, run.groupId)
-      : alternativeSubtotal(lines, run.groupId, { allowNone: optional });
+      : alternativeSubtotal(lines, run.groupId);
 
     return (
       <GroupCard
@@ -255,7 +256,7 @@ export default function LineItemList({
         memberCount={members.length}
         optional={optional}
         onToggleOptional={
-          onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId, run.type) : undefined
+          isSet && onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId) : undefined
         }
         footerLabel={isSet ? 'Total del conjunto' : 'Total'}
         footerValue={formatMoney(footerValue, currency, rates)}
@@ -365,7 +366,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, foot
   const Icon = isSet ? Boxes : GitFork;
   const eyebrow = isSet
     ? (optional ? 'Conjunto opcional' : 'Conjunto')
-    : (optional ? 'Alternativas — elige una o ninguna' : 'Alternativas — elige una');
+    : 'Alternativas — elige una';
   return (
     // Inset card so the surrounding row dividers don't bleed into it.
     <div className="px-3 sm:px-4 py-3">

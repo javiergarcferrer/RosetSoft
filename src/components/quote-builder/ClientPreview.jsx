@@ -223,10 +223,11 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                     // Group run → a container card wrapping the member rows.
                     const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
                     const isSet = run.type === 'set';
-                    const optional = isGroupOptional(quoteGroups, run.groupId);
+                    // Only Conjuntos can be optional — an Alternativa always uses one.
+                    const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
                     const footerValue = isSet
                       ? setSubtotal(lines, run.groupId)
-                      : alternativeSubtotal(lines, run.groupId, { allowNone: optional });
+                      : alternativeSubtotal(lines, run.groupId);
                     return (
                       <ClientGroupCard
                         key={`grp-${run.groupId}-${run.start}`}
@@ -747,7 +748,7 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
   const Icon = isSet ? Boxes : GitFork;
   const eyebrow = isSet
     ? (optional ? 'Conjunto opcional' : 'Conjunto')
-    : (optional ? 'Alternativas — elige una o ninguna' : 'Alternativas — elige una');
+    : 'Alternativas — elige una';
   return (
     // Inset card so the surrounding list rows don't bleed into it. Rendered
     // as a list item so it sits naturally in the <ul> alongside flat rows.
