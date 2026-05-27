@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Hash, Download, AlertCircle, Loader2, PackageSearch } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -25,6 +25,7 @@ import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
+import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
 
@@ -254,6 +255,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // happens outside the app.
   const [view, setView] = useState('compose'); // 'compose' | 'client'
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
 
   // -------- save indicator state --------
   // We track a UI-only timestamp here rather than reading quote.updatedAt
@@ -478,8 +480,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         description: seed.description || '',
         pageRef: seed.pageRef || '',
         imageId: seed.imageId || null,
+        swatchImageId: seed.swatchImageId ?? null,
         qty: seed.qty ?? 1,
         unitPrice: seed.unitPrice ?? 0,
+        unitCost: seed.unitCost ?? null,
         lineMarginPct: seed.lineMarginPct ?? 0,
         lineDiscountPct: seed.lineDiscountPct ?? 0,
         notes: seed.notes || '',
@@ -1027,6 +1031,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               onReorder={hx(reorderLines)}
               onAddItem={hx(() => addLine())}
               onAddSection={hx(addSection)}
+              onOpenCatalog={() => setCatalogOpen(true)}
             />
             <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           </div>
@@ -1063,6 +1068,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         rates={quote.rates || { USD: 1 }}
       />
 
+      <CatalogPicker
+        open={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        onInsert={hx((seed) => addLine(seed))}
+      />
+
       {undoToast}
     </>
   );
@@ -1077,7 +1088,7 @@ function LineItemsCard({
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
   onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-  onAddItem, onAddSection,
+  onAddItem, onAddSection, onOpenCatalog,
 }) {
   return (
     <div className="card overflow-hidden">
@@ -1091,6 +1102,14 @@ function LineItemsCard({
             title="Agregar sección"
           >
             <Hash size={12} /> Sección
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCatalog}
+            className="btn-ghost text-xs"
+            title="Elegir un producto del catálogo"
+          >
+            <PackageSearch size={12} /> Catálogo
           </button>
           <button
             type="button"
