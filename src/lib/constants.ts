@@ -39,7 +39,7 @@ export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTIO
  * quotes, and all rate display keep working. Flip to `true` (and ensure the
  * BPD_* edge-function secrets are set) when going live.
  */
-export const EXCHANGE_RATE_PULL_ENABLED = false;
+export const EXCHANGE_RATE_PULL_ENABLED = true;
 
 /**
  * Predicate every total-bearing surface (Quotes / Orders / Dashboard /
