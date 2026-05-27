@@ -11,6 +11,7 @@ import {
   Wallet,
   Calculator,
   Layers,
+  PackageSearch,
   Menu,
   X,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ const adminNavGroup = {
     { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
     { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
     { to: '/admin/materials',   label: 'Materiales', icon: Layers },
+    { to: '/admin/catalog',     label: 'Catálogo',   icon: PackageSearch },
   ],
 };
 

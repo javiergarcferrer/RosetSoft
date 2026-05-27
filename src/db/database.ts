@@ -12,6 +12,7 @@ import type {
   ImageRecord,
   Material,
   QuoteGroup,
+  Product,
 } from '../types/domain.ts';
 
 /**
@@ -57,6 +58,7 @@ const TABLES = {
   quoteGroups:   { db: 'quote_groups',  pk: 'id' },
   containers:    { db: 'containers',    pk: 'id' },
   materials:     { db: 'materials',     pk: 'id' },
+  products:      { db: 'products',      pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -78,6 +80,7 @@ export interface TableRowMap {
   quoteGroups: QuoteGroup;
   containers: Container;
   materials: Material;
+  products: Product;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

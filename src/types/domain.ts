@@ -234,6 +234,10 @@ export interface QuoteLine {
   /* Pricing — ignored when `components` is non-empty (compound mode). */
   qty?: number;
   unitPrice?: number;
+  /** Real wholesale cost (USD) snapshotted from the catalog when the line was
+   *  added; drives the per-order margin view. Frozen so a later price-list
+   *  update never rewrites an accepted order's margin. */
+  unitCost?: number;
   lineMarginPct?: number;
   lineDiscountPct?: number;
 
@@ -286,6 +290,29 @@ export interface QuoteLine {
 
   /* Internal-only — never rendered in client-facing surfaces. */
   notes?: string;
+}
+
+/**
+ * A catalog product imported from the Ligne Roset price-list CSV. The
+ * searchable catalog behind "Agregar artículo": picking one autofills the
+ * quote line and snapshots `cost` onto it for the margin view. `priceUsd` is
+ * the list (Retail) price; `cost` is the real wholesale cost.
+ */
+export interface Product {
+  id: string;
+  profileId: string;
+  reference: string;
+  name?: string;
+  subtype?: string;
+  dimensions?: string;
+  family?: string;
+  familyCode?: string;
+  category?: string;
+  priceUsd?: number;
+  cost?: number;
+  active?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 /**
