@@ -37,9 +37,14 @@ const CORS_HEADERS = {
     'authorization, x-client-info, apikey, content-type, x-supabase-api-version',
 };
 
-// Sandbox base from BPDConsultaTasa 2.6.1. Token + rate paths hang off it.
+// Production base from BPDConsultaTasa 2.2.0 (apipublico.bpd.com.do).
+//   token = `${DEFAULT_BASE}/bpd/Authentication/oauth2/token`
+//   tasa  = `${DEFAULT_BASE}/consultatasa/consultaTasa`
+// To go back to the sandbox, set the BPD_API_BASE secret to the bpdsandbox
+// URL — but DO NOT set BPD_API_BASE to a full endpoint URL (that doubles the
+// path); it must be ONLY the base, exactly like this constant.
 const DEFAULT_BASE =
-  'https://api.us-east-a.apiconnect.ibmappdomain.cloud/apiportalpopular/bpdsandbox';
+  'https://apipublico.bpd.com.do/bpd/bpd-publico';
 
 // Resilience for the upstream BPD calls (BPD cert C.7 + C.10): a hard
 // attempt cap (never an infinite loop), bounded exponential backoff, and
