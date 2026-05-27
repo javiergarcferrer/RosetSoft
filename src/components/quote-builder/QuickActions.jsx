@@ -208,7 +208,7 @@ export default function QuickActions({
 function Group({ heading, children }) {
   return (
     <div className="py-1">
-      <div className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-ink-400">{heading}</div>
+      <div className="px-3 pt-1.5 pb-1 eyebrow-xs tracking-widest text-ink-400">{heading}</div>
       {children}
     </div>
   );
@@ -243,7 +243,7 @@ function RowButton({ row, active, currency, rates, currentCustomerId, onHover, o
         ) : row.kind === 'item' ? (
           <>
             <div className="text-sm text-ink-900 truncate">
-              {row.family ? <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-700 mr-1.5">{row.family}</span> : null}
+              {row.family ? <span className="eyebrow-xs tracking-widest text-brand-700 mr-1.5">{row.family}</span> : null}
               <b>{row.name || row.reference || '—'}</b>
             </div>
             <div className="text-[11px] text-ink-500 truncate">

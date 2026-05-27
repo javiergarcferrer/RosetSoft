@@ -2,6 +2,7 @@ import type { PDFPage, PDFImage, PDFFont } from 'pdf-lib';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_R, MARGIN_T,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE,
+  FS_DISPLAY, FS_NUMBER, FS_EYEBROW_SM,
 } from './constants.js';
 import type { PdfCtx, Cursor } from './types.js';
 import { drawRightAt } from './util.js';
@@ -34,9 +35,9 @@ import type { DrawTextOptions } from './util.js';
  * what the dealer shows on screen is what the customer sees in PDF.
  */
 
-const COMPANY_FONT_SIZE = 26;   // matches the preview's "ALCOVER" wordmark scale
-const NUMBER_FONT_SIZE  = 26;
-const EYEBROW_SIZE      = 8;
+const COMPANY_FONT_SIZE = FS_DISPLAY;   // company wordmark — Display role
+const NUMBER_FONT_SIZE  = FS_NUMBER;    // quote # — Number role; deliberately quieter
+const EYEBROW_SIZE      = FS_EYEBROW_SM;
 const EYEBROW_TRACKING  = 1.4;
 
 function fontItalicOrRegular(ctx: PdfCtx): PDFFont {
@@ -102,11 +103,14 @@ export function drawHeader(page: PDFPage, ctx: PdfCtx, logoImage: PDFImage | nul
     characterSpacing: EYEBROW_TRACKING,
   } as DrawTextOptions);
 
-  // Big #number (or BORRADOR when unnumbered — better than "# —")
+  // #number (or BORRADOR when unnumbered — better than "# —"). Sized at
+  // the Number role (15pt) so it reads clearly as the document identity
+  // without out-shouting the company wordmark or the grand total — it was
+  // 26pt and dominated the page before.
   const numText = numbered ? `#${quote.number}` : 'BORRADOR';
-  const numSize = numbered ? NUMBER_FONT_SIZE : 20;
+  const numSize = NUMBER_FONT_SIZE;
   const numW = fontBold.widthOfTextAtSize(numText, numSize);
-  const numY = top - EYEBROW_SIZE - 10 - numSize;
+  const numY = top - EYEBROW_SIZE - 8 - numSize;
   page.drawText(numText, {
     x: rightX - numW,
     y: numY,
@@ -119,13 +123,13 @@ export function drawHeader(page: PDFPage, ctx: PdfCtx, logoImage: PDFImage | nul
   const dateW = fontRegular.widthOfTextAtSize(dateStr, 10);
   page.drawText(dateStr, {
     x: rightX - dateW,
-    y: numY - 18,
+    y: numY - 16,
     size: 10, font: fontRegular, color: INK_MID,
   });
 
   // The header's content extent on either side — pick the deeper of the
   // two so the divider sits below all of it with consistent breathing room.
-  const headerBottom = Math.min(ay + 2, numY - 24);
+  const headerBottom = Math.min(ay + 2, numY - 22);
   page.drawLine({
     start: { x: MARGIN_L, y: headerBottom - 6 },
     end:   { x: rightX,   y: headerBottom - 6 },
@@ -179,10 +183,13 @@ export function drawCustomerBlock(page: PDFPage, ctx: PdfCtx, cursor: Cursor): C
 
   let y = y0 - 18;
   if (customer) {
+    // Up-weighted to 15pt bold — the recipient is the second-most
+    // prominent identity on the page after the company wordmark, so the
+    // name reads clearly as "who this quote is for".
     page.drawText(customer.name || '—', {
-      x: MARGIN_L, y, size: 13, font: fontBold, color: INK,
+      x: MARGIN_L, y, size: FS_NUMBER, font: fontBold, color: INK,
     });
-    y -= 16;
+    y -= 18;
     if (customer.company) {
       page.drawText(customer.company, {
         x: MARGIN_L, y, size: 10, font: fontRegular, color: INK_HIGH,

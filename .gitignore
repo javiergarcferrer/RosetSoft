@@ -10,3 +10,6 @@ dist
 /pricelist_extract.txt
 /uploads
 .claude/
+
+# Dev-only PDF render harness (renders a sample quote to /tmp for eyeballing)
+/tools/render-sample.mjs

@@ -7,9 +7,13 @@ import {
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
+import { setGroupInfo, groupRuns } from '../lib/pricing.js';
+import { isGroupOptional } from '../lib/quoteGroups.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
+  drawGroupHeaderBand, drawGroupFooterBand, measureGroupHeaderHeight,
+  measureGroupFooterHeight, groupFooterSpec, groupZoneFor,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 import { shouldUseWebShare } from './shareTarget.js';
@@ -22,6 +26,7 @@ import type {
   Settings,
   Totals,
   CurrencyCode,
+  QuoteGroup,
 } from '../types/domain.ts';
 import type { PdfCtx, Cursor } from './types.js';
 
@@ -57,6 +62,7 @@ export interface GenerateQuotePdfInput {
   customer: Customer | null;
   professional?: Professional | null;
   seller?: Profile | null;
+  quoteGroups?: QuoteGroup[];
 }
 
 /**
@@ -69,7 +75,10 @@ export interface GenerateQuotePdfInput {
  */
 export function quoteFileName(quote: Quote, customer: Customer | null): string {
   const num = quote?.number != null ? `Cotizacion ${quote.number}` : 'Cotizacion (borrador)';
-  const client = (customer?.name || '').trim();
+  // Prefer the contact name, fall back to the company — a walk-in filed
+  // without a company name otherwise dropped out of the filename entirely,
+  // leaving just "Cotizacion N".
+  const client = (customer?.name || customer?.company || '').trim();
   const base = client ? `${client} - ${num}` : num;
   // Strip characters illegal in filenames; keep the " - " separator.
   return base.replace(/[/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -83,6 +92,7 @@ export async function generateQuotePdf({
   customer,
   professional = null,
   seller = null,
+  quoteGroups = [],
 }: GenerateQuotePdfInput): Promise<Blob> {
   const doc = await PDFDocument.create();
 
@@ -181,25 +191,100 @@ export async function generateQuotePdf({
         altGroupInfo.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) as number });
       }
     }
+    // Same "Conjunto N de M" position lookup for set members. Built off
+    // the full lines list (keyed by id) so it survives section grouping.
+    // A line is never both a set member and an alternative (DB CHECK), so
+    // the two maps never collide on the same id.
+    const setInfo = setGroupInfo(lines);
     for (const group of groups) {
       if (group.label) {
-        const firstRowH = group.items.length
-          ? measureLineRowHeight(ctx, group.items[0])
+        // The first item under the header may open a grouped zone — reserve
+        // its in-zone row height + the opening header band so a section header
+        // never lands orphaned at a page bottom away from its first block.
+        const firstItem = group.items[0] || null;
+        const firstGrouped = !!(firstItem && (firstItem.setGroup || firstItem.alternativeGroup));
+        const firstRowH = firstItem
+          ? measureLineRowHeight(ctx, firstItem, firstGrouped)
           : 0;
-        const reserve = 22 + firstRowH;
+        const firstBand = firstGrouped ? measureGroupHeaderHeight() : 0;
+        // Section header now consumes ~34pt (11pt eyebrow + terracotta
+        // rule + spacing); reserve that plus the first block.
+        const reserve = 34 + firstBand + firstRowH;
         if (cursor.y - reserve < PAGE_BREAK_RESERVE) {
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
         cursor = drawSectionHeader(page, ctx, cursor, group.label);
       }
-      for (const line of group.items) {
-        const rowH = measureLineRowHeight(ctx, line);
-        if (cursor.y - rowH - 4 < PAGE_BREAK_RESERVE) {
-          page = doc.addPage([PAGE_W, PAGE_H]);
-          cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
+      // groupRuns(group.items) is THE shared source of truth for run
+      // boundaries — the same helper the editor (LineItemList) and the
+      // on-screen ClientPreview consume. Each 'set' / 'alternative' run is a
+      // contiguous block whose members draw as today, capped by ONE footer
+      // total after the last member; 'single' runs render as a lone row.
+      // (Sections are stripped by groupBySection, so a run never straddles a
+      // section divider.) We index members by id within this section so a
+      // run's lineIds resolve to the right QuoteLine.
+      const byId = new Map(group.items.map((l) => [l.id, l]));
+      const runs = groupRuns(group.items);
+      for (const run of runs) {
+        const members = run.lineIds
+          .map((id) => byId.get(id))
+          .filter((l): l is QuoteLine => !!l);
+        const isGrouped = run.type === 'set' || run.type === 'alternative';
+        // A grouped run renders as a bounded, shaded ZONE: an opening header
+        // band, per-member tint + left rail, and a closing footer band — so
+        // two runs back-to-back read as distinct containers separated by a
+        // white gutter, and a split run still reads as one zone across pages.
+        const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
+        // Whole-Conjunto "optional" state (take-all-or-nothing add-on). Drives
+        // the band captions; the totals already exclude its members. Only sets
+        // can be optional — an Alternativa always uses one option.
+        const groupOptional = run.type === 'set' ? isGroupOptional(quoteGroups, run.groupId) : false;
+        // Footer presentation for a grouped run — Spanish uppercase eyebrow,
+        // rolled-up amount, and zone palette. Conjunto → "TOTAL DEL
+        // CONJUNTO"/setSubtotal/neutral; Alternativa → "TOTAL"/
+        // alternativeSubtotal/brand. Presentational only — the grand total in
+        // totals.ts is untouched (members already priced / only the selected
+        // alternative billed).
+        const footer = isGrouped && run.groupId
+          ? groupFooterSpec(run.type as 'set' | 'alternative', lines, run.groupId, groupOptional)
+          : null;
+
+        for (let m = 0; m < members.length; m++) {
+          const line = members[m];
+          // A set member shows its "CONJUNTO N de M" caption; an alternative
+          // its "ALTERNATIVA N de M" (mutually exclusive — see the maps above).
+          // Inside a zone the member draws no caption (identity is in the
+          // header band), but the lookup is harmless / unused there.
+          const groupInfo = (line.setGroup ? setInfo.get(line.id) : altGroupInfo.get(line.id)) || null;
+          const isFirstInRun = m === 0;
+          const isLastInRun = m === members.length - 1;
+
+          const rowH = measureLineRowHeight(ctx, line, !!zone);
+          // First member of a zone carries the opening header band; reserve it
+          // so the band + first row never split. Last member carries the
+          // closing footer band; reserve it so the roll-up never lands orphaned
+          // on a fresh page away from the block it sums. Continuation members
+          // reserve nothing extra — the tint + rail simply resume on the new
+          // page, keeping a split zone reading as one container.
+          const headerReserve = (isFirstInRun && zone) ? measureGroupHeaderHeight() : 0;
+          const footerReserve = (isLastInRun && footer) ? measureGroupFooterHeight() : 0;
+          if (cursor.y - headerReserve - rowH - footerReserve - 4 < PAGE_BREAK_RESERVE) {
+            page = doc.addPage([PAGE_W, PAGE_H]);
+            cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
+          }
+          // Opening header band — drawn ONCE, only at the run's true start
+          // (never repeated on a continuation page).
+          if (isFirstInRun && zone) {
+            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, members.length, groupOptional);
+          }
+          cursor = await drawLineRow(page, ctx, cursor, line, groupInfo, zone);
+          if (isLastInRun && footer && zone) {
+            cursor = drawGroupFooterBand(
+              page, ctx, cursor, zone, footer.label, footer.amount,
+            );
+          }
         }
-        cursor = await drawLineRow(page, ctx, cursor, line, altGroupInfo.get(line.id) || null);
       }
     }
   }

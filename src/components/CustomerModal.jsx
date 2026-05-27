@@ -26,9 +26,14 @@ import { db, newId } from '../db/database.js';
  *                    detail page hooks this to navigate away.
  *                    Falls back to onClose() when omitted so the
  *                    list-page caller doesn't have to know.
+ *   onSaved        — optional. Fired with the customer id right after a
+ *                    successful save, before onClose. The quote builder
+ *                    hooks this to auto-assign a just-created customer to
+ *                    the open quote (create-inside-the-quote, no detour
+ *                    through the Customers page).
  *   profileId      — team profile id; stamped on new rows.
  */
-export default function CustomerModal({ customer, onClose, onAfterDelete, profileId }) {
+export default function CustomerModal({ customer, onClose, onAfterDelete, onSaved, profileId }) {
   const open = !!customer;
   const isNew = !customer?.id;
   const [data, setData] = useState(null);
@@ -71,6 +76,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, profil
       notes: data.notes,
       createdAt: customer?.createdAt || Date.now(),
     });
+    onSaved?.(id);
     onClose();
   }
 

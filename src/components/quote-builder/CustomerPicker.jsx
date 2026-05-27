@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Plus, X, UserX } from 'lucide-react';
 import Modal from '../Modal.jsx';
+import CustomerModal from '../CustomerModal.jsx';
 import { db, newId } from '../../db/database.js';
 
 /**
@@ -9,20 +10,35 @@ import { db, newId } from '../../db/database.js';
  *   - Type to filter.
  *   - Pick a result with click or Enter.
  *   - When the query matches no exact result, an inline "Crear: 'XYZ'" row
- *     appears at the top — clicking it creates a customer with that name
- *     (only the name; richer details get filled in later from the Customers
- *     page) and selects them in one action.
+ *     appears at the top. Clicking it (or Enter) mints a name-only customer
+ *     and assigns them in one tap; the "Con detalles" button opens the full
+ *     customer form (prefilled with the typed name) so phone / email /
+ *     company can be captured without leaving the quote — on save the new
+ *     customer is auto-assigned.
  *   - "Quitar cliente" at the bottom unassigns.
  */
 export default function CustomerPicker({ open, onClose, onSelect, customers, profileId, currentId }) {
   const [q, setQ] = useState('');
   const inputRef = useRef(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  // When set, the full customer form is open on top of the picker, prefilled
+  // with this draft ({ name, key }). Saving it assigns the new customer. The
+  // bumping `key` forces a fresh CustomerModal mount on each open — without
+  // it, a second "Con detalles" (another id-less draft) would reuse the
+  // first draft's stale field values.
+  const [detailDraft, setDetailDraft] = useState(null);
+  const detailKeyRef = useRef(0);
+
+  function openDetail() {
+    detailKeyRef.current += 1;
+    setDetailDraft({ name: q.trim(), key: detailKeyRef.current });
+  }
 
   useEffect(() => {
     if (!open) return;
     setQ('');
     setActiveIdx(0);
+    setDetailDraft(null);
     // Autofocus after the modal mounts.
     setTimeout(() => inputRef.current?.focus(), 30);
   }, [open]);
@@ -93,6 +109,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
   }
 
   return (
+   <>
     <Modal open={open} onClose={onClose} title="Cliente" size="md" footer={
       currentId ? (
         <button
@@ -128,26 +145,37 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
 
       <div className="max-h-[60vh] overflow-y-auto -mx-1">
         {showCreate && (
-          <button
-            type="button"
+          <div
             onMouseEnter={() => setActiveIdx(0)}
-            onClick={createAndSelect}
-            className={`w-full text-left rounded-md px-3 py-2.5 mx-1 mb-1 flex items-center gap-2.5 transition-colors ${
-              activeIdx === 0 ? 'bg-brand-50 text-brand-900' : 'hover:bg-ink-50'
+            className={`rounded-md mx-1 mb-1 flex items-center gap-1 transition-colors ${
+              activeIdx === 0 ? 'bg-brand-50' : 'hover:bg-ink-50'
             }`}
           >
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-100 text-brand-700">
-              <Plus size={14} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <div className="text-sm">
-                Crear cliente: <b>&ldquo;{q.trim()}&rdquo;</b>
-              </div>
-              <div className="text-[11px] text-ink-500">
-                Podrás añadir empresa, correo y dirección desde Clientes.
-              </div>
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={createAndSelect}
+              className="min-w-0 flex-1 text-left px-3 py-2.5 flex items-center gap-2.5"
+            >
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex-shrink-0">
+                <Plus size={14} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <div className="text-sm text-brand-900">
+                  Crear cliente: <b>&ldquo;{q.trim()}&rdquo;</b>
+                </div>
+                <div className="text-[11px] text-ink-500">
+                  Se asigna al instante. Usa «Con detalles» para teléfono, correo y empresa.
+                </div>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={openDetail}
+              className="flex-shrink-0 mr-1.5 px-2.5 py-1.5 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 transition-colors"
+            >
+              Con detalles
+            </button>
+          </div>
         )}
 
         {filtered.length === 0 && !showCreate ? (
@@ -185,6 +213,18 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
         )}
       </div>
     </Modal>
+
+    {/* Full customer form, stacked over the picker. Prefilled with the
+        typed name; saving creates the customer and assigns it to the quote
+        in one go — no detour through the Customers page. */}
+    <CustomerModal
+      key={detailDraft?.key ?? 'closed'}
+      customer={detailDraft ? { name: detailDraft.name } : null}
+      profileId={profileId}
+      onClose={() => setDetailDraft(null)}
+      onSaved={(id) => { onSelect(id); onClose(); }}
+    />
+   </>
   );
 }
 

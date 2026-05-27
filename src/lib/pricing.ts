@@ -232,3 +232,178 @@ export function quoteSavings(
   return total > 0 ? total : 0;
 }
 
+/* ------------------------------ conjuntos (sets) ------------------------------ */
+
+/**
+ * "Total del conjunto" — the rolled-up total of a Conjunto (set).
+ *
+ * A Conjunto is a TAKE-ALL group: distinct standalone products sold
+ * together (see QuoteLine.setGroup). Every member is priced normally,
+ * so the set's total is the simple SUM of each member's own
+ * `lineTotal` (margin + discount + qty already baked in per member).
+ * There is NO separate set price and NO set-level discount — this is
+ * sum-only.
+ *
+ * @param {Array}  lines     all quote lines (the full list — this filters)
+ * @param {string} setGroup  the set's group id
+ * @returns {number} Σ lineTotal(member) over lines with that setGroup.
+ *                   Returns 0 for a falsy setGroup or no members.
+ */
+export function setSubtotal(
+  lines: readonly QuoteLine[] | null | undefined,
+  setGroup: string | null | undefined,
+): number {
+  if (!setGroup) return 0;
+  return (lines || [])
+    .filter((l) => l?.setGroup === setGroup)
+    .reduce((sum, l) => sum + lineTotal(l), 0);
+}
+
+/**
+ * Per-line "Conjunto N de M" position info, keyed by line id.
+ *
+ * Mirrors the alternative-group `groupInfo` computed in
+ * LineItemList / ClientPreview so set members can show a quiet
+ * "Conjunto N de M" eyebrow. Position is the line's 1-based order
+ * within its set as it appears in `lines`; total is the set size.
+ * Lines with no `setGroup` are absent from the map.
+ *
+ * The preview / PDF renderers can call this once per render and look
+ * up each line by id — the same shape (`{ index, total }`) the
+ * alternative caption already consumes.
+ *
+ * @param {Array} lines  all quote lines
+ * @returns {Map<string, { index: number, total: number }>}
+ */
+export function setGroupInfo(
+  lines: readonly QuoteLine[] | null | undefined,
+): Map<string, { index: number; total: number }> {
+  const map = new Map<string, { index: number; total: number }>();
+  const counts = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l?.setGroup;
+    if (!g) continue;
+    counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l?.setGroup;
+    if (!g) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(l.id, { index: idx, total: counts.get(g) as number });
+  }
+  return map;
+}
+
+/* --------------------------- alternativas (alternatives) --------------------------- */
+
+/**
+ * The SELECTED member of an alternative group — the one line that counts
+ * toward the quote total and whose price the group's footer shows.
+ *
+ * Within a well-formed group exactly one member carries
+ * `isSelectedAlternative`; this returns that line. As a defensive
+ * fallback (a group momentarily left with 0 selected after an edit) it
+ * returns the FIRST member of the group as it appears in `lines`, so a
+ * footer / total never reads as empty. Returns null for a falsy group
+ * id or when the group has no members.
+ *
+ * @param lines    all quote lines (the full list — this filters)
+ * @param groupId  the alternative group's id
+ */
+export function selectedAlternative(
+  lines: readonly QuoteLine[] | null | undefined,
+  groupId: string | null | undefined,
+): QuoteLine | null {
+  if (!groupId) return null;
+  const members = (lines || []).filter((l) => l?.alternativeGroup === groupId);
+  if (members.length === 0) return null;
+  return members.find((l) => l?.isSelectedAlternative) || members[0];
+}
+
+/**
+ * "Total" of an alternative group — the SELECTED member's own line total.
+ *
+ * Unlike a Conjunto (sum of ALL members), an alternative group bills only
+ * the one option the customer picks, so its footer/total equals
+ * `lineTotal(selectedAlternative(...))`. Returns 0 for a falsy group id or
+ * an empty group.
+ *
+ * @param lines    all quote lines (the full list — this filters)
+ * @param groupId  the alternative group's id
+ */
+export function alternativeSubtotal(
+  lines: readonly QuoteLine[] | null | undefined,
+  groupId: string | null | undefined,
+): number {
+  const sel = selectedAlternative(lines, groupId);
+  return sel ? lineTotal(sel) : 0;
+}
+
+/* ------------------------------ group runs (sets + alternatives) ------------------------------ */
+
+/**
+ * A contiguous "run" of adjacent lines sharing the same grouping key —
+ * either a Conjunto (`setGroup`) or an Alternativa (`alternativeGroup`).
+ *
+ *   type    'set' | 'alternative' for grouped runs; 'single' for a lone
+ *           ungrouped line (or a section) that isn't part of any run.
+ *   groupId the shared setGroup / alternativeGroup string ('single' → null).
+ *   lineIds the member line ids, in list order.
+ *   start   index in `lines` of the run's first member.
+ */
+export interface GroupRun {
+  type: 'set' | 'alternative' | 'single';
+  groupId: string | null;
+  lineIds: string[];
+  start: number;
+}
+
+/**
+ * Partition an ordered line list into contiguous group RUNS — the single
+ * source of truth for "where does each group card start and end" shared
+ * by the editor (LineItemList) and the customer surfaces (ClientPreview /
+ * PDF). A run is a maximal stretch of ADJACENT lines carrying the same
+ * `setGroup` (a set run) or the same `alternativeGroup` (an alternative
+ * run); every other line — ungrouped items AND section dividers — is its
+ * own one-element 'single' run.
+ *
+ * Because runs are detected by adjacency, a reorder that splits a group
+ * simply yields two separate runs of the same groupId — the renderer
+ * reflects the new contiguous reality without any group-level bookkeeping.
+ * A line is never simultaneously in a set and an alternative (the type's
+ * exclusivity rule + a DB CHECK guarantee it), so the two keys never
+ * compete for the same run.
+ *
+ * @param lines  ordered quote lines
+ * @returns the runs, in list order; concatenating their lineIds
+ *          reproduces the input order.
+ */
+export function groupRuns(
+  lines: readonly QuoteLine[] | null | undefined,
+): GroupRun[] {
+  const runs: GroupRun[] = [];
+  const arr = lines || [];
+  for (let i = 0; i < arr.length; i++) {
+    const l = arr[i];
+    const setG = l?.setGroup || null;
+    const altG = l?.alternativeGroup || null;
+    const key = setG || altG;
+    const prev = runs[runs.length - 1];
+    if (key && prev && prev.groupId === key && (
+      (setG && prev.type === 'set') || (altG && prev.type === 'alternative')
+    )) {
+      prev.lineIds.push(l.id);
+      continue;
+    }
+    runs.push({
+      type: setG ? 'set' : altG ? 'alternative' : 'single',
+      groupId: key,
+      lineIds: [l.id],
+      start: i,
+    });
+  }
+  return runs;
+}
+

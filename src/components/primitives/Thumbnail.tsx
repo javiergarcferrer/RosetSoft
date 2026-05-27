@@ -15,6 +15,8 @@ export interface ThumbnailProps {
    * never reflows when an image is added or removed.
    */
   sizeClass?: string;
+  /** Pop an enlarged floating preview when the filled thumbnail is hovered. */
+  hoverPreview?: boolean;
 }
 
 /**
@@ -36,7 +38,7 @@ export interface ThumbnailProps {
  *   - paste image   -> upload when the thumbnail has focus
  */
 export default function Thumbnail({
-  imageId, onChange, kind, ownerId,
+  imageId, onChange, kind, ownerId, hoverPreview = false,
   // Tailwind size class. Sized for visibility: 80 px on phones (the
   // earlier 56 px tile got lost in the line-item card's busy
   // composition — the empty-state dashed border + tiny camera icon
@@ -105,7 +107,7 @@ export default function Thumbnail({
         }`}
       >
         {imageId ? (
-          <ImageView id={imageId} className="w-full h-full object-contain" />
+          <ImageView id={imageId} hoverPreview={hoverPreview} className="w-full h-full object-contain" />
         ) : (
           // Stack the camera icon over a small "Foto" caption so the
           // empty state reads as an explicit slot, not as a decorative
@@ -116,7 +118,7 @@ export default function Thumbnail({
               ? <Loader2 size={22} className="animate-spin" />
               : <Camera size={22} strokeWidth={1.5} />}
             {!busy && (
-              <span className="text-[10px] font-medium uppercase tracking-wide select-none">
+              <span className="eyebrow-xs font-medium tracking-wide select-none">
                 Foto
               </span>
             )}

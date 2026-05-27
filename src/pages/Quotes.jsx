@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
-import { Plus, Search, FileText, Trash2 } from 'lucide-react';
+import { Plus, FileText, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
+import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -12,6 +14,25 @@ import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { currentQuoteStage } from '../lib/quoteStages.js';
+import { isTradeDiscount } from '../lib/commissions.js';
+
+/**
+ * Small amber flag for quotes settled as a decorator trade discount —
+ * accounting bills the decorator (not the client), no commission. The
+ * common 'commission' modality (and quotes with no professional) get no
+ * marker, so the flag draws the eye only to the exceptional path.
+ */
+function TradeFlag({ quote }) {
+  if (!quote.professionalId || !isTradeDiscount(quote)) return null;
+  return (
+    <span
+      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"
+      title="Trade discount: facturar al decorador (sin comisión)"
+    >
+      Trade
+    </span>
+  );
+}
 
 const STATUS_PILL_CLASS = {
   draft: 'status-pill-draft',
@@ -30,6 +51,13 @@ const STATUS_LABELS = {
   declined: 'Rechazada',
   archived: 'Archivada',
 };
+
+// Tab keys the list understands. A `?status=` deep-link (e.g. from the
+// dashboard's "Ver aceptadas") is honored only if it names one of these;
+// anything else falls back to "Todas".
+const VALID_TABS = new Set([
+  'all', 'draft', 'sent', 'accepted', 'deposito_recibido', 'declined', 'archived',
+]);
 
 // "#1001" or "borrador" — the internal-name field was removed; the
 // number plus the customer chip in each row already identify the quote.
@@ -60,7 +88,19 @@ function useQuoteOps(qu) {
 }
 
 export default function Quotes() {
-  const { profileId, profiles, settings } = useApp();
+  const { profileId, profiles, settings, currentProfile } = useApp();
+  // Mías / Equipo scope — defaults to the signed-in seller's own quotes
+  // (same toggle the home uses). Falls back to team when the current user
+  // isn't known yet.
+  const meId = currentProfile?.id || null;
+  // Honor a `?scope=` deep-link (the dashboard carries its Mías/Equipo
+  // state across when you tap a status card) — else default to "mine".
+  const [searchParams] = useSearchParams();
+  const [scope, setScope] = useState(() => {
+    const s = searchParams.get('scope');
+    return s === SCOPE_TEAM || s === SCOPE_MINE ? s : SCOPE_MINE;
+  });
+  const effectiveScope = meId ? scope : SCOPE_TEAM;
   // Quotes is the main list. Gate the "Sin cotizaciones" empty state on
   // `loaded` so we don't show a misleading "no data" message during the
   // first fetch — that flicker is the bug we're killing.
@@ -84,8 +124,18 @@ export default function Quotes() {
   // recent quotes and an order of magnitude cheaper for the full list page.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
+  // Search header query state. The status dimension is the primary tab
+  // strip ('all' = Todas); secondary filters (currently just vendedor)
+  // live in `activeFilters` as {key: value}; sort defaults to most-recent.
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
+  // Initialize the status tab from `?status=` so deep-links (dashboard
+  // "Ver enviadas / aceptadas / borradores") land pre-filtered.
+  const [tab, setTab] = useState(() => {
+    const s = searchParams.get('status');
+    return s && VALID_TABS.has(s) ? s : 'all';
+  });
+  const [filters, setFilters] = useState({}); // { creator: <profileId> }
+  const [sort, setSort] = useState({ key: 'recent', dir: 'desc' });
 
   const customerById = useMemo(() => {
     const m = new Map();
@@ -131,10 +181,76 @@ export default function Quotes() {
     return m;
   }, [allLines, quotes]);
 
+  // Apply the Mías / Equipo scope FIRST — every downstream view (tab
+  // counts, the vendedor filter options, the result list) reads from this
+  // so the whole page reflects the toggle, not just the rows.
+  const scopedQuotes = useMemo(
+    () => (effectiveScope === SCOPE_TEAM
+      ? quotes
+      : quotes.filter((qu) => qu.createdByUserId === meId)),
+    [quotes, effectiveScope, meId],
+  );
+
+  // Tabs for the primary status dimension. Counts are computed off the
+  // scoped list so each tab shows "how many would I see if I tapped this"
+  // within the current scope, independent of the search needle.
+  const tabs = useMemo(() => {
+    // Count by the derived lifecycle stage (currentQuoteStage), so a quote
+    // with a deposit shows under "Depósito recibido" — same dimension the
+    // status pill and the order page use.
+    const counts = { draft: 0, sent: 0, accepted: 0, deposito_recibido: 0, declined: 0, archived: 0 };
+    for (const qu of scopedQuotes) {
+      const stage = currentQuoteStage(qu);
+      if (stage in counts) counts[stage] += 1;
+    }
+    return [
+      { key: 'all', label: 'Todas', count: scopedQuotes.length },
+      { key: 'draft', label: 'Borrador', count: counts.draft },
+      { key: 'sent', label: 'Enviada', count: counts.sent },
+      { key: 'accepted', label: 'Aceptada', count: counts.accepted },
+      { key: 'deposito_recibido', label: 'Depósito recibido', count: counts.deposito_recibido },
+      { key: 'declined', label: 'Rechazada', count: counts.declined },
+      { key: 'archived', label: 'Archivada', count: counts.archived },
+    ];
+  }, [scopedQuotes]);
+
+  // Secondary filter: vendedor (the quote's creator). Options are the
+  // distinct creators actually present on this team's quotes, so the
+  // dropdown never lists someone who's authored nothing.
+  const creatorFilter = useMemo(() => {
+    const seen = new Map();
+    for (const qu of quotes) {
+      const id = qu.createdByUserId;
+      if (!id || seen.has(id)) continue;
+      const label = creatorDisplay(profileById.get(id));
+      if (label) seen.set(id, label);
+    }
+    const options = [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return {
+      key: 'creator',
+      label: 'Vendedor',
+      type: 'select',
+      placeholder: 'Todos',
+      options,
+    };
+  }, [quotes, profileById]);
+
+  const sortOptions = [
+    { key: 'recent', label: 'Más reciente' },
+    { key: 'amount', label: 'Monto' },
+    { key: 'customer', label: 'Cliente' },
+  ];
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return quotes
-      .filter((q) => (status ? currentQuoteStage(q) === status : true))
+    // The vendedor filter only applies in team scope — under "Mías" you're
+    // already scoped to yourself, so it's hidden and ignored.
+    const creator = effectiveScope === SCOPE_TEAM ? filters.creator : null;
+    const rows = scopedQuotes
+      .filter((qu) => (tab === 'all' ? true : currentQuoteStage(qu) === tab))
+      .filter((qu) => (creator ? qu.createdByUserId === creator : true))
       .filter((qu) => {
         if (!needle) return true;
         const cust = customerById.get(qu.customerId);
@@ -144,7 +260,26 @@ export default function Quotes() {
           (cust?.company || '').toLowerCase().includes(needle)
         );
       });
-  }, [quotes, q, status, customerById]);
+
+    // Sort. 'recent' rides updatedAt (the query already comes pre-sorted
+    // most-recent-first, but re-sorting here keeps the direction toggle
+    // honest); 'amount' uses the derived grand total; 'customer' the
+    // customer display name. Direction multiplier flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    const sorted = [...rows].sort((a, b) => {
+      if (sort.key === 'amount') {
+        return ((totalByQuoteId.get(a.id) || 0) - (totalByQuoteId.get(b.id) || 0)) * mul;
+      }
+      if (sort.key === 'customer') {
+        const an = (customerById.get(a.customerId)?.name || '').toLowerCase();
+        const bn = (customerById.get(b.customerId)?.name || '').toLowerCase();
+        return an.localeCompare(bn) * mul;
+      }
+      // recent
+      return ((a.updatedAt || 0) - (b.updatedAt || 0)) * mul;
+    });
+    return sorted;
+  }, [scopedQuotes, effectiveScope, q, tab, filters, sort, customerById, totalByQuoteId]);
 
   if (!loaded) {
     return (
@@ -172,37 +307,31 @@ export default function Quotes() {
     <>
       <PageHeader
         title="Cotizaciones"
-        subtitle={`${quotes.length} ${quotes.length === 1 ? 'cotización' : 'cotizaciones'}`}
-        actions={<Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>}
+        subtitle={`${scopedQuotes.length} ${scopedQuotes.length === 1 ? 'cotización' : 'cotizaciones'}`}
+        actions={
+          <div className="flex items-center gap-2">
+            {meId && <ScopeToggle scope={scope} onChange={setScope} />}
+            <Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>
+          </div>
+        }
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-9"
-            type="search"
-            inputMode="search"
-            enterKeyHint="search"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por número o cliente…"
-          />
-        </div>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="input max-w-[160px]">
-          <option value="">Todos los estados</option>
-          <option value="draft">Borrador</option>
-          <option value="sent">Enviada</option>
-          <option value="accepted">Aceptada</option>
-          <option value="deposito_recibido">Depósito recibido</option>
-          <option value="declined">Rechazada</option>
-          <option value="archived">Archivada</option>
-        </select>
-      </div>
+      <ListSearchHeader
+        searchValue={q}
+        onSearchChange={setQ}
+        searchPlaceholder="Buscar por número o cliente…"
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        filters={effectiveScope === SCOPE_TEAM ? [creatorFilter] : []}
+        activeFilters={filters}
+        onFiltersChange={setFilters}
+        sortOptions={sortOptions}
+        sort={sort}
+        onSortChange={setSort}
+        resultCount={filtered.length}
+        resultNoun={['cotización', 'cotizaciones']}
+      />
 
       {/* Mobile: cards */}
       <div className="md:hidden space-y-2">
@@ -299,6 +428,7 @@ function QuoteCard({ qu, customer, creator, order, total, rates }) {
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
         <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+        <TradeFlag quote={qu} />
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
@@ -321,7 +451,12 @@ function QuoteRow({ qu, customer, creator, order, total, rates }) {
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
       </td>
-      <td><span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span></td>
+      <td>
+        <div className="flex items-center gap-1.5">
+          <span className={`status-pill ${STATUS_PILL_CLASS[currentQuoteStage(qu)] || 'status-pill-draft'}`}>{STATUS_LABELS[currentQuoteStage(qu)] || 'Borrador'}</span>
+          <TradeFlag quote={qu} />
+        </div>
+      </td>
       <td><OrderIndicator order={order} /></td>
       <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>

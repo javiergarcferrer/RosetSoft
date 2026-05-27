@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Hash, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { isGroupOptional } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
@@ -16,7 +17,6 @@ import { formatMoney } from '../lib/format.js';
 // that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
-import { shouldUseWebShare } from '../pdf/shareTarget.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -26,6 +26,12 @@ import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
+import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
+
+// How many edit steps the workspace remembers for undo/redo. Each step is
+// a whole-quote snapshot (the quote row + all its lines); 50 covers a long
+// editing session without unbounded memory growth.
+const HISTORY_LIMIT = 50;
 
 /**
  * The Quote Workspace — the redesigned quote builder.
@@ -191,6 +197,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     [quoteId],
     [],
   );
+  // Per-group attributes (is_optional) for Conjuntos / Alternativas, keyed by
+  // the same id the lines carry in setGroup / alternativeGroup.
+  const groups = useLiveQuery(
+    () => db.quoteGroups.where('quoteId').equals(quoteId).toArray(),
+    [quoteId],
+    [],
+  );
   const customers = useLiveQuery(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId],
@@ -254,6 +267,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+  // On mobile the only export trigger is the bottom sticky bar, but the
+  // error banner renders at the top of the page — so a failed export would
+  // stop the spinner with the explanation scrolled far out of sight,
+  // recreating the "I tapped it and nothing happened" silence the banner
+  // exists to prevent. Scroll the banner into view whenever it appears.
+  const exportErrorRef = useRef(null);
+  useEffect(() => {
+    if (exportError) {
+      exportErrorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+  }, [exportError]);
   // Counter of in-flight writes so concurrent edits don't flicker the badge.
   const inFlight = useRef(0);
 
@@ -272,6 +296,45 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // -------- undo toast --------
   const { show: showUndo, element: undoToast } = useUndoToast();
 
+  /* ---------------------------- undo / redo --------------------------
+   * The builder writes every edit straight to the DB, so undo is a stack
+   * of whole-quote snapshots ({ quote, lines }). We push the PRE-edit
+   * snapshot before each user action (see `hx` below), and undo restores
+   * the previous one. Stacks live in refs (no stale-closure surprises);
+   * a version counter forces the toolbar buttons to re-evaluate
+   * canUndo/canRedo. Reset whenever we switch quotes.
+   *
+   * These hooks sit above the `!quote` guard so the hook count is stable;
+   * the imperative helpers (snapshotNow/applySnapshot/undo/redo/hx) are
+   * hoisted function declarations defined below the guard. */
+  const undoRef = useRef([]);
+  const redoRef = useRef([]);
+  const [, bumpHistory] = useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    undoRef.current = [];
+    redoRef.current = [];
+    bumpHistory();
+  }, [quoteId]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'z' && k !== 'y') return;
+      // Let the browser's native text undo win while the caret is in a
+      // field — otherwise Cmd+Z mid-typing would revert the whole quote.
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      e.preventDefault();
+      if (k === 'y' || e.shiftKey) redo();
+      else undo();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
    *   ⌘K       — open the command palette (the universal launcher)
@@ -288,10 +351,78 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
    * keypress, by which point `quote` is populated.
    */
   useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
-  useKeyboardShortcut('mod+enter', () => addLine(), { ignoreInInput: false });
+  useKeyboardShortcut('mod+enter', () => { pushUndo(snapshotNow()); addLine(); }, { ignoreInInput: false });
   useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
+
+  /* ---------------------------- undo / redo helpers ------------------ */
+
+  // Deep copy of the current quote + lines — the unit of undo. structuredClone
+  // is safe here: rows are plain JSON-ish objects (numbers, strings, nested
+  // `components` arrays), no functions or DOM nodes.
+  function snapshotNow() {
+    return { quote: structuredClone(quote), lines: structuredClone(lines) };
+  }
+
+  function pushUndo(snap) {
+    undoRef.current = boundedPush(undoRef.current, snap, HISTORY_LIMIT);
+    redoRef.current = [];   // a fresh edit invalidates the redo branch
+    bumpHistory();
+  }
+
+  // Write a snapshot back to the DB, making the quote + its lines match it
+  // exactly. Preserves the live sequence number the same way updateQuote
+  // does, so an undo can never clobber a freshly assigned `number`.
+  async function applySnapshot(snap) {
+    markSaving();
+    try {
+      const persisted = await db.quotes.get(quoteId);
+      await db.quotes.put({
+        ...snap.quote,
+        number: persisted?.number ?? snap.quote.number,
+        updatedAt: Date.now(),
+      });
+      const current = await db.quoteLines.where('quoteId').equals(quoteId).toArray();
+      const { toDelete, toPut } = diffLinesForRestore(current, snap.lines);
+      for (const id of toDelete) await db.quoteLines.delete(id);
+      for (const l of toPut) await db.quoteLines.put(l);
+    } finally {
+      markSaved();
+    }
+  }
+
+  async function undo() {
+    if (!undoRef.current.length) return;
+    const prev = undoRef.current[undoRef.current.length - 1];
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = boundedPush(redoRef.current, snapshotNow(), HISTORY_LIMIT);
+    bumpHistory();
+    await applySnapshot(prev);
+  }
+
+  async function redo() {
+    if (!redoRef.current.length) return;
+    const next = redoRef.current[redoRef.current.length - 1];
+    redoRef.current = redoRef.current.slice(0, -1);
+    undoRef.current = boundedPush(undoRef.current, snapshotNow(), HISTORY_LIMIT);
+    bumpHistory();
+    await applySnapshot(next);
+  }
+
+  // Wrap a mutation so it records a pre-edit snapshot first. One snapshot
+  // per user gesture: handlers that delegate (e.g. ungroupLine →
+  // separateFromSet) call the RAW inner function, never another wrapped
+  // one, so a single action is a single undo step.
+  function hx(fn) {
+    return (...args) => {
+      pushUndo(snapshotNow());
+      return fn(...args);
+    };
+  }
+
+  const canUndo = undoRef.current.length > 0;
+  const canRedo = redoRef.current.length > 0;
 
   /* ---------------------------- mutations ---------------------------- */
 
@@ -530,6 +661,148 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
   }
 
+  /**
+   * Remove `line` from its Conjunto, then HEAL singletons: a Conjunto
+   * with exactly one remaining member is meaningless (a "set of 1"), so
+   * the lone survivor's `setGroup` is cleared too. Exactly mirrors the
+   * alternative singleton-healing in removeLine.
+   */
+  async function separateFromSet(line) {
+    if (!line.setGroup) return;
+    markSaving();
+    try {
+      const groupId = line.setGroup;
+      // Leaving the conjunto: it becomes a standalone, non-optional line
+      // (its optional state belonged to the group, not the line).
+      await db.quoteLines.update(line.id, { setGroup: null, isOptional: false });
+      const survivors = lines.filter((l) => l.setGroup === groupId && l.id !== line.id);
+      if (survivors.length === 1) {
+        await db.quoteLines.update(survivors[0].id, { setGroup: null, isOptional: false });
+        await db.quoteGroups.delete(groupId);
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Toggle a whole Conjunto as optional, persisting the flag on the
+   * quote_groups row (source of truth) and materializing is_optional onto the
+   * member lines so every total surface (isPricedLine) stays correct without
+   * per-surface changes. Only Conjuntos can be optional — an Alternativa
+   * always uses at least one option, so it always counts toward the total.
+   */
+  async function toggleGroupOptional(groupId) {
+    if (!groupId) return;
+    markSaving();
+    try {
+      await ensurePersisted();
+      const current = groups.find((g) => g.id === groupId);
+      const nextOptional = !current?.isOptional;
+      await db.quoteGroups.put({
+        id: groupId,
+        quoteId,
+        type: 'set',
+        isOptional: nextOptional,
+        createdAt: current?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+      });
+      for (const m of lines.filter((l) => l.setGroup === groupId)) {
+        if (!!m.isOptional !== nextOptional) {
+          await db.quoteLines.update(m.id, { isOptional: nextOptional });
+        }
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Join `line` into the Conjunto (take-all set) of the item line DIRECTLY
+   * ABOVE it — the per-line "Unir al conjunto de arriba" action.
+   *
+   *   - If the line above already has a `setGroup`, adopt it; otherwise
+   *     mint a new id and stamp it on BOTH lines (a Conjunto is born with
+   *     its two members).
+   *   - A set is "take ALL", mutually exclusive with optional / alternative,
+   *     so those flags are stripped off any line entering it (DB CHECK +
+   *     type rule).
+   *   - Members are already contiguous because we only ever join the line
+   *     immediately above; no reorder needed.
+   *
+   * No-op when there's no line above or the line above is a section — the
+   * row hides the action via `canJoinAbove`, but we guard here too.
+   */
+  async function joinSet(line) {
+    markSaving();
+    try {
+      const idx = lines.findIndex((l) => l.id === line.id);
+      if (idx <= 0) return;
+      const above = lines[idx - 1];
+      if (!above || above.kind === LINE_KIND_SECTION) return;
+      const groupId = above.setGroup || newId();
+      // A line joining an OPTIONAL conjunto inherits its optional state
+      // (materialized so isPricedLine keeps the total correct). A brand-new
+      // set is not optional.
+      const inheritOptional = isGroupOptional(groups, above.setGroup);
+      if (!above.setGroup) {
+        await db.quoteLines.update(above.id, {
+          setGroup: groupId,
+          isOptional: false,
+          alternativeGroup: null,
+          isSelectedAlternative: false,
+        });
+      }
+      await db.quoteLines.update(line.id, {
+        setGroup: groupId,
+        isOptional: inheritOptional,
+        alternativeGroup: null,
+        isSelectedAlternative: false,
+      });
+    } finally {
+      markSaved();
+    }
+  }
+
+  /**
+   * Remove `line` from whatever group it's in — a Conjunto OR an
+   * Alternativa — and heal singletons. The multi-select bar handles
+   * CREATION; this is the single per-line "leave the group" handler the
+   * row's controls call. For a set it delegates to separateFromSet (set
+   * singleton-healing). For an alternative it clears the line's
+   * alternativeGroup/selection flag and, if exactly one sibling survives,
+   * promotes that survivor to standalone (mirrors removeLine's healing) —
+   * and if the removed line was the selected one, promotes the first
+   * survivor of a still-valid group so exactly one stays priced.
+   */
+  async function ungroupLine(line) {
+    if (line.setGroup) {
+      await separateFromSet(line);
+      return;
+    }
+    if (!line.alternativeGroup) return;
+    markSaving();
+    try {
+      await db.quoteLines.update(line.id, {
+        alternativeGroup: null,
+        isSelectedAlternative: false,
+      });
+      const survivors = lines.filter(
+        (l) => l.alternativeGroup === line.alternativeGroup && l.id !== line.id,
+      );
+      if (survivors.length === 1) {
+        await db.quoteLines.update(survivors[0].id, {
+          alternativeGroup: null,
+          isSelectedAlternative: false,
+        });
+      } else if (survivors.length > 1 && line.isSelectedAlternative) {
+        await db.quoteLines.update(survivors[0].id, { isSelectedAlternative: true });
+      }
+    } finally {
+      markSaved();
+    }
+  }
+
   async function removeLine(line) {
     markSaving();
     try {
@@ -556,10 +829,25 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             isSelectedAlternative: false,
           });
         } else if (siblings.length > 1 && line.isSelectedAlternative) {
-          // Removed the selected member of a still-valid group — promote
-          // the first survivor so exactly one line stays priced.
+          // Removed the selected member of a still-valid group — promote the
+          // first survivor so exactly one line stays priced.
           healedSibling = siblings[0];
           await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
+        }
+      }
+      // Same singleton-healing for Conjuntos (sets): a set left with one
+      // member is meaningless, so clear the lone survivor's setGroup.
+      // Captured separately from the alternative sibling so undo can
+      // restore each independently (a line is never both at once).
+      let healedSetSibling = null;
+      if (line.setGroup) {
+        const setSurvivors = lines.filter(
+          (l) => l.setGroup === line.setGroup && l.id !== line.id,
+        );
+        if (setSurvivors.length === 1) {
+          healedSetSibling = setSurvivors[0];
+          await db.quoteLines.update(healedSetSibling.id, { setGroup: null, isOptional: false });
+          await db.quoteGroups.delete(line.setGroup);
         }
       }
       const label = line.kind === LINE_KIND_SECTION
@@ -575,6 +863,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           await db.quoteLines.update(healedSibling.id, {
             alternativeGroup: healedSibling.alternativeGroup,
             isSelectedAlternative: !!healedSibling.isSelectedAlternative,
+          });
+        }
+        if (healedSetSibling) {
+          await db.quoteLines.update(healedSetSibling.id, {
+            isOptional: !!healedSetSibling.isOptional,
+            setGroup: healedSetSibling.setGroup,
           });
         }
       });
@@ -603,32 +897,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   );
 
   async function exportPdf() {
-    if (exporting) return;          // de-bounce double-taps
+    if (exporting) return;   // de-bounce double-taps
     setExportError(null);
     setExporting(true);
-    // Phones / tablets / installed PWAs hand the actual PDF File to the
-    // native share sheet (see downloadBlob). Sharing the File posts a real
-    // document to WhatsApp named "<Client> - Cotizacion <N>.pdf"; the old
-    // path opened a blob: preview tab, and sharing *that tab* to WhatsApp
-    // posted a useless "blob:https://…" text message instead.
-    const shareFile = shouldUseWebShare();
-    // Desktop keeps the review-first flow: the dealer asked to *look* at
-    // the PDF before sending. Open a viewer tab synchronously (inside the
-    // click gesture, so the browser doesn't block it as a popup) and point
-    // it at the finished PDF once it's ready. The browser's own PDF viewer
-    // then offers print / download after they've reviewed.
-    const viewer = !shareFile && typeof window !== 'undefined' ? window.open('', '_blank') : null;
-    if (viewer) {
-      try {
-        viewer.document.write(
-          '<!doctype html><meta charset="utf-8"><title>Generando cotización…</title>' +
-          '<body style="margin:0;font:15px system-ui,sans-serif;color:#555;' +
-          'display:flex;height:100vh;align-items:center;justify-content:center">' +
-          'Generando la cotización…</body>',
-        );
-        viewer.document.close();
-      } catch { /* about:blank write can race on some engines; harmless */ }
-    }
     try {
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
@@ -648,30 +919,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // matching the on-screen ClientPreview, where section headers
       // ("MOBILIARIO DE SALA") are part of the layout the customer
       // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller });
+      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups });
       if (!blob || !blob.size) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }
       const filename = `${quoteFileName(quote, customer)}.pdf`;
-      if (shareFile) {
-        // Touch / PWA: hand the File to the share sheet directly.
-        // downloadBlob owns the blob-URL lifecycle on this path.
-        await downloadBlob(blob, filename);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      if (viewer && !viewer.closed) {
-        // Show the PDF in the viewer tab so the dealer can review it.
-        viewer.location.href = url;
-      } else {
-        // Popup blocked / unavailable — fall back to the native
-        // share/download so the dealer still gets the file.
-        await downloadBlob(blob, filename);
-      }
-      // Hold the blob long enough for the viewer to finish loading it.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      // Deliver the file straight away. downloadBlob picks Web Share on the
+      // surfaces that need it (iOS PWA / touch) and an <a download> anchor
+      // everywhere else, so desktop just gets the file in the downloads tray.
+      await downloadBlob(blob, filename);
     } catch (err) {
-      if (viewer && !viewer.closed) { try { viewer.close(); } catch { /* noop */ } }
       console.error('[QuoteBuilder] exportPdf failed:', err);
       setExportError(err?.message || 'No se pudo generar el PDF.');
     } finally {
@@ -696,7 +953,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onViewChange={setView}
         onOpenPalette={() => setPaletteOpen(true)}
         onExportPdf={exportPdf}
-        onUpdateQuote={updateQuote}
+        onUpdateQuote={hx(updateQuote)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         savedAt={savedAt}
         saving={saving}
         exporting={exporting}
@@ -708,7 +969,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           the dealer sees a dismissible banner with the underlying
           message instead of just "I tapped it and nothing happened". */}
       {exportError && (
-        <div role="alert" className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
+        <div ref={exportErrorRef} role="alert" className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="font-medium">No se pudo exportar el PDF</div>
@@ -733,6 +994,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           quote={quote}
           settings={settings}
           lines={lines}
+          quoteGroups={groups}
           totals={totals}
           customer={customer}
           professional={professional}
@@ -749,25 +1011,30 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           <div className="space-y-5 min-w-0">
             <LineItemsCard
               lines={lines}
+              groups={groups}
               quote={quote}
               focusLineId={focusLineId}
-              onChangeLine={updateLine}
-              onRemoveLine={removeLine}
-              onDuplicateLine={duplicateLine}
-              onToggleOptional={toggleOptional}
-              onAddAlternative={addAlternative}
-              onSelectAlternative={selectAlternative}
-              onReorder={reorderLines}
-              onAddItem={() => addLine()}
-              onAddSection={addSection}
+              onToggleGroupOptional={toggleGroupOptional}
+              onChangeLine={hx(updateLine)}
+              onRemoveLine={hx(removeLine)}
+              onDuplicateLine={hx(duplicateLine)}
+              onToggleOptional={hx(toggleOptional)}
+              onAddAlternative={hx(addAlternative)}
+              onSelectAlternative={hx(selectAlternative)}
+              onSeparateFromSet={hx(separateFromSet)}
+              onUngroup={hx(ungroupLine)}
+              onJoinSet={hx(joinSet)}
+              onReorder={hx(reorderLines)}
+              onAddItem={hx(() => addLine())}
+              onAddSection={hx(addSection)}
             />
-            <NotesAndTermsCard quote={quote} onUpdateQuote={updateQuote} />
+            <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           </div>
 
           {/* Right column: totals rail, sticky on desktop. The price-list
               PDF panel that used to alternate into this slot is gone. */}
           <div className="lg:sticky lg:top-4 lg:self-start">
-            <TotalsRail quote={quote} totals={totals} onUpdateQuote={updateQuote} />
+            <TotalsRail quote={quote} totals={totals} onUpdateQuote={hx(updateQuote)} />
           </div>
         </div>
       )}
@@ -776,7 +1043,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <MobileStickyTotals
         quote={quote}
         totals={totals}
-        onAdd={() => addLine()}
+        onAdd={hx(() => addLine())}
         onExport={exportPdf}
         exporting={exporting}
       />
@@ -786,9 +1053,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onClose={() => setPaletteOpen(false)}
         customers={customers}
         currentCustomerId={quote.customerId}
-        onInsertLine={(seed) => addLine(seed)}
-        onAddSection={addSection}
-        onSelectCustomer={(id) => updateQuote({ customerId: id })}
+        onInsertLine={hx((seed) => addLine(seed))}
+        onAddSection={hx(addSection)}
+        onSelectCustomer={hx((id) => updateQuote({ customerId: id }))}
         onExportPdf={exportPdf}
         onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
         clientView={view === 'client'}
@@ -806,9 +1073,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 /* -------------------------------------------------------------------------- */
 
 function LineItemsCard({
-  lines, quote, focusLineId,
+  lines, groups, quote, focusLineId,
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
+  onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
   onAddItem, onAddSection,
 }) {
   return (
@@ -836,14 +1104,19 @@ function LineItemsCard({
       </header>
       <LineItemList
         lines={lines}
+        groups={groups}
         quote={quote}
         focusLineId={focusLineId}
+        onToggleGroupOptional={onToggleGroupOptional}
         onChangeLine={onChangeLine}
         onRemoveLine={onRemoveLine}
         onDuplicateLine={onDuplicateLine}
         onToggleOptional={onToggleOptional}
         onAddAlternative={onAddAlternative}
         onSelectAlternative={onSelectAlternative}
+        onSeparateFromSet={onSeparateFromSet}
+        onUngroup={onUngroup}
+        onJoinSet={onJoinSet}
         onReorder={onReorder}
         onAddItem={onAddItem}
         onAddSection={onAddSection}
@@ -937,6 +1210,7 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
           type="button"
           onClick={onExport}
           disabled={exporting}
+          aria-busy={exporting}
           className="btn-primary disabled:opacity-60 disabled:cursor-wait"
           aria-label="Exportar PDF"
         >

@@ -19,10 +19,38 @@
  * module just multiplies.
  */
 
-import type { Quote, Professional } from '../types/domain.ts';
+import type { Quote, Professional, DecoratorBilling } from '../types/domain.ts';
 
 /** Hard cap the dealer set: no commission > 20% on a sale. */
 export const COMMISSION_MAX_PCT = 20;
+
+/**
+ * How the assigned professional's cut is realized. The SAME percentage
+ * (the professional's rate) is used either way — only the accounting
+ * direction differs:
+ *
+ *   • 'commission'     — invoice the client at full price and pay the
+ *                        decorator their % as a commission.
+ *   • 'trade_discount' — invoice the DECORATOR at their % off; pay no
+ *                        commission (they already took their cut via the
+ *                        discount).
+ *
+ * Internal/accounting only — the client PDF always shows the full price.
+ * Anything not explicitly 'trade_discount' resolves to 'commission' (the
+ * legacy default), so a missing/null field is safe.
+ */
+export function decoratorBilling(
+  quote: Pick<Quote, 'decoratorBilling'> | null | undefined,
+): DecoratorBilling {
+  return quote?.decoratorBilling === 'trade_discount' ? 'trade_discount' : 'commission';
+}
+
+/** True when the quote settles the decorator via a trade discount. */
+export function isTradeDiscount(
+  quote: Pick<Quote, 'decoratorBilling'> | null | undefined,
+): boolean {
+  return decoratorBilling(quote) === 'trade_discount';
+}
 
 /**
  * Clamp a commission % into the legal range [0, 20]. Non-finite values
@@ -64,6 +92,56 @@ export function effectiveCommissionPct(
     return clampCommissionPct(professional.defaultCommissionPct);
   }
   return 0;
+}
+
+/**
+ * When (if ever) the assigned professional's commission on a quote becomes
+ * PAYABLE — i.e. the date the dealer actually owes the payout. Returns the
+ * milestone timestamp that triggers it, or null if it isn't owed yet.
+ *
+ * The dealer's rule for *when* a professional's cut is owed:
+ *
+ *   • Quote tied to an ORDER (`orderId` set): owed once the BALANCE is paid
+ *     (`balancePaidAt`). On a special order the deposit alone isn't enough —
+ *     the commission rides on full collection.
+ *   • Standalone quote (no order — a "venta de piso", floor sale): owed once
+ *     the DEPOSIT is received (`depositReceivedAt`).
+ *
+ * Only ACCEPTED quotes that have a professional and settle via the
+ * 'commission' modality can owe a payout. 'trade_discount' quotes settle
+ * the decorator through the invoice (billed at their % off), so there's no
+ * commission to pay and this returns null.
+ *
+ * The returned timestamp also tells Contabilidad which cycle the payout
+ * falls in (mirrors how seller commissions key off the deposit date).
+ */
+export function commissionOwedAt(
+  quote:
+    | Pick<
+        Quote,
+        | 'status'
+        | 'professionalId'
+        | 'orderId'
+        | 'depositReceivedAt'
+        | 'balancePaidAt'
+        | 'decoratorBilling'
+      >
+    | null
+    | undefined,
+): number | null {
+  if (!quote) return null;
+  if (quote.status !== 'accepted') return null;   // mirrors QUOTE_STATUS_ACCEPTED
+  if (!quote.professionalId) return null;
+  if (isTradeDiscount(quote)) return null;
+  const owed = quote.orderId ? quote.balancePaidAt : quote.depositReceivedAt;
+  return owed ?? null;
+}
+
+/** True once the professional's commission on the quote has been paid out. */
+export function isCommissionPaid(
+  quote: Pick<Quote, 'commissionPaidAt'> | null | undefined,
+): boolean {
+  return quote?.commissionPaidAt != null;
 }
 
 /**

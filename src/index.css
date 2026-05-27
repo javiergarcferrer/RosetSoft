@@ -118,6 +118,18 @@
   .kbd   { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
   .badge { @apply inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700; }
   .badge-brand { @apply inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700; }
+  /* Chip — the small uppercase micro-pill used for line-item status
+     badges, toggles and markers (Compuesto / Conjunto / Alternativa /
+     Opcional, the "unir en conjunto" connector, swatch tags, …). This
+     primitive owns only the SHAPE; pass colour/border/hover via utilities
+     (e.g. `chip bg-brand-50 text-brand-700 border border-brand-100`, or
+     `chip text-ink-600 bg-ink-100 border border-ink-200`, or a dashed
+     ghost `chip text-ink-500 border border-dashed border-ink-300`). Keeping
+     colour at the call site avoids a combinatorial explosion of modifiers
+     while still collapsing the 10-line shape boilerplate to one token.
+     Distinct from `.badge` (rounded-md, sentence-case) by being a pill in
+     tracked small-caps. */
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors; }
   .table { @apply w-full text-sm; }
   .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 border-b border-ink-100; }
   .table td { @apply px-3 py-2 border-b border-ink-100; }
@@ -131,11 +143,32 @@
      five different surfaces stitched together.
      =========================================================== */
 
+  /* ── Type scale ──────────────────────────────────────────────
+     Canonical ladder. Prefer these roles over arbitrary text-[Npx]
+     sizes, which had drifted to eight different values across the app:
+       Display    text-2xl / text-3xl   page + quote titles
+       Title      text-lg               card / dialog titles
+       Subtitle   text-base             product names, emphasis
+       Body       text-sm               default running text  ← DEFAULT
+       Meta       text-xs               secondary / helper text
+       Micro      text-[11px]           dense numeric, captions
+       Eyebrow    .eyebrow              small-caps section label (11px)
+       Eyebrow·xs .eyebrow-xs           dense in-component label (10px)
+     The named Tailwind sizes are exact equivalents of the old arbitrary
+     ones — text-xs = 12px, text-sm = 14px, text-base = 16px, text-lg =
+     18px — so always use the named token, never text-[12px]/[14px]/etc.
+     9 / 10 / 11 / 13 / 15px have no named equivalent and remain as
+     deliberate in-between steps (the eyebrow primitives cover 10/11). */
+
   /* Eyebrow — small uppercase widely-tracked label. The one we
      standardized on after seeing text-[10px] / text-[11px] /
      tracking-wide / tracking-wider / text-ink-500 / text-ink-600
-     in roughly every combination across the codebase. */
+     in roughly every combination across the codebase. `.eyebrow` is the
+     11px contextual/section label; `.eyebrow-xs` is the denser 10px
+     in-component label (pricing-cell captions, popover headers); add
+     `text-brand-700` to either for the terracotta variant. */
   .eyebrow { @apply text-[11px] font-medium uppercase tracking-wider text-ink-500; }
+  .eyebrow-xs { @apply text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500; }
 
   /* Section header inside a card — used 12+ times across
      Dashboard, OrderDetail, ProfessionalDetail, Settings,
@@ -364,6 +397,28 @@
        qty/unit cells above it. */
     .qli-pricing-total > button { text-align: left; }
     .qli-pricing-total .qli-total-val { text-align: left; }
+  }
+
+  /* Per-line footer action row (LineFooter in QuoteLineItem.jsx). The
+     actions used to hide behind a "⋯" menu; now they live in the open at
+     the bottom of every card. On FINE pointers (mouse) the row sits quiet
+     — dimmed to ~55% — so a dense desktop list stays calm, and lifts to
+     full opacity when the row is hovered or anything inside it is focused
+     (keyboard reachability). On COARSE pointers (touch) it's always full
+     opacity: phone/tablet dealers can't hover, so the actions must be
+     visible and tappable at rest. */
+  .qli-footer {
+    opacity: 0.55;
+    transition: opacity 150ms ease;
+  }
+  .qli-row:hover .qli-footer,
+  .qli-row:focus-within .qli-footer,
+  .qli-footer:hover,
+  .qli-footer:focus-within {
+    opacity: 1;
+  }
+  @media (pointer: coarse) {
+    .qli-footer { opacity: 1; }
   }
 
   /* Auto-growing single-line inputs. `field-sizing: content` sizes

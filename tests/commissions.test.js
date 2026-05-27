@@ -12,6 +12,10 @@ import {
   clampCommissionPct,
   effectiveCommissionPct,
   commissionAmount,
+  decoratorBilling,
+  isTradeDiscount,
+  commissionOwedAt,
+  isCommissionPaid,
 } from '../src/lib/commissions.js';
 
 test('the max commission is the 20% cap the dealer asked for', () => {
@@ -100,6 +104,35 @@ test('amount clamps the pct before multiplying', () => {
   assert.equal(commissionAmount(1000, 99), 200);
 });
 
+/* ----------------------------- decoratorBilling ----------------------- */
+
+test('decoratorBilling defaults to commission when unset/null/missing', () => {
+  // Every legacy quote (and any quote that hasn't picked a modality)
+  // must resolve to the prior, only behavior: a commission.
+  assert.equal(decoratorBilling(undefined), 'commission');
+  assert.equal(decoratorBilling(null), 'commission');
+  assert.equal(decoratorBilling({}), 'commission');
+  assert.equal(decoratorBilling({ decoratorBilling: null }), 'commission');
+  assert.equal(decoratorBilling({ decoratorBilling: 'commission' }), 'commission');
+});
+
+test('decoratorBilling recognizes the trade discount modality', () => {
+  assert.equal(decoratorBilling({ decoratorBilling: 'trade_discount' }), 'trade_discount');
+});
+
+test('an unknown modality value falls back to commission (safe default)', () => {
+  // A typo / future value must never silently behave as a trade discount,
+  // which would mis-route the invoice to the decorator.
+  assert.equal(decoratorBilling({ decoratorBilling: 'garbage' }), 'commission');
+});
+
+test('isTradeDiscount is true only for the trade_discount modality', () => {
+  assert.equal(isTradeDiscount({ decoratorBilling: 'trade_discount' }), true);
+  assert.equal(isTradeDiscount({ decoratorBilling: 'commission' }), false);
+  assert.equal(isTradeDiscount({}), false);
+  assert.equal(isTradeDiscount(null), false);
+});
+
 test('amount is taken from the taxable base, not the grand total', () => {
   // Dealer rule: commissions multiply against the base imponible
   // (computeTotals.taxableBase) — never the grand total (which
@@ -116,4 +149,69 @@ test('amount is taken from the taxable base, not the grand total', () => {
   const grandTotal  = 1230;
   assert.equal(commissionAmount(taxableBase, 10), 100);
   assert.notEqual(commissionAmount(taxableBase, 10), commissionAmount(grandTotal, 10));
+});
+
+/* ----------------------------- commissionOwedAt ----------------------- */
+
+const PRO = 'pro-1';
+const DEP = 1000;   // deposit received timestamp
+const BAL = 2000;   // balance paid timestamp
+
+test('not owed until the quote is accepted', () => {
+  assert.equal(commissionOwedAt({ status: 'sent', professionalId: PRO, depositReceivedAt: DEP }), null);
+  assert.equal(commissionOwedAt({ status: 'draft', professionalId: PRO, depositReceivedAt: DEP }), null);
+});
+
+test('not owed without a professional assigned', () => {
+  assert.equal(commissionOwedAt({ status: 'accepted', professionalId: null, depositReceivedAt: DEP }), null);
+});
+
+test('trade-discount quotes never owe a commission payout', () => {
+  // The decorator already took their cut via the invoice discount.
+  assert.equal(
+    commissionOwedAt({
+      status: 'accepted', professionalId: PRO, decoratorBilling: 'trade_discount',
+      depositReceivedAt: DEP,
+    }),
+    null,
+  );
+});
+
+test('floor sale (no order): the DEPOSIT activates the commission', () => {
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: null, depositReceivedAt: DEP }),
+    DEP,
+  );
+  // No deposit yet → not owed.
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: null, depositReceivedAt: null }),
+    null,
+  );
+});
+
+test('order-linked quote: owed only once the BALANCE is paid, not the deposit', () => {
+  // Deposit alone is NOT enough on a special order.
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: null }),
+    null,
+  );
+  // Balance paid → owed at the balance date.
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: BAL }),
+    BAL,
+  );
+});
+
+test('commissionOwedAt tolerates null/undefined', () => {
+  assert.equal(commissionOwedAt(null), null);
+  assert.equal(commissionOwedAt(undefined), null);
+});
+
+/* ----------------------------- isCommissionPaid ----------------------- */
+
+test('isCommissionPaid reflects the commissionPaidAt timestamp', () => {
+  assert.equal(isCommissionPaid({ commissionPaidAt: 12345 }), true);
+  assert.equal(isCommissionPaid({ commissionPaidAt: null }), false);
+  assert.equal(isCommissionPaid({}), false);
+  assert.equal(isCommissionPaid(null), false);
 });

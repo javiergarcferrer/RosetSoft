@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  Layers, Plus, Search, Pencil, Trash2, Shield, Download, Check,
-  Loader2, X,
+  Layers, Plus, Pencil, Trash2, Shield, Check,
+  Loader2, X, GripVertical,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -13,8 +13,8 @@ import Modal from '../../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInput.jsx';
 import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
+import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
-import lrSeed from '../../data/lr-materials-2025-10.json';
 
 /**
  * Materials catalog admin page.
@@ -44,29 +44,82 @@ export default function Materials() {
   );
 
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState(''); // '' | 'fabric' | 'leather' | 'outdoor'
+  const [category, setCategory] = useState(''); // '' = todas | 'fabric' | 'leather' | 'outdoor'
+  const [filters, setFilters] = useState({}); // { grade: <grade> }
+  const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
-  const [importBusy, setImportBusy] = useState(false);
-  const [importDone, setImportDone] = useState(0);
-  const [importError, setImportError] = useState(null);
+
+  // Category tabs (the primary dimension). Counts ride the full materials
+  // list so each tab shows "how many would I see if I tapped this",
+  // independent of the search needle / secondary filters. The '' key is the
+  // "Todas" view — the existing empty-string category already means "all".
+  const tabs = useMemo(() => {
+    const counts = { fabric: 0, leather: 0, outdoor: 0 };
+    for (const m of materials) {
+      if (m.category in counts) counts[m.category] += 1;
+    }
+    return [
+      { key: '', label: 'Todas', count: materials.length },
+      { key: 'fabric', label: 'Telas', count: counts.fabric },
+      { key: 'leather', label: 'Pieles', count: counts.leather },
+      { key: 'outdoor', label: 'Outdoor', count: counts.outdoor },
+    ];
+  }, [materials]);
+
+  // Secondary filter: grade. Options are the catalog's known grades —
+  // the alpha grades flattened out of GRADE_GROUPS plus the special
+  // non-letter grades (COM, …).
+  const gradeFilter = useMemo(() => ({
+    key: 'grade',
+    label: 'Grade',
+    type: 'select',
+    placeholder: 'Todos',
+    options: [
+      ...GRADE_GROUPS.flatMap((g) => g.grades).map((g) => ({ value: g, label: `Grade ${g}` })),
+      ...SPECIAL_GRADES.map((g) => ({ value: g, label: g })),
+    ],
+  }), []);
+
+  const sortOptions = [
+    { key: 'category', label: 'Categoría + Nombre' },
+    { key: 'name', label: 'Nombre A–Z' },
+    { key: 'price', label: 'Precio' },
+    { key: 'colors', label: '# colores' },
+  ];
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return materials
+    const grade = filters.grade;
+    const rows = materials
       .filter((m) => (category ? m.category === category : true))
+      .filter((m) => (grade ? m.grade === grade : true))
       .filter((m) => {
         if (!q) return true;
         if (m.name?.toLowerCase().includes(q)) return true;
         if (m.grade?.toLowerCase().includes(q)) return true;
         if (m.colors?.some((c) => c.name?.toLowerCase().includes(q) || c.code?.includes(q))) return true;
         return false;
-      })
-      .sort((a, b) => {
-        const ca = a.category.localeCompare(b.category);
-        if (ca) return ca;
-        return (a.name || '').localeCompare(b.name || '');
       });
-  }, [materials, search, category]);
+
+    // Sort. 'category' is the default (category then name); the other keys
+    // sort by a single field. Direction multiplier flips asc/desc.
+    const mul = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      if (sort.key === 'name') {
+        return (a.name || '').localeCompare(b.name || '') * mul;
+      }
+      if (sort.key === 'price') {
+        return ((a.price || 0) - (b.price || 0)) * mul;
+      }
+      if (sort.key === 'colors') {
+        return ((a.colors?.length || 0) - (b.colors?.length || 0)) * mul;
+      }
+      // category (+ name)
+      const ca = a.category.localeCompare(b.category);
+      if (ca) return ca * mul;
+      return (a.name || '').localeCompare(b.name || '') * mul;
+    });
+  }, [materials, search, category, filters, sort]);
 
   if (!isAdmin) {
     return (
@@ -86,55 +139,6 @@ export default function Materials() {
     await db.materials.delete(material.id);
   }
 
-  async function importSeed() {
-    if (importBusy) return;
-    setImportError(null);
-    setImportBusy(true);
-    setImportDone(0);
-    try {
-      // Dedupe against what's already loaded: skip any material whose
-      // (category, name) already exists. The DB has a UNIQUE index on
-      // (profile_id, category, lower(name)) so even if the dedupe slip
-      // we'd surface a clean error rather than silently duplicate.
-      const existing = new Set(
-        materials.map((m) => `${m.category}::${(m.name || '').toLowerCase()}`),
-      );
-      const now = Date.now();
-      const rows = lrSeed
-        .filter((s) => !existing.has(`${s.category}::${(s.name || '').toLowerCase()}`))
-        .map((s) => ({
-          id: newId(),
-          profileId,
-          category: s.category,
-          name: s.name,
-          grade: s.grade || null,
-          wearRating: s.wearRating || null,
-          wearDoubleRubs: s.wearDoubleRubs ?? null,
-          measure: s.measure ? parseMeasure(s.measure) : null,
-          measureUnit: s.category === 'leather' ? 'mm' : 'in',
-          price: typeof s.price === 'number' ? s.price : null,
-          priceUnit: s.category === 'leather' ? 'sm' : 'yard',
-          composition: s.composition || null,
-          colors: Array.isArray(s.colors) ? s.colors : [],
-          notes: s.notes || null,
-          createdAt: now,
-          updatedAt: now,
-        }));
-
-      // bulkPut chunks the writes and retries; surfaces the count via
-      // the onProgress callback so the import button shows live
-      // progress on the bigger insertions.
-      await db.materials.bulkPut(rows, {
-        chunkSize: 50,
-        onProgress: (done) => setImportDone(done),
-      });
-    } catch (e) {
-      setImportError(e?.message || 'No se pudo importar el catálogo.');
-    } finally {
-      setImportBusy(false);
-    }
-  }
-
   return (
     <>
       <PageHeader
@@ -142,17 +146,6 @@ export default function Materials() {
         subtitle={loaded ? `${materials.length} en catálogo` : ' '}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={importSeed}
-              disabled={importBusy}
-              className="btn-ghost disabled:opacity-60 disabled:cursor-wait"
-              title="Importar el catálogo Ligne Roset 10.2025 (USD) sin duplicar nada"
-            >
-              {importBusy
-                ? <><Loader2 size={14} className="animate-spin" /> Importando… {importDone || ''}</>
-                : <><Download size={14} /> Importar Ligne Roset 10.2025</>}
-            </button>
             <button
               type="button"
               onClick={() => setEditing('new')}
@@ -164,43 +157,22 @@ export default function Materials() {
         }
       />
 
-      {importError && (
-        <div role="alert" className="card card-pad mb-4 text-sm text-red-700 bg-red-50 border-red-200">
-          No se pudo importar: {importError}
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            className="input pl-9"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, grade o color…"
-          />
-        </div>
-        <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs">
-          {[
-            { k: '', label: 'Todos' },
-            { k: 'fabric', label: 'Telas' },
-            { k: 'leather', label: 'Pieles' },
-            { k: 'outdoor', label: 'Outdoor' },
-          ].map((c, i) => (
-            <button
-              key={c.k}
-              type="button"
-              onClick={() => setCategory(c.k)}
-              className={`px-3 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <ListSearchHeader
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar por nombre, grade o color…"
+        tabs={tabs}
+        activeTab={category}
+        onTabChange={setCategory}
+        filters={[gradeFilter]}
+        activeFilters={filters}
+        onFiltersChange={setFilters}
+        sortOptions={sortOptions}
+        sort={sort}
+        onSortChange={setSort}
+        resultCount={filtered.length}
+        resultNoun={['material', 'materiales']}
+      />
 
       {!loaded ? (
         <div className="card overflow-hidden"><ListLoading rows={6} /></div>
@@ -234,6 +206,7 @@ export default function Materials() {
                         <ImageView
                           id={heroImageId(m)}
                           alt={m.name}
+                          hoverPreview
                           className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
                         />
                       ) : (
@@ -244,7 +217,7 @@ export default function Materials() {
                         />
                       )}
                     </td>
-                    <td className="px-3 py-2 text-[11px] uppercase tracking-wide text-ink-500">
+                    <td className="px-3 py-2 eyebrow font-normal tracking-wide">
                       {categoryLabel(m.category)}
                     </td>
                     <td className="px-3 py-2 font-medium text-ink-900">{m.name}</td>
@@ -325,14 +298,6 @@ function GradePill({ grade }) {
   );
 }
 
-function parseMeasure(raw) {
-  // Width values in the LR price list include fractions like "54¼".
-  // Coerce them into decimal so they sort and display sensibly.
-  const s = String(raw).replace('¼', '.25').replace('½', '.5').replace('¾', '.75');
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
-}
-
 /* -------------------------------------------------------------------------- */
 /*  Editor modal                                                              */
 /* -------------------------------------------------------------------------- */
@@ -355,6 +320,11 @@ function MaterialEditor({ material, profileId, onClose }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Color drag-reorder — same HTML5 DnD pattern as the quote line list
+  // (LineItemList): the handle is draggable, the row is the drop target,
+  // and the indicator sits above the hovered row.
+  const [dragColor, setDragColor] = useState(null);
+  const [dropColor, setDropColor] = useState(null);
 
   function set(patch) { setDraft((d) => ({ ...d, ...patch })); }
 
@@ -368,6 +338,15 @@ function MaterialEditor({ material, profileId, onClose }) {
   }
   function removeColor(i) {
     set({ colors: draft.colors.filter((_, idx) => idx !== i) });
+  }
+  function moveColor(from, to) {
+    if (from == null || to == null || from === to) return;
+    const next = [...(draft.colors || [])];
+    const [moved] = next.splice(from, 1);
+    // Indicator renders above the target, so insert before it; dragging
+    // downward shifts indices down by one after the splice.
+    next.splice(from < to ? to - 1 : to, 0, moved);
+    set({ colors: next });
   }
 
   async function save() {
@@ -546,8 +525,44 @@ function MaterialEditor({ material, profileId, onClose }) {
             </button>
           </div>
           <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-            {(draft.colors || []).map((c, i) => (
-              <div key={i} className="grid grid-cols-[auto_1fr_120px_auto] gap-2 items-center">
+            {(draft.colors || []).map((c, i) => {
+              const isDragging = dragColor === i;
+              const isDropTarget = dropColor === i && dragColor !== i;
+              return (
+              <div
+                key={i}
+                onDragOver={(e) => {
+                  if (dragColor == null || dragColor === i) return;
+                  e.preventDefault();
+                  setDropColor(i);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  moveColor(dragColor, i);
+                  setDragColor(null);
+                  setDropColor(null);
+                }}
+                className={`relative grid grid-cols-[auto_auto_1fr_120px_auto] gap-2 items-center ${isDragging ? 'opacity-40' : ''}`}
+              >
+                {isDropTarget && (
+                  <div className="absolute left-0 right-0 -top-1 h-0.5 bg-brand-500 z-10 pointer-events-none" />
+                )}
+                {/* Drag handle — only the handle is draggable so the inputs
+                    stay selectable/editable. Same affordance as the quote
+                    line list. */}
+                <span
+                  draggable
+                  onDragStart={(e) => {
+                    setDragColor(i);
+                    try { e.dataTransfer.effectAllowed = 'move'; } catch {}
+                  }}
+                  onDragEnd={() => { setDragColor(null); setDropColor(null); }}
+                  className="cursor-grab text-ink-300 hover:text-ink-600 inline-flex items-center justify-center w-4"
+                  title="Arrastra para reordenar"
+                  aria-label="Reordenar color"
+                >
+                  <GripVertical size={14} />
+                </span>
                 {/* Tiny swatch thumbnail per color. Defaults to a
                     placeholder + camera glyph; clicking opens the
                     file picker exactly like the material-level
@@ -583,7 +598,8 @@ function MaterialEditor({ material, profileId, onClose }) {
                   <X size={13} />
                 </button>
               </div>
-            ))}
+              );
+            })}
             {!(draft.colors || []).length && (
               <div className="text-xs text-ink-500 italic py-2">Sin colores.</div>
             )}

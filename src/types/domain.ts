@@ -37,6 +37,15 @@ export type QuoteStatus =
   | 'archived';
 
 /**
+ * How an assigned professional's cut is settled — chosen per quote.
+ * Internal/accounting only; never affects the client PDF (the client
+ * always sees the full price). See `lib/commissions.ts`.
+ *   • 'commission'     — invoice the client, pay the decorator a commission.
+ *   • 'trade_discount' — invoice the decorator at their % off; no commission.
+ */
+export type DecoratorBilling = 'commission' | 'trade_discount';
+
+/**
  * `orders.status` lifecycle — six main stages + cancelled.
  * Pinned by CHECK constraint (migration 20260519200000).
  * Source of truth for labels/timestamps: `lib/orderStages.js`.
@@ -225,6 +234,10 @@ export interface QuoteLine {
   /* Pricing — ignored when `components` is non-empty (compound mode). */
   qty?: number;
   unitPrice?: number;
+  /** Real wholesale cost (USD) snapshotted from the catalog when the line was
+   *  added; drives the per-order margin view. Frozen so a later price-list
+   *  update never rewrites an accepted order's margin. */
+  unitCost?: number;
   lineMarginPct?: number;
   lineDiscountPct?: number;
 
@@ -251,8 +264,72 @@ export interface QuoteLine {
   alternativeGroup?: string | null;
   isSelectedAlternative?: boolean;
 
+  /**
+   * Conjunto ("set") — the TAKE-ALL twin of `alternativeGroup`. Lines
+   * sharing the same `setGroup` string are distinct standalone products
+   * SOLD TOGETHER (e.g. an armchair + an ottoman). UNLIKE alternatives,
+   * EVERY member is priced normally and counts toward the quote total;
+   * they're just visually grouped and roll up to one "Total del
+   * conjunto" = the simple SUM of each member's own `lineTotal` (see
+   * lib/pricing:setSubtotal). There is NO separate set price and NO
+   * set-level discount — each piece keeps its own price / qty / discount.
+   *
+   * null / undefined means the line is standalone.
+   *
+   * Mutually exclusive with `isOptional` and `alternativeGroup`: a line
+   * in a set must be neither optional nor an alternative (the take-all
+   * "all of these" semantic contradicts "maybe this" and "pick one").
+   * The QuoteBuilder handlers strip those flags when a line joins a set
+   * and a DB CHECK constraint (migration 20260523120000) forbids the
+   * combination — mirroring the existing optional-xor-alternative rule.
+   *
+   * Because every set member is priced, isPricedLine (lib/constants)
+   * needs NO special case for sets.
+   */
+  setGroup?: string | null;
+
   /* Internal-only — never rendered in client-facing surfaces. */
   notes?: string;
+}
+
+/**
+ * A catalog product imported from the Ligne Roset price-list CSV. The
+ * searchable catalog behind "Agregar artículo": picking one autofills the
+ * quote line and snapshots `cost` onto it for the margin view. `priceUsd` is
+ * the list (Retail) price; `cost` is the real wholesale cost.
+ */
+export interface Product {
+  id: string;
+  profileId: string;
+  reference: string;
+  name?: string;
+  subtype?: string;
+  dimensions?: string;
+  family?: string;
+  familyCode?: string;
+  category?: string;
+  priceUsd?: number;
+  cost?: number;
+  active?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * Per-group attributes for a Conjunto (set) or Alternativa, keyed by the same
+ * id the member lines carry in `setGroup` / `alternativeGroup`. The flat
+ * grouping + groupRuns are unchanged; this just hangs state off the group.
+ *
+ *   set + isOptional         → optional add-on, take-all-or-nothing.
+ *   alternative + isOptional → "pick one or none" (menu may be left empty).
+ */
+export interface QuoteGroup {
+  id: string;
+  quoteId: string;
+  type: 'set' | 'alternative';
+  isOptional?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface Quote {
@@ -269,6 +346,14 @@ export interface Quote {
 
   /** Quote-level commission override for the professional. null = inherit. */
   commissionPct?: number | null;
+
+  /**
+   * How the assigned professional's cut is settled for accounting — the
+   * SAME rate, two AR directions. Internal only; the client PDF always
+   * shows the full price. Defaults to 'commission'. Only meaningful when
+   * `professionalId` is set.
+   */
+  decoratorBilling?: DecoratorBilling;
 
   currencyCode?: CurrencyCode;
   /** Snapshot at draft time; live-overlaid in the workspace + PDF. */
@@ -291,6 +376,16 @@ export interface Quote {
   balancePaidAt?: number | null;
   deliveredAt?: number | null;
   depositAmount?: number | null;
+
+  /* When the assigned professional's commission on this quote was PAID
+   * OUT (Contabilidad tracking). null = pending. See commissionOwedAt()
+   * in lib/commissions for when it becomes owed. */
+  commissionPaidAt?: number | null;
+
+  /* When the SELLER (vendedor) commission on this quote was paid out.
+   * null = pending. The seller's cut is earned once the deposit lands;
+   * this is its sibling of commissionPaidAt (the professional's cut). */
+  sellerCommissionPaidAt?: number | null;
 
   createdAt?: number;
   updatedAt?: number;

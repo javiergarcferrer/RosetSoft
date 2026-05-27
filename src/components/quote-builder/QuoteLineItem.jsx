@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, MoreHorizontal, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
 import Select from '../primitives/Select.jsx';
-import { FieldGroup, Field } from '../primitives/FieldGroup.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
+import { useApp } from '../../context/AppContext.jsx';
+import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
 import {
-  applyLineAdjustments, clampPct,
+  applyLineAdjustments,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
 } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
@@ -19,13 +20,18 @@ import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAME
 import { newId } from '../../db/database.js';
 
 /**
- * One quote line — designed as a product card with three vertical bands:
+ * One quote line — a product card read top→bottom:
  *
- *   1. Top strip      family chip + drag handle + expand / overflow actions
+ *   1. Top strip      drag handle + family chip + READ-ONLY status badges
+ *                     (Compuesto / Opcional / Conjunto N/M / Alternativa N/M)
  *   2. Identity band  thumbnail + name + grade/fabric chooser + spec strip
+ *                     + an always-visible "Descripción" (visible in the PDF)
+ *                     + an optional "Nota interna" (collapsed when empty)
  *   3. Calculator     qty × unit = total, on a tinted inset surface
- *
- *   + (expanded)      a grouped details panel for fields not surfaced above
+ *   4. Footer         the per-line ACTION row — Compuesto, + Alternativa,
+ *                     Opcional, Duplicar, Separar, Eliminar. The old "⋯"
+ *                     overflow menu + "más detalles" disclosure are gone;
+ *                     every action lives in the open on the card.
  *
  * Same anatomy on every viewport. On phones the bands stack vertically;
  * from sm up the identity and calculator bands sit side-by-side with the
@@ -37,10 +43,12 @@ import { newId } from '../../db/database.js';
  * migration). Grade is a native <Select> so iOS / Android use their built-
  * in picker UI; fabric is an inline editor next to it.
  *
- * Yardage and line-level margin are intentionally absent from the editor.
- * Old quotes that have `lineMarginPct` set in the DB still calculate
- * correctly (pricing.js respects the value), but new lines never set it
- * and the UI never lets you toggle it.
+ * Yardage, line-level margin AND the per-line discount input are
+ * intentionally absent from the editor. Old quotes that carry
+ * `lineMarginPct` / `lineDiscountPct` in the DB still calculate correctly
+ * (pricing.js respects the value, and the read-only AdjustmentChip surfaces
+ * it on the total), but new lines never set them and the UI never lets you
+ * edit them.
  *
  * autoFocus targets the REF input — the dealer's primary entry point when
  * reading from a paper price list.
@@ -48,10 +56,10 @@ import { newId } from '../../db/database.js';
 export default function QuoteLineItem({
   line, quote, onChange, onRemove, onDuplicate,
   onToggleOptional, onAddAlternative, onSelectAlternative,
-  groupInfo,
+  onSeparateFromSet, onUngroup, insideGroupCard,
+  groupInfo, setInfo,
   autoFocus, dragHandleProps,
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const refInput = useRef(null);
 
@@ -138,6 +146,13 @@ export default function QuoteLineItem({
     });
   }
 
+  // Deactivated (optional) or non-selected alternative: the row reads as
+  // "off". We fade it with a white veil overlay (not row opacity) so the
+  // fabric swatch — lifted to z-[2] in GradeFabricRow — stays full-colour
+  // while the product photo, text and prices dim. Same treatment the
+  // client preview and the PDF export use.
+  const dimmed = !!line.isOptional || (!!line.alternativeGroup && !line.isSelectedAlternative);
+
   return (
     // qli-row turns each row into its own container-query root, so the
     // body below reflows based on this row's width — not the viewport's.
@@ -145,24 +160,27 @@ export default function QuoteLineItem({
     // full-width builder, in a narrowed editor when the PDF panel is
     // open, or in some future drawer / inspector pane. CSS in
     // src/index.css owns the breakpoints.
-    // Visual cues for the two new option flags:
+    // Visual cues for the option flags:
     //   • optional lines     dashed left accent + faint background tint
-    //                        so the dealer reads them as parked / not
-    //                        in the running total at a glance.
+    //                        + white veil (deactivated).
     //   • alternative groups solid brand-color left accent unifying
-    //                        the contiguous siblings — the rendering
-    //                        order already keeps them adjacent.
-    //   • non-selected sibs  reduced opacity on top of the accent so
-    //                        the selected one wins the eye.
+    //                        the contiguous siblings.
+    //   • non-selected sibs  white veil on top of the accent so the
+    //                        selected one wins the eye.
     <li
-      className={`qli-row group transition-colors duration-150 hover:bg-ink-50/40 ${
+      className={`qli-row group relative transition-colors duration-150 hover:bg-ink-50/40 ${
         line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''
       } ${
-        line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
-      } ${
-        line.alternativeGroup && !line.isSelectedAlternative ? 'opacity-70' : ''
+        // Per-line group accents are drawn by the wrapping GroupCard when
+        // this line lives inside one (insideGroupCard) — don't double them.
+        // A standalone alternative line (mid-edit, before the card forms)
+        // keeps its own accent as a fallback.
+        !insideGroupCard && line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
       }`}
     >
+      {dimmed && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+      )}
       <TopStrip
         family={line.family}
         onPickFamily={(value) => onChange({ family: value || '' })}
@@ -170,15 +188,10 @@ export default function QuoteLineItem({
         isOptional={!!line.isOptional}
         alternativeGroup={line.alternativeGroup}
         isSelectedAlternative={!!line.isSelectedAlternative}
+        setGroup={line.setGroup}
         groupInfo={groupInfo}
-        expanded={expanded}
-        onToggleExpand={() => setExpanded((v) => !v)}
-        onDuplicate={onDuplicate}
-        onRemove={onRemove}
-        onConvertToCompound={convertToCompound}
-        onDissolveCompound={dissolveCompound}
-        onToggleOptional={onToggleOptional}
-        onAddAlternative={onAddAlternative}
+        setInfo={setInfo}
+        insideGroupCard={insideGroupCard}
         onSelectAlternative={onSelectAlternative}
         dragHandleProps={dragHandleProps}
       />
@@ -232,7 +245,20 @@ export default function QuoteLineItem({
         />
       )}
 
-      {expanded && <DetailsPanel line={line} compound={compound} onChange={onChange} />}
+      <LineFooter
+        compound={compound}
+        isOptional={!!line.isOptional}
+        alternativeGroup={line.alternativeGroup}
+        setGroup={line.setGroup}
+        onConvertToCompound={convertToCompound}
+        onDissolveCompound={dissolveCompound}
+        onAddAlternative={onAddAlternative}
+        onToggleOptional={onToggleOptional}
+        onDuplicate={onDuplicate}
+        onSeparateFromSet={onSeparateFromSet}
+        onUngroup={onUngroup}
+        onRemove={onRemove}
+      />
     </li>
   );
 }
@@ -255,20 +281,23 @@ function makeBlankComponent(overrides = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Top strip — family chip + row actions. The chip is a direct button that
-// opens FamilyPicker; previously the only path to set a family was to
-// expand the row, scroll to the Catálogo group, and type the string by
-// hand (the dealer's words: "I don't like that I have to write family
-// name there for it to show up above. That's stupid."). One tap now.
-// The action cluster stays pinned to the right edge regardless of fill
-// state.
+// Top strip — drag handle + family chip + READ-ONLY status badges. The chip
+// is a direct button that opens FamilyPicker; previously the only path to
+// set a family was to expand the row, scroll to the Catálogo group, and type
+// the string by hand (the dealer's words: "I don't like that I have to write
+// family name there for it to show up above. That's stupid."). One tap now.
+//
+// The TopStrip carries IDENTITY + STATE only: family + the Compuesto /
+// Opcional / Conjunto N/M / Alternativa N/M badges. All row ACTIONS
+// (convert, alternativa, opcional, duplicar, separar, eliminar) moved to
+// the per-line LineFooter at the bottom of the card, so there's no longer
+// an action cluster pinned to the right edge here.
 // ---------------------------------------------------------------------------
 function TopStrip({
   family, onPickFamily, compound,
   isOptional, alternativeGroup, isSelectedAlternative, groupInfo,
-  expanded, onToggleExpand, onDuplicate, onRemove,
-  onConvertToCompound, onDissolveCompound,
-  onToggleOptional, onAddAlternative, onSelectAlternative,
+  setGroup, setInfo, insideGroupCard,
+  onSelectAlternative,
   dragHandleProps,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -309,7 +338,7 @@ function TopStrip({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200 transition-colors px-2 py-0.5 rounded-full"
+          className="chip text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200"
           title="Cambiar familia"
           aria-label={`Familia ${family}. Cambiar`}
         >
@@ -320,7 +349,7 @@ function TopStrip({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 transition-colors px-2 py-0.5 rounded-full"
+          className="chip font-medium text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500"
           aria-label="Asignar familia"
         >
           <Tag size={10} className="opacity-70" aria-hidden />
@@ -328,70 +357,62 @@ function TopStrip({
         </button>
       )}
 
-      {/* Status chips. Order: Compuesto → Opcional → Alternativa.
-          Multiple can show concurrently when a compound is in an
-          alternative group; isOptional+alternative is forbidden by
-          the DB so those two are visually mutually exclusive too. */}
-      {compound ? (
+      {/* Read-only status badges. Order: Compuesto → Opcional → Alternativa
+          → Conjunto. Multiple can show concurrently when a compound is in an
+          alternative group; isOptional+alternative is forbidden by the DB so
+          those two are visually mutually exclusive too. These are NON-
+          interactive labels — the matching toggles (convert to compound,
+          mark optional) live in the per-line LineFooter. */}
+      {compound && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-100 border border-ink-200 px-2 py-0.5 rounded-full"
+          className="chip text-ink-600 bg-ink-100 border border-ink-200"
           title="Artículo compuesto"
         >
           <Layers size={10} className="opacity-80" aria-hidden />
           Compuesto
         </span>
-      ) : (
-        <button
-          type="button"
-          onClick={onConvertToCompound}
-          className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 transition-colors px-2 py-0.5 rounded-full"
-          title="Agrupar varias referencias bajo una misma familia y foto"
-          aria-label="Convertir en artículo compuesto"
-        >
-          <Layers size={10} className="opacity-70" aria-hidden />
-          Compuesto
-        </button>
       )}
 
+      {/* Opcional badge — read-only. Shown only when the line IS optional;
+          the on/off toggle (and its "Hacer opcional" affordance) lives in
+          the footer. Hidden for grouped lines, where optional is forbidden. */}
       {isOptional && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-600 bg-ink-50 border border-dashed border-ink-300 px-2 py-0.5 rounded-full"
-          title="No se incluye en el total hasta aceptación"
+          className="chip text-ink-600 bg-ink-50 border border-dashed border-ink-300"
+          title="Línea opcional — se muestra pero no suma al total"
         >
+          <Sparkles size={10} className="opacity-80" aria-hidden />
           Opcional
         </span>
       )}
 
+      {/* Group position chips. When the line is wrapped in a GroupCard the
+          card's header/footer already carries the "Conjunto" / "Alternativas"
+          identity, so we render only a quiet "N/M" position pill inside the
+          card to avoid doubling the label. Outside a card (a momentary
+          mid-edit single line) the full labelled chip still shows. */}
       {alternativeGroup && groupInfo && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full"
+          className="chip text-brand-700 bg-brand-50 border border-brand-100"
           title="Esta línea es parte de un grupo de alternativas; solo la seleccionada cuenta en el total"
         >
-          Alternativa {groupInfo.index}/{groupInfo.total}
+          {insideGroupCard ? `${groupInfo.index}/${groupInfo.total}` : `Alternativa ${groupInfo.index}/${groupInfo.total}`}
+        </span>
+      )}
+
+      {setGroup && (
+        <span
+          className="chip text-ink-600 bg-ink-100 border border-ink-200"
+          title="Esta línea forma parte de un conjunto; todas las piezas se cotizan y suman al total"
+        >
+          <Boxes size={10} className="opacity-80" aria-hidden />
+          {insideGroupCard
+            ? (setInfo ? `${setInfo.index}/${setInfo.total}` : 'Conjunto')
+            : `Conjunto${setInfo ? ` ${setInfo.index}/${setInfo.total}` : ''}`}
         </span>
       )}
 
       <div className="flex-1" />
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors"
-        aria-label={expanded ? 'Contraer detalles' : 'Más detalles'}
-        aria-expanded={expanded}
-      >
-        <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
-      </button>
-      <OverflowMenu
-        compound={compound}
-        isOptional={isOptional}
-        alternativeGroup={alternativeGroup}
-        onDuplicate={onDuplicate}
-        onRemove={onRemove}
-        onConvertToCompound={onConvertToCompound}
-        onDissolveCompound={onDissolveCompound}
-        onToggleOptional={onToggleOptional}
-        onAddAlternative={onAddAlternative}
-      />
 
       <FamilyPicker
         open={pickerOpen}
@@ -426,6 +447,7 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
           onChange={(id) => onChange({ imageId: id })}
           kind="quote-line"
           ownerId={line.id}
+          hoverPreview
         />
         <div className="flex-1 min-w-0">
           <HeroInput
@@ -447,7 +469,92 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
           refInputRef={refInputRef}
         />
       )}
+      {/* Descripción — promoted out of the old DetailsPanel disclosure to an
+          always-visible, auto-growing field directly under the spec strip.
+          It's the PDF-facing copy the dealer writes for the client, so it
+          earns a permanent slot. Compound lines don't carry a line-level
+          description (the per-component rows do), so it's gated to simple
+          lines — same rule the old panel used. */}
+      {!compound && (
+        <AutoGrowTextarea
+          value={line.description || ''}
+          onCommit={(v) => onChange({ description: v })}
+          label="Descripción · visible en el PDF"
+          placeholder="Descripción · visible en el PDF"
+          autoCapitalize="sentences"
+        />
+      )}
+      {/* Notas internas — a quiet "+ Nota interna" toggle that reveals an
+          auto-growing field. Collapsed by default when empty; auto-shown
+          when the line already carries a note so existing copy isn't
+          hidden behind a click. */}
+      <InternalNote
+        value={line.notes || ''}
+        onCommit={(v) => onChange({ notes: v })}
+      />
     </div>
+  );
+}
+
+// Auto-growing multi-line text field for the always-visible Descripción and
+// the internal-note reveal. Wraps the shared <DebouncedTextarea> (debounced
+// commit on type/blur) and drives the same scrollHeight auto-resize HeroInput
+// uses, so long copy wraps and the field grows instead of scrolling. Unlike
+// HeroInput it ALLOWS Enter (these are paragraphs, not one-line titles) and
+// reads with the muted body weight of an inline note, not a heading.
+function AutoGrowTextarea({ value, onCommit, label, placeholder, ...rest }) {
+  const ref = useRef(null);
+  useEffect(() => { autoSize(ref.current); }, [value]);
+  return (
+    <DebouncedTextarea
+      ref={ref}
+      value={value}
+      onCommit={onCommit}
+      rows={1}
+      placeholder={placeholder}
+      aria-label={label || placeholder}
+      onInput={(e) => autoSize(e.currentTarget)}
+      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:shadow-[inset_0_0_0_1px_theme('colors.ink.200')] focus:outline-none transition-colors"
+      {...rest}
+    />
+  );
+}
+
+function autoSize(el) {
+  if (!el) return;
+  // Reset to auto first so deleting content shrinks the field back down —
+  // otherwise the height latches at the previous scrollHeight.
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+// Internal-note reveal. Collapsed to a quiet "+ Nota interna" link when the
+// line has no note; clicking opens the field. When the line ALREADY has a
+// note it opens automatically so existing copy is never hidden. These notes
+// never print — the placeholder says so.
+function InternalNote({ value, onCommit }) {
+  const [open, setOpen] = useState(!!value);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-ink-700 transition-colors px-1 -mx-1 py-1 rounded"
+        title="Agregar una nota interna — no se imprime en el PDF"
+      >
+        <MessageSquarePlus size={13} className="opacity-80" aria-hidden />
+        Nota interna
+      </button>
+    );
+  }
+  return (
+    <AutoGrowTextarea
+      value={value}
+      onCommit={onCommit}
+      label="Notas internas · no se imprimen"
+      placeholder="Notas internas · no se imprimen"
+      autoCapitalize="sentences"
+    />
   );
 }
 
@@ -459,7 +566,19 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
 // composeSubtype, so on-disk format is identical to what dealers have
 // always typed — no migration, no PDF / autocomplete churn.
 function GradeFabricRow({ line, onChange }) {
+  const { profileId } = useApp();
   const { grade, fabric } = parseSubtype(line.subtype);
+  // When a swatch is attached inline, also remember it in the catalog so
+  // the next quote that picks the same material/color is pre-filled. Only
+  // bites when the subtype came from the picker (carries a "(#code)") and
+  // the catalog color has no photo yet; hand-typed fabrics are skipped.
+  // Fire-and-forget — never blocks or fails the line edit.
+  const setSwatch = (id) => {
+    onChange({ swatchImageId: id });
+    if (id && profileId) {
+      rememberSwatchInCatalog({ profileId, subtype: line.subtype, imageId: id });
+    }
+  };
   // commit() always writes the composed subtype. When the picker hands
   // back a swatchImageId we persist it too; manual grade/fabric edits
   // (which don't carry the key) leave any existing swatch untouched.
@@ -481,13 +600,18 @@ function GradeFabricRow({ line, onChange }) {
           subtype. The catalog picker pre-fills it; the empty state is an
           explicit "add photo" tile and the corner × clears just the
           swatch. */}
-      <Thumbnail
-        imageId={swatchImageId}
-        onChange={(id) => onChange({ swatchImageId: id })}
-        kind="quote-line-swatch"
-        ownerId={line.id}
-        sizeClass="w-10 h-10 flex-shrink-0"
-      />
+      {/* z-[2] keeps the swatch above any deactivated/non-selected veil
+          (z-[1]) so the fabric colour is never dimmed — in any state. */}
+      <span className="relative z-[2] inline-flex shrink-0">
+        <Thumbnail
+          imageId={swatchImageId}
+          onChange={setSwatch}
+          kind="quote-line-swatch"
+          ownerId={line.id}
+          sizeClass="w-10 h-10"
+          hoverPreview
+        />
+      </span>
       <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
         <Select
           variant="ghost"
@@ -540,7 +664,7 @@ function GradeFabricRow({ line, onChange }) {
           // as the material name (or the placeholder when empty), never
           // stretched across the row. Capped at 100% so a very long name
           // still wraps/scrolls within the row instead of overflowing.
-          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-[14px] text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
         />
         {/* Catalog picker — opens the swatch modal so the dealer can pick a
             material + color instead of typing the name and guessing the
@@ -637,7 +761,7 @@ function PricingRow({
   qtyAriaLabel = 'Cantidad', unitAriaLabel = 'Precio unitario',
 }) {
   const totalValCls = totalSize === 'lg'
-    ? 'qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight'
+    ? 'qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight'
     : 'qli-total-val text-[15px] font-semibold tabular-nums text-ink-900 leading-tight';
   const totalEl = (
     <div className={totalValCls}>{fmt(total)}</div>
@@ -672,7 +796,7 @@ function PricingRow({
       <span className="qli-pricing-op text-base" aria-hidden>=</span>
 
       <div className="qli-pricing-cell qli-pricing-total relative">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+        <div className="eyebrow-xs tracking-wide">
           {totalLabel}
         </div>
         {onToggleBreakdown ? (
@@ -761,7 +885,7 @@ function CompoundCalculatorBand({
           {count} componente{count === 1 ? '' : 's'}
         </div>
         <div className="relative text-right ml-auto">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500 mb-0.5">
+          <div className="eyebrow-xs tracking-wide mb-0.5">
             Total compuesto
           </div>
           <button
@@ -771,7 +895,7 @@ function CompoundCalculatorBand({
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
-            <div className="qli-total-val text-[18px] font-semibold tabular-nums text-ink-900 leading-tight">
+            <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight">
               {fmt(rowTotal)}
             </div>
             {hasAdjustment ? (
@@ -909,9 +1033,14 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
   // stacking vertically reads cleaner and gives the name the full
   // row width unconditionally.
   return (
-    <div className={`group/comprow px-3 sm:px-4 py-3 bg-white space-y-2 ${
+    <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-white space-y-2 ${
       optional ? 'border-l-2 border-dashed border-ink-300' : ''
     }`}>
+      {/* Deactivated (optional) component: white veil fades the block;
+          the swatch (z-[2] in GradeFabricRow) stays full-colour. */}
+      {optional && (
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+      )}
       <div className="flex items-center gap-2">
         <span
           {...(dragHandleProps || {})}
@@ -921,7 +1050,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         >
           <GripVertical size={13} />
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 select-none">
+        <span className="eyebrow-xs tracking-wide text-ink-400 select-none">
           Componente {index + 1}
         </span>
         {/* Per-component optional toggle. Mirrors the line-level
@@ -933,7 +1062,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         <button
           type="button"
           onClick={() => onChange({ isOptional: !optional })}
-          className={`inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] px-2 py-0.5 rounded-full transition-colors ${
+          className={`chip font-medium ${
             optional
               ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
               : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
@@ -1009,7 +1138,7 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
 function CalcCell({ label, children }) {
   return (
     <div className="qli-pricing-cell">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+      <div className="eyebrow-xs tracking-wide">
         {label}
       </div>
       {children}
@@ -1017,9 +1146,10 @@ function CalcCell({ label, children }) {
   );
 }
 
-// Renders the live adjustments on a line. Discount is the only adjustment
-// new lines can carry; margin is shown only when a legacy line has one
-// set (the editor has no way to ADD margin anymore — see DetailsPanel).
+// Renders the live adjustments on a line. New lines can carry NEITHER a
+// discount nor a margin from the editor anymore (the per-line discount input
+// was removed); this read-only chip only surfaces a value that a legacy quote
+// already stored, so an old discount/margin still explains the adjusted total.
 function AdjustmentChip({ line }) {
   const margin = Number(line.lineMarginPct) || 0;
   const discount = Number(line.lineDiscountPct) || 0;
@@ -1031,182 +1161,142 @@ function AdjustmentChip({ line }) {
 }
 
 // ---------------------------------------------------------------------------
-// Overflow menu — Duplicate / Eliminar. Closes on outside click and Escape.
+// Per-line footer — the ACTION row, the home for everything the old "⋯"
+// overflow menu carried. A quiet hairline-topped strip at the bottom of the
+// card, read left→right: Compuesto · + Alternativa · Opcional · Duplicar ·
+// Separar … Eliminar (pushed to the far right, red).
+//
+// Visibility / touch contract: the row is ALWAYS reachable on touch (no
+// hover-to-reveal), so phone/tablet dealers can always act on a line. On
+// fine pointers it sits subtle (muted, faint top border) and strengthens on
+// row hover + on focus-within, so a dense desktop list stays calm but the
+// actions are one hover/Tab away. (Judgment call flagged in the report.)
+//
+// The conditional buttons mirror the exact rules the overflow menu used:
+//   • Compuesto    — convert / dissolve, mirroring the old chip+menu labels.
+//   • + Alternativa — hidden when optional or in a set; label changes to
+//                     "Agregar otra alternativa" once already in a group.
+//   • Opcional     — moved here from the TopStrip; hidden when grouped.
+//   • Duplicar     — always.
+//   • Separar      — "del conjunto" (set) or "de las alternativas" (alt).
+//   • Eliminar     — always, red, far right.
+// "Unir al conjunto de arriba" is gone — joining a set now happens via the
+// between-lines connector chip in LineItemList.
 // ---------------------------------------------------------------------------
-function OverflowMenu({
-  onDuplicate, onRemove, compound,
-  isOptional, alternativeGroup,
+function LineFooter({
+  compound, isOptional, alternativeGroup, setGroup,
   onConvertToCompound, onDissolveCompound,
-  onToggleOptional, onAddAlternative,
+  onAddAlternative, onToggleOptional,
+  onDuplicate, onSeparateFromSet, onUngroup, onRemove,
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
-    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
+  const canToggleOptional = !alternativeGroup && !setGroup;
+  const canAddAlternative = !isOptional && !setGroup;
   return (
-    <div className="relative" ref={ref}>
+    <div className="qli-footer relative z-[2] mt-2.5 pt-2 border-t border-ink-100 flex flex-wrap items-center gap-x-1 gap-y-1">
+      {compound ? (
+        <FooterButton
+          onClick={onDissolveCompound}
+          icon={Layers}
+          title="Convertir el compuesto en un artículo simple"
+        >
+          Disolver compuesto
+        </FooterButton>
+      ) : (
+        <FooterButton
+          onClick={onConvertToCompound}
+          icon={Layers}
+          title="Agrupar varias referencias bajo una misma familia y foto"
+        >
+          Convertir a compuesto
+        </FooterButton>
+      )}
+
+      {canAddAlternative && onAddAlternative && (
+        <FooterButton
+          onClick={onAddAlternative}
+          icon={GitFork}
+          title={alternativeGroup
+            ? 'Agregar otra alternativa al grupo existente'
+            : 'Crear un grupo de alternativas con esta línea como la seleccionada por defecto'}
+        >
+          {alternativeGroup ? 'Agregar otra alternativa' : 'Agregar alternativa'}
+        </FooterButton>
+      )}
+
+      {canToggleOptional && onToggleOptional && (
+        <FooterButton
+          onClick={onToggleOptional}
+          icon={Sparkles}
+          active={isOptional}
+          aria-pressed={isOptional}
+          title={isOptional
+            ? 'Quitar el marcador opcional — la línea vuelve a sumar al total'
+            : 'Marcar como opcional — la línea se muestra pero no suma al total'}
+        >
+          {isOptional ? 'Opcional' : 'Hacer opcional'}
+        </FooterButton>
+      )}
+
+      {onDuplicate && (
+        <FooterButton onClick={onDuplicate} icon={Copy} title="Duplicar esta línea">
+          Duplicar
+        </FooterButton>
+      )}
+
+      {setGroup && onSeparateFromSet && (
+        <FooterButton
+          onClick={onSeparateFromSet}
+          icon={Boxes}
+          title="Sacar esta línea del conjunto; vuelve a ser una línea independiente"
+        >
+          Separar del conjunto
+        </FooterButton>
+      )}
+      {alternativeGroup && onUngroup && (
+        <FooterButton
+          onClick={onUngroup}
+          icon={GitFork}
+          title="Sacar esta línea del grupo de alternativas; vuelve a ser una línea independiente"
+        >
+          Separar de las alternativas
+        </FooterButton>
+      )}
+
+      <div className="flex-1" />
+
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors"
-        aria-label="Más acciones"
-        aria-haspopup="menu"
-        aria-expanded={open}
+        onClick={onRemove}
+        className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors"
+        aria-label="Eliminar línea"
+        title="Eliminar línea"
       >
-        <MoreHorizontal size={16} />
+        <Trash2 size={15} />
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 mt-1.5 w-52 rounded-md border border-ink-200 bg-white shadow-pop py-1 z-30">
-          {onDuplicate && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onDuplicate(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-            >
-              <Copy size={14} className="text-ink-500" />
-              Duplicar línea
-            </button>
-          )}
-          {compound ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onDissolveCompound(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title="Convertir el compuesto en un artículo simple"
-            >
-              <Layers size={14} className="text-ink-500" />
-              Disolver compuesto
-            </button>
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onConvertToCompound(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title="Agrupar varias referencias bajo una misma familia y foto"
-            >
-              <Layers size={14} className="text-ink-500" />
-              Convertir a compuesto
-            </button>
-          )}
-
-          {/* Optional add-on toggle. Hidden when the line is in an
-              alternative group — DB CHECK forbids optional+alternative
-              and the UI shouldn't tempt the dealer to construct it. */}
-          {!alternativeGroup && onToggleOptional && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onToggleOptional(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title={isOptional
-                ? 'Quitar el marcador opcional — la línea volverá al total'
-                : 'Marcar como opcional — la línea se muestra pero no suma al total'}
-            >
-              <Sparkles size={14} className="text-ink-500" />
-              {isOptional ? 'Quitar opcional' : 'Marcar como opcional'}
-            </button>
-          )}
-
-          {/* Add alternative. Hidden when the line is optional (same
-              mutual-exclusion rule). When the line is already in a
-              group, the action label clarifies it's adding ANOTHER
-              alternative to the existing group. */}
-          {!isOptional && onAddAlternative && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => { onAddAlternative(); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
-              title={alternativeGroup
-                ? 'Agregar otra alternativa al grupo existente'
-                : 'Crear un grupo de alternativas con esta línea como la seleccionada por defecto'}
-            >
-              <GitFork size={14} className="text-ink-500" />
-              {alternativeGroup ? 'Agregar otra alternativa' : 'Agregar alternativa'}
-            </button>
-          )}
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { onRemove(); setOpen(false); }}
-            className="w-full text-left px-3 py-2 text-sm hover:bg-red-50 text-red-600 inline-flex items-center gap-2"
-          >
-            <Trash2 size={14} />
-            Eliminar línea
-          </button>
-        </div>
-      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Details panel — fields that aren't part of the always-visible bands:
-// per-line discount + the text fields. Family used to live here too, as a
-// free-text input the dealer had to scroll to and type. It's now editable
-// directly from its chip in the TopStrip via FamilyPicker, so we don't
-// duplicate the entry point here. Yardage and line-level margin are
-// intentionally absent — the line model doesn't surface them anymore.
-// ---------------------------------------------------------------------------
-function DetailsPanel({ line, compound, onChange }) {
+// A single footer action — quiet text+icon button reusing the project's
+// ghost-button feel. `active` paints the pressed state for the Opcional
+// toggle (the only stateful action in the row); everything else is a plain
+// command. On touch the min-height bumps to 40px so it's a comfortable tap
+// target without making the desktop row tall.
+function FooterButton({ onClick, icon: Icon, children, active, title, ...rest }) {
   return (
-    <div className="mt-4 pt-4 border-t border-ink-100 space-y-5">
-      <FieldGroup title="Ajuste" columns={2}>
-        <Field
-          label="Descuento %"
-          hint={compound
-            ? 'Aplicado al subtotal de todos los componentes.'
-            : 'Aplicado al precio unitario de esta línea.'}
-        >
-          <DebouncedInput
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max="100"
-            step="any"
-            className="input"
-            value={line.lineDiscountPct ?? 0}
-            onCommit={(v) => onChange({ lineDiscountPct: clampPct(v) })}
-          />
-        </Field>
-      </FieldGroup>
-
-      <FieldGroup title="Texto" columns={2}>
-        {!compound && (
-          <Field label="Descripción (visible en el PDF)" widthClass="col-span-2">
-            <DebouncedTextarea
-              className="input min-h-[60px]"
-              placeholder="Descripción del PDF de tarifa…"
-              value={line.description || ''}
-              onCommit={(v) => onChange({ description: v })}
-              autoCapitalize="sentences"
-            />
-          </Field>
-        )}
-        <Field label="Notas internas (no se imprimen)" widthClass="col-span-2">
-          <DebouncedTextarea
-            className="input min-h-[60px]"
-            placeholder="p. ej. cojín extra, COM"
-            value={line.notes || ''}
-            onCommit={(v) => onChange({ notes: v })}
-            autoCapitalize="sentences"
-          />
-        </Field>
-      </FieldGroup>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-2 py-1 coarse:min-h-10 transition-colors ${
+        active
+          ? 'text-ink-700 bg-ink-100 hover:bg-ink-200'
+          : 'text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200'
+      }`}
+      {...rest}
+    >
+      <Icon size={13} className="opacity-80" aria-hidden />
+      {children}
+    </button>
   );
 }

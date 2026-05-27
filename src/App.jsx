@@ -19,6 +19,7 @@ import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminCommissions from './pages/admin/Commissions.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
+import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -206,6 +207,7 @@ function ProtectedApp() {
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/commissions" element={<AdminCommissions />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
+            <Route path="admin/catalog" element={<AdminCatalog />} />
             {/* Accounting surface — a single workspace page that
                 rolls cotizaciones aceptadas, comisiones por pagar, and
                 the Odoo CSV exports into one table-first view. The

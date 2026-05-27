@@ -20,7 +20,7 @@ export function FieldGroup({ title, children, columns = 3 }: FieldGroupProps) {
   return (
     <div>
       {title ? (
-        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500 mb-2">
+        <div className="eyebrow-xs mb-2">
           {title}
         </div>
       ) : null}

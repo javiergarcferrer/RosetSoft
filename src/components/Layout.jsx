@@ -11,6 +11,7 @@ import {
   Wallet,
   Calculator,
   Layers,
+  PackageSearch,
   Menu,
   X,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ const adminNavGroup = {
     { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
     { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
     { to: '/admin/materials',   label: 'Materiales', icon: Layers },
+    { to: '/admin/catalog',     label: 'Catálogo',   icon: PackageSearch },
   ],
 };
 
@@ -186,7 +188,7 @@ export default function Layout() {
                 {company}
               </div>
             )}
-            <div className="text-[10px] uppercase tracking-widest text-ink-400">Roset Soft</div>
+            <div className="eyebrow-xs font-normal tracking-widest text-ink-400">Roset Soft</div>
           </div>
           <button
             onClick={() => setNavOpen(false)}
@@ -206,7 +208,7 @@ export default function Layout() {
               className={`space-y-0.5 ${gi > 0 ? 'mt-4' : ''}`}
             >
               {group.label && (
-                <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink-500 select-none">
+                <div className="px-3 pb-1.5 eyebrow-xs tracking-widest select-none">
                   {group.label}
                 </div>
               )}

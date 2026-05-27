@@ -235,6 +235,7 @@ function MaterialList({
                   <ImageView
                     id={heroImageId(m)}
                     alt={m.name}
+                    hoverPreview
                     className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
                   />
                 ) : (
@@ -359,6 +360,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
                     <ImageView
                       id={swatchId}
                       alt={c.name}
+                      hoverPreview
                       className="w-8 h-8 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
                     />
                   ) : (

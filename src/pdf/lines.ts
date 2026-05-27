@@ -2,13 +2,15 @@ import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal, lineListUnit, lineQty,
+  lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
 } from '../lib/pricing.js';
 import { rgb } from 'pdf-lib';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
   INK, INK_HIGH, INK_MID, INK_SOFT, INK_LINE, INK_LINE2, BG_SOFT, BRAND_700,
-  BRAND_300, EMERALD_700,
+  BRAND_300, ACCENT, EMERALD_700,
+  BG_GROUP_SET, BAND_GROUP_SET, BRAND_50, BAND_GROUP_ALT,
+  FS_TITLE, FS_EYEBROW, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
@@ -96,38 +98,43 @@ interface TypeToken {
 // internas (no se imprimen)" in the editor, so it must not appear in
 // the client-facing PDF.
 const T: Record<string, TypeToken> = {
-  family:      { size: 7.5, lh: 11, color: BRAND_700, cs: 1.5, bold: true },
-  name:        { size: 12,  lh: 15, color: INK,       bold: true },
-  subtype:     { size: 10,  lh: 13, color: INK_HIGH },
+  // Family eyebrow — RECLAIMED from terracotta to a neutral ink grey.
+  // Terracotta now reads only on section headers + the grand total, so
+  // sections become the brand-coloured landmarks instead of every row
+  // shouting in brand colour.
+  family:      { size: FS_EYEBROW_SM, lh: 11, color: INK_MID, cs: 1.5, bold: true },
+  name:        { size: FS_TITLE,      lh: 16, color: INK,     bold: true },
+  subtype:     { size: 10,            lh: 13, color: INK_HIGH },
   // Meta strip: "ref <code> · <dimensions>" — combined into one
   // segment to mirror the preview's compact meta row.
-  meta:        { size: 9,   lh: 12, color: INK_MID },
-  description: { size: 9,   lh: 12, color: INK_HIGH },
-  // Numeric column type
-  numLabel:    { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
-  numValue:    { size: 11,  lh: 14, color: INK },
-  totalLabel:  { size: 7.5, lh: 11, color: BRAND_700, cs: 1.4, bold: true },
-  totalValue:  { size: 14,  lh: 18, color: INK,       bold: true },
-  // Discount caption — surfaces under UNITARIO when the line carries a
-  // line-level discount, so the customer can see the list price they're
-  // saving against. Rendered in brand-700 to make the concession
-  // legible at a glance against the otherwise-monochrome numeric column.
-  numStrike:   { size: 9,   lh: 11, color: INK_SOFT },
-  numDiscount: { size: 8.5, lh: 11, color: BRAND_700, bold: true },
+  meta:        { size: FS_BODY,       lh: 12, color: INK_MID },
+  description: { size: FS_BODY,       lh: 12, color: INK_HIGH },
+  // Compact money cell ----------------------------------------------------
+  // ONE muted "n × $unit" line (`moneyLine`) sits above the bold line
+  // TOTAL (`totalValue`). The repeated CANTIDAD / UNITARIO / TOTAL
+  // eyebrows are gone — the equation + a single bold anchor carry the
+  // meaning with far less noise.
+  moneyLine:   { size: FS_META,       lh: 12, color: INK_MID },
+  totalValue:  { size: 12,            lh: 16, color: INK,     bold: true },
+  // Discount captions inside the money cell — struck list price + "−Y%".
+  // Rendered just under the "n × $unit" line so the customer sees what
+  // they're saving against. Brand-700 keeps the concession legible.
+  numStrike:   { size: FS_META,       lh: 11, color: INK_SOFT },
+  numDiscount: { size: FS_EYEBROW_SM, lh: 11, color: BRAND_700, bold: true },
   // Compound article — components rendered as a vertical stack
   // beneath the shared family + name. Each component carries its own
   // name, grade/fabric, ref/dim, plus an inline qty × unit = subtotal
   // equation right-aligned with the component name.
   compName:        { size: 10.5, lh: 13.5, color: INK,      bold: true },
   compSubtype:     { size: 9,    lh: 12,   color: INK_HIGH },
-  compMeta:        { size: 8.5,  lh: 11,   color: INK_MID },
-  compDescription: { size: 8.5,  lh: 11,   color: INK_HIGH },
-  compInline:      { size: 9.5,  lh: 12,   color: INK },
-  compTotalLabel:  { size: 7.5,  lh: 11,   color: BRAND_700, cs: 1.4, bold: true },
-  compTotalValue:  { size: 14,   lh: 18,   color: INK,       bold: true },
+  compMeta:        { size: FS_META, lh: 11, color: INK_MID },
+  compDescription: { size: FS_META, lh: 11, color: INK_HIGH },
+  compInline:      { size: FS_BODY, lh: 12, color: INK_MID },
+  compTotalLabel:  { size: FS_EYEBROW_SM, lh: 12, color: INK_MID, cs: 1.4, bold: true },
+  compTotalValue:  { size: 13,   lh: 17,   color: INK,      bold: true },
 };
 
-const NUMERIC_GAP = 6;   // vertical gap between qty/unit/total cells
+const NUMERIC_GAP = 6;   // vertical gap between the money-cell line and the total
 
 /**
  * One wrapped segment of detail-column text: a token + its (already
@@ -344,22 +351,22 @@ function drawSegs(page: PDFPage, ctx: PdfCtx, segs: DetailSegment[], x: number, 
 }
 
 /**
- * Height of the numeric column: three (label + value + gap) blocks.
- * Constant per line — the column never wraps because money strings
- * stay on one line and the column is wide enough to fit them.
+ * Height of the compact money cell:
  *
- * When the line carries a line-level discount we tack on two extra
- * caption lines under UNITARIO (struck-through list price + "–Y%"
- * caption) so the customer can see what they're saving against.
+ *     2 × $1,606.50          ← moneyLine (qty × unit)
+ *     $1,890.00              ← struck list price   ┐ only when the
+ *     −15%                   ← discount caption     ┘ line is discounted
+ *                            ← NUMERIC_GAP
+ *     $3,213.00              ← line TOTAL (bold anchor)
+ *
+ * No CANTIDAD / UNITARIO / TOTAL eyebrows any more — the equation plus a
+ * single bold total carry the meaning. Constant per line; money strings
+ * never wrap because the cell is wide enough to fit them.
  */
 function numericHeight(line: QuoteLine): number {
   const discount = Number(line?.lineDiscountPct) || 0;
   const extra = discount > 0 ? T.numStrike.lh + T.numDiscount.lh : 0;
-  return (
-    T.numLabel.lh + T.numValue.lh + NUMERIC_GAP
-    + T.numLabel.lh + T.numValue.lh + extra + NUMERIC_GAP
-    + T.totalLabel.lh + T.totalValue.lh
-  );
+  return T.moneyLine.lh + extra + NUMERIC_GAP + T.totalValue.lh;
 }
 
 /**
@@ -368,17 +375,47 @@ function numericHeight(line: QuoteLine): number {
  * into the detail column, and each component contributes its own
  * sub-block (name + meta + inline equation). See compoundRowHeight().
  */
-export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine): number {
-  if (isCompoundLine(line)) return compoundRowHeight(ctx, line);
+export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
+  if (isCompoundLine(line)) return compoundRowHeight(ctx, line, inZone);
   const cols = lineColumns();
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
   const inner = Math.max(IMAGE_SIZE, detailH, numericHeight(line));
-  // Reserve the caption band when the line is optional / in an
-  // alternative group — same height contract both measure and draw
-  // passes use so the page-break logic in quotePdf.ts always knows
-  // the exact row footprint.
-  const captionBand = lineOptionStyle(line, null) ? CAPTION_H : 0;
+  // Reserve the top caption band when the row paints anything in it — its OWN
+  // option/group caption (standalone), OR (inside a zone) the per-member
+  // "SELECCIONADA" flag on the chosen alternative. Same height contract both
+  // measure and draw passes use so the page-break logic always knows the
+  // exact footprint.
+  const captionBand = reservesTopBand(line, inZone) ? CAPTION_H : 0;
   return ROW_TOP_PAD + captionBand + inner + ROW_BOTTOM_PAD;
+}
+
+/**
+ * Whether a row paints its own top caption + gutter accent. True for
+ * optionals (always standalone), and for grouped members ONLY when NOT
+ * inside a zone (a defensive fallback — in practice grouped runs always get
+ * a zone). Inside a zone the identity lives in the header band, so the member
+ * suppresses its caption. Keeps measure + draw in lockstep.
+ */
+function drawsOwnCaption(line: QuoteLine, inZone: boolean): boolean {
+  const style = lineOptionStyle(line, null);
+  if (!style) return false;
+  if (inZone) return false;   // zone header band carries the identity
+  return true;
+}
+
+/**
+ * Inside an Alternativa zone, the CHOSEN option keeps a small per-member
+ * "SELECCIONADA" flag (emerald) — the one status that's per-member, not group
+ * identity, mirroring ClientPreview's in-card selected flag. Non-selected
+ * siblings rely on the dim wash instead. Only meaningful inside a zone.
+ */
+function zoneSelectedFlag(line: QuoteLine, inZone: boolean): boolean {
+  return inZone && !!line.alternativeGroup && !!line.isSelectedAlternative;
+}
+
+/** Whether the row reserves the CAPTION_H top band (own caption OR selected flag). */
+function reservesTopBand(line: QuoteLine, inZone: boolean): boolean {
+  return drawsOwnCaption(line, inZone) || zoneSelectedFlag(line, inZone);
 }
 
 /* ----------------------------- compound ------------------------------ */
@@ -474,7 +511,7 @@ function compoundHeaderSegments(ctx: PdfCtx, line: QuoteLine, detailW: number): 
  *            uses.
  *   caption  short uppercase eyebrow rendered above the row's
  *            content ("ALTERNATIVA 1 DE 2 · SELECCIONADA",
- *            "OPCIONAL · NO INCLUIDO"). Lifted into its own band so
+ *            "OPCIONAL · NO INCLUIDO EN EL TOTAL"). Lifted into its own band so
  *            the customer reads the status before scanning the row,
  *            instead of decoding a prefix glued to the family name.
  *   dim      when true, the row content gets a semi-transparent
@@ -499,7 +536,7 @@ function lineOptionStyle(
   if (line.isOptional) {
     return {
       accent: INK_SOFT,
-      caption: 'OPCIONAL · NO INCLUIDO',
+      caption: 'OPCIONAL · NO INCLUIDO EN EL TOTAL',
       captionColor: INK_MID,
       dim: true,
     };
@@ -514,6 +551,25 @@ function lineOptionStyle(
       caption: selected ? `${base} · SELECCIONADA` : base,
       captionColor: selected ? EMERALD_700 : BRAND_700,
       dim: !selected,
+    };
+  }
+  // Conjunto (set) member — the take-all twin of an alternative group.
+  // Mutually exclusive with the two branches above (DB CHECK enforces
+  // it), so this only runs for a pure set member. UNLIKE alternatives /
+  // optionals it is NEVER dimmed: every member is fully priced and
+  // counts toward the total, so it must read at full weight. Reuses the
+  // `groupInfo` channel for its "N DE M" position (the caller passes the
+  // set's index/total here for set lines). Neutral ink accent + caption to
+  // match the on-screen preview's neutral Conjunto card (no purple).
+  if (line.setGroup) {
+    const base = groupInfo
+      ? `CONJUNTO ${groupInfo.index} DE ${groupInfo.total}`
+      : 'CONJUNTO';
+    return {
+      accent: INK_LINE2,
+      caption: base,
+      captionColor: INK_MID,
+      dim: false,
     };
   }
   return null;
@@ -566,6 +622,24 @@ function drawOptionAccent(
   } as DrawTextOptions);
 
   return CAPTION_H;
+}
+
+/**
+ * Inside an Alternativa zone the chosen option carries a compact emerald
+ * "SELECCIONADA" eyebrow in the row's top band (the per-member status that
+ * ClientPreview shows in-card). Drawn AFTER the row content, in the CAPTION_H
+ * band reserved at the row top, in the MARGIN_L column.
+ */
+function drawSelectedFlag(page: PDFPage, ctx: PdfCtx, rowY: number): void {
+  const captionY = rowY - ROW_TOP_PAD;
+  page.drawText('SELECCIONADA', {
+    x: MARGIN_L + GROUP_RAIL_W + 8,
+    y: captionY - CAPTION_SIZE,
+    size: CAPTION_SIZE,
+    font: ctx.fontBold,
+    color: EMERALD_700,
+    characterSpacing: CAPTION_CS,
+  } as DrawTextOptions);
 }
 
 /**
@@ -689,7 +763,7 @@ function drawCompSegs(page: PDFPage, ctx: PdfCtx, segs: CompoundSegment[], x: nu
   return sy;
 }
 
-function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
+function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
   const cols = compoundColumns();
   // Parent identity (family + name) block.
   let textH = 0;
@@ -725,9 +799,9 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine): number {
   }
 
   const inner = Math.max(IMAGE_SIZE, textH);
-  // Same caption band reservation as the article row — kept in sync
+  // Same caption-band reservation rule as the article row — kept in sync
   // so the page-break logic always sees the row's true footprint.
-  const captionBand = lineOptionStyle(line, null) ? CAPTION_H : 0;
+  const captionBand = reservesTopBand(line, inZone) ? CAPTION_H : 0;
   return ROW_TOP_PAD + captionBand + inner + ROW_BOTTOM_PAD;
 }
 
@@ -760,7 +834,7 @@ export function drawSectionHeader(
   label: string,
 ): Cursor {
   const { fontBold } = ctx;
-  const size = 9;
+  const size = FS_EYEBROW;   // 11pt — sections are the brand-coloured landmarks
   const tracking = 1.6;
   const y = cursor.y - size;
   page.drawText((label || '').toUpperCase(), {
@@ -768,7 +842,291 @@ export function drawSectionHeader(
     size, font: fontBold, color: BRAND_700,
     characterSpacing: tracking,
   } as DrawTextOptions);
-  return { x: MARGIN_L, y: y - 18 };
+  // Short terracotta rule under the eyebrow so the section reads as a
+  // deliberate brand landmark, not just larger text. Now that no per-row
+  // label is terracotta, this rule + the eyebrow are the only brand marks
+  // in the body — exactly the "reclaimed accent" the redesign wants.
+  const ruleY = y - 7;
+  page.drawLine({
+    start: { x: MARGIN_L, y: ruleY },
+    end:   { x: MARGIN_L + SECTION_RULE_W, y: ruleY },
+    thickness: 1.5, color: BRAND_700,
+  });
+  return { x: MARGIN_L, y: ruleY - 16 };
+}
+
+// Width of the short terracotta rule beneath a section eyebrow.
+const SECTION_RULE_W = 34;
+
+/* --------------------------- grouped-run ZONE --------------------------- */
+//
+// A Conjunto / Alternativa run is rendered as a bounded, SHADED zone so two
+// runs placed back-to-back read as distinct containers instead of blurring
+// together. The zone is built from per-member elements (a tint fill + a solid
+// left rail under every row) so it continues cleanly across page breaks, and
+// bracketed by two filled bands:
+//
+//   ┌─ GAP ──────────────────────────────────────────────────────┐  ← white gutter
+//   │ ▌ CONJUNTO · 2 PIEZAS                          (header band)│
+//   │ ▌··· member row (tint fill + left rail) ···················│
+//   │ ▌··· member row ··········································   │
+//   │ ▌ TOTAL DEL CONJUNTO                  $5,920.00 (footer band)│
+//   └─ GAP ──────────────────────────────────────────────────────┘  ← white gutter
+//
+// The header band states the group identity ONCE (replacing the repeated
+// "CONJUNTO N DE M" caption that used to sit on every member); the footer band
+// is the "group ends" beat. Presentational only — members are already priced
+// into the grand total (a set sums all members; an alternative bills only the
+// selected option), so neither band adds a charge. Mirrors ClientPreview's
+// GroupCard: Conjunto → neutral ink band/tint, Alternativa → brand-tinted.
+
+// Separation rhythm — a clear white gutter before the header band and after the
+// footer band so two adjacent groups have an unmistakable gap between them.
+const GROUP_GAP_BEFORE = 15;
+const GROUP_GAP_AFTER  = 15;
+
+// The solid left accent RAIL that runs continuously down every member of a
+// zone (and the bands), at the content's left edge. Wider than the old 3pt
+// gutter mark so the shaded zone reads as one bracketed block. It sits just
+// inside MARGIN_L, overlapping the member tint's left edge.
+const GROUP_RAIL_W = 4;
+
+// Opening header band geometry.
+const GROUP_HEADER_PAD_T   = 7;
+const GROUP_HEADER_PAD_B   = 7;
+const GROUP_HEADER_LABEL_SZ = 9;
+const GROUP_HEADER_LABEL_CS = 1.5;
+const GROUP_HEADER_H = GROUP_HEADER_PAD_T + GROUP_HEADER_LABEL_SZ + GROUP_HEADER_PAD_B;
+
+// Closing footer band geometry.
+const GROUP_FOOTER_TOP_PAD    = 7;
+const GROUP_FOOTER_BOTTOM_PAD = 7;
+const GROUP_FOOTER_LABEL_SIZE = 8.5;
+const GROUP_FOOTER_LABEL_CS   = 1.4;
+const GROUP_FOOTER_VALUE_SIZE = 11;
+const GROUP_FOOTER_H = GROUP_FOOTER_TOP_PAD
+  + Math.max(GROUP_FOOTER_LABEL_SIZE, GROUP_FOOTER_VALUE_SIZE)
+  + GROUP_FOOTER_BOTTOM_PAD;
+
+/**
+ * Visual palette for a grouped run's zone — the tints + accent + label colours
+ * that make a Conjunto read neutral and an Alternativa read brand, matching
+ * ClientPreview's GroupCard (head bg / member bg / foot bg / ring / eyebrow).
+ *   memberFill  light tint behind every member row
+ *   bandFill    deeper tint for the header + footer bands
+ *   rail        solid left accent rail down the whole zone
+ *   label       eyebrow / band-label colour
+ */
+export interface GroupZone {
+  type: 'set' | 'alternative';
+  memberFill: RGB;
+  bandFill: RGB;
+  rail: RGB;
+  label: RGB;
+}
+
+// The two zone palettes. Conjunto → neutral ink (no purple), matching the
+// preview's neutral set card; Alternativa → brand. The rail is the strongest
+// tone so the bracket reads; fills are whisper-light so text stays legible.
+const GROUP_ZONES: { set: GroupZone; alternative: GroupZone } = {
+  set: {
+    type: 'set',
+    memberFill: BG_GROUP_SET,
+    bandFill: BAND_GROUP_SET,
+    rail: INK_HIGH,        // ink-800 — neutral-dark, continuous down the zone
+    label: INK_MID,
+  },
+  alternative: {
+    type: 'alternative',
+    memberFill: BRAND_50,
+    bandFill: BAND_GROUP_ALT,
+    rail: ACCENT,          // brand-500
+    label: BRAND_700,
+  },
+};
+
+/** Resolve the zone palette for a run type. */
+export function groupZoneFor(type: 'set' | 'alternative'): GroupZone {
+  return type === 'set' ? GROUP_ZONES.set : GROUP_ZONES.alternative;
+}
+
+/**
+ * Paint a member's zone backdrop — the light tint fill across the content
+ * width plus the solid left accent rail — UNDER the row content (called from
+ * drawLineRow before any text/image is drawn, so it can't cover them). Drawn
+ * per member so the zone continues automatically onto a continuation page.
+ * `rowY` is the row's top edge, `rowH` its full measured height.
+ */
+export function drawGroupMemberZone(
+  page: PDFPage,
+  zone: GroupZone,
+  rowY: number,
+  rowH: number,
+): void {
+  const top = rowY;
+  const bottom = rowY - rowH;
+  // Tint fill across the full content width.
+  page.drawRectangle({
+    x: MARGIN_L,
+    y: bottom,
+    width: CONTENT_W,
+    height: top - bottom,
+    color: zone.memberFill,
+  });
+  // Solid left rail at the content's left edge, continuous down every member.
+  page.drawRectangle({
+    x: MARGIN_L,
+    y: bottom,
+    width: GROUP_RAIL_W,
+    height: top - bottom,
+    color: zone.rail,
+  });
+}
+
+/**
+ * Vertical footprint of the opening header band (Conjunto / Alternativa),
+ * INCLUDING the white gutter that precedes it. The caller folds this into the
+ * first member's page-break budget so the band + first row never split.
+ */
+export function measureGroupHeaderHeight(): number {
+  return GROUP_GAP_BEFORE + GROUP_HEADER_H;
+}
+
+/**
+ * Vertical footprint of the closing footer band, INCLUDING the white gutter
+ * that follows it. The caller adds this to the LAST member's page-break budget
+ * so the footer never gets orphaned onto a fresh page away from its block.
+ */
+export function measureGroupFooterHeight(): number {
+  return GROUP_FOOTER_H + GROUP_GAP_AFTER;
+}
+
+/**
+ * Draw the opening header band of a grouped run, ONCE before its first member.
+ * A filled bar spanning the content width with a solid left cap and a bold
+ * eyebrow stating the group identity ("CONJUNTO · 2 PIEZAS" /
+ * "ALTERNATIVAS · ELIGE UNA"). Consumes a white gutter above the band first
+ * (GROUP_GAP_BEFORE) so it separates cleanly from whatever precedes it.
+ * Returns the cursor just below the band (the first member draws from there).
+ */
+export function drawGroupHeaderBand(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  zone: GroupZone,
+  memberCount: number,
+  optional: boolean = false,
+): Cursor {
+  const { fontBold } = ctx;
+  const top = cursor.y - GROUP_GAP_BEFORE;          // white gutter above
+  const bottom = top - GROUP_HEADER_H;
+
+  // Band fill across the content width.
+  page.drawRectangle({
+    x: MARGIN_L, y: bottom, width: CONTENT_W, height: GROUP_HEADER_H,
+    color: zone.bandFill,
+  });
+  // Solid left cap — same rail as the members, continuous into the band.
+  page.drawRectangle({
+    x: MARGIN_L, y: bottom, width: GROUP_RAIL_W, height: GROUP_HEADER_H,
+    color: zone.rail,
+  });
+
+  // Eyebrow: bold tracked label + a quieter descriptor. Only a Conjunto can
+  // be optional; an Alternativa always uses one option.
+  const label = zone.type === 'set'
+    ? `CONJUNTO${optional ? ' OPCIONAL' : ''} · ${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`
+    : 'ALTERNATIVAS · ELIGE UNA';
+  page.drawText(label, {
+    x: MARGIN_L + GROUP_RAIL_W + 8,
+    y: bottom + GROUP_HEADER_PAD_B,
+    size: GROUP_HEADER_LABEL_SZ,
+    font: fontBold,
+    color: zone.label,
+    characterSpacing: GROUP_HEADER_LABEL_CS,
+  } as DrawTextOptions);
+
+  return { x: MARGIN_L, y: bottom };
+}
+
+/**
+ * Draw the closing footer band of a grouped run, ONCE after its last member.
+ * A filled bar (deeper tint than the members) with the Spanish roll-up label
+ * on the left and the amount right-aligned, bold, on the shared money column —
+ * the clear "group ends" beat. Trails a white gutter (GROUP_GAP_AFTER) so the
+ * next block separates cleanly. Returns the cursor below the gutter.
+ */
+export function drawGroupFooterBand(
+  page: PDFPage,
+  ctx: PdfCtx,
+  cursor: Cursor,
+  zone: GroupZone,
+  label: string,
+  amount: number,
+): Cursor {
+  const { fontBold } = ctx;
+  const rightX = PAGE_W - MARGIN_R;
+  const top = cursor.y;
+  const bottom = top - GROUP_FOOTER_H;
+
+  // Band fill across the content width — deeper than the member tint.
+  page.drawRectangle({
+    x: MARGIN_L, y: bottom, width: CONTENT_W, height: GROUP_FOOTER_H,
+    color: zone.bandFill,
+  });
+  // Solid left cap — closes the rail at the bottom of the zone.
+  page.drawRectangle({
+    x: MARGIN_L, y: bottom, width: GROUP_RAIL_W, height: GROUP_FOOTER_H,
+    color: zone.rail,
+  });
+
+  const baselineY = bottom + GROUP_FOOTER_BOTTOM_PAD
+    + (Math.max(GROUP_FOOTER_LABEL_SIZE, GROUP_FOOTER_VALUE_SIZE) - GROUP_FOOTER_VALUE_SIZE) / 2;
+  // Left eyebrow — uppercase tracked caption in the zone's label tone.
+  page.drawText(label, {
+    x: MARGIN_L + GROUP_RAIL_W + 8,
+    y: baselineY + (GROUP_FOOTER_VALUE_SIZE - GROUP_FOOTER_LABEL_SIZE) * 0.5,
+    size: GROUP_FOOTER_LABEL_SIZE,
+    font: fontBold,
+    color: zone.label,
+    characterSpacing: GROUP_FOOTER_LABEL_CS,
+  } as DrawTextOptions);
+
+  // Right-aligned amount in ink, bold — same money formatter as the rows.
+  drawRightAt(
+    page, formatMoney(amount, ctx.currency, ctx.rates), rightX - 6, baselineY,
+    GROUP_FOOTER_VALUE_SIZE, fontBold, INK,
+  );
+
+  // Trail a white gutter so the next block clearly separates.
+  return { x: MARGIN_L, y: bottom - GROUP_GAP_AFTER };
+}
+
+/**
+ * Resolve a group run's footer presentation — the Spanish uppercase eyebrow
+ * label, the rolled-up amount, and the zone palette — for a `set` or
+ * `alternative` run. `lines` is the full quote list (the subtotal helpers
+ * filter by groupId). Centralised so the caller (quotePdf.ts) stays a thin
+ * loop and both group types share one footer code path.
+ */
+export function groupFooterSpec(
+  type: 'set' | 'alternative',
+  lines: QuoteLine[],
+  groupId: string,
+  optional: boolean = false,
+): { label: string; amount: number; zone: GroupZone } {
+  if (type === 'set') {
+    return {
+      label: optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO',
+      amount: setSubtotal(lines, groupId),
+      zone: GROUP_ZONES.set,
+    };
+  }
+  return {
+    label: 'TOTAL',
+    amount: alternativeSubtotal(lines, groupId),
+    zone: GROUP_ZONES.alternative,
+  };
 }
 
 /**
@@ -802,20 +1160,31 @@ export async function drawLineRow(
   cursor: Cursor,
   line: QuoteLine,
   groupInfo?: { index: number; total: number } | null,
+  zone?: GroupZone | null,
 ): Promise<Cursor> {
   if (isCompoundLine(line)) {
-    return drawCompoundLineRow(page, ctx, cursor, line, groupInfo);
+    return drawCompoundLineRow(page, ctx, cursor, line, groupInfo, zone);
   }
   const { doc, fontBold, fontRegular } = ctx;
   const cols = lineColumns();
   const rowY = cursor.y;
-  const rowH = measureLineRowHeight(ctx, line);
-  // Caption band sits in ROW_TOP_PAD's region — `inner` and
-  // `innerTop` shift down by CAPTION_H when the line is optional
-  // / in an alternative group, so the image + detail + numeric
-  // stack lands below the caption rather than overlapping it.
+  const inZone = !!zone;
+  const rowH = measureLineRowHeight(ctx, line, inZone);
+
+  // ---- Group-zone backdrop — tint fill + continuous left rail, drawn
+  //      UNDER everything so a grouped run reads as one shaded container
+  //      that carries across page breaks. Member's own caption is
+  //      suppressed in a zone (identity lives in the header band).
+  if (zone) drawGroupMemberZone(page, zone, rowY, rowH);
+
+  // Caption band sits in ROW_TOP_PAD's region — `inner` and `innerTop` shift
+  // down by CAPTION_H when the row paints anything in it: its OWN caption
+  // (optional, or a grouped member rendered standalone) OR (inside a zone) the
+  // selected-alternative flag. Otherwise the stack lands at the normal top.
   const style = lineOptionStyle(line, groupInfo);
-  const captionBand = style ? CAPTION_H : 0;
+  const ownCaption = drawsOwnCaption(line, inZone);
+  const selectedFlag = zoneSelectedFlag(line, inZone);
+  const captionBand = (ownCaption || selectedFlag) ? CAPTION_H : 0;
   const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD - captionBand;
   const innerTop = rowY - ROW_TOP_PAD - captionBand;
 
@@ -842,102 +1211,87 @@ export async function drawLineRow(
     sy = drawSegs(page, ctx, detail.desc, cols.detail.x, sy);
   }
 
-  // ---- Numeric column — three label/value pairs, right-aligned ----------
+  // ---- Compact money cell — right-aligned to the shared money column ----
+  // One muted "qty × $unit" line, an optional struck-list/−Y% discount
+  // pair, then the line TOTAL as the bold anchor. No CANTIDAD / UNITARIO /
+  // TOTAL eyebrows — they repeated on every row and competed with the
+  // section landmarks for attention. The TOTAL aligns on the same right
+  // money column as compound subtotals and group-footer values.
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const total = unit * (line.qty || 0);
   const discount = Number(line.lineDiscountPct) || 0;
   const listUnit = lineListUnit(line);
+  const moneyRight = cols.numeric.rightX;
 
   let ny = innerTop;
-  function drawLabelValue(
-    label: string,
-    value: string,
-    lblToken: TypeToken,
-    valToken: TypeToken,
-  ): void {
-    const lblY = ny - lblToken.size;
-    drawRightAt(
-      page, label, cols.numeric.rightX, lblY,
-      lblToken.size, fontBold, lblToken.color, lblToken.cs || 0,
-    );
-    ny -= lblToken.lh;
-    const valY = ny - valToken.size;
-    drawRightAt(
-      page, value, cols.numeric.rightX, valY,
-      valToken.size, valToken.bold ? fontBold : fontRegular, valToken.color,
-    );
-    ny -= valToken.lh + NUMERIC_GAP;
-  }
+  // "qty × $unit" — the per-unit story in one compact muted line.
+  const eq = `${line.qty || 0} × ${formatMoney(unit, ctx.currency, ctx.rates)}`;
+  drawRightAt(page, eq, moneyRight, ny - T.moneyLine.size, T.moneyLine.size, fontRegular, T.moneyLine.color);
+  ny -= T.moneyLine.lh;
 
-  drawLabelValue('CANTIDAD', String(line.qty || 0), T.numLabel, T.numValue);
-  drawLabelValue('UNITARIO', formatMoney(unit,  ctx.currency, ctx.rates), T.numLabel, T.numValue);
-  // Discount caption between UNITARIO and TOTAL — only when a line
-  // discount is set. Shows the list price with a strike-through line
-  // (pdf-lib has no `text-decoration: line-through`, so we draw a
-  // 0.6pt rule through the price string) and a brand-700 "–Y%"
-  // caption underneath. Bumps TOTAL down by `numericHeight`'s extra
-  // budget, which we reserved upstream.
+  // Discount: struck list price + "−Y%" caption, hugging the equation.
+  // pdf-lib has no text-decoration, so we draw a 0.6pt rule across the
+  // list-price string at the x-height.
   if (discount > 0) {
-    // Strike-through list price. ny currently sits at the top of the
-    // next block (post NUMERIC_GAP from UNITARIO). Roll the gap back
-    // so the caption hugs UNITARIO instead of floating midway.
-    ny += NUMERIC_GAP;
     const listText = formatMoney(listUnit, ctx.currency, ctx.rates);
     const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
     const listY = ny - T.numStrike.size;
-    drawRightAt(
-      page, listText, cols.numeric.rightX, listY,
-      T.numStrike.size, fontRegular, T.numStrike.color,
-    );
-    // Horizontal rule through the strike-through text. Centered on
-    // the x-height (~0.4 of the size), 0.6pt thick.
+    drawRightAt(page, listText, moneyRight, listY, T.numStrike.size, fontRegular, T.numStrike.color);
     const strikeY = listY + T.numStrike.size * 0.32;
     page.drawLine({
-      start: { x: cols.numeric.rightX - listW, y: strikeY },
-      end:   { x: cols.numeric.rightX,         y: strikeY },
+      start: { x: moneyRight - listW, y: strikeY },
+      end:   { x: moneyRight,         y: strikeY },
       thickness: 0.6, color: T.numStrike.color,
     });
     ny -= T.numStrike.lh;
 
-    const discText = `Descuento –${discount}%`;
-    const discY = ny - T.numDiscount.size;
-    drawRightAt(
-      page, discText, cols.numeric.rightX, discY,
-      T.numDiscount.size, fontBold, T.numDiscount.color,
-    );
-    ny -= T.numDiscount.lh + NUMERIC_GAP;
+    const discText = `−${discount}%`;
+    drawRightAt(page, discText, moneyRight, ny - T.numDiscount.size, T.numDiscount.size, fontBold, T.numDiscount.color);
+    ny -= T.numDiscount.lh;
   }
-  // No trailing gap after the last block — collapse it back.
-  drawLabelValue('TOTAL',    formatMoney(total, ctx.currency, ctx.rates), T.totalLabel, T.totalValue);
+
+  // Line TOTAL — the bold ink-900 anchor, ~12pt so it never rivals the
+  // 24pt grand total but clearly owns the row's price.
+  ny -= NUMERIC_GAP;
+  drawRightAt(
+    page, formatMoney(total, ctx.currency, ctx.rates), moneyRight,
+    ny - T.totalValue.size, T.totalValue.size, fontBold, T.totalValue.color,
+  );
 
   // ---- Option / alternative treatment ----------------------------------
-  // Three steps, in order: (1) wash overlay fades the row when the
-  // line is optional or a non-selected alternative — mirrors the 70%
-  // opacity rule ClientPreview applies. (2) accent bar in the gutter
-  // and (3) caption above the row content always stay vivid (drawn
-  // AFTER the wash so it can't fade them). Skipped entirely when the
-  // line has no option/alternative state.
+  // Steps, in order: (1) wash overlay fades the row when the line is optional
+  // or a non-selected alternative — mirrors the 70% opacity rule ClientPreview
+  // applies; it still runs INSIDE a zone (a non-selected alternative member
+  // must read dimmer than the chosen one). (2) the per-row gutter accent +
+  // caption draw only when the row owns its caption (optional, or a grouped
+  // member rendered standalone) — inside a zone the rail + header band carry
+  // that, so this is skipped. Both stay vivid (drawn AFTER the wash).
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
-    drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + swatch on top of the wash so the
-    // customer still sees the product and its fabric colour on a dimmed
-    // (optional / non-selected alternative) line.
-    if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
-      if (line.swatchImageId) {
-        await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
-      }
+    if (ownCaption) drawOptionAccent(page, ctx, style, rowY, rowH);
+    // Redraw only the swatch on top of the wash so its fabric colour stays
+    // vivid in any state; the product photo dims with the rest of a
+    // deactivated (optional / non-selected alternative) row.
+    if (style.dim && line.swatchImageId) {
+      await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
     }
   }
+  // Inside a zone, the chosen alternative keeps its emerald "SELECCIONADA"
+  // flag (never dimmed, so it stays vivid without a redraw).
+  if (selectedFlag) drawSelectedFlag(page, ctx, rowY);
 
   // ---- Bottom divider --------------------------------------------------
+  // Inside a zone the members are separated by the tint + rail rather than a
+  // hairline; a divider would cut the shaded container in two. Standalone rows
+  // keep their light divider so the white-page rhythm holds.
   const rowBottom = rowY - rowH;
-  page.drawLine({
-    start: { x: MARGIN_L, y: rowBottom },
-    end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
-    thickness: 0.5, color: INK_LINE,
-  });
+  if (!zone) {
+    page.drawLine({
+      start: { x: MARGIN_L, y: rowBottom },
+      end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
+      thickness: 0.5, color: INK_LINE,
+    });
+  }
 
   return { x: MARGIN_L, y: rowBottom };
 }
@@ -957,13 +1311,21 @@ async function drawCompoundLineRow(
   cursor: Cursor,
   line: QuoteLine,
   groupInfo?: { index: number; total: number } | null,
+  zone?: GroupZone | null,
 ): Promise<Cursor> {
   const { doc, fontBold, fontRegular } = ctx;
   const cols = compoundColumns();
   const rowY = cursor.y;
-  const rowH = measureLineRowHeight(ctx, line);
+  const inZone = !!zone;
+  const rowH = measureLineRowHeight(ctx, line, inZone);
+
+  // Group-zone backdrop — tint fill + continuous left rail under everything.
+  if (zone) drawGroupMemberZone(page, zone, rowY, rowH);
+
   const style = lineOptionStyle(line, groupInfo);
-  const captionBand = style ? CAPTION_H : 0;
+  const ownCaption = drawsOwnCaption(line, inZone);
+  const selectedFlag = zoneSelectedFlag(line, inZone);
+  const captionBand = (ownCaption || selectedFlag) ? CAPTION_H : 0;
   const inner = rowH - ROW_TOP_PAD - ROW_BOTTOM_PAD - captionBand;
   const innerTop = rowY - ROW_TOP_PAD - captionBand;
 
@@ -1094,29 +1456,34 @@ async function drawCompoundLineRow(
   );
 
   // ---- Option / alternative treatment ----------------------------------
-  // Same three-step finish as the article row — wash first, accent +
-  // caption last so they stay vivid against the faded content.
+  // Same finish as the article row — wash first; the per-row accent + caption
+  // draw only when the row owns its caption (suppressed inside a zone, where
+  // the rail + header band carry the identity).
   if (style) {
     if (style.dim) drawOptionDim(page, rowY, rowH);
-    drawOptionAccent(page, ctx, style, rowY, rowH);
-    // Redraw the product photo + every component swatch on top of the
-    // wash so the customer can still read the product and the fabric
-    // colours of a dimmed (alternative) bundle.
+    if (ownCaption) drawOptionAccent(page, ctx, style, rowY, rowH);
+    // Redraw only the component swatches on top of the wash so their
+    // fabric colours stay vivid in any state; the product photo dims with
+    // the rest of a deactivated (optional / non-selected alternative) bundle.
     if (style.dim) {
-      drawProductImage(page, img, cols.img.x, imgY);
       for (const s of compSwatches) {
         await drawSwatch(page, ctx.doc, s.id, cols.detail.x, s.topY, SWATCH_SIZE);
       }
     }
   }
+  if (selectedFlag) drawSelectedFlag(page, ctx, rowY);
 
   // ---- Bottom divider ---------------------------------------------------
+  // Suppressed inside a zone — the shaded container's tint + rail separate
+  // members; a divider would cut it in two.
   const rowBottom = rowY - rowH;
-  page.drawLine({
-    start: { x: MARGIN_L, y: rowBottom },
-    end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
-    thickness: 0.5, color: INK_LINE2,
-  });
+  if (!zone) {
+    page.drawLine({
+      start: { x: MARGIN_L, y: rowBottom },
+      end:   { x: PAGE_W - MARGIN_R, y: rowBottom },
+      thickness: 0.5, color: INK_LINE2,
+    });
+  }
 
   return { x: MARGIN_L, y: rowBottom };
 }
