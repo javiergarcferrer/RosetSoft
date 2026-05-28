@@ -114,6 +114,12 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 - [ ] **Decompose oversized leaves.** `QuoteLineItem.jsx` (**1501 LOC**, 13 inline subcomponents,
   own `FamiliesContext`) and `ClientPreview.jsx` (**980 LOC**). Action: split the inline
   subcomponents into files; separate presentation from catalog lookup + persistence.
+  - PARTIAL — `ClientPreview` (966 → 821 LOC): extracted the two reusable, self-contained leaves
+    `ImageZoom.jsx` + `MaterialOptionsStrip.jsx` into files (and dropped `MaterialOptionsStrip`'s
+    now-dead `pricing.materialOptionDeltas` namespace fallback for the direct named import).
+    Remaining: the entangled line/group components (`ClientLine`/`CompoundClientLine`/
+    `ClientGroupCard`) and all of `QuoteLineItem.jsx` (under active parallel churn — risky to split
+    blind without UI tests).
 
 - [ ] **Kill the prop-drilling.** Line-mutation handlers thread `Workspace → LineItemsCard →
   LineItemList → renderRow → QuoteLineItem → bands`; `families` already had to escape via
