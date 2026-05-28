@@ -1,0 +1,16 @@
+-- No-op reconciliation stub. DO NOT add DDL here.
+--
+-- This version was applied to the production database as a back-dated
+-- "products_important" migration, then re-timestamped to
+-- 20260527170000_products_important.sql (which carries the real DDL) and the
+-- original file removed. The remote migration history still records version
+-- 20260515160000, so `supabase db push` aborts with "Remote migration versions
+-- not found in local migrations directory" — jamming every pending migration
+-- (including quote_lines.material_options), which is why new features that need
+-- a column silently fail.
+--
+-- Restoring an empty file at this exact version lets the runner reconcile local
+-- with the remote history. The version is already applied on remote, so this
+-- file is never executed; it must stay a no-op (the real DDL lives in
+-- 20260527170000).
+select 1;

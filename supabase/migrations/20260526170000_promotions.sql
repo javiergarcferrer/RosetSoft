@@ -1,0 +1,13 @@
+-- No-op reconciliation stub. DO NOT add DDL here.
+--
+-- "Promotions engine v1" was applied to the production database at this version,
+-- then the feature was reverted (commit ee37e2e) and this file removed. The
+-- remote migration history still records version 20260526170000, so
+-- `supabase db push` aborts with "Remote migration versions not found in local
+-- migrations directory" and refuses to apply later migrations.
+--
+-- Restoring an empty file at this exact version reconciles local with remote.
+-- The version is already applied, so this file never runs. Any promotions
+-- objects left in production are untouched here; removing them (if wanted) is a
+-- separate forward migration.
+select 1;
