@@ -10,6 +10,8 @@
  * container number — so a correct number is the whole input to the lookup.
  */
 
+import { lookupPort } from './portCoordinates.js';
+
 /* ----------------------------- ISO 6346 ----------------------------- */
 
 // Per ISO 6346: letters map to values 10..38, skipping every multiple of
@@ -115,7 +117,10 @@ export interface TrackingMilestone {
   code: string | null;       // DEPA / ARRI / LOAD / GTIN / …
   label: string;             // human label (es)
   at: number | null;         // event time, ms
-  location: string | null;
+  location: string | null;   // human display name (or UN/LOCODE fallback)
+  unloc: string | null;      // raw UN/LOCODE, for map geocoding
+  lat: number | null;        // event coordinate, when the carrier supplies one
+  lon: number | null;
   mode: string | null;       // VESSEL | RAIL | TRUCK | BARGE
   vessel: string | null;
   voyage: string | null;
@@ -148,6 +153,20 @@ function locName(loc: any): string | null {
   return loc.locationName || loc.UNLocationCode || null;
 }
 
+function locUnloc(loc: any): string | null {
+  if (!loc) return null;
+  return loc.UNLocationCode || null;
+}
+
+/** Pull a {lat, lon} off a DCSA location object when the carrier includes one. */
+function locCoords(loc: any): { lat: number; lon: number } | null {
+  if (!loc) return null;
+  const lat = Number(loc.latitude);
+  const lon = Number(loc.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+  return null;
+}
+
 function toMs(iso: any): number | null {
   if (!iso) return null;
   const t = Date.parse(String(iso));
@@ -164,6 +183,9 @@ export function normalizeEvent(ev: any): TrackingMilestone {
     label: '',
     at: toMs(ev?.eventDateTime),
     location: null,
+    unloc: null,
+    lat: null,
+    lon: null,
     mode: null,
     vessel: null,
     voyage: null,
@@ -175,12 +197,18 @@ export function normalizeEvent(ev: any): TrackingMilestone {
     m.label = (m.code && TRANSPORT_LABELS[m.code]) || m.code || 'Transporte';
     m.mode = tc?.modeOfTransport || null;
     m.location = locName(tc?.location) || tc?.UNLocationCode || null;
+    m.unloc = locUnloc(tc?.location) || tc?.UNLocationCode || null;
+    const c = locCoords(tc?.location);
+    if (c) { m.lat = c.lat; m.lon = c.lon; }
     m.vessel = tc?.vessel?.vesselName || null;
     m.voyage = tc?.exportVoyageNumber || tc?.importVoyageNumber || null;
   } else if (type === 'EQUIPMENT') {
     m.code = ev?.equipmentEventTypeCode || null;
     m.label = (m.code && EQUIPMENT_LABELS[m.code]) || m.code || 'Equipo';
     m.location = locName(ev?.eventLocation) || locName(ev?.transportCall?.location) || null;
+    m.unloc = locUnloc(ev?.eventLocation) || locUnloc(ev?.transportCall?.location) || null;
+    const c = locCoords(ev?.eventLocation) || locCoords(ev?.transportCall?.location);
+    if (c) { m.lat = c.lat; m.lon = c.lon; }
     m.mode = ev?.transportCall?.modeOfTransport || null;
     m.empty = ev?.emptyIndicatorCode || null;
   } else if (type === 'SHIPMENT') {
@@ -220,4 +248,89 @@ export function summarizeTracking(events: any[] | null | undefined): TrackingSum
   }
 
   return { milestones, last, eta, count: milestones.length };
+}
+
+/* ------------------------- map route shaping ------------------------ */
+
+export interface RouteStop {
+  lat: number;
+  lon: number;
+  name: string;                  // port name (event-supplied, else table, else code)
+  unloc: string | null;
+  at: number | null;            // most recent event time at this stop, ms
+  events: TrackingMilestone[];  // every event that happened here, in order
+  isLast: boolean;              // the last-known ACTual position
+  isEta: boolean;               // the estimated/planned arrival (destination)
+}
+
+export interface TrackingRoute {
+  stops: RouteStop[];   // chronological, consecutive same-port events merged
+  lastIndex: number;    // index of the last-known position in stops, or -1
+  etaIndex: number;     // index of the ETA stop in stops, or -1
+}
+
+/** Coordinate for a milestone: the carrier's own lat/lon if present, else the
+ *  UN/LOCODE table. Returns null when neither resolves (not mappable). */
+function milestoneCoords(m: TrackingMilestone): { lat: number; lon: number; name: string | null } | null {
+  if (m.lat != null && m.lon != null && Number.isFinite(m.lat) && Number.isFinite(m.lon)) {
+    return { lat: m.lat, lon: m.lon, name: m.location };
+  }
+  const port = lookupPort(m.unloc);
+  if (port) return { lat: port.lat, lon: port.lon, name: port.name };
+  return null;
+}
+
+/**
+ * Turn a TrackingSummary into an ordered list of map stops. Milestones that
+ * don't geocode are skipped (they remain in the textual timeline); CONSECUTIVE
+ * events at the same place collapse into one stop (LOAD→DEPA at the load port,
+ * ARRI→DISC at destination), so the map shows the voyage's port hops rather
+ * than one pin per raw event. The stop carrying `summary.last` / `summary.eta`
+ * is flagged so the UI can style the current position and the destination.
+ */
+export function buildTrackingRoute(summary: TrackingSummary | null | undefined): TrackingRoute {
+  const empty: TrackingRoute = { stops: [], lastIndex: -1, etaIndex: -1 };
+  if (!summary || !Array.isArray(summary.milestones) || summary.milestones.length === 0) {
+    return empty;
+  }
+
+  // Internal `key` groups consecutive events at one place; stripped before return.
+  type WorkingStop = RouteStop & { key: string; nameFromEvent: boolean };
+  const stops: WorkingStop[] = [];
+
+  for (const m of summary.milestones) {
+    const coords = milestoneCoords(m);
+    if (!coords) continue;
+    const key = (m.unloc && m.unloc.toUpperCase()) || `${coords.lat.toFixed(3)},${coords.lon.toFixed(3)}`;
+    const prev = stops[stops.length - 1];
+    if (prev && prev.key === key) {
+      prev.events.push(m);
+      if (m.at != null && (prev.at == null || m.at > prev.at)) prev.at = m.at;
+      // Prefer an event-supplied name over the table fallback.
+      if (!prev.nameFromEvent && m.location) { prev.name = m.location; prev.nameFromEvent = true; }
+      continue;
+    }
+    stops.push({
+      key,
+      lat: coords.lat,
+      lon: coords.lon,
+      name: m.location || coords.name || m.unloc || '—',
+      nameFromEvent: !!m.location,
+      unloc: m.unloc,
+      at: m.at,
+      events: [m],
+      isLast: false,
+      isEta: false,
+    });
+  }
+
+  let lastIndex = -1;
+  let etaIndex = -1;
+  stops.forEach((s, i) => {
+    if (summary.last && s.events.includes(summary.last)) { s.isLast = true; lastIndex = i; }
+    if (summary.eta && s.events.includes(summary.eta)) { s.isEta = true; etaIndex = i; }
+  });
+
+  const cleaned: RouteStop[] = stops.map(({ key, nameFromEvent, ...rest }) => rest);
+  return { stops: cleaned, lastIndex, etaIndex };
 }
