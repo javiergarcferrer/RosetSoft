@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
@@ -43,13 +44,15 @@ import { formatMoney } from '../../lib/format.js';
  *   - Sort order renormalised after a drop. A reorder that splits a group
  *     simply yields the new contiguous runs the card layout reflects.
  */
-export default function LineItemList({
-  lines, groups, quote, focusLineId,
-  onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
-  onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-  onAddSection, onOpenCatalog,
-}) {
+export default function LineItemList({ lines, groups, quote, focusLineId }) {
+  // Editor actions arrive via context (served by Workspace) rather than being
+  // threaded through LineItemsCard — see QuoteActionsContext.
+  const {
+    onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
+    onToggleOptional, onAddAlternative, onSelectAlternative,
+    onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
+    onAddSection, onOpenCatalog,
+  } = useQuoteActions();
   // Per-line "Alternativa N de M" / "Conjunto N de M" position maps, from the
   // shared lib helpers so the editor, the client preview, and the PDF all
   // read the same caption instead of each re-scanning the list.

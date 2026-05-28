@@ -121,10 +121,13 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
     `ClientGroupCard`) and all of `QuoteLineItem.jsx` (under active parallel churn — risky to split
     blind without UI tests).
 
-- [ ] **Kill the prop-drilling.** Line-mutation handlers thread `Workspace → LineItemsCard →
-  LineItemList → renderRow → QuoteLineItem → bands`; `families` already had to escape via
-  `FamiliesContext` because `LineItemList` won't thread it. Action: serve quote+actions from a
-  context/store so blocks subscribe to what they need.
+- [x] **Kill the prop-drilling.** DONE — editor actions now flow via `QuoteActionsContext`
+  (`src/components/quote-builder/QuoteActionsContext.js`), mirroring the `FamiliesContext` escape
+  hatch. `Workspace` provides the 13-handler bundle once; `LineItemsCard` and `LineItemList` read
+  what they use from context instead of threading them through. History-wrapping (`hx`) stays at the
+  source (and `onToggleGroupOptional` stays un-wrapped, as before); per-line binding stays local in
+  `LineItemList`. Quote/lines/groups stay as data props by design. Behavior identical; typecheck +
+  218 tests + build green.
 
 ---
 

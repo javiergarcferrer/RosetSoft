@@ -25,6 +25,7 @@ import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/QuoteLineItem.jsx';
+import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
@@ -1077,27 +1078,37 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           {/* Provide catalog families to every line item below (through the
               LineItemList, which doesn't thread per-line catalog props) so
               the material-options chips can show list-price deltas. */}
-          <FamiliesContext.Provider value={families}>
-            <LineItemsCard
-              lines={lines}
-              groups={groups}
-              quote={quote}
-              focusLineId={focusLineId}
-              onToggleGroupOptional={toggleGroupOptional}
-              onChangeLine={hx(updateLine)}
-              onRemoveLine={hx(removeLine)}
-              onDuplicateLine={hx(duplicateLine)}
-              onToggleOptional={hx(toggleOptional)}
-              onAddAlternative={hx(addAlternative)}
-              onSelectAlternative={hx(selectAlternative)}
-              onSeparateFromSet={hx(separateFromSet)}
-              onUngroup={hx(ungroupLine)}
-              onJoinSet={hx(joinSet)}
-              onReorder={hx(reorderLines)}
-              onAddSection={hx(addSection)}
-              onOpenCatalog={() => setCatalogOpen(true)}
-            />
-          </FamiliesContext.Provider>
+          {/* Editor actions flow via QuoteActionsContext instead of being
+              threaded Workspace → LineItemsCard → LineItemList; catalog
+              families already do the same via FamiliesContext. The item tree
+              subscribes to the logic it needs, so re-nesting the UI doesn't
+              re-plumb handlers. History-wrapping (hx) stays here at the source
+              — note onToggleGroupOptional is intentionally NOT wrapped, as
+              before. */}
+          <QuoteActionsContext.Provider value={{
+            onToggleGroupOptional: toggleGroupOptional,
+            onChangeLine: hx(updateLine),
+            onRemoveLine: hx(removeLine),
+            onDuplicateLine: hx(duplicateLine),
+            onToggleOptional: hx(toggleOptional),
+            onAddAlternative: hx(addAlternative),
+            onSelectAlternative: hx(selectAlternative),
+            onSeparateFromSet: hx(separateFromSet),
+            onUngroup: hx(ungroupLine),
+            onJoinSet: hx(joinSet),
+            onReorder: hx(reorderLines),
+            onAddSection: hx(addSection),
+            onOpenCatalog: () => setCatalogOpen(true),
+          }}>
+            <FamiliesContext.Provider value={families}>
+              <LineItemsCard
+                lines={lines}
+                groups={groups}
+                quote={quote}
+                focusLineId={focusLineId}
+              />
+            </FamiliesContext.Provider>
+          </QuoteActionsContext.Provider>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
         </div>
       )}
@@ -1151,13 +1162,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 /*  Sub-cards                                                                  */
 /* -------------------------------------------------------------------------- */
 
-function LineItemsCard({
-  lines, groups, quote, focusLineId,
-  onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
-  onToggleOptional, onAddAlternative, onSelectAlternative,
-  onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-  onAddSection, onOpenCatalog,
-}) {
+function LineItemsCard({ lines, groups, quote, focusLineId }) {
+  // The header/footer add buttons use just these two; LineItemList subscribes
+  // to the rest of the editor actions from context itself.
+  const { onAddSection, onOpenCatalog } = useQuoteActions();
   return (
     <div className="card overflow-hidden">
       <header className="card-header">
@@ -1189,19 +1197,6 @@ function LineItemsCard({
         groups={groups}
         quote={quote}
         focusLineId={focusLineId}
-        onToggleGroupOptional={onToggleGroupOptional}
-        onChangeLine={onChangeLine}
-        onRemoveLine={onRemoveLine}
-        onDuplicateLine={onDuplicateLine}
-        onToggleOptional={onToggleOptional}
-        onAddAlternative={onAddAlternative}
-        onSelectAlternative={onSelectAlternative}
-        onSeparateFromSet={onSeparateFromSet}
-        onUngroup={onUngroup}
-        onJoinSet={onJoinSet}
-        onReorder={onReorder}
-        onAddSection={onAddSection}
-        onOpenCatalog={onOpenCatalog}
       />
       {lines.length > 0 && (
         <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between gap-2">
