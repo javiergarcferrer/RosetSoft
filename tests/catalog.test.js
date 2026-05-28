@@ -6,7 +6,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct } from '../src/lib/catalog.js';
+import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
 
@@ -68,4 +69,104 @@ test('a lone SKU ending in a grade letter is a standalone (not graded) family', 
   assert.equal(vik.graded, false);
   assert.deepEqual(availableGrades(vik), []);
   assert.equal(productForGrade(vik, '').reference, '10261152W');
+});
+
+/* ----------------------------- switchLineProduct ----------------------------- */
+
+const togoFamily = () => groupFamilies(TOGO).find((f) => f.root === '15420000');
+
+// A second graded model offered in only A + G — used to force materials whose
+// grade the target model doesn't carry.
+const PRADO = [
+  { reference: '16000000A', name: 'PRADO SOFA', family: 'SEATS', priceUsd: 2000, cost: 800 },
+  { reference: '16000000G', name: 'PRADO SOFA', family: 'SEATS', priceUsd: 3000, cost: 1200 },
+];
+const pradoFamily = () => groupFamilies(PRADO).find((f) => f.root === '16000000');
+
+// A non-graded model (its tail isn't a grade) — no fabric grades at all.
+const TABLE = [
+  { reference: '0050W49N', name: 'LOW TABLE', family: 'TABLES', subtype: 'Walnut', dimensions: 'H 30 × W 120', priceUsd: 1500, cost: 600 },
+];
+const tableFamily = () => groupFamilies(TABLE).find((f) => f.root === '0050W49N');
+
+test('keeps a compatible base material and re-snapshots the new model price', () => {
+  const line = { subtype: composeSubtype('G', 'DIVA'), swatchImageId: 'img1', materialOptions: null };
+  const patch = switchLineProduct(line, togoFamily());
+  assert.equal(patch.reference, '15420000G');
+  assert.equal(patch.unitPrice, 4450);
+  assert.equal(patch.unitCost, 1618.18);
+  assert.equal(patch.name, 'TOGO FIRESIDE CHAIR');
+  assert.equal(patch.subtype, composeSubtype('G', 'DIVA')); // material untouched
+  assert.equal(patch.swatchImageId, 'img1');                // swatch kept
+  assert.equal(patch.materialOptions, null);
+});
+
+test('drops options the new model has no grade for, keeps the rest', () => {
+  const line = {
+    subtype: composeSubtype('A', 'ALPHA'),
+    swatchImageId: null,
+    materialOptions: {
+      baseGrade: 'A',
+      baseLabel: 'ALPHA',
+      options: [
+        { grade: 'G', label: 'GAMMA' },   // TOGO has G → kept
+        { grade: 'B', label: 'BETA' },    // TOGO has no B → dropped
+      ],
+    },
+  };
+  const patch = switchLineProduct(line, togoFamily());
+  assert.equal(patch.subtype, composeSubtype('A', 'ALPHA'));   // base survives
+  assert.equal(patch.materialOptions.baseGrade, 'A');
+  assert.deepEqual(patch.materialOptions.options.map((o) => o.grade), ['G']);
+});
+
+test('promotes the first surviving option when the base material is incompatible', () => {
+  const line = {
+    subtype: composeSubtype('B', 'BETA'),   // TOGO has no B → base dropped
+    swatchImageId: 'base-swatch',
+    materialOptions: {
+      baseGrade: 'B',
+      baseLabel: 'BETA',
+      options: [
+        { grade: 'M', label: 'MICRO', swatchImageId: 'm-swatch' }, // promoted
+        { grade: 'G', label: 'GAMMA' },                            // stays an option
+        { grade: 'B', label: 'OTHER-B' },                          // dropped
+      ],
+    },
+  };
+  const patch = switchLineProduct(line, togoFamily());
+  assert.equal(patch.subtype, composeSubtype('M', 'MICRO'));
+  assert.equal(patch.swatchImageId, 'm-swatch');
+  assert.equal(patch.unitPrice, 5140);   // TOGO grade M
+  assert.equal(patch.materialOptions.baseGrade, 'M');
+  assert.deepEqual(patch.materialOptions.options.map((o) => o.grade), ['G']);
+});
+
+test('clears the material and prices at the cheapest grade when nothing survives', () => {
+  const line = { subtype: composeSubtype('M', 'MICRO'), swatchImageId: 'x', materialOptions: null };
+  // PRADO offers only A + G — grade M doesn't survive and there are no options.
+  const patch = switchLineProduct(line, pradoFamily());
+  assert.equal(patch.subtype, '');
+  assert.equal(patch.swatchImageId, null);
+  assert.equal(patch.materialOptions, null);
+  assert.equal(patch.reference, '16000000A');   // cheapest grade (A: 2000 < G: 3000)
+  assert.equal(patch.unitPrice, 2000);
+});
+
+test('switching to a non-graded model drops every material and takes its subtype', () => {
+  const line = {
+    subtype: composeSubtype('G', 'DIVA'),
+    swatchImageId: 'img1',
+    materialOptions: { baseGrade: 'G', baseLabel: 'DIVA', options: [{ grade: 'A', label: 'ALPHA' }] },
+  };
+  const patch = switchLineProduct(line, tableFamily());
+  assert.equal(patch.reference, '0050W49N');
+  assert.equal(patch.subtype, 'Walnut');         // model's own finish text
+  assert.equal(patch.swatchImageId, null);
+  assert.equal(patch.materialOptions, null);
+  assert.equal(patch.unitPrice, 1500);
+});
+
+test('returns null for a missing family (no-op guard)', () => {
+  assert.equal(switchLineProduct({ subtype: 'Grade A' }, null), null);
 });
