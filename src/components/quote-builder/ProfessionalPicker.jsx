@@ -175,11 +175,13 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
                     {isCurrent && <span className="ml-1.5 text-[10px] text-amber-700 font-medium">· actual</span>}
                   </div>
                   <div className="text-[11px] text-ink-500 truncate">
-                    {[p.company, p.email].filter(Boolean).join(' · ') || `${p.defaultCommissionPct ?? 10}% por defecto`}
+                    {[p.company, p.email].filter(Boolean).join(' · ') || `Ref. ${p.defaultCommissionPct ?? 10}%`}
                   </div>
                 </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">
-                  {p.defaultCommissionPct ?? 10}%
+                {/* Reference rate only — the real commission is set by the
+                    quote's order type (Piso 15% / Especial 20%), not here. */}
+                <span className="text-[11px] text-ink-400 tabular-nums whitespace-nowrap" title="Comisión de referencia · la fija el tipo de pedido">
+                  ref. {p.defaultCommissionPct ?? 10}%
                 </span>
               </button>
             );

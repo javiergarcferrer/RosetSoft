@@ -20,6 +20,7 @@ import {
   computeTotals,
   setSubtotal,
   setGroupInfo,
+  alternativeGroupInfo,
   selectedAlternative,
   alternativeSubtotal,
   groupRuns,
@@ -253,6 +254,38 @@ test('setGroupInfo: maps each member to its 1-based position + size', () => {
 test('setGroupInfo: empty/null input yields an empty map', () => {
   assert.equal(setGroupInfo(null).size, 0);
   assert.equal(setGroupInfo([]).size, 0);
+});
+
+/* --------------------------- alternativeGroupInfo -------------------- */
+
+test('alternativeGroupInfo: maps each member to its 1-based position + size', () => {
+  const lines = [
+    { id: 'a', alternativeGroup: 'g1' },
+    { id: 'b', alternativeGroup: 'g1' },
+    { id: 'c' },
+    { id: 'd', alternativeGroup: 'g1' },
+  ];
+  const info = alternativeGroupInfo(lines);
+  assert.deepEqual(info.get('a'), { index: 1, total: 3 });
+  assert.deepEqual(info.get('b'), { index: 2, total: 3 });
+  assert.deepEqual(info.get('d'), { index: 3, total: 3 });
+  assert.equal(info.has('c'), false);
+});
+
+test('alternativeGroupInfo: keys off alternativeGroup, ignoring setGroup', () => {
+  // A line in a set but no alternative group must not appear.
+  const lines = [
+    { id: 'a', setGroup: 's1' },
+    { id: 'b', alternativeGroup: 'g1' },
+  ];
+  const info = alternativeGroupInfo(lines);
+  assert.equal(info.has('a'), false);
+  assert.deepEqual(info.get('b'), { index: 1, total: 1 });
+});
+
+test('alternativeGroupInfo: empty/null input yields an empty map', () => {
+  assert.equal(alternativeGroupInfo(null).size, 0);
+  assert.equal(alternativeGroupInfo([]).size, 0);
 });
 
 /* --------------------------- selectedAlternative ---------------------- */

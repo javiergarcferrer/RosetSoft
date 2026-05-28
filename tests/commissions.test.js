@@ -16,6 +16,8 @@ import {
   baseCommissionPct,
   effectiveCommissionPct,
   commissionAmount,
+  grossCommissionAmount,
+  commissionBreakdown,
   decoratorBilling,
   isTradeDiscount,
   commissionOwedAt,
@@ -139,6 +141,54 @@ test('a missing discountAmt is treated as no discount', () => {
 test('amount clamps the pct before multiplying', () => {
   // 99% would otherwise produce 990; clamped to 20 → 200.
   assert.equal(commissionAmount({ taxableBase: 1000, discountAmt: 0 }, 99), 200);
+});
+
+/* ----------------------------- grossCommissionAmount ------------------ */
+
+test('gross is the full commission on the PRE-discount base', () => {
+  // Special order (20%), $1,000 pre-discount base, $100 client discount:
+  // taxableBase = 900, discountAmt = 100, preDiscountBase = 1,000.
+  // Gross is the full 200 (before the discount is drawn out); net is 100.
+  assert.equal(grossCommissionAmount({ taxableBase: 900, discountAmt: 100 }, 20), 200);
+  assert.equal(commissionAmount({ taxableBase: 900, discountAmt: 100 }, 20), 100);
+});
+
+test('with no discount gross equals net', () => {
+  assert.equal(grossCommissionAmount({ taxableBase: 1000, discountAmt: 0 }, 10), 100);
+  assert.equal(commissionAmount({ taxableBase: 1000, discountAmt: 0 }, 10), 100);
+});
+
+test('gross with a non-finite base is 0 (never NaN)', () => {
+  assert.equal(grossCommissionAmount({ taxableBase: NaN, discountAmt: 0 }, 10), 0);
+  assert.equal(grossCommissionAmount(null, 10), 0);
+});
+
+/* ----------------------------- commissionBreakdown -------------------- */
+
+test('breakdown returns { gross, discount, net } and they reconcile', () => {
+  // gross − discount = net is the equation the UI prints; it must hold so
+  // the displayed "Base · % = gross − desc = net" can never be wrong.
+  const b = commissionBreakdown({ taxableBase: 900, discountAmt: 100 }, 20);
+  assert.deepEqual(b, { gross: 200, discount: 100, net: 100 });
+  assert.equal(b.gross - b.discount, b.net);
+});
+
+test('breakdown floors net at 0 when the discount exceeds the gross', () => {
+  // Floor order (15%), $1,000 pre-discount base, $200 discount:
+  // gross 150, discount 200 → net max(0, −50) = 0. Discount term is the
+  // full 200 even though the net floors (the dealer absorbs the excess).
+  const b = commissionBreakdown({ taxableBase: 800, discountAmt: 200 }, 15);
+  assert.deepEqual(b, { gross: 150, discount: 200, net: 0 });
+});
+
+test('breakdown with a non-finite base is all zeros', () => {
+  assert.deepEqual(commissionBreakdown({ taxableBase: NaN }, 10), { gross: 0, discount: 0, net: 0 });
+  assert.deepEqual(commissionBreakdown(null, 10), { gross: 0, discount: 0, net: 0 });
+});
+
+test('breakdown normalizes a negative/missing discount to 0', () => {
+  assert.deepEqual(commissionBreakdown({ taxableBase: 1000, discountAmt: -50 }, 10), { gross: 100, discount: 0, net: 100 });
+  assert.deepEqual(commissionBreakdown({ taxableBase: 1000 }, 10), { gross: 100, discount: 0, net: 100 });
 });
 
 /* ----------------------------- decoratorBilling ----------------------- */

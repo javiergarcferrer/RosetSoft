@@ -162,8 +162,15 @@ export function isCommissionPaid(
 }
 
 /**
- * The assigned professional's commission $ on a quote — AFTER the client
- * discount is drawn out of it.
+ * The assigned professional's commission decomposed into the three figures
+ * every UI surface shows: the GROSS (full commission before the client
+ * discount), the DISCOUNT drawn out of it, and the NET the professional
+ * actually earns. This is the single source of truth for the commission
+ * arithmetic — commissionAmount() returns the net, grossCommissionAmount()
+ * the gross, and both the builder's CommissionCard and Contabilidad's
+ * commission line render every term from here so the displayed equation
+ * always reconciles (the bug it replaces: a detail string that multiplied
+ * the post-discount base by the rate yet printed the net).
  *
  * The dealer's rule: commission is paid on the base imponible (BEFORE ITBIS
  * and BEFORE shipping), and any discount given to the client is funded by
@@ -171,29 +178,59 @@ export function isCommissionPaid(
  *
  *   preDiscountBase = taxableBase + discountAmt   (base before the discount)
  *   gross           = preDiscountBase × pct/100    (full commission)
- *   commission      = max(0, gross − discountAmt)  (discount comes out of it)
+ *   net             = max(0, gross − discountAmt)  (discount comes out of it)
  *
  * Worked example — special order (20%), $1,000 base, 10% client discount:
  *   discountAmt = 100, taxableBase = 900, preDiscountBase = 1,000
- *   gross = 200, commission = max(0, 200 − 100) = 100.
+ *   gross = 200, net = max(0, 200 − 100) = 100.
  * The dealer's net (900 − 100 = 800) matches a no-discount sale
  * (1,000 − 200 = 800): the discount fell entirely on the professional.
  *
- * If the discount exceeds the commission the result floors at 0 (the dealer
+ * If the discount exceeds the commission the net floors at 0 (the dealer
  * absorbs the excess). Pass the totals object from computeTotals(); a bare
- * number with no discount degrades gracefully via the nullish reads.
+ * number with no discount degrades gracefully via the nullish reads. A
+ * non-finite base yields all-zeros rather than NaN.
  *
  * Multiplication only, no rounding policy — the formatter decides display.
  */
+export interface CommissionBreakdown {
+  /** Full commission before the client discount is drawn out. */
+  gross: number;
+  /** Client discount funded by the commission (>= 0). */
+  discount: number;
+  /** What the professional actually earns: max(0, gross − discount). */
+  net: number;
+}
+
+export function commissionBreakdown(
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
+  pct: unknown,
+): CommissionBreakdown {
+  const taxable = Number(totals?.taxableBase);
+  if (!Number.isFinite(taxable)) return { gross: 0, discount: 0, net: 0 };
+  const rawDiscount = Number(totals?.discountAmt);
+  const discount = Number.isFinite(rawDiscount) ? Math.max(0, rawDiscount) : 0;
+  const preDiscountBase = taxable + discount;
+  const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
+  return { gross, discount, net: Math.max(0, gross - discount) };
+}
+
+/**
+ * Full commission on the pre-discount base (preDiscountBase × pct/100),
+ * BEFORE the client discount is drawn out. The figure the "Comisión (X%)"
+ * line shows above the discount deduction.
+ */
+export function grossCommissionAmount(
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
+  pct: unknown,
+): number {
+  return commissionBreakdown(totals, pct).gross;
+}
+
+/** The NET commission the professional earns after the discount is drawn out. */
 export function commissionAmount(
   totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
   pct: unknown,
 ): number {
-  const taxable = Number(totals?.taxableBase);
-  if (!Number.isFinite(taxable)) return 0;
-  const rawDiscount = Number(totals?.discountAmt);
-  const discountAmt = Number.isFinite(rawDiscount) ? Math.max(0, rawDiscount) : 0;
-  const preDiscountBase = taxable + discountAmt;
-  const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
-  return Math.max(0, gross - discountAmt);
+  return commissionBreakdown(totals, pct).net;
 }
