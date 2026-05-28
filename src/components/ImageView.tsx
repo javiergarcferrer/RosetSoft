@@ -7,6 +7,12 @@ import { ImageOff } from 'lucide-react';
 
 export interface ImageViewProps {
   id: string | null | undefined;
+  /**
+   * Rendered when `id` is absent or resolves to nothing — e.g. a Ligne Roset
+   * swatch URL derived from a color code. A loaded `id` (an uploaded photo)
+   * always wins; if the chosen URL fails to load we fall to the placeholder.
+   */
+  fallbackUrl?: string | null;
   alt?: string;
   className?: string;
   placeholderClassName?: string;
@@ -31,34 +37,34 @@ function canHover(): boolean {
  * Renders an image stored in Supabase Storage by its image-table id.
  * Falls back to a neutral placeholder when missing.
  */
-export default function ImageView({ id, alt = '', className = '', placeholderClassName = '', style, hoverPreview = false }: ImageViewProps) {
+export default function ImageView({ id, fallbackUrl = null, alt = '', className = '', placeholderClassName = '', style, hoverPreview = false }: ImageViewProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
+  const [errored, setErrored] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [preview, setPreview] = useState<PreviewBox | null>(null);
 
   useEffect(() => {
     let active = true;
+    setErrored(false);
     if (!id) {
-      setMissing(true);
-      setUrl(null);
-      return () => {};
+      setUrl(fallbackUrl);
+      setMissing(!fallbackUrl);
+      return () => { active = false; };
     }
     setMissing(false);
     db.images.get(id).then((rec: { storagePath?: string } | null | undefined) => {
       if (!active) return;
-      const u = rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
-      if (!u) {
-        setMissing(true);
-        setUrl(null);
-        return;
-      }
+      const u = (rec?.storagePath ? publicImageUrl(rec.storagePath) : null) || fallbackUrl;
       setUrl(u);
+      setMissing(!u);
     }).catch(() => {
-      if (active) { setMissing(true); setUrl(null); }
+      if (!active) return;
+      setUrl(fallbackUrl);
+      setMissing(!fallbackUrl);
     });
     return () => { active = false; };
-  }, [id]);
+  }, [id, fallbackUrl]);
 
   // Dismiss the floating preview if the page scrolls or resizes underneath it.
   useEffect(() => {
@@ -95,7 +101,7 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
     setPreview({ left, top, width });
   }
 
-  if (missing || !url) {
+  if (missing || !url || errored) {
     return (
       <div className={`flex items-center justify-center bg-ink-100 text-ink-400 ${placeholderClassName || className}`}>
         <ImageOff size={18} />
@@ -111,6 +117,7 @@ export default function ImageView({ id, alt = '', className = '', placeholderCla
         className={className}
         style={style}
         loading="lazy"
+        onError={() => setErrored(true)}
         onMouseEnter={hoverPreview ? openPreview : undefined}
         onMouseLeave={hoverPreview ? () => setPreview(null) : undefined}
       />

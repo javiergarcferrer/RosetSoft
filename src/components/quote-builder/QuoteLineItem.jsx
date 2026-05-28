@@ -11,6 +11,8 @@ import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
+import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
+import { swatchUrl } from '../../lib/swatchImage.js';
 import {
   applyLineAdjustments,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
@@ -605,6 +607,7 @@ function GradeFabricRow({ line, onChange }) {
       <span className="relative z-[2] inline-flex shrink-0">
         <Thumbnail
           imageId={swatchImageId}
+          fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
           onChange={setSwatch}
           kind="quote-line-swatch"
           ownerId={line.id}

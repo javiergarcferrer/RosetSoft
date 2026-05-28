@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, PackageSearch, ChevronLeft } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import ImageView from '../ImageView.jsx';
+import { heroSwatchUrl } from '../../lib/swatchImage.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -198,11 +199,13 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
                   onClick={() => insertProduct(sel, product, grade, material)}
                   className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center gap-3 hover:bg-ink-50 transition-colors"
                 >
-                  {heroImageId(material) ? (
-                    <ImageView id={heroImageId(material)} hoverPreview className="w-9 h-9 object-cover rounded border border-ink-100 bg-white flex-shrink-0" />
-                  ) : (
-                    <span className="w-9 h-9 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0" aria-hidden />
-                  )}
+                  <ImageView
+                    id={heroImageId(material)}
+                    fallbackUrl={heroSwatchUrl(material)}
+                    hoverPreview
+                    className="w-9 h-9 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
+                    placeholderClassName="w-9 h-9 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0"
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-ink-900 truncate">{material.name}</span>
                     <span className="block text-[11px] text-ink-500">Grado {grade}{material.category ? ` · ${material.category}` : ''}</span>

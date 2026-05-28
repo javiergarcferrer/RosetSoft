@@ -10,6 +10,8 @@ import {
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
+import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
+import { swatchUrl } from '../../lib/swatchImage.js';
 
 /**
  * Read-only client-facing preview of the quote. Renders the same data the
@@ -28,9 +30,9 @@ import { formatMoney, formatDate } from '../../lib/format.js';
  * not. Falls back to a plain, non-interactive ImageView when there's no
  * image id (the placeholder box).
  */
-function ImageZoom({ id, className, alt = '' }) {
+function ImageZoom({ id, fallbackUrl = null, className, alt = '' }) {
   const [open, setOpen] = useState(false);
-  if (!id) return <ImageView id={id} className={className} alt={alt} />;
+  if (!id && !fallbackUrl) return <ImageView id={id} className={className} alt={alt} />;
   return (
     <>
       <button
@@ -40,11 +42,11 @@ function ImageZoom({ id, className, alt = '' }) {
         aria-label="Ampliar imagen"
         title="Ampliar imagen"
       >
-        <ImageView id={id} className={className} alt={alt} />
+        <ImageView id={id} fallbackUrl={fallbackUrl} className={className} alt={alt} />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} size="xl">
         <div className="flex items-center justify-center">
-          <ImageView id={id} alt={alt} className="max-h-[78vh] w-auto max-w-full object-contain rounded-md" />
+          <ImageView id={id} fallbackUrl={fallbackUrl} alt={alt} className="max-h-[78vh] w-auto max-w-full object-contain rounded-md" />
         </div>
       </Modal>
     </>
@@ -445,9 +447,10 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
             <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
             {(line.subtype || line.reference || line.dimensions || line.swatchImageId) && (
               <div className="flex items-start gap-2.5 mt-1">
-                {line.swatchImageId && (
+                {(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
                   <ImageZoom
                     id={line.swatchImageId}
+                    fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
                     alt="Muestra de tela"
                     className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
                   />
@@ -679,9 +682,10 @@ function CompoundComponentRow({ component, fmt }) {
         </div>
         {(component.subtype || component.reference || component.dimensions || component.swatchImageId) && (
           <div className="flex items-start gap-2 mt-0.5">
-            {component.swatchImageId && (
+            {(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
               <ImageZoom
                 id={component.swatchImageId}
+                fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
                 alt="Muestra de tela"
                 className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
               />

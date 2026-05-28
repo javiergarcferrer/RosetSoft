@@ -13,6 +13,7 @@ import Modal from '../../components/Modal.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../../components/DebouncedInput.jsx';
 import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
+import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 
@@ -202,20 +203,14 @@ export default function Materials() {
                 {filtered.map((m) => (
                   <tr key={m.id} className="hover:bg-ink-50/40">
                     <td className="px-3 py-2">
-                      {heroImageId(m) ? (
-                        <ImageView
-                          id={heroImageId(m)}
-                          alt={m.name}
-                          hoverPreview
-                          className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
-                        />
-                      ) : (
-                        <div
-                          className="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
-                          aria-hidden
-                          title="Sin foto"
-                        />
-                      )}
+                      <ImageView
+                        id={heroImageId(m)}
+                        fallbackUrl={heroSwatchUrl(m)}
+                        alt={m.name}
+                        hoverPreview
+                        className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
+                        placeholderClassName="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
+                      />
                     </td>
                     <td className="px-3 py-2 eyebrow font-normal tracking-wide">
                       {categoryLabel(m.category)}
@@ -571,6 +566,7 @@ function MaterialEditor({ material, profileId, onClose }) {
                     imageId and the dealer attaches them as needed. */}
                 <Thumbnail
                   imageId={c.imageId}
+                  fallbackUrl={swatchUrl(c.code)}
                   onChange={(id) => updateColor(i, { imageId: id })}
                   kind="material-color"
                   ownerId={material?.id}

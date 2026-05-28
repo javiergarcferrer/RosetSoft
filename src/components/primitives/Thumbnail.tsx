@@ -10,6 +10,12 @@ export interface ThumbnailProps {
   kind: string;
   ownerId?: string | null;
   /**
+   * Shown when no image is uploaded — e.g. a catalog swatch URL derived from
+   * the color code. The tile stays tappable to upload an override; there's
+   * no clear button until an actual image is attached.
+   */
+  fallbackUrl?: string | null;
+  /**
    * Tailwind size class — defaults to 56 px on phones, 64 px on sm+.
    * Same square footprint regardless of fill state so the row layout
    * never reflows when an image is added or removed.
@@ -38,7 +44,7 @@ export interface ThumbnailProps {
  *   - paste image   -> upload when the thumbnail has focus
  */
 export default function Thumbnail({
-  imageId, onChange, kind, ownerId, hoverPreview = false,
+  imageId, onChange, kind, ownerId, fallbackUrl = null, hoverPreview = false,
   // Tailwind size class. Sized for visibility: 80 px on phones (the
   // earlier 56 px tile got lost in the line-item card's busy
   // composition — the empty-state dashed border + tiny camera icon
@@ -82,6 +88,11 @@ export default function Thumbnail({
     onChange(null);
   }
 
+  // "Has a picture" = an uploaded image OR a borrowed fallback (e.g. the
+  // catalog swatch). Drives the filled look + the spinner overlay; the clear
+  // "×" stays gated on `imageId` so only real uploads can be removed.
+  const showsImage = !!(imageId || fallbackUrl);
+
   return (
     <div className={`${sizeClass} relative flex-shrink-0 group/thumb`}>
       <button
@@ -99,15 +110,15 @@ export default function Thumbnail({
         title={imageId ? 'Cambiar imagen' : 'Añadir imagen'}
         aria-label={imageId ? 'Cambiar imagen del artículo' : 'Añadir imagen al artículo'}
         className={`absolute inset-0 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 ${
-          imageId
+          showsImage
             ? 'bg-white border border-ink-200 hover:border-ink-400 overflow-hidden'
             : dragging
               ? 'border-2 border-dashed border-brand-500 bg-brand-50'
               : 'border-2 border-dashed border-ink-300 bg-ink-50 hover:bg-ink-100 hover:border-ink-500 active:bg-ink-100'
         }`}
       >
-        {imageId ? (
-          <ImageView id={imageId} hoverPreview={hoverPreview} className="w-full h-full object-contain" />
+        {showsImage ? (
+          <ImageView id={imageId} fallbackUrl={fallbackUrl} hoverPreview={hoverPreview} className="w-full h-full object-contain" />
         ) : (
           // Stack the camera icon over a small "Foto" caption so the
           // empty state reads as an explicit slot, not as a decorative
@@ -124,7 +135,7 @@ export default function Thumbnail({
             )}
           </span>
         )}
-        {busy && imageId && (
+        {busy && showsImage && (
           <span className="absolute inset-0 flex items-center justify-center bg-white/70">
             <Loader2 size={16} className="animate-spin text-ink-700" />
           </span>

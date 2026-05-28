@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ChevronLeft, Check, Layers } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import ImageView from '../ImageView.jsx';
+import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -231,16 +232,14 @@ function MaterialList({
                   read fabric / leather / outdoor at a glance even when
                   no photo exists yet. */}
               <div className="relative w-10 h-10 flex-shrink-0">
-                {heroImageId(m) ? (
-                  <ImageView
-                    id={heroImageId(m)}
-                    alt={m.name}
-                    hoverPreview
-                    className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50" aria-hidden />
-                )}
+                <ImageView
+                  id={heroImageId(m)}
+                  fallbackUrl={heroSwatchUrl(m)}
+                  alt={m.name}
+                  hoverPreview
+                  className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
+                  placeholderClassName="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
+                />
                 <span className="absolute -top-1 -right-1">
                   <CategoryDot category={m.category} />
                 </span>
@@ -339,12 +338,10 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
             {colors.map((c) => {
               const active = currentFabric && currentFabric.includes(c.code);
-              // Color swatch: the color's own photo, else a dashed
-              // placeholder. No cross-color fallback — showing one
-              // color's picture for another would mislead. Colors get
-              // their photos in /admin/materials or inline from a
-              // quote line's swatch slot.
-              const swatchId = c.imageId || null;
+              // Swatch = the color's uploaded photo, else its own Ligne
+              // Roset swatch derived from the code (c_{code}.jpg) — always
+              // this exact color, never a cross-color guess. Placeholder
+              // only when neither resolves.
               return (
                 <button
                   key={c.code}
@@ -356,16 +353,14 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
                       : 'border-ink-200 hover:border-ink-400 hover:bg-ink-50'
                   }`}
                 >
-                  {swatchId ? (
-                    <ImageView
-                      id={swatchId}
-                      alt={c.name}
-                      hoverPreview
-                      className="w-8 h-8 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0" aria-hidden />
-                  )}
+                  <ImageView
+                    id={c.imageId || null}
+                    fallbackUrl={swatchUrl(c.code)}
+                    alt={c.name}
+                    hoverPreview
+                    className="w-8 h-8 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
+                    placeholderClassName="w-8 h-8 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0"
+                  />
                   <span className="flex-1 min-w-0 text-sm text-ink-900 truncate">{c.name}</span>
                   <span className="text-[10px] text-ink-500 font-mono tabular-nums flex-shrink-0">
                     #{c.code}
