@@ -638,22 +638,24 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   const [swatchOpen, setSwatchOpen] = useState(false);
   const [optionOpen, setOptionOpen] = useState(false);
 
-  // Append an alternative material (informational — never touches the line's
-  // price/subtype). On the FIRST option we snapshot the line's current grade +
-  // material name as the delta base, so every option's "+RD$X" reads relative
-  // to what the line is actually quoted at.
-  function addOption(picked) {
-    const code = colorCodeFromSubtype(composeSubtype(picked.grade, picked.fabric));
-    const option = {
+  // Append one or more alternative materials (informational — never touches the
+  // line's price/subtype). On the FIRST option we snapshot the line's current
+  // grade + material name as the delta base, so every option's "+RD$X" reads
+  // relative to what the line is actually quoted at. The catalog picker hands
+  // back a batch (multi-select), so this takes an array.
+  function addOptions(picks) {
+    if (!picks?.length) return;
+    const toOption = (picked) => ({
       grade: picked.grade || '',
       label: picked.fabric || '',
-      code: code || undefined,
+      code: colorCodeFromSubtype(composeSubtype(picked.grade, picked.fabric)) || undefined,
       swatchImageId: picked.swatchImageId || undefined,
-    };
+    });
+    const additions = picks.map(toOption);
     const prev = materialOptions;
     const next = prev
-      ? { ...prev, options: [...(prev.options || []), option] }
-      : { baseGrade: grade || '', baseLabel: fabric || '', options: [option] };
+      ? { ...prev, options: [...(prev.options || []), ...additions] }
+      : { baseGrade: grade || '', baseLabel: fabric || '', options: additions };
     onChange({ materialOptions: next });
   }
 
@@ -815,13 +817,15 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         currentFabric={fabric}
         family={family}
       />
-      {/* Second picker instance dedicated to adding an alternative material;
-          its selection is appended to materialOptions instead of replacing
-          the line's own grade/fabric. */}
+      {/* Second picker instance dedicated to adding alternative materials;
+          multi-select so the dealer can tick several fabrics at once. Each
+          selection is appended to materialOptions instead of replacing the
+          line's own grade/fabric. */}
       <SwatchPicker
         open={optionOpen}
         onClose={() => setOptionOpen(false)}
-        onSelect={(picked) => addOption(picked)}
+        multiSelect
+        onSelectMany={(picks) => addOptions(picks)}
         currentGrade=""
         currentFabric=""
         family={family}
