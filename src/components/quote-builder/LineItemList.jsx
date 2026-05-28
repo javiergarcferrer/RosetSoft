@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucide-react';
+import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
@@ -46,7 +46,7 @@ export default function LineItemList({
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
   onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-  onAddItem, onAddSection,
+  onAddSection, onOpenCatalog,
 }) {
   // Pre-compute alternative-group sizes so each line knows the
   // "Alternativa N de M" position without re-scanning the list.
@@ -134,16 +134,16 @@ export default function LineItemList({
     return (
       <div className="px-6 py-12 text-center">
         <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-ink-100 text-ink-500 mb-3">
-          <Plus size={18} />
+          <PackageSearch size={18} />
         </div>
         <div className="text-sm font-medium text-ink-900">Empieza tu cotización</div>
         <div className="text-xs text-ink-500 mt-1 max-w-sm mx-auto">
-          Lee una fila de la lista de precios y pulsa <b>Agregar artículo</b>, o usa
-          el palette de acciones para insertar uno reciente.
+          Elige un producto del <b>catálogo</b>, o usa el palette de acciones
+          para insertar uno reciente.
         </div>
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button type="button" onClick={onAddItem} className="btn-primary">
-            <Plus size={14} /> Agregar artículo
+          <button type="button" onClick={onOpenCatalog} className="btn-primary">
+            <PackageSearch size={18} /> Catálogo
           </button>
           <button type="button" onClick={onAddSection} className="btn-ghost">
             <Hash size={14} /> Sección
