@@ -103,6 +103,13 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
   sequence-number healing + PDF export + render. Action: lift quote state + mutations + grouping/
   sequence rules into a `useQuoteActions` hook / domain module; expose `{quote, actions}` via
   context. This also removes the prop-drilling below.
+  - PARTIAL — the **grouping invariants** are lifted to `lib/quoteGroups.ts` as pure, tested
+    helpers (`selectAlternativePatches`, `healAlternativeOnRemove`, `healSetOnRemove`); the four
+    mutations (`selectAlternative`, `separateFromSet`, `ungroupLine`, `removeLine`) now consume
+    them instead of re-deriving the same singleton/selection healing four times. Remaining: lift
+    quote STATE + the db-writing mutations into a `useQuoteActions` hook + context (couples with
+    the prop-drilling item below; best as a reviewed change — `QuoteBuilder.jsx` is under active
+    parallel churn and there are no UI/integration tests to catch a regression).
 
 - [ ] **Decompose oversized leaves.** `QuoteLineItem.jsx` (**1501 LOC**, 13 inline subcomponents,
   own `FamiliesContext`) and `ClientPreview.jsx` (**980 LOC**). Action: split the inline

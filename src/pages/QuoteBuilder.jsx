@@ -6,7 +6,9 @@ import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { groupFamilies } from '../lib/catalog.js';
-import { isGroupOptional } from '../lib/quoteGroups.js';
+import {
+  isGroupOptional, selectAlternativePatches, healAlternativeOnRemove, healSetOnRemove,
+} from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
@@ -682,11 +684,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     markSaving();
     try {
       const siblings = lines.filter((l) => l.alternativeGroup === line.alternativeGroup);
-      for (const s of siblings) {
-        const shouldBeSelected = s.id === line.id;
-        if (!!s.isSelectedAlternative !== shouldBeSelected) {
-          await db.quoteLines.update(s.id, { isSelectedAlternative: shouldBeSelected });
-        }
+      for (const { id, patch } of selectAlternativePatches(siblings, line.id)) {
+        await db.quoteLines.update(id, patch);
       }
     } finally {
       markSaved();
@@ -708,10 +707,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // (its optional state belonged to the group, not the line).
       await db.quoteLines.update(line.id, { setGroup: null, isOptional: false });
       const survivors = lines.filter((l) => l.setGroup === groupId && l.id !== line.id);
-      if (survivors.length === 1) {
-        await db.quoteLines.update(survivors[0].id, { setGroup: null, isOptional: false });
-        await db.quoteGroups.delete(groupId);
-      }
+      const { linePatches, deleteGroup } = healSetOnRemove(survivors);
+      for (const { id, patch } of linePatches) await db.quoteLines.update(id, patch);
+      if (deleteGroup) await db.quoteGroups.delete(groupId);
     } finally {
       markSaved();
     }
@@ -822,13 +820,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       const survivors = lines.filter(
         (l) => l.alternativeGroup === line.alternativeGroup && l.id !== line.id,
       );
-      if (survivors.length === 1) {
-        await db.quoteLines.update(survivors[0].id, {
-          alternativeGroup: null,
-          isSelectedAlternative: false,
-        });
-      } else if (survivors.length > 1 && line.isSelectedAlternative) {
-        await db.quoteLines.update(survivors[0].id, { isSelectedAlternative: true });
+      for (const { id, patch } of healAlternativeOnRemove(survivors, !!line.isSelectedAlternative)) {
+        await db.quoteLines.update(id, patch);
       }
     } finally {
       markSaved();
@@ -845,42 +838,36 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // keys off `alternativeGroup`, so healing it here is what makes
       // "Alternativa 1 de 1" impossible. We capture the sibling we
       // touch so undo can put the group back exactly as it was.
+      // Heal the alternative-group invariant (lone survivor → standalone;
+      // removed-the-selected → promote the first survivor). The pure helper
+      // decides the patch; we capture the survivor's ORIGINAL state first so
+      // undo can put the group back exactly as it was.
       let healedSibling = null;
       if (line.alternativeGroup) {
         const siblings = lines.filter(
           (l) => l.alternativeGroup === line.alternativeGroup && l.id !== line.id,
         );
-        if (siblings.length === 1) {
-          // Collapsed to a lone survivor — it's no longer a menu of
-          // choices. Promote it to a standalone line so it neither
-          // shows the singleton caption nor risks dropping out of the
-          // total on a stale isSelectedAlternative flag.
-          healedSibling = siblings[0];
-          await db.quoteLines.update(healedSibling.id, {
-            alternativeGroup: null,
-            isSelectedAlternative: false,
-          });
-        } else if (siblings.length > 1 && line.isSelectedAlternative) {
-          // Removed the selected member of a still-valid group — promote the
-          // first survivor so exactly one line stays priced.
-          healedSibling = siblings[0];
-          await db.quoteLines.update(healedSibling.id, { isSelectedAlternative: true });
+        const [altPatch] = healAlternativeOnRemove(siblings, !!line.isSelectedAlternative);
+        if (altPatch) {
+          healedSibling = siblings.find((s) => s.id === altPatch.id) || null;
+          await db.quoteLines.update(altPatch.id, altPatch.patch);
         }
       }
       // Same singleton-healing for Conjuntos (sets): a set left with one
-      // member is meaningless, so clear the lone survivor's setGroup.
-      // Captured separately from the alternative sibling so undo can
-      // restore each independently (a line is never both at once).
+      // member is meaningless, so clear the lone survivor's setGroup and
+      // delete the group row. Captured separately from the alternative sibling
+      // so undo can restore each independently (a line is never both at once).
       let healedSetSibling = null;
       if (line.setGroup) {
         const setSurvivors = lines.filter(
           (l) => l.setGroup === line.setGroup && l.id !== line.id,
         );
-        if (setSurvivors.length === 1) {
-          healedSetSibling = setSurvivors[0];
-          await db.quoteLines.update(healedSetSibling.id, { setGroup: null, isOptional: false });
-          await db.quoteGroups.delete(line.setGroup);
+        const { linePatches, deleteGroup } = healSetOnRemove(setSurvivors);
+        if (linePatches.length) {
+          healedSetSibling = setSurvivors.find((s) => s.id === linePatches[0].id) || null;
+          await db.quoteLines.update(linePatches[0].id, linePatches[0].patch);
         }
+        if (deleteGroup) await db.quoteGroups.delete(line.setGroup);
       }
       const label = line.kind === LINE_KIND_SECTION
         ? `Sección "${line.name || 'sin nombre'}" eliminada`
