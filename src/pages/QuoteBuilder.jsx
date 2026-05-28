@@ -545,6 +545,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   async function updateLine(id, patch) {
     markSaving();
     try { await db.quoteLines.update(id, patch); }
+    catch (e) { console.error('[quote] line update failed', { id, patch, error: e }); }
     finally { markSaved(); }
   }
 
