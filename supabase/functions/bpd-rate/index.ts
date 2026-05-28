@@ -133,21 +133,15 @@ Deno.serve(async (req) => {
 
   try {
     console.log('[bpd-rate] start', { base: BASE });
-    // 1. OAuth client-credentials token.
-    //
-    // IBM API Connect identifies the confidential app at the gateway via
-    // BOTH the X-IBM-Client-Id AND X-IBM-Client-Secret *headers* (per
-    // BPD's "probar tus APIs" guide — "agrega los encabezados … client-id
-    // y client-secret"). Sending the secret only in the OAuth body is not
-    // enough: without the header the gateway can't authorize the app and
-    // returns `unauthorized_client` / "Invalid client ID or secret, or
-    // client not subscribed to this API" with an empty plan/product.
+    // 1. OAuth client-credentials token. BPD's gateway identifies the app by
+    // X-IBM-Client-Id ALONE — the official production request carries no
+    // X-IBM-Client-Secret header. The secret authenticates the OAuth grant
+    // in the form body (standard client_credentials), not as a gateway header.
     const tokenRes = await fetchWithRetry('token', `${BASE}/bpd/Authentication/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-IBM-Client-Id': CLIENT_ID,
-        'X-IBM-Client-Secret': CLIENT_SECRET,
         Accept: 'application/json',
       },
       body: new URLSearchParams({
