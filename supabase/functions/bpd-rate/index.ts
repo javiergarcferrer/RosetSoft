@@ -166,13 +166,13 @@ Deno.serve(async (req) => {
       return json({ error: 'No access_token in token response', detail: tokenText.slice(0, 500) }, 502);
     }
 
-    // 2. Fetch the published rates. Same gateway app-identification
-    // headers as the token call, plus the Bearer we just minted.
+    // 2. Fetch the published rates. Per BPD's official production request,
+    // the rate call carries ONLY X-IBM-Client-Id + the Bearer we just
+    // minted — NO client-secret header (the secret is only for the token).
     const rateRes = await fetchWithRetry('consultaTasa', `${BASE}/consultatasa/consultaTasa`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-IBM-Client-Id': CLIENT_ID,
-        'X-IBM-Client-Secret': CLIENT_SECRET,
         Accept: 'application/json',
       },
     });
