@@ -105,12 +105,13 @@ export default function ProfessionalDetail() {
         .filter(isPricedLine)
         .map(lineForTotals);
       const totals = computeTotals(lines, q);
-      const pct = effectiveCommissionPct(q, pro);
-      // Same rate, two AR directions. The $ amount is computed once off
-      // the base imponible (pre-ITBIS, pre-shipping); whether it lands as
-      // a commission WE pay or a trade discount WE bill the decorator is
-      // the per-quote modality. Trade discount accrues no commission.
-      const amount = commissionAmount(totals.taxableBase, pct);
+      const pct = effectiveCommissionPct(q);
+      // Same rate, two AR directions. The $ amount is computed off the base
+      // imponible (pre-ITBIS, pre-shipping) with any client discount drawn
+      // out of it; whether it lands as a commission WE pay or a trade
+      // discount WE bill the decorator is the per-quote modality. Trade
+      // discount accrues no commission.
+      const amount = commissionAmount(totals, pct);
       const trade = isTradeDiscount(q);
       const entry = {
         quote: q,
@@ -184,7 +185,7 @@ export default function ProfessionalDetail() {
         subtitle={
           pro.company
             ? <><Building2 size={12} className="inline -mt-0.5 mr-1" />{pro.company}</>
-            : `Comisión por defecto · ${pro.defaultCommissionPct ?? 10}%`
+            : (pro.email || null)
         }
         actions={
           <button

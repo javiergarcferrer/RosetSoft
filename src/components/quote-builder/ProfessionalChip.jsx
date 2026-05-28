@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, UserSquare2 } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
 import { DebouncedInput } from '../DebouncedInput.jsx';
-import { clampCommissionPct, decoratorBilling } from '../../lib/commissions.js';
+import { clampCommissionPct, decoratorBilling, baseCommissionPct } from '../../lib/commissions.js';
 
 /**
  * Chip that displays the assigned professional (architect / decorator
@@ -66,13 +66,14 @@ export default function ProfessionalChip({ quote, professional, professionals, p
 
   // Override semantics:
   //   • `commissionPct` numeric (including 0) → explicit per-sale override
-  //   • `commissionPct` null/'' → inherit professional.defaultCommissionPct
+  //   • `commissionPct` null/'' → inherit the order-type base rate
+  //     (floor 15% / special 20%, set by the Tipo toggle in the header)
   // We show the override value in the input when present, otherwise an
-  // empty field with the inherited default as a placeholder so the
+  // empty field with the inherited base rate as a placeholder so the
   // dealer can see "what would happen if I do nothing".
   const overrideRaw = quote.commissionPct;
   const hasOverride = overrideRaw != null && overrideRaw !== '';
-  const inheritedDefault = professional.defaultCommissionPct ?? 10;
+  const inheritedDefault = baseCommissionPct(quote);
 
   return (
     <>

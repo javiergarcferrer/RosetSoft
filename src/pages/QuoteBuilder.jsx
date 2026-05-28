@@ -93,6 +93,7 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
     customerId: null,
     professionalId: null,
     commissionPct: null,
+    orderType: 'floor',
     orderId: null,
     status: 'draft',
     currencyCode: 'USD',
@@ -1062,7 +1063,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           {/* Right column: totals rail, sticky on desktop. The price-list
               PDF panel that used to alternate into this slot is gone. */}
           <div className="lg:sticky lg:top-4 lg:self-start">
-            <TotalsRail quote={quote} totals={totals} onUpdateQuote={hx(updateQuote)} />
+            <TotalsRail quote={quote} totals={totals} professional={professional} onUpdateQuote={hx(updateQuote)} />
           </div>
         </div>
       )}

@@ -169,8 +169,8 @@ export default function AccountingWorkspace() {
       // ── Professional (decorator/architect) settlement ─────────────────
       const mode = professional ? decoratorBilling(q) : null;
       const trade = mode === 'trade_discount';
-      const proPct = professional ? effectiveCommissionPct(q, professional) : 0;
-      const proAmount = professional ? commissionAmount(t.taxableBase, proPct) : 0;
+      const proPct = professional ? effectiveCommissionPct(q) : 0;
+      const proAmount = professional ? commissionAmount(t, proPct) : 0;
       // Trade discount: bill the DECORATOR at their % off (no commission).
       const decoratorPct = trade ? proPct : 0;
       const tradeDiscount = trade ? proAmount : 0;

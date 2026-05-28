@@ -1,28 +1,42 @@
 /**
- * Commission math for outside professionals (architects, decorators) that
- * bring deals to the showroom and earn a cut of the resulting sale.
+ * Commission math for outside professionals (architects, interior
+ * designers) that bring deals to the showroom and earn a cut of the sale.
  *
  * The rule the dealer wants:
  *
- *   • Each professional has a *default* commission % (0–20). When you
- *     assign them to a quote, the quote inherits that %.
+ *   • The sale's TYPE sets the base rate: a floor order ("venta de piso")
+ *     pays 15%; a special order pays 20%. The quote carries an explicit
+ *     `orderType` toggle ('floor' | 'special'), independent of whether the
+ *     quote is attached to an order record.
  *
- *   • The quote can override the default per-deal. Some professionals
- *     negotiate different cuts for different clients.
+ *   • A per-quote `commissionPct` can still override the base rate for a
+ *     one-off deal (0 is a legitimate "earns nothing" override).
  *
- *   • The commission $ amount = quote total × (effective % / 100).
+ *   • Any DISCOUNT given to the client comes out of the professional's
+ *     commission, not the dealer's margin: the client pays less and the
+ *     professional earns less by the same amount, so the dealer's net is
+ *     unchanged. See commissionAmount() for the arithmetic.
  *
- *   • Without a professional assigned, the quote earns no commission.
+ *   • Without a professional assigned, the quote earns no commission — and
+ *     a discount simply lowers the client's price (the dealer absorbs it,
+ *     since there's no commission to draw from).
  *
  * The functions here are pure so they can be tested without Supabase.
- * The "quote total" comes from computeTotals() in pricing.js; this
- * module just multiplies.
+ * Totals (taxableBase, discountAmt) come from computeTotals() in pricing.ts.
  */
 
-import type { Quote, Professional, DecoratorBilling } from '../types/domain.ts';
+import type { Quote, DecoratorBilling, Totals } from '../types/domain.ts';
 
 /** Hard cap the dealer set: no commission > 20% on a sale. */
 export const COMMISSION_MAX_PCT = 20;
+
+/**
+ * Base commission rates by order type. A floor order ("venta de piso") pays
+ * 15%; a special order pays 20%. The cap above equals the special rate, so a
+ * special order with no discount sits exactly at the ceiling.
+ */
+export const FLOOR_COMMISSION_PCT = 15;
+export const SPECIAL_COMMISSION_PCT = 20;
 
 /**
  * How the assigned professional's cut is realized. The SAME percentage
@@ -66,32 +80,35 @@ export function clampCommissionPct(pct: unknown): number {
 }
 
 /**
- * The effective % the quote earns, given the quote and the professional
- * record. Resolution order:
+ * Base commission rate implied by the quote's order type: 15% for a floor
+ * order, 20% for a special order. Defaults to floor (15%) when unset, so a
+ * brand-new or legacy quote earns the floor rate.
+ */
+export function baseCommissionPct(
+  quote: Pick<Quote, 'orderType'> | null | undefined,
+): number {
+  return quote?.orderType === 'special' ? SPECIAL_COMMISSION_PCT : FLOOR_COMMISSION_PCT;
+}
+
+/**
+ * The effective % the quote earns. Resolution order:
  *
- *   1. If the quote has its own commissionPct set (any number, including
- *      0), that wins. 0 is a legitimate "this deal earns nothing"
- *      override — the dealer can disable commission per-quote without
+ *   1. An explicit per-quote `commissionPct` (any number, including 0)
+ *      overrides — the dealer can fix or zero a single deal's rate without
  *      removing the professional link.
  *
- *   2. Else fall back to the professional's defaultCommissionPct.
- *
- *   3. Else 0.
+ *   2. Else the base rate for the order type (floor 15% / special 20%).
  *
  * Returns the clamped value so callers never have to worry about a
  * pre-clamp value sneaking through.
  */
 export function effectiveCommissionPct(
-  quote: Pick<Quote, 'commissionPct'> | null | undefined,
-  professional: Pick<Professional, 'defaultCommissionPct'> | null | undefined,
+  quote: Pick<Quote, 'commissionPct' | 'orderType'> | null | undefined,
 ): number {
   if (quote?.commissionPct != null && (quote.commissionPct as unknown) !== '') {
     return clampCommissionPct(quote.commissionPct);
   }
-  if (professional?.defaultCommissionPct != null) {
-    return clampCommissionPct(professional.defaultCommissionPct);
-  }
-  return 0;
+  return clampCommissionPct(baseCommissionPct(quote));
 }
 
 /**
@@ -145,19 +162,38 @@ export function isCommissionPaid(
 }
 
 /**
- * Commission $ amount on a quote's *taxable base* (base imponible).
+ * The assigned professional's commission $ on a quote — AFTER the client
+ * discount is drawn out of it.
  *
- * The dealer's rule: commission is paid on the amount BEFORE ITBIS
- * and BEFORE shipping. computeTotals() in pricing.js exposes this as
- * `taxableBase` — that's the value callers should pass in here, not
- * `grandTotal`. Passing grandTotal over-pays the professional by
- * 18% (ITBIS) plus any shipping line.
+ * The dealer's rule: commission is paid on the base imponible (BEFORE ITBIS
+ * and BEFORE shipping), and any discount given to the client is funded by
+ * the professional's cut, not the dealer's margin:
  *
- * Multiplication only, no rounding policy — the formatter decides
- * how to display.
+ *   preDiscountBase = taxableBase + discountAmt   (base before the discount)
+ *   gross           = preDiscountBase × pct/100    (full commission)
+ *   commission      = max(0, gross − discountAmt)  (discount comes out of it)
+ *
+ * Worked example — special order (20%), $1,000 base, 10% client discount:
+ *   discountAmt = 100, taxableBase = 900, preDiscountBase = 1,000
+ *   gross = 200, commission = max(0, 200 − 100) = 100.
+ * The dealer's net (900 − 100 = 800) matches a no-discount sale
+ * (1,000 − 200 = 800): the discount fell entirely on the professional.
+ *
+ * If the discount exceeds the commission the result floors at 0 (the dealer
+ * absorbs the excess). Pass the totals object from computeTotals(); a bare
+ * number with no discount degrades gracefully via the nullish reads.
+ *
+ * Multiplication only, no rounding policy — the formatter decides display.
  */
-export function commissionAmount(taxableBase: unknown, pct: unknown): number {
-  const t = Number(taxableBase);
-  if (!Number.isFinite(t)) return 0;
-  return t * (clampCommissionPct(pct) / 100);
+export function commissionAmount(
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
+  pct: unknown,
+): number {
+  const taxable = Number(totals?.taxableBase);
+  if (!Number.isFinite(taxable)) return 0;
+  const rawDiscount = Number(totals?.discountAmt);
+  const discountAmt = Number.isFinite(rawDiscount) ? Math.max(0, rawDiscount) : 0;
+  const preDiscountBase = taxable + discountAmt;
+  const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
+  return Math.max(0, gross - discountAmt);
 }
