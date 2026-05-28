@@ -258,28 +258,48 @@ test('trade-discount quotes never owe a commission payout', () => {
   );
 });
 
-test('floor sale (no order): the DEPOSIT activates the commission', () => {
+test('floor order: the DEPOSIT activates the commission (orderType drives it)', () => {
+  // Floor pays on the deposit; an unset orderType defaults to floor.
   assert.equal(
-    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: null, depositReceivedAt: DEP }),
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'floor', depositReceivedAt: DEP }),
+    DEP,
+  );
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, depositReceivedAt: DEP }),
+    DEP,
+  );
+  // A floor order pays on its DEPOSIT even when tied to an order — the balance
+  // doesn't gate a floor payout.
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'floor', orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: null }),
     DEP,
   );
   // No deposit yet → not owed.
   assert.equal(
-    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: null, depositReceivedAt: null }),
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'floor', depositReceivedAt: null }),
     null,
   );
 });
 
-test('order-linked quote: owed only once the BALANCE is paid, not the deposit', () => {
+test('special order: owed only once the BALANCE is paid, not the deposit', () => {
   // Deposit alone is NOT enough on a special order.
   assert.equal(
-    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: null }),
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'special', orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: null }),
     null,
   );
   // Balance paid → owed at the balance date.
   assert.equal(
-    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: BAL }),
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'special', orderId: 'ord-1', depositReceivedAt: DEP, balancePaidAt: BAL }),
     BAL,
+  );
+});
+
+test('special order must be tied to an order/container to ever owe', () => {
+  // The balance is collected through the order's container; with no order
+  // there's nothing to pay against, so a stray balancePaidAt still owes nothing.
+  assert.equal(
+    commissionOwedAt({ status: 'accepted', professionalId: PRO, orderType: 'special', orderId: null, balancePaidAt: BAL }),
+    null,
   );
 });
 

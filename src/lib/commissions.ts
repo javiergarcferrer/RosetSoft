@@ -116,13 +116,14 @@ export function effectiveCommissionPct(
  * PAYABLE — i.e. the date the dealer actually owes the payout. Returns the
  * milestone timestamp that triggers it, or null if it isn't owed yet.
  *
- * The dealer's rule for *when* a professional's cut is owed:
+ * The dealer's rule keys off the ORDER TYPE (the same toggle that sets the rate):
  *
- *   • Quote tied to an ORDER (`orderId` set): owed once the BALANCE is paid
- *     (`balancePaidAt`). On a special order the deposit alone isn't enough —
- *     the commission rides on full collection.
- *   • Standalone quote (no order — a "venta de piso", floor sale): owed once
- *     the DEPOSIT is received (`depositReceivedAt`).
+ *   • Floor order ("venta de piso"): owed once the DEPOSIT is received
+ *     (`depositReceivedAt`) — a floor sale collects on the deposit.
+ *   • Special order: must be tied to an order/container (`orderId`) and is
+ *     owed only once the BALANCE is paid (`balancePaidAt`). The deposit alone
+ *     isn't enough — a special order rides on full collection when its
+ *     container lands, so a special quote with no order can't owe yet.
  *
  * Only ACCEPTED quotes that have a professional and settle via the
  * 'commission' modality can owe a payout. 'trade_discount' quotes settle
@@ -138,6 +139,7 @@ export function commissionOwedAt(
         Quote,
         | 'status'
         | 'professionalId'
+        | 'orderType'
         | 'orderId'
         | 'depositReceivedAt'
         | 'balancePaidAt'
@@ -150,8 +152,14 @@ export function commissionOwedAt(
   if (quote.status !== 'accepted') return null;   // mirrors QUOTE_STATUS_ACCEPTED
   if (!quote.professionalId) return null;
   if (isTradeDiscount(quote)) return null;
-  const owed = quote.orderId ? quote.balancePaidAt : quote.depositReceivedAt;
-  return owed ?? null;
+  if (quote.orderType === 'special') {
+    // A special order settles on the BALANCE, collected only once the order is
+    // in flight in a container — so it must be tied to an order and isn't owed
+    // until that balance is paid.
+    return quote.orderId ? (quote.balancePaidAt ?? null) : null;
+  }
+  // Floor order ("venta de piso"): owed once the DEPOSIT is received.
+  return quote.depositReceivedAt ?? null;
 }
 
 /** True once the professional's commission on the quote has been paid out. */

@@ -387,8 +387,10 @@ export interface Quote {
 
   /**
    * Floor order ('floor', 15% base commission) vs special order ('special',
-   * 20%). Sets the professional's base rate; independent of whether
-   * `orderId` is set. Defaults to 'floor'.
+   * 20%). Sets the professional's base rate AND the commission payout timing:
+   * a floor order pays on the deposit; a special order is tied to a
+   * container/order and pays on the balance (see commissionOwedAt).
+   * Defaults to 'floor'.
    */
   orderType?: OrderType;
 
