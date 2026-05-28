@@ -26,11 +26,18 @@ import { useApp } from '../../context/AppContext.jsx';
  * that material's ColorGrid (autoDrill) — MaterialColorPicker locates the
  * material via swatchMatch.locateColor on the current grade/fabric.
  *
+ * Multi-select mode (`multiSelect` + `onSelectMany`): the picker shows
+ * checkboxes and confirms ONCE with an array of selections — used by the
+ * "+ Opción" flow to batch-add alternative materials to a line.
+ *
  * Empty-catalog state: the picker shows a friendly nudge to import the
  * Ligne Roset 10.2025 list from /admin/materials. We don't trigger the
  * import inline because the catalog is admin-scoped.
  */
-export default function SwatchPicker({ open, onClose, onSelect, currentGrade, currentFabric, family = null }) {
+export default function SwatchPicker({
+  open, onClose, onSelect, onSelectMany, multiSelect = false,
+  currentGrade, currentFabric, family = null,
+}) {
   const { profileId } = useApp();
   const materials = useLiveQuery(
     () => (profileId ? db.materials.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
@@ -38,23 +45,35 @@ export default function SwatchPicker({ open, onClose, onSelect, currentGrade, cu
     [],
   );
 
-  const [title, setTitle] = useState('Elegir material');
+  const initialTitle = multiSelect ? 'Elegir materiales' : 'Elegir material';
+  const [title, setTitle] = useState(initialTitle);
 
   // Reset the heading every time the modal opens. The inner picker remounts
   // on open (Modal returns null while closed), so its own step state resets
   // too — a reopened picker never keeps the previous line's drilled material.
   useEffect(() => {
-    if (open) setTitle('Elegir material');
-  }, [open]);
+    if (open) setTitle(initialTitle);
+  }, [open, initialTitle]);
+
+  // material + color → the { grade, fabric, swatchImageId } shape the quote
+  // line consumes. Pre-fill the swatch from the chosen color's own photo when
+  // it has one; we deliberately do NOT fall back to another color's picture —
+  // a wrong-colour swatch is worse than none.
+  function toPick(material, color) {
+    return {
+      grade: material.grade || '',
+      fabric: composeFabricLabel(material, color),
+      swatchImageId: (color && color.imageId) || null,
+    };
+  }
 
   function commit(material, color) {
-    const fabric = composeFabricLabel(material, color);
-    // Pre-fill the swatch from the chosen color's own photo when it has one.
-    // We deliberately do NOT fall back to another color's picture — a wrong-
-    // colour swatch is worse than none. When the color has no photo the
-    // line's swatch slot lets the dealer add it inline.
-    const swatchImageId = (color && color.imageId) || null;
-    onSelect({ grade: material.grade || '', fabric, swatchImageId });
+    onSelect(toPick(material, color));
+    onClose();
+  }
+
+  function commitMany(picks) {
+    onSelectMany?.(picks.map(({ material, color }) => toPick(material, color)));
     onClose();
   }
 
@@ -69,8 +88,10 @@ export default function SwatchPicker({ open, onClose, onSelect, currentGrade, cu
           family={family}
           currentGrade={currentGrade}
           currentFabric={currentFabric}
-          autoDrill
+          autoDrill={!multiSelect}
+          multiSelect={multiSelect}
           onPick={commit}
+          onPickMany={commitMany}
           onTitleChange={setTitle}
         />
       )}

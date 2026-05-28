@@ -432,7 +432,30 @@ export interface Quote {
    * this is its sibling of commissionPaidAt (the professional's cut). */
   sellerCommissionPaidAt?: number | null;
 
+  /* Public share link. `shareToken` is a random secret embedded in the
+   * shareable URL (#/q/<token>); `shareEnabled` gates whether the link
+   * resolves (lets the dealer revoke without losing the token). The
+   * recipient's interactive picks land in `clientSelections` — stored
+   * SEPARATELY (never mutating the dealer's own lines) so the dealer sees
+   * what the client wants and can choose to apply it. */
+  shareToken?: string | null;
+  shareEnabled?: boolean;
+  clientSelections?: ClientSelections | null;
+
   createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * What a share-link recipient picked, persisted on the quote (plan A —
+ * non-destructive). `alternatives` maps an alternativeGroup id to the line
+ * id the client chose within it; `optionals` maps an optional line id to
+ * whether the client wants it included. Absent keys fall back to the
+ * dealer's own selection / the line's default.
+ */
+export interface ClientSelections {
+  alternatives?: Record<string, string>;
+  optionals?: Record<string, boolean>;
   updatedAt?: number;
 }
 

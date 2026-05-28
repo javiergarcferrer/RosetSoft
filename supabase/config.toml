@@ -30,3 +30,23 @@ verify_jwt = false
 # carries no Authorization header, isn't rejected by the gateway).
 [functions.bpd-rate]
 verify_jwt = false
+
+# swatch-proxy re-serves a public Ligne Roset swatch image with CORS headers
+# so the browser-side PDF generator can embed it. It's a public, read-only
+# image proxy locked to the LR swatch CDN — no auth needed, and the gateway
+# must NOT require a JWT, or the PDF's plain image fetch (which carries no
+# Authorization header) would be rejected before the function runs.
+[functions.swatch-proxy]
+verify_jwt = false
+
+# quote-share backs the public, interactive client quote link. It's used
+# logged-out, so the gateway must not require a JWT; the function itself gates
+# on the secret share token and runs with the service role.
+[functions.quote-share]
+verify_jwt = false
+
+# hl-track verifies the caller's JWT itself (same reason as bpd-rate) and
+# proxies Hapag-Lloyd's Track & Trace API, keeping HL_CLIENT_ID/SECRET
+# server-side.
+[functions.hl-track]
+verify_jwt = false

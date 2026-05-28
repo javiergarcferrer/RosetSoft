@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
   FileText, CheckCircle2, Package, DollarSign, Wallet,
+  MapPin, Ship, RefreshCw, AlertCircle,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
@@ -22,6 +23,11 @@ import {
 import {
   canMarkDeposit, canMarkBalance, canMarkDelivered, deliveryBlockedReason,
 } from '../lib/quoteMilestones.js';
+import { supabase } from '../db/supabaseClient.js';
+import {
+  validateContainerNo, detectCarrier, normalizeContainerNo,
+  summarizeTracking, MODE_LABELS, CLASSIFIER_LABELS,
+} from '../lib/containerTracking.js';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -452,6 +458,14 @@ export default function OrderDetail() {
 // ---------------------------------------------------------------------------
 function ContainerRow({ container }) {
   const filled = !!container.filledAt;
+  const [tracking, setTracking] = useState(false);
+
+  // The container number lives in `code`. Validate it (ISO 6346 check
+  // digit) so a typo is caught before the dealer tries to track it, and
+  // hint the carrier from the owner prefix.
+  const validation = validateContainerNo(container.code);
+  const carrier = detectCarrier(container.code);
+  const trackable = validation.status === 'valid';
 
   async function update(patch) {
     await db.containers.update(container.id, { ...patch, updatedAt: Date.now() });
@@ -488,8 +502,9 @@ function ContainerRow({ container }) {
               className="input font-mono text-xs max-w-xs"
               placeholder="MSCU1234567"
               value={container.code || ''}
-              onCommit={(v) => update({ code: v })}
+              onCommit={(v) => update({ code: normalizeContainerNo(v) })}
             />
+            <ContainerNoHint validation={validation} carrier={carrier} />
           </div>
         </div>
         <button
@@ -502,7 +517,7 @@ function ContainerRow({ container }) {
         </button>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={toggleFilled}
@@ -518,8 +533,173 @@ function ContainerRow({ container }) {
             <><Package size={12} /> Marcar lleno</>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setTracking((v) => !v)}
+          disabled={!trackable}
+          title={trackable ? 'Rastrear con Hapag-Lloyd' : 'Ingresa un número de contenedor válido para rastrear'}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-ink-200 bg-white text-ink-700 hover:border-ink-400 hover:text-ink-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <MapPin size={12} /> {tracking ? 'Ocultar rastreo' : 'Rastrear'}
+        </button>
       </div>
+
+      {tracking && trackable && <ContainerTracking containerNo={validation.value} />}
     </li>
+  );
+}
+
+// Inline feedback under the container-number field: a green "valid" line
+// (with the carrier guessed from the prefix) or an amber hint explaining
+// why the number is rejected. Empty input shows nothing.
+function ContainerNoHint({ validation, carrier }) {
+  if (validation.status === 'empty') return null;
+  if (validation.status === 'invalid') {
+    const msg = validation.reason === 'checkDigit'
+      ? `Dígito de control inválido${validation.expectedCheckDigit != null ? ` (se esperaba …${validation.expectedCheckDigit})` : ''}`
+      : 'Formato inválido — 4 letras + 7 dígitos (p. ej. MSCU1234567)';
+    return (
+      <p className="mt-1 text-[11px] text-amber-600 flex items-center gap-1">
+        <AlertCircle size={11} className="flex-shrink-0" /> {msg}
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[11px] text-emerald-600 flex items-center gap-1">
+      <CheckCircle2 size={11} className="flex-shrink-0" /> Número válido{carrier ? ` · ${carrier}` : ''}
+    </p>
+  );
+}
+
+// Track & Trace panel — calls the `hl-track` Edge Function (which holds the
+// Hapag-Lloyd keys server-side) and renders the returned DCSA events as a
+// timeline, plus the last known position and the estimated arrival. The API
+// is BETA and only knows Hapag-Lloyd-booked containers; both are surfaced so
+// an empty result reads as "not an HL booking", not "broken".
+function ContainerTracking({ containerNo }) {
+  const [state, setState] = useState({ status: 'loading', summary: null, error: null, fetchedAt: null });
+
+  async function load() {
+    setState({ status: 'loading', summary: null, error: null, fetchedAt: null });
+    try {
+      const { data, error } = await supabase.functions.invoke('hl-track', {
+        body: { containerNo },
+      });
+      if (error) {
+        let msg = error.message || 'No se pudo rastrear el contenedor';
+        try {
+          // The function returns { error, status, detail } on upstream
+          // failures; surface the cause instead of a generic message.
+          const body = await error.context?.json?.();
+          if (body?.error) {
+            msg = body.error;
+            if (body.status) msg += ` (HTTP ${body.status})`;
+          }
+        } catch { /* body already consumed / not JSON */ }
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      setState({
+        status: 'done',
+        summary: summarizeTracking(data?.events),
+        error: null,
+        fetchedAt: data?.fetchedAt || null,
+      });
+    } catch (e) {
+      setState({ status: 'error', summary: null, error: e?.message || 'Error', fetchedAt: null });
+    }
+  }
+
+  useEffect(() => { load(); }, [containerNo]);
+
+  const { status, summary, error, fetchedAt } = state;
+
+  return (
+    <div className="rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 font-medium text-ink-600">
+          <Ship size={12} /> Rastreo Hapag-Lloyd
+          <span className="text-[10px] font-normal text-ink-400 border border-ink-200 rounded px-1">BETA</span>
+        </span>
+        <button
+          type="button"
+          onClick={load}
+          disabled={status === 'loading'}
+          className="text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-50"
+        >
+          <RefreshCw size={11} className={status === 'loading' ? 'animate-spin' : ''} /> Actualizar
+        </button>
+      </div>
+
+      {status === 'loading' && <p className="text-ink-500">Consultando Hapag-Lloyd…</p>}
+
+      {status === 'error' && (
+        <p className="text-amber-700 flex items-start gap-1.5">
+          <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </p>
+      )}
+
+      {status === 'done' && summary && summary.count === 0 && (
+        <p className="text-ink-500">
+          Sin eventos. Track &amp; Trace solo reporta contenedores reservados con Hapag-Lloyd.
+        </p>
+      )}
+
+      {status === 'done' && summary && summary.count > 0 && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {summary.last && (
+              <div className="rounded bg-white border border-ink-100 p-2">
+                <div className="eyebrow text-[10px] text-ink-400">Última posición</div>
+                <div className="font-medium text-ink-800">
+                  {summary.last.label}{summary.last.location ? ` · ${summary.last.location}` : ''}
+                </div>
+                <div className="text-[10px] text-ink-500">{formatDateTime(summary.last.at)}</div>
+              </div>
+            )}
+            {summary.eta && (
+              <div className="rounded bg-white border border-ink-100 p-2">
+                <div className="eyebrow text-[10px] text-ink-400">Llegada estimada</div>
+                <div className="font-medium text-ink-800">{summary.eta.location || '—'}</div>
+                <div className="text-[10px] text-ink-500">
+                  {formatDateTime(summary.eta.at)} · {CLASSIFIER_LABELS[summary.eta.classifier] || summary.eta.classifier}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <ol className="space-y-1.5 border-l border-ink-200 pl-3">
+            {[...summary.milestones].reverse().map((m, i) => (
+              <li key={i} className="relative">
+                <span className="absolute -left-[14.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-ink-300" />
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <span className="text-ink-800 font-medium">
+                    {m.label}
+                    {m.location ? <span className="font-normal text-ink-500"> · {m.location}</span> : null}
+                  </span>
+                  <span className="text-[10px] text-ink-400 whitespace-nowrap">{formatDateTime(m.at)}</span>
+                </div>
+                {(() => {
+                  const meta = [
+                    m.mode ? (MODE_LABELS[m.mode] || m.mode) : null,
+                    m.vessel,
+                    m.voyage,
+                    CLASSIFIER_LABELS[m.classifier] || m.classifier || null,
+                  ].filter(Boolean).join(' · ');
+                  return meta ? <div className="text-[10px] text-ink-400">{meta}</div> : null;
+                })()}
+              </li>
+            ))}
+          </ol>
+
+          {fetchedAt && (
+            <p className="text-[10px] text-ink-400">Consultado {formatDateTime(Date.parse(fetchedAt))}</p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

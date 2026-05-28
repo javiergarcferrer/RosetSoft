@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, ChevronLeft, Check, Layers } from 'lucide-react';
+import { Search, X, ChevronLeft, Check, Layers, Plus } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { locateColor } from '../../lib/swatchMatch.js';
 import { composeSubtype } from '../../lib/subtype.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
+import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/composition.js';
 
 /**
  * Headless material + color chooser — the two-step MaterialList → ColorGrid
@@ -15,12 +16,19 @@ import { formatMoney } from '../../lib/format.js';
  * (SwatchPicker in a Modal; CatalogPicker as step 2 of its own modal).
  *
  *   1. Material list — search by name/grade/color, filter by category
- *      (Telas / Pieles / Outdoor). When `gradeFilter` is set the list is
- *      restricted to materials whose grade ∈ gradeFilter (the catalog flow
- *      passes the selected model's grades here).
+ *      (Telas / Pieles / Outdoor), sort (name/grade/price/colors/composition)
+ *      and optionally GROUP by primary fiber. When `gradeFilter` is set the
+ *      list is restricted to materials whose grade ∈ gradeFilter (the catalog
+ *      flow passes the selected model's grades here).
  *   2. Color grid — after picking a material the dealer sees its colors as a
  *      chip grid. Picking a color (or "Sin color específico") fires
  *      onPick(material, color|null).
+ *
+ * Multi-select mode (`multiSelect`): the list shows checkboxes instead of
+ * drilling into colors. The dealer ticks several fabrics and confirms, firing
+ * onPickMany([{ material, color }]) once — the quote line appends them as
+ * alternative material OPTIONS. Each pick carries the material's hero color
+ * (first with a photo, else the first color) so the option chip gets a swatch.
  *
  * Props:
  *   materials      catalog materials (already loaded by the caller)
@@ -30,7 +38,10 @@ import { formatMoney } from '../../lib/format.js';
  *                  highlight and, with autoDrill, which material to pre-open)
  *   autoDrill?     when true, locate the material the current grade/fabric
  *                  refers to and start in its ColorGrid (re-editing a line)
+ *   multiSelect?   when true, render checkboxes + a confirm bar instead of the
+ *                  single-pick color drill-down
  *   onPick         (material, color|null) — the chosen combination
+ *   onPickMany?    ([{ material, color }]) — the multi-select confirmation
  *   onTitleChange? (title) — lets the wrapper sync its modal heading with the
  *                  current step ("Elegir material" vs "<material> · elige color")
  */
@@ -41,15 +52,20 @@ export default function MaterialColorPicker({
   currentGrade,
   currentFabric,
   autoDrill = false,
+  multiSelect = false,
   onPick,
+  onPickMany,
   onTitleChange,
 }) {
   const list = materials || [];
 
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
+  const [sort, setSort] = useState('name');
+  const [groupByFiber, setGroupByFiber] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // material the dealer drilled into
+  const [selected, setSelected] = useState(() => new Set());  // multi-select ids
   const inputRef = useRef(null);
 
   // When re-editing a line that already carries a material, jump straight into
@@ -57,15 +73,16 @@ export default function MaterialColorPicker({
   // index, which shifts as the search term changes) via locateColor. We wait
   // until the materials have actually loaded (list non-empty) so an async
   // fetch that resolves AFTER mount still drills; runs once thereafter, and
-  // clearing `picked` afterwards (Volver) returns to the list.
+  // clearing `picked` afterwards (Volver) returns to the list. Never in
+  // multi-select mode — there is no single "current" material to drill to.
   const didAutoDrill = useRef(false);
   useEffect(() => {
-    if (didAutoDrill.current || !autoDrill || list.length === 0) return;
+    if (didAutoDrill.current || !autoDrill || multiSelect || list.length === 0) return;
     didAutoDrill.current = true;
     const hit = locateColor(list, composeSubtype(currentGrade, currentFabric));
     if (hit?.material) setPicked(hit.material);
     else queueMicrotask(() => inputRef.current?.focus());
-  }, [autoDrill, list, currentGrade, currentFabric]);
+  }, [autoDrill, multiSelect, list, currentGrade, currentFabric]);
 
   const allowGrade = useMemo(() => {
     if (!gradeFilter || gradeFilter.length === 0) return null;
@@ -81,22 +98,81 @@ export default function MaterialColorPicker({
         if (!needle) return true;
         if (m.name?.toLowerCase().includes(needle)) return true;
         if (m.grade?.toLowerCase() === needle) return true;
+        if (m.composition?.toLowerCase().includes(needle)) return true;
         if (m.colors?.some((c) => c.name?.toLowerCase().includes(needle) || c.code?.includes(needle))) return true;
         return false;
-      })
-      .sort((a, b) => {
-        const ca = (a.category || '').localeCompare(b.category || '');
-        if (ca) return ca;
-        return (a.name || '').localeCompare(b.name || '');
       });
   }, [list, q, category, allowGrade]);
 
-  useEffect(() => { setActiveIdx(0); }, [q, category, filtered.length]);
+  const cmp = useMemo(() => comparator(sort, family), [sort, family]);
+  const ordered = useMemo(() => [...filtered].sort(cmp), [filtered, cmp]);
+
+  // When grouping, bucket by primary fiber and order groups alphabetically
+  // (the "no composition" bucket last). Each group remembers its start offset
+  // into the FLAT display order so keyboard nav (activeIdx) stays a single
+  // index across the whole list.
+  const groups = useMemo(() => {
+    if (!groupByFiber) return null;
+    const map = new Map();
+    for (const m of ordered) {
+      const key = compositionGroup(m.composition);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(m);
+    }
+    const keys = [...map.keys()].sort((a, b) => {
+      if (a === NO_COMPOSITION) return 1;
+      if (b === NO_COMPOSITION) return -1;
+      return a.localeCompare(b);
+    });
+    let start = 0;
+    return keys.map((fiber) => {
+      const items = map.get(fiber);
+      const g = { fiber, items, start };
+      start += items.length;
+      return g;
+    });
+  }, [ordered, groupByFiber]);
+
+  // The actual rendered order — flat concatenation of groups when grouping,
+  // else the sorted list. activeIdx and Enter index into THIS.
+  const displayList = useMemo(
+    () => (groups ? groups.flatMap((g) => g.items) : ordered),
+    [groups, ordered],
+  );
+
+  useEffect(() => { setActiveIdx(0); }, [q, category, sort, groupByFiber, displayList.length]);
 
   // Keep the wrapper's heading in sync with the current step.
   useEffect(() => {
+    if (multiSelect) {
+      onTitleChange?.(selected.size ? `Elegir materiales · ${selected.size}` : 'Elegir materiales');
+      return;
+    }
     onTitleChange?.(picked ? `${picked.name} · elige color` : 'Elegir material');
-  }, [picked, onTitleChange]);
+  }, [picked, multiSelect, selected, onTitleChange]);
+
+  function toggle(m) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(m.id)) next.delete(m.id);
+      else next.add(m.id);
+      return next;
+    });
+  }
+
+  function confirmMany() {
+    if (selected.size === 0) return;
+    const picks = list
+      .filter((m) => selected.has(m.id))
+      .map((m) => ({ material: m, color: heroColor(m) }));
+    onPickMany?.(picks);
+  }
+
+  function activate(m) {
+    if (multiSelect) { toggle(m); return; }
+    if (!m.colors?.length) onPick(m, null);
+    else setPicked(m);
+  }
 
   function onKey(e) {
     if (picked) {
@@ -105,16 +181,16 @@ export default function MaterialColorPicker({
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIdx((i) => Math.min(filtered.length - 1, i + 1));
+      setActiveIdx((i) => Math.min(displayList.length - 1, i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIdx((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const m = filtered[activeIdx];
-      if (!m) return;
-      if (!m.colors?.length) onPick(m, null);
-      else setPicked(m);
+      // Cmd/Ctrl+Enter confirms the whole multi-selection.
+      if (multiSelect && (e.metaKey || e.ctrlKey)) { confirmMany(); return; }
+      const m = displayList[activeIdx];
+      if (m) activate(m);
     }
   }
 
@@ -130,7 +206,8 @@ export default function MaterialColorPicker({
         />
       ) : (
         <MaterialList
-          materials={filtered}
+          displayList={displayList}
+          groups={groups}
           total={list.length}
           gradeFiltered={!!allowGrade}
           family={family}
@@ -138,12 +215,16 @@ export default function MaterialColorPicker({
           setQ={setQ}
           category={category}
           setCategory={setCategory}
+          sort={sort}
+          setSort={setSort}
+          groupByFiber={groupByFiber}
+          setGroupByFiber={setGroupByFiber}
           activeIdx={activeIdx}
           setActiveIdx={setActiveIdx}
-          onPick={(m) => {
-            if (!m.colors?.length) onPick(m, null);
-            else setPicked(m);
-          }}
+          multiSelect={multiSelect}
+          selected={selected}
+          onActivate={activate}
+          onConfirmMany={confirmMany}
           inputRef={inputRef}
           currentGrade={currentGrade}
         />
@@ -153,6 +234,53 @@ export default function MaterialColorPicker({
 }
 
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
+
+/** Sort options surfaced in the list toolbar. */
+const SORTS = [
+  { k: 'name',   label: 'Nombre A–Z' },
+  { k: 'grade',  label: 'Grade' },
+  { k: 'price',  label: 'Precio' },
+  { k: 'colors', label: 'N.º de colores' },
+  { k: 'fiber',  label: 'Composición' },
+];
+
+/**
+ * Resolved price used for the "Precio" sort. With a catalog MODEL in play
+ * (`family`) it's the model's price in the material's grade; otherwise the
+ * material's own per-yard / per-m² price. null when neither resolves.
+ */
+function priceValue(family, m) {
+  if (family) {
+    const p = productForGrade(family, String(m.grade || '').toUpperCase());
+    return p?.priceUsd != null ? Number(p.priceUsd) : null;
+  }
+  return m.price != null ? Number(m.price) : null;
+}
+
+/** Comparator factory for the active sort. Name is the universal tiebreak. */
+function comparator(sort, family) {
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '');
+  switch (sort) {
+    case 'grade':
+      return (a, b) => String(a.grade || '').localeCompare(String(b.grade || '')) || byName(a, b);
+    case 'price':
+      return (a, b) => {
+        const pa = priceValue(family, a);
+        const pb = priceValue(family, b);
+        if (pa == null && pb == null) return byName(a, b);
+        if (pa == null) return 1;   // unknown prices sink to the bottom
+        if (pb == null) return -1;
+        return pa - pb || byName(a, b);
+      };
+    case 'colors':
+      return (a, b) => (b.colors?.length || 0) - (a.colors?.length || 0) || byName(a, b);
+    case 'fiber':
+      return (a, b) => primaryFiber(a.composition).localeCompare(primaryFiber(b.composition)) || byName(a, b);
+    case 'name':
+    default:
+      return byName;
+  }
+}
 
 /**
  * Price shown for a material. With a catalog MODEL in play (`family` set — the
@@ -181,8 +309,9 @@ function MaterialPrice({ family, material }) {
 /* -------------------------------------------------------------------------- */
 
 function MaterialList({
-  materials, total, gradeFiltered, family, q, setQ, category, setCategory,
-  activeIdx, setActiveIdx, onPick, inputRef, currentGrade,
+  displayList, groups, total, gradeFiltered, family, q, setQ, category, setCategory,
+  sort, setSort, groupByFiber, setGroupByFiber, activeIdx, setActiveIdx,
+  multiSelect, selected, onActivate, onConfirmMany, inputRef, currentGrade,
 }) {
   if (total === 0) {
     return (
@@ -201,37 +330,67 @@ function MaterialList({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <div className="relative flex-1">
+      <div className="space-y-2">
+        <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             ref={inputRef}
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nombre, grade o color…"
+            placeholder="Buscar por nombre, grade, color o composición…"
             className="input pl-9"
             autoFocus
           />
         </div>
-        <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs flex-shrink-0">
-          {[
-            { k: '', label: 'Todos' },
-            { k: 'fabric', label: 'Telas' },
-            { k: 'leather', label: 'Pieles' },
-            { k: 'outdoor', label: 'Outdoor' },
-          ].map((c, i) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs flex-shrink-0">
+            {[
+              { k: '', label: 'Todos' },
+              { k: 'fabric', label: 'Telas' },
+              { k: 'leather', label: 'Pieles' },
+              { k: 'outdoor', label: 'Outdoor' },
+            ].map((c, i) => (
+              <button
+                key={c.k}
+                type="button"
+                onClick={() => setCategory(c.k)}
+                className={`px-2.5 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
+                  category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="inline-flex items-center gap-1 text-[11px] text-ink-500">
+              <span className="hidden sm:inline">Ordenar</span>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 focus:outline-none focus:border-ink-900"
+                aria-label="Ordenar materiales"
+              >
+                {SORTS.map((s) => (
+                  <option key={s.k} value={s.k}>{s.label}</option>
+                ))}
+              </select>
+            </label>
             <button
-              key={c.k}
               type="button"
-              onClick={() => setCategory(c.k)}
-              className={`px-2.5 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+              onClick={() => setGroupByFiber((v) => !v)}
+              aria-pressed={groupByFiber}
+              className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-1.5 transition-colors ${
+                groupByFiber
+                  ? 'bg-ink-900 text-white border-ink-900'
+                  : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'
               }`}
+              title="Agrupar por composición (fibra principal)"
             >
-              {c.label}
+              <Layers size={13} /> Agrupar
             </button>
-          ))}
+          </div>
         </div>
       </div>
 
@@ -241,64 +400,143 @@ function MaterialList({
         </div>
       )}
 
+      {multiSelect && (
+        <div className="text-[11px] text-ink-500">
+          Marca varias telas para ofrecerlas como <b className="text-ink-700">opciones</b> de esta línea; cada una mostrará su diferencia de precio.
+        </div>
+      )}
+
       <ul className="max-h-[60vh] overflow-y-auto -mx-1 divide-y divide-ink-100 border-y border-ink-100">
-        {materials.length === 0 ? (
+        {displayList.length === 0 ? (
           <li className="px-3 py-8 text-center text-sm text-ink-500">Sin resultados.</li>
-        ) : materials.map((m, idx) => (
-          <li key={m.id}>
-            <button
-              type="button"
-              onClick={() => onPick(m)}
-              onMouseEnter={() => setActiveIdx(idx)}
-              className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
-                activeIdx === idx ? 'bg-ink-100' : 'hover:bg-ink-50'
-              }`}
-            >
-              {/* Material hero = the first color that carries a photo
-                  (there's no separate material-level image). Placeholder
-                  tile otherwise. The category dot remains as the small
-                  colour-coded chip in the corner so the dealer can still
-                  read fabric / leather / outdoor at a glance even when
-                  no photo exists yet. */}
-              <div className="relative w-10 h-10 flex-shrink-0">
-                <ImageView
-                  id={heroImageId(m)}
-                  fallbackUrl={heroSwatchUrl(m)}
-                  alt={m.name}
-                  hoverPreview
-                  className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
-                  placeholderClassName="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
-                />
-                <span className="absolute -top-1 -right-1">
-                  <CategoryDot category={m.category} />
-                </span>
+        ) : groups ? (
+          groups.map((g) => (
+            <li key={g.fiber} className="py-0">
+              <div className="sticky top-0 z-[1] bg-white/95 backdrop-blur px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500 flex items-center justify-between">
+                <span className="truncate">{g.fiber}</span>
+                <span className="text-ink-400 font-normal tabular-nums">{g.items.length}</span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2 min-w-0">
-                  <span className="font-medium text-ink-900 truncate">{m.name}</span>
-                  {m.grade && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
-                      Grade {m.grade}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[11px] text-ink-500 mt-0.5 truncate">
-                  {m.composition || ' '}
-                </div>
-              </div>
-              <div className="text-right text-xs text-ink-500 tabular-nums flex-shrink-0">
-                <div><MaterialPrice family={family} material={m} /></div>
-                <div className="text-[10px]">{m.colors?.length || 0} colores</div>
-              </div>
-            </button>
-          </li>
-        ))}
+              <ul className="divide-y divide-ink-100">
+                {g.items.map((m, localIdx) => {
+                  const idx = g.start + localIdx;
+                  return (
+                    <MaterialRow
+                      key={m.id}
+                      m={m}
+                      active={activeIdx === idx}
+                      multiSelect={multiSelect}
+                      checked={selected?.has(m.id)}
+                      family={family}
+                      onHover={() => setActiveIdx(idx)}
+                      onActivate={() => onActivate(m)}
+                    />
+                  );
+                })}
+              </ul>
+            </li>
+          ))
+        ) : (
+          displayList.map((m, idx) => (
+            <MaterialRow
+              key={m.id}
+              m={m}
+              active={activeIdx === idx}
+              multiSelect={multiSelect}
+              checked={selected?.has(m.id)}
+              family={family}
+              onHover={() => setActiveIdx(idx)}
+              onActivate={() => onActivate(m)}
+            />
+          ))
+        )}
       </ul>
 
-      <div className="text-[10px] text-ink-400 text-right">
-        {materials.length} de {total} materiales · ↑↓ navegar · ↵ elegir · Esc cerrar
-      </div>
+      {multiSelect ? (
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <span className="text-[10px] text-ink-400">
+            {displayList.length} de {total} · {selected?.size || 0} seleccionadas
+          </span>
+          <button
+            type="button"
+            onClick={onConfirmMany}
+            disabled={!selected?.size}
+            className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Plus size={13} /> Agregar {selected?.size || 0} {selected?.size === 1 ? 'opción' : 'opciones'}
+          </button>
+        </div>
+      ) : (
+        <div className="text-[10px] text-ink-400 text-right">
+          {displayList.length} de {total} materiales · ↑↓ navegar · ↵ elegir · Esc cerrar
+        </div>
+      )}
     </div>
+  );
+}
+
+/* One row in the material list — shared by the flat and grouped renders. In
+   multi-select mode the leading tile becomes a checkbox; otherwise it's the
+   material's hero swatch. The composition line is always shown (full text on
+   hover) so the dealer reads the fiber make-up at a glance. */
+function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActivate }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onActivate}
+        onMouseEnter={onHover}
+        aria-pressed={multiSelect ? !!checked : undefined}
+        className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
+          multiSelect && checked ? 'bg-brand-50' : active ? 'bg-ink-100' : 'hover:bg-ink-50'
+        }`}
+      >
+        {multiSelect && (
+          <span
+            className={`flex items-center justify-center w-4 h-4 rounded border flex-shrink-0 ${
+              checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300 bg-white'
+            }`}
+            aria-hidden
+          >
+            {checked && <Check size={12} strokeWidth={3} />}
+          </span>
+        )}
+        {/* Material hero = the first color that carries a photo (there's no
+            separate material-level image). Placeholder tile otherwise. The
+            category dot remains as the small colour-coded chip in the corner
+            so the dealer can still read fabric / leather / outdoor at a glance
+            even when no photo exists yet. */}
+        <div className="relative w-10 h-10 flex-shrink-0">
+          <ImageView
+            id={heroImageId(m)}
+            fallbackUrl={heroSwatchUrl(m)}
+            alt={m.name}
+            hoverPreview
+            className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
+            placeholderClassName="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
+          />
+          <span className="absolute -top-1 -right-1">
+            <CategoryDot category={m.category} />
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="font-medium text-ink-900 truncate">{m.name}</span>
+            {m.grade && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
+                Grade {m.grade}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-ink-500 mt-0.5 truncate" title={m.composition || undefined}>
+            {m.composition || '—'}
+          </div>
+        </div>
+        <div className="text-right text-xs text-ink-500 tabular-nums flex-shrink-0">
+          <div><MaterialPrice family={family} material={m} /></div>
+          <div className="text-[10px]">{m.colors?.length || 0} colores</div>
+        </div>
+      </button>
+    </li>
   );
 }
 
@@ -420,6 +658,16 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
  */
 function heroImageId(material) {
   return material?.colors?.find((c) => c.imageId)?.imageId || null;
+}
+
+/**
+ * The color used to represent a material in multi-select: the first color
+ * with a photo (so the option chip gets a real swatch), else the first
+ * color, else null. Mirrors heroImageId's "borrow from colors" rule.
+ */
+function heroColor(material) {
+  const colors = material?.colors || [];
+  return colors.find((c) => c.imageId) || colors[0] || null;
 }
 
 function CategoryDot({ category }) {

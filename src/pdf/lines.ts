@@ -6,7 +6,7 @@ import {
   materialOptionDeltas,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
-import { swatchUrl } from '../lib/swatchImage.js';
+import { swatchProxyUrl } from '../lib/swatchImage.js';
 import { colorCodeFromSubtype } from '../lib/swatchMatch.js';
 import { rgb } from 'pdf-lib';
 import {
@@ -279,10 +279,12 @@ function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
 /** Total height of the detail column — head + spec + (swatch below) + description. */
 function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
   const { head, spec, desc } = lineDetail(ctx, line, detailW);
-  const swatchBlock = line.swatchImageId ? SWATCH_TOP_GAP + LINE_SWATCH_SIZE : 0;
-  const moBlock = materialOptionsHeight(
-    materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, detailW),
-  );
+  const moCells = materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, detailW);
+  // The hero swatch is suppressed when the options grid renders (it repeats
+  // the chosen material), so it only adds height when there are no cells —
+  // the SAME condition drawLineRow uses, so measure + draw can't drift.
+  const swatchBlock = (line.swatchImageId && moCells.length === 0) ? SWATCH_TOP_GAP + LINE_SWATCH_SIZE : 0;
+  const moBlock = materialOptionsHeight(moCells);
   const descGap = desc.length ? IDENTITY_TO_SPEC_GAP : 0;
   return segsHeight(head) + segsHeight(spec) + swatchBlock + moBlock + descGap + segsHeight(desc);
 }
@@ -354,6 +356,22 @@ interface MaterialCell {
 }
 
 /**
+ * Whether a line/component carries material options (so the grid renders).
+ * When it does, the grid's first ("incluido") cell already shows the chosen
+ * material's swatch — so the separate hero/spec swatch is suppressed to
+ * avoid showing the same swatch twice.
+ */
+function hasMaterialOptions(mo: MaterialOptions | null | undefined): boolean {
+  return Array.isArray(mo?.options) && mo.options.length > 0;
+}
+
+/** Whether a compound component draws its beside-spec swatch — only when it
+ *  has a swatch AND no options grid (which would otherwise repeat it). */
+function componentSwatchShown(c: LineComponent): boolean {
+  return !!c.swatchImageId && !hasMaterialOptions(c.materialOptions);
+}
+
+/**
  * Build the material-options cells for a line/component: the base material
  * first ("incluido"), then each alternative with its signed price delta.
  * Pure (no image fetch) so the measure + draw passes share it and can't
@@ -403,7 +421,7 @@ function materialOptionCells(
   if (baseLabel) {
     push(
       baseLabel,
-      { imageId: baseSwatchImageId, url: swatchUrl(colorCodeFromSubtype(baseLabel)) },
+      { imageId: baseSwatchImageId, url: swatchProxyUrl(colorCodeFromSubtype(baseLabel)) },
       'incluido',
       INK_SOFT,
     );
@@ -418,7 +436,7 @@ function materialOptionCells(
       : null;
     const noteColor = delta != null && delta < 0 ? EMERALD_700 : INK_MID;
     const code = o.code || colorCodeFromSubtype(o.label);
-    push(o.label || '', { imageId: o.swatchImageId, url: swatchUrl(code) }, note, noteColor);
+    push(o.label || '', { imageId: o.swatchImageId, url: swatchProxyUrl(code) }, note, noteColor);
   }
   return cells;
 }
@@ -896,7 +914,7 @@ function componentDetail(
   detailW: number,
   nameW: number,
 ): CompDetail {
-  const specW = component.swatchImageId ? Math.max(60, detailW - SWATCH_SIZE - SWATCH_GAP) : detailW;
+  const specW = componentSwatchShown(component) ? Math.max(60, detailW - SWATCH_SIZE - SWATCH_GAP) : detailW;
   const seg = (text: string | null | undefined, token: TypeToken, w: number): CompoundSegment[] => {
     if (!text) return [];
     const lines = wrapToWidth(text, w, fontFor(ctx, token), token.size);
@@ -962,7 +980,7 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false
     if (i > 0) textH += COMP_TOP_GAP;       // divider gap before this block
     const cd = componentDetail(ctx, components[i], cols.detail.w, nameW);
     const specTextH = compSegsHeight(cd.spec);
-    const specBlockH = components[i].swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
+    const specBlockH = componentSwatchShown(components[i]) ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
     const moBlock = materialOptionsHeight(
       materialOptionCells(ctx, components[i].materialOptions, components[i].reference, components[i].swatchImageId, cols.detail.w),
     );
@@ -1380,16 +1398,17 @@ export async function drawLineRow(
   let sy = drawSegs(page, ctx, detail.head, cols.detail.x, innerTop);
   const specTop = sy;
   sy = drawSegs(page, ctx, detail.spec, cols.detail.x, specTop);
+  // Material-options grid replaces the hero swatch when present (its first
+  // "incluido" cell already shows the chosen material), so the standalone
+  // swatch only draws when there are no options.
+  const moCells = materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, cols.detail.w);
   let swatchTopY: number | null = null;
-  if (line.swatchImageId) {
+  if (line.swatchImageId && !moCells.length) {
     sy -= SWATCH_TOP_GAP;
     swatchTopY = sy;
     await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, swatchTopY, LINE_SWATCH_SIZE);
     sy -= LINE_SWATCH_SIZE;
   }
-  // Material-options grid — sits below the fabric swatch, above the
-  // description (mirrors ClientPreview's order).
-  const moCells = materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, cols.detail.w);
   if (moCells.length) {
     sy = await drawMaterialOptions(page, ctx, moCells, cols.detail.x, sy, cols.detail.w);
   }
@@ -1574,7 +1593,7 @@ async function drawCompoundLineRow(
     // The swatch top sits just below the component name (head); used to
     // redraw the swatch on top of any wash so its fabric colour stays vivid.
     const swatchTopY = compTop - compSegsHeight(componentDetail(ctx, components[i], cols.detail.w, nameW).head);
-    if (components[i].swatchImageId) {
+    if (componentSwatchShown(components[i])) {
       compSwatches.push({ id: components[i].swatchImageId as string, topY: swatchTopY });
     }
     // Optional components get the same treatment as the on-screen
@@ -1583,7 +1602,7 @@ async function drawCompoundLineRow(
     // base composition. The swatch is redrawn ON TOP so its colour shows.
     if (components[i].isOptional) {
       drawComponentOptional(page, cols, compTop, sy);
-      if (components[i].swatchImageId) {
+      if (componentSwatchShown(components[i])) {
         await drawSwatch(page, ctx.doc, components[i].swatchImageId as string, cols.detail.x, swatchTopY, SWATCH_SIZE);
       }
     }
@@ -1724,13 +1743,14 @@ async function drawComponentBlock(
   // Swatch (left) + subtype/ref-dims (beside it), then description below —
   // identical band order to the standalone line.
   const specTop = sy;
-  if (component.swatchImageId) {
-    await drawSwatch(page, doc, component.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
+  const showSwatch = componentSwatchShown(component);
+  if (showSwatch) {
+    await drawSwatch(page, doc, component.swatchImageId as string, cols.detail.x, specTop, SWATCH_SIZE);
   }
-  const specX = component.swatchImageId ? cols.detail.x + SWATCH_SIZE + SWATCH_GAP : cols.detail.x;
+  const specX = showSwatch ? cols.detail.x + SWATCH_SIZE + SWATCH_GAP : cols.detail.x;
   const afterSpec = drawCompSegs(page, ctx, cd.spec, specX, specTop);
   const specTextH = specTop - afterSpec;
-  const specBlockH = component.swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
+  const specBlockH = showSwatch ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
   sy = specTop - specBlockH;
   sy = drawCompSegs(page, ctx, cd.desc, cols.detail.x, sy);
   // Material-options grid below the component's description — same layout

@@ -32,15 +32,18 @@ export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTIO
 
 /**
  * DAILY auto-pull of the Banco Popular Dominicano exchange rate (once per day
- * on first login, via the `bpd-rate` edge function → apipublico.bpd.com.do).
+ * on the first login at/after 08:00 AST, via the `bpd-rate` edge function →
+ * apipublico.bpd.com.do).
  *
- * This gates ONLY the automatic daily pull. The manual "Actualizar ahora"
- * button in Settings is ALWAYS available (on-demand) regardless of this flag.
+ * This gates ONLY the automatic daily pull. The manual on-demand refresh
+ * (Settings' "Actualizar ahora" and the quote workspace's "Actualizar tasa")
+ * is ALWAYS available regardless of this flag.
  *
  * ENABLED: the production subscription is approved and the rate pulls
- * successfully end-to-end. The pull fires once per day on the first app load of
- * the day (see `shouldPullDailyRate` in lib/exchangeRate + AppContext) — not
- * hourly, because BPD publishes a single daily rate.
+ * successfully end-to-end. The pull fires once per day on the first app load
+ * at/after 08:00 AST (see `shouldPullDailyRate` in lib/exchangeRate +
+ * AppContext) — gated on 08:00 because BPD publishes a single daily rate in
+ * the morning, and not hourly thereafter.
  */
 export const EXCHANGE_RATE_PULL_ENABLED = true;
 

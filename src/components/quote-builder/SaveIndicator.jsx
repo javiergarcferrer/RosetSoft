@@ -19,17 +19,23 @@ export default function SaveIndicator({ savedAt, saving }) {
 
   if (saving) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-ink-500">
-        <RefreshCw size={11} className="animate-spin" /> Guardando…
+      <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500">
+        <RefreshCw size={11} className="shrink-0 animate-spin" />
+        <span className="truncate">Guardando…</span>
       </span>
     );
   }
   if (!savedAt) {
-    return <span className="inline-flex items-center gap-1 text-[11px] text-ink-400">Sin cambios</span>;
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-400">
+        <span className="truncate">Sin cambios</span>
+      </span>
+    );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-ink-500">
-      <Check size={11} className="text-emerald-600" /> Guardado {relativeFromNow(savedAt)}
+    <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500">
+      <Check size={11} className="shrink-0 text-emerald-600" />
+      <span className="truncate">Guardado {relativeFromNow(savedAt)}</span>
     </span>
   );
 }
