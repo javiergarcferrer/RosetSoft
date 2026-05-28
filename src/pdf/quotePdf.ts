@@ -28,7 +28,6 @@ import type {
   CurrencyCode,
   QuoteGroup,
 } from '../types/domain.ts';
-import type { CatalogFamily } from '../lib/catalog.ts';
 import type { PdfCtx, Cursor } from './types.js';
 
 /**
@@ -64,13 +63,6 @@ export interface GenerateQuotePdfInput {
   professional?: Professional | null;
   seller?: Profile | null;
   quoteGroups?: QuoteGroup[];
-  /**
-   * Catalog families keyed by SKU root, for pricing a line's material-option
-   * deltas in the PDF. Optional — callers without the catalog loaded (e.g.
-   * the accounting workspace) omit it and option labels render without a
-   * delta, exactly as the on-screen preview degrades.
-   */
-  families?: Map<string, CatalogFamily> | null;
 }
 
 /**
@@ -101,7 +93,6 @@ export async function generateQuotePdf({
   professional = null,
   seller = null,
   quoteGroups = [],
-  families = null,
 }: GenerateQuotePdfInput): Promise<Blob> {
   const doc = await PDFDocument.create();
 
@@ -152,7 +143,6 @@ export async function generateQuotePdf({
     // bank's rate changes the next day.
     rates: displayRatesFor(quote, safeSettings),
     currency: (quote.currencyCode || 'USD') as CurrencyCode,
-    families,
   };
 
   const logoImage = await embedImageById(doc, safeSettings?.logoImageId);

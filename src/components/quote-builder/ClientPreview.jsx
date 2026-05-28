@@ -79,7 +79,7 @@ function ImageZoom({ id, fallbackUrl = null, className, alt = '' }) {
  * the line's main swatch, kept deliberately tiny so the strip stays a quiet
  * spec line, not a second gallery.
  */
-function MaterialOptionsStrip({ materialOptions, reference, families, currency, rates, baseSwatchImageId }) {
+function MaterialOptionsStrip({ materialOptions, reference, families, currency, rates }) {
   const rawOptions = materialOptions?.options;
   if (!Array.isArray(rawOptions) || rawOptions.length === 0) return null;
 
@@ -107,7 +107,7 @@ function MaterialOptionsStrip({ materialOptions, reference, families, currency, 
 
   // Merge: walk the priced rows when present (authoritative label + delta),
   // else the raw options. Each entry → { grade, label, code, swatchImageId, delta }.
-  const optionRows = (priced || rawOptions).map((o) => ({
+  const rows = (priced || rawOptions).map((o) => ({
     grade: o?.grade,
     label: o?.label,
     code: o?.code,
@@ -115,56 +115,48 @@ function MaterialOptionsStrip({ materialOptions, reference, families, currency, 
     delta: typeof o?.delta === 'number' ? o.delta : null,
   })).filter((o) => o.label);
 
-  if (optionRows.length === 0) return null;
-
-  // One uniform grid of materials: the selected (base) material reads first
-  // as the anchor ("incluido", no delta), then each alternative with its
-  // price delta. Every cell carries a same-size swatch tile so the grid
-  // reads evenly — no "Opciones de material" heading; the swatch + label is
-  // self-explanatory.
-  const cells = [];
-  if (baseLabel) {
-    cells.push({
-      key: 'base',
-      label: baseLabel,
-      swatchImageId: baseSwatchImageId,
-      code: colorCodeFromSubtype(baseLabel),
-      note: 'incluido',
-      noteClass: 'text-ink-400',
-    });
-  }
-  optionRows.forEach((opt, i) => {
-    const hasDelta = typeof opt.delta === 'number';
-    // Money string with an explicit sign — negative deltas show "−".
-    const signed = hasDelta
-      ? `${opt.delta < 0 ? '−' : '+'}${formatMoney(Math.abs(opt.delta), currency, rates)}`
-      : null;
-    cells.push({
-      key: opt.grade != null ? `${opt.grade}-${i}` : `opt-${i}`,
-      label: opt.label,
-      swatchImageId: opt.swatchImageId,
-      code: opt.code || colorCodeFromSubtype(opt.label),
-      note: signed,
-      noteClass: hasDelta && opt.delta < 0 ? 'text-emerald-700 font-semibold' : 'text-ink-500 font-semibold',
-    });
-  });
+  if (rows.length === 0) return null;
 
   return (
-    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 max-w-lg">
-      {cells.map((c) => (
-        <div key={c.key} className="flex items-start gap-2 min-w-0">
-          <ImageView
-            id={c.swatchImageId}
-            fallbackUrl={swatchUrl(c.code)}
-            alt=""
-            className="w-7 h-7 object-cover rounded-sm border border-ink-200 bg-white flex-shrink-0"
-          />
-          <div className="min-w-0 leading-tight pt-px">
-            <div className="text-[11px] font-medium text-ink-700">{c.label}</div>
-            {c.note && <div className={`text-[10px] ${c.noteClass}`}>{c.note}</div>}
-          </div>
-        </div>
-      ))}
+    <div className="mt-2">
+      <div className="eyebrow-xs tracking-widest text-ink-500 mb-1">Opciones de material</div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {baseLabel && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-600">
+            <span className="font-medium text-ink-700">{baseLabel}</span>
+            <span className="text-ink-400">· incluido</span>
+          </span>
+        )}
+        {rows.map((opt, i) => {
+          const hasDelta = typeof opt.delta === 'number';
+          // Money string with an explicit sign — negative deltas show "−".
+          const signed = hasDelta
+            ? `${opt.delta < 0 ? '−' : '+'}${formatMoney(Math.abs(opt.delta), currency, rates)}`
+            : null;
+          const swatchFallback = swatchUrl(opt.code || colorCodeFromSubtype(opt.label));
+          return (
+            <span
+              key={opt.grade != null ? `${opt.grade}-${i}` : i}
+              className="inline-flex items-center gap-1.5 text-[11px] text-ink-600"
+            >
+              {(opt.swatchImageId || swatchFallback) && (
+                <ImageView
+                  id={opt.swatchImageId}
+                  fallbackUrl={swatchFallback}
+                  alt=""
+                  className="w-4 h-4 object-cover rounded-sm border border-ink-200 bg-white flex-shrink-0"
+                />
+              )}
+              <span className="font-medium text-ink-700">{opt.label}</span>
+              {signed && (
+                <span className={opt.delta < 0 ? 'text-emerald-700 font-semibold' : 'text-ink-500 font-semibold'}>
+                  {signed}
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -630,7 +622,6 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               families={families}
               currency={currency}
               rates={rates}
-              baseSwatchImageId={line.swatchImageId}
             />
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
@@ -865,7 +856,6 @@ function CompoundComponentRow({ component, currency, rates, fmt, families }) {
           families={families}
           currency={currency}
           rates={rates}
-          baseSwatchImageId={component.swatchImageId}
         />
         {component.description && (
           <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">

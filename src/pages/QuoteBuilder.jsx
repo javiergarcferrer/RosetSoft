@@ -940,7 +940,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       // matching the on-screen ClientPreview, where section headers
       // ("MOBILIARIO DE SALA") are part of the layout the customer
       // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups, families });
+      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups });
       if (!blob || !blob.size) {
         throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
       }

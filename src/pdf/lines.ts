@@ -1,13 +1,9 @@
 import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
-import type { QuoteLine, LineComponent, MaterialOptions } from '../types/domain.ts';
+import type { QuoteLine, LineComponent } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
   lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
-  materialOptionDeltas,
 } from '../lib/pricing.js';
-import { splitSkuGrade } from '../lib/catalog.js';
-import { swatchUrl } from '../lib/swatchImage.js';
-import { colorCodeFromSubtype } from '../lib/swatchMatch.js';
 import { rgb } from 'pdf-lib';
 import {
   PAGE_W, MARGIN_L, MARGIN_R, CONTENT_W,
@@ -18,7 +14,7 @@ import {
 } from './constants.js';
 import { drawRightAt, formatMoney } from './util.js';
 import type { DrawTextOptions } from './util.js';
-import { embedImageById, embedSwatch } from './embed.js';
+import { embedImageById } from './embed.js';
 import type { PdfCtx, Cursor } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -136,14 +132,6 @@ const T: Record<string, TypeToken> = {
   compInline:      { size: FS_BODY, lh: 12, color: INK_MID },
   compTotalLabel:  { size: FS_EYEBROW_SM, lh: 12, color: INK_MID, cs: 1.4, bold: true },
   compTotalValue:  { size: 13,   lh: 17,   color: INK,      bold: true },
-  // Material-options grid — a uniform-swatch two-column list of the
-  // materials a line can be re-quoted in. `moLabel` is the material name
-  // (e.g. "ACATE · ANIS (#855)"); `moNote` is the per-cell note below it
-  // ("incluido" on the base, or the signed price delta on an alternative).
-  // The note's colour is set per cell at draw time (muted / emerald), so
-  // the token colour here is just the default.
-  moLabel:         { size: 8.5,  lh: 10.5, color: INK_HIGH, bold: true },
-  moNote:          { size: 8,    lh: 9.5,  color: INK_MID },
 };
 
 const NUMERIC_GAP = 6;   // vertical gap between the money-cell line and the total
@@ -280,11 +268,8 @@ function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
 function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
   const { head, spec, desc } = lineDetail(ctx, line, detailW);
   const swatchBlock = line.swatchImageId ? SWATCH_TOP_GAP + LINE_SWATCH_SIZE : 0;
-  const moBlock = materialOptionsHeight(
-    materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, detailW),
-  );
   const descGap = desc.length ? IDENTITY_TO_SPEC_GAP : 0;
-  return segsHeight(head) + segsHeight(spec) + swatchBlock + moBlock + descGap + segsHeight(desc);
+  return segsHeight(head) + segsHeight(spec) + swatchBlock + descGap + segsHeight(desc);
 }
 
 /**
@@ -294,30 +279,6 @@ function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): num
  * tile so it reads as a material sample, not a second product shot.
  * No-op when the image can't be embedded (deleted / unreadable).
  */
-function drawSwatchImage(
-  page: PDFPage,
-  img: PDFImage | null,
-  x: number,
-  topY: number,
-  size: number,
-): void {
-  const boxY = topY - size;
-  page.drawRectangle({
-    x, y: boxY, width: size, height: size,
-    color: BG_SOFT, borderColor: INK_LINE2, borderWidth: 0.5,
-  });
-  if (img) {
-    const scale = Math.min(size / img.width, size / img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
-    page.drawImage(img, {
-      x: x + (size - w) / 2,
-      y: boxY + (size - h) / 2,
-      width: w, height: h,
-    });
-  }
-}
-
 async function drawSwatch(
   page: PDFPage,
   doc: PdfCtx['doc'],
@@ -326,158 +287,22 @@ async function drawSwatch(
   topY: number,
   size: number = SWATCH_SIZE,
 ): Promise<void> {
-  drawSwatchImage(page, await embedImageById(doc, imageId), x, topY, size);
-}
-
-// ---------------------------------------------------------------------------
-// Material-options grid. The materials a line (or component) can be re-quoted
-// in, laid out as a two-column list flowing down: each cell is a uniform
-// swatch tile on the LEFT with the material name + a note to its right. The
-// selected (base) material reads first as the anchor ("incluido"); each
-// alternative follows with its signed price delta. Mirrors ClientPreview's
-// MaterialOptionsStrip — no "OPCIONES DE MATERIAL" heading; the swatch +
-// label is self-explanatory.
-// ---------------------------------------------------------------------------
-const MO_SWATCH      = 22;   // uniform swatch tile — same size for every cell
-const MO_SWATCH_GAP  = 6;    // gap between a cell's swatch and its text
-const MO_COL_GAP     = 16;   // gap between the two columns
-const MO_ROW_GAP     = 7;    // vertical gap between grid rows
-const MO_TOP_GAP     = 9;    // gap above the grid (below the line's main swatch)
-const MO_LABEL_MAX_LINES = 2;
-
-interface MaterialCell {
-  labelLines: string[];
-  note: string | null;
-  noteColor: RGB;
-  swatch: { imageId?: string | null; url?: string | null };
-  h: number;            // cell content height = max(swatch, text)
-}
-
-/**
- * Build the material-options cells for a line/component: the base material
- * first ("incluido"), then each alternative with its signed price delta.
- * Pure (no image fetch) so the measure + draw passes share it and can't
- * drift. Deltas come from materialOptionDeltas when `ctx.families` resolves
- * a family for the SKU root; otherwise the cell shows label-only — the same
- * graceful degradation the on-screen preview uses.
- */
-function materialOptionCells(
-  ctx: PdfCtx,
-  mo: MaterialOptions | null | undefined,
-  reference: string | null | undefined,
-  baseSwatchImageId: string | null | undefined,
-  detailW: number,
-): MaterialCell[] {
-  const rawOptions = mo?.options;
-  if (!Array.isArray(rawOptions) || rawOptions.length === 0) return [];
-  const baseLabel = mo?.baseLabel || mo?.baseGrade || '';
-
-  // Price deltas — graceful: no families / no resolved family ⇒ label-only.
-  let priced: ReturnType<typeof materialOptionDeltas> | null = null;
-  if (ctx.families) {
-    const root = splitSkuGrade(reference || '').root;
-    const family = root ? ctx.families.get(root) : null;
-    if (family) {
-      try { priced = materialOptionDeltas(mo, family); } catch { priced = null; }
-    }
+  const boxY = topY - size;
+  page.drawRectangle({
+    x, y: boxY, width: size, height: size,
+    color: BG_SOFT, borderColor: INK_LINE2, borderWidth: 0.5,
+  });
+  const swatch = await embedImageById(doc, imageId);
+  if (swatch) {
+    const scale = Math.min(size / swatch.width, size / swatch.height);
+    const w = swatch.width * scale;
+    const h = swatch.height * scale;
+    page.drawImage(swatch, {
+      x: x + (size - w) / 2,
+      y: boxY + (size - h) / 2,
+      width: w, height: h,
+    });
   }
-
-  const cellW = (detailW - MO_COL_GAP) / 2;
-  const textW = Math.max(24, cellW - MO_SWATCH - MO_SWATCH_GAP);
-  const labelFont = fontFor(ctx, T.moLabel);
-
-  const cells: MaterialCell[] = [];
-  const push = (
-    label: string,
-    swatch: { imageId?: string | null; url?: string | null },
-    note: string | null,
-    noteColor: RGB,
-  ): void => {
-    const labelLines = wrapToWidth(label, textW, labelFont, T.moLabel.size).slice(0, MO_LABEL_MAX_LINES);
-    if (!labelLines.length) return;
-    const textH = labelLines.length * T.moLabel.lh + (note ? T.moNote.lh : 0);
-    cells.push({ labelLines, note, noteColor, swatch, h: Math.max(MO_SWATCH, textH) });
-  };
-
-  if (baseLabel) {
-    push(
-      baseLabel,
-      { imageId: baseSwatchImageId, url: swatchUrl(colorCodeFromSubtype(baseLabel)) },
-      'incluido',
-      INK_SOFT,
-    );
-  }
-
-  const rows = priced && priced.length ? priced : rawOptions;
-  for (const o of rows) {
-    const d = (o as { delta?: number }).delta;
-    const delta = typeof d === 'number' ? d : null;
-    const note = delta != null
-      ? `${delta < 0 ? '−' : '+'}${formatMoney(Math.abs(delta), ctx.currency, ctx.rates)}`
-      : null;
-    const noteColor = delta != null && delta < 0 ? EMERALD_700 : INK_MID;
-    const code = o.code || colorCodeFromSubtype(o.label);
-    push(o.label || '', { imageId: o.swatchImageId, url: swatchUrl(code) }, note, noteColor);
-  }
-  return cells;
-}
-
-/** Total height of the material-options grid (0 when there are no cells). */
-function materialOptionsHeight(cells: MaterialCell[]): number {
-  if (!cells.length) return 0;
-  let h = MO_TOP_GAP;
-  for (let i = 0; i < cells.length; i += 2) {
-    h += Math.max(cells[i].h, cells[i + 1]?.h ?? 0);
-    if (i + 2 < cells.length) h += MO_ROW_GAP;
-  }
-  return h;
-}
-
-/**
- * Draw the material-options grid starting MO_TOP_GAP below `topY`, flowing
- * two columns down. Returns the y after the last row. Swatches embed via
- * embedSwatch (uploaded id OR the catalog color's remote swatch); a tile
- * that can't load stays an empty framed square so every cell keeps the
- * same footprint.
- */
-async function drawMaterialOptions(
-  page: PDFPage,
-  ctx: PdfCtx,
-  cells: MaterialCell[],
-  x: number,
-  topY: number,
-  detailW: number,
-): Promise<number> {
-  if (!cells.length) return topY;
-  const cellW = (detailW - MO_COL_GAP) / 2;
-  const labelFont = fontFor(ctx, T.moLabel);
-  const noteFont = fontFor(ctx, T.moNote);
-  let y = topY - MO_TOP_GAP;
-  for (let i = 0; i < cells.length; i += 2) {
-    const rowCells = cells.slice(i, i + 2);
-    const rowH = Math.max(...rowCells.map((c) => c.h));
-    for (let j = 0; j < rowCells.length; j++) {
-      const c = rowCells[j];
-      const cellX = x + j * (cellW + MO_COL_GAP);
-      drawSwatchImage(page, await embedSwatch(ctx.doc, c.swatch), cellX, y, MO_SWATCH);
-      const tx = cellX + MO_SWATCH + MO_SWATCH_GAP;
-      let ty = y;
-      for (const ln of c.labelLines) {
-        page.drawText(ln, {
-          x: tx, y: ty - T.moLabel.size, size: T.moLabel.size, font: labelFont, color: T.moLabel.color,
-        } as DrawTextOptions);
-        ty -= T.moLabel.lh;
-      }
-      if (c.note) {
-        page.drawText(c.note, {
-          x: tx, y: ty - T.moNote.size, size: T.moNote.size, font: noteFont, color: c.noteColor,
-        } as DrawTextOptions);
-      }
-    }
-    y -= rowH;
-    if (i + 2 < cells.length) y -= MO_ROW_GAP;
-  }
-  return y;
 }
 
 /**
@@ -961,10 +786,7 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false
     const cd = componentDetail(ctx, components[i], cols.detail.w, nameW);
     const specTextH = compSegsHeight(cd.spec);
     const specBlockH = components[i].swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
-    const moBlock = materialOptionsHeight(
-      materialOptionCells(ctx, components[i].materialOptions, components[i].reference, components[i].swatchImageId, cols.detail.w),
-    );
-    textH += compSegsHeight(cd.head) + specBlockH + compSegsHeight(cd.desc) + moBlock;
+    textH += compSegsHeight(cd.head) + specBlockH + compSegsHeight(cd.desc);
     textH += COMP_BLOCK_GAP;
   }
 
@@ -1385,12 +1207,6 @@ export async function drawLineRow(
     await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, swatchTopY, LINE_SWATCH_SIZE);
     sy -= LINE_SWATCH_SIZE;
   }
-  // Material-options grid — sits below the fabric swatch, above the
-  // description (mirrors ClientPreview's order).
-  const moCells = materialOptionCells(ctx, line.materialOptions, line.reference, line.swatchImageId, cols.detail.w);
-  if (moCells.length) {
-    sy = await drawMaterialOptions(page, ctx, moCells, cols.detail.x, sy, cols.detail.w);
-  }
   if (detail.desc.length) {
     sy -= IDENTITY_TO_SPEC_GAP;
     sy = drawSegs(page, ctx, detail.desc, cols.detail.x, sy);
@@ -1731,11 +1547,5 @@ async function drawComponentBlock(
   const specBlockH = component.swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
   sy = specTop - specBlockH;
   sy = drawCompSegs(page, ctx, cd.desc, cols.detail.x, sy);
-  // Material-options grid below the component's description — same layout
-  // as a standalone line, sharing the measure/draw helpers.
-  const moCells = materialOptionCells(ctx, component.materialOptions, component.reference, component.swatchImageId, cols.detail.w);
-  if (moCells.length) {
-    sy = await drawMaterialOptions(page, ctx, moCells, cols.detail.x, sy, cols.detail.w);
-  }
   return sy;
 }

@@ -35,64 +35,6 @@ export async function embedImageById(
   return null;
 }
 
-// Per-document cache of embedded swatch images keyed by a stable cache key
-// (the storage id or the remote url). A swatch — especially a line's base
-// material — repeats across many lines; embedding it once keeps the PDF
-// small. WeakMap by doc so the cache is collected with the document and
-// never leaks across exports.
-const swatchByDoc = new WeakMap<PDFDocument, Map<string, PDFImage | null>>();
-// Module-level fetched-bytes cache (bytes are document-independent) so the
-// same remote swatch is fetched at most once per session.
-const urlBytesCache = new Map<string, Uint8Array | null>();
-
-async function fetchImageBytes(url: string): Promise<Uint8Array | null> {
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    return new Uint8Array(await r.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Embed a material swatch from EITHER an uploaded Supabase image id OR a
- * remote url (a catalog color's Ligne Roset swatch derived from its code),
- * preferring the uploaded image. Results are memoised per document so a
- * swatch shared across lines is embedded once. Returns null when neither
- * source yields embeddable PNG/JPEG bytes — the caller draws an empty tile.
- */
-export async function embedSwatch(
-  doc: PDFDocument,
-  src: { imageId?: string | null; url?: string | null },
-): Promise<PDFImage | null> {
-  const key = src.imageId ? `id:${src.imageId}` : src.url ? `url:${src.url}` : '';
-  if (!key) return null;
-  let cache = swatchByDoc.get(doc);
-  if (!cache) { cache = new Map(); swatchByDoc.set(doc, cache); }
-  if (cache.has(key)) return cache.get(key) ?? null;
-
-  let img: PDFImage | null = null;
-  if (src.imageId) {
-    img = await embedImageById(doc, src.imageId);
-  } else if (src.url) {
-    let bytes = urlBytesCache.get(src.url);
-    if (bytes === undefined) {
-      bytes = await fetchImageBytes(src.url);
-      urlBytesCache.set(src.url, bytes);
-    }
-    if (bytes) {
-      try { img = await doc.embedJpg(bytes); }
-      catch {
-        try { img = await doc.embedPng(bytes); }
-        catch { img = null; }
-      }
-    }
-  }
-  cache.set(key, img);
-  return img;
-}
-
 /**
  * Rasterize SVG bytes to PNG bytes at print-quality resolution.
  *
