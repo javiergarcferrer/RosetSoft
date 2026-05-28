@@ -98,21 +98,22 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 > single autonomous pass is high-risk and they're explicitly "no rush"; better as a focused,
 > reviewable change set. Listed here so they're not lost.
 
-- [ ] **Thin out the god orchestrator.** `Workspace` (~L184–1105 in `src/pages/QuoteBuilder.jsx`,
-  ~920 LOC) owns all state + ~18 mutations (writing directly to `db.*`) + grouping invariants +
-  sequence-number healing + PDF export + render. Action: lift quote state + mutations + grouping/
-  sequence rules into a `useQuoteActions` hook / domain module; expose `{quote, actions}` via
-  context. This also removes the prop-drilling below.
-  - PARTIAL — three slices landed, `Workspace` is shrinking (1258 → 1162 LOC):
+- [x] **Thin out the god orchestrator.** DONE — `Workspace` (`src/pages/QuoteBuilder.jsx`) went
+  from ~1258 LOC to ~580 and is now live-queries + UI-panel state + view-model + JSX wiring; the
+  logic moved out in four slices:
     1. **Grouping invariants** → pure, tested `lib/quoteGroups.ts` helpers (`selectAlternativePatches`,
-       `healAlternativeOnRemove`, `healSetOnRemove`); the four mutations now consume them instead of
+       `healAlternativeOnRemove`, `healSetOnRemove`); the four mutations consume them instead of
        re-deriving the same singleton/selection healing four times.
     2. **Prop-drilling killed** (item below, done) — editor actions flow via `QuoteActionsContext`.
     3. **Export/share logic** → `useQuoteExport.js` (PDF generation + share-link minting + their UI
        status/effects), so the export UI stays thin.
-    - Remaining: lift quote STATE + the db-writing mutations + undo/redo history into a
-      `useQuoteController` hook (the big one — a cohesive state machine; `QuoteBuilder.jsx` is under
-      active parallel churn and there are no UI tests, so move verbatim + lean on typecheck/build).
+    4. **The mutation + undo/redo state machine** → `useQuoteController.js` (the ~14 db-writing
+       mutations, the whole-quote-snapshot history with its ⌘Z/⌘Y binding + per-quote reset, and the
+       save-status indicator). `Workspace` destructures the controller's return into the same local
+       names the JSX already used, so only the SOURCE of the handlers moved — behavior is identical
+       (verified with a scoped `checkJs` pass for missing inputs/return keys, plus typecheck + tests
+       + build). The remaining sequence-number heal effect stays on the page (it's tied to the live
+       query); the catalog-families escape hatch is unchanged.
 
 - [ ] **Decompose oversized leaves.** `QuoteLineItem.jsx` (**1501 LOC**, 13 inline subcomponents,
   own `FamiliesContext`) and `ClientPreview.jsx` (**980 LOC**). Action: split the inline
