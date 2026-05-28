@@ -1,7 +1,8 @@
 /**
- * Tests for src/lib/commissions.js — the rules for how a quote's
- * commission % is resolved (quote override vs professional default vs
- * none), the clamping behavior (0–20), and the amount calculation.
+ * Tests for src/lib/commissions.js — the rules for how a quote's commission
+ * % is resolved (order-type base rate of 15%/20% vs a per-quote override),
+ * the clamping behavior (0–20), and the discount-aware amount calculation
+ * (the client discount is drawn out of the professional's commission).
  */
 
 import test from 'node:test';
@@ -9,7 +10,10 @@ import assert from 'node:assert/strict';
 
 import {
   COMMISSION_MAX_PCT,
+  FLOOR_COMMISSION_PCT,
+  SPECIAL_COMMISSION_PCT,
   clampCommissionPct,
+  baseCommissionPct,
   effectiveCommissionPct,
   commissionAmount,
   decoratorBilling,
@@ -17,6 +21,11 @@ import {
   commissionOwedAt,
   isCommissionPaid,
 } from '../src/lib/commissions.js';
+
+test('the floor/special base rates are 15% and 20%', () => {
+  assert.equal(FLOOR_COMMISSION_PCT, 15);
+  assert.equal(SPECIAL_COMMISSION_PCT, 20);
+});
 
 test('the max commission is the 20% cap the dealer asked for', () => {
   assert.equal(COMMISSION_MAX_PCT, 20);
@@ -43,65 +52,93 @@ test('non-finite values collapse to 0 (dealer-favoring default)', () => {
   assert.equal(clampCommissionPct(undefined), 0);
 });
 
+/* ----------------------------- baseCommissionPct ---------------------- */
+
+test('base rate is 15% for a floor order, 20% for a special order', () => {
+  assert.equal(baseCommissionPct({ orderType: 'floor' }), 15);
+  assert.equal(baseCommissionPct({ orderType: 'special' }), 20);
+});
+
+test('base rate defaults to the floor rate (15%) when orderType is unset', () => {
+  assert.equal(baseCommissionPct({}), 15);
+  assert.equal(baseCommissionPct(null), 15);
+  assert.equal(baseCommissionPct(undefined), 15);
+});
+
 /* ----------------------------- effectiveCommissionPct ------------------ */
 
-test('quote override wins over professional default', () => {
-  const quote = { commissionPct: 5 };
-  const pro = { defaultCommissionPct: 10 };
-  assert.equal(effectiveCommissionPct(quote, pro), 5);
+test('floor order with no override earns the 15% base rate', () => {
+  assert.equal(effectiveCommissionPct({ orderType: 'floor' }), 15);
 });
 
-test('falls back to professional default when no quote override', () => {
-  const quote = { commissionPct: null };
-  const pro = { defaultCommissionPct: 12 };
-  assert.equal(effectiveCommissionPct(quote, pro), 12);
+test('special order with no override earns the 20% base rate', () => {
+  assert.equal(effectiveCommissionPct({ orderType: 'special' }), 20);
 });
 
-test('quote override of 0 is treated as a real override (disable commission)', () => {
-  // Dealer wants to explicitly zero out a single deal without removing
-  // the professional link (e.g. a favor for a long-time partner). 0 must
-  // count as set, not "fall through to default".
-  const quote = { commissionPct: 0 };
-  const pro = { defaultCommissionPct: 15 };
-  assert.equal(effectiveCommissionPct(quote, pro), 0);
+test('a quote with no orderType defaults to the floor rate', () => {
+  assert.equal(effectiveCommissionPct({}), 15);
 });
 
-test('empty-string override is treated as unset and falls through', () => {
-  // The input field passes "" while empty; we treat that as "no
-  // override" so the professional's default applies.
-  const quote = { commissionPct: '' };
-  const pro = { defaultCommissionPct: 8 };
-  assert.equal(effectiveCommissionPct(quote, pro), 8);
+test('an explicit commissionPct overrides the order-type base rate', () => {
+  assert.equal(effectiveCommissionPct({ orderType: 'special', commissionPct: 12 }), 12);
 });
 
-test('no professional and no quote override yields 0', () => {
-  assert.equal(effectiveCommissionPct({}, null), 0);
+test('override of 0 is treated as a real override (disable commission)', () => {
+  // Zero out a single deal without changing its type or removing the
+  // professional link — 0 must count as set, not "fall through to base".
+  const quote = { orderType: 'special', commissionPct: 0 };
+  assert.equal(effectiveCommissionPct(quote), 0);
 });
 
-test('out-of-range override is clamped', () => {
-  const quote = { commissionPct: 99 };
-  assert.equal(effectiveCommissionPct(quote, null), 20);
+test('empty-string override is treated as unset and falls through to base', () => {
+  // The input field passes "" while empty; we treat that as "no override"
+  // so the order-type base rate applies.
+  assert.equal(effectiveCommissionPct({ orderType: 'special', commissionPct: '' }), 20);
+  assert.equal(effectiveCommissionPct({ orderType: 'floor', commissionPct: null }), 15);
+});
+
+test('out-of-range override is clamped to the 20% cap', () => {
+  assert.equal(effectiveCommissionPct({ commissionPct: 99 }), 20);
 });
 
 /* ----------------------------- commissionAmount ----------------------- */
 
-test('amount = total × pct/100', () => {
-  assert.equal(commissionAmount(1000, 10), 100);
-  assert.equal(commissionAmount(2500, 8), 200);
+test('with no discount, amount = base × pct/100', () => {
+  assert.equal(commissionAmount({ taxableBase: 1000, discountAmt: 0 }, 10), 100);
+  assert.equal(commissionAmount({ taxableBase: 2500, discountAmt: 0 }, 8), 200);
+});
+
+test('the client discount is drawn out of the commission', () => {
+  // Special order (20%), $1,000 pre-discount base, $100 (10%) client
+  // discount: taxableBase = 900, discountAmt = 100. Full commission on the
+  // pre-discount base is 200; minus the 100 discount → 100 net. The dealer's
+  // net (900 − 100) equals a no-discount sale (1000 − 200): discount-neutral.
+  assert.equal(commissionAmount({ taxableBase: 900, discountAmt: 100 }, 20), 100);
+});
+
+test('a discount that exceeds the commission floors the payout at 0', () => {
+  // Floor order (15%), $1,000 pre-discount base, $200 (20%) discount:
+  // full commission 150, minus 200 → max(0, −50) = 0.
+  assert.equal(commissionAmount({ taxableBase: 800, discountAmt: 200 }, 15), 0);
 });
 
 test('amount with 0% is 0', () => {
-  assert.equal(commissionAmount(5000, 0), 0);
+  assert.equal(commissionAmount({ taxableBase: 5000, discountAmt: 0 }, 0), 0);
 });
 
-test('amount with non-finite total is 0', () => {
-  assert.equal(commissionAmount(NaN, 10), 0);
+test('amount with non-finite base is 0', () => {
+  assert.equal(commissionAmount({ taxableBase: NaN, discountAmt: 0 }, 10), 0);
+  assert.equal(commissionAmount(null, 10), 0);
   assert.equal(commissionAmount(undefined, 10), 0);
+});
+
+test('a missing discountAmt is treated as no discount', () => {
+  assert.equal(commissionAmount({ taxableBase: 1000 }, 10), 100);
 });
 
 test('amount clamps the pct before multiplying', () => {
   // 99% would otherwise produce 990; clamped to 20 → 200.
-  assert.equal(commissionAmount(1000, 99), 200);
+  assert.equal(commissionAmount({ taxableBase: 1000, discountAmt: 0 }, 99), 200);
 });
 
 /* ----------------------------- decoratorBilling ----------------------- */
@@ -133,22 +170,16 @@ test('isTradeDiscount is true only for the trade_discount modality', () => {
   assert.equal(isTradeDiscount(null), false);
 });
 
-test('amount is taken from the taxable base, not the grand total', () => {
+test('amount is computed on the taxable base, never the grand total', () => {
   // Dealer rule: commissions multiply against the base imponible
-  // (computeTotals.taxableBase) — never the grand total (which
-  // includes 18% ITBIS and any shipping). This test locks the
-  // semantics so a future caller can't accidentally feed grandTotal
-  // back in and over-pay the professional.
-  //
-  // Numbers chosen to make the math obvious:
-  //   taxableBase = 1000, ITBIS 18% = 180, shipping 50
-  //   grandTotal  = 1230
-  //   10% commission on the base = 100 (correct)
-  //   10% commission on grandTotal = 123 (wrong, what we used to do)
-  const taxableBase = 1000;
-  const grandTotal  = 1230;
-  assert.equal(commissionAmount(taxableBase, 10), 100);
-  assert.notEqual(commissionAmount(taxableBase, 10), commissionAmount(grandTotal, 10));
+  // (computeTotals.taxableBase) — never the grand total (which includes
+  // 18% ITBIS and any shipping). commissionAmount reads only taxableBase +
+  // discountAmt off the totals object, so ITBIS/shipping can't leak in.
+  //   taxableBase = 1000, no discount → 10% = 100 (correct)
+  //   a grand-total-sized 1230 would over-pay → must differ
+  const onBase = commissionAmount({ taxableBase: 1000, discountAmt: 0 }, 10);
+  assert.equal(onBase, 100);
+  assert.notEqual(onBase, commissionAmount({ taxableBase: 1230, discountAmt: 0 }, 10));
 });
 
 /* ----------------------------- commissionOwedAt ----------------------- */

@@ -4,6 +4,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { QUOTE_STATUS_DRAFT } from '../../lib/constants.js';
 import { formatMoney } from '../../lib/format.js';
+import { effectiveCommissionPct, commissionAmount } from '../../lib/commissions.js';
 /**
  * The persistent totals + adjustments rail. Always visible on the right
  * column at desktop widths so the dealer never loses sight of the running
@@ -24,7 +25,7 @@ import { formatMoney } from '../../lib/format.js';
  * quote.
  */
 export default function TotalsRail({
-  quote, totals, onUpdateQuote,
+  quote, totals, professional, onUpdateQuote,
 }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
@@ -47,6 +48,15 @@ export default function TotalsRail({
   // emerald, padded (> 40%) reads amber — see the <meter> CSS in index.css.
   const marginPct = Number(quote.marginPct) || 0;
   const showMarginMeter = totals.marginAmt !== 0;
+
+  // Internal commission readout — only meaningful when a professional is
+  // assigned. The client discount is funded out of this commission, so we
+  // show the full commission, the discount drawn from it, and the net the
+  // professional actually earns. Without a professional there's no commission
+  // to draw from (the dealer absorbs the discount), so the card is hidden.
+  const commissionPct = effectiveCommissionPct(quote);
+  const grossCommission = (totals.taxableBase + totals.discountAmt) * (commissionPct / 100);
+  const netCommission = commissionAmount(totals, commissionPct);
 
   return (
     <div className="space-y-4">
@@ -137,6 +147,52 @@ export default function TotalsRail({
           ITBIS fijo en {ITBIS_PCT}% · La tasa DOP se gestiona en <Link to="/settings" className="underline">configuración</Link>.
         </p>
       </div>
+
+      {professional && (
+        <CommissionCard
+          commissionPct={commissionPct}
+          grossCommission={grossCommission}
+          discountAmt={totals.discountAmt}
+          netCommission={netCommission}
+          fmt={fmt}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Internal (dealer-only) readout of the assigned professional's commission.
+ * Makes the rule visible: the client discount is subtracted from the
+ * professional's cut, so the dealer sees exactly what the decorator earns
+ * after a discount. Never shown to the client (this rail is the edit view;
+ * the client preview/PDF never render commission).
+ */
+function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommission, fmt }) {
+  const hasDiscount = discountAmt > 0;
+  const fullyAbsorbed = hasDiscount && netCommission <= 0;
+  return (
+    <div className="card card-pad space-y-2.5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-sm">Comisión profesional</h2>
+        <span className="text-[10px] text-ink-400 uppercase tracking-wide">Interno</span>
+      </div>
+      <Row label={`Comisión (${commissionPct}%)`} value={fmt(grossCommission)} />
+      {hasDiscount && (
+        <Row label="– Descuento al cliente" value={`–${fmt(discountAmt)}`} muted />
+      )}
+      {hasDiscount && (
+        <div className="border-t border-ink-100 pt-2 mt-2">
+          <Row label="Comisión neta" value={fmt(Math.max(0, netCommission))} bold />
+        </div>
+      )}
+      <p className="text-[10px] text-ink-500">
+        {hasDiscount
+          ? (fullyAbsorbed
+              ? 'El descuento supera la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
+              : 'El descuento al cliente sale de la comisión del profesional.')
+          : 'Cualquier descuento al cliente saldrá de esta comisión.'}
+      </p>
     </div>
   );
 }

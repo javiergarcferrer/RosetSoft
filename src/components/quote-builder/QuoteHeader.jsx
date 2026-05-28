@@ -8,6 +8,7 @@ import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
+import { FLOOR_COMMISSION_PCT, SPECIAL_COMMISSION_PCT } from '../../lib/commissions.js';
 
 /**
  * Top of the quote workspace. Title (editable inline), customer chip,
@@ -191,6 +192,7 @@ export default function QuoteHeader({
             profileId={profileId}
             onUpdateQuote={onUpdateQuote}
           />
+          <OrderTypeChip quote={quote} onUpdateQuote={onUpdateQuote} />
           <OrderChip
             quote={quote}
             profileId={profileId}
@@ -242,6 +244,47 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * Floor vs special order toggle. Sets `quote.orderType`, which drives the
+ * assigned professional's base commission rate (floor 15% / special 20%).
+ * Always shown — it classifies the sale even before a professional is
+ * assigned — and styled as a compact segmented pill matching the other
+ * chips in the meta row.
+ */
+function OrderTypeChip({ quote, onUpdateQuote }) {
+  const type = quote?.orderType === 'special' ? 'special' : 'floor';
+  const options = [
+    { value: 'floor', label: 'Piso', pct: FLOOR_COMMISSION_PCT },
+    { value: 'special', label: 'Especial', pct: SPECIAL_COMMISSION_PCT },
+  ];
+  return (
+    <span
+      className="inline-flex items-stretch rounded-full border border-ink-200 bg-white overflow-hidden text-xs"
+      role="group"
+      aria-label="Tipo de orden"
+      title="Tipo de orden — define la comisión base del profesional (Piso 15% / Especial 20%)"
+    >
+      {options.map((opt) => {
+        const active = type === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onUpdateQuote({ orderType: opt.value })}
+            aria-pressed={active}
+            className={`inline-flex items-center gap-1 px-2.5 min-h-7 coarse:min-h-9 font-medium transition-colors ${
+              active ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+            }`}
+          >
+            {opt.label}
+            <span className={active ? 'text-white/70' : 'text-ink-400'}>{opt.pct}%</span>
+          </button>
+        );
+      })}
+    </span>
   );
 }
 

@@ -46,6 +46,13 @@ export type QuoteStatus =
 export type DecoratorBilling = 'commission' | 'trade_discount';
 
 /**
+ * Floor order ("venta de piso", 15% base commission) vs special order
+ * (20%). Sets the assigned professional's base commission rate; chosen via
+ * an explicit toggle on the quote, independent of order attachment.
+ */
+export type OrderType = 'floor' | 'special';
+
+/**
  * `orders.status` lifecycle — six main stages + cancelled.
  * Pinned by CHECK constraint (migration 20260519200000).
  * Source of truth for labels/timestamps: `lib/orderStages.js`.
@@ -377,6 +384,13 @@ export interface Quote {
 
   /** Quote-level commission override for the professional. null = inherit. */
   commissionPct?: number | null;
+
+  /**
+   * Floor order ('floor', 15% base commission) vs special order ('special',
+   * 20%). Sets the professional's base rate; independent of whether
+   * `orderId` is set. Defaults to 'floor'.
+   */
+  orderType?: OrderType;
 
   /**
    * How the assigned professional's cut is settled for accounting — the
