@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, Download, AlertCircle, Loader2, PackageSearch, Share2, Eye } from 'lucide-react';
+import { Hash, AlertCircle, PackageSearch, Share2, Eye } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -9,7 +9,6 @@ import { groupFamilies } from '../lib/catalog.js';
 import { isGroupOptional } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
-import { formatMoney } from '../lib/format.js';
 // PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
 // gzipped between pdf-lib, fontkit, and the font fetch. Loading it
 // eagerly would bloat every page that imports QuoteBuilder. Dynamic
@@ -24,7 +23,7 @@ import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/QuoteLineItem.jsx';
-import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
+import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
@@ -1087,53 +1086,50 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           families={families}
         />
       ) : (
-        // Left column uses `minmax(0, 1fr)` — not bare `1fr` — so it can
-        // shrink below its content's intrinsic min-width. Without that,
-        // the implicit `min-width: auto` on a 1fr track stops the column
-        // from accepting `min-width: 0` from descendants, and any long
-        // string (a 6-digit money value, a full dimension spec) forces
-        // the whole column wider than the viewport.
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-5 min-w-0">
-            {/* Provide catalog families to every line item below (through the
-                LineItemList, which doesn't thread per-line catalog props) so
-                the material-options chips can show list-price deltas. */}
-            <FamiliesContext.Provider value={families}>
-              <LineItemsCard
-                lines={lines}
-                groups={groups}
-                quote={quote}
-                focusLineId={focusLineId}
-                onToggleGroupOptional={toggleGroupOptional}
-                onChangeLine={hx(updateLine)}
-                onRemoveLine={hx(removeLine)}
-                onDuplicateLine={hx(duplicateLine)}
-                onToggleOptional={hx(toggleOptional)}
-                onAddAlternative={hx(addAlternative)}
-                onSelectAlternative={hx(selectAlternative)}
-                onSeparateFromSet={hx(separateFromSet)}
-                onUngroup={hx(ungroupLine)}
-                onJoinSet={hx(joinSet)}
-                onReorder={hx(reorderLines)}
-                onAddSection={hx(addSection)}
-                onOpenCatalog={() => setCatalogOpen(true)}
-              />
-            </FamiliesContext.Provider>
-            <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
-          </div>
-
-          {/* Right column: totals rail, sticky on desktop. The price-list
-              PDF panel that used to alternate into this slot is gone. */}
-          <div className="lg:sticky lg:top-4 lg:self-start">
-            <TotalsRail quote={quote} totals={totals} professional={professional} onUpdateQuote={hx(updateQuote)} />
-          </div>
+        // Single full-width column: the totals live in the persistent bottom
+        // dock now (not a right rail), so the line items get the full width.
+        // `min-w-0` lets the column shrink below its content's intrinsic width,
+        // so a long money value / dimension spec can't force a horizontal scroll.
+        <div className="space-y-5 min-w-0">
+          {/* Provide catalog families to every line item below (through the
+              LineItemList, which doesn't thread per-line catalog props) so
+              the material-options chips can show list-price deltas. */}
+          <FamiliesContext.Provider value={families}>
+            <LineItemsCard
+              lines={lines}
+              groups={groups}
+              quote={quote}
+              focusLineId={focusLineId}
+              onToggleGroupOptional={toggleGroupOptional}
+              onChangeLine={hx(updateLine)}
+              onRemoveLine={hx(removeLine)}
+              onDuplicateLine={hx(duplicateLine)}
+              onToggleOptional={hx(toggleOptional)}
+              onAddAlternative={hx(addAlternative)}
+              onSelectAlternative={hx(selectAlternative)}
+              onSeparateFromSet={hx(separateFromSet)}
+              onUngroup={hx(ungroupLine)}
+              onJoinSet={hx(joinSet)}
+              onReorder={hx(reorderLines)}
+              onAddSection={hx(addSection)}
+              onOpenCatalog={() => setCatalogOpen(true)}
+            />
+          </FamiliesContext.Provider>
+          <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
         </div>
       )}
 
-      {/* Mobile sticky totals bar */}
-      <MobileStickyTotals
+      {/* Spacer so the last content can scroll clear of the fixed bottom dock
+          (sized to the collapsed bar: label + amount + DOP line + safe area). */}
+      <div className="h-[calc(5rem+env(safe-area-inset-bottom))]" aria-hidden />
+
+      {/* Persistent totals dock — pinned to the bottom of the screen at every
+          width, replacing the old desktop right-rail and the mobile totals bar. */}
+      <TotalsDock
         quote={quote}
         totals={totals}
+        professional={professional}
+        onUpdateQuote={hx(updateQuote)}
         onOpenCatalog={() => setCatalogOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
@@ -1273,61 +1269,5 @@ function NotesAndTermsCard({ quote, onUpdateQuote }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * Tight totals strip shown above the line items only when the PDF panel
- * is open and the rail is hidden. Keeps the running total in view without
- * eating vertical space.
- */
-function MobileStickyTotals({ quote, totals, onOpenCatalog, onExport, exporting }) {
-  // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
-  // insets so the buttons clear the Dynamic Island ear when the phone is
-  // sideways; pb uses max(0.75rem, …) so the home indicator never overlaps
-  // the buttons. The spacer below reserves room so the page content can
-  // scroll fully into view without the bar covering the last row.
-  return (
-    <>
-      <div
-        className="md:hidden fixed inset-x-0 bottom-0 z-20 bg-white border-t border-ink-200 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] py-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="eyebrow">Total</div>
-          <div className="text-lg font-semibold tabular-nums truncate">
-            {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
-          </div>
-        </div>
-        {/* Catalog is the only add path — picking a real product fills the
-            line instead of leaving the dealer to type it from the price list. */}
-        <button type="button" onClick={onOpenCatalog} className="btn-secondary" aria-label="Agregar desde catálogo">
-          <PackageSearch size={18} /> <span>Catálogo</span>
-        </button>
-        {/* On mobile, this button is the *only* way to export — the
-            desktop header version is hidden. Disable it while a
-            generation is in flight so a frustrated dealer double-tap
-            doesn't fire two share sheets in a row. The Loader2 spinner
-            gives an unambiguous "I heard you, working on it" signal,
-            which the previous silent button didn't. */}
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={exporting}
-          aria-busy={exporting}
-          className="btn-primary disabled:opacity-60 disabled:cursor-wait"
-          aria-label="Exportar PDF"
-        >
-          {exporting
-            ? <><Loader2 size={16} className="animate-spin" /> PDF</>
-            : <><Download size={16} /> PDF</>}
-        </button>
-      </div>
-      {/* Spacer matches the bar height + safe-area so the last list row is
-          fully scrollable above the bar. */}
-      <div
-        className="md:hidden h-[calc(4.5rem+env(safe-area-inset-bottom))]"
-        aria-hidden
-      />
-    </>
   );
 }
