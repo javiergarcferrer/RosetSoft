@@ -39,6 +39,12 @@ verify_jwt = false
 [functions.swatch-proxy]
 verify_jwt = false
 
+# quote-share backs the public, interactive client quote link. It's used
+# logged-out, so the gateway must not require a JWT; the function itself gates
+# on the secret share token and runs with the service role.
+[functions.quote-share]
+verify_jwt = false
+
 # hl-track verifies the caller's JWT itself (same reason as bpd-rate) and
 # proxies Hapag-Lloyd's Track & Trace API, keeping HL_CLIENT_ID/SECRET
 # server-side.

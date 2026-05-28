@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2 } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2, Share2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -28,6 +28,8 @@ export default function QuoteHeader({
   onViewChange,
   onOpenPalette,
   onExportPdf,
+  onShare,
+  sharing,
   onUpdateQuote,
   onUndo,
   onRedo,
@@ -122,6 +124,17 @@ export default function QuoteHeader({
             </button>
 
             <ViewToggle view={view} onChange={onViewChange} />
+
+            <button
+              type="button"
+              onClick={onShare}
+              disabled={sharing}
+              className="btn-ghost text-xs hidden md:inline-flex disabled:opacity-60 disabled:cursor-wait"
+              title="Copiar un enlace interactivo para el cliente"
+            >
+              {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+              <span className="hidden lg:inline">Compartir</span>
+            </button>
 
             <button
               type="button"
