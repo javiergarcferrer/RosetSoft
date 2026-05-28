@@ -752,12 +752,17 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
           <div className="text-[11px] text-ink-500">{Math.round(pct)}% del mínimo</div>
         </div>
       </div>
-      <div className="h-2 bg-ink-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full transition-all ${thresholdMet ? 'bg-emerald-500' : 'bg-brand-500'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      {/* Native <progress> (themed in index.css: ink-100 track, brand-500
+          fill). When the minimum is met the `.is-complete` modifier recolours
+          the value bar emerald — the same green-on-complete cue the old
+          hand-rolled bar gave. value/max are the raw figures; the browser
+          clamps the fill to 100%, matching the previous Math.min(100,…). */}
+      <progress
+        className={`h-2 ${thresholdMet ? 'is-complete' : ''}`}
+        max={threshold}
+        value={Math.min(orderTotal, threshold)}
+        aria-label={`${Math.round(pct)}% del mínimo de despacho`}
+      />
       <p className="text-[11px] text-ink-500">
         El mínimo se multiplica por el número de contenedores en el pedido.
         Todas las cotizaciones aportan al total, sin importar a cuál contenedor pertenezcan.
