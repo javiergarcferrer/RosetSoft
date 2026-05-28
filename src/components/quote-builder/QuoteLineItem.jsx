@@ -472,9 +472,10 @@ function TopStrip({
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
 function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }) {
-  // Layout: product photo + name on top; the swatch + material
-  // (grade/fabric) and the ref/dimensions strip stack BELOW them, full
-  // width — not squeezed into a narrow column beside the photo.
+  // Layout: product photo + name on top; the ref/dimensions strip and
+  // the swatch + material (grade/fabric) stack BELOW them, full width —
+  // not squeezed into a narrow column beside the photo. Material sits
+  // under the spec to match the PDF and client preview.
   //
   // In compound mode the parent only carries the *shared* identity —
   // family (a chip in the TopStrip), photo, and the composition name.
@@ -499,7 +500,6 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
           />
         </div>
       </div>
-      {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} />}
       {!compound && (
         <SpecStrip
           reference={line.reference}
@@ -509,8 +509,9 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
           refInputRef={refInputRef}
         />
       )}
+      {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} />}
       {/* Descripción — promoted out of the old DetailsPanel disclosure to an
-          always-visible, auto-growing field directly under the spec strip.
+          always-visible, auto-growing field under the spec + material rows.
           It's the PDF-facing copy the dealer writes for the client, so it
           earns a permanent slot. Compound lines don't carry a line-level
           description (the per-component rows do), so it's gated to simple
@@ -1285,24 +1286,24 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         autoCapitalize="words"
       />
 
-      <GradeFabricRow
-        line={{
-          subtype: component.subtype,
-          swatchImageId: component.swatchImageId,
-          reference: component.reference,
-          materialOptions: component.materialOptions,
-        }}
-        onChange={(patch) => onChange(patch)}
-        currency={currency}
-        rates={rates}
+      <SpecStrip
+        reference={component.reference}
+        dimensions={component.dimensions}
+        onChangeReference={(v) => onChange({ reference: v })}
+        onChangeDimensions={(v) => onChange({ dimensions: v })}
       />
 
       <div className="pt-0.5">
-        <SpecStrip
-          reference={component.reference}
-          dimensions={component.dimensions}
-          onChangeReference={(v) => onChange({ reference: v })}
-          onChangeDimensions={(v) => onChange({ dimensions: v })}
+        <GradeFabricRow
+          line={{
+            subtype: component.subtype,
+            swatchImageId: component.swatchImageId,
+            reference: component.reference,
+            materialOptions: component.materialOptions,
+          }}
+          onChange={(patch) => onChange(patch)}
+          currency={currency}
+          rates={rates}
         />
       </div>
 
