@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { ChevronDown, Info, Lock } from 'lucide-react';
+import { ChevronDown, Info, Lock, RefreshCw, AlertTriangle } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { QUOTE_STATUS_DRAFT } from '../../lib/constants.js';
 import { formatMoney } from '../../lib/format.js';
 import { effectiveCommissionPct, commissionAmount } from '../../lib/commissions.js';
+import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 /**
  * The persistent totals + adjustments rail. Always visible on the right
  * column at desktop widths so the dealer never loses sight of the running
@@ -36,6 +37,13 @@ export default function TotalsRail({
   // has seen can't move). Flag it so the dealer doesn't mistake a locked
   // rate for a stale one after pulling a newer rate.
   const rateLocked = !!quote.status && quote.status !== QUOTE_STATUS_DRAFT;
+
+  // On-demand BPD pull. Only offered while the rate is live (draft): once
+  // sent the figure is frozen to the snapshot, so refreshing the bank's
+  // rate wouldn't — and shouldn't — move it. A successful pull updates the
+  // team settings row, which flows back through displayRatesFor into this
+  // draft's totals automatically.
+  const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 
   const fmt = (v) => formatMoney(v, currency, rates);
 
@@ -143,9 +151,34 @@ export default function TotalsRail({
             />
           </div>
         </div>
-        <p className="text-[10px] text-ink-500">
-          ITBIS fijo en {ITBIS_PCT}% · La tasa DOP se gestiona en <Link to="/settings" className="underline">configuración</Link>.
-        </p>
+        <div className="text-[10px] text-ink-500 space-y-1.5">
+          <p>ITBIS fijo en {ITBIS_PCT}%.</p>
+          {rateLocked ? (
+            <p>
+              Tasa DOP bloqueada al enviar · se gestiona en{' '}
+              <Link to="/settings" className="underline">configuración</Link>.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>Tasa DOP en vivo (Banco Popular).</span>
+              <button
+                type="button"
+                onClick={refreshRate}
+                disabled={refreshingRate}
+                className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
+                title="Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano"
+              >
+                <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
+                {refreshingRate ? 'Actualizando…' : 'Actualizar tasa'}
+              </button>
+            </div>
+          )}
+          {rateError && (
+            <p className="text-red-600 flex items-start gap-1">
+              <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" /> {rateError}
+            </p>
+          )}
+        </div>
       </div>
 
       {professional && (

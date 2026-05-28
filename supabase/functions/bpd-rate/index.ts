@@ -14,10 +14,10 @@
 // settings row (settings.exchange_rate — the single source of truth) with
 // the service-role key, so the number the whole app quotes on is the bank's
 // published rate — nobody types it in. It's called from a logged-in
-// dealer's browser: automatically on the first app load of each day (see
-// AppContext / shouldPullDailyRate) and on demand from Settings'
-// "Actualizar ahora" button. Both carry the user's JWT, verified here —
-// no cron, no extra secrets, no manual setup.
+// dealer's browser: automatically on the first app load at/after 08:00 AST
+// each day (see AppContext / shouldPullDailyRate) and on demand from the
+// Settings or quote-workspace refresh button. Both carry the user's JWT,
+// verified here — no cron, no extra secrets, no manual setup.
 //
 // Endpoints come from the API spec, pinned to the production gateway
 // (apipublico.bpd.com.do). The base is hardcoded below — there is NO
