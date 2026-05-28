@@ -122,14 +122,14 @@ export default function PublicQuoteView() {
 
   if (state.status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-ink-50 text-ink-500">
+      <div className="h-full flex items-center justify-center bg-ink-50 text-ink-500">
         <Loader2 className="animate-spin mr-2" size={18} /> Cargando cotización…
       </div>
     );
   }
   if (state.status === 'error') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-ink-50 text-center px-6">
+      <div className="h-full flex flex-col items-center justify-center bg-ink-50 text-center px-6">
         <AlertCircle className="text-ink-400 mb-3" size={32} />
         <div className="text-lg font-semibold text-ink-800">Enlace no disponible</div>
         <p className="text-sm text-ink-500 mt-1 max-w-sm">
@@ -143,7 +143,11 @@ export default function PublicQuoteView() {
   const hasChoices = altGroups.length > 0 || optionals.length > 0;
 
   return (
-    <div className="min-h-screen bg-ink-50 py-6 px-3 sm:px-6">
+    // Lives outside the app shell, so it can't lean on the Layout's <main>
+    // scroll container — and html/body/#root are pinned to the viewport with
+    // overflow:hidden (see index.css). Be our own scroll container, or the
+    // quote is clipped at the fold with no way to scroll on mobile.
+    <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
         {hasChoices && (
           <section className="card p-4 sm:p-5">
