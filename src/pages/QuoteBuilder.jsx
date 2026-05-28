@@ -14,8 +14,9 @@ import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
-import { FamiliesContext } from '../components/quote-builder/QuoteLineItem.jsx';
+import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
+import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
@@ -427,6 +428,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             onReorder: hx(reorderLines),
             onAddSection: hx(addSection),
             onOpenCatalog: () => setCatalogOpen(true),
+            // Catalog side-effect (not an undoable line edit): remember a
+            // material's swatch so the next quote that picks it is pre-filled.
+            // Owns the profileId source + persistence so the editor row doesn't.
+            rememberSwatch: (subtype, imageId) => {
+              if (imageId && profileId) rememberSwatchInCatalog({ profileId, subtype, imageId });
+            },
           }}>
             <FamiliesContext.Provider value={families}>
               <LineItemsCard

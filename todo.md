@@ -82,12 +82,13 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
     "ref. X%"; `Professionals` list header is "Comisión ref.". The editable field/column is kept
     (dropping the column is optional/non-urgent, per the note) — no data/migration change.
 
-- [ ] **Side-effect inside a presentation component.** (DEFERRED — the literal "in render" bug
-    isn't present; the remaining concern is architectural, belongs with P3.)
-  - `rememberSwatchInCatalog` (`QuoteLineItem.jsx`) is already called from the `setSwatch` event
-    handler, not during render, so it doesn't fire on re-render. The deeper cleanup — moving
-    persistence out of the presentation component entirely — is part of the P3 god-orchestrator /
-    prop-drilling work below; doing it standalone has no behavioral payoff and touches a 1.5k-LOC file.
+- [x] **Side-effect inside a presentation component.** DONE — now that the action layer exists,
+  `GradeFabricRow` dispatches `rememberSwatch(subtype, imageId)` through `QuoteActionsContext`
+  instead of importing `rememberSwatchInCatalog` and reading `profileId` itself. The persistence
+  (which catalog row, where `profileId` comes from) lives in the action defined by `Workspace`; the
+  presentation row just signals intent. Behavior identical (still fire-and-forget from the
+  `setSwatch` handler). Bundled with moving `FamiliesContext` into its own module
+  (`FamiliesContext.js`) so the context isn't imported out of a 1.5k-LOC UI component.
 
 ---
 

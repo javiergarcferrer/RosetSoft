@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
@@ -11,8 +11,8 @@ import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import ProductPicker from './ProductPicker.jsx';
-import { useApp } from '../../context/AppContext.jsx';
-import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
+import { FamiliesContext } from './FamiliesContext.js';
+import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import {
@@ -23,15 +23,6 @@ import { splitSkuGrade, switchLineProduct } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId } from '../../db/database.js';
-
-/**
- * Catalog families keyed by SKU root, provided by QuoteBuilder. Used to
- * resolve a line's family (via splitSkuGrade(reference).root) for the
- * material-options price deltas. Passed via context because the intermediate
- * LineItemList doesn't forward per-line catalog data. Defaults to an empty
- * Map so the component renders fine outside a provider (tests, previews).
- */
-export const FamiliesContext = createContext(new Map());
 
 /**
  * One quote line — a product card read top→bottom:
@@ -615,7 +606,7 @@ function InternalNote({ value, onCommit }) {
 // composeSubtype, so on-disk format is identical to what dealers have
 // always typed — no migration, no PDF / autocomplete churn.
 function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
-  const { profileId } = useApp();
+  const { rememberSwatch } = useQuoteActions();
   const families = useContext(FamiliesContext);
   const { grade, fabric } = parseSubtype(line.subtype);
   // Resolve this line's catalog family from its reference root so the
@@ -623,16 +614,14 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   // non-graded) reference simply yields no family → deltas read as 0.
   const family = families?.get(splitSkuGrade(line.reference).root) || null;
   const materialOptions = line.materialOptions || null;
-  // When a swatch is attached inline, also remember it in the catalog so
-  // the next quote that picks the same material/color is pre-filled. Only
-  // bites when the subtype came from the picker (carries a "(#code)") and
-  // the catalog color has no photo yet; hand-typed fabrics are skipped.
-  // Fire-and-forget — never blocks or fails the line edit.
+  // When a swatch is attached inline, also remember it in the catalog so the
+  // next quote that picks the same material/color is pre-filled. The catalog
+  // persistence — which row, and where profileId comes from — lives in the
+  // action layer; the row just says "remember this material's swatch".
+  // Fire-and-forget; never blocks or fails the line edit.
   const setSwatch = (id) => {
     onChange({ swatchImageId: id });
-    if (id && profileId) {
-      rememberSwatchInCatalog({ profileId, subtype: line.subtype, imageId: id });
-    }
+    rememberSwatch(line.subtype, id);
   };
   // commit() always writes the composed subtype. When the picker hands
   // back a swatchImageId we persist it too; manual grade/fabric edits
