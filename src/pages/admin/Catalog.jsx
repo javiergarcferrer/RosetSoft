@@ -23,7 +23,7 @@ import { parsePriceList } from '../../lib/priceListCsv.js';
  */
 export default function Catalog() {
   const { profileId, isAdmin } = useApp();
-  const { data: products, loaded } = useLiveQueryStatus(
+  const { data: products, loaded, error: loadError } = useLiveQueryStatus(
     () => db.products.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
@@ -132,6 +132,12 @@ export default function Catalog() {
 
       {!loaded ? (
         <div className="card overflow-hidden"><ListLoading rows={6} /></div>
+      ) : loadError ? (
+        <EmptyState
+          icon={PackageSearch}
+          title="No se pudo cargar el catálogo"
+          description="La tabla de productos aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga; el catálogo aparecerá en cuanto la migración corra."
+        />
       ) : products.length === 0 ? (
         <EmptyState
           icon={PackageSearch}

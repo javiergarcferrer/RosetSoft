@@ -51,6 +51,10 @@ export function useLiveQuery<T, D>(
 export interface LiveQueryStatus<T> {
   data: T;
   loaded: boolean;
+  /** Set when the most recent fetch threw (e.g. a missing table / RLS deny).
+   *  `loaded` still flips to true so callers render an error/empty state
+   *  instead of hanging on the loading skeleton forever. */
+  error?: unknown;
 }
 
 export function useLiveQueryStatus<T>(
@@ -73,6 +77,7 @@ export function useLiveQueryStatus<T, D>(
   const [state, setState] = useState<LiveQueryStatus<T | D | undefined>>({
     data: defaultValue,
     loaded: false,
+    error: null,
   });
   const fnRef = useRef(asyncFn);
   fnRef.current = asyncFn;
@@ -82,9 +87,15 @@ export function useLiveQueryStatus<T, D>(
     const run = async () => {
       try {
         const r = await Promise.resolve(fnRef.current());
-        if (active) setState({ data: r, loaded: true });
+        if (active) setState({ data: r, loaded: true, error: null });
       } catch (e) {
-        if (active) console.error('useLiveQuery error:', e);
+        // Don't hang on the loading skeleton forever: flip `loaded` and
+        // surface the error so the page can show an error/empty state. Keep
+        // the prior data (SWR-style) so a transient error doesn't blank it.
+        if (active) {
+          console.error('useLiveQuery error:', e);
+          setState((s) => ({ data: s.data, loaded: true, error: e }));
+        }
       }
     };
     run();
