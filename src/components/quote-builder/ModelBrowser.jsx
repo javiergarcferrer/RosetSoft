@@ -275,8 +275,14 @@ function ResultCategory({ section, onPick }) {
   );
 }
 
-/** A selectable model row — picking it hands the model up to the caller. */
+/** A selectable model row — picking it hands the model up to the caller. Shows
+ *  the product's description (its Description-2 text + dimensions) under the name
+ *  so the dealer can tell what the model is. */
 function ModelButton({ model, onPick }) {
+  // Any member SKU carries the model-level descriptor + dimensions (they're
+  // the same across grades); take the leading grade's product as the sample.
+  const sample = productForGrade(model, model.grades?.[0] || '');
+  const description = [sample?.subtype, sample?.dimensions].filter(Boolean).join(' · ');
   return (
     <button
       type="button"
@@ -291,6 +297,9 @@ function ModelButton({ model, onPick }) {
         <span className="block text-[11px] text-ink-500">
           {[model.family, model.graded ? `${model.grades.length} grados` : null].filter(Boolean).join(' · ')}
         </span>
+        {description && (
+          <span className="block text-[11px] text-ink-400 truncate" title={description}>{description}</span>
+        )}
       </span>
       <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">{priceLabel(model)}</span>
     </button>

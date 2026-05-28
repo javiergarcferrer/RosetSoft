@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Hash, Download, AlertCircle, Loader2, PackageSearch, Share2, Eye } from 'lucide-react';
+import { Hash, Download, AlertCircle, Loader2, PackageSearch, Share2, Eye } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -368,7 +368,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
    *   ⌘K       — open the command palette (the universal launcher)
-   *   ⌘↵       — add a new blank line (works even inside an input)
+   *   ⌘↵       — open the catalog to add a product (works even inside an input)
    *   ⌘P       — export PDF (commandeers the browser's print shortcut on
    *              purpose — the PDF IS the print equivalent for this app)
    * The client-view toggle is intentionally NOT bound — every browser has
@@ -381,7 +381,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
    * keypress, by which point `quote` is populated.
    */
   useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
-  useKeyboardShortcut('mod+enter', () => { pushUndo(snapshotNow()); addLine(); }, { ignoreInInput: false });
+  useKeyboardShortcut('mod+enter', () => setCatalogOpen(true), { ignoreInInput: false });
   useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
@@ -1115,7 +1115,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
                 onUngroup={hx(ungroupLine)}
                 onJoinSet={hx(joinSet)}
                 onReorder={hx(reorderLines)}
-                onAddItem={hx(() => addLine())}
                 onAddSection={hx(addSection)}
                 onOpenCatalog={() => setCatalogOpen(true)}
               />
@@ -1135,7 +1134,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <MobileStickyTotals
         quote={quote}
         totals={totals}
-        onAdd={hx(() => addLine())}
         onOpenCatalog={() => setCatalogOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
@@ -1148,6 +1146,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         currentCustomerId={quote.customerId}
         onInsertLine={hx((seed) => addLine(seed))}
         onAddSection={hx(addSection)}
+        onOpenCatalog={() => setCatalogOpen(true)}
         onSelectCustomer={hx((id) => updateQuote({ customerId: id }))}
         onExportPdf={exportPdf}
         onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
@@ -1176,7 +1175,7 @@ function LineItemsCard({
   onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
   onToggleOptional, onAddAlternative, onSelectAlternative,
   onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-  onAddItem, onAddSection, onOpenCatalog,
+  onAddSection, onOpenCatalog,
 }) {
   return (
     <div className="card overflow-hidden">
@@ -1191,25 +1190,16 @@ function LineItemsCard({
           >
             <Hash size={12} /> Sección
           </button>
-          {/* Catalog is the PRIMARY add path — picking a real product fills the
+          {/* Catalog is the ONLY add path — picking a real product fills the
               line (ref, name, price, cost, grade/fabric) instead of leaving the
-              dealer to type everything from the paper price list. The blank
-              "Agregar artículo" stays as a quiet escape hatch. */}
-          <button
-            type="button"
-            onClick={onAddItem}
-            className="btn-ghost text-xs"
-            title={`Agregar artículo en blanco (${shortcutLabel('mod+enter')})`}
-          >
-            <Plus size={14} /> Artículo
-          </button>
+              dealer to type everything from the paper price list. */}
           <button
             type="button"
             onClick={onOpenCatalog}
             className="btn-primary"
-            title="Elegir un producto del catálogo"
+            title={`Elegir un producto del catálogo (${shortcutLabel('mod+enter')})`}
           >
-            <PackageSearch size={14} /> <span className="hidden sm:inline">Agregar desde </span>catálogo
+            <PackageSearch size={18} /> Catálogo
           </button>
         </div>
       </header>
@@ -1229,8 +1219,8 @@ function LineItemsCard({
         onUngroup={onUngroup}
         onJoinSet={onJoinSet}
         onReorder={onReorder}
-        onAddItem={onAddItem}
         onAddSection={onAddSection}
+        onOpenCatalog={onOpenCatalog}
       />
       {lines.length > 0 && (
         <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between gap-2">
@@ -1242,8 +1232,8 @@ function LineItemsCard({
             <button type="button" onClick={onAddSection} className="btn-ghost text-xs">
               <Hash size={12} /> Sección
             </button>
-            <button type="button" onClick={onAddItem} className="btn-secondary text-xs">
-              <Plus size={12} /> Agregar otro
+            <button type="button" onClick={onOpenCatalog} className="btn-secondary text-xs">
+              <PackageSearch size={16} /> Catálogo
             </button>
           </div>
         </div>
@@ -1291,7 +1281,7 @@ function NotesAndTermsCard({ quote, onUpdateQuote }) {
  * is open and the rail is hidden. Keeps the running total in view without
  * eating vertical space.
  */
-function MobileStickyTotals({ quote, totals, onAdd, onOpenCatalog, onExport, exporting }) {
+function MobileStickyTotals({ quote, totals, onOpenCatalog, onExport, exporting }) {
   // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
   // insets so the buttons clear the Dynamic Island ear when the phone is
   // sideways; pb uses max(0.75rem, …) so the home indicator never overlaps
@@ -1308,19 +1298,10 @@ function MobileStickyTotals({ quote, totals, onAdd, onOpenCatalog, onExport, exp
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>
         </div>
-        {/* Blank-line add demoted to a compact icon-only escape hatch; the
-            primary add path on mobile is now "Desde catálogo" below. */}
-        <button
-          type="button"
-          onClick={onAdd}
-          className="btn-ghost border border-ink-200 px-2"
-          aria-label="Agregar artículo en blanco"
-          title="Agregar artículo en blanco"
-        >
-          <Plus size={16} />
-        </button>
+        {/* Catalog is the only add path — picking a real product fills the
+            line instead of leaving the dealer to type it from the price list. */}
         <button type="button" onClick={onOpenCatalog} className="btn-secondary" aria-label="Agregar desde catálogo">
-          <PackageSearch size={16} /> <span>Desde catálogo</span>
+          <PackageSearch size={18} /> <span>Catálogo</span>
         </button>
         {/* On mobile, this button is the *only* way to export — the
             desktop header version is hidden. Disable it while a
