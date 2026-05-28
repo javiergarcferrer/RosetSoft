@@ -19,8 +19,10 @@
 // "Actualizar ahora" button. Both carry the user's JWT, verified here —
 // no cron, no extra secrets, no manual setup.
 //
-// Endpoints come from the API spec (sandbox by default). Set a
-// BPD_API_BASE secret to point at production without a code change.
+// Endpoints come from the API spec, pinned to the production gateway
+// (apipublico.bpd.com.do). The base is hardcoded below — there is NO
+// BPD_API_BASE env override — so a stray secret can never point the
+// function at the wrong environment.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
@@ -37,14 +39,13 @@ const CORS_HEADERS = {
     'authorization, x-client-info, apikey, content-type, x-supabase-api-version',
 };
 
-// Production base from BPDConsultaTasa 2.2.0 (apipublico.bpd.com.do).
-//   token = `${DEFAULT_BASE}/bpd/Authentication/oauth2/token`
-//   tasa  = `${DEFAULT_BASE}/consultatasa/consultaTasa`
-// To go back to the sandbox, set the BPD_API_BASE secret to the bpdsandbox
-// URL — but DO NOT set BPD_API_BASE to a full endpoint URL (that doubles the
-// path); it must be ONLY the base, exactly like this constant.
-const DEFAULT_BASE =
-  'https://apipublico.bpd.com.do/bpd/bpd-publico';
+// Production gateway for BPDConsultaTasa 2.2.0 (apipublico.bpd.com.do).
+// Hardcoded on purpose — NO env override — so the whole function always
+// talks to production and nothing can silently send the credentials to a
+// sandbox gateway (or vice-versa).
+//   token = `${BASE}/bpd/Authentication/oauth2/token`
+//   tasa  = `${BASE}/consultatasa/consultaTasa`
+const BASE = 'https://apipublico.bpd.com.do/bpd/bpd-publico';
 
 // Resilience for the upstream BPD calls (BPD cert C.7 + C.10): a hard
 // attempt cap (never an infinite loop), bounded exponential backoff, and
@@ -109,7 +110,6 @@ Deno.serve(async (req) => {
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const CLIENT_ID = Deno.env.get('BPD_CLIENT_ID');
   const CLIENT_SECRET = Deno.env.get('BPD_CLIENT_SECRET');
-  const BASE = (Deno.env.get('BPD_API_BASE') || DEFAULT_BASE).replace(/\/+$/, '');
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return json({ error: 'Server misconfigured' }, 500);
   }
