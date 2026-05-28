@@ -194,18 +194,16 @@ export default function TotalsDock({
               truncated by the action cluster; from sm: up it collapses back to a
               single row. */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-            {/* Currency + total share the first row, so the figure gets every
-                pixel the actions aren't using. */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 sm:flex-1">
-              <CurrencyToggle value={currency} onChange={(c) => onUpdateQuote({ currencyCode: c })} />
-
-              {/* The total doubles as the breakdown toggle — a big, obvious tap
-                  target that slides the step-by-step total up. */}
+            {/* The total leads the row — the hero figure. Both currencies read
+                at once (USD large, the live DOP equivalent beneath), so there's
+                nothing to toggle: the figure is complete at a glance. It doubles
+                as the breakdown toggle — a big, obvious tap target. */}
+            <div className="min-w-0 sm:flex-1">
               <button
                 type="button"
                 onClick={() => toggle('breakdown')}
                 aria-expanded={breakdownOpen}
-                className="min-w-0 flex-1 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
+                className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
                 title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
               >
                 <div className="flex items-center gap-2">
@@ -215,9 +213,9 @@ export default function TotalsDock({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums truncate">{fmt(totals.grandTotal)}</span>
+                  <span className="text-2xl sm:text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
                   <ChevronUp
-                    size={16}
+                    size={18}
                     className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                     aria-hidden
                   />
@@ -410,25 +408,6 @@ function MarginMeter({ marginPct }) {
         aria-label={`Margen aplicado ${marginPct}%`}
         title={`Margen aplicado: ${marginPct}%`}
       />
-    </div>
-  );
-}
-
-function CurrencyToggle({ value, onChange }) {
-  return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden flex-shrink-0">
-      {['USD', 'DOP'].map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onChange(c)}
-          className={`px-2 py-1 text-[10px] font-semibold transition-colors ${
-            value === c ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-ink-50'
-          }`}
-        >
-          {c}
-        </button>
-      ))}
     </div>
   );
 }
