@@ -50,3 +50,12 @@ verify_jwt = false
 # server-side.
 [functions.hl-track]
 verify_jwt = false
+
+# lr-catalog reads a public Ligne Roset product page + its catalog AJAX
+# endpoints and returns the offered fabrics/colors as JSON for the Materials
+# importer. It's read-only and locked to ligne-roset.com (no SSRF), and it only
+# returns public catalog data — no auth needed. The gateway must NOT require a
+# JWT, or the browser's CORS preflight (which carries no Authorization header)
+# would be rejected before the function runs.
+[functions.lr-catalog]
+verify_jwt = false
