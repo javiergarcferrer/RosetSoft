@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
+import { isPricedLine } from '../lib/constants.js';
+import { applyClientSelections } from '../lib/clientSelections.js';
 import { formatMoney } from '../lib/format.js';
 import { fetchSharedQuote, saveClientSelections } from '../lib/quoteShare.js';
 
@@ -17,27 +19,17 @@ import { fetchSharedQuote, saveClientSelections } from '../lib/quoteShare.js';
  *
  * Renders OUTSIDE the app's auth shell, so it depends on no AppContext /
  * session — only the bundle it fetches and <ImageView>'s public-bucket reads.
+ *
+ * The recipient's picks (alternatives, optionals, AND material grades) are
+ * folded into the line set by applyClientSelections (lib) so the transform is
+ * shared + unit-tested; this component owns only the fetch, the panel UI, and
+ * the debounced persistence.
  */
-
-// Fold the recipient's picks into the line set the preview + totals consume:
-// the chosen alternative becomes the selected member; an included optional is
-// un-flagged so it both counts in the total and renders as a normal line.
-function applySelections(lines, sel) {
-  const alts = sel.alternatives || {};
-  const opts = sel.optionals || {};
-  return lines.map((l) => {
-    if (l.alternativeGroup && alts[l.alternativeGroup] != null) {
-      return { ...l, isSelectedAlternative: alts[l.alternativeGroup] === l.id };
-    }
-    if (l.isOptional) return opts[l.id] ? { ...l, isOptional: false } : l;
-    return l;
-  });
-}
 
 export default function PublicQuoteView() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
-  const [selections, setSelections] = useState({ alternatives: {}, optionals: {} });
+  const [selections, setSelections] = useState({ alternatives: {}, optionals: {}, materials: {} });
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved
   const initialised = useRef(false);
 
@@ -53,6 +45,7 @@ export default function PublicQuoteView() {
         setSelections({
           alternatives: saved.alternatives || {},
           optionals: saved.optionals || {},
+          materials: saved.materials || {},
         });
         setState({ status: 'ready', bundle, error: null });
       })
@@ -84,20 +77,36 @@ export default function PublicQuoteView() {
 
   // Effective lines + totals recompute whenever selections change.
   const effectiveLines = useMemo(
-    () => (bundle ? applySelections(bundle.lines || [], selections) : []),
+    () => (bundle ? applyClientSelections(bundle.lines || [], selections) : []),
     [bundle, selections],
   );
+  // Effective line by id — so the options panel prices each alternative with
+  // the recipient's material picks already applied.
+  const effectiveById = useMemo(
+    () => new Map(effectiveLines.map((l) => [l.id, l])),
+    [effectiveLines],
+  );
+  // Only PRICED lines feed the total — the same isPricedLine gate the editor
+  // uses. Without it the total would sum every alternative + every excluded
+  // optional, so picking an option wouldn't actually move the number.
   const totals = useMemo(
-    () => computeTotals(effectiveLines.map(lineForTotals), quote || {}),
+    () => computeTotals(effectiveLines.filter(isPricedLine).map(lineForTotals), quote || {}),
     [effectiveLines, quote],
   );
 
-  // Group the choosable bits for the options panel.
-  const { altGroups, optionals } = useMemo(() => {
+  // Group the choosable bits for the options panel. `hasMaterials` flags that
+  // at least one line/component can be re-quoted in another material (those
+  // pickers live in-line in the preview below, not in this panel).
+  const { altGroups, optionals, hasMaterials } = useMemo(() => {
     const lines = bundle?.lines || [];
     const groups = new Map();
     const opts = [];
+    let mats = false;
     for (const l of lines) {
+      if (l.materialOptions?.options?.length) mats = true;
+      if (Array.isArray(l.components)) {
+        for (const c of l.components) if (c?.materialOptions?.options?.length) mats = true;
+      }
       if (l.alternativeGroup) {
         if (!groups.has(l.alternativeGroup)) groups.set(l.alternativeGroup, []);
         groups.get(l.alternativeGroup).push(l);
@@ -105,7 +114,7 @@ export default function PublicQuoteView() {
         opts.push(l);
       }
     }
-    return { altGroups: [...groups.entries()], optionals: opts };
+    return { altGroups: [...groups.entries()], optionals: opts, hasMaterials: mats };
   }, [bundle]);
 
   function selectedAltId(group, members) {
@@ -118,6 +127,12 @@ export default function PublicQuoteView() {
   }
   function toggleOptional(lineId, on) {
     setSelections((s) => ({ ...s, optionals: { ...s.optionals, [lineId]: on } }));
+  }
+  // Re-quote a line (or compound component) in a different material grade. The
+  // total recomputes via applyClientSelections shifting that line's unit price
+  // by the option's price delta.
+  function pickMaterial(id, grade) {
+    setSelections((s) => ({ ...s, materials: { ...s.materials, [id]: grade } }));
   }
 
   if (state.status === 'loading') {
@@ -140,7 +155,7 @@ export default function PublicQuoteView() {
     );
   }
 
-  const hasChoices = altGroups.length > 0 || optionals.length > 0;
+  const hasChoices = altGroups.length > 0 || optionals.length > 0 || hasMaterials;
 
   return (
     // Lives outside the app shell, so it can't lean on the Layout's <main>
@@ -158,31 +173,52 @@ export default function PublicQuoteView() {
 
             {altGroups.map(([group, members]) => {
               const sel = selectedAltId(group, members);
+              // Price each option as the DIFFERENCE vs. the one currently
+              // chosen: the selected option shows its absolute total (it's
+              // what's in the quote), the others show +/− what switching costs.
+              const selMember = effectiveById.get(sel) || members.find((m) => m.id === sel) || members[0];
+              const selTotal = lineTotal(selMember);
               return (
                 <div key={group} className="mb-4 last:mb-0">
                   <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Elige una opción</div>
                   <div className="space-y-1.5">
-                    {members.map((m) => (
-                      <label
-                        key={m.id}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
-                          sel === m.id ? 'border-brand-400 bg-brand-50' : 'border-ink-200 hover:bg-ink-50'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={`alt-${group}`}
-                          checked={sel === m.id}
-                          onChange={() => pickAlternative(group, m.id)}
-                          className="accent-brand-600"
-                        />
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium text-ink-900 truncate">{m.name || '—'}</span>
-                          {m.subtype && <span className="block text-[11px] text-ink-500 truncate">{m.subtype}</span>}
-                        </span>
-                        <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">{fmt(lineTotal(m))}</span>
-                      </label>
-                    ))}
+                    {members.map((m) => {
+                      const isSel = sel === m.id;
+                      const mTotal = lineTotal(effectiveById.get(m.id) || m);
+                      const diff = mTotal - selTotal;
+                      return (
+                        <label
+                          key={m.id}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
+                            isSel ? 'border-brand-400 bg-brand-50' : 'border-ink-200 hover:bg-ink-50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`alt-${group}`}
+                            checked={isSel}
+                            onChange={() => pickAlternative(group, m.id)}
+                            className="accent-brand-600"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-medium text-ink-900 truncate">{m.name || '—'}</span>
+                            {m.subtype && <span className="block text-[11px] text-ink-500 truncate">{m.subtype}</span>}
+                          </span>
+                          <span className="text-right whitespace-nowrap">
+                            {isSel ? (
+                              <>
+                                <span className="block text-sm font-semibold tabular-nums text-ink-900">{fmt(mTotal)}</span>
+                                <span className="block text-[10px] text-ink-400">en tu total</span>
+                              </>
+                            ) : (
+                              <span className={`block text-sm font-semibold tabular-nums ${diff < 0 ? 'text-emerald-700' : 'text-ink-700'}`}>
+                                {diff === 0 ? 'Mismo precio' : `${diff < 0 ? '−' : '+'}${fmt(Math.abs(diff))}`}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -212,12 +248,19 @@ export default function PublicQuoteView() {
                           {o.subtype && <span className="block text-[11px] text-ink-500 truncate">{o.subtype}</span>}
                         </span>
                         <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">
-                          {on ? '' : '+ '}{fmt(lineTotal(o))}
+                          {on ? '' : '+ '}{fmt(lineTotal(effectiveById.get(o.id) || o))}
                         </span>
                       </label>
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {hasMaterials && (
+              <div className="mt-3 text-[11px] text-ink-500 border-t border-ink-100 pt-3">
+                ¿Quieres otra tela o piel? Cámbiala en cada artículo más abajo —
+                verás la diferencia de precio y el total se actualiza al instante.
               </div>
             )}
           </section>
@@ -233,6 +276,8 @@ export default function PublicQuoteView() {
           professional={bundle.professional || null}
           seller={bundle.seller || null}
           families={undefined}
+          materialSelections={selections.materials}
+          onSelectMaterial={pickMaterial}
         />
       </div>
     </div>

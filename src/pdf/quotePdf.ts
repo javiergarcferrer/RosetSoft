@@ -7,7 +7,7 @@ import {
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
-import { setGroupInfo, groupRuns } from '../lib/pricing.js';
+import { setGroupInfo, groupRuns, sectionSubtotal } from '../lib/pricing.js';
 import { isGroupOptional } from '../lib/quoteGroups.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
@@ -224,7 +224,7 @@ export async function generateQuotePdf({
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
-        cursor = drawSectionHeader(page, ctx, cursor, group.label);
+        cursor = drawSectionHeader(page, ctx, cursor, group.label, sectionSubtotal(group.items));
       }
       // groupRuns(group.items) is THE shared source of truth for run
       // boundaries — the same helper the editor (LineItemList) and the

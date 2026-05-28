@@ -460,12 +460,15 @@ export interface Quote {
  * What a share-link recipient picked, persisted on the quote (plan A —
  * non-destructive). `alternatives` maps an alternativeGroup id to the line
  * id the client chose within it; `optionals` maps an optional line id to
- * whether the client wants it included. Absent keys fall back to the
- * dealer's own selection / the line's default.
+ * whether the client wants it included; `materials` maps a line OR compound
+ * component id to the material GRADE the client re-quoted it in (the base
+ * grade, or one of the line's `materialOptions`). Absent keys fall back to
+ * the dealer's own selection / the line's default base material.
  */
 export interface ClientSelections {
   alternatives?: Record<string, string>;
   optionals?: Record<string, boolean>;
+  materials?: Record<string, string>;
   updatedAt?: number;
 }
 

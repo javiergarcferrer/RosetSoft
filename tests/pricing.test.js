@@ -24,6 +24,7 @@ import {
   selectedAlternative,
   alternativeSubtotal,
   groupRuns,
+  sectionSubtotal,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -433,3 +434,46 @@ test('groupRuns: empty/null input yields an empty array', () => {
   assert.deepEqual(groupRuns([]), []);
 });
 
+
+/* --------------------------- sectionSubtotal --------------------------- */
+
+test('sectionSubtotal sums priced item lines', () => {
+  const items = [
+    { id: 'a', kind: 'item', qty: 2, unitPrice: 100 },
+    { id: 'b', kind: 'item', qty: 1, unitPrice: 50 },
+  ];
+  assert.equal(sectionSubtotal(items), 250);
+});
+
+test('sectionSubtotal excludes optionals and non-selected alternatives', () => {
+  const items = [
+    { id: 'a', kind: 'item', qty: 1, unitPrice: 100 },
+    { id: 'o', kind: 'item', qty: 1, unitPrice: 40, isOptional: true },
+    { id: 'g1', kind: 'item', qty: 1, unitPrice: 200, alternativeGroup: 'g', isSelectedAlternative: true },
+    { id: 'g2', kind: 'item', qty: 1, unitPrice: 300, alternativeGroup: 'g', isSelectedAlternative: false },
+  ];
+  // 100 (a) + 200 (selected alt) — optional + non-selected alt excluded.
+  assert.equal(sectionSubtotal(items), 300);
+});
+
+test('sectionSubtotal counts every set member (take-all)', () => {
+  const items = [
+    { id: 's1', kind: 'item', qty: 1, unitPrice: 120, setGroup: 's' },
+    { id: 's2', kind: 'item', qty: 2, unitPrice: 40, setGroup: 's' },
+  ];
+  assert.equal(sectionSubtotal(items), 200);
+});
+
+test('sectionSubtotal applies per-line discount and ignores section rows', () => {
+  const items = [
+    { id: 'sec', kind: 'section', name: 'Sala' },
+    { id: 'a', kind: 'item', qty: 1, unitPrice: 100, lineDiscountPct: 10 },
+  ];
+  assert.equal(sectionSubtotal(items), 90);
+});
+
+test('sectionSubtotal is 0 for empty / all-optional sections', () => {
+  assert.equal(sectionSubtotal([]), 0);
+  assert.equal(sectionSubtotal(null), 0);
+  assert.equal(sectionSubtotal([{ id: 'o', kind: 'item', qty: 1, unitPrice: 80, isOptional: true }]), 0);
+});

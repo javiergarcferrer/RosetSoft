@@ -3,10 +3,11 @@ import ImageView from '../ImageView.jsx';
 import Modal from '../Modal.jsx';
 
 /**
- * A displayed image that opens a centered lightbox (the shared Modal) on
- * click so the customer can study the product photo / fabric swatch at
- * size. Tapping an image to ZOOM is the expected gesture — a download is
- * not. Falls back to a plain, non-interactive ImageView when there's no
+ * A displayed image that ENLARGES ON HOVER (a floating preview, via
+ * ImageView's `hoverPreview`) on fine-pointer devices — no click needed. On
+ * touch (no real hover) and for keyboard users, clicking/Enter still opens a
+ * centered lightbox (the shared Modal) so the photo / swatch is reachable
+ * everywhere. Falls back to a plain, non-interactive ImageView when there's no
  * image id (the placeholder box).
  */
 export default function ImageZoom({ id, fallbackUrl = null, className, alt = '' }) {
@@ -19,9 +20,9 @@ export default function ImageZoom({ id, fallbackUrl = null, className, alt = '' 
         onClick={() => setOpen(true)}
         className="flex-shrink-0 block appearance-none p-0 bg-transparent border-0 cursor-zoom-in rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1"
         aria-label="Ampliar imagen"
-        title="Ampliar imagen"
+        title="Pasa el cursor para ampliar — o toca para verla en grande"
       >
-        <ImageView id={id} fallbackUrl={fallbackUrl} className={className} alt={alt} />
+        <ImageView id={id} fallbackUrl={fallbackUrl} className={className} alt={alt} hoverPreview />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} size="xl">
         <div className="flex items-center justify-center">

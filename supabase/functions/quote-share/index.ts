@@ -50,13 +50,55 @@ const COMPONENT_KEYS = [
   'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'materialOptions',
 ];
 
+// 8-digit family root of an upholstered SKU ("15420000G" -> "15420000").
+// Material options only ride on graded SKUs, so a non-matching reference
+// yields null and the line renders its options without a price delta.
+function rootOf(ref: unknown): string | null {
+  const m = /^(\d{8})[A-Za-z]$/.exec(String(ref || '').trim());
+  return m ? m[1] : null;
+}
+
+// Enrich a line/component's materialOptions with a per-option `delta`: the
+// list-price difference between that grade's SKU and the base grade's SKU,
+// scaled by the SAME margin factor baked into the unit price — so the client
+// sees a real, margin-consistent +/- and the markup never leaks. Graceful:
+// no catalog row / no resolved base or grade price -> that option keeps no
+// delta and renders label-only, exactly as the on-screen preview degrades.
+function withDeltas(
+  mo: Record<string, unknown> | null | undefined,
+  reference: unknown,
+  marginFactor: number,
+  priceByRootGrade: Map<string, Map<string, number>>,
+): Record<string, unknown> | null {
+  if (!mo) return null;
+  const options = Array.isArray(mo.options) ? mo.options as Record<string, unknown>[] : [];
+  if (!options.length) return mo;
+  const grades = priceByRootGrade.get(rootOf(reference) || '');
+  if (!grades) return mo;
+  const basePrice = grades.get(String(mo.baseGrade || '').toUpperCase());
+  if (typeof basePrice !== 'number') return mo;
+  const pricedOptions = options.map((o) => {
+    const p = grades.get(String(o.grade || '').toUpperCase());
+    if (typeof p !== 'number') return o;
+    return { ...o, delta: (p - basePrice) * marginFactor };
+  });
+  return { ...mo, options: pricedOptions };
+}
+
 // Map a raw snake_case quote_lines row to the client-facing camelCase shape,
 // baking `marginFactor` into every price so margin is invisible downstream.
-function clientLine(row: Record<string, unknown>, marginFactor: number): Record<string, unknown> {
+function clientLine(
+  row: Record<string, unknown>,
+  marginFactor: number,
+  priceByRootGrade: Map<string, Map<string, number>>,
+): Record<string, unknown> {
   const rawComponents = Array.isArray(row.components) ? row.components as Record<string, unknown>[] : [];
   const components = rawComponents.map((c) => {
     const safe = pick(c, COMPONENT_KEYS);
     safe.unitPrice = num(c.unitPrice) * marginFactor;
+    safe.materialOptions = withDeltas(
+      c.materialOptions as Record<string, unknown> | null, c.reference, marginFactor, priceByRootGrade,
+    );
     return safe;
   });
   return {
@@ -77,7 +119,9 @@ function clientLine(row: Record<string, unknown>, marginFactor: number): Record<
     unitPrice: num(row.unit_price) * marginFactor,
     lineMarginPct: 0,
     lineDiscountPct: row.line_discount_pct,
-    materialOptions: row.material_options ?? null,
+    materialOptions: withDeltas(
+      row.material_options as Record<string, unknown> | null, row.reference, marginFactor, priceByRootGrade,
+    ),
     components,
     isOptional: row.is_optional ?? false,
     alternativeGroup: row.alternative_group ?? null,
@@ -114,17 +158,36 @@ Deno.serve(async (req: Request) => {
 
   // ---- POST: persist the recipient's picks (validated against this quote) --
   if (req.method === 'POST') {
-    let body: { alternatives?: Record<string, unknown>; optionals?: Record<string, unknown> } = {};
+    let body: {
+      alternatives?: Record<string, unknown>;
+      optionals?: Record<string, unknown>;
+      materials?: Record<string, unknown>;
+    } = {};
     try { body = await req.json(); } catch { /* empty body ok */ }
 
     const { data: lineRows } = await admin
       .from('quote_lines')
-      .select('id, is_optional, alternative_group')
+      .select('id, is_optional, alternative_group, material_options, components')
       .eq('quote_id', quote.id);
     const lines = lineRows || [];
-    // Valid targets: alternative groups → their member line ids; optional ids.
+    // Valid targets: alternative groups → their member line ids; optional ids;
+    // material-bearing ids (line OR component) → their valid grades.
     const groupMembers = new Map<string, Set<string>>();
     const optionalIds = new Set<string>();
+    const materialGrades = new Map<string, Set<string>>();
+    const addMaterialTarget = (
+      id: unknown,
+      mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined,
+    ): void => {
+      if (!id || !mo || !Array.isArray(mo.options) || !mo.options.length) return;
+      const set = new Set<string>();
+      if (mo.baseGrade != null) set.add(String(mo.baseGrade));
+      for (const o of mo.options) {
+        const g = (o as { grade?: unknown })?.grade;
+        if (g != null) set.add(String(g));
+      }
+      if (set.size) materialGrades.set(String(id), set);
+    };
     for (const l of lines) {
       if (l.alternative_group) {
         const g = String(l.alternative_group);
@@ -132,6 +195,11 @@ Deno.serve(async (req: Request) => {
         groupMembers.get(g)!.add(String(l.id));
       }
       if (l.is_optional) optionalIds.add(String(l.id));
+      addMaterialTarget(l.id, l.material_options as { baseGrade?: unknown; options?: unknown[] } | null);
+      const comps = Array.isArray(l.components) ? l.components as Record<string, unknown>[] : [];
+      for (const c of comps) {
+        addMaterialTarget(c.id, c.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
+      }
     }
 
     const alternatives: Record<string, string> = {};
@@ -142,8 +210,12 @@ Deno.serve(async (req: Request) => {
     for (const [lineId, on] of Object.entries(body.optionals || {})) {
       if (optionalIds.has(lineId)) optionals[lineId] = !!on;
     }
+    const materials: Record<string, string> = {};
+    for (const [id, grade] of Object.entries(body.materials || {})) {
+      if (materialGrades.get(String(id))?.has(String(grade))) materials[String(id)] = String(grade);
+    }
 
-    const client_selections = { alternatives, optionals, updatedAt: Date.now() };
+    const client_selections = { alternatives, optionals, materials, updatedAt: Date.now() };
     const { error: upErr } = await admin
       .from('quotes')
       .update({ client_selections })
@@ -163,8 +235,40 @@ Deno.serve(async (req: Request) => {
     .order('sort_order', { ascending: true });
   if (lErr) return json({ error: 'lines failed' }, 500);
 
+  // Catalog prices for every material option's grade, so each option carries a
+  // real price delta. Scoped to the SKU roots actually used here — both to keep
+  // the query small AND to dodge PostgREST's default 1000-row cap silently
+  // truncating a large price list. No options anywhere -> no query.
+  const roots = new Set<string>();
+  for (const row of lineRows || []) {
+    const mo = row.material_options as { options?: unknown[] } | null;
+    if (mo?.options?.length) { const r = rootOf(row.reference); if (r) roots.add(r); }
+    const comps = Array.isArray(row.components) ? row.components as Record<string, unknown>[] : [];
+    for (const c of comps) {
+      const cmo = c.materialOptions as { options?: unknown[] } | null;
+      if (cmo?.options?.length) { const r = rootOf(c.reference); if (r) roots.add(r); }
+    }
+  }
+  const priceByRootGrade = new Map<string, Map<string, number>>();
+  if (roots.size) {
+    const orFilter = [...roots].map((r) => `reference.like.${r}*`).join(',');
+    const { data: prods } = await admin
+      .from('products')
+      .select('reference, price_usd')
+      .eq('profile_id', quote.profile_id)
+      .or(orFilter);
+    for (const p of prods || []) {
+      const m = /^(\d{8})([A-Za-z])$/.exec(String(p.reference || '').trim());
+      if (!m) continue;
+      const root = m[1];
+      const grade = m[2].toUpperCase();
+      if (!priceByRootGrade.has(root)) priceByRootGrade.set(root, new Map());
+      priceByRootGrade.get(root)!.set(grade, num(p.price_usd));
+    }
+  }
+
   const lines = (lineRows || []).map((row) =>
-    clientLine(row, baseFactor * (1 + num(row.line_margin_pct) / 100)),
+    clientLine(row, baseFactor * (1 + num(row.line_margin_pct) / 100), priceByRootGrade),
   );
 
   // Related rows — each best-effort, all whitelisted to client-facing fields.

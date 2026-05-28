@@ -1031,6 +1031,7 @@ export function drawSectionHeader(
   ctx: PdfCtx,
   cursor: Cursor,
   label: string,
+  subtotal: number | null = null,
 ): Cursor {
   const { fontBold } = ctx;
   const size = FS_EYEBROW;   // 11pt — sections are the brand-coloured landmarks
@@ -1041,6 +1042,15 @@ export function drawSectionHeader(
     size, font: fontBold, color: BRAND_700,
     characterSpacing: tracking,
   } as DrawTextOptions);
+  // Section roll-up — the sum of the priced products in this section, right-
+  // aligned on the eyebrow's baseline. Ink (not brand) so it reads as a number
+  // rather than competing with the section landmark; shown only when non-zero.
+  if (subtotal != null && subtotal > 0) {
+    drawRightAt(
+      page, formatMoney(subtotal, ctx.currency, ctx.rates),
+      PAGE_W - MARGIN_R, y, 10.5, fontBold, INK,
+    );
+  }
   // Short terracotta rule under the eyebrow so the section reads as a
   // deliberate brand landmark, not just larger text. Now that no per-row
   // label is terracotta, this rule + the eyebrow are the only brand marks

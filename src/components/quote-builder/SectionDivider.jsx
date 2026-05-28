@@ -11,7 +11,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
  * groups. Auto-focuses when first added (newly created sections need a
  * label immediately).
  */
-export default function SectionDivider({ line, onChange, onRemove, autoFocus, dragHandleProps }) {
+export default function SectionDivider({ line, onChange, onRemove, autoFocus, dragHandleProps, subtotalLabel }) {
   const inputRef = useRef(null);
   const [hover, setHover] = useState(false);
 
@@ -44,6 +44,11 @@ export default function SectionDivider({ line, onChange, onRemove, autoFocus, dr
           placeholder='Sección · p. ej. "Sala", "Habitación principal"'
           className="block flex-1 bg-transparent border-0 px-0 py-0 text-[13px] font-semibold uppercase tracking-wide text-ink-700 placeholder:text-ink-400 placeholder:normal-case placeholder:font-medium focus:outline-none"
         />
+        {subtotalLabel && (
+          <span className="text-[12px] font-semibold tabular-nums text-ink-600 whitespace-nowrap" title="Total de los artículos de esta sección">
+            {subtotalLabel}
+          </span>
+        )}
         <button
           type="button"
           onClick={onRemove}
