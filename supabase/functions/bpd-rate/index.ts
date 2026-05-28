@@ -108,8 +108,8 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const CLIENT_ID = Deno.env.get('BPD_CLIENT_ID');
-  const CLIENT_SECRET = Deno.env.get('BPD_CLIENT_SECRET');
+  const CLIENT_ID = Deno.env.get('BPD_CLIENT_ID')?.trim();
+  const CLIENT_SECRET = Deno.env.get('BPD_CLIENT_SECRET')?.trim();
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return json({ error: 'Server misconfigured' }, 500);
   }
@@ -132,26 +132,40 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('[bpd-rate] start', { base: BASE });
-    // 1. OAuth client-credentials token. BPD's gateway identifies the app by
-    // X-IBM-Client-Id ALONE — the official production request carries no
-    // X-IBM-Client-Secret header. The secret authenticates the OAuth grant
-    // in the form body (standard client_credentials), not as a gateway header.
-    const tokenRes = await fetchWithRetry('token', `${BASE}/bpd/Authentication/oauth2/token`, {
-      method: 'POST',
-      headers: {
+    console.log('[bpd-rate] start', { base: BASE, clientId: CLIENT_ID, secretLen: CLIENT_SECRET.length });
+
+    // 1. OAuth client-credentials token. The portal doesn't reveal HOW it
+    // authenticates the client at the token endpoint, so try the two standard
+    // ways and let the gateway pick: HTTP Basic auth (the IBM/OAuth2 default
+    // for confidential clients) first, then form-body credentials. The app is
+    // always identified by X-IBM-Client-Id (as the official rate call shows).
+    // If BOTH return 401, the cause is the credential VALUES or the
+    // subscription — not the request shape.
+    const tokenUrl = `${BASE}/bpd/Authentication/oauth2/token`;
+    const requestToken = (mode: 'basic' | 'body') => {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-IBM-Client-Id': CLIENT_ID,
         Accept: 'application/json',
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        scope: 'scope_1',
-      }),
-    });
-    const tokenText = await tokenRes.text();
+      };
+      const form: Record<string, string> = { grant_type: 'client_credentials', scope: 'scope_1' };
+      if (mode === 'basic') {
+        const basic = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+        headers.Authorization = `Basic ${basic}`;
+      } else {
+        form.client_id = CLIENT_ID;
+        form.client_secret = CLIENT_SECRET;
+      }
+      return fetchWithRetry(`token(${mode})`, tokenUrl, { method: 'POST', headers, body: new URLSearchParams(form) });
+    };
+
+    let tokenRes = await requestToken('basic');
+    let tokenText = await tokenRes.text();
+    if (!tokenRes.ok && (tokenRes.status === 400 || tokenRes.status === 401)) {
+      console.warn(`[bpd-rate] token via Basic auth → HTTP ${tokenRes.status}; retrying with form-body credentials`);
+      tokenRes = await requestToken('body');
+      tokenText = await tokenRes.text();
+    }
     if (!tokenRes.ok) {
       return json({ error: upstreamMessage('OAuth token', tokenRes.status), status: tokenRes.status, detail: tokenText.slice(0, 500) }, 502);
     }
