@@ -21,7 +21,13 @@ Pushing to `main` ships everything end-to-end:
 - **→ Vercel:** auto-builds and deploys the app.
 - **→ Supabase:** auto-applies any new `supabase/migrations/*.sql` — no manual
   `db push`, SQL console, or schema reload. End migrations with
-  `notify pgrst, 'reload schema';`.
+  `notify pgrst, 'reload schema';`. **Also auto-deploys Edge Functions in
+  `supabase/functions/`** ("Deploy to production" is enabled) — no `supabase
+  functions deploy`, no dashboard paste. Gotcha: a function only deploys if it's
+  declared in `supabase/config.toml` (`[functions.<name>]`); a brand-new
+  function won't ship until that block exists. The integration deploys
+  **changed** functions — to force a redeploy, make a trivial edit to the
+  function's file.
 - **Supabase → Vercel:** supplies `SUPABASE_URL`/`ANON_KEY`; `vite.config.js`
   forwards them to the `VITE_` slots at build time.
 
