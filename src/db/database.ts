@@ -430,6 +430,78 @@ export async function searchProducts(profileId: string, term: string, limit = 40
   return fromRows<Product>(data as unknown[] | null | undefined);
 }
 
+/** A catalog category bucket — the category label + how many SKUs it holds. */
+export interface CatalogCategory {
+  category: string;
+  count: number;
+}
+
+/**
+ * The distinct product categories for a profile, each with its SKU count, in
+ * ONE round-trip. The catalog browser lists every category up-front (collapsed)
+ * and only loads a category's products when it's opened, so it must never pull
+ * the whole (tens-of-thousands-row) table just to learn the category names.
+ *
+ * Fast path: the `catalog_categories` SQL function (a server-side GROUP BY,
+ * which PostgREST can't express over its REST grammar). Fallback — used when
+ * that function isn't deployed yet or errors — pages the lightweight `category`
+ * column and dedupes client-side: slower, but it works under the existing
+ * team-read RLS so the page degrades gracefully instead of breaking.
+ */
+export async function catalogCategories(profileId: string): Promise<CatalogCategory[]> {
+  const { data, error } = await supabase.rpc('catalog_categories', { p_profile_id: profileId });
+  if (!error && Array.isArray(data)) {
+    return (data as Array<{ category?: string | null; sku_count?: number | string }>).map((r) => ({
+      category: (r.category || '').trim(),
+      count: Number(r.sku_count) || 0,
+    }));
+  }
+  if (error) console.warn('[catalog] catalog_categories RPC unavailable, falling back:', error.message);
+  return catalogCategoriesFallback(profileId);
+}
+
+async function catalogCategoriesFallback(profileId: string): Promise<CatalogCategory[]> {
+  const PAGE = 1000;
+  const counts = new Map<string, number>();
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('category')
+      .eq('profile_id', profileId)
+      .order('id')
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data as Array<{ category?: string | null }>) || [];
+    for (const r of page) {
+      const key = (r.category || '').trim();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    if (page.length < PAGE) break;
+  }
+  return [...counts.entries()].map(([category, count]) => ({ category, count }));
+}
+
+/**
+ * Every product in one category, ordered by name — the lazy payload behind a
+ * catalog category card. Pages past Supabase's 1000-row API cap so a large
+ * category (Upholstery) comes back whole; an empty `category` matches the
+ * null/blank bucket. The caller groups these into models via `groupFamilies`.
+ */
+export async function productsByCategory(profileId: string, category: string): Promise<Product[]> {
+  const PAGE = 1000;
+  let out: unknown[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = supabase.from('products').select('*').eq('profile_id', profileId);
+    q = category ? q.eq('category', category) : q.or('category.is.null,category.eq.');
+    const { data, error } = await q.order('name').order('id').range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data as unknown[]) || [];
+    out = from === 0 ? page : out.concat(page);
+    if (page.length < PAGE) break;
+  }
+  return fromRows<Product>(out);
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Sequential numbering                                                   */
 /* ---------------------------------------------------------------------- */
