@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PackageSearch, Shield, Upload, Loader2, Check } from 'lucide-react';
-import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db } from '../../db/database.js';
+import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
+import { db, searchProducts } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -23,29 +23,32 @@ import { parsePriceList, dedupeBySku } from '../../lib/priceListCsv.js';
  */
 export default function Catalog() {
   const { profileId, isAdmin } = useApp();
-  const { data: products, loaded, error: loadError } = useLiveQueryStatus(
-    () => db.products.where('profileId').equals(profileId || '').toArray(),
-    [profileId],
+  const [q, setQ] = useState('');
+  const [dq, setDq] = useState('');
+  // Debounce so each keystroke isn't its own query.
+  useEffect(() => {
+    const id = setTimeout(() => setDq(q.trim()), 200);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  // Server-side search: the catalog is tens of thousands of SKUs, never pulled
+  // client-side. An empty term returns a bounded first-200 browse set.
+  const { data: rows, loaded, error: loadError } = useLiveQueryStatus(
+    () => (profileId ? searchProducts(profileId, dq, 200) : Promise.resolve([])),
+    [profileId, dq],
     [],
   );
-  const [q, setQ] = useState('');
+  // Cheap HEAD count for the header total (not a full fetch).
+  const total = useLiveQuery(
+    () => (profileId ? db.products.where('profileId').equals(profileId).count() : Promise.resolve(0)),
+    [profileId],
+    0,
+  );
+
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const inputRef = useRef(null);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const rows = needle
-      ? products.filter((p) => (
-        (p.reference || '').toLowerCase().includes(needle) ||
-        (p.name || '').toLowerCase().includes(needle) ||
-        (p.family || '').toLowerCase().includes(needle)
-      ))
-      : products;
-    // Cap the rendered rows — the catalog is large; search narrows it.
-    return [...rows].sort((a, b) => (a.name || '').localeCompare(b.name || '')).slice(0, 200);
-  }, [products, q]);
 
   if (!isAdmin) {
     return (
@@ -71,9 +74,9 @@ export default function Catalog() {
         setError('No se reconocieron productos. ¿Es el CSV de la lista de precios de Roset?');
         return;
       }
-      const now = Date.now();
-      const byId = new Map(products.map((p) => [p.id, p]));
-      const rows = parsed.map((p) => ({
+      // Omit created_at: the upsert leaves it unchanged on existing rows and
+      // the column default fills it for new ones — so we never read the table.
+      const upserts = parsed.map((p) => ({
         id: p.reference,
         profileId,
         reference: p.reference,
@@ -86,10 +89,9 @@ export default function Catalog() {
         priceUsd: p.priceUsd,
         cost: p.cost,
         active: true,
-        createdAt: byId.get(p.reference)?.createdAt || now,
       }));
-      await db.products.bulkPut(rows);
-      setResult(`${rows.length} productos importados.`);
+      await db.products.bulkPut(upserts);
+      setResult(`${upserts.length} productos importados.`);
     } catch (e) {
       console.error('[Catalog] import failed:', e);
       setError(e?.message || 'No se pudo importar el archivo.');
@@ -102,7 +104,7 @@ export default function Catalog() {
     <>
       <PageHeader
         title="Catálogo"
-        subtitle={loaded ? `${products.length} producto(s)` : ' '}
+        subtitle={total > 0 ? `${total} producto(s)` : ' '}
         actions={(
           <button
             type="button"
@@ -141,7 +143,7 @@ export default function Catalog() {
           title="No se pudo cargar el catálogo"
           description="La tabla de productos aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga; el catálogo aparecerá en cuanto la migración corra."
         />
-      ) : products.length === 0 ? (
+      ) : (!dq && rows.length === 0) ? (
         <EmptyState
           icon={PackageSearch}
           title="Catálogo vacío"
@@ -154,7 +156,7 @@ export default function Catalog() {
             searchValue={q}
             onSearchChange={setQ}
             searchPlaceholder="Buscar por referencia, nombre o familia…"
-            resultCount={filtered.length}
+            resultCount={rows.length}
             resultNoun={['producto', 'productos']}
           />
           <div className="card overflow-hidden">
@@ -170,7 +172,7 @@ export default function Catalog() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
+                {rows.map((p) => {
                   const price = Number(p.priceUsd) || 0;
                   const cost = Number(p.cost) || 0;
                   const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
@@ -187,9 +189,12 @@ export default function Catalog() {
                 })}
               </tbody>
             </table>
-            {products.length > filtered.length && (
+            {rows.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>
+            )}
+            {rows.length >= 200 && (
               <div className="px-4 py-2 text-[11px] text-ink-500 border-t border-ink-100">
-                Mostrando {filtered.length} de {products.length}. Usa la búsqueda para acotar.
+                Mostrando los primeros 200. Afina la búsqueda para ver más.
               </div>
             )}
           </div>

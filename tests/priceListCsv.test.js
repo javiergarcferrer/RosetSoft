@@ -86,6 +86,17 @@ test('skips rows with no SKU; tolerates missing columns', () => {
   assert.equal(products[0].priceUsd, 1000);
 });
 
+test('collapses double/multiple internal spaces in human-text fields (TOGO case)', () => {
+  // The Roset list stores names with double spaces; search is a single-space
+  // substring match, so the parser must normalize them.
+  const csv = `${HEADER}\n11000001F,TOGO  FIRESIDE  CHAIR,FABRIC   FINISH H(28),14H,LIVING  SEATS,2.68,3000,1119.40,500,LIVING  ROOM,6,14H SEATS`;
+  const p = parsePriceList(csv)[0];
+  assert.equal(p.name, 'TOGO FIRESIDE CHAIR');
+  assert.equal(p.subtype, 'FABRIC FINISH');
+  assert.equal(p.family, 'LIVING SEATS');
+  assert.equal(p.category, 'LIVING ROOM');
+});
+
 /* ------------------------------ dedupeBySku ------------------------------ */
 
 const mk = (reference, priceUsd, extra = {}) => ({
