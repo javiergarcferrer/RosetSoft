@@ -8,6 +8,7 @@ import type {
   RatesMap,
   CurrencyCode,
 } from '../types/domain.ts';
+import type { CatalogFamily } from '../lib/catalog.ts';
 
 /**
  * Shared rendering context passed to every draw* function in the PDF
@@ -33,6 +34,13 @@ export interface PdfCtx {
   seller?: Profile | null;
   rates: RatesMap;
   currency: CurrencyCode;
+  /**
+   * Catalog families keyed by SKU root — used to price a line's material
+   * options (delta vs. the chosen grade). Optional: surfaces that don't
+   * have the catalog loaded (e.g. the accounting workspace) omit it, and
+   * the renderer falls back to showing option labels without a delta.
+   */
+  families?: Map<string, CatalogFamily> | null;
 }
 
 /**
