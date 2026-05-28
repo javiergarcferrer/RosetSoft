@@ -208,6 +208,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
             <MaterialColorPicker
               materials={materials}
               gradeFilter={sel.grades}
+              family={sel}
               currentGrade=""
               currentFabric=""
               onPick={(material, color) => {

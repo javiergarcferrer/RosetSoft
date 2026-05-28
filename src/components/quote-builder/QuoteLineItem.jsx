@@ -812,6 +812,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         onSelect={(next) => commit(next)}
         currentGrade={grade}
         currentFabric={fabric}
+        family={family}
       />
       {/* Second picker instance dedicated to adding an alternative material;
           its selection is appended to materialOptions instead of replacing
@@ -822,6 +823,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         onSelect={(picked) => addOption(picked)}
         currentGrade=""
         currentFabric=""
+        family={family}
       />
     </div>
   );

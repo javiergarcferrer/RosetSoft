@@ -30,7 +30,7 @@ import { useApp } from '../../context/AppContext.jsx';
  * Ligne Roset 10.2025 list from /admin/materials. We don't trigger the
  * import inline because the catalog is admin-scoped.
  */
-export default function SwatchPicker({ open, onClose, onSelect, currentGrade, currentFabric }) {
+export default function SwatchPicker({ open, onClose, onSelect, currentGrade, currentFabric, family = null }) {
   const { profileId } = useApp();
   const materials = useLiveQuery(
     () => (profileId ? db.materials.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
@@ -66,6 +66,7 @@ export default function SwatchPicker({ open, onClose, onSelect, currentGrade, cu
       {open && (
         <MaterialColorPicker
           materials={materials}
+          family={family}
           currentGrade={currentGrade}
           currentFabric={currentFabric}
           autoDrill

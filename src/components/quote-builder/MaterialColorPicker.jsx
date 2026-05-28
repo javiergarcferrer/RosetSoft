@@ -4,6 +4,8 @@ import ImageView from '../ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { locateColor } from '../../lib/swatchMatch.js';
 import { composeSubtype } from '../../lib/subtype.js';
+import { productForGrade } from '../../lib/catalog.js';
+import { formatMoney } from '../../lib/format.js';
 
 /**
  * Headless material + color chooser — the two-step MaterialList → ColorGrid
@@ -35,6 +37,7 @@ import { composeSubtype } from '../../lib/subtype.js';
 export default function MaterialColorPicker({
   materials,
   gradeFilter,
+  family = null,
   currentGrade,
   currentFabric,
   autoDrill = false,
@@ -123,12 +126,14 @@ export default function MaterialColorPicker({
           onBack={() => setPicked(null)}
           onPick={(color) => onPick(picked, color)}
           currentFabric={currentFabric}
+          family={family}
         />
       ) : (
         <MaterialList
           materials={filtered}
           total={list.length}
           gradeFiltered={!!allowGrade}
+          family={family}
           q={q}
           setQ={setQ}
           category={category}
@@ -147,12 +152,36 @@ export default function MaterialColorPicker({
   );
 }
 
+const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
+
+/**
+ * Price shown for a material. With a catalog MODEL in play (`family` set — the
+ * catalog flow, or a quote line that carries a model), it's the MODEL's USD
+ * price upholstered in that material's grade. Without a model it's the
+ * material's own per-yard / per-m² price.
+ */
+function MaterialPrice({ family, material }) {
+  if (family) {
+    const p = productForGrade(family, String(material.grade || '').toUpperCase());
+    return p?.priceUsd != null
+      ? <span className="text-ink-700 font-medium">{usd(p.priceUsd)}</span>
+      : <span className="text-ink-400">—</span>;
+  }
+  if (material.price == null) return null;
+  return (
+    <span className="text-ink-700 font-medium">
+      ${material.price}
+      <span className="text-ink-400 ml-0.5 font-normal">/{material.priceUnit === 'sm' ? 'm²' : 'yd'}</span>
+    </span>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Step 1 — material list                                                    */
 /* -------------------------------------------------------------------------- */
 
 function MaterialList({
-  materials, total, gradeFiltered, q, setQ, category, setCategory,
+  materials, total, gradeFiltered, family, q, setQ, category, setCategory,
   activeIdx, setActiveIdx, onPick, inputRef, currentGrade,
 }) {
   if (total === 0) {
@@ -258,14 +287,7 @@ function MaterialList({
                 </div>
               </div>
               <div className="text-right text-xs text-ink-500 tabular-nums flex-shrink-0">
-                {m.price != null && (
-                  <div className="text-ink-700 font-medium">
-                    ${m.price}
-                    <span className="text-ink-400 ml-0.5">
-                      /{m.priceUnit === 'sm' ? 'm²' : 'yd'}
-                    </span>
-                  </div>
-                )}
+                <div><MaterialPrice family={family} material={m} /></div>
                 <div className="text-[10px]">{m.colors?.length || 0} colores</div>
               </div>
             </button>
@@ -284,7 +306,7 @@ function MaterialList({
 /*  Step 2 — color grid                                                       */
 /* -------------------------------------------------------------------------- */
 
-function ColorGrid({ material, onBack, onPick, currentFabric }) {
+function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
   const [q, setQ] = useState('');
   const colors = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -309,11 +331,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric }) {
         </button>
         <div className="flex-1 text-right text-[11px] text-ink-500">
           {material.grade && <span className="font-medium text-ink-700">Grade {material.grade}</span>}
-          {material.price != null && (
-            <span className="ml-2 tabular-nums">
-              ${material.price}/{material.priceUnit === 'sm' ? 'm²' : 'yd'}
-            </span>
-          )}
+          <span className="ml-2 tabular-nums"><MaterialPrice family={family} material={material} /></span>
         </div>
       </div>
 
