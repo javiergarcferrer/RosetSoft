@@ -56,7 +56,11 @@ export default function FilterTabs({ tabs, activeTab, onTabChange }) {
             {t.count != null && (
               <span
                 className={`tabular-nums rounded px-1.5 py-px text-[11px] font-semibold ${
-                  active ? 'bg-white/20 text-ink-50' : 'bg-ink-100 text-ink-500'
+                  active
+                    ? 'bg-white/20 text-ink-50'
+                    : t.pillCls
+                      ? t.pillCls
+                      : 'bg-ink-100 text-ink-500'
                 }`}
               >
                 {t.count}

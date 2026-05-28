@@ -189,12 +189,12 @@ export default function Quotes() {
     }
     return [
       { key: 'all', label: 'Todas', count: scopedQuotes.length },
-      { key: 'draft', label: 'Borrador', count: counts.draft },
-      { key: 'sent', label: 'Enviada', count: counts.sent },
-      { key: 'accepted', label: 'Aceptada', count: counts.accepted },
-      { key: 'deposito_recibido', label: 'Depósito recibido', count: counts.deposito_recibido },
-      { key: 'declined', label: 'Rechazada', count: counts.declined },
-      { key: 'archived', label: 'Archivada', count: counts.archived },
+      { key: 'draft', label: 'Borrador', count: counts.draft, pillCls: quoteStagePill('draft').cls },
+      { key: 'sent', label: 'Enviada', count: counts.sent, pillCls: quoteStagePill('sent').cls },
+      { key: 'accepted', label: 'Aceptada', count: counts.accepted, pillCls: quoteStagePill('accepted').cls },
+      { key: 'deposito_recibido', label: 'Depósito recibido', count: counts.deposito_recibido, pillCls: quoteStagePill('deposito_recibido').cls },
+      { key: 'declined', label: 'Rechazada', count: counts.declined, pillCls: quoteStagePill('declined').cls },
+      { key: 'archived', label: 'Archivada', count: counts.archived, pillCls: quoteStagePill('archived').cls },
     ];
   }, [scopedQuotes]);
 
