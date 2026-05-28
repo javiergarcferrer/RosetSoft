@@ -46,10 +46,10 @@ export default function Catalog() {
     0,
   );
 
-  // Group the (already filtered) rows for display: a top-level CATEGORY
-  // section, and within it the model FAMILIES (groupFamilies collapses each
-  // 8-digit SKU root + its grade variants into one family). Grouping is purely
-  // a view over `rows` — search/fetch logic is untouched.
+  // Group the (already filtered) rows into the display tree: CATEGORY → product
+  // FAMILY → MODEL (groupFamilies collapses each 8-digit SKU root + its grade
+  // variants into one model). Grouping is purely a view over `rows` —
+  // search/fetch logic is untouched.
   const sections = useMemo(() => groupByCategory(rows), [rows]);
 
   const [busy, setBusy] = useState(false);
@@ -171,7 +171,9 @@ export default function Catalog() {
           ) : (
             <div className="space-y-3">
               {sections.map((section) => (
-                <CategorySection key={section.key} section={section} />
+                // Collapsed while browsing; auto-expanded when a search is
+                // active so matches aren't hidden behind closed cards.
+                <CategorySection key={section.key} section={section} open={!!dq} />
               ))}
             </div>
           )}
@@ -188,12 +190,16 @@ export default function Catalog() {
 
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
 const NO_CATEGORY = 'Sin categoría';
+const NO_FAMILY = 'Sin familia';
 
 /**
- * Bucket the (filtered) product rows into CATEGORY sections, each holding its
- * model FAMILIES. The CSV's `category` (Category Description) is the top level;
- * `groupFamilies` collapses each family's grade variants underneath. Sections
- * and families are sorted A→Z so the same query always renders the same order.
+ * Bucket the (filtered) product rows into the three-level display tree:
+ *   CATEGORY  (Category Description — "Asientos", "Comedor")
+ *     → product FAMILY  (Sales Code Description — "TOGO", "EXCLUSIF")
+ *       → MODEL  (groupFamilies collapses each 8-digit SKU root + its grade
+ *         variants into one model).
+ * Every level is sorted A→Z (catch-all buckets sink last) so the same query
+ * always renders the same order. Grouping is purely a view over `rows`.
  */
 function groupByCategory(rows) {
   const byCategory = new Map();
@@ -205,28 +211,50 @@ function groupByCategory(rows) {
   }
   const sections = [];
   for (const [key, items] of byCategory) {
-    const families = groupFamilies(items).sort((a, b) =>
-      (a.name || a.root).localeCompare(b.name || b.root, 'es', { sensitivity: 'base' }),
-    );
+    const families = groupByFamily(items);
     sections.push({ key, category: key, count: items.length, families });
   }
-  return sections.sort((a, b) => {
-    // Keep the catch-all bucket last; everything else alphabetical.
-    if (a.category === NO_CATEGORY) return 1;
-    if (b.category === NO_CATEGORY) return -1;
-    return a.category.localeCompare(b.category, 'es', { sensitivity: 'base' });
-  });
+  return sections.sort((a, b) => sortKeys(a.category, b.category, NO_CATEGORY));
 }
 
-/** One collapsible CATEGORY section: a prominent header + its families. */
-function CategorySection({ section }) {
+/** Bucket a category's products by product FAMILY, each holding its models. */
+function groupByFamily(items) {
+  const byFamily = new Map();
+  for (const p of items || []) {
+    const key = (p.family || '').trim() || NO_FAMILY;
+    const bucket = byFamily.get(key);
+    if (bucket) bucket.push(p);
+    else byFamily.set(key, [p]);
+  }
+  const families = [];
+  for (const [key, products] of byFamily) {
+    const models = groupFamilies(products).sort((a, b) =>
+      (a.name || a.root).localeCompare(b.name || b.root, 'es', { sensitivity: 'base' }),
+    );
+    families.push({ key, family: key, count: products.length, models });
+  }
+  return families.sort((a, b) => sortKeys(a.family, b.family, NO_FAMILY));
+}
+
+/** A→Z compare that always sinks the catch-all bucket (`last`) to the bottom. */
+function sortKeys(a, b, last) {
+  if (a === last) return 1;
+  if (b === last) return -1;
+  return a.localeCompare(b, 'es', { sensitivity: 'base' });
+}
+
+/**
+ * One CATEGORY card. Collapsed by default (open when `open` — i.e. a search is
+ * active); holds the category's product families.
+ */
+function CategorySection({ section, open }) {
   return (
-    <details open className="card overflow-hidden group">
+    <details open={open} className="card overflow-hidden group/category">
       <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={15}
-            className="text-ink-400 flex-shrink-0 transition-transform group-open:rotate-90"
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/category:rotate-90"
             aria-hidden
           />
           <span className="font-semibold text-sm text-ink-900 truncate" title={section.category}>
@@ -239,7 +267,7 @@ function CategorySection({ section }) {
       </summary>
       <div className="divide-y divide-ink-100">
         {section.families.map((fam) => (
-          <FamilyGroup key={fam.root} family={fam} />
+          <ProductFamilyGroup key={fam.key} family={fam} open={open} />
         ))}
       </div>
     </details>
@@ -247,25 +275,53 @@ function CategorySection({ section }) {
 }
 
 /**
- * One FAMILY sub-group: a header (model name + member count) over its grade
+ * One product FAMILY ("TOGO", "EXCLUSIF") inside a category. A collapsed-by-
+ * default disclosure over its models, indented under the category header.
+ */
+function ProductFamilyGroup({ family, open }) {
+  return (
+    <details open={open} className="group/family">
+      <summary className="cursor-pointer list-none select-none pl-8 pr-5 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50">
+        <span className="flex items-center gap-2 min-w-0">
+          <ChevronRight
+            size={13}
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/family:rotate-90"
+            aria-hidden
+          />
+          <span className="font-medium text-sm text-ink-800 truncate" title={family.family}>
+            {family.family}
+          </span>
+        </span>
+        <span className="eyebrow-xs tracking-wide flex-shrink-0">
+          {family.models.length} modelo(s) · {family.count} SKU
+        </span>
+      </summary>
+      <div className="divide-y divide-ink-100/70 bg-ink-50/40">
+        {family.models.map((model) => (
+          <ModelGroup key={model.root} model={model} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * One MODEL sub-group: a header (model name + member count) over its grade
  * variants/SKUs, listed compactly. A graded model shows its grade letter per
  * row; a standalone product shows just its single SKU.
  */
-function FamilyGroup({ family }) {
+function ModelGroup({ model }) {
   // All member SKUs (graded variants first in price order, then any ungraded).
   const members = [
-    ...family.grades.map((g) => ({ grade: g, product: family.byGrade.get(g) })),
-    ...(family.byGrade.has('') ? [{ grade: '', product: family.byGrade.get('') }] : []),
+    ...model.grades.map((g) => ({ grade: g, product: model.byGrade.get(g) })),
+    ...(model.byGrade.has('') ? [{ grade: '', product: model.byGrade.get('') }] : []),
   ].filter((m) => m.product);
 
   return (
-    <div className="px-4 py-3">
+    <div className="pl-10 pr-4 py-3">
       <div className="flex items-baseline justify-between gap-3 mb-1.5">
-        <h3 className="font-medium text-sm text-ink-800 truncate" title={family.name || family.root}>
-          {family.name || family.root || '—'}
-          {family.family && family.family !== family.name && (
-            <span className="ml-2 text-ink-500 font-normal">{family.family}</span>
-          )}
+        <h3 className="font-medium text-sm text-ink-700 truncate" title={model.name || model.root}>
+          {model.name || model.root || '—'}
         </h3>
         <span className="eyebrow-xs tracking-wide flex-shrink-0">
           {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
