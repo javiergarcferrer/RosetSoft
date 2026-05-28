@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { PackageSearch, Shield, Upload, Loader2, Check } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
 import { db, searchProducts } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { parsePriceList, dedupeBySku } from '../../lib/priceListCsv.js';
+import { groupFamilies } from '../../lib/catalog.js';
 
 /**
  * Catálogo — the Ligne Roset product catalog, imported from the supplier
@@ -44,6 +45,12 @@ export default function Catalog() {
     [profileId],
     0,
   );
+
+  // Group the (already filtered) rows for display: a top-level CATEGORY
+  // section, and within it the model FAMILIES (groupFamilies collapses each
+  // 8-digit SKU root + its grade variants into one family). Grouping is purely
+  // a view over `rows` — search/fetch logic is untouched.
+  const sections = useMemo(() => groupByCategory(rows), [rows]);
 
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
@@ -159,47 +166,142 @@ export default function Catalog() {
             resultCount={rows.length}
             resultNoun={['producto', 'productos']}
           />
-          <div className="card overflow-hidden">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Referencia</th>
-                  <th>Nombre</th>
-                  <th className="hidden md:table-cell">Familia</th>
-                  <th className="text-right">Precio</th>
-                  <th className="text-right hidden sm:table-cell">Costo</th>
-                  <th className="text-right hidden lg:table-cell">Margen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => {
-                  const price = Number(p.priceUsd) || 0;
-                  const cost = Number(p.cost) || 0;
-                  const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
-                  return (
-                    <tr key={p.id}>
-                      <td className="font-mono text-xs text-ink-700">{p.reference}</td>
-                      <td className="font-medium truncate max-w-[260px]" title={p.name}>{p.name || '—'}</td>
-                      <td className="hidden md:table-cell text-ink-600 truncate max-w-[160px]" title={p.family}>{p.family || '—'}</td>
-                      <td className="text-right tabular-nums">{formatMoney(price, 'USD', { USD: 1 })}</td>
-                      <td className="text-right tabular-nums text-ink-600 hidden sm:table-cell">{formatMoney(cost, 'USD', { USD: 1 })}</td>
-                      <td className="text-right tabular-nums hidden lg:table-cell">{marginPct}%</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {rows.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>
-            )}
-            {rows.length >= 200 && (
-              <div className="px-4 py-2 text-[11px] text-ink-500 border-t border-ink-100">
-                Mostrando los primeros 200. Afina la búsqueda para ver más.
-              </div>
-            )}
-          </div>
+          {rows.length === 0 ? (
+            <div className="card px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>
+          ) : (
+            <div className="space-y-3">
+              {sections.map((section) => (
+                <CategorySection key={section.key} section={section} />
+              ))}
+            </div>
+          )}
+          {rows.length >= 200 && (
+            <div className="px-4 py-2 text-[11px] text-ink-500">
+              Mostrando los primeros 200. Afina la búsqueda para ver más.
+            </div>
+          )}
         </>
       )}
     </>
+  );
+}
+
+const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
+const NO_CATEGORY = 'Sin categoría';
+
+/**
+ * Bucket the (filtered) product rows into CATEGORY sections, each holding its
+ * model FAMILIES. The CSV's `category` (Category Description) is the top level;
+ * `groupFamilies` collapses each family's grade variants underneath. Sections
+ * and families are sorted A→Z so the same query always renders the same order.
+ */
+function groupByCategory(rows) {
+  const byCategory = new Map();
+  for (const p of rows || []) {
+    const key = (p.category || '').trim() || NO_CATEGORY;
+    const bucket = byCategory.get(key);
+    if (bucket) bucket.push(p);
+    else byCategory.set(key, [p]);
+  }
+  const sections = [];
+  for (const [key, items] of byCategory) {
+    const families = groupFamilies(items).sort((a, b) =>
+      (a.name || a.root).localeCompare(b.name || b.root, 'es', { sensitivity: 'base' }),
+    );
+    sections.push({ key, category: key, count: items.length, families });
+  }
+  return sections.sort((a, b) => {
+    // Keep the catch-all bucket last; everything else alphabetical.
+    if (a.category === NO_CATEGORY) return 1;
+    if (b.category === NO_CATEGORY) return -1;
+    return a.category.localeCompare(b.category, 'es', { sensitivity: 'base' });
+  });
+}
+
+/** One collapsible CATEGORY section: a prominent header + its families. */
+function CategorySection({ section }) {
+  return (
+    <details open className="card overflow-hidden group">
+      <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
+        <span className="flex items-center gap-2 min-w-0">
+          <ChevronRight
+            size={15}
+            className="text-ink-400 flex-shrink-0 transition-transform group-open:rotate-90"
+            aria-hidden
+          />
+          <span className="font-semibold text-sm text-ink-900 truncate" title={section.category}>
+            {section.category}
+          </span>
+        </span>
+        <span className="eyebrow-xs tracking-wide flex-shrink-0">
+          {section.families.length} familia(s) · {section.count} SKU
+        </span>
+      </summary>
+      <div className="divide-y divide-ink-100">
+        {section.families.map((fam) => (
+          <FamilyGroup key={fam.root} family={fam} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * One FAMILY sub-group: a header (model name + member count) over its grade
+ * variants/SKUs, listed compactly. A graded model shows its grade letter per
+ * row; a standalone product shows just its single SKU.
+ */
+function FamilyGroup({ family }) {
+  // All member SKUs (graded variants first in price order, then any ungraded).
+  const members = [
+    ...family.grades.map((g) => ({ grade: g, product: family.byGrade.get(g) })),
+    ...(family.byGrade.has('') ? [{ grade: '', product: family.byGrade.get('') }] : []),
+  ].filter((m) => m.product);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-baseline justify-between gap-3 mb-1.5">
+        <h3 className="font-medium text-sm text-ink-800 truncate" title={family.name || family.root}>
+          {family.name || family.root || '—'}
+          {family.family && family.family !== family.name && (
+            <span className="ml-2 text-ink-500 font-normal">{family.family}</span>
+          )}
+        </h3>
+        <span className="eyebrow-xs tracking-wide flex-shrink-0">
+          {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
+        </span>
+      </div>
+      <ul className="divide-y divide-ink-100/70">
+        {members.map(({ grade, product: p }) => {
+          const price = Number(p.priceUsd) || 0;
+          const cost = Number(p.cost) || 0;
+          const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
+          return (
+            <li key={p.id} className="flex items-center gap-3 py-1.5 text-sm">
+              {grade ? (
+                <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
+                  {grade}
+                </span>
+              ) : (
+                <span className="chip text-ink-500 border border-dashed border-ink-300 flex-shrink-0">—</span>
+              )}
+              <span className="font-mono text-xs text-ink-600 flex-shrink-0 w-24 truncate" title={p.reference}>
+                {p.reference}
+              </span>
+              <span className="text-ink-500 text-xs truncate flex-1 min-w-0" title={p.subtype || p.name}>
+                {p.subtype || ''}
+              </span>
+              <span className="tabular-nums text-right w-24 flex-shrink-0">{usd(price)}</span>
+              <span className="tabular-nums text-right text-ink-500 w-24 flex-shrink-0 hidden sm:inline">
+                {usd(cost)}
+              </span>
+              <span className="tabular-nums text-right text-ink-500 w-12 flex-shrink-0 hidden lg:inline">
+                {marginPct}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
