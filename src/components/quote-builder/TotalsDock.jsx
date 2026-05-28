@@ -237,76 +237,59 @@ export default function TotalsDock({
               </button>
             </div>
 
-            {/* Action cluster — the discount toggle, then the document actions
-                (catalog on mobile, share, export) pinned to the bar. Icon-only
-                so they stay compact at every width; right-aligned on its own row
-                on phones. */}
-            <div className="flex items-center gap-1 flex-shrink-0 justify-end">
-              {/* Optional discount card — icon-only toggle; an amber dot flags
-                  an applied adjustment while the dock is folded. */}
-              <button
-                type="button"
+            {/* Action toolbar. On phones it's a full-width row of labelled
+                actions that share the width evenly (tab-bar style) so it reads
+                as a deliberate toolbar rather than buttons stranded in a corner;
+                the export CTA carries the filled accent. From sm: up the labels
+                drop away and it collapses to the compact right-aligned icon
+                cluster the desktop dock has always used. */}
+            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
+              <DockAction
+                icon={SlidersHorizontal}
+                label="Ajustes"
                 onClick={() => toggle('adjust')}
-                aria-pressed={panel === 'adjust'}
-                aria-label="Ajustes: descuento y envío"
+                pressed={panel === 'adjust'}
+                dot={hasAdjustment}
+                ariaLabel="Ajustes: descuento y envío"
                 title="Descuento y envío de la cotización"
-                className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md transition-colors active:scale-[0.97] ${
-                  panel === 'adjust'
-                    ? 'bg-ink-900 text-white'
-                    : 'text-ink-700 hover:bg-ink-100 border border-ink-200'
-                }`}
-              >
-                <SlidersHorizontal size={18} />
-                {hasAdjustment && (
-                  <span
-                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
-                      panel === 'adjust' ? 'bg-amber-400' : 'bg-amber-500'
-                    }`}
-                    aria-hidden
-                  />
-                )}
-              </button>
+              />
 
-              <span className="w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
+              <span className="hidden sm:block w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
 
-              {/* Catálogo — mobile only; the header and the items card carry it
+              {/* Catálogo — phone/tablet only; the header and items card carry it
                   on desktop. */}
-              <button
-                type="button"
+              <DockAction
+                icon={PackageSearch}
+                label="Añadir"
                 onClick={onOpenCatalog}
-                className="md:hidden btn-icon border border-ink-200"
-                aria-label="Agregar desde catálogo"
+                ariaLabel="Agregar desde catálogo"
                 title="Agregar desde catálogo"
-              >
-                <PackageSearch size={18} />
-              </button>
+                className="md:hidden"
+              />
 
               {/* Share an interactive client link — pinned at every width. */}
-              <button
-                type="button"
+              <DockAction
+                icon={Share2}
+                label="Compartir"
                 onClick={onShare}
                 disabled={sharing}
-                aria-busy={sharing}
-                aria-label="Compartir enlace para el cliente"
+                busy={sharing}
+                ariaLabel="Compartir enlace para el cliente"
                 title="Copiar un enlace interactivo para el cliente"
-                className="btn-icon border border-ink-200 disabled:opacity-60"
-              >
-                {sharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
-              </button>
+              />
 
               {/* Export / preview the PDF — the primary action, pinned at every
                   width. */}
-              <button
-                type="button"
+              <DockAction
+                icon={Download}
+                label="Exportar"
                 onClick={onExport}
                 disabled={exporting}
-                aria-busy={exporting}
-                aria-label="Exportar PDF"
+                busy={exporting}
+                primary
+                ariaLabel="Exportar PDF"
                 title="Previsualizar y descargar PDF"
-                className="inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700 active:scale-[0.97] transition-colors disabled:opacity-60 disabled:cursor-wait flex-shrink-0"
-              >
-                {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-              </button>
+              />
             </div>
           </div>
         </div>
@@ -345,6 +328,53 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
           : 'Cualquier descuento al cliente saldrá de esta comisión.'}
       </p>
     </div>
+  );
+}
+
+/**
+ * One action in the dock's toolbar. Two faces from a single definition:
+ *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
+ *     bar's width evenly and read as a real toolbar (labels remove the "what
+ *     does this icon do" guesswork on the small target).
+ *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
+ *     uses, label hidden.
+ * `primary` paints the filled CTA (export); `pressed` is the active-panel
+ * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
+ * stays put whether the cell is wide (phone) or square (desktop).
+ */
+function DockAction({
+  icon: Icon, label, onClick, title, ariaLabel,
+  disabled, busy, pressed, primary, dot, className = '',
+}) {
+  const variant = primary
+    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
+    : pressed
+      ? 'bg-ink-900 text-white'
+      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-busy={busy || undefined}
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      title={title}
+      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+    >
+      <span className="relative inline-flex">
+        {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
+        {dot && (
+          <span
+            className={`absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full ring-2 ${
+              pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
+            }`}
+            aria-hidden
+          />
+        )}
+      </span>
+      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
+    </button>
   );
 }
 
