@@ -1,5 +1,7 @@
-# Supabase project config. Used by the GitHub integration's
-# auto-deploy pipeline to apply per-function settings on push.
+# Supabase project config. Used by the GitHub integration's auto-deploy
+# pipeline on push to `main`: it applies each function's `verify_jwt` setting
+# AND deploys every Edge Function declared here. A function only auto-deploys
+# if it has a `[functions.<name>]` block below.
 #
 # Per-function `verify_jwt` toggles whether Supabase's gateway checks
 # the request's JWT *before* the function code runs. We set it to
