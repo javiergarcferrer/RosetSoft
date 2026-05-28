@@ -66,6 +66,14 @@ function num(v: string | undefined): number {
 }
 
 /**
+ * Collapse internal whitespace runs to a single space and trim. The Roset list
+ * stores model names with double spaces (e.g. `TOGO  FIRESIDE CHAIR`); without
+ * this a dealer can only find them by typing the double space, since catalog
+ * search is a single-space substring/ilike match.
+ */
+const squish = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/**
  * Split a "Description 2" value into the finish/subtype prefix and the
  * dimensions tail. The tail begins at the first dimension token — letters
  * directly followed by "(" and a number, e.g. `H(33)`, `THK(3.25)`. Returns
@@ -122,12 +130,12 @@ export function parsePriceList(text: string): ParsedProduct[] {
     const { subtype, dimensions } = splitDimensions(get(r, cDesc2));
     out.push({
       reference,
-      name: get(r, cName),
-      subtype,
+      name: squish(get(r, cName)),
+      subtype: squish(subtype),
       dimensions,
-      family: get(r, cFam),
+      family: squish(get(r, cFam)),
       familyCode: get(r, cFamCode),
-      category: get(r, cCat),
+      category: squish(get(r, cCat)),
       priceUsd: num(get(r, cRetail)),
       cost: num(get(r, cCost)),
     });

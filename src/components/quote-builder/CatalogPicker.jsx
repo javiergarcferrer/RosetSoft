@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, PackageSearch, ChevronLeft } from 'lucide-react';
+import { Search, X, PackageSearch, ChevronLeft, Loader2 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import ImageView from '../ImageView.jsx';
 import { useApp } from '../../context/AppContext.jsx';
-import { useLiveQuery } from '../../db/hooks.js';
-import { db } from '../../db/database.js';
+import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
+import { db, searchProducts } from '../../db/database.js';
 import { groupFamilies, productForGrade } from '../../lib/catalog.js';
 import { composeSubtype } from '../../lib/subtype.js';
 import { formatMoney } from '../../lib/format.js';
@@ -23,17 +23,43 @@ import { formatMoney } from '../../lib/format.js';
  * Non-graded models (tables, lamps, wood chairs) skip step 2 — picking the
  * model inserts its single priced row directly.
  *
- * Products + materials are queried lazily on open (the catalog is large), the
- * same pattern SwatchPicker uses.
+ * The catalog is tens of thousands of SKUs, so step 1 searches Postgres
+ * server-side (debounced) and only ever pulls a bounded result set —
+ * `searchProducts` — never the whole table. Materials (a small table) load on
+ * open as before.
  */
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
 const heroImageId = (m) => m?.colors?.find((c) => c.imageId)?.imageId || null;
 
 export default function CatalogPicker({ open, onClose, onInsert }) {
   const { profileId } = useApp();
-  const products = useLiveQuery(
-    () => (profileId ? db.products.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
-    [profileId, open],
+  const [q, setQ] = useState('');
+  const [dq, setDq] = useState('');
+  const [sel, setSel] = useState(null);   // selected graded family → step 2
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setQ('');
+    setDq('');
+    setSel(null);
+    setTimeout(() => inputRef.current?.focus(), 30);
+  }, [open]);
+
+  // Debounce the query so each keystroke isn't its own request.
+  useEffect(() => {
+    const id = setTimeout(() => setDq(q.trim()), 200);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  // Server-side search — the catalog is tens of thousands of SKUs, never pulled
+  // whole. A focused model search returns all that model's grade variants so
+  // family grouping stays complete; an empty term shows a bounded browse set.
+  // While closed the query is inert (a never-resolving promise) so reopening
+  // shows the last results instantly instead of an "empty catalog" flash.
+  const { data: products, loaded } = useLiveQueryStatus(
+    () => (open && profileId ? searchProducts(profileId, dq, 500) : new Promise(() => {})),
+    [open, profileId, dq],
     [],
   );
   const materials = useLiveQuery(
@@ -43,28 +69,10 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
   );
 
   const families = useMemo(() => groupFamilies(products), [products]);
-
-  const [q, setQ] = useState('');
-  const [sel, setSel] = useState(null);   // selected graded family → step 2
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setQ('');
-    setSel(null);
-    setTimeout(() => inputRef.current?.focus(), 30);
-  }, [open]);
-
-  const matches = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const arr = needle
-      ? families.filter((f) =>
-        (f.name || '').toLowerCase().includes(needle) ||
-        (f.root || '').toLowerCase().includes(needle) ||
-        (f.family || '').toLowerCase().includes(needle))
-      : families;
-    return [...arr].sort((a, b) => (a.name || '').localeCompare(b.name || '')).slice(0, 60);
-  }, [families, q]);
+  const matches = useMemo(
+    () => [...families].sort((a, b) => (a.name || '').localeCompare(b.name || '')).slice(0, 60),
+    [families],
+  );
 
   function familyPriceLabel(fam) {
     if (!fam.graded) {
@@ -140,9 +148,13 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
             )}
           </div>
 
-          {families.length === 0 ? (
+          {!loaded ? (
+            <div className="px-3 py-10 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
+              <Loader2 size={15} className="animate-spin" /> Buscando…
+            </div>
+          ) : matches.length === 0 ? (
             <div className="px-3 py-10 text-center text-sm text-ink-500">
-              Catálogo vacío. Impórtalo en <b>Administración › Catálogo</b>.
+              {dq ? 'Sin coincidencias.' : <>Catálogo vacío. Impórtalo en <b>Administración › Catálogo</b>.</>}
             </div>
           ) : (
             <div className="max-h-[60vh] overflow-y-auto -mx-1">
@@ -165,9 +177,6 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
                   <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">{familyPriceLabel(fam)}</span>
                 </button>
               ))}
-              {matches.length === 0 && (
-                <div className="px-3 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>
-              )}
             </div>
           )}
         </>

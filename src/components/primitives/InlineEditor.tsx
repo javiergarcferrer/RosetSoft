@@ -29,7 +29,7 @@ export interface InlineEditorProps
  * Use inside compact "meta strips" — reference numbers, page pointers,
  * dimensions, dates — where surfacing a full <input className="input"> for
  * every field would crush the layout. For form-style fields with labels
- * above the input, use <Field> / <FieldGroup> instead.
+ * above the input, use a standard labeled `<input className="input">`.
  */
 const InlineEditor = forwardRef<HTMLInputElement, InlineEditorProps>(function InlineEditor({
   label,

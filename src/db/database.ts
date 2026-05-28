@@ -403,6 +403,33 @@ export const db: Db = Object.fromEntries(
   (Object.keys(TABLES) as TableName[]).map((k) => [k, new Table(k)]),
 ) as Db;
 
+/**
+ * Server-side catalog search. The product catalog is tens of thousands of SKUs
+ * — far past Supabase's default 1000-row API cap — so list pages and the
+ * quote-builder picker must NOT load the whole table client-side (that was a
+ * multi-second hang + a false "empty" flash). This filters in Postgres: an OR
+ * of case-insensitive substring matches across the fields a dealer searches by
+ * (reference / name / family), ordered by name and capped at `limit`. An empty
+ * term returns the first `limit` rows by name — a bounded browse set. Names are
+ * whitespace-normalized at import (priceListCsv.squish) so a single-space query
+ * matches a double-spaced source name.
+ */
+export async function searchProducts(profileId: string, term: string, limit = 400): Promise<Product[]> {
+  let q = supabase.from('products').select('*').eq('profile_id', profileId);
+  const needle = term.trim();
+  if (needle) {
+    // PostgREST or() is a comma-separated list and ilike treats % as the
+    // wildcard; strip the characters that would break that filter grammar.
+    const safe = needle.replace(/[%,()*]/g, ' ').trim();
+    if (safe) {
+      q = q.or(`reference.ilike.%${safe}%,name.ilike.%${safe}%,family.ilike.%${safe}%`);
+    }
+  }
+  const { data, error } = await q.order('name').limit(limit);
+  if (error) throw error;
+  return fromRows<Product>(data as unknown[] | null | undefined);
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Sequential numbering                                                   */
 /* ---------------------------------------------------------------------- */
