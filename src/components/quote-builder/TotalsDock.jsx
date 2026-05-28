@@ -194,18 +194,16 @@ export default function TotalsDock({
               truncated by the action cluster; from sm: up it collapses back to a
               single row. */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-            {/* Currency + total share the first row, so the figure gets every
-                pixel the actions aren't using. */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 sm:flex-1">
-              <CurrencyToggle value={currency} onChange={(c) => onUpdateQuote({ currencyCode: c })} />
-
-              {/* The total doubles as the breakdown toggle — a big, obvious tap
-                  target that slides the step-by-step total up. */}
+            {/* The total leads the row — the hero figure. Both currencies read
+                at once (USD large, the live DOP equivalent beneath), so there's
+                nothing to toggle: the figure is complete at a glance. It doubles
+                as the breakdown toggle — a big, obvious tap target. */}
+            <div className="min-w-0 sm:flex-1">
               <button
                 type="button"
                 onClick={() => toggle('breakdown')}
                 aria-expanded={breakdownOpen}
-                className="min-w-0 flex-1 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
+                className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
                 title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
               >
                 <div className="flex items-center gap-2">
@@ -215,9 +213,9 @@ export default function TotalsDock({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-lg sm:text-xl font-semibold tabular-nums truncate">{fmt(totals.grandTotal)}</span>
+                  <span className="text-2xl sm:text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
                   <ChevronUp
-                    size={16}
+                    size={18}
                     className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                     aria-hidden
                   />
@@ -237,76 +235,59 @@ export default function TotalsDock({
               </button>
             </div>
 
-            {/* Action cluster — the discount toggle, then the document actions
-                (catalog on mobile, share, export) pinned to the bar. Icon-only
-                so they stay compact at every width; right-aligned on its own row
-                on phones. */}
-            <div className="flex items-center gap-1 flex-shrink-0 justify-end">
-              {/* Optional discount card — icon-only toggle; an amber dot flags
-                  an applied adjustment while the dock is folded. */}
-              <button
-                type="button"
+            {/* Action toolbar. On phones it's a full-width row of labelled
+                actions that share the width evenly (tab-bar style) so it reads
+                as a deliberate toolbar rather than buttons stranded in a corner;
+                the export CTA carries the filled accent. From sm: up the labels
+                drop away and it collapses to the compact right-aligned icon
+                cluster the desktop dock has always used. */}
+            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
+              <DockAction
+                icon={SlidersHorizontal}
+                label="Ajustes"
                 onClick={() => toggle('adjust')}
-                aria-pressed={panel === 'adjust'}
-                aria-label="Ajustes: descuento y envío"
+                pressed={panel === 'adjust'}
+                dot={hasAdjustment}
+                ariaLabel="Ajustes: descuento y envío"
                 title="Descuento y envío de la cotización"
-                className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md transition-colors active:scale-[0.97] ${
-                  panel === 'adjust'
-                    ? 'bg-ink-900 text-white'
-                    : 'text-ink-700 hover:bg-ink-100 border border-ink-200'
-                }`}
-              >
-                <SlidersHorizontal size={18} />
-                {hasAdjustment && (
-                  <span
-                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
-                      panel === 'adjust' ? 'bg-amber-400' : 'bg-amber-500'
-                    }`}
-                    aria-hidden
-                  />
-                )}
-              </button>
+              />
 
-              <span className="w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
+              <span className="hidden sm:block w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
 
-              {/* Catálogo — mobile only; the header and the items card carry it
+              {/* Catálogo — phone/tablet only; the header and items card carry it
                   on desktop. */}
-              <button
-                type="button"
+              <DockAction
+                icon={PackageSearch}
+                label="Añadir"
                 onClick={onOpenCatalog}
-                className="md:hidden btn-icon border border-ink-200"
-                aria-label="Agregar desde catálogo"
+                ariaLabel="Agregar desde catálogo"
                 title="Agregar desde catálogo"
-              >
-                <PackageSearch size={18} />
-              </button>
+                className="md:hidden"
+              />
 
               {/* Share an interactive client link — pinned at every width. */}
-              <button
-                type="button"
+              <DockAction
+                icon={Share2}
+                label="Compartir"
                 onClick={onShare}
                 disabled={sharing}
-                aria-busy={sharing}
-                aria-label="Compartir enlace para el cliente"
+                busy={sharing}
+                ariaLabel="Compartir enlace para el cliente"
                 title="Copiar un enlace interactivo para el cliente"
-                className="btn-icon border border-ink-200 disabled:opacity-60"
-              >
-                {sharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
-              </button>
+              />
 
               {/* Export / preview the PDF — the primary action, pinned at every
                   width. */}
-              <button
-                type="button"
+              <DockAction
+                icon={Download}
+                label="Exportar"
                 onClick={onExport}
                 disabled={exporting}
-                aria-busy={exporting}
-                aria-label="Exportar PDF"
+                busy={exporting}
+                primary
+                ariaLabel="Exportar PDF"
                 title="Previsualizar y descargar PDF"
-                className="inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700 active:scale-[0.97] transition-colors disabled:opacity-60 disabled:cursor-wait flex-shrink-0"
-              >
-                {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-              </button>
+              />
             </div>
           </div>
         </div>
@@ -348,6 +329,53 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
   );
 }
 
+/**
+ * One action in the dock's toolbar. Two faces from a single definition:
+ *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
+ *     bar's width evenly and read as a real toolbar (labels remove the "what
+ *     does this icon do" guesswork on the small target).
+ *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
+ *     uses, label hidden.
+ * `primary` paints the filled CTA (export); `pressed` is the active-panel
+ * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
+ * stays put whether the cell is wide (phone) or square (desktop).
+ */
+function DockAction({
+  icon: Icon, label, onClick, title, ariaLabel,
+  disabled, busy, pressed, primary, dot, className = '',
+}) {
+  const variant = primary
+    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
+    : pressed
+      ? 'bg-ink-900 text-white'
+      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-busy={busy || undefined}
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      title={title}
+      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+    >
+      <span className="relative inline-flex">
+        {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
+        {dot && (
+          <span
+            className={`absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full ring-2 ${
+              pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
+            }`}
+            aria-hidden
+          />
+        )}
+      </span>
+      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
+    </button>
+  );
+}
+
 function Row({ label, value, muted, bold }) {
   return (
     <div className={`flex items-center justify-between text-sm tabular-nums ${
@@ -380,25 +408,6 @@ function MarginMeter({ marginPct }) {
         aria-label={`Margen aplicado ${marginPct}%`}
         title={`Margen aplicado: ${marginPct}%`}
       />
-    </div>
-  );
-}
-
-function CurrencyToggle({ value, onChange }) {
-  return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden flex-shrink-0">
-      {['USD', 'DOP'].map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => onChange(c)}
-          className={`px-2 py-1 text-[10px] font-semibold transition-colors ${
-            value === c ? 'bg-ink-900 text-white' : 'text-ink-500 hover:bg-ink-50'
-          }`}
-        >
-          {c}
-        </button>
-      ))}
     </div>
   );
 }

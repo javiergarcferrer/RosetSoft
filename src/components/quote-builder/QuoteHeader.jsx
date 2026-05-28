@@ -9,7 +9,6 @@ import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
-import { FLOOR_COMMISSION_PCT, SPECIAL_COMMISSION_PCT } from '../../lib/commissions.js';
 
 /**
  * Top of the quote workspace. Title (editable inline), customer chip,
@@ -71,9 +70,23 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      <Link to="/quotes" className="back-link">
-        <ArrowLeft size={12} /> Volver a cotizaciones
-      </Link>
+      {/* Breadcrumb row — back link anchors the left, the seller picker the
+          right. The seller is an attribution control, not quote data, so it
+          belongs up here away from the customer/professional chips rather than
+          crowding the meta row. Admin-only; non-admins just see the back link. */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <Link to="/quotes" className="back-link mb-0">
+          <ArrowLeft size={12} />
+          <span>Volver<span className="hidden sm:inline"> a cotizaciones</span></span>
+        </Link>
+        {isAdmin && (
+          <SellerSelect
+            quote={quote}
+            assignableSellers={assignableSellers}
+            onUpdateQuote={onUpdateQuote}
+          />
+        )}
+      </div>
 
       <div className="space-y-3">
         {/* Title (left) and actions (right) on one row that WRAPS rather
@@ -137,25 +150,15 @@ export default function QuoteHeader({
           </div>
         </div>
 
-        {/* Meta row: vendor (admin-editable) + customer + professional
-            + order, in one horizontal group. Wraps naturally when the
-            chips don't all fit on a single line. We deliberately kept
-            the chips compact (short labels, narrow name max-widths)
-            so on most phone widths they sit on one row instead of
-            wrapping — "Pedido" lands next to the customer name where
-            it belongs visually, with the professional chip alongside. */}
+        {/* Meta row: customer + professional (with its order-type/commission
+            tier jointed in) + order, in one horizontal group. Wraps naturally
+            when the chips don't all fit on a single line; each chip is a single
+            flex child, so a pill never splits across the wrap. */}
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
           aria-label="Datos de la cotización"
         >
-          {isAdmin && (
-            <SellerSelect
-              quote={quote}
-              assignableSellers={assignableSellers}
-              onUpdateQuote={onUpdateQuote}
-            />
-          )}
           <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
           <ProfessionalChip
             quote={quote}
@@ -164,7 +167,6 @@ export default function QuoteHeader({
             profileId={profileId}
             onUpdateQuote={onUpdateQuote}
           />
-          <OrderTypeChip quote={quote} onUpdateQuote={onUpdateQuote} />
           <OrderChip
             quote={quote}
             profileId={profileId}
@@ -218,47 +220,6 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
         ))}
       </select>
     </label>
-  );
-}
-
-/**
- * Floor vs special order toggle. Sets `quote.orderType`, which drives the
- * assigned professional's base commission rate (floor 15% / special 20%).
- * Always shown — it classifies the sale even before a professional is
- * assigned — and styled as a compact segmented pill matching the other
- * chips in the meta row.
- */
-function OrderTypeChip({ quote, onUpdateQuote }) {
-  const type = quote?.orderType === 'special' ? 'special' : 'floor';
-  const options = [
-    { value: 'floor', label: 'Piso', pct: FLOOR_COMMISSION_PCT },
-    { value: 'special', label: 'Especial', pct: SPECIAL_COMMISSION_PCT },
-  ];
-  return (
-    <span
-      className="inline-flex items-stretch rounded-full border border-ink-200 bg-white overflow-hidden text-xs"
-      role="group"
-      aria-label="Tipo de orden"
-      title="Tipo de orden — define la comisión base del profesional (Piso 15% / Especial 20%)"
-    >
-      {options.map((opt) => {
-        const active = type === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onUpdateQuote({ orderType: opt.value })}
-            aria-pressed={active}
-            className={`inline-flex items-center gap-1 px-2.5 min-h-7 coarse:min-h-9 font-medium transition-colors ${
-              active ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
-            }`}
-          >
-            {opt.label}
-            <span className={active ? 'text-white/70' : 'text-ink-400'}>{opt.pct}%</span>
-          </button>
-        );
-      })}
-    </span>
   );
 }
 

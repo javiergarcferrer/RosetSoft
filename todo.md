@@ -98,18 +98,22 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 > single autonomous pass is high-risk and they're explicitly "no rush"; better as a focused,
 > reviewable change set. Listed here so they're not lost.
 
-- [ ] **Thin out the god orchestrator.** `Workspace` (~L184–1105 in `src/pages/QuoteBuilder.jsx`,
-  ~920 LOC) owns all state + ~18 mutations (writing directly to `db.*`) + grouping invariants +
-  sequence-number healing + PDF export + render. Action: lift quote state + mutations + grouping/
-  sequence rules into a `useQuoteActions` hook / domain module; expose `{quote, actions}` via
-  context. This also removes the prop-drilling below.
-  - PARTIAL — the **grouping invariants** are lifted to `lib/quoteGroups.ts` as pure, tested
-    helpers (`selectAlternativePatches`, `healAlternativeOnRemove`, `healSetOnRemove`); the four
-    mutations (`selectAlternative`, `separateFromSet`, `ungroupLine`, `removeLine`) now consume
-    them instead of re-deriving the same singleton/selection healing four times. Remaining: lift
-    quote STATE + the db-writing mutations into a `useQuoteActions` hook + context (couples with
-    the prop-drilling item below; best as a reviewed change — `QuoteBuilder.jsx` is under active
-    parallel churn and there are no UI/integration tests to catch a regression).
+- [x] **Thin out the god orchestrator.** DONE — `Workspace` (`src/pages/QuoteBuilder.jsx`) went
+  from ~1258 LOC to ~580 and is now live-queries + UI-panel state + view-model + JSX wiring; the
+  logic moved out in four slices:
+    1. **Grouping invariants** → pure, tested `lib/quoteGroups.ts` helpers (`selectAlternativePatches`,
+       `healAlternativeOnRemove`, `healSetOnRemove`); the four mutations consume them instead of
+       re-deriving the same singleton/selection healing four times.
+    2. **Prop-drilling killed** (item below, done) — editor actions flow via `QuoteActionsContext`.
+    3. **Export/share logic** → `useQuoteExport.js` (PDF generation + share-link minting + their UI
+       status/effects), so the export UI stays thin.
+    4. **The mutation + undo/redo state machine** → `useQuoteController.js` (the ~14 db-writing
+       mutations, the whole-quote-snapshot history with its ⌘Z/⌘Y binding + per-quote reset, and the
+       save-status indicator). `Workspace` destructures the controller's return into the same local
+       names the JSX already used, so only the SOURCE of the handlers moved — behavior is identical
+       (verified with a scoped `checkJs` pass for missing inputs/return keys, plus typecheck + tests
+       + build). The remaining sequence-number heal effect stays on the page (it's tied to the live
+       query); the catalog-families escape hatch is unchanged.
 
 - [ ] **Decompose oversized leaves.** `QuoteLineItem.jsx` (**1501 LOC**, 13 inline subcomponents,
   own `FamiliesContext`) and `ClientPreview.jsx` (**980 LOC**). Action: split the inline
@@ -121,10 +125,13 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
     `ClientGroupCard`) and all of `QuoteLineItem.jsx` (under active parallel churn — risky to split
     blind without UI tests).
 
-- [ ] **Kill the prop-drilling.** Line-mutation handlers thread `Workspace → LineItemsCard →
-  LineItemList → renderRow → QuoteLineItem → bands`; `families` already had to escape via
-  `FamiliesContext` because `LineItemList` won't thread it. Action: serve quote+actions from a
-  context/store so blocks subscribe to what they need.
+- [x] **Kill the prop-drilling.** DONE — editor actions now flow via `QuoteActionsContext`
+  (`src/components/quote-builder/QuoteActionsContext.js`), mirroring the `FamiliesContext` escape
+  hatch. `Workspace` provides the 13-handler bundle once; `LineItemsCard` and `LineItemList` read
+  what they use from context instead of threading them through. History-wrapping (`hx`) stays at the
+  source (and `onToggleGroupOptional` stays un-wrapped, as before); per-line binding stays local in
+  `LineItemList`. Quote/lines/groups stay as data props by design. Behavior identical; typecheck +
+  218 tests + build green.
 
 ---
 
