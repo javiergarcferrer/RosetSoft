@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
-import { db, searchProducts } from '../../db/database.js';
+import { db, searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -16,11 +16,19 @@ import { groupFamilies } from '../../lib/catalog.js';
  * price-list CSV. Admin-only to manage (same gate as the other /admin pages);
  * RLS lets any team member read so the quote builder's product picker works.
  *
- * Import is a CSV upload (the list is thousands of SKUs and updated
- * periodically): the file is parsed client-side (lib/priceListCsv) and
- * upserted into `products`, keyed by SKU so re-uploading a new list replaces
- * prices in place. Margen % shown per row is the catalog spread
- * (Retail − Cost) / Retail — a quick read on each product's headroom.
+ * The catalog is tens of thousands of SKUs, so the view never pulls the whole
+ * table. Two modes:
+ *   • Browse — list every CATEGORY up-front (one cheap server-side aggregate),
+ *     collapsed. Opening a category lazy-loads ITS products and groups them
+ *     into MODELS (groupFamilies collapses each 8-digit SKU root + its grade
+ *     variants). Each model is itself collapsible: collapsed it shows just its
+ *     name + price range; expanded it lists the grade-variant SKUs.
+ *   • Search — a bounded server-side match, grouped into the same
+ *     category → model shape so a query reads the same way as browsing.
+ *
+ * Import is a CSV upload (thousands of SKUs, refreshed periodically): parsed
+ * client-side (lib/priceListCsv) and upserted into `products`, keyed by SKU so
+ * re-uploading replaces prices in place.
  */
 export default function Catalog() {
   const { profileId, isAdmin } = useApp();
@@ -31,12 +39,13 @@ export default function Catalog() {
     const id = setTimeout(() => setDq(q.trim()), 200);
     return () => clearTimeout(id);
   }, [q]);
+  const searching = dq.length > 0;
 
-  // Server-side search: the catalog is tens of thousands of SKUs, never pulled
-  // client-side. An empty term returns a bounded first-200 browse set.
-  const { data: rows, loaded, error: loadError } = useLiveQueryStatus(
-    () => (profileId ? searchProducts(profileId, dq, 200) : Promise.resolve([])),
-    [profileId, dq],
+  // Browse: every category up-front (one cheap aggregate), each lazy-loaded on
+  // open. Loaded regardless of search so toggling search ↔ browse is instant.
+  const { data: categories, loaded: catsLoaded, error: catsError } = useLiveQueryStatus(
+    () => (profileId ? catalogCategories(profileId) : Promise.resolve([])),
+    [profileId],
     [],
   );
   // Cheap HEAD count for the header total (not a full fetch).
@@ -46,11 +55,10 @@ export default function Catalog() {
     0,
   );
 
-  // Group the (already filtered) rows into the display tree: CATEGORY → product
-  // FAMILY → MODEL (groupFamilies collapses each 8-digit SKU root + its grade
-  // variants into one model). Grouping is purely a view over `rows` —
-  // search/fetch logic is untouched.
-  const sections = useMemo(() => groupByCategory(rows), [rows]);
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => sortCat(a.category, b.category)),
+    [categories],
+  );
 
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
@@ -107,6 +115,10 @@ export default function Catalog() {
     }
   }
 
+  // Truly-empty catalog (no products at all, not just an unmatched search):
+  // show the import call-to-action instead of an empty category list.
+  const emptyCatalog = !searching && catsLoaded && !catsError && total === 0 && sortedCategories.length === 0;
+
   return (
     <>
       <PageHeader
@@ -142,15 +154,7 @@ export default function Catalog() {
         </div>
       )}
 
-      {!loaded ? (
-        <div className="card overflow-hidden"><ListLoading rows={6} /></div>
-      ) : loadError ? (
-        <EmptyState
-          icon={PackageSearch}
-          title="No se pudo cargar el catálogo"
-          description="La tabla de productos aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga; el catálogo aparecerá en cuanto la migración corra."
-        />
-      ) : (!dq && rows.length === 0) ? (
+      {emptyCatalog ? (
         <EmptyState
           icon={PackageSearch}
           title="Catálogo vacío"
@@ -163,23 +167,30 @@ export default function Catalog() {
             searchValue={q}
             onSearchChange={setQ}
             searchPlaceholder="Buscar por referencia, nombre o familia…"
-            resultCount={rows.length}
-            resultNoun={['producto', 'productos']}
+            resultCount={searching ? undefined : sortedCategories.length}
+            resultNoun={['categoría', 'categorías']}
           />
-          {rows.length === 0 ? (
-            <div className="card px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>
+
+          {searching ? (
+            <SearchResults profileId={profileId} term={dq} />
+          ) : !catsLoaded ? (
+            <div className="card overflow-hidden"><ListLoading rows={6} /></div>
+          ) : catsError ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No se pudo cargar el catálogo"
+              description="La tabla de productos aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga; el catálogo aparecerá en cuanto la migración corra."
+            />
           ) : (
             <div className="space-y-3">
-              {sections.map((section) => (
-                // Collapsed while browsing; auto-expanded when a search is
-                // active so matches aren't hidden behind closed cards.
-                <CategorySection key={section.key} section={section} open={!!dq} />
+              {sortedCategories.map((c) => (
+                <CategoryCard
+                  key={c.category || NONE_KEY}
+                  profileId={profileId}
+                  category={c.category}
+                  count={c.count}
+                />
               ))}
-            </div>
-          )}
-          {rows.length >= 200 && (
-            <div className="px-4 py-2 text-[11px] text-ink-500">
-              Mostrando los primeros 200. Afina la búsqueda para ver más.
             </div>
           )}
         </>
@@ -190,174 +201,254 @@ export default function Catalog() {
 
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
 const NO_CATEGORY = 'Sin categoría';
-const NO_FAMILY = 'Sin familia';
+const NONE_KEY = '__none__';
+const SEARCH_LIMIT = 1000;
+
+/** Sort categories A→Z, sinking the empty ("Sin categoría") bucket to the end. */
+function sortCat(a, b) {
+  if (!a && b) return 1;
+  if (a && !b) return -1;
+  return (a || '').localeCompare(b || '', 'es', { sensitivity: 'base' });
+}
 
 /**
- * Bucket the (filtered) product rows into the three-level display tree:
- *   CATEGORY  (Category Description — "Asientos", "Comedor")
- *     → product FAMILY  (Sales Code Description — "TOGO", "EXCLUSIF")
- *       → MODEL  (groupFamilies collapses each 8-digit SKU root + its grade
- *         variants into one model).
- * Every level is sorted A→Z (catch-all buckets sink last) so the same query
- * always renders the same order. Grouping is purely a view over `rows`.
+ * Group a flat product list (a search result set) into CATEGORY → MODEL — the
+ * same shape the browse view renders, so a query reads identically. Sections
+ * and models are sorted A→Z.
  */
 function groupByCategory(rows) {
   const byCategory = new Map();
   for (const p of rows || []) {
-    const key = (p.category || '').trim() || NO_CATEGORY;
+    const key = (p.category || '').trim();
     const bucket = byCategory.get(key);
     if (bucket) bucket.push(p);
     else byCategory.set(key, [p]);
   }
   const sections = [];
-  for (const [key, items] of byCategory) {
-    const families = groupByFamily(items);
-    sections.push({ key, category: key, count: items.length, families });
+  for (const [category, items] of byCategory) {
+    sections.push({ category, count: items.length, models: toModels(items) });
   }
-  return sections.sort((a, b) => sortKeys(a.category, b.category, NO_CATEGORY));
+  return sections.sort((a, b) => sortCat(a.category, b.category));
 }
 
-/** Bucket a category's products by product FAMILY, each holding its models. */
-function groupByFamily(items) {
-  const byFamily = new Map();
-  for (const p of items || []) {
-    const key = (p.family || '').trim() || NO_FAMILY;
-    const bucket = byFamily.get(key);
-    if (bucket) bucket.push(p);
-    else byFamily.set(key, [p]);
-  }
-  const families = [];
-  for (const [key, products] of byFamily) {
-    const models = groupFamilies(products).sort((a, b) =>
-      (a.name || a.root).localeCompare(b.name || b.root, 'es', { sensitivity: 'base' }),
-    );
-    families.push({ key, family: key, count: products.length, models });
-  }
-  return families.sort((a, b) => sortKeys(a.family, b.family, NO_FAMILY));
+/** Collapse a category's products into models, sorted by display name. */
+function toModels(products) {
+  return groupFamilies(products).sort((a, b) =>
+    (a.name || a.root).localeCompare(b.name || b.root, 'es', { sensitivity: 'base' }),
+  );
 }
 
-/** A→Z compare that always sinks the catch-all bucket (`last`) to the bottom. */
-function sortKeys(a, b, last) {
-  if (a === last) return 1;
-  if (b === last) return -1;
-  return a.localeCompare(b, 'es', { sensitivity: 'base' });
+/** A model's member SKUs: graded variants first (ascending price), then any
+ *  lone ungraded SKU. */
+function memberSkus(model) {
+  return [
+    ...model.grades.map((g) => ({ grade: g, product: model.byGrade.get(g) })),
+    ...(model.byGrade.has('') ? [{ grade: '', product: model.byGrade.get('') }] : []),
+  ].filter((m) => m.product);
+}
+
+/** "$X" when every variant is one price, else "$lo – $hi" across the model's
+ *  grade variants — the at-a-glance figure shown on the collapsed model row. */
+function priceRangeLabel(model) {
+  const prices = [...model.byGrade.values()]
+    .map((p) => Number(p?.priceUsd) || 0)
+    .filter((n) => n > 0);
+  if (!prices.length) return '—';
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  return lo === hi ? usd(lo) : `${usd(lo)} – ${usd(hi)}`;
 }
 
 /**
- * One CATEGORY card. Collapsed by default (open when `open` — i.e. a search is
- * active); holds the category's product families.
+ * One CATEGORY card in browse mode. Collapsed by default; opening it
+ * lazy-loads (and then keeps) the category's products. `onToggle` flips
+ * `everOpened` on first open so the body fetch fires exactly once.
  */
-function CategorySection({ section, open }) {
+function CategoryCard({ profileId, category, count }) {
+  const [everOpened, setEverOpened] = useState(false);
+  const label = category || NO_CATEGORY;
   return (
-    <details open={open} className="card overflow-hidden group/category">
+    <details
+      className="card overflow-hidden group/cat"
+      onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
+    >
       <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={15}
-            className="text-ink-400 flex-shrink-0 transition-transform group-open/category:rotate-90"
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
             aria-hidden
           />
-          <span className="font-semibold text-sm text-ink-900 truncate" title={section.category}>
-            {section.category}
-          </span>
+          <span className="font-semibold text-sm text-ink-900 truncate" title={label}>{label}</span>
         </span>
-        <span className="eyebrow-xs tracking-wide flex-shrink-0">
-          {section.families.length} familia(s) · {section.count} SKU
-        </span>
+        <span className="eyebrow-xs tracking-wide flex-shrink-0">{count} SKU</span>
       </summary>
-      <div className="divide-y divide-ink-100">
-        {section.families.map((fam) => (
-          <ProductFamilyGroup key={fam.key} family={fam} open={open} />
-        ))}
-      </div>
+      {everOpened && <CategoryModels profileId={profileId} category={category} />}
     </details>
   );
 }
 
+/** Lazy body of a category card — fetches the category's products on mount and
+ *  renders its models. */
+function CategoryModels({ profileId, category }) {
+  const { data: products, loaded, error } = useLiveQueryStatus(
+    () => productsByCategory(profileId, category),
+    [profileId, category],
+    [],
+  );
+  const models = useMemo(() => toModels(products), [products]);
+
+  if (!loaded) {
+    return (
+      <div className="px-5 py-6 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
+        <Loader2 size={15} className="animate-spin" /> Cargando…
+      </div>
+    );
+  }
+  if (error) {
+    return <div className="px-5 py-4 text-sm text-red-700">No se pudieron cargar los productos.</div>;
+  }
+  if (models.length === 0) {
+    return <div className="px-5 py-4 text-sm text-ink-500">Sin productos en esta categoría.</div>;
+  }
+  return <ModelList models={models} />;
+}
+
 /**
- * One product FAMILY ("TOGO", "EXCLUSIF") inside a category. A collapsed-by-
- * default disclosure over its models, indented under the category header.
+ * Search results — owns its own query so a fresh search shows a real loader and
+ * the previous matches stay on screen (SWR-style) while a new term settles,
+ * instead of flashing a false "no matches". Renders the same category → model
+ * shape as the browse view, open by default.
  */
-function ProductFamilyGroup({ family, open }) {
+function SearchResults({ profileId, term }) {
+  const { data: rows, loaded } = useLiveQueryStatus(
+    () => searchProducts(profileId, term, SEARCH_LIMIT),
+    [profileId, term],
+    [],
+  );
+  const sections = useMemo(() => groupByCategory(rows), [rows]);
+
+  if (!loaded) {
+    return <div className="card overflow-hidden"><ListLoading rows={6} /></div>;
+  }
+  if (sections.length === 0) {
+    return <div className="card px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>;
+  }
   return (
-    <details open={open} className="group/family">
+    <>
+      <p className="mb-3 text-xs text-ink-500" aria-live="polite">
+        {rows.length === 1 ? '1 producto' : `${rows.length} productos`}
+      </p>
+      <div className="space-y-3">
+        {sections.map((section) => (
+          <CategorySection key={section.category || NONE_KEY} section={section} />
+        ))}
+      </div>
+      {rows.length >= SEARCH_LIMIT && (
+        <div className="px-4 py-2 text-[11px] text-ink-500">
+          Mostrando los primeros {SEARCH_LIMIT}. Afina la búsqueda para ver más.
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * One CATEGORY section in search mode. Same chrome as the browse card but
+ * open by default (the products are already loaded with the search) so hits
+ * are visible immediately.
+ */
+function CategorySection({ section }) {
+  return (
+    <details open className="card overflow-hidden group/cat">
+      <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
+        <span className="flex items-center gap-2 min-w-0">
+          <ChevronRight
+            size={15}
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
+            aria-hidden
+          />
+          <span className="font-semibold text-sm text-ink-900 truncate" title={section.category || NO_CATEGORY}>
+            {section.category || NO_CATEGORY}
+          </span>
+        </span>
+        <span className="eyebrow-xs tracking-wide flex-shrink-0">
+          {section.models.length} modelo(s) · {section.count} SKU
+        </span>
+      </summary>
+      <ModelList models={section.models} />
+    </details>
+  );
+}
+
+/** The list of model rows inside a category. */
+function ModelList({ models }) {
+  return (
+    <div className="divide-y divide-ink-100">
+      {models.map((model) => (
+        <ModelRow key={model.root} model={model} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One MODEL row — collapsed by default. The summary shows the model name and
+ * its price range (everything the dealer needs at a glance); expanding reveals
+ * the grade-variant SKUs with their reference, finish, price, cost and margin.
+ */
+function ModelRow({ model }) {
+  const members = memberSkus(model);
+  return (
+    <details className="group/model">
       <summary className="cursor-pointer list-none select-none pl-8 pr-5 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={13}
-            className="text-ink-400 flex-shrink-0 transition-transform group-open/family:rotate-90"
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/model:rotate-90"
             aria-hidden
           />
-          <span className="font-medium text-sm text-ink-800 truncate" title={family.family}>
-            {family.family}
+          <span className="font-medium text-sm text-ink-800 truncate" title={model.name || model.root}>
+            {model.name || model.root || '—'}
+          </span>
+          <span className="eyebrow-xs tracking-wide flex-shrink-0 hidden sm:inline">
+            {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
           </span>
         </span>
-        <span className="eyebrow-xs tracking-wide flex-shrink-0">
-          {family.models.length} modelo(s) · {family.count} SKU
+        <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">
+          {priceRangeLabel(model)}
         </span>
       </summary>
-      <div className="divide-y divide-ink-100/70 bg-ink-50/40">
-        {family.models.map((model) => (
-          <ModelGroup key={model.root} model={model} />
+      <ul className="divide-y divide-ink-100/70 bg-ink-50/40 pl-10 pr-4 pb-2">
+        {members.map(({ grade, product: p }) => (
+          <SkuRow key={p.id} grade={grade} product={p} />
         ))}
-      </div>
+      </ul>
     </details>
   );
 }
 
-/**
- * One MODEL sub-group: a header (model name + member count) over its grade
- * variants/SKUs, listed compactly. A graded model shows its grade letter per
- * row; a standalone product shows just its single SKU.
- */
-function ModelGroup({ model }) {
-  // All member SKUs (graded variants first in price order, then any ungraded).
-  const members = [
-    ...model.grades.map((g) => ({ grade: g, product: model.byGrade.get(g) })),
-    ...(model.byGrade.has('') ? [{ grade: '', product: model.byGrade.get('') }] : []),
-  ].filter((m) => m.product);
-
+/** One grade-variant SKU line inside an expanded model. */
+function SkuRow({ grade, product: p }) {
+  const price = Number(p.priceUsd) || 0;
+  const cost = Number(p.cost) || 0;
+  const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
   return (
-    <div className="pl-10 pr-4 py-3">
-      <div className="flex items-baseline justify-between gap-3 mb-1.5">
-        <h3 className="font-medium text-sm text-ink-700 truncate" title={model.name || model.root}>
-          {model.name || model.root || '—'}
-        </h3>
-        <span className="eyebrow-xs tracking-wide flex-shrink-0">
-          {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
-        </span>
-      </div>
-      <ul className="divide-y divide-ink-100/70">
-        {members.map(({ grade, product: p }) => {
-          const price = Number(p.priceUsd) || 0;
-          const cost = Number(p.cost) || 0;
-          const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
-          return (
-            <li key={p.id} className="flex items-center gap-3 py-1.5 text-sm">
-              {grade ? (
-                <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
-                  {grade}
-                </span>
-              ) : (
-                <span className="chip text-ink-500 border border-dashed border-ink-300 flex-shrink-0">—</span>
-              )}
-              <span className="font-mono text-xs text-ink-600 flex-shrink-0 w-24 truncate" title={p.reference}>
-                {p.reference}
-              </span>
-              <span className="text-ink-500 text-xs truncate flex-1 min-w-0" title={p.subtype || p.name}>
-                {p.subtype || ''}
-              </span>
-              <span className="tabular-nums text-right w-24 flex-shrink-0">{usd(price)}</span>
-              <span className="tabular-nums text-right text-ink-500 w-24 flex-shrink-0 hidden sm:inline">
-                {usd(cost)}
-              </span>
-              <span className="tabular-nums text-right text-ink-500 w-12 flex-shrink-0 hidden lg:inline">
-                {marginPct}%
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <li className="flex items-center gap-3 py-1.5 text-sm">
+      {grade ? (
+        <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">{grade}</span>
+      ) : (
+        <span className="chip text-ink-500 border border-dashed border-ink-300 flex-shrink-0">—</span>
+      )}
+      <span className="font-mono text-xs text-ink-600 flex-shrink-0 w-24 truncate" title={p.reference}>
+        {p.reference}
+      </span>
+      <span className="text-ink-500 text-xs truncate flex-1 min-w-0" title={p.subtype || p.name}>
+        {p.subtype || ''}
+      </span>
+      <span className="tabular-nums text-right w-24 flex-shrink-0">{usd(price)}</span>
+      <span className="tabular-nums text-right text-ink-500 w-24 flex-shrink-0 hidden sm:inline">{usd(cost)}</span>
+      <span className="tabular-nums text-right text-ink-500 w-12 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
+    </li>
   );
 }
