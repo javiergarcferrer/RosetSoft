@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../lib/constants.js';
-import { effectiveCommissionPct, commissionAmount, isTradeDiscount } from '../lib/commissions.js';
+import { effectiveCommissionPct, commissionAmount, isTradeDiscount, reportedCommission } from '../lib/commissions.js';
 
 /**
  * Detail view for one professional — the financial roll-up the
@@ -111,7 +111,12 @@ export default function ProfessionalDetail() {
       // out of it; whether it lands as a commission WE pay or a trade
       // discount WE bill the decorator is the per-quote modality. Trade
       // discount accrues no commission.
-      const amount = commissionAmount(totals, pct);
+      // Once the commission is paid, freeze to the amount snapshotted at
+      // payout so a later rate/order-type change can't restate this pro's
+      // paid history; unpaid (and trade, which never pays a commission) stay
+      // live. Trade discounts never set commissionPaidAt, so they pass through.
+      const liveAmount = commissionAmount(totals, pct);
+      const amount = reportedCommission(q.commissionPaidAt, q.commissionPaidAmount, liveAmount);
       const trade = isTradeDiscount(q);
       const entry = {
         quote: q,

@@ -428,11 +428,19 @@ export interface Quote {
    * OUT (Contabilidad tracking). null = pending. See commissionOwedAt()
    * in lib/commissions for when it becomes owed. */
   commissionPaidAt?: number | null;
+  /* The professional commission $ frozen at payout time (snapshotted when
+   * commissionPaidAt is set), so a later order_type toggle / base-rate change
+   * can't restate what was paid. null = not paid → recompute live. */
+  commissionPaidAmount?: number | null;
 
   /* When the SELLER (vendedor) commission on this quote was paid out.
    * null = pending. The seller's cut is earned once the deposit lands;
    * this is its sibling of commissionPaidAt (the professional's cut). */
   sellerCommissionPaidAt?: number | null;
+  /* The seller commission $ frozen at payout time (sibling of
+   * commissionPaidAmount), so editing the seller's profile commission_pct
+   * later can't restate what was paid. null = not paid → recompute live. */
+  sellerCommissionPaidAmount?: number | null;
 
   /* Public share link. `shareToken` is a random secret embedded in the
    * shareable URL (#/q/<token>); `shareEnabled` gates whether the link

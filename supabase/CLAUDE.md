@@ -40,6 +40,9 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   FKs (all `on delete set null`): `customer_id`, `professional_id`, `order_id`,
   `created_by_user_id`. Accepted-quote milestones live HERE not on the order:
   `deposit_received_at`, `balance_paid_at`, `delivered_at`. Unique `(profile_id, number)`.
+  Commission payout tracking: `commission_paid_at` / `seller_commission_paid_at`
+  (when), plus `commission_paid_amount` / `seller_commission_paid_amount` (the $
+  frozen at payout, `numeric`; null ⇒ recompute live — see `reportedCommission`).
 - **quote_lines** scoped via `quote_id` (`on delete cascade`). `kind` ∈ `item|section`.
   Two JSONB columns: **`components`** (compound article parts — each a
   `LineComponent`; non-empty array ⇒ compound) and the line carries `image_id`

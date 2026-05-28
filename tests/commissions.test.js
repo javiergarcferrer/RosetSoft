@@ -22,6 +22,7 @@ import {
   isTradeDiscount,
   commissionOwedAt,
   isCommissionPaid,
+  reportedCommission,
 } from '../src/lib/commissions.js';
 
 test('the floor/special base rates are 15% and 20%', () => {
@@ -315,4 +316,33 @@ test('isCommissionPaid reflects the commissionPaidAt timestamp', () => {
   assert.equal(isCommissionPaid({ commissionPaidAt: null }), false);
   assert.equal(isCommissionPaid({}), false);
   assert.equal(isCommissionPaid(null), false);
+});
+
+/* ----------------------------- reportedCommission --------------------- */
+
+test('reportedCommission: unpaid → the live amount (no freeze)', () => {
+  // No paid-at timestamp → always live, even if a stray frozen value exists.
+  assert.equal(reportedCommission(null, null, 150), 150);
+  assert.equal(reportedCommission(null, 999, 150), 150);
+  assert.equal(reportedCommission(undefined, undefined, 200), 200);
+});
+
+test('reportedCommission: paid → the frozen snapshot, not the live amount', () => {
+  // Paid at some date with a snapshot of 180 — a later rate change moves the
+  // live amount to 100, but the reported figure stays the 180 that was paid.
+  assert.equal(reportedCommission(12345, 180, 100), 180);
+  assert.equal(reportedCommission(12345, 0, 100), 0); // a real $0 payout is honored
+});
+
+test('reportedCommission: paid but no snapshot (legacy) → live amount', () => {
+  // Rows paid before the snapshot column existed carry a null amount; they
+  // fall back to the live figure rather than rendering blank.
+  assert.equal(reportedCommission(12345, null, 120), 120);
+  assert.equal(reportedCommission(12345, NaN, 120), 120);
+});
+
+test('reportedCommission: coerces a numeric-string snapshot (Postgres numeric)', () => {
+  // Supabase can hand back a numeric column as a string; it must still
+  // compare/format as a number.
+  assert.equal(reportedCommission(12345, '180.50', 100), 180.5);
 });

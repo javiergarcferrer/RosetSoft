@@ -21,7 +21,8 @@ import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
 import {
-  effectiveCommissionPct, commissionAmount, commissionBreakdown, decoratorBilling, commissionOwedAt,
+  effectiveCommissionPct, commissionAmount, commissionBreakdown, decoratorBilling,
+  commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
 
 /**
@@ -159,10 +160,15 @@ export default function AccountingWorkspace() {
       // ── Seller (vendedor) commission ──────────────────────────────────
       const pct = clampPct(creator?.commissionPct);
       const potentialCommission = t.taxableBase * (pct / 100);
-      // Earned once the deposit lands within the cycle (the payout rule the
-      // admin report uses). `sellerPayable` is the laxer "deposit received
-      // at all" gate that lets the accountant tick it paid.
-      const earnedCommission = depositIn ? potentialCommission : 0;
+      // Once PAID, the figure freezes to the amount snapshotted at payout
+      // (sellerCommissionPaidAmount) so editing the seller's profile rate
+      // later can't restate it; unpaid stays live. `earnedCommission` keeps
+      // its cycle gate (deposit-in-window) but now carries the frozen-if-paid
+      // value, so the rollup + CSV report what was paid.
+      const sellerReported = reportedCommission(
+        q.sellerCommissionPaidAt, q.sellerCommissionPaidAmount, potentialCommission,
+      );
+      const earnedCommission = depositIn ? sellerReported : 0;
       const sellerPayable = Boolean(q.depositReceivedAt);
       const sellerPaid = Boolean(q.sellerCommissionPaidAt);
 
@@ -171,6 +177,9 @@ export default function AccountingWorkspace() {
       const trade = mode === 'trade_discount';
       const proPct = professional ? effectiveCommissionPct(q) : 0;
       const proAmount = professional ? commissionAmount(t, proPct) : 0;
+      // Frozen at payout (commissionPaidAmount) so a later order_type toggle /
+      // base-rate change can't restate a paid commission; unpaid stays live.
+      const proReported = reportedCommission(q.commissionPaidAt, q.commissionPaidAmount, proAmount);
       // Trade discount: bill the DECORATOR at their % off (no commission).
       const decoratorPct = trade ? proPct : 0;
       const tradeDiscount = trade ? proAmount : 0;
@@ -199,13 +208,15 @@ export default function AccountingWorkspace() {
         depositIn,
         // seller cut
         commissionPct: pct,
-        potentialCommission,
+        potentialCommission,        // live — passed to the toggle as the snapshot
+        sellerReported,             // frozen-if-paid — what we display/report
         earnedCommission,
         sellerPayable,
         sellerPaid,
         // professional cut
         proPct,
-        proAmount,
+        proAmount,                  // live — passed to the toggle as the snapshot
+        proReported,                // frozen-if-paid — what we display/report
         proOwedAt,
         proOwed,
         proPayable,
@@ -233,8 +244,8 @@ export default function AccountingWorkspace() {
         }
         const row = profRoll.get(professional.id);
         row.count += 1;
-        row.commission += proAmount;
-        if (proPaid) row.paid += proAmount; else row.pending += proAmount;
+        row.commission += proReported;
+        if (proPaid) row.paid += proReported; else row.pending += proReported;
       }
     }
 
@@ -259,10 +270,19 @@ export default function AccountingWorkspace() {
       setSavingPaid((cur) => (cur === key ? null : cur));
     }
   }
-  const setSellerPaid = (quoteId, paid) =>
-    setPaid(`seller:${quoteId}`, quoteId, { sellerCommissionPaidAt: paid ? Date.now() : null });
-  const setProPaid = (quoteId, paid) =>
-    setPaid(`pro:${quoteId}`, quoteId, { commissionPaidAt: paid ? Date.now() : null });
+  // Marking paid also SNAPSHOTS the amount (the live figure at click time) so
+  // it can't be restated later by a rate/order-type change; unmarking clears
+  // both the timestamp and the snapshot.
+  const setSellerPaid = (quoteId, paid, amount) =>
+    setPaid(`seller:${quoteId}`, quoteId, {
+      sellerCommissionPaidAt: paid ? Date.now() : null,
+      sellerCommissionPaidAmount: paid ? amount : null,
+    });
+  const setProPaid = (quoteId, paid, amount) =>
+    setPaid(`pro:${quoteId}`, quoteId, {
+      commissionPaidAt: paid ? Date.now() : null,
+      commissionPaidAmount: paid ? amount : null,
+    });
 
   // Search-header query state, applied on top of the cycle-scoped entries.
   // The cycle picker above stays the page's PRIMARY window; the deposit
@@ -461,7 +481,7 @@ export default function AccountingWorkspace() {
         isoDate(e.proOwedAt),
         e.base.toFixed(2),
         e.proPct,
-        e.proAmount.toFixed(2),
+        e.proReported.toFixed(2),
         e.proPaid ? 'pagada' : 'pendiente',
         e.proPaid ? isoDate(e.quote.commissionPaidAt) : '',
       ]);
@@ -666,8 +686,8 @@ export default function AccountingWorkspace() {
 function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid }) {
   const {
     quote, customer, creator, professional, mode, decoratorPct, base, grandTotal, totals,
-    commissionPct, potentialCommission, sellerPayable, sellerPaid,
-    proPct, proAmount, proPayable, proPaid,
+    commissionPct, potentialCommission, sellerReported, sellerPayable, sellerPaid,
+    proPct, proAmount, proReported, proPayable, proPaid,
   } = entry;
   const [open, setOpen] = useState(false);
   const pdf = usePdfDownload({ quote, customer, lines, settings });
@@ -687,15 +707,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
   //   • trade discount: −% = gross − desc. cliente = net trade discount
   // Without a discount gross === net, so the compact form stays. All terms
   // come from the one lib breakdown (gross/discount/net), so the printed
-  // numbers always reconcile and mirror the builder's CommissionCard.
+  // numbers always reconcile and mirror the builder's CommissionCard. Once
+  // PAID the commission line collapses to the frozen amount that was actually
+  // paid (proReported) — a live breakdown would re-derive and could drift from
+  // the snapshot, so we show the figure of record instead.
   const proCommission = commissionBreakdown(totals, proPct);
   const proDetail = mode === 'trade_discount'
     ? proCommission.discount > 0
       ? `Facturar al decorador −${decoratorPct}% = ${fmtUsd(proCommission.gross)} − desc. cliente ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)} (sin comisión)`
       : `Facturar al decorador −${decoratorPct}% (sin comisión)`
-    : proCommission.discount > 0
-      ? `Base ${fmtUsd(base + proCommission.discount)} · ${proPct}% = ${fmtUsd(proCommission.gross)} − desc. ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)}`
-      : `Base ${fmtUsd(base)} · ${proPct}% = ${fmtUsd(proAmount)}`;
+    : proPaid
+      ? `Pagada · ${fmtUsd(proReported)}`
+      : proCommission.discount > 0
+        ? `Base ${fmtUsd(base + proCommission.discount)} · ${proPct}% = ${fmtUsd(proCommission.gross)} − desc. ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)}`
+        : `Base ${fmtUsd(base)} · ${proPct}% = ${fmtUsd(proAmount)}`;
 
   const anyPayable = sellerPayable || proPayable;
   const anyPending = (sellerPayable && !sellerPaid) || (proPayable && !proPaid);
@@ -755,12 +780,14 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
             <CommissionLine
               role="Vendedor"
               who={creatorDisplay(creator) || '—'}
-              detail={`Base ${fmtUsd(base)} · ${commissionPct}% = ${fmtUsd(potentialCommission)}`}
+              detail={sellerPaid
+                ? `Pagada · ${fmtUsd(sellerReported)}`
+                : `Base ${fmtUsd(base)} · ${commissionPct}% = ${fmtUsd(potentialCommission)}`}
               action={sellerPayable ? (
                 <PaidToggle
                   paid={sellerPaid}
                   busy={savingPaid === `seller:${quote.id}`}
-                  onToggle={(n) => onSellerPaid(quote.id, n)}
+                  onToggle={(n) => onSellerPaid(quote.id, n, potentialCommission)}
                 />
               ) : (
                 <span className="text-[11px] text-ink-400 italic whitespace-nowrap">Tras depósito</span>
@@ -777,7 +804,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                   <PaidToggle
                     paid={proPaid}
                     busy={savingPaid === `pro:${quote.id}`}
-                    onToggle={(n) => onProPaid(quote.id, n)}
+                    onToggle={(n) => onProPaid(quote.id, n, proAmount)}
                   />
                 ) : (
                   <span className="text-[11px] text-ink-400 italic whitespace-nowrap">

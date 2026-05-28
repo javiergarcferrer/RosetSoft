@@ -32,12 +32,12 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 
 ## P1 — inconsistencies / latent correctness risks
 
-- [ ] **Two discount mechanics with different commission semantics.** (DEFERRED — depends on
-    another workstream + a business decision.)
-  - Per-line discount (`lineDiscountPct`) silently shrinks the commission base; the quote-level
-    discount (`discountPct`) is explicitly drawn from commission. The trail is only fully
-    consistent once per-line discounts are removed (planned in another workstream). Confirm that
-    removal lands; until then, decide whether a per-line discount should also come out of commission.
+- [x] **Two discount mechanics with different commission semantics.** (RESOLVED by removal.)
+  - The per-line discount removal has landed: there is NO UI control that sets `lineDiscountPct`
+    (new lines initialize it to 0 at `QuoteBuilder.jsx:163,546`; duplication only carries a legacy
+    value). So the inconsistency can't arise on new quotes — it's frozen to legacy data. Restating
+    legacy per-line discounts as "drawn from commission" would rewrite historical commission
+    figures (same reason we now freeze paid amounts), so legacy is intentionally left as-is.
 
 - [x] **`ClientPreview` recomputes line math without the lib's clamp.**
   - DONE — `ClientLine` now derives `qty`/`listUnit`/`unit`/`total` from `lineQty`,
@@ -62,12 +62,14 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
     `CompoundClientLine` carry parallel layout/logic. Action: extract one shared group/line block.
     Belongs with the P3 decomposition below; out of scope for this correctness/dedup pass.
 
-- [ ] **Commission is recomputed live — no frozen paid amount.** (DEFERRED — needs an
-    audit-history decision + a schema change; see open business decisions.)
-  - Toggling `order_type`, or ever changing `FLOOR_COMMISSION_PCT`/`SPECIAL_COMMISSION_PCT`,
-    retroactively changes already-paid quotes' displayed commission; `commissionPaidAt` records
-    *that* it paid, not *how much*. Action (if audit history matters): snapshot the paid amount at
-    payout time, or freeze via an explicit `commission_pct` override.
+- [x] **Commission is recomputed live — no frozen paid amount.** DONE — snapshot route.
+  - New nullable `numeric` columns `commission_paid_amount` / `seller_commission_paid_amount`
+    (migration `20260530120000`). Marking a commission paid in Contabilidad now snapshots the live
+    amount; unmarking clears it. New `reportedCommission(paidAt, frozen, live)` returns the frozen
+    snapshot once paid (else live), so a later `order_type` toggle or a `FLOOR/SPECIAL_COMMISSION_PCT`
+    / seller-rate change can't restate a PAID commission. Applied across the Contabilidad rollups,
+    sale-card detail (collapses to "Pagada · $X" when paid), and both CSV exports, plus
+    `ProfessionalDetail`. Legacy paid rows (null snapshot) fall back to live. Tests added.
 
 ---
 

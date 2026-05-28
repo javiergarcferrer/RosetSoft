@@ -170,6 +170,30 @@ export function isCommissionPaid(
 }
 
 /**
+ * The commission $ to REPORT/DISPLAY for one stream of a quote: the amount
+ * SNAPSHOTTED at payout time once paid — so a later order_type toggle, a
+ * change to FLOOR/SPECIAL_COMMISSION_PCT, or an edit to a seller's rate can't
+ * retroactively restate what was actually paid — otherwise the live-computed
+ * amount. Pass the paid-at timestamp + frozen column for the stream
+ * (professional: commissionPaidAt/commissionPaidAmount; seller:
+ * sellerCommissionPaidAt/sellerCommissionPaidAmount).
+ *
+ * A non-finite stored value (legacy paid rows predating the snapshot column
+ * carry null) falls through to the live amount, so old payouts still render.
+ */
+export function reportedCommission(
+  paidAt: number | null | undefined,
+  frozenAmount: number | null | undefined,
+  liveAmount: number,
+): number {
+  if (paidAt != null && frozenAmount != null) {
+    const n = Number(frozenAmount);
+    if (Number.isFinite(n)) return n;
+  }
+  return liveAmount;
+}
+
+/**
  * The assigned professional's commission decomposed into the three figures
  * every UI surface shows: the GROSS (full commission before the client
  * discount), the DISCOUNT drawn out of it, and the NET the professional
