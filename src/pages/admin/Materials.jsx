@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
-  Loader2, X, GripVertical, DownloadCloud, RefreshCw, AlertTriangle,
+  Loader2, X, GripVertical, DownloadCloud, RefreshCw, AlertTriangle, FileText,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { supabase } from '../../db/supabaseClient.js';
 import { mergeCatalog } from '../../lib/lrCatalog.js';
+import { mergePriceList } from '../../lib/materialsPdf.js';
+import { parsePriceListPdfs } from '../../lib/loadMaterialsPdf.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -52,7 +54,8 @@ export default function Materials() {
   const [filters, setFilters] = useState({}); // { grade: <grade> }
   const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
-  const [importing, setImporting] = useState(false); // LR sync modal open?
+  const [importing, setImporting] = useState(false); // LR website sync modal open?
+  const [importingPdf, setImportingPdf] = useState(false); // price-list PDF modal open?
 
   // Category tabs (the primary dimension). Counts ride the full materials
   // list so each tab shows "how many would I see if I tapped this",
@@ -153,6 +156,13 @@ export default function Materials() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setImportingPdf(true)}
+              className="btn-ghost"
+            >
+              <FileText size={14} /> Importar precios (PDF)
+            </button>
+            <button
+              type="button"
               onClick={() => setImporting(true)}
               className="btn-ghost"
             >
@@ -236,6 +246,14 @@ export default function Materials() {
                           <AlertTriangle size={10} /> No en sitio
                         </span>
                       )}
+                      {m.notInPricelistAt && (
+                        <span
+                          className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-red-50 text-red-700 border border-red-200 align-middle"
+                          title="No aparece en la lista de precios (PDF) de Ligne Roset"
+                        >
+                          <AlertTriangle size={10} /> No en lista
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2"><GradePill grade={m.grade} /></td>
                     <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
@@ -291,6 +309,14 @@ export default function Materials() {
           materials={materials}
           profileId={profileId}
           onClose={() => setImporting(false)}
+        />
+      )}
+
+      {importingPdf && (
+        <PriceListImportModal
+          materials={materials}
+          profileId={profileId}
+          onClose={() => setImportingPdf(false)}
         />
       )}
     </>
@@ -876,6 +902,169 @@ function ImportSummaryList({ summary }) {
     ['Colores retirados', summary.removedColors],
     ['Reactivados', summary.restored],
     ['Marcados “no en sitio”', summary.flaggedMissing],
+    ['Sin cambios', summary.unchangedMaterials],
+  ].filter(([, n]) => n > 0);
+  if (!rows.length) return null;
+  return (
+    <ul className="text-sm border border-ink-100 rounded-lg overflow-hidden divide-y divide-ink-100">
+      {rows.map(([label, n]) => (
+        <li key={label} className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-ink-600">{label}</span>
+          <span className="tabular-nums font-semibold text-ink-900">{n}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Price-list (PDF) importer                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Imports the Ligne Roset price-list PDF(s) — the source of truth for
+ * commercial spec (grade, wear, Martindale, width, per-yard price, composition,
+ * and the FABRICS/LEATHER/OUTDOOR category). Parsing runs in the browser
+ * (pdfjs); colors/swatches come from the website sync. Accepts several files at
+ * once; "complete list" flags any material not found as "no en lista" (kept,
+ * never deleted). A preview shows every change before applying.
+ */
+function PriceListImportModal({ materials, profileId, onClose }) {
+  const [files, setFiles] = useState([]);
+  const [complete, setComplete] = useState(true);
+  const [busy, setBusy] = useState(null); // null | 'parse' | 'apply'
+  const [error, setError] = useState(null);
+  const [preview, setPreview] = useState(null); // { count, rows, summary, complete }
+  const [done, setDone] = useState(null);
+
+  async function analyze() {
+    if (!files.length) { setError('Elige al menos un PDF de lista de precios.'); return; }
+    setError(null);
+    setBusy('parse');
+    try {
+      const parsed = await parsePriceListPdfs(files);
+      if (!parsed.length) {
+        throw new Error('No se reconocieron materiales en el PDF. ¿Es la lista de materiales de Ligne Roset?');
+      }
+      const { rows, summary } = mergePriceList(materials, parsed, {
+        profileId, now: Date.now(), newId, complete,
+      });
+      setPreview({ count: parsed.length, rows, summary, complete });
+    } catch (e) {
+      setError(e?.message || 'No se pudo leer el PDF.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function apply() {
+    if (!preview?.rows?.length) return;
+    setError(null);
+    setBusy('apply');
+    try {
+      await db.materials.bulkPut(preview.rows);
+      setDone(preview.summary);
+    } catch (e) {
+      setError(e?.message || 'No se pudieron guardar los cambios.');
+      setBusy(null);
+    }
+  }
+
+  const s = preview?.summary;
+  return (
+    <Modal open onClose={onClose} title="Importar lista de precios (PDF)">
+      <div className="space-y-4">
+        {error && (
+          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        {done ? (
+          <>
+            <div className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">
+              <Check size={16} className="flex-shrink-0 mt-0.5" />
+              <span>Lista de precios aplicada al catálogo.</span>
+            </div>
+            <PriceListSummaryList summary={done} />
+            <div className="flex items-center justify-end pt-2 border-t border-ink-100">
+              <button type="button" onClick={onClose} className="btn-primary"><Check size={14} /> Listo</button>
+            </div>
+          </>
+        ) : preview ? (
+          <>
+            <p className="text-sm text-ink-600">{preview.count} materiales en el PDF.</p>
+            <PriceListSummaryList summary={s} />
+            {preview.complete && s.flaggedMissing > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                {s.flaggedMissing} material(es) no aparecen en estos PDFs y se marcarán “no en lista”.
+                Si te faltan archivos, vuelve y súbelos todos juntos.
+              </p>
+            )}
+            {preview.rows.length === 0 ? (
+              <p className="text-sm text-ink-500 italic">El catálogo ya coincide con la lista — nada que aplicar.</p>
+            ) : (
+              <p className="text-xs text-ink-500">
+                La lista manda en grade, precio, ancho, composición y categoría. Conserva colores, fotos y notas. No elimina nada.
+              </p>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t border-ink-100">
+              <button type="button" onClick={() => setPreview(null)} className="btn-ghost" disabled={!!busy}>Volver</button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
+                <button type="button" onClick={apply} disabled={!!busy || preview.rows.length === 0} className="btn-primary">
+                  {busy === 'apply'
+                    ? <><Loader2 size={14} className="animate-spin" /> Aplicando…</>
+                    : <><Check size={14} /> Aplicar ({preview.rows.length})</>}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-ink-600">
+              Sube la(s) lista(s) de precios de Ligne Roset en PDF. Leeremos grade, precio, ancho, composición y categoría.
+            </p>
+            <label className="flex flex-col gap-1">
+              <span className="label">Archivos PDF</span>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                className="input"
+                onChange={(e) => setFiles(Array.from(e.target.files || []))}
+              />
+            </label>
+            {files.length > 0 && (
+              <ul className="text-xs text-ink-500 list-disc pl-5">
+                {files.map((f, i) => (<li key={i}>{f.name}</li>))}
+              </ul>
+            )}
+            <label className="flex items-start gap-2 text-sm text-ink-600">
+              <input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)} className="mt-0.5" />
+              <span>Es la lista completa — marcar las telas que no aparezcan como “no en lista”.</span>
+            </label>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-ink-100">
+              <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
+              <button type="button" onClick={analyze} disabled={!!busy || !files.length} className="btn-primary">
+                {busy === 'parse'
+                  ? <><Loader2 size={14} className="animate-spin" /> Leyendo PDF…</>
+                  : <><FileText size={14} /> Analizar</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function PriceListSummaryList({ summary }) {
+  const rows = [
+    ['Materiales nuevos', summary.newMaterials],
+    ['Materiales actualizados', summary.updatedMaterials],
+    ['Reactivados', summary.restored],
+    ['Marcados “no en lista”', summary.flaggedMissing],
     ['Sin cambios', summary.unchangedMaterials],
   ].filter(([, n]) => n > 0);
   if (!rows.length) return null;

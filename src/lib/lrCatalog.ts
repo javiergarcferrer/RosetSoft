@@ -162,11 +162,12 @@ export function mergeCatalog(
     const notes = cleanNotes(p.remark);
     const siteColors = dedupeColors(p.colors);
     const current = byName.get(key);
-    // The site is authoritative on fabric-vs-leather, but it does NOT encode
-    // "outdoor" (sling / teflon fabrics are typed "Fabrics"), so never let a
-    // sync demote a material the dealer deliberately placed in Outdoor.
-    const category =
-      current && current.category === 'outdoor' ? 'outdoor' : lrTypeToCategory(p.type);
+    // Category + composition are owned by the price-list PDF (it has explicit
+    // FABRICS/LEATHER/OUTDOOR sections and authoritative composition). The
+    // website only sets them when creating a material it sees first; for an
+    // existing material it keeps the dealer/PDF category and only fills an
+    // EMPTY composition.
+    const category = current ? current.category : lrTypeToCategory(p.type);
 
     if (!current) {
       const colors: MaterialColor[] = siteColors.map((c) => ({ name: c.name || '', code: c.code }));
@@ -194,8 +195,8 @@ export function mergeCatalog(
       continue;
     }
 
-    // Overwrite the site-owned fields; preserve everything dealer-owned by
-    // spreading `current` and only replacing the managed fields.
+    // Website-owned fields only (colors + notes; composition filled if empty).
+    // name + category belong to the price list and are left untouched here.
     const existingByCode = new Map<string, MaterialColor>();
     for (const c of current.colors || []) {
       const code = trimmed(c.code);
@@ -220,17 +221,18 @@ export function mergeCatalog(
       for (const c of siteColors) if (!existingByCode.has(c.code)) added += 1;
     }
 
+    // Composition is the price list's to own — only fill it when ours is empty.
+    const nextComposition = trimmed(current.composition) ? (current.composition ?? null) : composition;
+
     const wasFlagged = current.discontinuedAt != null;
     const changed =
-      (current.name ?? '') !== name ||
-      current.category !== category ||
-      (current.composition ?? null) !== composition ||
       (current.notes ?? null) !== notes ||
+      (current.composition ?? null) !== nextComposition ||
       !sameColors(current.colors || [], colors) ||
       wasFlagged;
 
     if (changed) {
-      rows.push({ ...current, name, category, composition, notes, colors, discontinuedAt: null, updatedAt: now });
+      rows.push({ ...current, notes, colors, composition: nextComposition, discontinuedAt: null, updatedAt: now });
       summary.updatedMaterials += 1;
       summary.newColors += added;
       summary.removedColors += removed;

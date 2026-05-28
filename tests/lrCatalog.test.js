@@ -92,12 +92,12 @@ test('new leather material gets mm / sm units', () => {
   assert.equal(rows[0].priceUnit, 'sm');
 });
 
-test('source of truth: overwrites name/composition/notes/colors, preserves grade/price/photos', () => {
+test('website merge: owns colors+notes, leaves name/category/composition to the price list', () => {
   const existing = [{
-    id: 'm1', profileId: 'team', category: 'fabric', name: 'alcantara - a', // stale casing
+    id: 'm1', profileId: 'team', category: 'fabric', name: 'ALCANTARA - A',
     grade: 'S', price: 363, priceUnit: 'yard', measure: 56, measureUnit: 'in',
     wearRating: '3C',
-    composition: 'OLD — should be replaced',
+    composition: 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%', // from the PDF — kept
     notes: 'dealer scribble — site wins',
     colors: [
       { name: 'almond', code: '4479', imageId: 'photo-1' }, // dealer photo must survive
@@ -109,7 +109,7 @@ test('source of truth: overwrites name/composition/notes/colors, preserves grade
     existing,
     [{
       name: 'ALCANTARA - A', type: 'Microfibres',
-      composition: 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%',
+      composition: 'SITE COMPOSITION — must NOT overwrite the PDF one',
       remark: 'THIS FABRIC IS NOT TB117-2013 APPROVED.',
       colors: [
         { code: '4479', name: 'ALMOND' },     // kept, photo carried, name normalized
@@ -120,16 +120,15 @@ test('source of truth: overwrites name/composition/notes/colors, preserves grade
   );
   assert.equal(rows.length, 1);
   const m = rows[0];
-  assert.equal(m.id, 'm1');                         // same identity
-  assert.equal(m.name, 'ALCANTARA - A');            // site casing wins
-  assert.equal(m.composition, 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%'); // overwritten
-  assert.equal(m.notes, 'THIS FABRIC IS NOT TB117-2013 APPROVED.');           // overwritten
-  // dealer-only fields preserved:
+  assert.equal(m.id, 'm1');
+  // price-list-owned fields untouched by the website sync:
+  assert.equal(m.composition, 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%'); // NOT overwritten
   assert.equal(m.grade, 'S');
   assert.equal(m.price, 363);
   assert.equal(m.measure, 56);
   assert.equal(m.wearRating, '3C');
-  // color set replaced (site order), photo carried by code, stale color dropped:
+  // website-owned fields updated:
+  assert.equal(m.notes, 'THIS FABRIC IS NOT TB117-2013 APPROVED.');           // overwritten
   assert.deepEqual(m.colors, [
     { name: 'ALMOND', code: '4479', imageId: 'photo-1' },
     { name: 'ANTHRACITE', code: '4522' },

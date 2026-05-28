@@ -1,0 +1,614 @@
+[
+{
+"x": 258.6,
+"y": 54.3,
+"str": "USD",
+"bold": false
+},
+{
+"x": 28.9,
+"y": 806.1,
+"str": "18",
+"bold": true
+},
+{
+"x": 214.4,
+"y": 808.8,
+"str": "05.09.2026/USA 02/AMERICAN/USD",
+"bold": false
+},
+{
+"x": 19.0,
+"y": 65.3,
+"str": "FABRICS",
+"bold": true
+},
+{
+"x": 95.4,
+"y": 49.3,
+"str": "Name",
+"bold": false
+},
+{
+"x": 150.3,
+"y": 49.3,
+"str": "Grade",
+"bold": false
+},
+{
+"x": 181.3,
+"y": 49.3,
+"str": "Wear",
+"bold": false
+},
+{
+"x": 246.3,
+"y": 44.4,
+"str": "Price per yard",
+"bold": false
+},
+{
+"x": 210.5,
+"y": 49.3,
+"str": "Width",
+"bold": false
+},
+{
+"x": 297.5,
+"y": 49.3,
+"str": "Composition",
+"bold": false
+},
+{
+"x": 87.6,
+"y": 705.3,
+"str": "BOISSARD",
+"bold": true
+},
+{
+"x": 156.9,
+"y": 705.5,
+"str": "A",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 705.3,
+"str": "POLYESTER 100%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 718.9,
+"str": "NOIR:860 TERRA COTTA:861",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 725.3,
+"str": "ONLY AVAILABLE ON EXCLUSIF AND EXCLUSIF 2.",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 701.0,
+"str": "3C",
+"bold": false
+},
+{
+"x": 178.4,
+"y": 709.5,
+"str": "100000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 705.3,
+"str": "55",
+"bold": false
+},
+{
+"x": 261.6,
+"y": 705.8,
+"str": "73",
+"bold": true
+},
+{
+"x": 91.0,
+"y": 634.4,
+"str": "ASATOR",
+"bold": true
+},
+{
+"x": 156.9,
+"y": 634.7,
+"str": "E",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 634.4,
+"str": "COTTON 100%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 648.0,
+"str": "AMANDE:1575 ANTHRACITE:1567 AURORE:1584 BLEU ROI:1562 BOUTEILLE:1577 BRONZE:1583 CHARBON:1581 DUNE:1564 ECRU:1578 GRIS:1580 LIN:1569 MILITAIRE:1576 NOIR:1574",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 654.4,
+"str": "NOISETTE:1563 NUIT:1561 ORAGE:1560 PLATRE:1579 PRUNE:1565 RACINE:1570 TAUPE:1568 VERMILLON:1571 VERVEINE:1582 VIEUX ROSE:1573 VIN:1572 VIOLET:1566",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 660.8,
+"str": "THIS FABRIC IS NOT TB117-2013 APPROVED AND CANNOT BE USED IN PUBLIC SPACES IN CALIFORNIA.",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 638.7,
+"str": "80000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 634.4,
+"str": "55",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 634.9,
+"str": "196",
+"bold": true
+},
+{
+"x": 89.9,
+"y": 563.6,
+"str": "ARDA/FR",
+"bold": true
+},
+{
+"x": 158.1,
+"y": 563.9,
+"str": "I",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 563.6,
+"str": "VIRGIN WOOL 70%, POLYESTER 21%, POLYAMID 9%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 577.2,
+"str": "ALMANDIN:609 AUTOMNAL:610 CONIFERE:604 ECORCE:611 GRANITE:606 HOWLITE:601 LICHEN:602 MOUSSE:603 NOIR SAPHIRE:608 OCEAN:605 ROCHE:607 SABLE:600",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 583.6,
+"str": "TERRACOTTA:612",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 559.4,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 567.9,
+"str": "50000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 563.6,
+"str": "56",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 564.1,
+"str": "330",
+"bold": true
+},
+{
+"x": 97.0,
+"y": 492.8,
+"str": "ARA",
+"bold": true
+},
+{
+"x": 156.8,
+"y": 493.0,
+"str": "C",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 492.8,
+"str": "ACRYLIC 35%, VISCOSE 23%, POLYESTER 20%, COTTON 12%, LINEN 10%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 506.4,
+"str": "ACIER:1336 ANIS:1331 GLACE:1337 GRIS:1338 NEIGE:1332 NOISETTE:1334 PETROLE:1333 PRUNE:1330 VERT:1335",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 488.5,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 497.0,
+"str": "40000",
+"bold": false
+},
+{
+"x": 212.8,
+"y": 492.8,
+"str": "53½",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 493.3,
+"str": "129",
+"bold": true
+},
+{
+"x": 90.5,
+"y": 421.9,
+"str": "APPA/FR",
+"bold": true
+},
+{
+"x": 158.1,
+"y": 422.2,
+"str": "I",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 421.9,
+"str": "POLYESTER FILLING 60%, POLYAMID 11%, POLYESTER 7%, ELASTHANE 1%, WOOL 21%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 435.5,
+"str": "BOLERO:3517 BOMBER:3514 COSSACK:3512 LODEN:3511 PARKA:3516 PEPLUM:3510 PONCHO:3515 ROUGE:3520 SLICKER:3518 SPENCER:3539 TRENCH:3538 TUNIC:3519 ULSTER:3513",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 417.7,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 426.2,
+"str": "80000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 421.9,
+"str": "61",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 422.4,
+"str": "330",
+"bold": true
+},
+{
+"x": 92.1,
+"y": 351.1,
+"str": "AMALFI",
+"bold": true
+},
+{
+"x": 156.8,
+"y": 351.3,
+"str": "B",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 351.1,
+"str": "POLYESTER 100%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 364.7,
+"str": "ANTHRACITE:3804 CANARD:3808 CORAIL:3806 GRENADE:3809 SAFRAN:3805 TAUPE:3802",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 371.1,
+"str": "A moir (watered) effect will sometimes be noticeable on certain items covered in CHENILLE fabrics. This is perfectly normal, and is wholly due to the natural characteristics of the fabric   as with",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 377.5,
+"str": "velours, the individual bres will atten with use. IMPORTANT: the color GRENADE is exclusively for use on the MULTY FIRST bed-settee 155 + lumbars.",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 346.9,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 355.3,
+"str": "25000",
+"bold": false
+},
+{
+"x": 212.8,
+"y": 351.1,
+"str": "54½",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 351.6,
+"str": "101",
+"bold": true
+},
+{
+"x": 95.6,
+"y": 280.3,
+"str": "ALPA",
+"bold": true
+},
+{
+"x": 158.1,
+"y": 280.5,
+"str": "I",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 280.3,
+"str": "COTTON 44%, ALPAGA WOOL 39%, VIRGIN WOOL 17%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 293.9,
+"str": "ACIER:573 ARGENT:571",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 300.3,
+"str": "THIS FABRIC IS NOT TB117-2013 APPROVED AND CANNOT BE USED IN PUBLIC SPACES IN CALIFORNIA.",
+"bold": false
+},
+{
+"x": 184.8,
+"y": 276.0,
+"str": "3B",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 284.5,
+"str": "18000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 280.3,
+"str": "55",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 280.8,
+"str": "330",
+"bold": true
+},
+{
+"x": 80.1,
+"y": 209.4,
+"str": "ALCANTARA - B",
+"bold": true
+},
+{
+"x": 156.9,
+"y": 209.7,
+"str": "S",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 209.4,
+"str": "POLYESTER 68%, NON FIBROUS POLYURETHANE 32%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 223.0,
+"str": "AMARETTO:128 ANDY:121 AVIO:102 BLOOM:119 CAMEO BROWN:126 CHIANTI:137 CONCRETE:100 DENIM:101 DUNE:122 EMERALD:132 FLAX:103 FLEECE:99 KOALA:127 LUNARGLIDE:125",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 229.4,
+"str": "MALACHITE:136 METEORITE:135 MOCHA:104 MONKFISH:138 MUSCATTE:134 NEVE:120 NOTTE:139 PRALINE:131 SILICA:123 SILVER:129 STONE:124 ULTRA UMBER:133 WHALE:130",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 242.2,
+"str": "SWATCH B",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 205.2,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 213.7,
+"str": "30000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 209.4,
+"str": "56",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 209.9,
+"str": "363",
+"bold": true
+},
+{
+"x": 80.3,
+"y": 138.6,
+"str": "ALCANTARA - A",
+"bold": true
+},
+{
+"x": 156.9,
+"y": 138.8,
+"str": "S",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 138.6,
+"str": "POLYESTER 68%, NON FIBROUS POLYURETHANE 32%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 152.2,
+"str": "ALMOND:4479 AMBER GLOW:4500 ANTHRACITE:4522 AUBERGINE:4525 AUBUSSON:4532 BABY GREY:4575 BOHEMIAN:4517 BORDEAUX:4577 BRITTANY:4518 BROWN:4512 CADMIUM:4547",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 158.6,
+"str": "CAMEL:4501 CELADON:4478 CHESNUT:4576 CHIC:4499 COMMODORE:4529 CORN:110 CURRY:4561 DARK CAMEL:4562 DOVE:4475 EGGSHELL:4570 GOLD:4484 GOYA RED:115",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 165.0,
+"str": "GRAYSH:4504 ICE:4555 INFANTA:4513 IVORY:112 KIWI:4566 LICHEN:4509 LIZARD:106 NAVY:107 NILE:4511 ORANGE:4563 PALM:105 PEARL:4490 POMPEIAN RED:118 PORCELAIN:4495",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 171.4,
+"str": "POWDER:4514 SADDLE:4571 SEA:114 SEA SAND:111 SLATE BLACK:117 STEEL:4551 STRING:4565 TAUPE:4496 TERRA:4486 TREKKING:4527 VELVET:4503 VIOLET:4568",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 184.2,
+"str": "SWATCH A",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 134.3,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 142.8,
+"str": "30000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 138.6,
+"str": "56",
+"bold": false
+},
+{
+"x": 259.9,
+"y": 139.1,
+"str": "363",
+"bold": true
+},
+{
+"x": 93.3,
+"y": 67.8,
+"str": "ACATE",
+"bold": true
+},
+{
+"x": 156.9,
+"y": 68.0,
+"str": "A",
+"bold": true
+},
+{
+"x": 297.8,
+"y": 67.8,
+"str": "COTTON 80%, POLYESTER 20%",
+"bold": false
+},
+{
+"x": 68.0,
+"y": 81.4,
+"str": "ANIS:855",
+"bold": false
+},
+{
+"x": 184.6,
+"y": 63.5,
+"str": "3C",
+"bold": false
+},
+{
+"x": 180.1,
+"y": 72.0,
+"str": "50000",
+"bold": false
+},
+{
+"x": 215.3,
+"y": 67.8,
+"str": "55",
+"bold": false
+},
+{
+"x": 261.6,
+"y": 68.3,
+"str": "73",
+"bold": true
+}
+]

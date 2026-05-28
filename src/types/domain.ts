@@ -579,6 +579,13 @@ export interface Material {
    * `null` means active / on-site.
    */
   discontinuedAt?: number | null;
+  /**
+   * Set by a complete price-list (PDF) import when this material isn't found
+   * in the price list — so it carries no current grade/price. Kept, not
+   * deleted (it may be a website-only or custom entry); `null` means present
+   * in the price list.
+   */
+  notInPricelistAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
 }
