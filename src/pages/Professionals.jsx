@@ -11,11 +11,12 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
 
-// The commission % a row displays — the stored default, clamped into the
-// legal [0,20] range, falling back to the house 10% when unset. Kept as a
-// single helper so the band filter, the sort, and the rendered cells all
-// read the same number (otherwise a row could fall in one band but sort
-// as if it were in another).
+// The reference commission % a row displays — a non-binding note (the real
+// rate is the quote's order-type rate, Piso 15% / Especial 20%), clamped into
+// the legal [0,20] range, falling back to the house 10% when unset. Kept as a
+// single helper so the band filter, the sort, and the rendered cells all read
+// the same number (otherwise a row could fall in one band but sort as if it
+// were in another).
 function commissionOf(p) {
   return clampCommissionPct(p.defaultCommissionPct ?? 10);
 }
@@ -177,7 +178,7 @@ export default function Professionals() {
                     <MetaStrip p={p} />
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-[11px] text-ink-500">Comisión</div>
+                    <div className="text-[11px] text-ink-500">Comisión ref.</div>
                     <div className="text-sm font-medium tabular-nums">
                       {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
                     </div>
@@ -202,7 +203,7 @@ export default function Professionals() {
                   <th>Empresa</th>
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
-                  <th className="text-right">Comisión</th>
+                  <th className="text-right">Comisión ref.</th>
                   <th></th>
                 </tr>
               </thead>

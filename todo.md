@@ -10,58 +10,60 @@ afterMargin`). `commissionAmount(totals, pct) = max(0, preDiscountBase*pct − d
 
 Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 
+> **Status (this pass):** P0 fixed; all clear-cut P1 dedup/correctness items done; P2 vestigial
+> default-commission relabeled. New lib surface: `commissionBreakdown` / `grossCommissionAmount`
+> (`commissions.ts`) and `alternativeGroupInfo` (`pricing.ts`), both covered by tests
+> (typecheck + 200 tests + build all green). **Deferred** (marked inline below): the editor/preview
+> component extraction, the frozen-paid-amount change, all P3 structural refactors (large, "no rush",
+> high regression risk to ship blind), and the open business decisions (need an owner's call).
+
 ---
 
 ## P0 — confirmed defect (fix first)
 
-- [ ] **Accounting commission detail string is arithmetically wrong when a discount is present.**
-  - Where: `src/pages/accounting/Workspace.jsx:756` (the `Profesional` `CommissionLine` `detail`).
-  - Problem: it renders `Base {base} · {proPct}% = {proAmount}` where `base = t.taxableBase`
-    (post-discount, L173) but `proAmount` now nets out the client discount. With a discount it
-    reads e.g. "Base 900 · 20% = 100" (900×20% = 180, not 100). Rollup totals are correct — this
-    is display-only. The seller line above (`:737`) is fine (seller commission really is base×pct).
-  - Action: make the equation honest. When `t.discountAmt > 0`, show the breakdown, e.g.
-    `Base {preDiscountBase} · {proPct}% = {gross} − desc. {discountAmt} = {proAmount}`
-    (mirror the builder's `CommissionCard` in `TotalsRail.jsx`); when no discount, keep the
-    current `Base · % = amount` form. `preDiscountBase = t.taxableBase + t.discountAmt`.
-  - Verify: open Contabilidad on a quote with an assigned professional + a quote-level discount;
-    the printed numbers must compute.
+- [x] **Accounting commission detail string is arithmetically wrong when a discount is present.**
+  - DONE — `SaleCard` (`Workspace.jsx`) now builds the `Profesional` detail from
+    `commissionBreakdown(totals, proPct)`: with a discount it prints
+    `Base {preDiscountBase} · {proPct}% = {gross} − desc. {discountAmt} = {net}`, and the
+    no-discount path keeps the compact `Base · % = amount` form. Mirrors the builder's
+    `CommissionCard`. (Seller line left as-is — it was already honest.)
 
 ---
 
 ## P1 — inconsistencies / latent correctness risks
 
-- [ ] **Two discount mechanics with different commission semantics.**
+- [ ] **Two discount mechanics with different commission semantics.** (DEFERRED — depends on
+    another workstream + a business decision.)
   - Per-line discount (`lineDiscountPct`) silently shrinks the commission base; the quote-level
     discount (`discountPct`) is explicitly drawn from commission. The trail is only fully
     consistent once per-line discounts are removed (planned in another workstream). Confirm that
     removal lands; until then, decide whether a per-line discount should also come out of commission.
 
-- [ ] **`ClientPreview` recomputes line math without the lib's clamp.**
-  - Where: `src/components/quote-builder/ClientPreview.jsx:492,499` (`Number(line.lineDiscountPct)`
-    then `listUnit*(1-discount/100)`).
-  - Problem: equals `applyLineAdjustments` for in-range data, but skips `clampPct` (0–100), so it
-    diverges if `lineDiscountPct` is ever out of range. Latent (inputs currently clamp).
-  - Action: route through `applyLineAdjustments` / `lineListUnit` from `src/lib/pricing.ts`.
+- [x] **`ClientPreview` recomputes line math without the lib's clamp.**
+  - DONE — `ClientLine` now derives `qty`/`listUnit`/`unit`/`total` from `lineQty`,
+    `lineListUnit`, `applyLineAdjustments`, `lineTotal`, and `clampPct(line.lineDiscountPct)`
+    (so an out-of-range pct can no longer invert/balloon the unit). `CompoundClientLine`'s
+    displayed `−Y%` now clamps via `clampPct` too.
 
-- [ ] **Duplicated math that should come from a lib (drift risk; currently equivalent).**
-  - DOP conversion: `TotalsRail.jsx:88` vs `ClientPreview.jsx:447` — both hand-roll
-    `Math.round(total*dopRate)`; consider a `formatMoney`/helper.
-  - "N of M" group position: hand-written in `LineItemList.jsx` and `ClientPreview.jsx` instead of
-    a shared helper (`setGroupInfo` exists in `pricing.ts`).
-  - `resolveOptionDeltas` in `QuoteLineItem.jsx` (~L42) re-implements `materialOptionDeltas` (`pricing.ts`).
-  - Action: make the libs authoritative; delete the inline copies.
+- [x] **Duplicated math that should come from a lib (drift risk; currently equivalent).**
+  - DONE — DOP conversion in `ClientPreview` now goes through `formatMoney(total, 'DOP', rates)`
+    (the helper already does `Math.round(total*rate)`); "N of M" position now uses the new shared
+    `alternativeGroupInfo` + existing `setGroupInfo` in `pricing.ts` (the three inline scans in
+    `LineItemList`/`ClientPreview` are gone); `resolveOptionDeltas` in `QuoteLineItem` is deleted
+    in favor of `materialOptionDeltas` from `pricing.ts`.
 
-- [ ] **Gross-commission formula duplicated outside the lib.**
-  - Where: `src/components/quote-builder/TotalsRail.jsx:58` recomputes `(taxableBase+discountAmt)*pct/100`.
-  - Action: expose `grossCommissionAmount(totals, pct)` (or a `{gross, discount, net}` breakdown)
-    from `src/lib/commissions.ts` and consume it here.
+- [x] **Gross-commission formula duplicated outside the lib.**
+  - DONE — added `commissionBreakdown(totals, pct) -> {gross, discount, net}` and
+    `grossCommissionAmount` to `commissions.ts` (with `commissionAmount` now delegating to the
+    breakdown). `TotalsRail` consumes the breakdown; the accounting line (P0) consumes it too.
 
-- [ ] **Editor/preview twin components can drift.**
+- [ ] **Editor/preview twin components can drift.** (DEFERRED — large refactor; currently works.)
   - `GroupCard` (`LineItemList.jsx`) vs `ClientGroupCard` (`ClientPreview.jsx`); `ClientLine` /
     `CompoundClientLine` carry parallel layout/logic. Action: extract one shared group/line block.
+    Belongs with the P3 decomposition below; out of scope for this correctness/dedup pass.
 
-- [ ] **Commission is recomputed live — no frozen paid amount.**
+- [ ] **Commission is recomputed live — no frozen paid amount.** (DEFERRED — needs an
+    audit-history decision + a schema change; see open business decisions.)
   - Toggling `order_type`, or ever changing `FLOOR_COMMISSION_PCT`/`SPECIAL_COMMISSION_PCT`,
     retroactively changes already-paid quotes' displayed commission; `commissionPaidAt` records
     *that* it paid, not *how much*. Action (if audit history matters): snapshot the paid amount at
@@ -71,20 +73,28 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 
 ## P2 — leftovers / hygiene
 
-- [ ] **Vestigial per-professional default commission.**
-  - `professionals.default_commission_pct` no longer drives the quote rate (the order-type toggle
-    replaced it) but is still editable/shown: `ProfessionalModal.jsx:48,150-151`,
-    `ProfessionalPicker.jsx:178,182` ("X% por defecto"), `Professionals.jsx:20,182,217`.
-  - Action: remove it or relabel as a non-binding note. (Already cleaned in `ProfessionalChip`
-    placeholder and `ProfessionalDetail` subtitle.) Dropping the column is optional/non-urgent.
+- [x] **Vestigial per-professional default commission.**
+  - DONE (relabel route) — copy no longer implies the value drives the quote rate:
+    `ProfessionalModal` field is now "Comisión de referencia" with honest help text
+    (rate comes from the order type, Piso 15% / Especial 20%); `ProfessionalPicker` shows
+    "ref. X%"; `Professionals` list header is "Comisión ref.". The editable field/column is kept
+    (dropping the column is optional/non-urgent, per the note) — no data/migration change.
 
-- [ ] **Side-effect inside a presentation component.**
-  - `QuoteLineItem.jsx` `GradeFabricRow` does a fire-and-forget DB write (`rememberSwatchInCatalog`,
-    ~L626). Action: lift the persistence out of render into a handler/hook.
+- [ ] **Side-effect inside a presentation component.** (DEFERRED — the literal "in render" bug
+    isn't present; the remaining concern is architectural, belongs with P3.)
+  - `rememberSwatchInCatalog` (`QuoteLineItem.jsx`) is already called from the `setSwatch` event
+    handler, not during render, so it doesn't fire on re-render. The deeper cleanup — moving
+    persistence out of the presentation component entirely — is part of the P3 god-orchestrator /
+    prop-drilling work below; doing it standalone has no behavioral payoff and touches a 1.5k-LOC file.
 
 ---
 
 ## P3 — structural (architecture; larger refactors, no rush)
+
+> DEFERRED this pass — these are large, cross-cutting refactors (god-object decomposition, splitting
+> 1.5k-LOC leaves, introducing a quote context/store). Shipping them blind to production `main` in a
+> single autonomous pass is high-risk and they're explicitly "no rush"; better as a focused,
+> reviewable change set. Listed here so they're not lost.
 
 - [ ] **Thin out the god orchestrator.** `Workspace` (~L184–1105 in `src/pages/QuoteBuilder.jsx`,
   ~920 LOC) owns all state + ~18 mutations (writing directly to `db.*`) + grouping invariants +
@@ -104,6 +114,9 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 ---
 
 ## Open business decisions (NOT bugs — confirm intent, then act if needed)
+
+> NOT actioned this pass — each needs the owner's call (they change money semantics, not just code).
+> Surfaced back to the user; ready to implement once a direction is chosen.
 
 - [ ] **Seller commission also drops with the client discount** (it's computed on the post-discount
   `taxableBase`: `Workspace.jsx:161`, `admin/Commissions.jsx:137`). Decide: should the seller earn

@@ -4,7 +4,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { QUOTE_STATUS_DRAFT } from '../../lib/constants.js';
 import { formatMoney } from '../../lib/format.js';
-import { effectiveCommissionPct, commissionAmount } from '../../lib/commissions.js';
+import { effectiveCommissionPct, commissionBreakdown } from '../../lib/commissions.js';
 import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 /**
  * The persistent totals + adjustments rail. Always visible on the right
@@ -63,8 +63,9 @@ export default function TotalsRail({
   // professional actually earns. Without a professional there's no commission
   // to draw from (the dealer absorbs the discount), so the card is hidden.
   const commissionPct = effectiveCommissionPct(quote);
-  const grossCommission = (totals.taxableBase + totals.discountAmt) * (commissionPct / 100);
-  const netCommission = commissionAmount(totals, commissionPct);
+  // Gross / net both come from the one lib breakdown so this readout and
+  // Contabilidad's commission line can't drift from the payout math.
+  const { gross: grossCommission, net: netCommission } = commissionBreakdown(totals, commissionPct);
 
   return (
     <div className="space-y-4">

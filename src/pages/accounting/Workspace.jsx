@@ -21,7 +21,7 @@ import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
 import {
-  effectiveCommissionPct, commissionAmount, decoratorBilling, commissionOwedAt,
+  effectiveCommissionPct, commissionAmount, commissionBreakdown, decoratorBilling, commissionOwedAt,
 } from '../../lib/commissions.js';
 
 /**
@@ -676,6 +676,23 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
   const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
   const customerName = customer?.company || customer?.name || '—';
 
+  // Commission figures always book in USD (the price-list currency), so the
+  // detail strings render with a fixed USD rate regardless of the quote's
+  // display currency.
+  const fmtUsd = (v) => formatMoney(v, 'USD', { USD: 1 });
+  // Professional commission detail. With a client discount the equation must
+  // show every term — Base(pre-discount) · % = gross − desc = net — because
+  // the printed net is drawn out of the gross (the post-discount base × %
+  // would NOT equal the net). Without a discount, gross === net, so the
+  // compact "Base · % = amount" form stays. Mirrors the builder's
+  // CommissionCard; all terms come from the one lib breakdown.
+  const proCommission = commissionBreakdown(totals, proPct);
+  const proDetail = mode === 'trade_discount'
+    ? `Facturar al decorador −${decoratorPct}% (sin comisión)`
+    : proCommission.discount > 0
+      ? `Base ${fmtUsd(base + proCommission.discount)} · ${proPct}% = ${fmtUsd(proCommission.gross)} − desc. ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)}`
+      : `Base ${fmtUsd(base)} · ${proPct}% = ${fmtUsd(proAmount)}`;
+
   const anyPayable = sellerPayable || proPayable;
   const anyPending = (sellerPayable && !sellerPaid) || (proPayable && !proPaid);
   const chip = !anyPayable
@@ -734,7 +751,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
             <CommissionLine
               role="Vendedor"
               who={creatorDisplay(creator) || '—'}
-              detail={`Base ${formatMoney(base, 'USD', { USD: 1 })} · ${commissionPct}% = ${formatMoney(potentialCommission, 'USD', { USD: 1 })}`}
+              detail={`Base ${fmtUsd(base)} · ${commissionPct}% = ${fmtUsd(potentialCommission)}`}
               action={sellerPayable ? (
                 <PaidToggle
                   paid={sellerPaid}
@@ -751,9 +768,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                 role="Profesional"
                 who={professional.name || '—'}
                 badge={mode === 'trade_discount' ? 'Trade discount' : 'Comisión'}
-                detail={mode === 'trade_discount'
-                  ? `Facturar al decorador −${decoratorPct}% (sin comisión)`
-                  : `Base ${formatMoney(base, 'USD', { USD: 1 })} · ${proPct}% = ${formatMoney(proAmount, 'USD', { USD: 1 })}`}
+                detail={proDetail}
                 action={mode === 'trade_discount' ? null : (proPayable ? (
                   <PaidToggle
                     paid={proPaid}

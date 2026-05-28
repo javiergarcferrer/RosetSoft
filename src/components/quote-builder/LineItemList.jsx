@@ -3,7 +3,9 @@ import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucid
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
-import { setSubtotal, alternativeSubtotal, groupRuns } from '../../lib/pricing.js';
+import {
+  setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
+} from '../../lib/pricing.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
 
@@ -48,46 +50,11 @@ export default function LineItemList({
   onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
   onAddSection, onOpenCatalog,
 }) {
-  // Pre-compute alternative-group sizes so each line knows the
-  // "Alternativa N de M" position without re-scanning the list.
-  const groupInfo = (() => {
-    const map = new Map();
-    const counts = new Map();
-    for (const l of lines) {
-      const g = l.alternativeGroup;
-      if (!g) continue;
-      counts.set(g, (counts.get(g) || 0) + 1);
-    }
-    const seen = new Map();
-    for (const l of lines) {
-      const g = l.alternativeGroup;
-      if (!g) continue;
-      const idx = (seen.get(g) || 0) + 1;
-      seen.set(g, idx);
-      map.set(l.id, { index: idx, total: counts.get(g) });
-    }
-    return map;
-  })();
-
-  // Same "Conjunto N de M" position map for sets.
-  const setInfo = (() => {
-    const map = new Map();
-    const counts = new Map();
-    for (const l of lines) {
-      const g = l.setGroup;
-      if (!g) continue;
-      counts.set(g, (counts.get(g) || 0) + 1);
-    }
-    const seen = new Map();
-    for (const l of lines) {
-      const g = l.setGroup;
-      if (!g) continue;
-      const idx = (seen.get(g) || 0) + 1;
-      seen.set(g, idx);
-      map.set(l.id, { index: idx, total: counts.get(g) });
-    }
-    return map;
-  })();
+  // Per-line "Alternativa N de M" / "Conjunto N de M" position maps, from the
+  // shared lib helpers so the editor, the client preview, and the PDF all
+  // read the same caption instead of each re-scanning the list.
+  const groupInfo = alternativeGroupInfo(lines);
+  const setInfo = setGroupInfo(lines);
 
   const currency = quote?.currencyCode || 'USD';
   const rates = quote?.rates || { USD: 1 };

@@ -138,7 +138,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
           />
         </div>
         <div>
-          <div className="label">Comisión por defecto</div>
+          <div className="label">Comisión de referencia</div>
           <div className="relative">
             <input
               type="number"
@@ -153,8 +153,8 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
           </div>
           <p className="text-[11px] text-ink-500 mt-1">
-            Se aplica automáticamente al asignar este profesional a una cotización.
-            Rango 0–20%. Cada venta puede sobreescribir este valor.
+            Solo una nota de referencia (0–20%). La comisión real la fija el tipo de
+            pedido de cada cotización (Piso 15% · Especial 20%) y puede ajustarse por venta.
           </p>
         </div>
         <div>

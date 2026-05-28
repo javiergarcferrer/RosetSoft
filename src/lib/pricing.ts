@@ -296,17 +296,42 @@ export function setSubtotal(
 }
 
 /**
+ * Per-line "N de M" position info for a grouping key, keyed by line id.
+ *
+ * The shared engine behind setGroupInfo / alternativeGroupInfo: position is
+ * the line's 1-based order within its group as it appears in `lines`; total
+ * is the group size. Lines whose `keyOf` yields a falsy id are absent from
+ * the map. `{ index, total }` is the same shape every caption consumes.
+ */
+function groupPositionInfo(
+  lines: readonly QuoteLine[] | null | undefined,
+  keyOf: (line: QuoteLine) => string | null | undefined,
+): Map<string, { index: number; total: number }> {
+  const map = new Map<string, { index: number; total: number }>();
+  const counts = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l ? keyOf(l) : null;
+    if (!g) continue;
+    counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  for (const l of lines || []) {
+    const g = l ? keyOf(l) : null;
+    if (!g) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(l.id, { index: idx, total: counts.get(g) as number });
+  }
+  return map;
+}
+
+/**
  * Per-line "Conjunto N de M" position info, keyed by line id.
  *
- * Mirrors the alternative-group `groupInfo` computed in
- * LineItemList / ClientPreview so set members can show a quiet
- * "Conjunto N de M" eyebrow. Position is the line's 1-based order
- * within its set as it appears in `lines`; total is the set size.
- * Lines with no `setGroup` are absent from the map.
- *
- * The preview / PDF renderers can call this once per render and look
- * up each line by id — the same shape (`{ index, total }`) the
- * alternative caption already consumes.
+ * So set members can show a quiet "Conjunto N de M" eyebrow. Position is the
+ * line's 1-based order within its set as it appears in `lines`; total is the
+ * set size. Lines with no `setGroup` are absent from the map. The preview /
+ * PDF renderers call this once per render and look up each line by id.
  *
  * @param {Array} lines  all quote lines
  * @returns {Map<string, { index: number, total: number }>}
@@ -314,22 +339,23 @@ export function setSubtotal(
 export function setGroupInfo(
   lines: readonly QuoteLine[] | null | undefined,
 ): Map<string, { index: number; total: number }> {
-  const map = new Map<string, { index: number; total: number }>();
-  const counts = new Map<string, number>();
-  for (const l of lines || []) {
-    const g = l?.setGroup;
-    if (!g) continue;
-    counts.set(g, (counts.get(g) || 0) + 1);
-  }
-  const seen = new Map<string, number>();
-  for (const l of lines || []) {
-    const g = l?.setGroup;
-    if (!g) continue;
-    const idx = (seen.get(g) || 0) + 1;
-    seen.set(g, idx);
-    map.set(l.id, { index: idx, total: counts.get(g) as number });
-  }
-  return map;
+  return groupPositionInfo(lines, (l) => l.setGroup);
+}
+
+/**
+ * Per-line "Alternativa N de M" position info, keyed by line id — the
+ * alternative-group twin of setGroupInfo. Single source of truth shared by
+ * the editor (LineItemList) and the customer surfaces (ClientPreview / PDF)
+ * so the caption reads identically everywhere instead of each surface
+ * hand-rolling the same scan. Lines with no `alternativeGroup` are absent.
+ *
+ * @param {Array} lines  all quote lines
+ * @returns {Map<string, { index: number, total: number }>}
+ */
+export function alternativeGroupInfo(
+  lines: readonly QuoteLine[] | null | undefined,
+): Map<string, { index: number; total: number }> {
+  return groupPositionInfo(lines, (l) => l.alternativeGroup);
 }
 
 /* --------------------------- alternativas (alternatives) --------------------------- */

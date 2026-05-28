@@ -13,12 +13,11 @@ import { useApp } from '../../context/AppContext.jsx';
 import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
-import * as pricing from '../../lib/pricing.js';
 import {
-  applyLineAdjustments,
+  applyLineAdjustments, materialOptionDeltas,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
 } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
+import { splitSkuGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId } from '../../db/database.js';
@@ -31,31 +30,6 @@ import { newId } from '../../db/database.js';
  * Map so the component renders fine outside a provider (tests, previews).
  */
 export const FamiliesContext = createContext(new Map());
-
-/**
- * Resolve the [{ grade, label, code, swatchImageId, delta }] view of a line's
- * materialOptions against its catalog family. Prefers lib/pricing's
- * materialOptionDeltas when present; otherwise computes the list-price USD
- * delta locally (option grade price − base grade price) so the chips still
- * read a number while that helper is being added.
- */
-function resolveOptionDeltas(materialOptions, family) {
-  if (!materialOptions || !Array.isArray(materialOptions.options)) return [];
-  if (typeof pricing.materialOptionDeltas === 'function') {
-    return pricing.materialOptionDeltas(materialOptions, family) || [];
-  }
-  const basePrice = Number(productForGrade(family, materialOptions.baseGrade)?.priceUsd) || 0;
-  return materialOptions.options.map((o) => {
-    const price = Number(productForGrade(family, o.grade)?.priceUsd) || 0;
-    return {
-      grade: o.grade,
-      label: o.label,
-      code: o.code,
-      swatchImageId: o.swatchImageId,
-      delta: family ? price - basePrice : 0,
-    };
-  });
-}
 
 /**
  * One quote line — a product card read top→bottom:
@@ -840,7 +814,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
 // "Hacer base" swaps a chip with the current delta base — informational only.
 function MaterialOptionChips({ materialOptions, family, currency, rates, onRemove, onMakeBase }) {
   if (!materialOptions || !(materialOptions.options || []).length) return null;
-  const deltas = resolveOptionDeltas(materialOptions, family);
+  const deltas = materialOptionDeltas(materialOptions, family);
   const fmtDelta = (d) => {
     const v = Number(d) || 0;
     const sign = v > 0 ? '+' : v < 0 ? '−' : '';

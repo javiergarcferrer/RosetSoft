@@ -4,8 +4,9 @@ import ImageView from '../ImageView.jsx';
 import Modal from '../Modal.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  quoteSavings, setSubtotal, setGroupInfo,
+  quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
   alternativeSubtotal, groupRuns,
+  lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
 } from '../../lib/pricing.js';
 // Namespace import for materialOptionDeltas so this surface degrades
 // gracefully if the helper isn't present in the bundle yet (it resolves
@@ -210,29 +211,11 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // non-zero so the concessions don't read as silent post-discount
   // numbers.
   const savings = useMemo(() => quoteSavings(lines, totals), [lines, totals]);
-  // Alternative-group index/total lookup — same shape the editor uses
-  // so the "Alternativa N de M" caption reads identically on both
-  // surfaces. Cheap to compute on every render.
-  const groupInfo = useMemo(() => {
-    const counts = new Map();
-    for (const l of lines) {
-      if (!l.alternativeGroup) continue;
-      counts.set(l.alternativeGroup, (counts.get(l.alternativeGroup) || 0) + 1);
-    }
-    const seen = new Map();
-    const map = new Map();
-    for (const l of lines) {
-      if (!l.alternativeGroup) continue;
-      const idx = (seen.get(l.alternativeGroup) || 0) + 1;
-      seen.set(l.alternativeGroup, idx);
-      map.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) });
-    }
-    return map;
-  }, [lines]);
-  // Conjunto (set) "Conjunto N de M" position lookup — keyed by line id,
-  // SAME { index, total } shape as the alternative groupInfo above. We
-  // import the shared helper rather than re-deriving it so the caption
-  // reads identically across editor / preview / PDF.
+  // "Alternativa N de M" and "Conjunto N de M" position lookups, keyed by
+  // line id. Both come from the shared lib helpers rather than being
+  // re-derived here, so the caption reads identically across editor /
+  // preview / PDF.
+  const groupInfo = useMemo(() => alternativeGroupInfo(lines), [lines]);
   const setInfo = useMemo(() => setGroupInfo(lines), [lines]);
 
   // overflow-clip (not -hidden) so the rounded corners still clip the
@@ -444,7 +427,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           )}
           {dopRate && currency === 'USD' && (
             <div className="text-[11px] text-ink-500 text-right pt-0.5">
-              ≈ RD$ {Math.round(totals.grandTotal * dopRate).toLocaleString('en-US')} a {dopRate.toFixed(2)} DOP/USD
+              ≈ {formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
             </div>
           )}
         </div>
@@ -487,18 +470,18 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
       />
     );
   }
-  const base = Number(line.unitPrice) || 0;
-  const margin = Number(line.lineMarginPct) || 0;
-  const discount = Number(line.lineDiscountPct) || 0;
-  const qty = Number(line.qty) || 0;
-  // List unit = post-margin, pre-discount. That's the catalogue price
-  // the customer would have paid without the discount — so the
-  // strike-through / "antes" line reflects the figure they're saving
-  // against, not the dealer's internal cost basis.
-  const listUnit = base * (1 + margin / 100);
-  const unit = listUnit * (1 - discount / 100);
+  // All line math routes through lib/pricing so the customer preview can
+  // never diverge from the editor / PDF / totals — and so the line-discount
+  // clamp (0–100) is applied here too (a stray out-of-range pct can't invert
+  // or balloon the unit price). listUnit = post-margin, pre-discount: the
+  // catalogue price the customer would have paid without the discount, so the
+  // strike-through reflects what they're saving against, not the cost basis.
+  const qty = lineQty(line);
+  const listUnit = lineListUnit(line);
+  const unit = applyLineAdjustments(lineBasePrice(line), line.lineMarginPct, line.lineDiscountPct);
   const listTotal = listUnit * qty;
-  const total = unit * qty;
+  const total = lineTotal(line);
+  const discount = clampPct(line.lineDiscountPct);
   const discounted = discount > 0;
   // Layout shape, mobile-first:
   //
@@ -686,7 +669,10 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
 function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
-  const discount = Number(line.lineDiscountPct) || 0;
+  // Clamp the displayed discount % the same way the lib does (0–100) so the
+  // "−Y%" caption can't show an out-of-range value; the money above already
+  // routes through compoundSubtotal / lineTotal.
+  const discount = clampPct(line.lineDiscountPct);
   const discounted = discount > 0;
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
