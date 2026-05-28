@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('[bpd-rate] start', { version: 'tls-ca-fix', base: BASE, clientId: CLIENT_ID, secretLen: CLIENT_SECRET.length, tlsClient: bpdHttpClient ? 'custom-ca' : 'default' });
+    console.log('[bpd-rate] start', { version: 'tls-ca-fix-2', base: BASE, clientId: CLIENT_ID, secretLen: CLIENT_SECRET.length, tlsClient: bpdHttpClient ? 'custom-ca' : 'default' });
 
     // 1. OAuth client-credentials token. The portal doesn't reveal HOW it
     // authenticates the client at the token endpoint, so try the two standard
