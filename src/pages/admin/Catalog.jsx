@@ -8,7 +8,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatMoney } from '../../lib/format.js';
-import { parsePriceList } from '../../lib/priceListCsv.js';
+import { parsePriceList, dedupeBySku } from '../../lib/priceListCsv.js';
 
 /**
  * Catálogo — the Ligne Roset product catalog, imported from the supplier
@@ -63,37 +63,31 @@ export default function Catalog() {
     setResult('');
     try {
       const text = await file.text();
-      const parsed = parsePriceList(text);
+      // dedupeBySku collapses the list's repeated SKUs (required: a single
+      // upsert batch can't touch the same primary key twice) and resolves
+      // stale-price duplicates to the canonical current price.
+      const parsed = dedupeBySku(parsePriceList(text));
       if (parsed.length === 0) {
         setError('No se reconocieron productos. ¿Es el CSV de la lista de precios de Roset?');
         return;
       }
       const now = Date.now();
       const byId = new Map(products.map((p) => [p.id, p]));
-      // Dedupe by SKU before upserting: the price list repeats a SKU across
-      // sections, and a single upsert batch can't touch the same row twice
-      // ("ON CONFLICT DO UPDATE command cannot affect row a second time").
-      // Last occurrence wins.
-      const bySku = new Map();
-      for (const p of parsed) {
-        if (!p.reference) continue;
-        bySku.set(p.reference, {
-          id: p.reference,
-          profileId,
-          reference: p.reference,
-          name: p.name,
-          subtype: p.subtype,
-          dimensions: p.dimensions,
-          family: p.family,
-          familyCode: p.familyCode,
-          category: p.category,
-          priceUsd: p.priceUsd,
-          cost: p.cost,
-          active: true,
-          createdAt: byId.get(p.reference)?.createdAt || now,
-        });
-      }
-      const rows = [...bySku.values()];
+      const rows = parsed.map((p) => ({
+        id: p.reference,
+        profileId,
+        reference: p.reference,
+        name: p.name,
+        subtype: p.subtype,
+        dimensions: p.dimensions,
+        family: p.family,
+        familyCode: p.familyCode,
+        category: p.category,
+        priceUsd: p.priceUsd,
+        cost: p.cost,
+        active: true,
+        createdAt: byId.get(p.reference)?.createdAt || now,
+      }));
       await db.products.bulkPut(rows);
       setResult(`${rows.length} productos importados.`);
     } catch (e) {

@@ -134,3 +134,45 @@ export function parsePriceList(text: string): ParsedProduct[] {
   }
   return out;
 }
+
+/**
+ * Collapse rows that share a SKU into one product. The Roset list repeats SKUs
+ * (~5500 of 32940 rows): usually byte-identical, sometimes the same article
+ * under several layout names at one price, and — for ~95 SKUs — a stale price
+ * left over from an earlier list revision (same SKU, two retails, e.g. MOEL
+ * ARMCHAIR 10000552H at 6410 once and 7455 twice).
+ *
+ * A single upsert batch can't touch the same primary key twice, so this dedupe
+ * is required before import. The price-conflict case makes "keep the last row"
+ * wrong for a pricing tool: it picks an arbitrary (possibly stale, lower)
+ * price. Instead, choose the most-frequently-listed price per SKU — the
+ * canonical current price — tie-broken to the HIGHEST so a 1-row revision wins
+ * and we never quote a stale lower price. Deterministic: the same file always
+ * yields the same rows. Returns the chosen occurrence (carrying the matching
+ * cost / name / dimensions).
+ */
+export function dedupeBySku(products: ParsedProduct[]): ParsedProduct[] {
+  const groups = new Map<string, ParsedProduct[]>();
+  for (const p of products) {
+    if (!p.reference) continue;
+    const g = groups.get(p.reference);
+    if (g) g.push(p);
+    else groups.set(p.reference, [p]);
+  }
+  const out: ParsedProduct[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) { out.push(group[0]); continue; }
+    const freq = new Map<number, number>();
+    for (const p of group) freq.set(p.priceUsd, (freq.get(p.priceUsd) || 0) + 1);
+    let bestPrice = group[0].priceUsd;
+    let bestCount = -1;
+    for (const [price, count] of freq) {
+      if (count > bestCount || (count === bestCount && price > bestPrice)) {
+        bestPrice = price;
+        bestCount = count;
+      }
+    }
+    out.push(group.find((p) => p.priceUsd === bestPrice) as ParsedProduct);
+  }
+  return out;
+}
