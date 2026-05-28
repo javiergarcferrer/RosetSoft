@@ -103,13 +103,16 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
   sequence-number healing + PDF export + render. Action: lift quote state + mutations + grouping/
   sequence rules into a `useQuoteActions` hook / domain module; expose `{quote, actions}` via
   context. This also removes the prop-drilling below.
-  - PARTIAL — the **grouping invariants** are lifted to `lib/quoteGroups.ts` as pure, tested
-    helpers (`selectAlternativePatches`, `healAlternativeOnRemove`, `healSetOnRemove`); the four
-    mutations (`selectAlternative`, `separateFromSet`, `ungroupLine`, `removeLine`) now consume
-    them instead of re-deriving the same singleton/selection healing four times. Remaining: lift
-    quote STATE + the db-writing mutations into a `useQuoteActions` hook + context (couples with
-    the prop-drilling item below; best as a reviewed change — `QuoteBuilder.jsx` is under active
-    parallel churn and there are no UI/integration tests to catch a regression).
+  - PARTIAL — three slices landed, `Workspace` is shrinking (1258 → 1162 LOC):
+    1. **Grouping invariants** → pure, tested `lib/quoteGroups.ts` helpers (`selectAlternativePatches`,
+       `healAlternativeOnRemove`, `healSetOnRemove`); the four mutations now consume them instead of
+       re-deriving the same singleton/selection healing four times.
+    2. **Prop-drilling killed** (item below, done) — editor actions flow via `QuoteActionsContext`.
+    3. **Export/share logic** → `useQuoteExport.js` (PDF generation + share-link minting + their UI
+       status/effects), so the export UI stays thin.
+    - Remaining: lift quote STATE + the db-writing mutations + undo/redo history into a
+      `useQuoteController` hook (the big one — a cohesive state machine; `QuoteBuilder.jsx` is under
+      active parallel churn and there are no UI tests, so move verbatim + lean on typecheck/build).
 
 - [ ] **Decompose oversized leaves.** `QuoteLineItem.jsx` (**1501 LOC**, 13 inline subcomponents,
   own `FamiliesContext`) and `ClientPreview.jsx` (**980 LOC**). Action: split the inline

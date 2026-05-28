@@ -11,14 +11,7 @@ import {
 } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
-// PDF generation (pdf-lib + fontkit + embedded Inter) is heavy — ~600KB
-// gzipped between pdf-lib, fontkit, and the font fetch. Loading it
-// eagerly would bloat every page that imports QuoteBuilder. Dynamic
-// import keeps it out of the initial bundle and fetched only when the
-// dealer first taps Export PDF — the browser caches the chunk after
-// that, so subsequent exports in the same session are free.
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
-import { safeDynamicImport } from '../lib/dynamicImport.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -31,8 +24,8 @@ import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
+import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
-import { shareLinkUrl, newShareToken } from '../lib/quoteShare.js';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is
 // a whole-quote snapshot (the quote row + all its lines); 50 covers a long
@@ -240,6 +233,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (materialize) await materialize();
   }, [materialize]);
 
+  // PDF export + share-link logic lives in its own hook so the export UI
+  // (TotalsDock, the banners below) stays thin. It persists the share token
+  // through updateQuote — the single quote writer, defined further down (a
+  // hoisted function declaration, so referencing it here is fine).
+  const {
+    exporting, exportError, setExportError,
+    sharing, shareMsg, setShareMsg, exportErrorRef,
+    exportPdf, shareQuote,
+  } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote });
+
   // Heal legacy quotes that lost their sequence number to the old
   // updateQuote write-back race (it persisted the stale in-memory quote,
   // number:null, right after materialize had assigned one). Assign the
@@ -282,34 +285,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // because line edits don't bump the parent quote's updatedAt (by design).
   const [savedAt, setSavedAt] = useState(quote?.updatedAt || null);
   const [saving, setSaving] = useState(false);
-  // PDF export UI state — disables the export button while a generation
-  // is in flight, and surfaces failures (a malformed line, a refusal
-  // from the browser to deliver the blob) instead of swallowing them.
-  // Earlier the whole exportPdf() ran without try/catch, so any error
-  // — including "nothing happened" — was invisible to the dealer.
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState(null);
-  // Share-link state: a spinner while the token is minted/persisted, and a
-  // transient toast confirming the copied link (or showing it to copy by
-  // hand when the clipboard API is unavailable).
-  const [sharing, setSharing] = useState(false);
-  const [shareMsg, setShareMsg] = useState(null);
-  useEffect(() => {
-    if (!shareMsg) return undefined;
-    const id = setTimeout(() => setShareMsg(null), 6000);
-    return () => clearTimeout(id);
-  }, [shareMsg]);
-  // On mobile the only export trigger is the bottom sticky bar, but the
-  // error banner renders at the top of the page — so a failed export would
-  // stop the spinner with the explanation scrolled far out of sight,
-  // recreating the "I tapped it and nothing happened" silence the banner
-  // exists to prevent. Scroll the banner into view whenever it appears.
-  const exportErrorRef = useRef(null);
-  useEffect(() => {
-    if (exportError) {
-      exportErrorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-    }
-  }, [exportError]);
   // Counter of in-flight writes so concurrent edits don't flicker the badge.
   const inFlight = useRef(0);
 
@@ -915,72 +890,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     lines.filter(isPricedLine).map(lineForTotals),
     { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
   );
-
-  // Mint (once) + copy a public interactive link for the client. The token
-  // is generated on first share and persisted on the quote; `shareEnabled`
-  // lets a later revoke flip it off without losing the URL.
-  async function shareQuote() {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      let token = quote.shareToken;
-      if (!token || !quote.shareEnabled) {
-        token = token || newShareToken();
-        await updateQuote({ shareToken: token, shareEnabled: true });
-      }
-      const url = shareLinkUrl(token);
-      try {
-        await navigator.clipboard.writeText(url);
-        setShareMsg(`Enlace copiado · ${url}`);
-      } catch {
-        setShareMsg(url);
-      }
-    } catch {
-      setShareMsg('No se pudo crear el enlace para compartir.');
-    } finally {
-      setSharing(false);
-    }
-  }
-
-  async function exportPdf() {
-    if (exporting) return;   // de-bounce double-taps
-    setExportError(null);
-    setExporting(true);
-    try {
-      const customer = quote.customerId
-        ? customers.find((c) => c.id === quote.customerId)
-        : null;
-      const professional = quote.professionalId
-        ? professionals.find((p) => p.id === quote.professionalId)
-        : null;
-      const seller = quote.createdByUserId
-        ? (profiles || []).find((p) => p.id === quote.createdByUserId)
-        : null;
-      const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
-        () => import('../pdf/quotePdf.js'),
-      );
-      // Pass *all* lines to the generator — including section breaks.
-      // The generator's groupBySection() consumes them as headings; the
-      // earlier filter that stripped sections out predates the PDF
-      // matching the on-screen ClientPreview, where section headers
-      // ("MOBILIARIO DE SALA") are part of the layout the customer
-      // sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups, families });
-      if (!blob || !blob.size) {
-        throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
-      }
-      const filename = `${quoteFileName(quote, customer)}.pdf`;
-      // Deliver the file straight away. downloadBlob picks Web Share on the
-      // surfaces that need it (iOS PWA / touch) and an <a download> anchor
-      // everywhere else, so desktop just gets the file in the downloads tray.
-      await downloadBlob(blob, filename);
-    } catch (err) {
-      console.error('[QuoteBuilder] exportPdf failed:', err);
-      setExportError(err?.message || 'No se pudo generar el PDF.');
-    } finally {
-      setExporting(false);
-    }
-  }
 
   /* ---------------------------- render ---------------------------- */
 
