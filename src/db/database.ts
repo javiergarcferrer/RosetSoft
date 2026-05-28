@@ -419,8 +419,10 @@ export async function searchProducts(profileId: string, term: string, limit = 40
   const needle = term.trim();
   if (needle) {
     // PostgREST or() is a comma-separated list and ilike treats % as the
-    // wildcard; strip the characters that would break that filter grammar.
-    const safe = needle.replace(/[%,()*]/g, ' ').trim();
+    // wildcard; strip the characters that would break that filter grammar, and
+    // collapse whitespace runs so a single-spaced query matches regardless of
+    // how the term was typed (the catalog data is normalized to single spaces).
+    const safe = needle.replace(/[%,()*]/g, ' ').replace(/\s+/g, ' ').trim();
     if (safe) {
       q = q.or(`reference.ilike.%${safe}%,name.ilike.%${safe}%,family.ilike.%${safe}%`);
     }
