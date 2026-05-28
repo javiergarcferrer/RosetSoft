@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
+import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
@@ -644,6 +645,9 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
   const [optionOpen, setOptionOpen] = useState(false);
+  // Index of the alternative option whose color we're re-picking (null = none).
+  // Drives a dedicated SwatchPicker that drills into that option's material.
+  const [editingOption, setEditingOption] = useState(null);
 
   // Append one or more alternative materials (informational — never touches the
   // line's price/subtype). On the FIRST option we snapshot the line's current
@@ -696,6 +700,27 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         options,
       },
     });
+  }
+
+  // Re-pick an alternative option's material/color. Mirrors how the base
+  // material commits a catalog pick, but writes it back into the option at
+  // `editingOption` (grade + label + code + swatch) instead of the line's own
+  // subtype — informational, never touches the line's price. This is what
+  // makes the option pills editable: pick colors per option after a bulk add.
+  function editOption(picked) {
+    if (editingOption == null || !materialOptions) return;
+    const opts = materialOptions.options || [];
+    const updated = opts.map((o, i) =>
+      i === editingOption
+        ? {
+            grade: picked.grade || '',
+            label: picked.fabric || '',
+            code: colorCodeFromSubtype(composeSubtype(picked.grade, picked.fabric)) || undefined,
+            swatchImageId: picked.swatchImageId || undefined,
+          }
+        : o,
+    );
+    onChange({ materialOptions: { ...materialOptions, options: updated } });
   }
 
   // Single row: swatch · grade · fabric · picker. The fabric input sizes
@@ -814,6 +839,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         rates={rates}
         onRemove={removeOption}
         onMakeBase={makeBase}
+        onEditColor={setEditingOption}
       />
 
       <SwatchPicker
@@ -837,15 +863,30 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         currentFabric=""
         family={family}
       />
+      {/* Third picker — re-pick the color/material of an EXISTING option.
+          Opens drilled into that option's material (autoDrill via its
+          grade/fabric) so clicking an option pill lands straight on its
+          color grid; the pick overwrites just that option. */}
+      <SwatchPicker
+        open={editingOption != null}
+        onClose={() => setEditingOption(null)}
+        onSelect={(picked) => editOption(picked)}
+        currentGrade={materialOptions?.options?.[editingOption]?.grade || ''}
+        currentFabric={materialOptions?.options?.[editingOption]?.label || ''}
+        family={family}
+      />
     </div>
   );
 }
 
 // Compact, removable chips for a line/component's alternative materials. Each
-// reads "LABEL +RD$X · ×"; the delta comes from materialOptionDeltas (resolved
-// against the line's catalog family) and is formatted in the quote's currency.
-// "Hacer base" swaps a chip with the current delta base — informational only.
-function MaterialOptionChips({ materialOptions, family, currency, rates, onRemove, onMakeBase }) {
+// shows a color swatch + "LABEL +RD$X" with a "Hacer base" and a remove ×; the
+// delta comes from materialOptionDeltas (resolved against the line's catalog
+// family) and is formatted in the quote's currency. "Hacer base" swaps a chip
+// with the current delta base — informational only. Clicking the swatch/label
+// opens the color picker for THAT option (onEditColor) so colors can be chosen
+// per option, e.g. after bulk-adding the same materials across many lines.
+function MaterialOptionChips({ materialOptions, family, currency, rates, onRemove, onMakeBase, onEditColor }) {
   if (!materialOptions || !(materialOptions.options || []).length) return null;
   const deltas = materialOptionDeltas(materialOptions, family);
   const fmtDelta = (d) => {
@@ -869,7 +910,25 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
           key={`${o.code || o.label || 'opt'}-${i}`}
           className="inline-flex items-center gap-1 chip text-brand-700 bg-brand-50 border border-brand-100"
         >
-          <span className="truncate max-w-[14rem]">{o.label || `Grade ${o.grade}`}</span>
+          {/* Swatch + label — click to re-pick this option's color/material. */}
+          <button
+            type="button"
+            onClick={() => onEditColor(i)}
+            className="inline-flex items-center gap-1 rounded hover:text-brand-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-brand-400"
+            title="Cambiar el color o material de esta opción"
+            aria-label={`Cambiar el color de ${o.label || 'la opción'}`}
+          >
+            {(o.swatchImageId || o.code) && (
+              <ImageView
+                id={o.swatchImageId}
+                fallbackUrl={swatchUrl(o.code)}
+                alt=""
+                className="w-4 h-4 rounded-sm object-cover border border-brand-100 bg-white flex-shrink-0"
+              />
+            )}
+            <span className="truncate max-w-[14rem]">{o.label || `Grade ${o.grade}`}</span>
+            <Palette size={10} className="opacity-40 flex-shrink-0" aria-hidden />
+          </button>
           <span className="tabular-nums font-medium">{fmtDelta(o.delta)}</span>
           <button
             type="button"
