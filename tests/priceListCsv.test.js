@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseCsv, splitDimensions, parsePriceList } from '../src/lib/priceListCsv.js';
+import { parseCsv, splitDimensions, parsePriceList, dedupeBySku } from '../src/lib/priceListCsv.js';
 
 const HEADER = 'SKU,Description 1,Description 2,Sales Code,Sales Code Description,Sales Code Divisor,Retail,Cost,Category Code,Category Description,Item Style Code,Item Style Code Description';
 
@@ -84,4 +84,46 @@ test('skips rows with no SKU; tolerates missing columns', () => {
   assert.equal(products.length, 1);
   assert.equal(products[0].reference, '9999X');
   assert.equal(products[0].priceUsd, 1000);
+});
+
+/* ------------------------------ dedupeBySku ------------------------------ */
+
+const mk = (reference, priceUsd, extra = {}) => ({
+  reference, name: 'X', subtype: '', dimensions: '', family: 'SEATS',
+  familyCode: '14H', category: 'SEATS', priceUsd, cost: priceUsd / 2.68, ...extra,
+});
+
+test('collapses identical duplicate SKUs to one row', () => {
+  const out = dedupeBySku([mk('A1', 100), mk('A1', 100), mk('B2', 200)]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map((p) => p.reference).sort(), ['A1', 'B2']);
+});
+
+test('on a price conflict keeps the most-frequently-listed price (MOEL case)', () => {
+  // 10000552H: 6410 once, 7455 twice → canonical is 7455.
+  const out = dedupeBySku([mk('10000552H', 6410), mk('10000552H', 7455), mk('10000552H', 7455)]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].priceUsd, 7455);
+});
+
+test('breaks a frequency tie toward the higher price (never quote a stale lower one)', () => {
+  const out = dedupeBySku([mk('T1', 500), mk('T1', 900)]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].priceUsd, 900);
+});
+
+test('keeps the row matching the chosen price, so cost/name stay consistent', () => {
+  const out = dedupeBySku([
+    mk('C1', 800, { cost: 305.45, name: 'OLD' }),
+    mk('C1', 900, { cost: 335.82, name: 'NEW' }),
+    mk('C1', 900, { cost: 335.82, name: 'NEW' }),
+  ]);
+  assert.equal(out[0].priceUsd, 900);
+  assert.equal(out[0].cost, 335.82);
+  assert.equal(out[0].name, 'NEW');
+});
+
+test('drops rows without a reference', () => {
+  const out = dedupeBySku([mk('', 100), mk('OK', 200)]);
+  assert.deepEqual(out.map((p) => p.reference), ['OK']);
 });

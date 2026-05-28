@@ -189,15 +189,39 @@ export class Query<T> implements PromiseLike<T[]> {
     if (this.pending != null) {
       throw new Error(`Incomplete query: .where('${this.pending}') has no matching .equals()`);
     }
-    let q = supabase.from(this.t.db).select('*');
-    for (const f of this.filters) q = q.eq(snake(f.field), f.value);
-    if (this.orderField) {
-      q = q.order(snake(this.orderField), { ascending: !this.reversed });
+    const build = () => {
+      let q = supabase.from(this.t.db).select('*');
+      for (const f of this.filters) q = q.eq(snake(f.field), f.value);
+      if (this.orderField) {
+        q = q.order(snake(this.orderField), { ascending: !this.reversed });
+      }
+      return q;
+    };
+
+    let raw: unknown[];
+    if (this._limit) {
+      const { data, error } = await build().limit(this._limit);
+      if (error) throw error;
+      raw = (data as unknown[]) || [];
+    } else {
+      // No explicit limit → return ALL rows, paging past Supabase's default
+      // 1000-row API cap (Settings → API → Max Rows). Without this a large
+      // table (the catalog is thousands of SKUs) silently truncates at 1000.
+      // Paging needs a stable order; add the primary key when the caller
+      // didn't request one so pages don't overlap or skip rows.
+      const PAGE = 1000;
+      raw = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = build();
+        if (!this.orderField) q = q.order(snake(this.t.pk), { ascending: true });
+        const { data, error } = await q.range(from, from + PAGE - 1);
+        if (error) throw error;
+        const page = (data as unknown[]) || [];
+        raw = from === 0 ? page : raw.concat(page);
+        if (page.length < PAGE) break;
+      }
     }
-    if (this._limit) q = q.limit(this._limit);
-    const { data, error } = await q;
-    if (error) throw error;
-    let rows = fromRows<T>(data as unknown[] | null | undefined);
+    let rows = fromRows<T>(raw);
     if (this.predicate) rows = rows.filter(this.predicate);
     if (this.sortField) {
       const f = this.sortField as keyof T;
