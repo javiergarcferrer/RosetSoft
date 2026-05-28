@@ -189,51 +189,59 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar */}
-          <div className="flex items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-            <CurrencyToggle value={currency} onChange={(c) => onUpdateQuote({ currencyCode: c })} />
+          {/* Always-visible bar. On phones it stacks into two rows so the grand
+              total — the hero figure — keeps the full width instead of being
+              truncated by the action cluster; from sm: up it collapses back to a
+              single row. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+            {/* Currency + total share the first row, so the figure gets every
+                pixel the actions aren't using. */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 sm:flex-1">
+              <CurrencyToggle value={currency} onChange={(c) => onUpdateQuote({ currencyCode: c })} />
 
-            {/* The total doubles as the breakdown toggle — a big, obvious tap
-                target that slides the step-by-step total up. */}
-            <button
-              type="button"
-              onClick={() => toggle('breakdown')}
-              aria-expanded={breakdownOpen}
-              className="min-w-0 flex-1 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
-              title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
-            >
-              <div className="flex items-center gap-2">
-                <span className="eyebrow-xs">Total</span>
-                {discountPct > 0 && (
-                  <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200">−{discountPct}%</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-lg sm:text-xl font-semibold tabular-nums truncate">{fmt(totals.grandTotal)}</span>
-                <ChevronUp
-                  size={16}
-                  className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
-                  aria-hidden
-                />
-              </div>
-              {dopRate && currency === 'USD' && (
-                <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1 truncate">
-                  ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-                  {rateLocked ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700" title="Tasa bloqueada al enviar">
-                      <Lock size={10} /> @ {dopRate.toFixed(2)}
-                    </span>
-                  ) : (
-                    <span className="text-ink-400">@ {dopRate.toFixed(2)}</span>
+              {/* The total doubles as the breakdown toggle — a big, obvious tap
+                  target that slides the step-by-step total up. */}
+              <button
+                type="button"
+                onClick={() => toggle('breakdown')}
+                aria-expanded={breakdownOpen}
+                className="min-w-0 flex-1 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
+                title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="eyebrow-xs">Total</span>
+                  {discountPct > 0 && (
+                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200">−{discountPct}%</span>
                   )}
                 </div>
-              )}
-            </button>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-lg sm:text-xl font-semibold tabular-nums truncate">{fmt(totals.grandTotal)}</span>
+                  <ChevronUp
+                    size={16}
+                    className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                    aria-hidden
+                  />
+                </div>
+                {dopRate && currency === 'USD' && (
+                  <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1 truncate">
+                    ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
+                    {rateLocked ? (
+                      <span className="inline-flex items-center gap-1 text-amber-700" title="Tasa bloqueada al enviar">
+                        <Lock size={10} /> @ {dopRate.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-ink-400">@ {dopRate.toFixed(2)}</span>
+                    )}
+                  </div>
+                )}
+              </button>
+            </div>
 
             {/* Action cluster — the discount toggle, then the document actions
                 (catalog on mobile, share, export) pinned to the bar. Icon-only
-                so they stay compact at every width. */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+                so they stay compact at every width; right-aligned on its own row
+                on phones. */}
+            <div className="flex items-center gap-1 flex-shrink-0 justify-end">
               {/* Optional discount card — icon-only toggle; an amber dot flags
                   an applied adjustment while the dock is folded. */}
               <button
