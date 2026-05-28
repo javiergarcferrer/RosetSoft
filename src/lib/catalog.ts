@@ -13,8 +13,13 @@
  * family with grade ''.
  */
 
-import { ALPHA_GRADES } from './subtype.js';
-import type { Product } from '../types/domain.ts';
+import { ALPHA_GRADES, parseSubtype, composeSubtype } from './subtype.js';
+import type {
+  Product,
+  QuoteLine,
+  MaterialOption,
+  MaterialOptions,
+} from '../types/domain.ts';
 
 const GRADE_SET: ReadonlySet<string> = new Set(ALPHA_GRADES);
 
@@ -96,5 +101,129 @@ export function productForGrade(
 ): Product | null {
   if (!family) return null;
   if (!family.graded) return [...family.byGrade.values()][0] || null;
-  return family.byGrade.get(grade) || null;
+  return family.byGrade.get((grade || '').toUpperCase()) || null;
+}
+
+/**
+ * Fields the catalog flow rewrites on a line when its product changes.
+ * `unitCost` is widened to allow null (the DB column is nullable and we clear
+ * it when the new SKU carries no wholesale cost), mirroring how addLine writes
+ * it; the QuoteLine type models it as an optional number.
+ */
+export type ProductSwitchPatch = Pick<
+  QuoteLine,
+  | 'family'
+  | 'reference'
+  | 'name'
+  | 'dimensions'
+  | 'subtype'
+  | 'unitPrice'
+  | 'swatchImageId'
+  | 'materialOptions'
+> & { unitCost: number | null };
+
+function numOr0(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Build the line patch for switching a line to a different catalog MODEL,
+ * KEEPING the materials the new model can actually be quoted in and DROPPING
+ * the rest — the counterpart to the catalog insert flow, for an existing line.
+ *
+ * "Compatible" = the new model offers a priced SKU at that material's grade
+ * (the family carries that grade). The base material is kept when its grade
+ * survives; otherwise the first surviving option is promoted into the base
+ * slot so a still-valid material stays quoted. The option list is filtered to
+ * the survivors. When nothing survives (e.g. switching to a non-upholstered
+ * model, or a model that shares none of the line's grades) the material is
+ * cleared and the line falls back to the model's own subtype.
+ *
+ * Price/cost/reference/name/dimensions are re-snapshotted from the new model's
+ * SKU for the surviving base grade — or the cheapest grade when no material
+ * survives — so the line always carries a real catalog price, mirroring
+ * CatalogPicker's insertProduct.
+ */
+export function switchLineProduct(
+  line: Pick<QuoteLine, 'subtype' | 'swatchImageId' | 'materialOptions'>,
+  family: CatalogFamily | null | undefined,
+): ProductSwitchPatch | null {
+  if (!family) return null;
+
+  // Non-graded model (table, lamp, wood chair): it has no fabric grades, so no
+  // upholstery material applies. Drop them all and take the model's own
+  // subtype (its finish/variant text), as the insert flow does.
+  if (!family.graded) {
+    const p = productForGrade(family, '');
+    return {
+      family: p?.family || family.family || '',
+      reference: p?.reference || '',
+      name: p?.name || family.name || '',
+      dimensions: p?.dimensions || '',
+      subtype: p?.subtype || '',
+      unitPrice: numOr0(p?.priceUsd),
+      unitCost: p?.cost ?? null,
+      swatchImageId: null,
+      materialOptions: null,
+    };
+  }
+
+  const offered = new Set(family.grades.map((g) => g.toUpperCase()));
+  const fits = (g: string | null | undefined): boolean =>
+    !!g && offered.has(g.toUpperCase());
+
+  const { grade: baseGrade, fabric: baseFabric } = parseSubtype(line.subtype);
+  const options: MaterialOption[] = line.materialOptions?.options ?? [];
+  const keptOptions = options.filter((o) => fits(o.grade));
+
+  let newGrade: string;
+  let newFabric: string;
+  let newSwatchId: string | null;
+  let remaining: MaterialOption[];
+
+  if (fits(baseGrade)) {
+    // The line's own material survives — keep it (and its swatch) verbatim.
+    newGrade = baseGrade.toUpperCase();
+    newFabric = baseFabric;
+    newSwatchId = line.swatchImageId ?? null;
+    remaining = keptOptions;
+  } else if (keptOptions.length) {
+    // Base dropped but a compatible option remains — promote it to the base
+    // slot so a valid material stays quoted; the rest stay as options.
+    const promoted = keptOptions[0];
+    newGrade = (promoted.grade || '').toUpperCase();
+    newFabric = promoted.label || '';
+    newSwatchId = promoted.swatchImageId ?? null;
+    remaining = keptOptions.slice(1);
+  } else {
+    // Nothing survives — clear the material; the dealer re-picks a fabric.
+    newGrade = '';
+    newFabric = '';
+    newSwatchId = null;
+    remaining = [];
+  }
+
+  // Price/identity from the surviving base grade, or the cheapest grade when no
+  // material survived (grades are sorted ascending by price).
+  const priceGrade = newGrade || family.grades[0] || '';
+  const p = productForGrade(family, priceGrade);
+
+  // Reset the delta base to the line's actual current material — both healing
+  // any prior base/subtype drift and re-anchoring the kept options' deltas.
+  const materialOptions: MaterialOptions | null = remaining.length
+    ? { baseGrade: newGrade, baseLabel: newFabric, options: remaining }
+    : null;
+
+  return {
+    family: p?.family || family.family || '',
+    reference: p?.reference || '',
+    name: p?.name || family.name || '',
+    dimensions: p?.dimensions || '',
+    subtype: composeSubtype(newGrade, newFabric),
+    unitPrice: numOr0(p?.priceUsd),
+    unitCost: p?.cost ?? null,
+    swatchImageId: newSwatchId,
+    materialOptions,
+  };
 }
