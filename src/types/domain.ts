@@ -206,6 +206,35 @@ export interface LineComponent {
    * (the product photo). Lives inline on the JSONB component shape.
    */
   swatchImageId?: string | null;
+  /** Alternative-material options with price deltas (see MaterialOptions). */
+  materialOptions?: MaterialOptions | null;
+}
+
+/**
+ * Material options — present the same line/component in alternative upholstery
+ * materials with the PRICE DELTA vs. the chosen base. Deltas are DERIVED at
+ * render time from the catalog (a material's grade → the model SKU's price at
+ * that grade), never frozen, so they stay correct if list prices change. The
+ * line's own subtype/unitPrice stay the base; options are informational and do
+ * NOT change the quote total.
+ */
+export interface MaterialOption {
+  /** Grade letter of this option's material — drives its SKU price. */
+  grade: string;
+  /** Display label, e.g. "SOFT TOUCH" or "MATERIAL · COLOR". */
+  label: string;
+  /** Color code, for the Ligne Roset swatch fallback, when known. */
+  code?: string | null;
+  /** Uploaded swatch image (by images.id), when one exists. */
+  swatchImageId?: string | null;
+}
+
+export interface MaterialOptions {
+  /** Grade of the line's current (base) material — the $0 reference. */
+  baseGrade: string;
+  /** Display label of the base material. */
+  baseLabel: string;
+  options: MaterialOption[];
 }
 
 export interface QuoteLine {
@@ -230,6 +259,8 @@ export interface QuoteLine {
    * and in the client preview + PDF next to the subtype.
    */
   swatchImageId?: string | null;
+  /** Alternative-material options with price deltas (see MaterialOptions). */
+  materialOptions?: MaterialOptions | null;
 
   /* Pricing — ignored when `components` is non-empty (compound mode). */
   qty?: number;

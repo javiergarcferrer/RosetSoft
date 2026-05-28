@@ -16,9 +16,45 @@ import type {
   PricingLine,
   PricingQuote,
   Totals,
+  MaterialOptions,
 } from '../types/domain.ts';
+import { productForGrade } from './catalog.js';
+import type { CatalogFamily } from './catalog.ts';
 
 export const ITBIS_PCT = 18;
+
+export interface MaterialOptionDelta {
+  grade: string;
+  label: string;
+  code?: string | null;
+  swatchImageId?: string | null;
+  /** USD list-price difference vs. the base material (can be negative). */
+  delta: number;
+}
+
+/**
+ * Price deltas for a line/component's material options vs. its base material.
+ * Pure: the caller resolves the `CatalogFamily` (groupFamilies over the model's
+ * SKUs, keyed by the line's reference root). Deltas are list-price USD
+ * differences from the base grade; an option whose grade isn't in the family
+ * yields 0 so a stale/missing SKU degrades gracefully (label shows, no number).
+ * Returned values are USD — the display layer converts via the line's rates.
+ */
+export function materialOptionDeltas(
+  mo: MaterialOptions | null | undefined,
+  family: CatalogFamily | null | undefined,
+): MaterialOptionDelta[] {
+  if (!mo || !mo.options || !mo.options.length) return [];
+  const priceOf = (grade: string): number => safeNum(family ? productForGrade(family, grade)?.priceUsd : 0);
+  const base = priceOf(mo.baseGrade);
+  return mo.options.map((o) => ({
+    grade: o.grade,
+    label: o.label,
+    code: o.code ?? null,
+    swatchImageId: o.swatchImageId ?? null,
+    delta: priceOf(o.grade) - base,
+  }));
+}
 
 /** Coerce to a finite number, falling back to a default if not. */
 function safeNum(v: unknown, fallback = 0): number {

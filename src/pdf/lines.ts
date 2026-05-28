@@ -211,13 +211,14 @@ function fontFor(ctx: PdfCtx, token: TypeToken): PDFFont {
   return ctx.fontRegular;
 }
 
-// Swatch geometry. The fabric swatch sits to the LEFT of the spec text
-// (subtype + ref/dims), mirroring the client preview — not below it.
-// That keeps rows short enough to pack onto a page. One square size for
-// every swatch (line + compound component) so the document reads
-// consistently.
-const SWATCH_SIZE = 40;   // square — same size for lines and compound components
-const SWATCH_GAP  = 8;    // horizontal gap between the swatch and the spec text
+// Swatch geometry. A top-level line draws a LARGER swatch BELOW its spec
+// text (subtype + ref/dims) so the fabric reads clearly; compound
+// components keep a compact swatch beside their denser spec to stay
+// packable on the page.
+const SWATCH_SIZE = 40;        // compound component swatch — compact, beside the spec
+const SWATCH_GAP  = 8;         // horizontal gap (compound component swatch ∥ spec)
+const LINE_SWATCH_SIZE = 64;   // top-level line swatch — larger, sits below the spec
+const SWATCH_TOP_GAP = 5;      // vertical gap between a line's spec text and its swatch
 
 /** Sum the vertical height of a stack of detail segments. */
 function segsHeight(segs: DetailSegment[]): number {
@@ -233,14 +234,14 @@ interface LineDetail {
 }
 
 /**
- * Split a line's detail column into three stacked bands so the layout
- * matches the client preview: head (family + name) spans the full width
- * on top; spec (subtype + ref/dims) is wrapped narrower so it sits to the
- * RIGHT of the swatch; description spans the full width underneath.
+ * Split a line's detail column into three stacked bands: head (family +
+ * name) on top, spec (subtype + ref/dims) — both full width — and the
+ * description underneath. The fabric swatch is drawn BELOW the spec band
+ * (see the draw pass), so spec no longer reserves room beside it.
  * Shared by the measure + draw passes so they can't drift.
  */
 function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
-  const specW = line.swatchImageId ? Math.max(60, detailW - SWATCH_SIZE - SWATCH_GAP) : detailW;
+  const specW = detailW;
   const seg = (text: string | null | undefined, token: TypeToken, w: number): DetailSegment[] => {
     if (!text) return [];
     const lines = wrapToWidth(text, w, fontFor(ctx, token), token.size);
@@ -263,12 +264,12 @@ function lineDetail(ctx: PdfCtx, line: QuoteLine, detailW: number): LineDetail {
   };
 }
 
-/** Total height of the detail column — head + (swatch ∥ spec) + description. */
+/** Total height of the detail column — head + spec + (swatch below) + description. */
 function measureDetailHeight(ctx: PdfCtx, line: QuoteLine, detailW: number): number {
   const { head, spec, desc } = lineDetail(ctx, line, detailW);
-  const specBlock = line.swatchImageId ? Math.max(SWATCH_SIZE, segsHeight(spec)) : segsHeight(spec);
+  const swatchBlock = line.swatchImageId ? SWATCH_TOP_GAP + LINE_SWATCH_SIZE : 0;
   const descGap = desc.length ? IDENTITY_TO_SPEC_GAP : 0;
-  return segsHeight(head) + specBlock + descGap + segsHeight(desc);
+  return segsHeight(head) + segsHeight(spec) + swatchBlock + descGap + segsHeight(desc);
 }
 
 /**
@@ -1193,19 +1194,19 @@ export async function drawLineRow(
   const imgY = innerTop - (inner - IMAGE_SIZE) / 2 - IMAGE_SIZE;
   drawProductImage(page, img, cols.img.x, imgY);
 
-  // ---- Detail column — head (full width), then swatch + spec side by
-  //      side, then description (full width); mirrors the client preview.
+  // ---- Detail column — head (full width), then spec (full width), then a
+  //      larger fabric swatch BELOW the spec, then description (full width).
   const detail = lineDetail(ctx, line, cols.detail.w);
   let sy = drawSegs(page, ctx, detail.head, cols.detail.x, innerTop);
   const specTop = sy;
+  sy = drawSegs(page, ctx, detail.spec, cols.detail.x, specTop);
+  let swatchTopY: number | null = null;
   if (line.swatchImageId) {
-    await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
+    sy -= SWATCH_TOP_GAP;
+    swatchTopY = sy;
+    await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, swatchTopY, LINE_SWATCH_SIZE);
+    sy -= LINE_SWATCH_SIZE;
   }
-  const specX = line.swatchImageId ? cols.detail.x + SWATCH_SIZE + SWATCH_GAP : cols.detail.x;
-  const afterSpec = drawSegs(page, ctx, detail.spec, specX, specTop);
-  const specTextH = specTop - afterSpec;
-  const specBlockH = line.swatchImageId ? Math.max(SWATCH_SIZE, specTextH) : specTextH;
-  sy = specTop - specBlockH;
   if (detail.desc.length) {
     sy -= IDENTITY_TO_SPEC_GAP;
     sy = drawSegs(page, ctx, detail.desc, cols.detail.x, sy);
@@ -1272,8 +1273,8 @@ export async function drawLineRow(
     // Redraw only the swatch on top of the wash so its fabric colour stays
     // vivid in any state; the product photo dims with the rest of a
     // deactivated (optional / non-selected alternative) row.
-    if (style.dim && line.swatchImageId) {
-      await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, specTop, SWATCH_SIZE);
+    if (style.dim && line.swatchImageId && swatchTopY != null) {
+      await drawSwatch(page, doc, line.swatchImageId, cols.detail.x, swatchTopY, LINE_SWATCH_SIZE);
     }
   }
   // Inside a zone, the chosen alternative keeps its emerald "SELECCIONADA"
