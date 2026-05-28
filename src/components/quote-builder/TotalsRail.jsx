@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Info, Lock } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
@@ -36,9 +35,18 @@ export default function TotalsRail({
   // has seen can't move). Flag it so the dealer doesn't mistake a locked
   // rate for a stale one after pulling a newer rate.
   const rateLocked = !!quote.status && quote.status !== QUOTE_STATUS_DRAFT;
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const fmt = (v) => formatMoney(v, currency, rates);
+
+  // Quote-level margin health. By design most margin lives on lines, so a
+  // quote-wide margin is the exception — surface the gauge only when one is
+  // actually applied (totals.marginAmt !== 0). The value comes straight off
+  // quote.marginPct (the input computeTotals already used to derive
+  // marginAmt), so this invents no new math. The meter's low/high/optimum
+  // frame a sensible target band: thin (< 15%) reads rose, healthy reads
+  // emerald, padded (> 40%) reads amber — see the <meter> CSS in index.css.
+  const marginPct = Number(quote.marginPct) || 0;
+  const showMarginMeter = totals.marginAmt !== 0;
 
   return (
     <div className="space-y-4">
@@ -87,18 +95,16 @@ export default function TotalsRail({
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setBreakdownOpen((v) => !v)}
-          className="text-[11px] text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 pt-1"
-        >
-          <Info size={11} />
-          Cómo se calcula
-          <ChevronDown size={11} className={`transition-transform ${breakdownOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {breakdownOpen && (
+        {showMarginMeter && <MarginMeter marginPct={marginPct} />}
+
+        <details className="group">
+          <summary className="text-[11px] text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 pt-1">
+            <Info size={11} />
+            Cómo se calcula
+            <ChevronDown size={11} className="disclosure-chevron" />
+          </summary>
           <BreakdownExplainer quote={quote} totals={totals} fmt={fmt} />
-        )}
+        </details>
       </div>
 
       {/* Adjustments */}
@@ -146,6 +152,33 @@ function Row({ label, value, muted, bold }) {
   );
 }
 
+// Quote-level margin-health gauge built on the native <meter>. The browser
+// colours the fill from where `value` sits against low/high/optimum, so the
+// band itself is the legend: < 15% thin (rose), 15–40% healthy (emerald),
+// > 40% padded (amber) — see the <meter> rules in index.css. `value` clamps
+// to [min,max], so a negative (loss-leader) margin reads as thin, as intended.
+function MarginMeter({ marginPct }) {
+  return (
+    <div className="space-y-1 pt-0.5">
+      <div className="flex items-center justify-between text-[10px] text-ink-500">
+        <span className="eyebrow-xs">Margen</span>
+        <span className="tabular-nums text-ink-700 font-medium">{marginPct}%</span>
+      </div>
+      <meter
+        className="w-full"
+        min={0}
+        max={60}
+        low={15}
+        high={40}
+        optimum={27}
+        value={Math.max(0, Math.min(60, marginPct))}
+        aria-label={`Margen aplicado ${marginPct}%`}
+        title={`Margen aplicado: ${marginPct}%`}
+      />
+    </div>
+  );
+}
+
 function CurrencyToggle({ value, onChange }) {
   return (
     <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
@@ -176,7 +209,7 @@ function BreakdownExplainer({ quote, totals, fmt }) {
   lines.push(['= Total', fmt(totals.grandTotal)]);
 
   return (
-    <div className="bg-ink-50 rounded-md p-2.5 space-y-0.5 text-[11px] tabular-nums border border-ink-100">
+    <div className="bg-ink-50 rounded-md p-2.5 mt-2 space-y-0.5 text-[11px] tabular-nums border border-ink-100">
       {lines.map(([l, v], i) => (
         <div key={i} className={`flex justify-between ${i === lines.length - 1 ? 'font-semibold text-ink-900 pt-1 border-t border-ink-200 mt-1' : 'text-ink-600'}`}>
           <span>{l}</span>

@@ -295,43 +295,39 @@ export default function AdminCommissions() {
 
 // ---------------------------------------------------------------------------
 // Per-user row — collapsed by default. Clicking expands to the list of
-// contributing quotes (deposit date, total, commission slice). React
-// state instead of <details>/<summary> so the chevron icon can rotate
-// in sync with the open state.
+// contributing quotes (deposit date, total, commission slice). Built on a
+// native <details>/<summary>: the platform owns the open/close state and the
+// chevron rotates 90° via the [details[open]] arbitrary variant, so no React
+// state is needed for what is purely a disclosure.
 // ---------------------------------------------------------------------------
 function UserRow({ row }) {
-  const [open, setOpen] = useState(false);
   const { user, pct, base, commission, quotes } = row;
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-ink-50 transition-colors"
-      >
-        <Avatar name={user.name || user.email} />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium truncate">{user.name || user.email || '—'}</div>
-          <div className="text-[11px] text-ink-500 truncate">
-            {quotes.length} {quotes.length === 1 ? 'cotización' : 'cotizaciones'} · {pct}% comisión
+      <details className="group">
+        <summary className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-ink-50 transition-colors cursor-pointer">
+          <Avatar name={user.name || user.email} />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium truncate">{user.name || user.email || '—'}</div>
+            <div className="text-[11px] text-ink-500 truncate">
+              {quotes.length} {quotes.length === 1 ? 'cotización' : 'cotizaciones'} · {pct}% comisión
+            </div>
           </div>
-        </div>
-        <div className="text-right">
-          <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-            {formatMoney(commission, 'USD', { USD: 1 })}
+          <div className="text-right">
+            <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+              {formatMoney(commission, 'USD', { USD: 1 })}
+            </div>
+            <div className="text-[11px] text-ink-500 tabular-nums">
+              base {formatMoney(base, 'USD', { USD: 1 })}
+            </div>
           </div>
-          <div className="text-[11px] text-ink-500 tabular-nums">
-            base {formatMoney(base, 'USD', { USD: 1 })}
-          </div>
-        </div>
-        <ChevronRight
-          size={14}
-          className={`text-ink-400 transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-      </button>
+          <ChevronRight
+            size={14}
+            className="text-ink-400 transition-transform group-open:rotate-90"
+          />
+        </summary>
 
-      {open && (
         <ul className="bg-ink-50/60 border-t border-ink-100 divide-y divide-ink-100">
           {quotes.map(({ quote, customer, base: b, grandTotal, commission: c }) => (
             <li key={quote.id} className="px-5 py-2.5 pl-14 flex items-center gap-3">
@@ -363,7 +359,7 @@ function UserRow({ row }) {
             </li>
           ))}
         </ul>
-      )}
+      </details>
     </li>
   );
 }
