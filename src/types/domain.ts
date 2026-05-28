@@ -569,6 +569,13 @@ export interface Material {
   composition?: string | null;
   colors: MaterialColor[];
   notes?: string | null;
+  /**
+   * Set by a full catalog sync when this material is no longer offered
+   * anywhere on the Ligne Roset site. Kept (not deleted) so dealer-only data
+   * — per-yard price, grade, uploaded color photos, COM entries — survives;
+   * `null` means active / on-site.
+   */
+  discontinuedAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
 }

@@ -1,24 +1,28 @@
 /**
  * Ligne Roset catalog import — pure mapping + merge logic.
  *
- * The `lr-catalog` Edge Function fetches a product page's catalog AJAX
- * endpoints and returns a list of `LrPattern`s (fabric name, type, composition,
- * care remark, and every color with its catalog `code`). This module turns that
- * into a non-destructive merge against the existing `materials` catalog:
+ * The `lr-catalog` Edge Function returns a list of `LrPattern`s (fabric name,
+ * type, composition, care remark, and every color with its catalog `code`),
+ * either for one product or — in a full catalog sweep — for the entire site.
+ * This module merges that into our `materials`, treating the **site as the
+ * source of truth** for everything it carries:
  *
- *   - A pattern with no name match → a NEW material.
- *   - A pattern that matches an existing material (by normalized name) →
- *     ENRICHED in place: add colors whose `code` we don't have yet, fill the
- *     name on a color we have by code but never named, and backfill
- *     composition / notes only when ours is empty.
+ *   - name, category, composition, care notes → overwritten from the site.
+ *   - color set → replaced by the site's (the color list is global per
+ *     fabric, so this is authoritative). A color's uploaded photo (`imageId`)
+ *     is carried across by matching `code`.
  *
- * What it never touches: grade, wear, price, measure (those come from the
- * dealer's price list, not these endpoints), a color's uploaded `imageId`, and
- * anything that's already set. Nothing is ever deleted. The merge is
- * idempotent — re-running with the same input yields zero changed rows.
+ * What it deliberately PRESERVES, because the site has no equivalent and
+ * nulling them would break quoting: grade, price, measure/units, wear, plus a
+ * color's uploaded photo. Nothing is deleted.
  *
- * Kept dependency-free (type-only import of the domain types) so it unit-tests
- * without pulling in the Supabase client.
+ * On a **complete** sweep (`complete: true`), materials that aren't offered
+ * anywhere on the site are flagged (`discontinuedAt`) rather than removed, so a
+ * custom/COM entry or one carrying dealer pricing survives review. A flagged
+ * material that reappears on the site is un-flagged.
+ *
+ * Pure (type-only import of the domain types) so it unit-tests without the
+ * Supabase client. The merge is idempotent — re-running changes nothing.
  */
 import type { Material, MaterialCategory, MaterialColor } from '../types/domain';
 
@@ -44,15 +48,21 @@ export interface ImportSummary {
   updatedMaterials: number;
   unchangedMaterials: number;
   newColors: number;
-  namedColors: number;
-  filledComposition: number;
-  filledNotes: number;
+  removedColors: number;
+  flaggedMissing: number;
+  restored: number;
 }
 
 export interface MergeContext {
   profileId: string;
   now: number;
   newId: () => string;
+  /**
+   * True when `patterns` represents the WHOLE site (a full sweep), so existing
+   * materials absent from it can be flagged as no-longer-offered. False for a
+   * single-product import, where absence just means "not on this product".
+   */
+  complete?: boolean;
 }
 
 /**
@@ -105,51 +115,66 @@ function dedupeColors(colors: LrColor[] | undefined): LrColor[] {
   return [...seen.values()];
 }
 
+/** Deep-equal two color lists over the fields we manage (order included). */
+function sameColors(a: MaterialColor[], b: MaterialColor[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (trimmed(a[i].code) !== trimmed(b[i].code)) return false;
+    if ((a[i].name || '') !== (b[i].name || '')) return false;
+    if ((a[i].imageId ?? null) !== (b[i].imageId ?? null)) return false;
+  }
+  return true;
+}
+
 /**
- * Merge imported patterns into the existing catalog. Pure: pass `now` and a
- * `newId` factory so callers (and tests) control id/timestamp generation.
- * Returns only the rows that actually changed (ready for `db.materials.bulkPut`)
- * plus a summary of what changed.
+ * Merge imported patterns into the existing catalog (site as source of truth).
+ * Pure: pass `now` and a `newId` factory so callers (and tests) control
+ * id/timestamp generation. Returns only the rows that actually changed (ready
+ * for `db.materials.bulkPut`) plus a summary of what changed.
  */
 export function mergeCatalog(
   existing: Material[],
   patterns: LrPattern[],
-  { profileId, now, newId }: MergeContext,
+  { profileId, now, newId, complete = false }: MergeContext,
 ): { rows: Material[]; summary: ImportSummary } {
   const byName = new Map<string, Material>();
   for (const m of existing) byName.set(normalizeName(m.name), m);
 
   const rows: Material[] = [];
+  const seen = new Set<string>();
   const summary: ImportSummary = {
     newMaterials: 0,
     updatedMaterials: 0,
     unchangedMaterials: 0,
     newColors: 0,
-    namedColors: 0,
-    filledComposition: 0,
-    filledNotes: 0,
+    removedColors: 0,
+    flaggedMissing: 0,
+    restored: 0,
   };
 
   for (const p of patterns) {
     const key = normalizeName(p.name);
     if (!key) continue;
+    seen.add(key);
 
-    const category = lrTypeToCategory(p.type);
+    const name = trimmed(p.name);
     const composition = trimmed(p.composition) || null;
     const notes = cleanNotes(p.remark);
-    const importedColors = dedupeColors(p.colors);
+    const siteColors = dedupeColors(p.colors);
     const current = byName.get(key);
+    // The site is authoritative on fabric-vs-leather, but it does NOT encode
+    // "outdoor" (sling / teflon fabrics are typed "Fabrics"), so never let a
+    // sync demote a material the dealer deliberately placed in Outdoor.
+    const category =
+      current && current.category === 'outdoor' ? 'outdoor' : lrTypeToCategory(p.type);
 
     if (!current) {
-      const colors: MaterialColor[] = importedColors.map((c) => ({
-        name: c.name || '',
-        code: c.code,
-      }));
+      const colors: MaterialColor[] = siteColors.map((c) => ({ name: c.name || '', code: c.code }));
       rows.push({
         id: newId(),
         profileId,
         category,
-        name: trimmed(p.name),
+        name,
         grade: null,
         wearRating: null,
         wearDoubleRubs: null,
@@ -160,6 +185,7 @@ export function mergeCatalog(
         composition,
         colors,
         notes,
+        discontinuedAt: null,
         createdAt: now,
         updatedAt: now,
       });
@@ -168,46 +194,63 @@ export function mergeCatalog(
       continue;
     }
 
-    // Enrich an existing material — clone its colors, never its identity.
-    let changed = false;
-    const colors: MaterialColor[] = (current.colors || []).map((c) => ({ ...c }));
-    const codeIndex = new Map<string, number>();
-    colors.forEach((c, i) => {
+    // Overwrite the site-owned fields; preserve everything dealer-owned by
+    // spreading `current` and only replacing the managed fields.
+    const existingByCode = new Map<string, MaterialColor>();
+    for (const c of current.colors || []) {
       const code = trimmed(c.code);
-      if (code) codeIndex.set(code, i);
-    });
-
-    for (const ic of importedColors) {
-      const at = codeIndex.get(ic.code);
-      if (at == null) {
-        colors.push({ name: ic.name || '', code: ic.code });
-        codeIndex.set(ic.code, colors.length - 1);
-        summary.newColors += 1;
-        changed = true;
-      } else if (ic.name && !trimmed(colors[at].name)) {
-        colors[at] = { ...colors[at], name: ic.name };
-        summary.namedColors += 1;
-        changed = true;
-      }
+      if (code) existingByCode.set(code, c);
     }
 
-    const patch: Partial<Material> = {};
-    if (composition && !trimmed(current.composition)) {
-      patch.composition = composition;
-      summary.filledComposition += 1;
-      changed = true;
+    let colors: MaterialColor[];
+    let added = 0;
+    let removed = 0;
+    if (siteColors.length === 0) {
+      // A transient empty colors payload must never wipe a real color set.
+      colors = (current.colors || []).map((c) => ({ ...c }));
+    } else {
+      colors = siteColors.map((sc) => {
+        const ex = existingByCode.get(sc.code);
+        const col: MaterialColor = { name: sc.name || (ex?.name ?? ''), code: sc.code };
+        if (ex?.imageId) col.imageId = ex.imageId; // carry the dealer's photo
+        return col;
+      });
+      const siteCodes = new Set(siteColors.map((c) => c.code));
+      for (const code of existingByCode.keys()) if (!siteCodes.has(code)) removed += 1;
+      for (const c of siteColors) if (!existingByCode.has(c.code)) added += 1;
     }
-    if (notes && !trimmed(current.notes)) {
-      patch.notes = notes;
-      summary.filledNotes += 1;
-      changed = true;
-    }
+
+    const wasFlagged = current.discontinuedAt != null;
+    const changed =
+      (current.name ?? '') !== name ||
+      current.category !== category ||
+      (current.composition ?? null) !== composition ||
+      (current.notes ?? null) !== notes ||
+      !sameColors(current.colors || [], colors) ||
+      wasFlagged;
 
     if (changed) {
-      rows.push({ ...current, ...patch, colors, updatedAt: now });
+      rows.push({ ...current, name, category, composition, notes, colors, discontinuedAt: null, updatedAt: now });
       summary.updatedMaterials += 1;
+      summary.newColors += added;
+      summary.removedColors += removed;
+      if (wasFlagged) summary.restored += 1;
     } else {
       summary.unchangedMaterials += 1;
+    }
+  }
+
+  // Full sweep only: anything we have that the site no longer offers gets
+  // flagged (kept, never deleted). Already-flagged rows stay as they are.
+  if (complete) {
+    for (const m of existing) {
+      if (seen.has(normalizeName(m.name))) continue;
+      if (m.discontinuedAt == null) {
+        rows.push({ ...m, discontinuedAt: now, updatedAt: now });
+        summary.flaggedMissing += 1;
+      } else {
+        summary.unchangedMaterials += 1;
+      }
     }
   }
 

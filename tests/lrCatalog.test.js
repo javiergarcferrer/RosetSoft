@@ -1,7 +1,8 @@
 /**
- * Tests for src/lib/lrCatalog.ts — mapping a Ligne Roset product page's
- * patterns into our catalog and merging them non-destructively into the
- * existing materials.
+ * Tests for src/lib/lrCatalog.ts — mapping Ligne Roset patterns into our
+ * catalog with the site as source of truth: overwrite the fields the site
+ * carries, preserve dealer-only data (grade/price/photos), and on a full sweep
+ * flag (never delete) materials the site no longer offers.
  */
 
 import test from 'node:test';
@@ -19,7 +20,6 @@ import {
 test('lrTypeToCategory — leather/outdoor/fabric buckets', () => {
   assert.equal(lrTypeToCategory('Leather'), 'leather');
   assert.equal(lrTypeToCategory('Outdoor fabrics'), 'outdoor');
-  // Everything else (the many fabric sub-types) collapses to fabric.
   for (const t of ['Fabrics', 'Microfibres', 'Microfibers', 'Velvets', 'Wools', 'Chenilles', 'Fabrics with effect threads', '"Technical" fabrics + coated + jersey']) {
     assert.equal(lrTypeToCategory(t), 'fabric', t);
   }
@@ -49,19 +49,16 @@ test('cleanNotes — keeps real warnings, drops trivial SWATCH markers', () => {
 
 /* -------------------------------- mergeCatalog ------------------------------ */
 
-// Deterministic id factory so assertions are stable.
-function ctx() {
+function ctx(extra) {
   let n = 0;
-  return { profileId: 'team', now: 1000, newId: () => `new-${++n}` };
+  return { profileId: 'team', now: 1000, newId: () => `new-${++n}`, ...extra };
 }
 
 test('adds a brand-new material with its colors and derived fields', () => {
   const { rows, summary } = mergeCatalog(
     [],
     [{
-      name: 'ACATE',
-      type: 'Fabrics',
-      composition: 'COTTON 80%, POLYESTER 20%',
+      name: 'ACATE', type: 'Fabrics', composition: 'COTTON 80%, POLYESTER 20%',
       remark: ' SWATCH A',
       colors: [{ code: '855', name: 'ANIS' }, { code: '857', name: 'NOIR' }],
     }],
@@ -70,23 +67,18 @@ test('adds a brand-new material with its colors and derived fields', () => {
   assert.equal(rows.length, 1);
   const m = rows[0];
   assert.equal(m.id, 'new-1');
-  assert.equal(m.profileId, 'team');
   assert.equal(m.category, 'fabric');
   assert.equal(m.name, 'ACATE');
   assert.equal(m.composition, 'COTTON 80%, POLYESTER 20%');
   assert.equal(m.notes, null);            // trivial "SWATCH A" dropped
   assert.equal(m.grade, null);            // never invented
   assert.equal(m.price, null);
-  assert.equal(m.measureUnit, 'in');      // fabric default
+  assert.equal(m.discontinuedAt, null);
+  assert.equal(m.measureUnit, 'in');
   assert.equal(m.priceUnit, 'yard');
-  assert.deepEqual(m.colors, [
-    { name: 'ANIS', code: '855' },
-    { name: 'NOIR', code: '857' },
-  ]);
-  assert.deepEqual(summary, {
-    newMaterials: 1, updatedMaterials: 0, unchangedMaterials: 0,
-    newColors: 2, namedColors: 0, filledComposition: 0, filledNotes: 0,
-  });
+  assert.deepEqual(m.colors, [{ name: 'ANIS', code: '855' }, { name: 'NOIR', code: '857' }]);
+  assert.equal(summary.newMaterials, 1);
+  assert.equal(summary.newColors, 2);
 });
 
 test('new leather material gets mm / sm units', () => {
@@ -100,76 +92,75 @@ test('new leather material gets mm / sm units', () => {
   assert.equal(rows[0].priceUnit, 'sm');
 });
 
-test('enriches an existing material: adds missing colors, keeps grade/price/photos', () => {
+test('source of truth: overwrites name/composition/notes/colors, preserves grade/price/photos', () => {
   const existing = [{
-    id: 'm1', profileId: 'team', category: 'fabric', name: 'ALCANTARA - A',
-    grade: 'S', price: 363, priceUnit: 'yard', composition: 'POLYESTER 68%, …',
-    notes: null,
+    id: 'm1', profileId: 'team', category: 'fabric', name: 'alcantara - a', // stale casing
+    grade: 'S', price: 363, priceUnit: 'yard', measure: 56, measureUnit: 'in',
+    wearRating: '3C',
+    composition: 'OLD — should be replaced',
+    notes: 'dealer scribble — site wins',
     colors: [
-      { name: 'ALMOND', code: '4479', imageId: 'photo-1' }, // dealer photo must survive
-      { name: '', code: '4500' },                           // has code, never named
+      { name: 'almond', code: '4479', imageId: 'photo-1' }, // dealer photo must survive
+      { name: 'OLD COLOR', code: '0000' },                   // not on site → removed
     ],
     createdAt: 1, updatedAt: 1,
   }];
   const { rows, summary } = mergeCatalog(
     existing,
     [{
-      name: 'alcantara - a',                  // matches case-insensitively
-      type: 'Microfibres',
-      composition: 'IGNORED — ours wins',     // existing composition is set → not overwritten
-      remark: ' SWATCH A',
+      name: 'ALCANTARA - A', type: 'Microfibres',
+      composition: 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%',
+      remark: 'THIS FABRIC IS NOT TB117-2013 APPROVED.',
       colors: [
-        { code: '4479', name: 'ALMOND' },     // already present, named → no-op
-        { code: '4500', name: 'AMBER GLOW' }, // present but unnamed → fill name
-        { code: '4522', name: 'ANTHRACITE' }, // new → append
+        { code: '4479', name: 'ALMOND' },     // kept, photo carried, name normalized
+        { code: '4522', name: 'ANTHRACITE' }, // new
       ],
     }],
     ctx(),
   );
   assert.equal(rows.length, 1);
   const m = rows[0];
-  assert.equal(m.id, 'm1');                   // same identity, not a new row
-  assert.equal(m.grade, 'S');                 // untouched
-  assert.equal(m.price, 363);                 // untouched
-  assert.equal(m.composition, 'POLYESTER 68%, …'); // ours kept
-  assert.equal(m.updatedAt, 1000);
+  assert.equal(m.id, 'm1');                         // same identity
+  assert.equal(m.name, 'ALCANTARA - A');            // site casing wins
+  assert.equal(m.composition, 'POLYESTER 68%, NON FIBROUS POLYURETHANE 32%'); // overwritten
+  assert.equal(m.notes, 'THIS FABRIC IS NOT TB117-2013 APPROVED.');           // overwritten
+  // dealer-only fields preserved:
+  assert.equal(m.grade, 'S');
+  assert.equal(m.price, 363);
+  assert.equal(m.measure, 56);
+  assert.equal(m.wearRating, '3C');
+  // color set replaced (site order), photo carried by code, stale color dropped:
   assert.deepEqual(m.colors, [
-    { name: 'ALMOND', code: '4479', imageId: 'photo-1' }, // photo preserved
-    { name: 'AMBER GLOW', code: '4500' },                 // name backfilled
-    { name: 'ANTHRACITE', code: '4522' },                 // appended
+    { name: 'ALMOND', code: '4479', imageId: 'photo-1' },
+    { name: 'ANTHRACITE', code: '4522' },
   ]);
   assert.equal(summary.updatedMaterials, 1);
   assert.equal(summary.newColors, 1);
-  assert.equal(summary.namedColors, 1);
-  assert.equal(summary.filledComposition, 0);
+  assert.equal(summary.removedColors, 1);
 });
 
-test('backfills composition and notes only when ours is empty', () => {
+test('a transient empty color payload never wipes an existing color set', () => {
   const existing = [{
-    id: 'm1', profileId: 'team', category: 'fabric', name: 'CLOUD',
-    grade: null, composition: '', notes: '', colors: [], createdAt: 1, updatedAt: 1,
+    id: 'm1', profileId: 'team', category: 'fabric', name: 'ACATE',
+    composition: 'COTTON 80%, POLYESTER 20%', notes: null,
+    colors: [{ name: 'ANIS', code: '855' }], createdAt: 1, updatedAt: 1,
   }];
   const { rows, summary } = mergeCatalog(
     existing,
-    [{
-      name: 'CLOUD', type: 'Velvets',
-      composition: '56% ACRYLIC, 44% POLYESTER',
-      remark: 'The moiré effect is a natural characteristic of this fabric.',
-      colors: [],
-    }],
+    [{ name: 'ACATE', type: 'Fabrics', composition: 'COTTON 80%, POLYESTER 20%', remark: null, colors: [] }],
     ctx(),
   );
-  assert.equal(rows[0].composition, '56% ACRYLIC, 44% POLYESTER');
-  assert.equal(rows[0].notes, 'The moiré effect is a natural characteristic of this fabric.');
-  assert.equal(summary.filledComposition, 1);
-  assert.equal(summary.filledNotes, 1);
+  // Nothing changed (colors kept, everything else equal) → no row emitted.
+  assert.equal(rows.length, 0);
+  assert.equal(summary.unchangedMaterials, 1);
 });
 
-test('no-op when nothing changes → not in rows, counted as unchanged', () => {
+test('no-op when site matches stored state → not in rows', () => {
   const existing = [{
     id: 'm1', profileId: 'team', category: 'fabric', name: 'ACATE',
     grade: 'A', composition: 'COTTON 80%, POLYESTER 20%', notes: null,
-    colors: [{ name: 'ANIS', code: '855' }], createdAt: 1, updatedAt: 1,
+    colors: [{ name: 'ANIS', code: '855' }], discontinuedAt: null,
+    createdAt: 1, updatedAt: 1,
   }];
   const patterns = [{
     name: 'ACATE', type: 'Fabrics', composition: 'COTTON 80%, POLYESTER 20%',
@@ -178,10 +169,9 @@ test('no-op when nothing changes → not in rows, counted as unchanged', () => {
   const { rows, summary } = mergeCatalog(existing, patterns, ctx());
   assert.equal(rows.length, 0);
   assert.equal(summary.unchangedMaterials, 1);
-  assert.equal(summary.updatedMaterials, 0);
 });
 
-test('merge is idempotent — a second run over applied rows changes nothing', () => {
+test('merge is idempotent — second run over applied rows changes nothing', () => {
   const patterns = [{
     name: 'ACATE', type: 'Fabrics', composition: 'COTTON 80%, POLYESTER 20%',
     remark: 'Treated against stains (TEFLON).',
@@ -193,21 +183,85 @@ test('merge is idempotent — a second run over applied rows changes nothing', (
   assert.equal(second.summary.unchangedMaterials, 1);
 });
 
+/* ------------------------------ complete sweep ------------------------------ */
+
+test('complete sweep flags (never deletes) a material the site no longer offers', () => {
+  const existing = [
+    { id: 'm1', profileId: 'team', category: 'fabric', name: 'ACATE', composition: 'C', notes: null, colors: [{ name: 'ANIS', code: '855' }], createdAt: 1, updatedAt: 1 },
+    { id: 'm2', profileId: 'team', category: 'fabric', name: 'CUSTOM COM', grade: 'X', price: 99, colors: [], createdAt: 1, updatedAt: 1 }, // not on site
+  ];
+  const patterns = [{ name: 'ACATE', type: 'Fabrics', composition: 'C', remark: null, colors: [{ code: '855', name: 'ANIS' }] }];
+  const { rows, summary } = mergeCatalog(existing, patterns, ctx({ complete: true }));
+  // ACATE unchanged; CUSTOM COM flagged but kept (id/grade/price intact).
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, 'm2');
+  assert.equal(rows[0].discontinuedAt, 1000);
+  assert.equal(rows[0].grade, 'X');
+  assert.equal(rows[0].price, 99);
+  assert.equal(summary.flaggedMissing, 1);
+});
+
+test('a partial (single-product) import never flags absent materials', () => {
+  const existing = [
+    { id: 'm1', profileId: 'team', category: 'fabric', name: 'ACATE', composition: 'C', notes: null, colors: [{ name: 'ANIS', code: '855' }], createdAt: 1, updatedAt: 1 },
+    { id: 'm2', profileId: 'team', category: 'fabric', name: 'OTHER', colors: [], createdAt: 1, updatedAt: 1 },
+  ];
+  const patterns = [{ name: 'ACATE', type: 'Fabrics', composition: 'C', remark: null, colors: [{ code: '855', name: 'ANIS' }] }];
+  const { rows, summary } = mergeCatalog(existing, patterns, ctx({ complete: false }));
+  assert.equal(rows.length, 0);            // OTHER untouched, ACATE unchanged
+  assert.equal(summary.flaggedMissing, 0);
+});
+
+test('re-appearing on the site clears the discontinued flag (restored)', () => {
+  const existing = [{
+    id: 'm1', profileId: 'team', category: 'fabric', name: 'ACATE', composition: 'C', notes: null,
+    colors: [{ name: 'ANIS', code: '855' }], discontinuedAt: 500, createdAt: 1, updatedAt: 1,
+  }];
+  const patterns = [{ name: 'ACATE', type: 'Fabrics', composition: 'C', remark: null, colors: [{ code: '855', name: 'ANIS' }] }];
+  const { rows, summary } = mergeCatalog(existing, patterns, ctx({ complete: true }));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].discontinuedAt, null);
+  assert.equal(summary.restored, 1);
+  assert.equal(summary.updatedMaterials, 1);
+});
+
+test('already-flagged + still missing stays flagged without re-emitting', () => {
+  const existing = [{
+    id: 'm1', profileId: 'team', category: 'fabric', name: 'GONE', colors: [],
+    discontinuedAt: 500, createdAt: 1, updatedAt: 1,
+  }];
+  const { rows, summary } = mergeCatalog(existing, [], ctx({ complete: true }));
+  assert.equal(rows.length, 0);
+  assert.equal(summary.flaggedMissing, 0);
+  assert.equal(summary.unchangedMaterials, 1);
+});
+
+test('keeps a dealer-set outdoor category — the site never encodes outdoor', () => {
+  // ELIOS SLING is an outdoor sling, but the site types it "Fabrics". A sync
+  // must overwrite its other fields without demoting it out of Outdoor.
+  const existing = [{
+    id: 'm1', profileId: 'team', category: 'outdoor', name: 'ELIOS SLING',
+    composition: null, notes: null, colors: [{ name: 'A', code: '1' }],
+    createdAt: 1, updatedAt: 1,
+  }];
+  const patterns = [{
+    name: 'ELIOS SLING', type: 'Fabrics', composition: 'PVC', remark: null,
+    colors: [{ code: '1', name: 'A' }, { code: '2', name: 'B' }],
+  }];
+  const { rows } = mergeCatalog(existing, patterns, ctx({ complete: true }));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, 'outdoor'); // not demoted to 'fabric'
+  assert.equal(rows[0].composition, 'PVC');  // other fields still overwritten
+});
+
 test('dedupes repeated color codes within a pattern (first non-empty name wins)', () => {
   const { rows } = mergeCatalog(
     [],
     [{
       name: 'X', type: 'Fabrics', composition: null, remark: null,
-      colors: [
-        { code: '100', name: '' },
-        { code: '100', name: 'RED' },   // same code → folded in, supplies the name
-        { code: '200', name: 'BLUE' },
-      ],
+      colors: [{ code: '100', name: '' }, { code: '100', name: 'RED' }, { code: '200', name: 'BLUE' }],
     }],
     ctx(),
   );
-  assert.deepEqual(rows[0].colors, [
-    { name: 'RED', code: '100' },
-    { name: 'BLUE', code: '200' },
-  ]);
+  assert.deepEqual(rows[0].colors, [{ name: 'RED', code: '100' }, { name: 'BLUE', code: '200' }]);
 });
