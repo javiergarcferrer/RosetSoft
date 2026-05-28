@@ -26,8 +26,9 @@ import {
 import { supabase } from '../db/supabaseClient.js';
 import {
   validateContainerNo, detectCarrier, normalizeContainerNo,
-  summarizeTracking, MODE_LABELS, CLASSIFIER_LABELS,
+  summarizeTracking, buildTrackingRoute, MODE_LABELS, CLASSIFIER_LABELS,
 } from '../lib/containerTracking.js';
+import ContainerTrackingMap from '../components/ContainerTrackingMap.jsx';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -614,6 +615,9 @@ function ContainerTracking({ containerNo }) {
   useEffect(() => { load(); }, [containerNo]);
 
   const { status, summary, error, fetchedAt } = state;
+  // Geocoded port hops for the map; empty when no event carries a known
+  // UN/LOCODE, in which case the textual timeline below stands on its own.
+  const route = useMemo(() => buildTrackingRoute(summary), [summary]);
 
   return (
     <div className="rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3">
@@ -669,6 +673,8 @@ function ContainerTracking({ containerNo }) {
               </div>
             )}
           </div>
+
+          {route.stops.length > 0 && <ContainerTrackingMap route={route} />}
 
           <ol className="space-y-1.5 border-l border-ink-200 pl-3">
             {[...summary.milestones].reverse().map((m, i) => (

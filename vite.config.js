@@ -78,6 +78,9 @@ export default defineConfig(({ mode }) => {
             // quote-builder lazy-imports them via dynamic import so the
             // initial bundle stays under 500 KB.
             pdflib: ['pdf-lib'],
+            // Leaflet is likewise dynamic-imported (only when a dealer opens
+            // container tracking), so it gets its own on-demand chunk.
+            leaflet: ['leaflet'],
             react: ['react', 'react-dom', 'react-router-dom'],
           },
         },
