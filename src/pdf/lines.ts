@@ -6,7 +6,7 @@ import {
   materialOptionDeltas,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
-import { swatchUrl } from '../lib/swatchImage.js';
+import { swatchProxyUrl } from '../lib/swatchImage.js';
 import { colorCodeFromSubtype } from '../lib/swatchMatch.js';
 import { rgb } from 'pdf-lib';
 import {
@@ -421,7 +421,7 @@ function materialOptionCells(
   if (baseLabel) {
     push(
       baseLabel,
-      { imageId: baseSwatchImageId, url: swatchUrl(colorCodeFromSubtype(baseLabel)) },
+      { imageId: baseSwatchImageId, url: swatchProxyUrl(colorCodeFromSubtype(baseLabel)) },
       'incluido',
       INK_SOFT,
     );
@@ -436,7 +436,7 @@ function materialOptionCells(
       : null;
     const noteColor = delta != null && delta < 0 ? EMERALD_700 : INK_MID;
     const code = o.code || colorCodeFromSubtype(o.label);
-    push(o.label || '', { imageId: o.swatchImageId, url: swatchUrl(code) }, note, noteColor);
+    push(o.label || '', { imageId: o.swatchImageId, url: swatchProxyUrl(code) }, note, noteColor);
   }
   return cells;
 }
