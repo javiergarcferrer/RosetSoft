@@ -1010,9 +1010,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         view={view}
         onViewChange={setView}
         onOpenPalette={() => setPaletteOpen(true)}
-        onExportPdf={exportPdf}
-        onShare={shareQuote}
-        sharing={sharing}
         onUpdateQuote={hx(updateQuote)}
         onUndo={undo}
         onRedo={redo}
@@ -1020,7 +1017,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         canRedo={canRedo}
         savedAt={savedAt}
         saving={saving}
-        exporting={exporting}
       />
 
       {/* Surface PDF export failures inline. The export button used to
@@ -1133,6 +1129,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onOpenCatalog={() => setCatalogOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
+        onShare={shareQuote}
+        sharing={sharing}
       />
 
       <QuickActions

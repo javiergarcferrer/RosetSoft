@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Undo2, Redo2, Share2 } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, MoreHorizontal, Command, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -13,7 +13,8 @@ import { FLOOR_COMMISSION_PCT, SPECIAL_COMMISSION_PCT } from '../../lib/commissi
 /**
  * Top of the quote workspace. Title (editable inline), customer chip,
  * container chip, save indicator, view toggle (compose / client preview),
- * and the main actions (open command palette, export PDF, toggle price list).
+ * undo/redo and the command palette. Export PDF and Share moved to the
+ * persistent bottom totals dock so they're always reachable.
  *
  * The title is inline-editable: clicking the H1 swaps in an input. The "back
  * to quotes" link is a tiny breadcrumb above. This consolidates four
@@ -27,9 +28,6 @@ export default function QuoteHeader({
   view,
   onViewChange,
   onOpenPalette,
-  onExportPdf,
-  onShare,
-  sharing,
   onUpdateQuote,
   onUndo,
   onRedo,
@@ -37,7 +35,6 @@ export default function QuoteHeader({
   canRedo,
   savedAt,
   saving,
-  exporting,
 }) {
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
   // Look up the quote's creator from the AppContext profiles list. The
@@ -124,37 +121,6 @@ export default function QuoteHeader({
             </button>
 
             <ViewToggle view={view} onChange={onViewChange} />
-
-            <button
-              type="button"
-              onClick={onShare}
-              disabled={sharing}
-              className="btn-ghost text-xs hidden md:inline-flex disabled:opacity-60 disabled:cursor-wait"
-              title="Copiar un enlace interactivo para el cliente"
-            >
-              {sharing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-              <span className="hidden lg:inline">Compartir</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onExportPdf}
-              disabled={exporting}
-              aria-busy={exporting}
-              // Hidden on phones — the mobile sticky bottom bar carries
-              // an equivalent export action so the desktop header
-              // doesn't compete for tap space.
-              className="btn-primary hidden md:inline-flex disabled:opacity-60 disabled:cursor-wait"
-              // Desktop opens a review tab (not a direct download); the
-              // browser's PDF viewer then offers print / save from there.
-              title="Previsualizar y descargar PDF"
-            >
-              {exporting ? (
-                <><Loader2 size={14} className="animate-spin" /> Generando…</>
-              ) : (
-                <><Download size={14} /> Exportar PDF</>
-              )}
-            </button>
 
             {/* Mobile: condense Export + palette into a single icon-only menu.
                 btn-icon is the 44pt-on-coarse, 36pt-on-fine square target.
