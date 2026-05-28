@@ -610,11 +610,11 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
                 )}
               </div>
             )}
-            {/* Fabric swatch — now BELOW the subtype + ref/dims (per the
-                explicit ask) and enlarged to w-16 h-16 so the colour reads
-                clearly. Still inside the tap-to-zoom Modal with the
-                Ligne-Roset-code fallback, and lifted above the dim veil. */}
-            {(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
+            {/* Fabric swatch — shown only when there are NO material options.
+                When the options grid renders it already leads with this same
+                (selected) material as its "incluido" cell, so a separate hero
+                swatch would just repeat it. */}
+            {!line.materialOptions?.options?.length && (line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
               <div className="mt-2">
                 <ImageZoom
                   id={line.swatchImageId}
@@ -846,10 +846,10 @@ function CompoundComponentRow({ component, currency, rates, fmt, families }) {
             )}
           </div>
         )}
-        {/* Fabric swatch — moved BELOW subtype + ref/dims and enlarged to
-            w-16 h-16, mirroring the standalone line treatment. Tap-to-zoom
-            + Ligne-Roset-code fallback, lifted above the dim veil. */}
-        {(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
+        {/* Fabric swatch — suppressed when the material-options grid renders
+            (it already leads with this same material), mirroring the
+            standalone line. */}
+        {!component.materialOptions?.options?.length && (component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
           <div className="mt-2">
             <ImageZoom
               id={component.swatchImageId}
