@@ -444,10 +444,12 @@ export interface Quote {
 
   /* Public share link. `shareToken` is a random secret embedded in the
    * shareable URL (#/q/<token>); `shareEnabled` gates whether the link
-   * resolves (lets the dealer revoke without losing the token). The
-   * recipient's interactive picks land in `clientSelections` — stored
-   * SEPARATELY (never mutating the dealer's own lines) so the dealer sees
-   * what the client wants and can choose to apply it. */
+   * resolves (lets the dealer revoke without losing the token).
+   *
+   * `clientSelections` is LEGACY: the share link used to store a recipient's
+   * picks separately here, but the owner chose a single source of truth — the
+   * `quote-share` function now applies picks directly to `quote_lines`, so this
+   * column is no longer written. Kept (nullable) only so old rows type-check. */
   shareToken?: string | null;
   shareEnabled?: boolean;
   clientSelections?: ClientSelections | null;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, PackageSearch, Share2, Eye } from 'lucide-react';
+import { Hash, AlertCircle, PackageSearch, Share2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -14,8 +14,9 @@ import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
-import { FamiliesContext } from '../components/quote-builder/QuoteLineItem.jsx';
+import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
+import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
@@ -365,22 +366,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      {/* Non-destructive notice that the client interacted with the share
-          link (plan A — their picks live in quote.clientSelections, separate
-          from the dealer's own lines). */}
-      {quote.clientSelections && (quote.clientSelections.alternatives || quote.clientSelections.optionals || quote.clientSelections.materials) && (
-        <div className="mb-4 rounded-md bg-brand-50 border border-brand-200 px-3 py-2 text-xs text-brand-800 flex items-start gap-2">
-          <Eye size={14} className="flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            El cliente personalizó esta cotización desde el enlace
-            {' '}({Object.keys(quote.clientSelections.alternatives || {}).length} alternativa(s),
-            {' '}{Object.values(quote.clientSelections.optionals || {}).filter(Boolean).length} complemento(s),
-            {' '}{Object.keys(quote.clientSelections.materials || {}).length} material(es)).
-            Sus selecciones se guardan aparte; tus líneas no cambian.
-          </div>
-        </div>
-      )}
-
       <div className="mb-5">
         <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
       </div>
@@ -427,6 +412,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             onReorder: hx(reorderLines),
             onAddSection: hx(addSection),
             onOpenCatalog: () => setCatalogOpen(true),
+            // Catalog side-effect (not an undoable line edit): remember a
+            // material's swatch so the next quote that picks it is pre-filled.
+            // Owns the profileId source + persistence so the editor row doesn't.
+            rememberSwatch: (subtype, imageId) => {
+              if (imageId && profileId) rememberSwatchInCatalog({ profileId, subtype, imageId });
+            },
           }}>
             <FamiliesContext.Provider value={families}>
               <LineItemsCard
