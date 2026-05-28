@@ -120,3 +120,41 @@ export function composeSubtype(
   const gradeStr = ALPHA_GRADES.includes(g.toUpperCase()) ? `Grade ${g.toUpperCase()}` : g;
   return f ? `${gradeStr} — ${f}` : gradeStr;
 }
+
+/** A catalog material the picker can compose a fabric label from. */
+export interface MaterialLike {
+  name?: string | null;
+}
+
+/** A catalog color (the picked variant) — carries the code we embed. */
+export interface ColorLike {
+  name?: string | null;
+  code?: string | null;
+}
+
+/**
+ * Compose the fabric portion of a quote line's subtype from a catalog
+ * material + (optional) color:
+ *
+ *   material + color → "MATERIAL · COLOR (#code)"
+ *   material only    → "MATERIAL"
+ *
+ * The result lands as the second segment of composeSubtype(grade, fabric),
+ * so the on-screen + PDF render stays consistent with hand-typed values and
+ * the embedded "(#code)" lets swatchMatch.locateColor find it again later.
+ *
+ * Shared by both material pickers (the quote-pane SwatchPicker and the
+ * catalog flow) so the codes never drift between the two entry points.
+ */
+export function composeFabricLabel(
+  material: MaterialLike | null | undefined,
+  color: ColorLike | null | undefined,
+): string {
+  const name = (material?.name || '').trim();
+  if (!color) return name;
+  const colorName = (color.name || '').trim();
+  const code = (color.code || '').trim();
+  const colorBit = code ? `${colorName} (#${code})` : colorName;
+  if (!colorBit) return name;
+  return name ? `${name} · ${colorBit}` : colorBit;
+}
