@@ -35,15 +35,14 @@ export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTIO
  * on first login, via the `bpd-rate` edge function → apipublico.bpd.com.do).
  *
  * This gates ONLY the automatic daily pull. The manual "Actualizar ahora"
- * button in Settings is ALWAYS available (on-demand) regardless of this flag —
- * it just returns 401 until BPD approves the production app's subscription to
- * BPDConsultaTasa.
+ * button in Settings is ALWAYS available (on-demand) regardless of this flag.
  *
- * PRODUCTION IS FULLY WIRED (bpd-rate pinned to prod gateway, BPD_* secrets set);
- * kept false so the daily auto-pull doesn't fire (and fail) until the
- * subscription is approved. Flip to `true` then — no other change needed.
+ * ENABLED: the production subscription is approved and the rate pulls
+ * successfully end-to-end. The pull fires once per day on the first app load of
+ * the day (see `shouldPullDailyRate` in lib/exchangeRate + AppContext) — not
+ * hourly, because BPD publishes a single daily rate.
  */
-export const EXCHANGE_RATE_PULL_ENABLED = false;
+export const EXCHANGE_RATE_PULL_ENABLED = true;
 
 /**
  * Predicate every total-bearing surface (Quotes / Orders / Dashboard /
