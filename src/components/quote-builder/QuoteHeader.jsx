@@ -4,6 +4,7 @@ import { ArrowLeft, Eye, Pencil, Download, MoreHorizontal, Command, Loader2, Und
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
+import SpecialOrderWarning from './SpecialOrderWarning.jsx';
 import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import { useApp } from '../../context/AppContext.jsx';
@@ -204,6 +205,8 @@ export default function QuoteHeader({
             onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
         </div>
+
+        <SpecialOrderWarning quote={quote} />
       </div>
 
       <CustomerPicker
