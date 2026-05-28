@@ -6,7 +6,7 @@ import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
-  alternativeSubtotal, groupRuns,
+  alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
@@ -32,7 +32,7 @@ import { swatchUrl } from '../../lib/swatchImage.js';
  * is the same terracotta eyebrow + rule the section header used, plus a
  * chevron that rotates when open.
  */
-function SectionDisclosure({ label, children }) {
+function SectionDisclosure({ label, subtotalLabel, children }) {
   return (
     <details open className="group/section">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden px-4 pt-6 pb-2 flex items-center justify-between gap-3">
@@ -40,18 +40,23 @@ function SectionDisclosure({ label, children }) {
           <span className="eyebrow font-semibold tracking-[0.12em] text-brand-700">{label}</span>
           <span className="mt-1.5 block h-[2px] w-9 bg-brand-700 rounded-full" />
         </span>
-        <ChevronDown
-          size={16}
-          className="flex-shrink-0 text-brand-700 transition-transform duration-200 group-open/section:rotate-180"
-          aria-hidden
-        />
+        <span className="flex items-center gap-3 flex-shrink-0">
+          {subtotalLabel && (
+            <span className="text-sm font-semibold tabular-nums text-ink-800 whitespace-nowrap">{subtotalLabel}</span>
+          )}
+          <ChevronDown
+            size={16}
+            className="text-brand-700 transition-transform duration-200 group-open/section:rotate-180"
+            aria-hidden
+          />
+        </span>
       </summary>
       {children}
     </details>
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -191,6 +196,8 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                         groupInfo={groupInfo.get(l.id)}
                         setInfo={undefined}
                         insideGroupCard={false}
+                        materialSelections={materialSelections}
+                        onSelectMaterial={onSelectMaterial}
                       />
                     );
                   }
@@ -223,6 +230,8 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                           groupInfo={groupInfo.get(l.id)}
                           setInfo={isSet ? setInfo.get(l.id) : undefined}
                           insideGroupCard
+                          materialSelections={materialSelections}
+                          onSelectMaterial={onSelectMaterial}
                         />
                       ))}
                     </ClientGroupCard>
@@ -230,14 +239,18 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                 })}
               </ul>
             );
+            // Section roll-up — the sum of the priced products under this
+            // header (same isPricedLine rule as the grand total). Shown only
+            // for labelled sections with something to total.
+            const secSub = g.label ? sectionSubtotal(g.items) : 0;
             return (
               <div key={gi} className="mb-2">
                 {g.label ? (
                   // Labelled section → collapsible <details> landmark. The
                   // summary carries the same terracotta eyebrow + rule the
-                  // PDF uses; open by default, a chevron flags it's
-                  // collapsible on touch.
-                  <SectionDisclosure label={g.label}>{list}</SectionDisclosure>
+                  // PDF uses + the section subtotal; open by default, a chevron
+                  // flags it's collapsible on touch.
+                  <SectionDisclosure label={g.label} subtotalLabel={secSub > 0 ? fmt(secSub) : null}>{list}</SectionDisclosure>
                 ) : (
                   // Top-level / unlabelled group — flush, no disclosure.
                   list
@@ -306,7 +319,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard }) {
+function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -322,6 +335,8 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
         groupInfo={groupInfo}
         setInfo={setInfo}
         insideGroupCard={insideGroupCard}
+        materialSelections={materialSelections}
+        onSelectMaterial={onSelectMaterial}
       />
     );
   }
@@ -469,6 +484,8 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               currency={currency}
               rates={rates}
               baseSwatchImageId={line.swatchImageId}
+              selectedGrade={materialSelections?.[line.id] ?? line.materialOptions?.baseGrade}
+              onSelect={onSelectMaterial ? (g) => onSelectMaterial(line.id, g) : undefined}
             />
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
@@ -521,7 +538,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard }) {
+function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -620,6 +637,8 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 rates={rates}
                 fmt={fmt}
                 families={families}
+                materialSelections={materialSelections}
+                onSelectMaterial={onSelectMaterial}
               />
             ))}
           </ul>
@@ -653,7 +672,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families, materialSelections, onSelectMaterial }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -707,6 +726,8 @@ function CompoundComponentRow({ component, currency, rates, fmt, families }) {
           currency={currency}
           rates={rates}
           baseSwatchImageId={component.swatchImageId}
+          selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
+          onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
         />
         {component.description && (
           <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">

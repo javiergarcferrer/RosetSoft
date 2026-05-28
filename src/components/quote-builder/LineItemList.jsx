@@ -6,6 +6,7 @@ import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
+  sectionSubtotal,
 } from '../../lib/pricing.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
@@ -62,6 +63,27 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   const currency = quote?.currencyCode || 'USD';
   const rates = quote?.rates || { USD: 1 };
   const byId = new Map(lines.map((l) => [l.id, l]));
+
+  // Per-section roll-up — the sum of the priced items between each section
+  // header and the next, keyed by the section line's id. Same isPricedLine
+  // rule (via sectionSubtotal) the client preview + PDF use, so all three
+  // surfaces show an identical section total.
+  const sectionSubtotals = (() => {
+    const map = new Map();
+    let curId = null;
+    let acc = [];
+    for (const l of lines) {
+      if (l.kind === LINE_KIND_SECTION) {
+        if (curId != null) map.set(curId, sectionSubtotal(acc));
+        curId = l.id;
+        acc = [];
+      } else if (curId != null) {
+        acc.push(l);
+      }
+    }
+    if (curId != null) map.set(curId, sectionSubtotal(acc));
+    return map;
+  })();
 
   // -------- drag-reorder --------
   const [draggingId, setDraggingId] = useState(null);
@@ -162,6 +184,11 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
             onRemove={() => onRemoveLine(l)}
             autoFocus={l.id === focusLineId}
             dragHandleProps={handleProps}
+            subtotalLabel={
+              sectionSubtotals.get(l.id) > 0
+                ? formatMoney(sectionSubtotals.get(l.id), currency, rates)
+                : null
+            }
           />
         ) : (
           <QuoteLineItem

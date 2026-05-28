@@ -268,6 +268,30 @@ export function quoteSavings(
   return total > 0 ? total : 0;
 }
 
+/* ------------------------------ sections ------------------------------ */
+
+/**
+ * Subtotal of a SECTION — the sum of the priced lines that fall under one
+ * section header (the items between this divider and the next).
+ *
+ * "Priced" uses the SAME `isPricedLine` predicate the grand total does, so the
+ * figure can never diverge from `computeTotals`' `subtotal`: section dividers,
+ * optionals and non-selected alternatives drop out; set members and the chosen
+ * alternative are summed at their own `lineTotal`. It's a pre-quote-discount,
+ * pre-tax roll-up of the products shown in the section — so the section
+ * subtotals add up to the Subtotal row. Returns 0 for an empty section.
+ *
+ * @param items  the line items under one section header (NOT the section row
+ *               itself). Callers slice the flat list by section boundary.
+ */
+export function sectionSubtotal(
+  items: readonly QuoteLine[] | null | undefined,
+): number {
+  return (items || [])
+    .filter((l) => isPricedLine(l))
+    .reduce((sum, l) => sum + lineTotal(l), 0);
+}
+
 /* ------------------------------ conjuntos (sets) ------------------------------ */
 
 /**
