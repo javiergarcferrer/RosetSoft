@@ -39,7 +39,7 @@ export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTIO
  * it just returns 401 until BPD approves the production app's subscription to
  * BPDConsultaTasa.
  *
- * PRODUCTION IS FULLY WIRED (DEFAULT_BASE = prod gateway, BPD_* secrets set);
+ * PRODUCTION IS FULLY WIRED (bpd-rate pinned to prod gateway, BPD_* secrets set);
  * kept false so the daily auto-pull doesn't fire (and fail) until the
  * subscription is approved. Flip to `true` then — no other change needed.
  */
