@@ -41,15 +41,26 @@ export async function embedImageById(
 // small. WeakMap by doc so the cache is collected with the document and
 // never leaks across exports.
 const swatchByDoc = new WeakMap<PDFDocument, Map<string, PDFImage | null>>();
-// Module-level fetched-bytes cache (bytes are document-independent) so the
-// same remote swatch is fetched at most once per session.
-const urlBytesCache = new Map<string, Uint8Array | null>();
+// Module-level cache of successfully fetched swatch bytes (bytes are
+// document-independent) so the same remote swatch is fetched at most once
+// per session. Only SUCCESSES are cached — a transient failure must never
+// stick, or one bad fetch would blank that swatch for the rest of the
+// session (every later export reusing the cached null).
+const urlBytesCache = new Map<string, Uint8Array>();
 
 async function fetchImageBytes(url: string): Promise<Uint8Array | null> {
   try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    return new Uint8Array(await r.arrayBuffer());
+    // Bound the wait so a slow/hanging swatch can't freeze the whole export
+    // (swatches are embedded sequentially during the render).
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal });
+      if (!r.ok) return null;
+      return new Uint8Array(await r.arrayBuffer());
+    } finally {
+      clearTimeout(timer);
+    }
   } catch {
     return null;
   }
@@ -76,10 +87,11 @@ export async function embedSwatch(
   if (src.imageId) {
     img = await embedImageById(doc, src.imageId);
   } else if (src.url) {
-    let bytes = urlBytesCache.get(src.url);
-    if (bytes === undefined) {
+    let bytes = urlBytesCache.get(src.url) ?? null;
+    if (!bytes) {
       bytes = await fetchImageBytes(src.url);
-      urlBytesCache.set(src.url, bytes);
+      // Cache successes only — see urlBytesCache note above.
+      if (bytes) urlBytesCache.set(src.url, bytes);
     }
     if (bytes) {
       try { img = await doc.embedJpg(bytes); }

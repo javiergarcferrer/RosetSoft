@@ -331,18 +331,18 @@ async function drawSwatch(
 
 // ---------------------------------------------------------------------------
 // Material-options grid. The materials a line (or component) can be re-quoted
-// in, laid out as a two-column list flowing down: each cell is a uniform
-// swatch tile on the LEFT with the material name + a note to its right. The
-// selected (base) material reads first as the anchor ("incluido"); each
-// alternative follows with its signed price delta. Mirrors ClientPreview's
-// MaterialOptionsStrip — no "OPCIONES DE MATERIAL" heading; the swatch +
-// label is self-explanatory.
+// in, laid out as a two-column grid flowing down. Each cell stacks a LARGE,
+// uniform swatch tile on top with the material name + a note left-aligned
+// directly BELOW it. The selected (base) material reads first as the anchor
+// ("incluido"); each alternative follows with its signed price delta. Mirrors
+// ClientPreview's MaterialOptionsStrip — no "OPCIONES DE MATERIAL" heading;
+// the swatch + label is self-explanatory.
 // ---------------------------------------------------------------------------
-const MO_SWATCH      = 22;   // uniform swatch tile — same size for every cell
-const MO_SWATCH_GAP  = 6;    // gap between a cell's swatch and its text
-const MO_COL_GAP     = 16;   // gap between the two columns
-const MO_ROW_GAP     = 7;    // vertical gap between grid rows
-const MO_TOP_GAP     = 9;    // gap above the grid (below the line's main swatch)
+const MO_SWATCH       = 48;   // uniform swatch tile — same big size for every cell
+const MO_IMG_TEXT_GAP = 4;    // gap between a cell's swatch and the text below it
+const MO_COL_GAP      = 16;   // gap between the two columns
+const MO_ROW_GAP      = 10;   // vertical gap between grid rows
+const MO_TOP_GAP      = 9;    // gap above the grid (below the line's main swatch)
 const MO_LABEL_MAX_LINES = 2;
 
 interface MaterialCell {
@@ -350,7 +350,7 @@ interface MaterialCell {
   note: string | null;
   noteColor: RGB;
   swatch: { imageId?: string | null; url?: string | null };
-  h: number;            // cell content height = max(swatch, text)
+  h: number;            // cell height = swatch + gap + text (label + note)
 }
 
 /**
@@ -383,7 +383,8 @@ function materialOptionCells(
   }
 
   const cellW = (detailW - MO_COL_GAP) / 2;
-  const textW = Math.max(24, cellW - MO_SWATCH - MO_SWATCH_GAP);
+  // Text sits BELOW the swatch and wraps to the full cell width.
+  const textW = Math.max(24, cellW);
   const labelFont = fontFor(ctx, T.moLabel);
 
   const cells: MaterialCell[] = [];
@@ -396,7 +397,7 @@ function materialOptionCells(
     const labelLines = wrapToWidth(label, textW, labelFont, T.moLabel.size).slice(0, MO_LABEL_MAX_LINES);
     if (!labelLines.length) return;
     const textH = labelLines.length * T.moLabel.lh + (note ? T.moNote.lh : 0);
-    cells.push({ labelLines, note, noteColor, swatch, h: Math.max(MO_SWATCH, textH) });
+    cells.push({ labelLines, note, noteColor, swatch, h: MO_SWATCH + MO_IMG_TEXT_GAP + textH });
   };
 
   if (baseLabel) {
@@ -459,18 +460,19 @@ async function drawMaterialOptions(
     for (let j = 0; j < rowCells.length; j++) {
       const c = rowCells[j];
       const cellX = x + j * (cellW + MO_COL_GAP);
+      // Swatch on top — occupies [y − MO_SWATCH, y].
       drawSwatchImage(page, await embedSwatch(ctx.doc, c.swatch), cellX, y, MO_SWATCH);
-      const tx = cellX + MO_SWATCH + MO_SWATCH_GAP;
-      let ty = y;
+      // Text below the swatch, left edge flush with the swatch's left edge.
+      let ty = y - MO_SWATCH - MO_IMG_TEXT_GAP;
       for (const ln of c.labelLines) {
         page.drawText(ln, {
-          x: tx, y: ty - T.moLabel.size, size: T.moLabel.size, font: labelFont, color: T.moLabel.color,
+          x: cellX, y: ty - T.moLabel.size, size: T.moLabel.size, font: labelFont, color: T.moLabel.color,
         } as DrawTextOptions);
         ty -= T.moLabel.lh;
       }
       if (c.note) {
         page.drawText(c.note, {
-          x: tx, y: ty - T.moNote.size, size: T.moNote.size, font: noteFont, color: c.noteColor,
+          x: cellX, y: ty - T.moNote.size, size: T.moNote.size, font: noteFont, color: c.noteColor,
         } as DrawTextOptions);
       }
     }

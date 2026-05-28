@@ -150,16 +150,16 @@ function MaterialOptionsStrip({ materialOptions, reference, families, currency, 
   });
 
   return (
-    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 max-w-lg">
+    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 max-w-md">
       {cells.map((c) => (
-        <div key={c.key} className="flex items-start gap-2 min-w-0">
+        <div key={c.key} className="min-w-0">
           <ImageView
             id={c.swatchImageId}
             fallbackUrl={swatchUrl(c.code)}
             alt=""
-            className="w-7 h-7 object-cover rounded-sm border border-ink-200 bg-white flex-shrink-0"
+            className="w-16 h-16 object-cover rounded border border-ink-200 bg-white"
           />
-          <div className="min-w-0 leading-tight pt-px">
+          <div className="mt-1 leading-tight">
             <div className="text-[11px] font-medium text-ink-700">{c.label}</div>
             {c.note && <div className={`text-[10px] ${c.noteClass}`}>{c.note}</div>}
           </div>
