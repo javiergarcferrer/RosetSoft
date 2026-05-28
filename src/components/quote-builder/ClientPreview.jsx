@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Boxes, GitFork } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import Modal from '../Modal.jsx';
 import {
@@ -7,6 +7,12 @@ import {
   quoteSavings, setSubtotal, setGroupInfo,
   alternativeSubtotal, groupRuns,
 } from '../../lib/pricing.js';
+// Namespace import for materialOptionDeltas so this surface degrades
+// gracefully if the helper isn't present in the bundle yet (it resolves
+// to undefined rather than failing the build) and lights up automatically
+// once it lands. See materialDeltas() below.
+import * as pricing from '../../lib/pricing.js';
+import { splitSkuGrade } from '../../lib/catalog.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
@@ -53,7 +59,135 @@ function ImageZoom({ id, fallbackUrl = null, className, alt = '' }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller }) {
+/**
+ * "Opciones de material" — a compact, read-only strip listing the fabric/
+ * leather grades a line (or compound component) can be re-quoted in, with
+ * the price delta versus the chosen grade. The base grade reads as the
+ * anchor (no number, "incluido"); each alternative shows its label and the
+ * delta (e.g. "Cuero L +$420.00", a cheaper grade shows "−$120.00").
+ *
+ * Deltas come from materialOptionDeltas(materialOptions, family) where the
+ * family is looked up in the parent-supplied `families` map by the line's
+ * SKU root. The component degrades in layers so the customer never sees a
+ * broken strip while the catalog wiring settles:
+ *   - no options                                  → renders nothing
+ *   - no `families` / no family / helper absent /
+ *     a row whose delta is unavailable            → that option shows
+ *                                                    label-only (no number)
+ *
+ * Small swatch chips reuse the same Ligne-Roset-code fallback vocabulary as
+ * the line's main swatch, kept deliberately tiny so the strip stays a quiet
+ * spec line, not a second gallery.
+ */
+function MaterialOptionsStrip({ materialOptions, reference, families, currency, rates }) {
+  const rawOptions = materialOptions?.options;
+  if (!Array.isArray(rawOptions) || rawOptions.length === 0) return null;
+
+  const baseLabel = materialOptions.baseLabel || materialOptions.baseGrade || null;
+
+  // Prefer the priced rows from materialOptionDeltas (which carry
+  // grade/label/code/swatchImageId/delta together); fall back to the raw
+  // options (label-only, delta null) whenever the helper isn't in the
+  // bundle yet, there's no `families` map, or no family resolves for this
+  // SKU root. materialOptionDeltas is read off the namespace so a bundle
+  // that predates it resolves to undefined instead of failing the build.
+  const priced = (() => {
+    const compute = pricing.materialOptionDeltas;
+    if (typeof compute !== 'function' || !families) return null;
+    const root = splitSkuGrade(reference || '').root;
+    const family = root ? families.get(root) : null;
+    if (!family) return null;
+    try {
+      const rows = compute(materialOptions, family);
+      return Array.isArray(rows) ? rows : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  // Merge: walk the priced rows when present (authoritative label + delta),
+  // else the raw options. Each entry → { grade, label, code, swatchImageId, delta }.
+  const rows = (priced || rawOptions).map((o) => ({
+    grade: o?.grade,
+    label: o?.label,
+    code: o?.code,
+    swatchImageId: o?.swatchImageId,
+    delta: typeof o?.delta === 'number' ? o.delta : null,
+  })).filter((o) => o.label);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-2">
+      <div className="eyebrow-xs tracking-widest text-ink-500 mb-1">Opciones de material</div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {baseLabel && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-600">
+            <span className="font-medium text-ink-700">{baseLabel}</span>
+            <span className="text-ink-400">· incluido</span>
+          </span>
+        )}
+        {rows.map((opt, i) => {
+          const hasDelta = typeof opt.delta === 'number';
+          // Money string with an explicit sign — negative deltas show "−".
+          const signed = hasDelta
+            ? `${opt.delta < 0 ? '−' : '+'}${formatMoney(Math.abs(opt.delta), currency, rates)}`
+            : null;
+          const swatchFallback = swatchUrl(opt.code || colorCodeFromSubtype(opt.label));
+          return (
+            <span
+              key={opt.grade != null ? `${opt.grade}-${i}` : i}
+              className="inline-flex items-center gap-1.5 text-[11px] text-ink-600"
+            >
+              {(opt.swatchImageId || swatchFallback) && (
+                <ImageView
+                  id={opt.swatchImageId}
+                  fallbackUrl={swatchFallback}
+                  alt=""
+                  className="w-4 h-4 object-cover rounded-sm border border-ink-200 bg-white flex-shrink-0"
+                />
+              )}
+              <span className="font-medium text-ink-700">{opt.label}</span>
+              {signed && (
+                <span className={opt.delta < 0 ? 'text-emerald-700 font-semibold' : 'text-ink-500 font-semibold'}>
+                  {signed}
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A labelled section group wrapped in a native <details open> so a customer
+ * on a phone can collapse a long section. Renders only when the section
+ * carries a label (top-level / unlabelled groups stay flush). The summary
+ * is the same terracotta eyebrow + rule the section header used, plus a
+ * chevron that rotates when open.
+ */
+function SectionDisclosure({ label, children }) {
+  return (
+    <details open className="group/section">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden px-4 pt-6 pb-2 flex items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="eyebrow font-semibold tracking-[0.12em] text-brand-700">{label}</span>
+          <span className="mt-1.5 block h-[2px] w-9 bg-brand-700 rounded-full" />
+        </span>
+        <ChevronDown
+          size={16}
+          className="flex-shrink-0 text-brand-700 transition-transform duration-200 group-open/section:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -105,8 +239,11 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         <span className="opacity-60">{formatDate(quote.updatedAt)}</span>
       </div>
 
-      {/* Header */}
-      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-wrap items-start gap-6 justify-between">
+      {/* Header — stacks on mobile (logo block, then quote#) and promotes
+          to a side-by-side row on sm+. The quote# column reads left-aligned
+          on mobile so it shares the page gutter instead of orphaning to the
+          right edge. */}
+      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0">
           {settings?.logoImageId ? (
             <ImageView
@@ -120,7 +257,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             {[settings?.companyAddress, settings?.companyPhone, settings?.companyEmail].filter(Boolean).join('\n')}
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-left sm:text-right">
           <div className="eyebrow">Cotización</div>
           {/* Quieter quote number — it shouldn't out-shout the company
               wordmark or (on the totals) the grand total. */}
@@ -132,7 +269,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
       {/* Customer block — client on the left, who's selling it (vendedor)
           and the referring professional on the right. */}
       {(customer || seller || professional) && (
-        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6">
           <div className="min-w-0">
             <div className="eyebrow mb-1.5">Cliente</div>
             {customer ? (
@@ -150,7 +287,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             )}
           </div>
           {(seller || professional) && (
-            <div className="text-right shrink-0 space-y-3">
+            <div className="text-left sm:text-right shrink-0 space-y-3">
               {seller && (
                 <div>
                   <div className="eyebrow mb-0.5">Vendedor</div>
@@ -169,8 +306,10 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         </div>
       )}
 
-      {/* Line items */}
-      <div className="px-2 sm:px-6 py-2">
+      {/* Line items — unified left gutter (px-4 sm:px-6) so every left
+          edge inside (rows, group cards, section headers) aligns with the
+          header/customer blocks above. */}
+      <div className="px-4 sm:px-6 py-2">
         {lines.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm text-ink-500">
             Aún no hay artículos en esta cotización.
@@ -187,74 +326,76 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             // read-only customer treatment.
             const byId = new Map(g.items.map((l) => [l.id, l]));
             const runs = groupRuns(g.items);
-            return (
-              <div key={gi} className="mb-2">
-                {g.label && (
-                  // Section landmark — terracotta eyebrow + a short
-                  // terracotta rule, the only brand-coloured marks in the
-                  // line body now (per-row labels are neutral). Mirrors the
-                  // PDF's section treatment.
-                  <div className="px-4 pt-6 pb-2">
-                    <div className="eyebrow font-semibold tracking-[0.12em] text-brand-700">
-                      {g.label}
-                    </div>
-                    <div className="mt-1.5 h-[2px] w-9 bg-brand-700 rounded-full" />
-                  </div>
-                )}
-                <ul>
-                  {runs.map((run) => {
-                    if (run.type === 'single') {
-                      // Ungrouped line — render the row flat, exactly as
-                      // before. (Sections never appear here.)
-                      const l = byId.get(run.lineIds[0]);
-                      if (!l) return null;
-                      return (
+            const list = (
+              <ul>
+                {runs.map((run) => {
+                  if (run.type === 'single') {
+                    // Ungrouped line — render the row flat, exactly as
+                    // before. (Sections never appear here.)
+                    const l = byId.get(run.lineIds[0]);
+                    if (!l) return null;
+                    return (
+                      <ClientLine
+                        key={l.id}
+                        line={l}
+                        currency={currency}
+                        rates={rates}
+                        fmt={fmt}
+                        families={families}
+                        groupInfo={groupInfo.get(l.id)}
+                        setInfo={undefined}
+                        insideGroupCard={false}
+                      />
+                    );
+                  }
+
+                  // Group run → a container card wrapping the member rows.
+                  const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
+                  const isSet = run.type === 'set';
+                  // Only Conjuntos can be optional — an Alternativa always uses one.
+                  const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
+                  const footerValue = isSet
+                    ? setSubtotal(lines, run.groupId)
+                    : alternativeSubtotal(lines, run.groupId);
+                  return (
+                    <ClientGroupCard
+                      key={`grp-${run.groupId}-${run.start}`}
+                      type={run.type}
+                      memberCount={members.length}
+                      optional={optional}
+                      footerLabel={isSet ? 'Total del conjunto' : 'Total'}
+                      footerValue={fmt(footerValue)}
+                    >
+                      {members.map((l) => (
                         <ClientLine
                           key={l.id}
                           line={l}
                           currency={currency}
                           rates={rates}
                           fmt={fmt}
+                          families={families}
                           groupInfo={groupInfo.get(l.id)}
-                          setInfo={undefined}
-                          insideGroupCard={false}
+                          setInfo={isSet ? setInfo.get(l.id) : undefined}
+                          insideGroupCard
                         />
-                      );
-                    }
-
-                    // Group run → a container card wrapping the member rows.
-                    const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
-                    const isSet = run.type === 'set';
-                    // Only Conjuntos can be optional — an Alternativa always uses one.
-                    const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
-                    const footerValue = isSet
-                      ? setSubtotal(lines, run.groupId)
-                      : alternativeSubtotal(lines, run.groupId);
-                    return (
-                      <ClientGroupCard
-                        key={`grp-${run.groupId}-${run.start}`}
-                        type={run.type}
-                        memberCount={members.length}
-                        optional={optional}
-                        footerLabel={isSet ? 'Total del conjunto' : 'Total'}
-                        footerValue={fmt(footerValue)}
-                      >
-                        {members.map((l) => (
-                          <ClientLine
-                            key={l.id}
-                            line={l}
-                            currency={currency}
-                            rates={rates}
-                            fmt={fmt}
-                            groupInfo={groupInfo.get(l.id)}
-                            setInfo={isSet ? setInfo.get(l.id) : undefined}
-                            insideGroupCard
-                          />
-                        ))}
-                      </ClientGroupCard>
-                    );
-                  })}
-                </ul>
+                      ))}
+                    </ClientGroupCard>
+                  );
+                })}
+              </ul>
+            );
+            return (
+              <div key={gi} className="mb-2">
+                {g.label ? (
+                  // Labelled section → collapsible <details> landmark. The
+                  // summary carries the same terracotta eyebrow + rule the
+                  // PDF uses; open by default, a chevron flags it's
+                  // collapsible on touch.
+                  <SectionDisclosure label={g.label}>{list}</SectionDisclosure>
+                ) : (
+                  // Top-level / unlabelled group — flush, no disclosure.
+                  list
+                )}
               </div>
             );
           })
@@ -266,7 +407,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           (Descuento in brand); the savings line + FX shadow sit below the
           band. Mirrors the redesigned PDF. */}
       <div className="px-6 sm:px-10 py-7 border-t border-ink-100">
-        <div className="ml-auto max-w-sm tabular-nums">
+        <div className="w-full sm:ml-auto sm:max-w-sm tabular-nums">
           <div className="space-y-1.5">
             <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
             {quote.discountPct ? (
@@ -319,7 +460,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGroupCard }) {
+function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -328,7 +469,10 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
     return (
       <CompoundClientLine
         line={line}
+        currency={currency}
+        rates={rates}
         fmt={fmt}
+        families={families}
         groupInfo={groupInfo}
         setInfo={setInfo}
         insideGroupCard={insideGroupCard}
@@ -379,7 +523,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
   // read-only menu reads clearly without a radio.
   const showSelectedFlag = insideGroupCard && inGroup && isSelected;
   return (
-    <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
+    <li className={`px-4 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
       showRowGroupChrome && inGroup ? 'border-l-2 border-solid border-brand-300' : ''
@@ -424,18 +568,20 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
           )}
         </div>
       )}
-      {/* Image sizing matches the PDF: a "quarter page of space" per
-          dealer's directive. The PDF uses 170pt (~60mm); we land
-          around the same physical scale on screen — w-44 (176px) on
-          phones, w-52 (208px) on tablets+ — so the on-screen preview
-          and the printed PDF read the same. The previous w-20 / w-24
-          (80px / 96px) was small enough that dealers asked for the
-          PDF images to be bigger when the preview "looked fine". */}
-      <div className="flex items-start gap-4 sm:gap-5">
+      {/* Mobile-first: the photo is a near-full-bleed hero stacked above
+          the text (the gesture customers expect on a phone); sm+ promotes
+          to a side-by-side card with the photo at a fixed "quarter page"
+          scale (w-44 / lg:w-52) so the on-screen preview reads at the same
+          physical size as the printed PDF. */}
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-5">
         {line.imageId ? (
-          <ImageZoom id={line.imageId} alt={line.name || ''} className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100" />
+          <ImageZoom
+            id={line.imageId}
+            alt={line.name || ''}
+            className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
+          />
         ) : (
-          <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100 flex-shrink-0" />
+          <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
           <div className="min-w-0 sm:flex-1">
@@ -444,31 +590,39 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
                 {line.family}
               </div>
             )}
-            <div className="text-sm font-semibold text-ink-900">{line.name || '—'}</div>
-            {(line.subtype || line.reference || line.dimensions || line.swatchImageId) && (
-              <div className="flex items-start gap-2.5 mt-1">
-                {(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
-                  <ImageZoom
-                    id={line.swatchImageId}
-                    fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
-                    alt="Muestra de tela"
-                    className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
-                  />
+            <div className="text-base font-semibold text-ink-900 sm:text-sm">{line.name || '—'}</div>
+            {(line.subtype || line.reference || line.dimensions) && (
+              <div className="min-w-0 mt-1">
+                {line.subtype && <div className="text-xs text-ink-500 sm:text-[11px]">{line.subtype}</div>}
+                {(line.reference || line.dimensions) && (
+                  <div className="text-[11px] text-ink-500 sm:text-[10px] mt-0.5 flex flex-wrap gap-x-2">
+                    {line.reference && <span className="font-mono">REF. {line.reference}</span>}
+                    {line.dimensions && <span>DIM. {line.dimensions}</span>}
+                  </div>
                 )}
-                {/* Subtype + ref/dimensions stacked to the right of the
-                    swatch so the photo spans both rows instead of sitting
-                    inline with just the grade line. */}
-                <div className="min-w-0">
-                  {line.subtype && <div className="text-[11px] text-ink-500">{line.subtype}</div>}
-                  {(line.reference || line.dimensions) && (
-                    <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                      {line.reference && <span className="font-mono">REF. {line.reference}</span>}
-                      {line.dimensions && <span>DIM. {line.dimensions}</span>}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
+            {/* Fabric swatch — now BELOW the subtype + ref/dims (per the
+                explicit ask) and enlarged to w-16 h-16 so the colour reads
+                clearly. Still inside the tap-to-zoom Modal with the
+                Ligne-Roset-code fallback, and lifted above the dim veil. */}
+            {(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
+              <div className="mt-2">
+                <ImageZoom
+                  id={line.swatchImageId}
+                  fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
+                  alt="Muestra de tela"
+                  className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
+                />
+              </div>
+            )}
+            <MaterialOptionsStrip
+              materialOptions={line.materialOptions}
+              reference={line.reference}
+              families={families}
+              currency={currency}
+              rates={rates}
+            />
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
                 {line.description}
@@ -476,48 +630,33 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
             )}
           </div>
 
-          {/* Numbers — on mobile we render a single compact line at
-              the bottom of the card (`1 × $11,310.00 = $11,310.00`).
-              That's the dealer-side editor's mental model already, and
-              it solves the layout problem that two prior fixes danced
-              around: a wide horizontal pill strip kept flex-wrapping
-              each label/value pair onto its own row when the values
-              were 5+ digits, and a vertical right-aligned column left
-              a tall dead zone next to it. One inline equation is
-              ~30 chars wide, fits comfortably on any phone, and reads
-              as "this line costs $11,310.00" in one glance.
-
-              On sm+ we promote back to the labelled vertical column
-              (CANTIDAD / UNITARIO / TOTAL) as the right rail — the
-              desktop layout had no width problem and benefits from
-              the explicit labels. */}
-
-          {/* Compact money cell — the SAME shape on every breakpoint now,
-              matching the redesigned PDF: a muted "n × $unit" line, an
-              optional struck-list/−Y% discount pair, then the line TOTAL
-              as the bold ink-900 anchor. The repeated CANTIDAD / UNITARIO
-              / TOTAL eyebrows are gone — they competed with the section
-              landmarks for attention and repeated on every row. On mobile
-              it sits under a hairline at the card bottom; on sm+ it floats
-              right of the detail column. */}
-          <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
-            <div className="text-[13px] text-ink-500 whitespace-nowrap">
-              {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
-            </div>
-            {discounted && (
-              <div className="mt-0.5 whitespace-nowrap">
-                <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
-                <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+          {/* Price strip — on mobile it anchors the full card width
+              (flex items-end justify-between: "n × $unit" on the left, the
+              bold TOTAL on the right under a hairline); on sm+ it promotes
+              to a right rail (sm:block sm:text-right). The struck list /
+              −Y% discount pair + per-line savings ride along when present. */}
+          <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
+            <div className="min-w-0">
+              <div className="text-[13px] text-ink-500 whitespace-nowrap">
+                {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
               </div>
-            )}
-            <div className="mt-1.5 text-lg font-semibold text-ink-900 whitespace-nowrap">
-              {fmt(total)}
+              {discounted && (
+                <div className="mt-0.5 whitespace-nowrap">
+                  <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
+                  <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+                </div>
+              )}
             </div>
-            {discounted && qty > 1 && (
-              <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
-                ahorras {fmt(listTotal - total)}
+            <div className="text-right">
+              <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+                {fmt(total)}
               </div>
-            )}
+              {discounted && qty > 1 && (
+                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                  ahorras {fmt(listTotal - total)}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -535,7 +674,7 @@ function ClientLine({ line, currency, rates, fmt, groupInfo, setInfo, insideGrou
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) {
+function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   const discount = Number(line.lineDiscountPct) || 0;
@@ -552,7 +691,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
   const showRowGroupChrome = !insideGroupCard;
   const showSelectedFlag = insideGroupCard && inGroup && isSelected;
   return (
-    <li className={`px-3 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
+    <li className={`px-4 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
     } ${
       showRowGroupChrome && inGroup ? 'border-l-2 border-solid border-brand-300' : ''
@@ -594,23 +733,23 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
           )}
         </div>
       )}
-      <div className="flex items-start gap-4 sm:gap-5">
-        {/* Sticky image column: a compound article can carry a long
-            component list, so the shared product image is pinned to the
-            top of the viewport (offset clears the mobile sticky header)
-            and stays visible as the customer scrolls the components
-            beside it. `self-start` keeps the sticky box confined to this
-            row's height; with a short component list there's nothing to
-            scroll past, so it simply sits put — graceful degradation. */}
-        <div className="flex-shrink-0 self-start sticky top-4">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-5">
+        {/* Image column. On mobile it's a near-full-bleed hero stacked
+            above the component list — NOT sticky (a pinned hero would
+            cover the list as you scroll on a phone). On sm+ it pins to the
+            top of the viewport (offset clears the z-30 topbar) and stays
+            visible while the customer scrolls a long component list beside
+            it; `self-start` confines the sticky box to this row so a short
+            list simply sits put — graceful degradation. */}
+        <div className="flex-shrink-0 self-start sm:sticky sm:top-20 w-full sm:w-auto">
           {line.imageId ? (
             <ImageZoom
               id={line.imageId}
               alt={line.name || ''}
-              className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 object-contain bg-white rounded-md border border-ink-100"
+              className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
             />
           ) : (
-            <div className="w-32 h-32 sm:w-44 sm:h-44 lg:w-52 lg:h-52 bg-ink-50 rounded-md border border-ink-100" />
+            <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -620,11 +759,18 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
             </div>
           )}
           {line.name && (
-            <div className="text-sm font-semibold text-ink-900">{line.name}</div>
+            <div className="text-base font-semibold text-ink-900 sm:text-sm">{line.name}</div>
           )}
           <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
             {(line.components || []).map((c, i) => (
-              <CompoundComponentRow key={c.id || i} component={c} fmt={fmt} />
+              <CompoundComponentRow
+                key={c.id || i}
+                component={c}
+                currency={currency}
+                rates={rates}
+                fmt={fmt}
+                families={families}
+              />
             ))}
           </ul>
           {/* Compound roll-up — a neutral "Total compuesto" caption +
@@ -657,7 +803,7 @@ function CompoundClientLine({ line, fmt, groupInfo, setInfo, insideGroupCard }) 
   );
 }
 
-function CompoundComponentRow({ component, fmt }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -680,29 +826,37 @@ function CompoundComponentRow({ component, fmt }) {
             </span>
           )}
         </div>
-        {(component.subtype || component.reference || component.dimensions || component.swatchImageId) && (
-          <div className="flex items-start gap-2 mt-0.5">
-            {(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
-              <ImageZoom
-                id={component.swatchImageId}
-                fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
-                alt="Muestra de tela"
-                className="relative z-[2] w-11 h-11 object-cover rounded border border-ink-200 bg-white"
-              />
+        {(component.subtype || component.reference || component.dimensions) && (
+          <div className="min-w-0 mt-0.5">
+            {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
+            {(component.reference || component.dimensions) && (
+              <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
+                {component.reference && <span className="font-mono">REF. {component.reference}</span>}
+                {component.dimensions && <span>DIM. {component.dimensions}</span>}
+              </div>
             )}
-            {/* Subtype + ref/dimensions stacked to the right so the swatch
-                spans both rows, mirroring the standalone line treatment. */}
-            <div className="min-w-0">
-              {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
-              {(component.reference || component.dimensions) && (
-                <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                  {component.reference && <span className="font-mono">REF. {component.reference}</span>}
-                  {component.dimensions && <span>DIM. {component.dimensions}</span>}
-                </div>
-              )}
-            </div>
           </div>
         )}
+        {/* Fabric swatch — moved BELOW subtype + ref/dims and enlarged to
+            w-16 h-16, mirroring the standalone line treatment. Tap-to-zoom
+            + Ligne-Roset-code fallback, lifted above the dim veil. */}
+        {(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
+          <div className="mt-2">
+            <ImageZoom
+              id={component.swatchImageId}
+              fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
+              alt="Muestra de tela"
+              className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
+            />
+          </div>
+        )}
+        <MaterialOptionsStrip
+          materialOptions={component.materialOptions}
+          reference={component.reference}
+          families={families}
+          currency={currency}
+          rates={rates}
+        />
         {component.description && (
           <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
             {component.description}
@@ -756,7 +910,7 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
   return (
     // Inset card so the surrounding list rows don't bleed into it. Rendered
     // as a list item so it sits naturally in the <ul> alongside flat rows.
-    <li className="px-1 sm:px-2 py-3 list-none">
+    <li className="px-3 sm:px-2 py-3 list-none">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
