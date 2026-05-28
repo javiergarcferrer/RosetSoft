@@ -42,8 +42,8 @@ import {
  *      invoice detail (per-product lines + totals + per-quote CSV) followed
  *      by BOTH commissions owed on the sale — vendedor and, if assigned,
  *      profesional (with its invoicing mode: comisión vs trade discount).
- *      Each commission is tickable paid once earned (deposit for the seller
- *      / balance for an order-linked professional).
+ *      Each commission is tickable paid once earned (deposit for the seller;
+ *      for the professional, deposit on a floor order / balance on a special).
  *   5–6. Resumen por vendedor / por profesional — the same per-sale numbers
  *      grouped, split paid vs pendiente, so payouts can be batched.
  *
@@ -134,8 +134,8 @@ export default function AccountingWorkspace() {
   //   • the SELLER (vendedor) cut: their profile commission_pct on the base
   //     imponible, earned once the deposit lands.
   //   • the PROFESSIONAL (decorator/architect) cut: their %, owed per
-  //     commissionOwedAt (balance on orders, deposit on floor sales) and
-  //     only when the modality is 'commission' (a 'trade_discount' is
+  //     commissionOwedAt (balance on special orders, deposit on floor sales)
+  //     and only when the modality is 'commission' (a 'trade_discount' is
   //     settled through the invoice, no payout).
   // Each cut is marked paid independently (sellerCommissionPaidAt /
   // commissionPaidAt). The two rollups below aggregate the same per-sale
@@ -457,7 +457,7 @@ export default function AccountingWorkspace() {
         e.professional.email || '',
         e.quote.number != null ? String(e.quote.number) : '',
         e.customer ? (e.customer.company || e.customer.name || '') : '',
-        e.quote.orderId ? 'balance' : 'deposito',
+        e.quote.orderType === 'special' ? 'balance' : 'deposito',
         isoDate(e.proOwedAt),
         e.base.toFixed(2),
         e.proPct,
@@ -680,15 +680,19 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
   // detail strings render with a fixed USD rate regardless of the quote's
   // display currency.
   const fmtUsd = (v) => formatMoney(v, 'USD', { USD: 1 });
-  // Professional commission detail. With a client discount the equation must
-  // show every term — Base(pre-discount) · % = gross − desc = net — because
-  // the printed net is drawn out of the gross (the post-discount base × %
-  // would NOT equal the net). Without a discount, gross === net, so the
-  // compact "Base · % = amount" form stays. Mirrors the builder's
-  // CommissionCard; all terms come from the one lib breakdown.
+  // Professional settlement detail. Both modalities draw the client discount
+  // out of the decorator's amount, so when a discount is present the equation
+  // shows every term (the post-discount base × % would NOT equal the net):
+  //   • commission:     Base(pre-discount) · % = gross − desc = net
+  //   • trade discount: −% = gross − desc. cliente = net trade discount
+  // Without a discount gross === net, so the compact form stays. All terms
+  // come from the one lib breakdown (gross/discount/net), so the printed
+  // numbers always reconcile and mirror the builder's CommissionCard.
   const proCommission = commissionBreakdown(totals, proPct);
   const proDetail = mode === 'trade_discount'
-    ? `Facturar al decorador −${decoratorPct}% (sin comisión)`
+    ? proCommission.discount > 0
+      ? `Facturar al decorador −${decoratorPct}% = ${fmtUsd(proCommission.gross)} − desc. cliente ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)} (sin comisión)`
+      : `Facturar al decorador −${decoratorPct}% (sin comisión)`
     : proCommission.discount > 0
       ? `Base ${fmtUsd(base + proCommission.discount)} · ${proPct}% = ${fmtUsd(proCommission.gross)} − desc. ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)}`
       : `Base ${fmtUsd(base)} · ${proPct}% = ${fmtUsd(proAmount)}`;
@@ -777,7 +781,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                   />
                 ) : (
                   <span className="text-[11px] text-ink-400 italic whitespace-nowrap">
-                    Tras {quote.orderId ? 'balance' : 'depósito'}
+                    Tras {quote.orderType === 'special' ? 'balance' : 'depósito'}
                   </span>
                 ))}
               />

@@ -113,21 +113,21 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 
 ---
 
-## Open business decisions (NOT bugs — confirm intent, then act if needed)
+## Open business decisions (RESOLVED by the owner — now implemented)
 
-> NOT actioned this pass — each needs the owner's call (they change money semantics, not just code).
-> Surfaced back to the user; ready to implement once a direction is chosen.
-
-- [ ] **Seller commission also drops with the client discount** (it's computed on the post-discount
-  `taxableBase`: `Workspace.jsx:161`, `admin/Commissions.jsx:137`). Decide: should the seller earn
-  on the pre- or post-discount base?
-- [ ] **Rate vs payout-timing are decoupled.** Rate ← `order_type` (toggle); payout timing ←
-  `order_id` presence (`commissions.ts` `commissionOwedAt`, the `quote.orderId ? balancePaidAt :
-  depositReceivedAt` line). A quote can be `special` (20%) yet pay on deposit, or `floor` (15%) yet
-  pay on balance. Confirm acceptable, or make `commissionOwedAt` consider `order_type`.
-- [ ] **`trade_discount` + a client discount combine** — in trade-discount mode the decorator's
-  billed discount also shrinks by a client discount. Rare/murky. Decide: allow, or block
-  `discountPct` when `decorator_billing = 'trade_discount'`.
+- [x] **Seller commission base → POST-discount.** Owner: "post discount base." Current behavior
+  already computes the seller cut on the post-discount `taxableBase` (`Workspace.jsx:161`,
+  `admin/Commissions.jsx:137`) — confirmed correct, no change.
+- [x] **Payout timing follows `order_type` (not `order_id`).** Owner: "floor pays on deposit;
+  special must be tied to a container and requires a balance payment." `commissionOwedAt` now keys
+  off `order_type`: floor → `depositReceivedAt`; special → `balancePaidAt` AND requires an
+  order/container (`orderId`), so a special quote with no order never owes. The Contabilidad
+  per-line hint and the `devengada_via` CSV column follow the same rule. Tests updated.
+- [x] **`trade_discount` + a client discount → discount comes from the decorator amount.** Owner:
+  "discount percent must come from decorator amount." The math already drew it from there
+  (`tradeDiscount = commissionAmount = gross − client discount`); the Contabilidad trade-discount
+  detail is now honest about it: with a discount it prints
+  `−{pct}% = {gross} − desc. cliente {discount} = {net} (sin comisión)`.
 
 ## Notes (found, already resolved — no action)
 - The `decorator_billing` migration comment said the trade-discount default was "15%" while
