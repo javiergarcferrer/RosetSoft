@@ -1,0 +1,46 @@
+# Autonomous DB bootstrap — applies the idempotent products migration directly
+# via psql, because the Supabase GitHub-App migration pipeline is not applying
+# migrations (a parallel branch corrupted the shared migration history), so the
+# `products` table never got created and the Catálogo import fails with
+# "Could not find the table 'public.products' in the schema cache".
+#
+# Runs on GitHub's runners using a Postgres connection string from repo
+# secrets. Idempotent (the migration is all `if not exists`). Remove this
+# workflow once the migration pipeline is healthy again.
+name: apply-db
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/apply-db.yml'
+  workflow_dispatch: {}
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply products migration (idempotent)
+        env:
+          S1: ${{ secrets.SUPABASE_DB_URL }}
+          S2: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          S3: ${{ secrets.POSTGRES_URL }}
+          S4: ${{ secrets.DATABASE_URL }}
+          S5: ${{ secrets.POSTGRES_PRISMA_URL }}
+        run: |
+          set -euo pipefail
+          URL="${S1:-}"; [ -z "$URL" ] && URL="${S2:-}"; [ -z "$URL" ] && URL="${S3:-}"
+          [ -z "$URL" ] && URL="${S4:-}"; [ -z "$URL" ] && URL="${S5:-}"
+          if [ -z "$URL" ]; then
+            echo "::error::No Postgres connection secret found. Add a repo secret named SUPABASE_DB_URL (or POSTGRES_URL / DATABASE_URL) with the direct connection string."
+            exit 1
+          fi
+          echo "Applying products migration via psql…"
+          psql "$URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260515160000_products_important.sql
+          echo "products table ensured + schema reloaded."
