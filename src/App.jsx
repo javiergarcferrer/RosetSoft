@@ -21,6 +21,7 @@ import AdminCommissions from './pages/admin/Commissions.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
+import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -230,6 +231,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
+        {/* Public, logged-out interactive quote view. Lives OUTSIDE
+            RequireAuth so a client with the link never hits the login wall. */}
+        <Route path="/q/:token" element={<PublicQuoteView />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>

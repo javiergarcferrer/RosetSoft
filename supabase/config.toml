@@ -38,3 +38,9 @@ verify_jwt = false
 # Authorization header) would be rejected before the function runs.
 [functions.swatch-proxy]
 verify_jwt = false
+
+# quote-share backs the public, interactive client quote link. It's used
+# logged-out, so the gateway must not require a JWT; the function itself gates
+# on the secret share token and runs with the service role.
+[functions.quote-share]
+verify_jwt = false

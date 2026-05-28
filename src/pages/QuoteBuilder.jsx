@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Hash, Download, AlertCircle, Loader2, PackageSearch } from 'lucide-react';
+import { Plus, Hash, Download, AlertCircle, Loader2, PackageSearch, Share2, Eye } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -30,6 +30,7 @@ import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import { useUndoToast } from '../components/quote-builder/UndoToast.jsx';
 import { boundedPush, diffLinesForRestore } from '../lib/quoteHistory.js';
+import { shareLinkUrl, newShareToken } from '../lib/quoteShare.js';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is
 // a whole-quote snapshot (the quote row + all its lines); 50 covers a long
@@ -286,6 +287,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // — including "nothing happened" — was invisible to the dealer.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+  // Share-link state: a spinner while the token is minted/persisted, and a
+  // transient toast confirming the copied link (or showing it to copy by
+  // hand when the clipboard API is unavailable).
+  const [sharing, setSharing] = useState(false);
+  const [shareMsg, setShareMsg] = useState(null);
+  useEffect(() => {
+    if (!shareMsg) return undefined;
+    const id = setTimeout(() => setShareMsg(null), 6000);
+    return () => clearTimeout(id);
+  }, [shareMsg]);
   // On mobile the only export trigger is the bottom sticky bar, but the
   // error banner renders at the top of the page — so a failed export would
   // stop the spinner with the explanation scrolled far out of sight,
@@ -918,6 +929,32 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
   );
 
+  // Mint (once) + copy a public interactive link for the client. The token
+  // is generated on first share and persisted on the quote; `shareEnabled`
+  // lets a later revoke flip it off without losing the URL.
+  async function shareQuote() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      let token = quote.shareToken;
+      if (!token || !quote.shareEnabled) {
+        token = token || newShareToken();
+        await updateQuote({ shareToken: token, shareEnabled: true });
+      }
+      const url = shareLinkUrl(token);
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareMsg(`Enlace copiado · ${url}`);
+      } catch {
+        setShareMsg(url);
+      }
+    } catch {
+      setShareMsg('No se pudo crear el enlace para compartir.');
+    } finally {
+      setSharing(false);
+    }
+  }
+
   async function exportPdf() {
     if (exporting) return;   // de-bounce double-taps
     setExportError(null);
@@ -975,6 +1012,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onViewChange={setView}
         onOpenPalette={() => setPaletteOpen(true)}
         onExportPdf={exportPdf}
+        onShare={shareQuote}
+        sharing={sharing}
         onUpdateQuote={hx(updateQuote)}
         onUndo={undo}
         onRedo={redo}
@@ -1004,6 +1043,30 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           >
             Cerrar
           </button>
+        </div>
+      )}
+
+      {/* Share-link toast — the copied URL (or a manual-copy fallback). */}
+      {shareMsg && (
+        <div role="status" className="mb-4 rounded-md bg-ink-900 text-white px-3 py-2 text-xs flex items-start gap-2">
+          <Share2 size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1 break-all">{shareMsg}</div>
+          <button type="button" onClick={() => setShareMsg(null)} className="text-white/70 hover:text-white text-[11px] underline">Cerrar</button>
+        </div>
+      )}
+
+      {/* Non-destructive notice that the client interacted with the share
+          link (plan A — their picks live in quote.clientSelections, separate
+          from the dealer's own lines). */}
+      {quote.clientSelections && (quote.clientSelections.alternatives || quote.clientSelections.optionals) && (
+        <div className="mb-4 rounded-md bg-brand-50 border border-brand-200 px-3 py-2 text-xs text-brand-800 flex items-start gap-2">
+          <Eye size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            El cliente personalizó esta cotización desde el enlace
+            {' '}({Object.keys(quote.clientSelections.alternatives || {}).length} alternativa(s),
+            {' '}{Object.values(quote.clientSelections.optionals || {}).filter(Boolean).length} complemento(s)).
+            Sus selecciones se guardan aparte; tus líneas no cambian.
+          </div>
         </div>
       )}
 
