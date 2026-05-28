@@ -78,24 +78,18 @@ export default function QuoteHeader({
       </Link>
 
       <div className="space-y-3">
-        {/* Title row. On phones this stacks: the title group sits on top
-            and the actions cluster drops onto its own line directly
-            below, so nothing competes for horizontal space and there's
-            no tall right-hand column inflating the row height (the old
-            `items-start` + wrapping-actions layout left a void beside
-            the short title). From sm: up it returns to title-left /
-            actions-right on a single baseline-aligned row.
-
-            SaveIndicator is pulled OUT of the actions cluster and parked
-            inline with the eyebrow — on a phone the actions row is mostly
-            an icon menu, so keeping the save badge there made it crowd the
-            "Cotización" label and the number. Sitting right after the
-            eyebrow it reads as the title's own status line (matching the
-            component's "badge near the title" intent) and never overlaps. */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5">
-              <div className="eyebrow">Cotización</div>
+        {/* Title (left) and actions (right) on one row that WRAPS rather
+            than overlaps. The earlier flex-1 + nowrap split let a wide
+            actions cluster shrink the title column to zero width, so the
+            opaque buttons painted over the number. Here the title keeps its
+            intrinsic min-width (the number is never clipped) and the actions
+            drop onto their own line when they can't fit beside it. On phones
+            the column layout stacks them; the SaveIndicator rides inline with
+            the eyebrow as the number's status line and truncates if cramped. */}
+        <div className="flex flex-col gap-x-4 gap-y-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="eyebrow shrink-0">Cotización</div>
               <SaveIndicator savedAt={savedAt} saving={saving} />
             </div>
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
@@ -108,11 +102,9 @@ export default function QuoteHeader({
             )}
           </div>
 
-          {/* Actions. The save badge now lives by the title, so this
-              cluster is just the buttons — no `items-start` tall column to
-              leave a void beside the title. On phones it sits on its own
-              line below the title; from sm: up it stays to the right. */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:justify-end sm:shrink-0">
+          {/* Buttons wrap among themselves on the narrowest phones; the whole
+              cluster drops below the title when the row is too tight. */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <UndoRedo
               onUndo={onUndo}
               onRedo={onRedo}

@@ -44,3 +44,9 @@ verify_jwt = false
 # on the secret share token and runs with the service role.
 [functions.quote-share]
 verify_jwt = false
+
+# hl-track verifies the caller's JWT itself (same reason as bpd-rate) and
+# proxies Hapag-Lloyd's Track & Trace API, keeping HL_CLIENT_ID/SECRET
+# server-side.
+[functions.hl-track]
+verify_jwt = false

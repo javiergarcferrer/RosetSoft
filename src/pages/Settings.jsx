@@ -10,10 +10,10 @@ import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
-import { supabase } from '../db/supabaseClient.js';
+import { useExchangeRatePull } from '../lib/useExchangeRatePull.js';
 
 export default function Settings() {
-  const { profileId, settings, saveSettings, refreshSettings, isAdmin } = useApp();
+  const { profileId, settings, saveSettings, isAdmin } = useApp();
   const [local, setLocal] = useState(settings || {});
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [saveError, setSaveError] = useState(null);
@@ -140,7 +140,7 @@ export default function Settings() {
           </div>
 
           {/* Currency (DR-focused) */}
-          <RateCard local={local} set={set} refreshSettings={refreshSettings} saveSettings={saveSettings} />
+          <RateCard local={local} set={set} saveSettings={saveSettings} />
 
           {/* Defaults */}
           <div className="card card-pad">
@@ -197,50 +197,18 @@ function OrdersCard({ local, set }) {
 }
 
 
-function RateCard({ local, set, refreshSettings, saveSettings }) {
+function RateCard({ local, set, saveSettings }) {
   // Banco Popular's published rate, stored under `settings.exchangeRate`.
   // The daily auto-pull and "Actualizar ahora" are the usual writers; the
   // manual override below is a stopgap until the BPD subscription is live.
   // Legacy `bsc` / `bpd` shapes are read as fallbacks — see readExchangeRate.
   const rate = local.exchangeRate || local.bsc || local.bpd || { buy: null, sell: null, updatedAt: null };
 
-  // "Actualizar ahora": invoke the bpd-rate Edge Function (OAuth secret
-  // stays server-side). The function writes the rate to the team settings
-  // row itself; we just re-read settings so the new figure shows up here
-  // and across the app immediately, instead of waiting for the daily pull.
-  const [fetching, setFetching] = useState(false);
-  const [fetchErr, setFetchErr] = useState(null);
-  async function fetchNow() {
-    setFetching(true);
-    setFetchErr(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('bpd-rate');
-      if (error) {
-        let msg = error.message || 'No se pudo obtener la tasa';
-        try {
-          // The function returns { error, status, detail } on upstream
-          // failures (e.g. the bank's 401 on the OAuth token call). Surface
-          // the status + detail so the cause is visible here rather than
-          // buried in a generic message.
-          const body = await error.context?.json?.();
-          if (body?.error) {
-            msg = body.error;
-            if (body.status) msg += ` (HTTP ${body.status})`;
-            if (body.detail) msg += ` — ${String(body.detail).slice(0, 200)}`;
-          }
-        } catch { /* body already consumed / not JSON */ }
-        throw new Error(msg);
-      }
-      if (!data?.usd || (!data.usd.compra && !data.usd.venta)) {
-        throw new Error(data?.error || 'El banco no devolvió una tasa de USD.');
-      }
-      await refreshSettings();
-    } catch (e) {
-      setFetchErr(e?.message || 'No se pudo obtener la tasa.');
-    } finally {
-      setFetching(false);
-    }
-  }
+  // "Actualizar ahora": pull Banco Popular's published rate on demand. The
+  // Edge Function writes settings.exchange_rate server-side (OAuth secret
+  // never reaches the browser); the hook re-reads settings so the new figure
+  // shows here and across the app immediately, not on the next daily pull.
+  const { pull: fetchNow, pulling: fetching, error: fetchErr } = useExchangeRatePull();
 
   // Manual override — a stopgap while the BPD subscription is approved.
   // Writes settings.exchangeRate (the single source of truth), so the app
