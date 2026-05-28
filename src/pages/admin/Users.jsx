@@ -187,21 +187,16 @@ export default function AdminUsers() {
           description="Invita a tu equipo con el botón “Invitar usuario”."
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {invited.length > 0 && (
-            <section className="card overflow-hidden">
-              <header className="card-header">
-                <div className="flex items-center gap-2">
-                  <h2>Invitaciones enviadas</h2>
-                  <span className="status-pill status-pill-sent">
-                    {invited.length}
-                  </span>
-                </div>
-                <p className="hidden sm:block text-xs text-ink-500">
-                  Aún no han iniciado sesión con el enlace del correo.
-                </p>
-              </header>
-              <ul className="divide-y divide-ink-100">
+            <section>
+              <SectionHeader
+                title="Invitaciones enviadas"
+                count={invited.length}
+                tone="sent"
+                hint="Aún no han iniciado sesión con el enlace del correo."
+              />
+              <ul className="space-y-3">
                 {invited.map((p) => (
                   <ActiveRow
                     key={p.id}
@@ -216,17 +211,14 @@ export default function AdminUsers() {
             </section>
           )}
 
-          <section className="card overflow-hidden">
-            <header className="card-header">
-              <h2>Activos</h2>
-              <span className="badge">{active.length}</span>
-            </header>
+          <section>
+            <SectionHeader title="Activos" count={active.length} />
             {active.length === 0 ? (
-              <div className="px-5 py-8 text-center text-sm text-ink-500">
+              <div className="rounded-xl border border-dashed border-ink-200 bg-white px-5 py-10 text-center text-sm text-ink-500">
                 Aún no hay usuarios activos.
               </div>
             ) : (
-              <ul className="divide-y divide-ink-100">
+              <ul className="space-y-3">
                 {active.map((p) => (
                   <ActiveRow
                     key={p.id}
@@ -249,7 +241,28 @@ export default function AdminUsers() {
 /*  Row components                                                            */
 /* -------------------------------------------------------------------------- */
 
-function Avatar({ name, email }) {
+/**
+ * Standalone section label that sits ABOVE a stack of user cards.
+ * Each user is now its own card, so the heading can't live inside a
+ * shared `card-header` anymore — it floats over the stack instead.
+ * Title + count on the left, an optional helper hint on the right
+ * (desktop only, where there's room for it).
+ */
+function SectionHeader({ title, count, tone = 'default', hint }) {
+  return (
+    <div className="flex items-end justify-between gap-3 mb-3 px-0.5">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-ink-900">{title}</h2>
+        <span className={tone === 'sent' ? 'status-pill status-pill-sent' : 'badge'}>
+          {count}
+        </span>
+      </div>
+      {hint && <p className="hidden sm:block text-xs text-ink-500">{hint}</p>}
+    </div>
+  );
+}
+
+function Avatar({ name, email, role }) {
   const seed = (name || email || '?').trim();
   const initials = seed
     .split(/\s+/)
@@ -258,10 +271,17 @@ function Avatar({ name, email }) {
     .slice(0, 2)
     .join('')
     .toUpperCase() || '?';
+  // Admins get a brand-tinted chip so the team hierarchy reads at a
+  // glance — even before the eye lands on the role select. Everyone
+  // else stays neutral ink. The inset ring gives the disc a crisp
+  // edge against the card instead of floating as a flat blob.
+  const tint = role === 'admin'
+    ? 'bg-brand-100 text-brand-700 ring-brand-200/70'
+    : 'bg-ink-100 text-ink-700 ring-ink-200/70';
   return (
     <span
       aria-hidden
-      className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-ink-100 text-ink-700 text-xs font-semibold shrink-0"
+      className={`inline-flex items-center justify-center w-10 h-10 rounded-full ring-1 ring-inset text-[13px] font-semibold shrink-0 ${tint}`}
     >
       {initials}
     </span>
@@ -456,8 +476,23 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
     }
   }
 
+  // Each user now lives in its own card — the dealer asked to "separate
+  // the user cards", so the old hairline-divided rows-in-one-card give
+  // way to a stack of standalone cards. Three visual states:
+  //   self     — warm brand-tinted card so you spot your own row instantly
+  //   invited  — dashed border, reads as provisional until first sign-in
+  //   default  — plain white card whose border firms up on hover
+  const cardClass = [
+    'card card-pad transition-colors duration-150',
+    invitePending
+      ? 'border-dashed border-ink-300'
+      : isSelf
+        ? 'border-brand-200 bg-brand-50/40'
+        : 'hover:border-ink-200',
+  ].join(' ');
+
   return (
-    <li className="px-4 sm:px-5 py-4">
+    <li className={cardClass}>
       {/* Row layout — two sections that stack on mobile and sit
           side-by-side on lg+. Earlier the controls cluster used a
           single flex-wrap and the ActivePill collided with the name
@@ -470,7 +505,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
       <div className="flex flex-col xl:flex-row xl:items-center xl:gap-6">
         {/* Identity */}
         <div className="flex items-start gap-3 min-w-0 flex-1">
-          <Avatar name={profile.name} email={profile.email} />
+          <Avatar name={profile.name} email={profile.email} role={profile.role} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 min-w-0 flex-wrap">
               {/* Visibly an input at rest — light grey border + pencil
@@ -491,7 +526,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
                   type="text"
                   value={profile.name || ''}
                   onCommit={setName}
-                  className="font-medium text-sm bg-white border border-ink-200 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand hover:border-ink-300 transition-colors min-w-0 w-full max-w-[220px]"
+                  className="font-semibold text-sm bg-white border border-ink-200 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400 hover:border-ink-300 transition-colors min-w-0 w-full max-w-[220px]"
                   placeholder={profile.email || 'Sin nombre'}
                   aria-label="Nombre del usuario"
                   autoComplete="off"
@@ -499,7 +534,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
                 />
                 <Pencil
                   size={12}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 group-focus-within:text-brand pointer-events-none"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 group-focus-within:text-brand-500 pointer-events-none"
                   aria-hidden
                 />
               </div>
@@ -535,7 +570,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
             the gap between the role select and the name — the
             screenshot the dealer sent shows "Pendiente" floating
             mid-row over the truncated name input. */}
-        <div className="mt-4 xl:mt-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
+        <div className="mt-4 pt-4 border-t border-ink-100 xl:mt-0 xl:pt-0 xl:border-t-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
           <label className="flex flex-col gap-1 lg:contents">
             <span className="eyebrow-xs tracking-wide lg:hidden">
               Rol
