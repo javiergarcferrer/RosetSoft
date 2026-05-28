@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, X, Download, Loader2, PackageSearch,
+  SlidersHorizontal, X, Download, Loader2, PackageSearch, Share2,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -23,8 +23,9 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  *
  * Three states:
  *   • Collapsed bar — currency toggle, the grand total + live DOP conversion,
- *     an "Ajustes" button, and (mobile only) the Catálogo/PDF actions that live
- *     in the header on desktop. Always visible.
+ *     an icon-only "Ajustes" toggle, and the Share + Export PDF actions pinned
+ *     at every width (Catálogo rides along on mobile, where the header hides
+ *     it). Always visible.
  *   • Breakdown — tapping the total slides up the full step-by-step total
  *     (subtotal → margin → discount → ITBIS → shipping), margin gauge,
  *     professional commission, and the "Cómo se calcula" explainer.
@@ -37,7 +38,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, totals, professional, onUpdateQuote,
-  onOpenCatalog, onExport, exporting,
+  onOpenCatalog, onExport, exporting, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown' | 'adjust'
 
@@ -229,51 +230,76 @@ export default function TotalsDock({
               )}
             </button>
 
-            {/* Optional discount card — hidden until clicked. */}
-            <button
-              type="button"
-              onClick={() => toggle('adjust')}
-              aria-pressed={panel === 'adjust'}
-              className={`relative inline-flex items-center gap-1.5 rounded-md px-2.5 min-h-9 coarse:min-h-11 text-sm font-medium transition-colors active:scale-[0.98] ${
-                panel === 'adjust'
-                  ? 'bg-ink-900 text-white'
-                  : 'text-ink-700 hover:bg-ink-100 border border-ink-200'
-              }`}
-              title="Descuento y envío de la cotización"
-            >
-              <SlidersHorizontal size={16} />
-              <span className="hidden sm:inline">Ajustes</span>
-              {hasAdjustment && (
-                <span
-                  className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
-                    panel === 'adjust' ? 'bg-amber-400' : 'bg-amber-500'
-                  }`}
-                  aria-hidden
-                />
-              )}
-            </button>
+            {/* Action cluster — the discount toggle, then the document actions
+                (catalog on mobile, share, export) pinned to the bar. Icon-only
+                so they stay compact at every width. */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Optional discount card — icon-only toggle; an amber dot flags
+                  an applied adjustment while the dock is folded. */}
+              <button
+                type="button"
+                onClick={() => toggle('adjust')}
+                aria-pressed={panel === 'adjust'}
+                aria-label="Ajustes: descuento y envío"
+                title="Descuento y envío de la cotización"
+                className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md transition-colors active:scale-[0.97] ${
+                  panel === 'adjust'
+                    ? 'bg-ink-900 text-white'
+                    : 'text-ink-700 hover:bg-ink-100 border border-ink-200'
+                }`}
+              >
+                <SlidersHorizontal size={18} />
+                {hasAdjustment && (
+                  <span
+                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+                      panel === 'adjust' ? 'bg-amber-400' : 'bg-amber-500'
+                    }`}
+                    aria-hidden
+                  />
+                )}
+              </button>
 
-            {/* Mobile-only actions — on desktop these live in the header. */}
-            <span className="md:hidden w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
-            <button
-              type="button"
-              onClick={onOpenCatalog}
-              className="md:hidden btn-icon border border-ink-200"
-              aria-label="Agregar desde catálogo"
-            >
-              <PackageSearch size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={exporting}
-              aria-busy={exporting}
-              aria-label="Exportar PDF"
-              className="md:hidden btn-primary disabled:opacity-60 disabled:cursor-wait"
-            >
-              {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-              <span>PDF</span>
-            </button>
+              <span className="w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
+
+              {/* Catálogo — mobile only; the header and the items card carry it
+                  on desktop. */}
+              <button
+                type="button"
+                onClick={onOpenCatalog}
+                className="md:hidden btn-icon border border-ink-200"
+                aria-label="Agregar desde catálogo"
+                title="Agregar desde catálogo"
+              >
+                <PackageSearch size={18} />
+              </button>
+
+              {/* Share an interactive client link — pinned at every width. */}
+              <button
+                type="button"
+                onClick={onShare}
+                disabled={sharing}
+                aria-busy={sharing}
+                aria-label="Compartir enlace para el cliente"
+                title="Copiar un enlace interactivo para el cliente"
+                className="btn-icon border border-ink-200 disabled:opacity-60"
+              >
+                {sharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
+              </button>
+
+              {/* Export / preview the PDF — the primary action, pinned at every
+                  width. */}
+              <button
+                type="button"
+                onClick={onExport}
+                disabled={exporting}
+                aria-busy={exporting}
+                aria-label="Exportar PDF"
+                title="Previsualizar y descargar PDF"
+                className="inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700 active:scale-[0.97] transition-colors disabled:opacity-60 disabled:cursor-wait flex-shrink-0"
+              >
+                {exporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
