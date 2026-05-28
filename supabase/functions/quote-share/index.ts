@@ -1,21 +1,25 @@
 // quote-share — backs the public, interactive client quote link (#/q/<token>).
 //
 //   GET  ?token=…  → a whitelisted, CLIENT-FACING bundle for the viewer.
-//   POST ?token=…  → persists the recipient's option picks (plan A: stored
-//                    separately in quotes.client_selections, never mutating
-//                    the dealer's own lines).
+//   POST ?token=…  → applies the recipient's picks DIRECTLY to the quote and
+//                    returns the fresh bundle. The owner chose ONE version over
+//                    a separate copy ("always on the same page"), so fabrics,
+//                    optionals, and alternatives edit the real quote_lines in
+//                    place rather than living in a side channel.
 //
-// Why a function: the share link is used logged-OUT, but the database is
-// behind RLS (`to authenticated`). Rather than open anon reads on quotes
-// (which would expose every quote to anyone with the public key), this runs
-// with the service role and gates on the secret share token.
+// Why a function: the share link is used logged-OUT, but the DB is behind RLS
+// (`to authenticated`). This runs with the service role and gates on the secret
+// share token, so the public never gets raw table access — only this whitelist.
 //
-// CRITICAL — no margin/cost leakage: the bundle bakes BOTH line- and
-// quote-level margin into each unit price and zeroes the margin fields, so
-// the client sees the real quoted prices but the markup never leaves the
-// server. Costs, internal notes, commission, etc. are simply never copied in.
+// CRITICAL — no margin/cost leakage: the bundle bakes BOTH line- and quote-level
+// margin into each unit price and zeroes the margin fields, so the client sees
+// the real quoted prices but the markup never leaves the server. Costs, internal
+// notes, commission, etc. are simply never copied into the bundle.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+
+type Admin = ReturnType<typeof createClient>;
+type Row = Record<string, unknown>;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,8 +40,7 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// Pick a subset of an object's keys (snake→camel handled by the explicit map
-// in the callers; this is just a safe shallow picker for camelCase JSONB).
+// Pick a subset of an object's keys (shallow; for camelCase JSONB components).
 function pick<T extends Record<string, unknown>>(obj: T | null | undefined, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (!obj) return out;
@@ -51,11 +54,24 @@ const COMPONENT_KEYS = [
 ];
 
 // 8-digit family root of an upholstered SKU ("15420000G" -> "15420000").
-// Material options only ride on graded SKUs, so a non-matching reference
-// yields null and the line renders its options without a price delta.
 function rootOf(ref: unknown): string | null {
   const m = /^(\d{8})[A-Za-z]$/.exec(String(ref || '').trim());
   return m ? m[1] : null;
+}
+
+// Grade taxonomy + canonical subtype composer, mirrored from src/lib/subtype.ts
+// so a material switch writes the SAME "Grade X — Fabric" string the editor would
+// (T/Y/Z are intentionally absent from the price list).
+const ALPHA_GRADES = new Set(
+  'A B C D E F G H I J K L M N O P Q R S U V W X'.split(' '),
+);
+function composeSubtype(grade: string, fabric: string): string {
+  const g = (grade || '').trim();
+  const f = (fabric || '').trim();
+  if (!g && !f) return '';
+  if (!g) return f;
+  const gradeStr = ALPHA_GRADES.has(g.toUpperCase()) ? `Grade ${g.toUpperCase()}` : g;
+  return f ? `${gradeStr} — ${f}` : gradeStr;
 }
 
 // Enrich a line/component's materialOptions with a per-option `delta`: the
@@ -63,7 +79,7 @@ function rootOf(ref: unknown): string | null {
 // scaled by the SAME margin factor baked into the unit price — so the client
 // sees a real, margin-consistent +/- and the markup never leaks. Graceful:
 // no catalog row / no resolved base or grade price -> that option keeps no
-// delta and renders label-only, exactly as the on-screen preview degrades.
+// delta and renders label-only.
 function withDeltas(
   mo: Record<string, unknown> | null | undefined,
   reference: unknown,
@@ -88,16 +104,16 @@ function withDeltas(
 // Map a raw snake_case quote_lines row to the client-facing camelCase shape,
 // baking `marginFactor` into every price so margin is invisible downstream.
 function clientLine(
-  row: Record<string, unknown>,
+  row: Row,
   marginFactor: number,
   priceByRootGrade: Map<string, Map<string, number>>,
 ): Record<string, unknown> {
-  const rawComponents = Array.isArray(row.components) ? row.components as Record<string, unknown>[] : [];
+  const rawComponents = Array.isArray(row.components) ? row.components as Row[] : [];
   const components = rawComponents.map((c) => {
     const safe = pick(c, COMPONENT_KEYS);
     safe.unitPrice = num(c.unitPrice) * marginFactor;
     safe.materialOptions = withDeltas(
-      c.materialOptions as Record<string, unknown> | null, c.reference, marginFactor, priceByRootGrade,
+      c.materialOptions as Row | null, c.reference, marginFactor, priceByRootGrade,
     );
     return safe;
   });
@@ -114,19 +130,192 @@ function clientLine(
     imageId: row.image_id,
     swatchImageId: row.swatch_image_id,
     qty: row.qty,
-    // Margin baked in; the margin field is zeroed so the viewer's pricing
-    // reproduces the same total without ever seeing the markup.
+    // Margin baked in; the margin field is zeroed so the viewer reproduces the
+    // same total without ever seeing the markup.
     unitPrice: num(row.unit_price) * marginFactor,
     lineMarginPct: 0,
     lineDiscountPct: row.line_discount_pct,
     materialOptions: withDeltas(
-      row.material_options as Record<string, unknown> | null, row.reference, marginFactor, priceByRootGrade,
+      row.material_options as Row | null, row.reference, marginFactor, priceByRootGrade,
     ),
     components,
     isOptional: row.is_optional ?? false,
     alternativeGroup: row.alternative_group ?? null,
     isSelectedAlternative: row.is_selected_alternative ?? false,
     setGroup: row.set_group ?? null,
+  };
+}
+
+// Catalog list price (+ wholesale cost) per root→grade, for the given roots.
+// Scoped to the roots actually in play, which also dodges PostgREST's default
+// 1000-row cap silently truncating a large price list.
+interface GradeInfo { price: number; cost: number }
+async function priceMapForRoots(
+  admin: Admin,
+  profileId: unknown,
+  roots: Set<string>,
+): Promise<Map<string, Map<string, GradeInfo>>> {
+  const map = new Map<string, Map<string, GradeInfo>>();
+  if (!roots.size) return map;
+  const orFilter = [...roots].map((r) => `reference.like.${r}*`).join(',');
+  const { data: prods } = await admin
+    .from('products')
+    .select('reference, price_usd, cost')
+    .eq('profile_id', profileId)
+    .or(orFilter);
+  for (const p of (prods || []) as Row[]) {
+    const m = /^(\d{8})([A-Za-z])$/.exec(String(p.reference || '').trim());
+    if (!m) continue;
+    const root = m[1];
+    const grade = m[2].toUpperCase();
+    if (!map.has(root)) map.set(root, new Map());
+    map.get(root)!.set(grade, { price: num(p.price_usd), cost: num(p.cost) });
+  }
+  return map;
+}
+
+// Just the list-price view of a root→grade map, for delta computation.
+function priceOnly(full: Map<string, Map<string, GradeInfo>>): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  for (const [root, grades] of full) {
+    const m = new Map<string, number>();
+    for (const [g, info] of grades) m.set(g, info.price);
+    out.set(root, m);
+  }
+  return out;
+}
+
+// Re-anchor a materialOptions blob so `pickedGrade` becomes the base (the
+// chosen material). The old base is demoted into the options list carrying the
+// entity's CURRENT swatch, so switching back later keeps that swatch. Returns
+// null when the grade isn't offered (a stale/invalid pick — leave untouched).
+function reanchor(
+  mo: { baseGrade?: unknown; baseLabel?: unknown; options?: unknown[] } | null | undefined,
+  pickedGrade: string,
+  currentSwatchId: unknown,
+): { newMo: Record<string, unknown>; label: string; newSwatchId: unknown } | null {
+  if (!mo) return null;
+  const options = Array.isArray(mo.options) ? mo.options as Record<string, unknown>[] : [];
+  if (String(mo.baseGrade) === pickedGrade) {
+    return { newMo: mo as Record<string, unknown>, label: String(mo.baseLabel ?? ''), newSwatchId: currentSwatchId ?? null };
+  }
+  const picked = options.find((o) => String(o.grade) === pickedGrade);
+  if (!picked) return null;
+  const oldBase = { grade: mo.baseGrade, label: mo.baseLabel ?? '', code: null, swatchImageId: currentSwatchId ?? null };
+  const newOptions = options.filter((o) => String(o.grade) !== pickedGrade).concat([oldBase]);
+  return {
+    newMo: { baseGrade: picked.grade, baseLabel: picked.label ?? '', options: newOptions },
+    label: String(picked.label ?? ''),
+    newSwatchId: picked.swatchImageId ?? null,
+  };
+}
+
+// snake_case patch to switch a LINE's own material to `grade`.
+function lineMaterialPatch(
+  line: Row,
+  grade: string,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row | null {
+  const r = reanchor(line.material_options as Row, grade, line.swatch_image_id);
+  if (!r) return null;
+  const root = rootOf(line.reference);
+  const info = root ? priceMap.get(root)?.get(grade.toUpperCase()) : null;
+  const patch: Row = {
+    material_options: r.newMo,
+    swatch_image_id: r.newSwatchId,
+    subtype: composeSubtype(grade, r.label),
+  };
+  if (root) patch.reference = root + grade.toUpperCase();
+  if (info) { patch.unit_price = info.price; patch.unit_cost = info.cost; }
+  return patch;
+}
+
+// Return a NEW component object with its material switched to `grade`.
+function switchComponentMaterial(
+  comp: Row,
+  grade: string,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row {
+  const r = reanchor(comp.materialOptions as Row, grade, comp.swatchImageId);
+  if (!r) return comp;
+  const root = rootOf(comp.reference);
+  const info = root ? priceMap.get(root)?.get(grade.toUpperCase()) : null;
+  const next: Row = { ...comp, materialOptions: r.newMo, swatchImageId: r.newSwatchId, subtype: composeSubtype(grade, r.label) };
+  if (root) next.reference = root + grade.toUpperCase();
+  if (info) next.unitPrice = info.price;
+  return next;
+}
+
+// Build the whole client-facing bundle for a resolved quote row. Re-reads the
+// (possibly just-mutated) lines, so GET and the POST response share one path.
+async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unknown>> {
+  const quoteMargin = num(quote.margin_pct);
+  const baseFactor = 1 + quoteMargin / 100;
+
+  const { data: lineRows } = await admin
+    .from('quote_lines')
+    .select('*')
+    .eq('quote_id', quote.id)
+    .order('sort_order', { ascending: true });
+
+  // Catalog prices for every material option's grade → per-option delta.
+  const roots = new Set<string>();
+  for (const row of (lineRows || []) as Row[]) {
+    const mo = row.material_options as { options?: unknown[] } | null;
+    if (mo?.options?.length) { const r = rootOf(row.reference); if (r) roots.add(r); }
+    const comps = Array.isArray(row.components) ? row.components as Row[] : [];
+    for (const c of comps) {
+      const cmo = c.materialOptions as { options?: unknown[] } | null;
+      if (cmo?.options?.length) { const r = rootOf(c.reference); if (r) roots.add(r); }
+    }
+  }
+  const priceByRootGrade = priceOnly(await priceMapForRoots(admin, quote.profile_id, roots));
+
+  const lines = ((lineRows || []) as Row[]).map((row) =>
+    clientLine(row, baseFactor * (1 + num(row.line_margin_pct) / 100), priceByRootGrade),
+  );
+
+  const fetchOne = async (table: string, id: unknown) => {
+    if (!id) return null;
+    const { data } = await admin.from(table).select('*').eq('id', id).maybeSingle();
+    return (data as Row) || null;
+  };
+  const [customerRow, professionalRow, sellerRow, settingsRow] = await Promise.all([
+    fetchOne('customers', quote.customer_id),
+    fetchOne('professionals', quote.professional_id),
+    fetchOne('profiles', quote.created_by_user_id),
+    admin.from('settings').select('*').eq('profile_id', quote.profile_id).maybeSingle().then((r) => (r.data as Row) || null),
+  ]);
+
+  const customer = customerRow ? {
+    name: customerRow.name, company: customerRow.company, address: customerRow.address,
+    city: customerRow.city, state: customerRow.state, zip: customerRow.zip,
+    country: customerRow.country, email: customerRow.email, phone: customerRow.phone,
+  } : null;
+  const professional = professionalRow ? { name: professionalRow.name, company: professionalRow.company } : null;
+  const seller = sellerRow ? { name: sellerRow.name } : null;
+  const settings = settingsRow ? {
+    companyName: settingsRow.company_name, logoImageId: settingsRow.logo_image_id,
+    quoteFooter: settingsRow.quote_footer,
+  } : {};
+
+  return {
+    quote: {
+      id: quote.id,
+      number: quote.number,
+      status: quote.status,
+      currencyCode: quote.currency_code,
+      rates: quote.rates,
+      terms: quote.terms,
+      marginPct: 0,
+      discountPct: quote.discount_pct,
+      shipping: quote.shipping,
+    },
+    lines,
+    customer,
+    professional,
+    seller,
+    settings,
   };
 }
 
@@ -147,16 +336,17 @@ Deno.serve(async (req: Request) => {
 
   // Resolve the quote by its secret token; a disabled link reads as 404 so a
   // revoked link is indistinguishable from a bad one.
-  const { data: quote, error: qErr } = await admin
+  const { data: quoteData, error: qErr } = await admin
     .from('quotes')
     .select('*')
     .eq('share_token', token)
     .eq('share_enabled', true)
     .maybeSingle();
   if (qErr) return json({ error: 'lookup failed' }, 500);
-  if (!quote) return json({ error: 'not found' }, 404);
+  if (!quoteData) return json({ error: 'not found' }, 404);
+  const quote = quoteData as Row;
 
-  // ---- POST: persist the recipient's picks (validated against this quote) --
+  // ---- POST: apply the recipient's picks to the REAL quote_lines ----------
   if (req.method === 'POST') {
     let body: {
       alternatives?: Record<string, unknown>;
@@ -165,157 +355,114 @@ Deno.serve(async (req: Request) => {
     } = {};
     try { body = await req.json(); } catch { /* empty body ok */ }
 
-    const { data: lineRows } = await admin
+    const { data: lineRowsData } = await admin
       .from('quote_lines')
-      .select('id, is_optional, alternative_group, material_options, components')
+      .select('*')
       .eq('quote_id', quote.id);
-    const lines = lineRows || [];
-    // Valid targets: alternative groups → their member line ids; optional ids;
-    // material-bearing ids (line OR component) → their valid grades.
+    const lineRows = (lineRowsData || []) as Row[];
+
+    // Indexes for validation + lookup.
+    const lineById = new Map<string, Row>();
     const groupMembers = new Map<string, Set<string>>();
     const optionalIds = new Set<string>();
-    const materialGrades = new Map<string, Set<string>>();
-    const addMaterialTarget = (
-      id: unknown,
-      mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined,
-    ): void => {
+    const materialGrades = new Map<string, Set<string>>();     // line OR component id → valid grades
+    const componentIndex = new Map<string, { lineId: string }>(); // component id → its line
+    const addMaterialTarget = (id: unknown, mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined) => {
       if (!id || !mo || !Array.isArray(mo.options) || !mo.options.length) return;
       const set = new Set<string>();
       if (mo.baseGrade != null) set.add(String(mo.baseGrade));
-      for (const o of mo.options) {
-        const g = (o as { grade?: unknown })?.grade;
-        if (g != null) set.add(String(g));
-      }
+      for (const o of mo.options) { const g = (o as { grade?: unknown })?.grade; if (g != null) set.add(String(g)); }
       if (set.size) materialGrades.set(String(id), set);
     };
-    for (const l of lines) {
+    for (const l of lineRows) {
+      const id = String(l.id);
+      lineById.set(id, l);
       if (l.alternative_group) {
         const g = String(l.alternative_group);
         if (!groupMembers.has(g)) groupMembers.set(g, new Set());
-        groupMembers.get(g)!.add(String(l.id));
+        groupMembers.get(g)!.add(id);
       }
-      if (l.is_optional) optionalIds.add(String(l.id));
+      if (l.is_optional) optionalIds.add(id);
       addMaterialTarget(l.id, l.material_options as { baseGrade?: unknown; options?: unknown[] } | null);
-      const comps = Array.isArray(l.components) ? l.components as Record<string, unknown>[] : [];
+      const comps = Array.isArray(l.components) ? l.components as Row[] : [];
       for (const c of comps) {
-        addMaterialTarget(c.id, c.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
+        if (c?.id != null) componentIndex.set(String(c.id), { lineId: id });
+        addMaterialTarget(c?.id, c?.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
       }
     }
 
-    const alternatives: Record<string, string> = {};
-    for (const [g, lineId] of Object.entries(body.alternatives || {})) {
-      if (groupMembers.get(g)?.has(String(lineId))) alternatives[g] = String(lineId);
-    }
-    const optionals: Record<string, boolean> = {};
-    for (const [lineId, on] of Object.entries(body.optionals || {})) {
-      if (optionalIds.has(lineId)) optionals[lineId] = !!on;
-    }
-    const materials: Record<string, string> = {};
+    // Catalog prices for the roots touched by material picks (line + component).
+    const matRoots = new Set<string>();
     for (const [id, grade] of Object.entries(body.materials || {})) {
-      if (materialGrades.get(String(id))?.has(String(grade))) materials[String(id)] = String(grade);
+      const key = String(id);
+      if (!materialGrades.get(key)?.has(String(grade))) continue;
+      if (lineById.has(key)) { const r = rootOf(lineById.get(key)!.reference); if (r) matRoots.add(r); }
+      else if (componentIndex.has(key)) {
+        const line = lineById.get(componentIndex.get(key)!.lineId);
+        const comp = (line?.components as Row[] | undefined)?.find((c) => String(c.id) === key);
+        const r = rootOf(comp?.reference); if (r) matRoots.add(r);
+      }
+    }
+    const priceMap = await priceMapForRoots(admin, quote.profile_id, matRoots);
+
+    // Accumulate one patch per line, then write each once. Component edits
+    // build on a working copy of the line's components so several picks on the
+    // same compound line compose.
+    const patches = new Map<string, Row>();
+    const workingComps = new Map<string, Row[]>();
+    const merge = (id: string, p: Row) => patches.set(id, { ...(patches.get(id) || {}), ...p });
+    const compsOf = (lineId: string): Row[] => {
+      if (!workingComps.has(lineId)) {
+        const comps = lineById.get(lineId)?.components;
+        workingComps.set(lineId, (Array.isArray(comps) ? comps as Row[] : []).map((c) => ({ ...c })));
+      }
+      return workingComps.get(lineId)!;
+    };
+
+    // Alternatives — only the chosen member of a group stays selected.
+    for (const [group, lineId] of Object.entries(body.alternatives || {})) {
+      const members = groupMembers.get(group);
+      if (!members || !members.has(String(lineId))) continue;
+      for (const memberId of members) merge(memberId, { is_selected_alternative: memberId === String(lineId) });
     }
 
-    const client_selections = { alternatives, optionals, materials, updatedAt: Date.now() };
-    const { error: upErr } = await admin
-      .from('quotes')
-      .update({ client_selections })
-      .eq('id', quote.id);
-    if (upErr) return json({ error: 'save failed' }, 500);
-    return json({ ok: true, clientSelections: client_selections });
+    // Optionals — including one (on=true) folds it into the quote (is_optional
+    // = false); excluding leaves it as an offered add-on. Validated against the
+    // currently-optional lines the dealer designated.
+    for (const [lineId, on] of Object.entries(body.optionals || {})) {
+      if (optionalIds.has(String(lineId))) merge(String(lineId), { is_optional: !on });
+    }
+
+    // Materials — re-anchor the line (or component) to the chosen grade.
+    for (const [id, gradeRaw] of Object.entries(body.materials || {})) {
+      const key = String(id);
+      const grade = String(gradeRaw);
+      if (!materialGrades.get(key)?.has(grade)) continue;
+      if (lineById.has(key)) {
+        const p = lineMaterialPatch(lineById.get(key)!, grade, priceMap);
+        if (p) merge(key, p);
+      } else if (componentIndex.has(key)) {
+        const lineId = componentIndex.get(key)!.lineId;
+        const comps = compsOf(lineId);
+        const idx = comps.findIndex((c) => String(c.id) === key);
+        if (idx >= 0) {
+          comps[idx] = switchComponentMaterial(comps[idx], grade, priceMap);
+          merge(lineId, { components: comps });
+        }
+      }
+    }
+
+    // Persist — one UPDATE per touched line, scoped to this quote.
+    for (const [id, patch] of patches) {
+      const { error } = await admin.from('quote_lines').update(patch).eq('id', id).eq('quote_id', quote.id);
+      if (error) return json({ error: 'save failed' }, 500);
+    }
+    // Touch the quote so the dealer's list reflects recent activity.
+    await admin.from('quotes').update({ updated_at: new Date().toISOString() }).eq('id', quote.id);
+
+    return json(await buildBundle(admin, quote));
   }
 
   // ---- GET: build the client-facing bundle --------------------------------
-  const quoteMargin = num(quote.margin_pct);
-  const baseFactor = 1 + quoteMargin / 100;
-
-  const { data: lineRows, error: lErr } = await admin
-    .from('quote_lines')
-    .select('*')
-    .eq('quote_id', quote.id)
-    .order('sort_order', { ascending: true });
-  if (lErr) return json({ error: 'lines failed' }, 500);
-
-  // Catalog prices for every material option's grade, so each option carries a
-  // real price delta. Scoped to the SKU roots actually used here — both to keep
-  // the query small AND to dodge PostgREST's default 1000-row cap silently
-  // truncating a large price list. No options anywhere -> no query.
-  const roots = new Set<string>();
-  for (const row of lineRows || []) {
-    const mo = row.material_options as { options?: unknown[] } | null;
-    if (mo?.options?.length) { const r = rootOf(row.reference); if (r) roots.add(r); }
-    const comps = Array.isArray(row.components) ? row.components as Record<string, unknown>[] : [];
-    for (const c of comps) {
-      const cmo = c.materialOptions as { options?: unknown[] } | null;
-      if (cmo?.options?.length) { const r = rootOf(c.reference); if (r) roots.add(r); }
-    }
-  }
-  const priceByRootGrade = new Map<string, Map<string, number>>();
-  if (roots.size) {
-    const orFilter = [...roots].map((r) => `reference.like.${r}*`).join(',');
-    const { data: prods } = await admin
-      .from('products')
-      .select('reference, price_usd')
-      .eq('profile_id', quote.profile_id)
-      .or(orFilter);
-    for (const p of prods || []) {
-      const m = /^(\d{8})([A-Za-z])$/.exec(String(p.reference || '').trim());
-      if (!m) continue;
-      const root = m[1];
-      const grade = m[2].toUpperCase();
-      if (!priceByRootGrade.has(root)) priceByRootGrade.set(root, new Map());
-      priceByRootGrade.get(root)!.set(grade, num(p.price_usd));
-    }
-  }
-
-  const lines = (lineRows || []).map((row) =>
-    clientLine(row, baseFactor * (1 + num(row.line_margin_pct) / 100), priceByRootGrade),
-  );
-
-  // Related rows — each best-effort, all whitelisted to client-facing fields.
-  const fetchOne = async (table: string, id: unknown) => {
-    if (!id) return null;
-    const { data } = await admin.from(table).select('*').eq('id', id).maybeSingle();
-    return data || null;
-  };
-  const [customerRow, professionalRow, sellerRow, settingsRow] = await Promise.all([
-    fetchOne('customers', quote.customer_id),
-    fetchOne('professionals', quote.professional_id),
-    fetchOne('profiles', quote.created_by_user_id),
-    admin.from('settings').select('*').eq('profile_id', quote.profile_id).maybeSingle().then((r) => r.data || null),
-  ]);
-
-  const customer = customerRow ? {
-    name: customerRow.name, company: customerRow.company, address: customerRow.address,
-    city: customerRow.city, state: customerRow.state, zip: customerRow.zip,
-    country: customerRow.country, email: customerRow.email, phone: customerRow.phone,
-  } : null;
-  const professional = professionalRow ? { name: professionalRow.name, company: professionalRow.company } : null;
-  const seller = sellerRow ? { name: sellerRow.name } : null;
-  const settings = settingsRow ? {
-    companyName: settingsRow.company_name, logoImageId: settingsRow.logo_image_id,
-    quoteFooter: settingsRow.quote_footer,
-  } : {};
-
-  const bundle = {
-    quote: {
-      id: quote.id,
-      number: quote.number,
-      status: quote.status,
-      currencyCode: quote.currency_code,
-      rates: quote.rates,
-      terms: quote.terms,
-      // Margin is baked into the lines above, so the quote-level margin is
-      // zeroed here; the client discount + shipping stay.
-      marginPct: 0,
-      discountPct: quote.discount_pct,
-      shipping: quote.shipping,
-      clientSelections: quote.client_selections ?? null,
-    },
-    lines,
-    customer,
-    professional,
-    seller,
-    settings,
-  };
-  return json(bundle);
+  return json(await buildBundle(admin, quote));
 });

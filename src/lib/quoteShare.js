@@ -36,12 +36,20 @@ export async function fetchSharedQuote(token) {
   return r.json();
 }
 
-/** Persist the recipient's option picks. Best-effort; returns the saved set. */
-export async function saveClientSelections(token, selections) {
+/**
+ * Apply ONE of the recipient's picks to the real quote and return the FRESH
+ * bundle. The owner chose a single source of truth — picks edit the quote in
+ * place, so the response is the re-read quote, not a separate selection blob.
+ *
+ *   pick = { alternatives: { [group]: lineId } }
+ *        | { optionals:    { [lineId]: boolean } }
+ *        | { materials:    { [lineOrComponentId]: grade } }
+ */
+export async function applyClientPick(token, pick) {
   const r = await fetch(endpoint(token), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(selections || {}),
+    body: JSON.stringify(pick || {}),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
