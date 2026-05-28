@@ -92,8 +92,8 @@ export default function QuoteHeader({
             component's "badge near the title" intent) and never overlaps. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5">
-              <div className="eyebrow">Cotización</div>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="eyebrow shrink-0">Cotización</div>
               <SaveIndicator savedAt={savedAt} saving={saving} />
             </div>
             <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
