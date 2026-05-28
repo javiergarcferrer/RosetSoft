@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, PackageSearch, ChevronLeft, Loader2 } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import ImageView from '../ImageView.jsx';
-import { heroSwatchUrl } from '../../lib/swatchImage.js';
+import MaterialColorPicker from './MaterialColorPicker.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
 import { db, searchProducts } from '../../db/database.js';
 import { groupFamilies, productForGrade } from '../../lib/catalog.js';
-import { composeSubtype } from '../../lib/subtype.js';
+import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -30,7 +29,6 @@ import { formatMoney } from '../../lib/format.js';
  * open as before.
  */
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
-const heroImageId = (m) => m?.colors?.find((c) => c.imageId)?.imageId || null;
 
 export default function CatalogPicker({ open, onClose, onInsert }) {
   const { profileId } = useApp();
@@ -84,19 +82,26 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
     return prices.length ? `desde ${usd(Math.min(...prices))}` : '—';
   }
 
-  function insertProduct(fam, product, grade, material) {
+  // Insert a line. `product` carries the price/reference (productForGrade for
+  // the chosen grade); `material`+`color` (when present) compose the fabric
+  // label and the swatch. Forcing a specific COLOR — not just a grade — means
+  // the inserted line lands fully specified ("Grade X — MATERIAL · COLOR
+  // (#code)") and its swatch is that color's own photo, mirroring the quote-
+  // pane SwatchPicker. A plain (non-upholstered) product keeps its own
+  // catalog subtype (the wood finish / variant text).
+  function insertProduct(fam, product, grade, material, color) {
     if (!product) return;
     onInsert({
       family: product.family || fam.family,
       reference: product.reference,
       name: product.name,
       dimensions: product.dimensions,
-      // Graded pick → "Grade X — Fabric"; a plain (non-upholstered) product
-      // keeps its own catalog subtype (the wood finish / variant text).
-      subtype: (grade || material) ? composeSubtype(grade, material?.name) : (product.subtype || ''),
+      subtype: (grade || material)
+        ? composeSubtype(grade, composeFabricLabel(material, color))
+        : (product.subtype || ''),
       unitPrice: product.priceUsd,
       unitCost: product.cost,
-      swatchImageId: material ? heroImageId(material) : null,
+      swatchImageId: color?.imageId ?? null,
     });
     onClose();
   }
@@ -109,19 +114,15 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
     setSel(fam);
   }
 
-  // Step 2 — fabrics whose grade the selected model offers, each carrying the
-  // model's price at that grade.
-  const fabricRows = useMemo(() => {
-    if (!sel) return [];
-    const grades = new Set(sel.grades);
-    return materials
-      .filter((m) => m.grade && grades.has(String(m.grade).toUpperCase()))
-      .map((m) => {
-        const grade = String(m.grade).toUpperCase();
-        return { material: m, grade, product: productForGrade(sel, grade) };
-      })
-      .filter((r) => r.product)
-      .sort((a, b) => (Number(a.product.priceUsd) || 0) - (Number(b.product.priceUsd) || 0));
+  // Step 2 — does the catalog carry ANY material in one of this model's
+  // grades? Drives the fallback: when none match we let the dealer pick the
+  // price tier (grade) directly so the flow still works. The actual material→
+  // color choice is delegated to the shared <MaterialColorPicker>, filtered to
+  // `sel.grades`.
+  const hasGradeMaterials = useMemo(() => {
+    if (!sel) return false;
+    const grades = new Set(sel.grades.map((g) => String(g).toUpperCase()));
+    return materials.some((m) => m.grade && grades.has(String(m.grade).toUpperCase()));
   }, [sel, materials]);
 
   return (
@@ -184,7 +185,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       ) : (
         <>
           <button type="button" onClick={() => setSel(null)} className="back-link"><ChevronLeft size={12} /> Volver a modelos</button>
-          {fabricRows.length === 0 ? (
+          {!hasGradeMaterials ? (
             // No fabric in the catalog for this model's grades — let the dealer
             // pick the price tier (grade) directly so the flow still works.
             <div className="max-h-[60vh] overflow-y-auto -mx-1">
@@ -200,29 +201,20 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
               })}
             </div>
           ) : (
-            <div className="max-h-[60vh] overflow-y-auto -mx-1">
-              {fabricRows.map(({ material, grade, product }) => (
-                <button
-                  key={material.id}
-                  type="button"
-                  onClick={() => insertProduct(sel, product, grade, material)}
-                  className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center gap-3 hover:bg-ink-50 transition-colors"
-                >
-                  <ImageView
-                    id={heroImageId(material)}
-                    fallbackUrl={heroSwatchUrl(material)}
-                    hoverPreview
-                    className="w-9 h-9 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
-                    placeholderClassName="w-9 h-9 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-ink-900 truncate">{material.name}</span>
-                    <span className="block text-[11px] text-ink-500">Grado {grade}{material.category ? ` · ${material.category}` : ''}</span>
-                  </span>
-                  <span className="text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap">{usd(product.priceUsd)}</span>
-                </button>
-              ))}
-            </div>
+            // Shared material→color body, restricted to the model's grades.
+            // Picking forces a specific COLOR before placing: the product
+            // (price/reference) comes from the material's own grade, the
+            // subtype + swatch from the chosen color.
+            <MaterialColorPicker
+              materials={materials}
+              gradeFilter={sel.grades}
+              currentGrade=""
+              currentFabric=""
+              onPick={(material, color) => {
+                const grade = String(material.grade || '').toUpperCase();
+                insertProduct(sel, productForGrade(sel, grade), grade, material, color);
+              }}
+            />
           )}
         </>
       )}

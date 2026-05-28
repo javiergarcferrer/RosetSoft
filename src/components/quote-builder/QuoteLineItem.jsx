@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -13,13 +13,49 @@ import { useApp } from '../../context/AppContext.jsx';
 import { rememberSwatchInCatalog } from '../../lib/swatchCatalog.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
+import * as pricing from '../../lib/pricing.js';
 import {
   applyLineAdjustments,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
 } from '../../lib/pricing.js';
+import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId } from '../../db/database.js';
+
+/**
+ * Catalog families keyed by SKU root, provided by QuoteBuilder. Used to
+ * resolve a line's family (via splitSkuGrade(reference).root) for the
+ * material-options price deltas. Passed via context because the intermediate
+ * LineItemList doesn't forward per-line catalog data. Defaults to an empty
+ * Map so the component renders fine outside a provider (tests, previews).
+ */
+export const FamiliesContext = createContext(new Map());
+
+/**
+ * Resolve the [{ grade, label, code, swatchImageId, delta }] view of a line's
+ * materialOptions against its catalog family. Prefers lib/pricing's
+ * materialOptionDeltas when present; otherwise computes the list-price USD
+ * delta locally (option grade price − base grade price) so the chips still
+ * read a number while that helper is being added.
+ */
+function resolveOptionDeltas(materialOptions, family) {
+  if (!materialOptions || !Array.isArray(materialOptions.options)) return [];
+  if (typeof pricing.materialOptionDeltas === 'function') {
+    return pricing.materialOptionDeltas(materialOptions, family) || [];
+  }
+  const basePrice = Number(productForGrade(family, materialOptions.baseGrade)?.priceUsd) || 0;
+  return materialOptions.options.map((o) => {
+    const price = Number(productForGrade(family, o.grade)?.priceUsd) || 0;
+    return {
+      grade: o.grade,
+      label: o.label,
+      code: o.code,
+      swatchImageId: o.swatchImageId,
+      delta: family ? price - basePrice : 0,
+    };
+  });
+}
 
 /**
  * One quote line — a product card read top→bottom:
@@ -204,6 +240,8 @@ export default function QuoteLineItem({
           compound={compound}
           onChange={onChange}
           refInputRef={refInput}
+          currency={currency}
+          rates={rates}
         />
         {compound ? (
           <CompoundCalculatorBand
@@ -433,7 +471,7 @@ function TopStrip({
 // visible band because fabric grade is what drives price; hiding it behind
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
-function IdentityBand({ line, compound, onChange, refInputRef }) {
+function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }) {
   // Layout: product photo + name on top; the swatch + material
   // (grade/fabric) and the ref/dimensions strip stack BELOW them, full
   // width — not squeezed into a narrow column beside the photo.
@@ -461,7 +499,7 @@ function IdentityBand({ line, compound, onChange, refInputRef }) {
           />
         </div>
       </div>
-      {!compound && <GradeFabricRow line={line} onChange={onChange} />}
+      {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} />}
       {!compound && (
         <SpecStrip
           reference={line.reference}
@@ -567,9 +605,15 @@ function InternalNote({ value, onCommit }) {
 // controls write into the single `subtype` column on every commit via
 // composeSubtype, so on-disk format is identical to what dealers have
 // always typed — no migration, no PDF / autocomplete churn.
-function GradeFabricRow({ line, onChange }) {
+function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   const { profileId } = useApp();
+  const families = useContext(FamiliesContext);
   const { grade, fabric } = parseSubtype(line.subtype);
+  // Resolve this line's catalog family from its reference root so the
+  // material-option chips can show a list-price delta. A line with no (or a
+  // non-graded) reference simply yields no family → deltas read as 0.
+  const family = families?.get(splitSkuGrade(line.reference).root) || null;
+  const materialOptions = line.materialOptions || null;
   // When a swatch is attached inline, also remember it in the catalog so
   // the next quote that picks the same material/color is pre-filled. Only
   // bites when the subtype came from the picker (carries a "(#code)") and
@@ -591,98 +635,177 @@ function GradeFabricRow({ line, onChange }) {
   };
   const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
+  const [optionOpen, setOptionOpen] = useState(false);
+
+  // Append an alternative material (informational — never touches the line's
+  // price/subtype). On the FIRST option we snapshot the line's current grade +
+  // material name as the delta base, so every option's "+RD$X" reads relative
+  // to what the line is actually quoted at.
+  function addOption(picked) {
+    const code = colorCodeFromSubtype(composeSubtype(picked.grade, picked.fabric));
+    const option = {
+      grade: picked.grade || '',
+      label: picked.fabric || '',
+      code: code || undefined,
+      swatchImageId: picked.swatchImageId || undefined,
+    };
+    const prev = materialOptions;
+    const next = prev
+      ? { ...prev, options: [...(prev.options || []), option] }
+      : { baseGrade: grade || '', baseLabel: fabric || '', options: [option] };
+    onChange({ materialOptions: next });
+  }
+
+  function removeOption(idx) {
+    if (!materialOptions) return;
+    const options = (materialOptions.options || []).filter((_, i) => i !== idx);
+    // Drop the whole structure when the last option goes — keeps the row clean
+    // and avoids a dangling base with no alternatives.
+    onChange({ materialOptions: options.length ? { ...materialOptions, options } : null });
+  }
+
+  // Swap an option into the base slot: the picked option becomes the delta
+  // reference and the old base is pushed back as an option. INFORMATIONAL
+  // only — the line's own grade/price/subtype are untouched (deltas just
+  // recompute against the new base).
+  function makeBase(idx) {
+    if (!materialOptions) return;
+    const opts = materialOptions.options || [];
+    const target = opts[idx];
+    if (!target) return;
+    const oldBase = {
+      grade: materialOptions.baseGrade || '',
+      label: materialOptions.baseLabel || '',
+    };
+    const options = opts.map((o, i) => (i === idx ? oldBase : o));
+    onChange({
+      materialOptions: {
+        ...materialOptions,
+        baseGrade: target.grade || '',
+        baseLabel: target.label || '',
+        options,
+      },
+    });
+  }
+
   // Single row: swatch · grade · fabric · picker. The fabric input sizes
   // to its content (field-sizing) so it's only as wide as the material
   // name; the picker button sits right after it, not across the row.
   return (
-    <div className="flex items-center gap-2 min-w-0">
-      {/* Swatch pinned to the LEFT so the material reads the same on every
-          line/component no matter how long the fabric name is — mirrors
-          the client preview, which always puts the swatch left of the
-          subtype. The catalog picker pre-fills it; the empty state is an
-          explicit "add photo" tile and the corner × clears just the
-          swatch. */}
-      {/* z-[2] keeps the swatch above any deactivated/non-selected veil
-          (z-[1]) so the fabric colour is never dimmed — in any state. */}
-      <span className="relative z-[2] inline-flex shrink-0">
-        <Thumbnail
-          imageId={swatchImageId}
-          fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
-          onChange={setSwatch}
-          kind="quote-line-swatch"
-          ownerId={line.id}
-          sizeClass="w-10 h-10"
-          hoverPreview
-        />
-      </span>
-      <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
-        <Select
-          variant="ghost"
-          value={grade}
-          onChange={(v) => commit({ grade: v, fabric })}
-          aria-label="Grade"
-          title="Fabric grade"
-        >
-          {/* Option text carries the "Grade " prefix on alpha values so the
-              collapsed select reads as "Grade C" rather than just "C" —
-              a bare letter is unambiguous to a Ligne Roset dealer in
-              isolation but jarring on a card that contains other letters
-              (refs, page numbers, dimensions).
+    <div className="space-y-1.5 min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
+        {/* Swatch pinned to the LEFT so the material reads the same on every
+            line/component no matter how long the fabric name is — mirrors
+            the client preview, which always puts the swatch left of the
+            subtype. The catalog picker pre-fills it; the empty state is an
+            explicit "add photo" tile and the corner × clears just the
+            swatch. */}
+        {/* z-[2] keeps the swatch above any deactivated/non-selected veil
+            (z-[1]) so the fabric colour is never dimmed — in any state. */}
+        <span className="relative z-[2] inline-flex shrink-0">
+          <Thumbnail
+            imageId={swatchImageId}
+            fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
+            onChange={setSwatch}
+            kind="quote-line-swatch"
+            ownerId={line.id}
+            sizeClass="w-10 h-10"
+            hoverPreview
+          />
+        </span>
+        <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
+          <Select
+            variant="ghost"
+            value={grade}
+            onChange={(v) => commit({ grade: v, fabric })}
+            aria-label="Grade"
+            title="Fabric grade"
+          >
+            {/* Option text carries the "Grade " prefix on alpha values so the
+                collapsed select reads as "Grade C" rather than just "C" —
+                a bare letter is unambiguous to a Ligne Roset dealer in
+                isolation but jarring on a card that contains other letters
+                (refs, page numbers, dimensions).
 
-              Groups (Telas / Microfibras / Pieles) and the A..R, S, U..X
-              letter set come from the Ligne Roset price list verbatim;
-              the in-between letters (T, Y, Z) are reserved and never
-              offered. Source of truth: src/lib/subtype.js GRADE_GROUPS. */}
-          <option value="">Grade —</option>
-          {GRADE_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.grades.map((g) => (
-                <option key={g} value={g}>Grade {g}</option>
-              ))}
-            </optgroup>
-          ))}
-          <optgroup label="Otros">
-            {SPECIAL_GRADES.map((g) => (
-              <option key={g} value={g}>{g}</option>
+                Groups (Telas / Microfibras / Pieles) and the A..R, S, U..X
+                letter set come from the Ligne Roset price list verbatim;
+                the in-between letters (T, Y, Z) are reserved and never
+                offered. Source of truth: src/lib/subtype.js GRADE_GROUPS. */}
+            <option value="">Grade —</option>
+            {GRADE_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.grades.map((g) => (
+                  <option key={g} value={g}>Grade {g}</option>
+                ))}
+              </optgroup>
             ))}
-            {/* Legacy values that may still live in older quotes — render
-                the matching option ONLY when the current value is one of
-                them, so a native <select> can display it back to the user.
-                Without this, the browser would silently fall back to the
-                first option and we'd lose what the dealer typed. */}
-            {LEGACY_NAMED_GRADES.includes(grade) && (
-              <option value={grade}>{grade} (anterior)</option>
-            )}
-          </optgroup>
-        </Select>
-        {(grade || fabric) ? (
-          <span className="text-ink-300 select-none px-0.5" aria-hidden>·</span>
-        ) : null}
-        <DebouncedInput
-          value={fabric}
-          onCommit={(v) => commit({ grade, fabric: v })}
-          placeholder="Tela o acabado"
-          autoCapitalize="words"
-          // Sizes to its content (field-sizing via .qli-grow): only as wide
-          // as the material name (or the placeholder when empty), never
-          // stretched across the row. Capped at 100% so a very long name
-          // still wraps/scrolls within the row instead of overflowing.
-          className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
-        />
-        {/* Catalog picker — opens the swatch modal so the dealer can pick a
-            material + color instead of typing the name and guessing the
-            code. Selecting writes back grade + fabric (and the swatch) in
-            one shot; the input above still works for freeform overrides. */}
-        <button
-          type="button"
-          onClick={() => setSwatchOpen(true)}
-          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
-          title="Elegir del catálogo de materiales"
-          aria-label="Elegir tela del catálogo"
-        >
-          <Palette size={14} />
-        </button>
+            <optgroup label="Otros">
+              {SPECIAL_GRADES.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+              {/* Legacy values that may still live in older quotes — render
+                  the matching option ONLY when the current value is one of
+                  them, so a native <select> can display it back to the user.
+                  Without this, the browser would silently fall back to the
+                  first option and we'd lose what the dealer typed. */}
+              {LEGACY_NAMED_GRADES.includes(grade) && (
+                <option value={grade}>{grade} (anterior)</option>
+              )}
+            </optgroup>
+          </Select>
+          {(grade || fabric) ? (
+            <span className="text-ink-300 select-none px-0.5" aria-hidden>·</span>
+          ) : null}
+          <DebouncedInput
+            value={fabric}
+            onCommit={(v) => commit({ grade, fabric: v })}
+            placeholder="Tela o acabado"
+            autoCapitalize="words"
+            // Sizes to its content (field-sizing via .qli-grow): only as wide
+            // as the material name (or the placeholder when empty), never
+            // stretched across the row. Capped at 100% so a very long name
+            // still wraps/scrolls within the row instead of overflowing.
+            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+          />
+          {/* Catalog picker — opens the swatch modal so the dealer can pick a
+              material + color instead of typing the name and guessing the
+              code. Selecting writes back grade + fabric (and the swatch) in
+              one shot; the input above still works for freeform overrides. */}
+          <button
+            type="button"
+            onClick={() => setSwatchOpen(true)}
+            className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+            title="Elegir del catálogo de materiales"
+            aria-label="Elegir tela del catálogo"
+          >
+            <Palette size={14} />
+          </button>
+          {/* Quiet "+ Opción" affordance — adds an ALTERNATIVE material the
+              customer could choose instead. Purely informational: it records
+              the option + a list-price delta, never changing this line's own
+              price or total. */}
+          <button
+            type="button"
+            onClick={() => setOptionOpen(true)}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-brand-50 transition-colors flex-shrink-0"
+            title="Agregar un material alternativo (solo informativo, no cambia el total)"
+            aria-label="Agregar material alternativo"
+          >
+            <Plus size={12} className="opacity-80" aria-hidden />
+            Opción
+          </button>
+        </div>
       </div>
+
+      <MaterialOptionChips
+        materialOptions={materialOptions}
+        family={family}
+        currency={currency}
+        rates={rates}
+        onRemove={removeOption}
+        onMakeBase={makeBase}
+      />
+
       <SwatchPicker
         open={swatchOpen}
         onClose={() => setSwatchOpen(false)}
@@ -690,6 +813,69 @@ function GradeFabricRow({ line, onChange }) {
         currentGrade={grade}
         currentFabric={fabric}
       />
+      {/* Second picker instance dedicated to adding an alternative material;
+          its selection is appended to materialOptions instead of replacing
+          the line's own grade/fabric. */}
+      <SwatchPicker
+        open={optionOpen}
+        onClose={() => setOptionOpen(false)}
+        onSelect={(picked) => addOption(picked)}
+        currentGrade=""
+        currentFabric=""
+      />
+    </div>
+  );
+}
+
+// Compact, removable chips for a line/component's alternative materials. Each
+// reads "LABEL +RD$X · ×"; the delta comes from materialOptionDeltas (resolved
+// against the line's catalog family) and is formatted in the quote's currency.
+// "Hacer base" swaps a chip with the current delta base — informational only.
+function MaterialOptionChips({ materialOptions, family, currency, rates, onRemove, onMakeBase }) {
+  if (!materialOptions || !(materialOptions.options || []).length) return null;
+  const deltas = resolveOptionDeltas(materialOptions, family);
+  const fmtDelta = (d) => {
+    const v = Number(d) || 0;
+    const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+    return `${sign}${formatMoney(Math.abs(v), currency, rates)}`;
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 pl-12">
+      {materialOptions.baseLabel && (
+        <span
+          className="chip text-ink-500 bg-ink-50 border border-ink-200"
+          title="Material base — referencia para los deltas"
+        >
+          {composeSubtype(materialOptions.baseGrade, materialOptions.baseLabel) || materialOptions.baseLabel}
+          <span className="ml-1 text-ink-400 normal-case font-normal">base</span>
+        </span>
+      )}
+      {deltas.map((o, i) => (
+        <span
+          key={`${o.code || o.label || 'opt'}-${i}`}
+          className="inline-flex items-center gap-1 chip text-brand-700 bg-brand-50 border border-brand-100"
+        >
+          <span className="truncate max-w-[14rem]">{o.label || `Grade ${o.grade}`}</span>
+          <span className="tabular-nums font-medium">{fmtDelta(o.delta)}</span>
+          <button
+            type="button"
+            onClick={() => onMakeBase(i)}
+            className="text-[10px] text-brand-600 hover:text-brand-900 underline decoration-dotted"
+            title="Usar este material como base de los deltas"
+          >
+            Hacer base
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(i)}
+            className="text-brand-500 hover:text-red-600"
+            aria-label={`Quitar ${o.label || 'opción'}`}
+            title="Quitar opción"
+          >
+            <X size={11} />
+          </button>
+        </span>
+      ))}
     </div>
   );
 }
@@ -1098,8 +1284,15 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
       />
 
       <GradeFabricRow
-        line={{ subtype: component.subtype, swatchImageId: component.swatchImageId }}
+        line={{
+          subtype: component.subtype,
+          swatchImageId: component.swatchImageId,
+          reference: component.reference,
+          materialOptions: component.materialOptions,
+        }}
         onChange={(patch) => onChange(patch)}
+        currency={currency}
+        rates={rates}
       />
 
       <div className="pt-0.5">

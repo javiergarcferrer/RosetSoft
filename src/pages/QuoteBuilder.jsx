@@ -5,6 +5,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { groupFamilies } from '../lib/catalog.js';
 import { isGroupOptional } from '../lib/quoteGroups.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION, isPricedLine } from '../lib/constants.js';
@@ -22,6 +23,7 @@ import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
+import { FamiliesContext } from '../components/quote-builder/QuoteLineItem.jsx';
 import TotalsRail from '../components/quote-builder/TotalsRail.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import QuickActions from '../components/quote-builder/QuickActions.jsx';
@@ -215,6 +217,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     [profileId],
     [],
   );
+  // Catalog products → families, keyed by SKU root. Feeds the material-options
+  // delta math (QuoteLineItem resolves a line's family from its reference) and
+  // the client preview's preview-side deltas (passed down as `families`). The
+  // product table is small enough to hold in memory; grouping is memoised.
+  const products = useLiveQuery(
+    () => (profileId ? db.products.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId],
+    [],
+  );
+  const families = useMemo(() => {
+    const map = new Map();
+    for (const fam of groupFamilies(products)) map.set(fam.root, fam);
+    return map;
+  }, [products]);
 
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
@@ -1003,6 +1019,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           customer={customer}
           professional={professional}
           seller={seller}
+          families={families}
         />
       ) : (
         // Left column uses `minmax(0, 1fr)` — not bare `1fr` — so it can
@@ -1013,26 +1030,31 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // the whole column wider than the viewport.
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5 min-w-0">
-            <LineItemsCard
-              lines={lines}
-              groups={groups}
-              quote={quote}
-              focusLineId={focusLineId}
-              onToggleGroupOptional={toggleGroupOptional}
-              onChangeLine={hx(updateLine)}
-              onRemoveLine={hx(removeLine)}
-              onDuplicateLine={hx(duplicateLine)}
-              onToggleOptional={hx(toggleOptional)}
-              onAddAlternative={hx(addAlternative)}
-              onSelectAlternative={hx(selectAlternative)}
-              onSeparateFromSet={hx(separateFromSet)}
-              onUngroup={hx(ungroupLine)}
-              onJoinSet={hx(joinSet)}
-              onReorder={hx(reorderLines)}
-              onAddItem={hx(() => addLine())}
-              onAddSection={hx(addSection)}
-              onOpenCatalog={() => setCatalogOpen(true)}
-            />
+            {/* Provide catalog families to every line item below (through the
+                LineItemList, which doesn't thread per-line catalog props) so
+                the material-options chips can show list-price deltas. */}
+            <FamiliesContext.Provider value={families}>
+              <LineItemsCard
+                lines={lines}
+                groups={groups}
+                quote={quote}
+                focusLineId={focusLineId}
+                onToggleGroupOptional={toggleGroupOptional}
+                onChangeLine={hx(updateLine)}
+                onRemoveLine={hx(removeLine)}
+                onDuplicateLine={hx(duplicateLine)}
+                onToggleOptional={hx(toggleOptional)}
+                onAddAlternative={hx(addAlternative)}
+                onSelectAlternative={hx(selectAlternative)}
+                onSeparateFromSet={hx(separateFromSet)}
+                onUngroup={hx(ungroupLine)}
+                onJoinSet={hx(joinSet)}
+                onReorder={hx(reorderLines)}
+                onAddItem={hx(() => addLine())}
+                onAddSection={hx(addSection)}
+                onOpenCatalog={() => setCatalogOpen(true)}
+              />
+            </FamiliesContext.Provider>
             <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           </div>
 
@@ -1049,6 +1071,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         quote={quote}
         totals={totals}
         onAdd={hx(() => addLine())}
+        onOpenCatalog={() => setCatalogOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
       />
@@ -1103,21 +1126,25 @@ function LineItemsCard({
           >
             <Hash size={12} /> Sección
           </button>
-          <button
-            type="button"
-            onClick={onOpenCatalog}
-            className="btn-ghost text-xs"
-            title="Elegir un producto del catálogo"
-          >
-            <PackageSearch size={12} /> Catálogo
-          </button>
+          {/* Catalog is the PRIMARY add path — picking a real product fills the
+              line (ref, name, price, cost, grade/fabric) instead of leaving the
+              dealer to type everything from the paper price list. The blank
+              "Agregar artículo" stays as a quiet escape hatch. */}
           <button
             type="button"
             onClick={onAddItem}
-            className="btn-secondary"
-            title={`Agregar artículo (${shortcutLabel('mod+enter')})`}
+            className="btn-ghost text-xs"
+            title={`Agregar artículo en blanco (${shortcutLabel('mod+enter')})`}
           >
-            <Plus size={14} /> Agregar
+            <Plus size={14} /> Artículo
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCatalog}
+            className="btn-primary"
+            title="Elegir un producto del catálogo"
+          >
+            <PackageSearch size={14} /> <span className="hidden sm:inline">Agregar desde </span>catálogo
           </button>
         </div>
       </header>
@@ -1199,7 +1226,7 @@ function NotesAndTermsCard({ quote, onUpdateQuote }) {
  * is open and the rail is hidden. Keeps the running total in view without
  * eating vertical space.
  */
-function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
+function MobileStickyTotals({ quote, totals, onAdd, onOpenCatalog, onExport, exporting }) {
   // Bottom-anchored action bar. We pad pl/pr with the landscape safe-area
   // insets so the buttons clear the Dynamic Island ear when the phone is
   // sideways; pb uses max(0.75rem, …) so the home indicator never overlaps
@@ -1216,8 +1243,19 @@ function MobileStickyTotals({ quote, totals, onAdd, onExport, exporting }) {
             {formatMoney(totals.grandTotal, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
           </div>
         </div>
-        <button type="button" onClick={onAdd} className="btn-secondary" aria-label="Agregar artículo">
-          <Plus size={16} /> <span>Artículo</span>
+        {/* Blank-line add demoted to a compact icon-only escape hatch; the
+            primary add path on mobile is now "Desde catálogo" below. */}
+        <button
+          type="button"
+          onClick={onAdd}
+          className="btn-ghost border border-ink-200 px-2"
+          aria-label="Agregar artículo en blanco"
+          title="Agregar artículo en blanco"
+        >
+          <Plus size={16} />
+        </button>
+        <button type="button" onClick={onOpenCatalog} className="btn-secondary" aria-label="Agregar desde catálogo">
+          <PackageSearch size={16} /> <span>Desde catálogo</span>
         </button>
         {/* On mobile, this button is the *only* way to export — the
             desktop header version is hidden. Disable it while a
