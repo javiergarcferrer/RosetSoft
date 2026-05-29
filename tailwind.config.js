@@ -53,6 +53,22 @@ export default {
         pop:  '0 8px 28px rgba(23,22,18,0.18), 0 2px 6px rgba(23,22,18,0.10)',
         focus:'0 0 0 4px rgba(23,22,18,0.10)',
       },
+      // Square-corner design language, matching alcover.do: every radius in
+      // the scale is flattened to 0 so the whole `rounded-*` utility family
+      // (incl. `rounded-full` pills/avatars/badges and the per-corner
+      // variants) renders with sharp edges. Overriding the scale here is the
+      // single source of truth — no need to touch the ~200 class call sites.
+      borderRadius: {
+        none: '0px',
+        sm: '0px',
+        DEFAULT: '0px',
+        md: '0px',
+        lg: '0px',
+        xl: '0px',
+        '2xl': '0px',
+        '3xl': '0px',
+        full: '0px',
+      },
     },
   },
   plugins: [
