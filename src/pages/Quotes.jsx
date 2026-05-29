@@ -286,6 +286,23 @@ export default function Quotes() {
     return sorted;
   }, [scopedQuotes, effectiveScope, q, tab, filters, sort, customerById, totalByQuoteId]);
 
+  // One track button per ORDER, not per quote: several quotes can share an
+  // order and would otherwise each repeat an identical "Rastrear envío" for the
+  // same containers. Give the tracker to the first quote of each order in the
+  // current list order; the rest render without it.
+  const trackingByQuoteId = useMemo(() => {
+    const seen = new Set();
+    const byQuote = new Map();
+    for (const qu of filtered) {
+      const conts = qu.orderId ? trackableByOrderId.get(qu.orderId) : null;
+      if (conts?.length && !seen.has(qu.orderId)) {
+        seen.add(qu.orderId);
+        byQuote.set(qu.id, conts);
+      }
+    }
+    return byQuote;
+  }, [filtered, trackableByOrderId]);
+
   if (!loaded) {
     return (
       <>
@@ -347,7 +364,7 @@ export default function Quotes() {
             customer={customerById.get(qu.customerId)}
             creator={profileById.get(qu.createdByUserId)}
             order={ordersById.get(qu.orderId)}
-            tracking={trackableByOrderId.get(qu.orderId)}
+            tracking={trackingByQuoteId.get(qu.id)}
             total={totalByQuoteId.get(qu.id) || 0}
             rates={displayRatesFor(qu, settings)}
           />
@@ -382,7 +399,7 @@ export default function Quotes() {
                 customer={customerById.get(qu.customerId)}
                 creator={profileById.get(qu.createdByUserId)}
                 order={ordersById.get(qu.orderId)}
-                tracking={trackableByOrderId.get(qu.orderId)}
+                tracking={trackingByQuoteId.get(qu.id)}
                 total={totalByQuoteId.get(qu.id) || 0}
                 rates={displayRatesFor(qu, settings)}
               />
