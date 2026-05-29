@@ -302,6 +302,12 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
    * them from totals, so the total adjusts in one round-trip without
    * any extra recompute on this side.
    *
+   * Marking a line optional also stamps `optionalOffered` so the public
+   * client link shows a working ON/OFF toggle for it (and clears it when
+   * un-marked — a plain line isn't a toggleable add-on). The client link
+   * flips `isOptional` to include/exclude; `optionalOffered` is the stable
+   * designation that survives those flips.
+   *
    * Defensive: if the line is currently part of an alternative group
    * we strip the alternative metadata at the same time — optional +
    * alternative is forbidden by the DB CHECK and would otherwise
@@ -312,8 +318,8 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     try {
       const next = !line.isOptional;
       const patch = next
-        ? { isOptional: true, alternativeGroup: null, isSelectedAlternative: false }
-        : { isOptional: false };
+        ? { isOptional: true, optionalOffered: true, alternativeGroup: null, isSelectedAlternative: false }
+        : { isOptional: false, optionalOffered: false };
       await db.quoteLines.update(line.id, patch);
     } finally {
       markSaved();
@@ -405,8 +411,9 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     try {
       const groupId = line.setGroup;
       // Leaving the conjunto: it becomes a standalone, non-optional line
-      // (its optional state belonged to the group, not the line).
-      await db.quoteLines.update(line.id, { setGroup: null, isOptional: false });
+      // (its optional state belonged to the group, not the line) — and not a
+      // client-toggleable optional either, so clear the offer marker too.
+      await db.quoteLines.update(line.id, { setGroup: null, isOptional: false, optionalOffered: false });
       const survivors = lines.filter((l) => l.setGroup === groupId && l.id !== line.id);
       const { linePatches, deleteGroup } = healSetOnRemove(survivors);
       for (const { id, patch } of linePatches) await db.quoteLines.update(id, patch);
@@ -480,13 +487,17 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         await db.quoteLines.update(above.id, {
           setGroup: groupId,
           isOptional: false,
+          optionalOffered: false,
           alternativeGroup: null,
           isSelectedAlternative: false,
         });
       }
+      // A set member is never a standalone client-toggleable optional — its
+      // optionality (if any) is the GROUP's, so drop the per-line offer marker.
       await db.quoteLines.update(line.id, {
         setGroup: groupId,
         isOptional: inheritOptional,
+        optionalOffered: false,
         alternativeGroup: null,
         isSelectedAlternative: false,
       });

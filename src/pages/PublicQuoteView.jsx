@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check, CloudOff, Ship } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
+import Switch from '../components/primitives/Switch.jsx';
 import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
@@ -110,7 +111,9 @@ export default function PublicQuoteView() {
 
   // Choosable bits for the options panel. `hasMaterials` flags that at least
   // one line/component can be re-quoted in another material (those pickers live
-  // in-line in the preview below).
+  // in-line in the preview below). Optionals are the dealer-OFFERED standalone
+  // add-ons (optionalOffered) — listed whether currently in or out so the
+  // toggle stays put after the client folds one in (and can take it back out).
   const { altGroups, optionals, hasMaterials } = useMemo(() => {
     const groups = new Map();
     const opts = [];
@@ -123,7 +126,7 @@ export default function PublicQuoteView() {
       if (l.alternativeGroup) {
         if (!groups.has(l.alternativeGroup)) groups.set(l.alternativeGroup, []);
         groups.get(l.alternativeGroup).push(l);
-      } else if (l.isOptional) {
+      } else if (l.optionalOffered && !l.setGroup) {
         opts.push(l);
       }
     }
@@ -226,24 +229,33 @@ export default function PublicQuoteView() {
               <div className="mt-1">
                 <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Complementos opcionales</div>
                 <div className="space-y-1.5">
-                  {optionals.map((o) => (
-                    <label
-                      key={o.id}
-                      className="flex items-center gap-3 rounded-lg border border-ink-200 px-3 py-2 transition-colors cursor-pointer hover:bg-ink-50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        onChange={(e) => toggleOptional(o.id, e.target.checked)}
-                        className="accent-emerald-600"
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-medium text-ink-900 truncate">{o.name || '—'}</span>
-                        {o.subtype && <span className="block text-[11px] text-ink-500 truncate">{o.subtype}</span>}
-                      </span>
-                      <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">+ {fmt(lineTotal(o))}</span>
-                    </label>
-                  ))}
+                  {optionals.map((o) => {
+                    // `isOptional` false ⇒ the add-on is currently folded into
+                    // the quote (the toggle reads ON). Flipping it fires a pick
+                    // both ways, and the total recomputes instantly.
+                    const included = !o.isOptional;
+                    return (
+                      <div
+                        key={o.id}
+                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
+                          included ? 'border-emerald-300 bg-emerald-50/50' : 'border-ink-200'
+                        }`}
+                      >
+                        <Switch
+                          checked={included}
+                          onChange={(on) => toggleOptional(o.id, on)}
+                          label={`${included ? 'Quitar' : 'Agregar'} ${o.name || 'complemento'}`}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium text-ink-900 truncate">{o.name || '—'}</span>
+                          {o.subtype && <span className="block text-[11px] text-ink-500 truncate">{o.subtype}</span>}
+                        </span>
+                        <span className={`text-sm tabular-nums whitespace-nowrap ${included ? 'text-emerald-700 font-semibold' : 'text-ink-700'}`}>
+                          {included ? `Incluido · ${fmt(lineTotal(o))}` : `+ ${fmt(lineTotal(o))}`}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -268,6 +280,7 @@ export default function PublicQuoteView() {
           seller={bundle.seller || null}
           families={undefined}
           onSelectMaterial={pickMaterial}
+          onToggleOptional={toggleOptional}
         />
 
         {/* Shipment tracking — appears once the quote's order has a container

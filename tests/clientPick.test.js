@@ -12,7 +12,10 @@ function bundle() {
     lines: [
       { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true, name: 'Opción A', unitPrice: 100, qty: 1 },
       { id: 'b', alternativeGroup: 'g1', isSelectedAlternative: false, name: 'Opción B', unitPrice: 120, qty: 1 },
-      { id: 'opt', isOptional: true, name: 'Cojín', unitPrice: 50, qty: 1 },
+      { id: 'opt', isOptional: true, optionalOffered: true, name: 'Cojín', unitPrice: 50, qty: 1 },
+      // An optional the dealer did NOT offer as client-toggleable (no
+      // optionalOffered) — the recipient must not be able to flip it.
+      { id: 'optLocked', isOptional: true, name: 'Garantía', unitPrice: 80, qty: 1 },
       {
         id: 'm', name: 'Sofá', reference: '12345678A', subtype: 'Grade A — Tela X',
         unitPrice: 100, qty: 2, swatchImageId: 'sw-A',
@@ -50,12 +53,22 @@ test('alternative: no-op picks return the same bundle reference', () => {
   assert.equal(applyClientPick(b, { alternatives: { nope: 'b' } }), b); // invalid group
 });
 
-test('optional: include folds the add-on in (isOptional=false), include-only', () => {
+test('optional: toggles in AND back out (offered lines, bidirectional)', () => {
   const b = bundle();
-  const out = applyClientPick(b, { optionals: { opt: true } });
-  assert.equal(line(out, 'opt').isOptional, false);
-  // Once included it's no longer optional → re-applying does nothing.
-  assert.equal(applyClientPick(out, { optionals: { opt: true } }), out);
+  // ON folds the add-on into the quote.
+  const on = applyClientPick(b, { optionals: { opt: true } });
+  assert.equal(line(on, 'opt').isOptional, false);
+  // Re-applying the same state is a no-op (same reference).
+  assert.equal(applyClientPick(on, { optionals: { opt: true } }), on);
+  // OFF takes it back out — the toggle is reversible now.
+  const off = applyClientPick(on, { optionals: { opt: false } });
+  assert.equal(line(off, 'opt').isOptional, true);
+});
+
+test('optional: a non-offered optional can NOT be toggled by the client', () => {
+  const b = bundle();
+  assert.equal(applyClientPick(b, { optionals: { optLocked: true } }), b);
+  assert.equal(line(b, 'optLocked').isOptional, true);
 });
 
 test('material (line): reprices via delta, recomposes subtype/reference/swatch, re-anchors options', () => {

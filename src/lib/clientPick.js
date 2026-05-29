@@ -9,8 +9,9 @@
 // It mirrors the function's pick semantics exactly (see
 // supabase/functions/quote-share/index.ts):
 //   - alternatives: only the chosen group member stays selected.
-//   - optionals:    `on` folds the add-on into the quote (isOptional = !on);
-//                   only lines the dealer left optional can be toggled.
+//   - optionals:    a toggle — `on` folds the add-on into the quote
+//                   (isOptional = !on) and `off` takes it back out; only lines
+//                   the dealer OFFERED as optional (optionalOffered) toggle.
 //   - materials:    re-anchor the line/component to the chosen grade, recompose
 //                   subtype + reference + swatch, and reprice.
 //
@@ -111,11 +112,14 @@ export function applyClientPick(bundle, pick) {
     }
   }
 
-  // Optionals — `on` includes the add-on (isOptional = !on). Only lines the
-  // dealer currently leaves optional are eligible (include-only, like the server).
+  // Optionals — a TOGGLE: `on` includes the add-on (isOptional = !on), and it
+  // flips back out when `on` is false. Eligible = lines the dealer OFFERED as
+  // optional (optionalOffered), NOT just the currently-excluded ones, so an
+  // already-included optional can be toggled off again — mirrors the server.
   for (const [lineId, on] of Object.entries(pick.optionals || {})) {
     const i = next.findIndex((l) => l.id === lineId);
-    if (i < 0 || !next[i].isOptional) continue;
+    if (i < 0 || !next[i].optionalOffered) continue;
+    if (!!next[i].isOptional === !on) continue; // already in the requested state
     next[i] = { ...next[i], isOptional: !on };
     changed = true;
   }

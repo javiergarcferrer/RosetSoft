@@ -140,6 +140,10 @@ function clientLine(
     ),
     components,
     isOptional: row.is_optional ?? false,
+    // The dealer-designated "client may toggle this optional in/out" marker.
+    // Lets the viewer turn an add-on ON and back OFF (a real toggle) — without
+    // it, clearing is_optional on include would erase the fact it was optional.
+    optionalOffered: row.optional_offered ?? false,
     alternativeGroup: row.alternative_group ?? null,
     isSelectedAlternative: row.is_selected_alternative ?? false,
     setGroup: row.set_group ?? null,
@@ -377,6 +381,9 @@ Deno.serve(async (req: Request) => {
     // Indexes for validation + lookup.
     const lineById = new Map<string, Row>();
     const groupMembers = new Map<string, Set<string>>();
+    // Lines the dealer OFFERED as toggleable optionals — gated on
+    // optional_offered (the stable designation), NOT is_optional (the current
+    // include state), so a toggled-in optional can be toggled back OUT.
     const optionalIds = new Set<string>();
     const materialGrades = new Map<string, Set<string>>();     // line OR component id → valid grades
     const componentIndex = new Map<string, { lineId: string }>(); // component id → its line
@@ -395,7 +402,7 @@ Deno.serve(async (req: Request) => {
         if (!groupMembers.has(g)) groupMembers.set(g, new Set());
         groupMembers.get(g)!.add(id);
       }
-      if (l.is_optional) optionalIds.add(id);
+      if (l.optional_offered) optionalIds.add(id);
       addMaterialTarget(l.id, l.material_options as { baseGrade?: unknown; options?: unknown[] } | null);
       const comps = Array.isArray(l.components) ? l.components as Row[] : [];
       for (const c of comps) {
@@ -439,9 +446,10 @@ Deno.serve(async (req: Request) => {
       for (const memberId of members) merge(memberId, { is_selected_alternative: memberId === String(lineId) });
     }
 
-    // Optionals — including one (on=true) folds it into the quote (is_optional
-    // = false); excluding leaves it as an offered add-on. Validated against the
-    // currently-optional lines the dealer designated.
+    // Optionals — a TOGGLE: on=true folds the add-on into the quote
+    // (is_optional=false), on=false takes it back out (is_optional=true).
+    // Validated against the lines the dealer OFFERED as optional
+    // (optional_offered), so an already-included optional can be toggled off.
     for (const [lineId, on] of Object.entries(body.optionals || {})) {
       if (optionalIds.has(String(lineId))) merge(String(lineId), { is_optional: !on });
     }

@@ -3,6 +3,7 @@ import { Boxes, GitFork, ChevronDown } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
+import Switch from '../primitives/Switch.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
@@ -56,7 +57,7 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial, onToggleOptional }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -198,6 +199,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                         insideGroupCard={false}
                         materialSelections={materialSelections}
                         onSelectMaterial={onSelectMaterial}
+                        onToggleOptional={onToggleOptional}
                       />
                     );
                   }
@@ -232,6 +234,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                           insideGroupCard
                           materialSelections={materialSelections}
                           onSelectMaterial={onSelectMaterial}
+                          onToggleOptional={onToggleOptional}
                         />
                       ))}
                     </ClientGroupCard>
@@ -319,7 +322,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial }) {
+function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -337,6 +340,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
         insideGroupCard={insideGroupCard}
         materialSelections={materialSelections}
         onSelectMaterial={onSelectMaterial}
+        onToggleOptional={onToggleOptional}
       />
     );
   }
@@ -374,6 +378,11 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
   const inSet = !!line.setGroup;
   const isSelected = !!line.isSelectedAlternative;
   const dimmed = optional || (inGroup && !isSelected);
+  // A dealer-offered optional the client can fold in / out right here with a
+  // toggle. Only when interactive (onToggleOptional) and standalone — group
+  // members are priced take-all / pick-one, never individually optional.
+  const offered = !!onToggleOptional && !!line.optionalOffered && !inGroup && !inSet;
+  const included = !optional; // an offered optional currently in the total
   // Inside a group card the card owns the left accent + the full group
   // eyebrow + the footer, so the row drops its own per-row group border /
   // tint / standalone eyebrow to avoid doubling. The optional treatment
@@ -403,13 +412,15 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
+      {(offered || optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
-          {optional && (
+          {offered ? (
+            <OptionalToggle included={included} name={line.name} onToggle={(on) => onToggleOptional(line.id, on)} />
+          ) : optional ? (
             <span className="text-ink-500">
               Opcional · no incluido en el total
             </span>
-          )}
+          ) : null}
           {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
@@ -538,7 +549,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial }) {
+function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -551,6 +562,9 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   const inSet = !!line.setGroup;
   const isSelected = !!line.isSelectedAlternative;
   const dimmed = optional || (inGroup && !isSelected);
+  // Same client-toggleable optional affordance as the simple line.
+  const offered = !!onToggleOptional && !!line.optionalOffered && !inGroup && !inSet;
+  const included = !optional;
   // Inside a group card the card owns the accent + eyebrow + footer, so a
   // compound member suppresses its own per-row group border / tint /
   // standalone eyebrow to avoid doubling. Optional treatment + alternative
@@ -576,11 +590,13 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
+      {(offered || optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
-          {optional && (
+          {offered ? (
+            <OptionalToggle included={included} name={line.name} onToggle={(on) => onToggleOptional(line.id, on)} />
+          ) : optional ? (
             <span className="text-ink-500">Opcional · no incluido en el total</span>
-          )}
+          ) : null}
           {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
@@ -806,6 +822,27 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
         </div>
       </div>
     </li>
+  );
+}
+
+// Inline ON/OFF toggle for a dealer-offered optional add-on, rendered in a
+// client line's eyebrow. `relative z-[2]` lifts it above the row's dimming
+// veil so it stays tappable even when the optional is currently OFF (and the
+// rest of the row is veiled). ON reads emerald "incluido"; OFF invites the
+// client to add it. The total recomputes from the pick the toggle fires.
+function OptionalToggle({ included, name, onToggle }) {
+  return (
+    <span className="relative z-[2] inline-flex items-center gap-2">
+      <Switch
+        checked={included}
+        onChange={onToggle}
+        size="sm"
+        label={`${included ? 'Quitar del total' : 'Agregar al total'}: ${name || 'opcional'}`}
+      />
+      <span className={included ? 'text-emerald-700 font-semibold' : 'text-ink-500 font-semibold'}>
+        {included ? 'Opcional · incluido' : 'Opcional · agregar'}
+      </span>
+    </span>
   );
 }
 

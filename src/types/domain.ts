@@ -283,9 +283,18 @@ export interface QuoteLine {
   components?: LineComponent[];
 
   /* Product options + alternatives.
-   *   isOptional               line excluded from the quote total
-   *                            until the dealer un-toggles (the
-   *                            customer accepted the add-on).
+   *   isOptional               line currently EXCLUDED from the quote
+   *                            total. isPricedLine (lib/constants) keys
+   *                            off this; flipping it is what includes /
+   *                            excludes the add-on.
+   *   optionalOffered          the dealer designated this STANDALONE line
+   *                            as an optional add-on the CLIENT may toggle
+   *                            in or out on the public share link. Stable
+   *                            across client picks, so the recipient can
+   *                            turn an optional ON and back OFF (a true
+   *                            toggle), unlike `isOptional` which the
+   *                            include/exclude flips. A toggled-in optional
+   *                            is `optionalOffered=true` + `isOptional=false`.
    *   alternativeGroup         id shared by sibling lines the
    *                            customer picks between; null means
    *                            the line is standalone.
@@ -294,11 +303,13 @@ export interface QuoteLine {
    *                            counts toward the total. The others
    *                            still render so the customer sees
    *                            the menu.
-   * Pricing math in lib/constants:isPricedLine respects both flags;
-   * a DB CHECK constraint forbids the meaningless combination
-   * (optional + alternative).
+   * Pricing math in lib/constants:isPricedLine respects isOptional +
+   * the alternative flags (NOT optionalOffered — that's a UI/affordance
+   * marker only); a DB CHECK constraint forbids the meaningless
+   * combination (optional + alternative).
    */
   isOptional?: boolean;
+  optionalOffered?: boolean;
   alternativeGroup?: string | null;
   isSelectedAlternative?: boolean;
 
