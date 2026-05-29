@@ -21,10 +21,10 @@ import { db } from '../../db/database.js';
  *   - List below shows every distinct family already used across the
  *     team's quotes, sorted by how often it's been used so the most
  *     common ones surface first. Source: a direct scan of every quote
- *     line's `family` field — NOT useQuoteAutocomplete, which drops any
- *     line lacking a reference/name and so silently hid families created
- *     on a still-unnamed line (the "created family doesn't come back"
- *     bug). Here a family counts the moment any line carries it.
+ *     line's `family` field — NOT a reference/name-keyed dedupe, which
+ *     drops any line lacking a reference/name and so silently hid families
+ *     created on a still-unnamed line (the "created family doesn't come
+ *     back" bug). Here a family counts the moment any line carries it.
  *   - When the typed query doesn't exactly match an existing family, a
  *     "Crear familia: 'XYZ'" row appears at the top — picking it sets
  *     the line's family to the new string. No separate families table

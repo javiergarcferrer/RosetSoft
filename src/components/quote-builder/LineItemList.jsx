@@ -130,8 +130,7 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
         </div>
         <div className="text-sm font-medium text-ink-900">Empieza tu cotización</div>
         <div className="text-xs text-ink-500 mt-1 max-w-sm mx-auto">
-          Elige un producto del <b>catálogo</b>, o usa el palette de acciones
-          para insertar uno reciente.
+          Elige un producto del <b>catálogo</b> para empezar.
         </div>
         <div className="mt-4 flex items-center justify-center gap-2">
           <button type="button" onClick={onOpenCatalog} className="btn-primary">

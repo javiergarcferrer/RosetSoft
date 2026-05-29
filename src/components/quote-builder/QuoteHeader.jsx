@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, MoreHorizontal, Command, Undo2, Redo2 } from 'lucide-react';
+import { ArrowLeft, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -13,8 +13,8 @@ import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 /**
  * Top of the quote workspace. Title (editable inline), customer chip,
  * container chip, save indicator, view toggle (compose / client preview),
- * undo/redo and the command palette. Export PDF and Share moved to the
- * persistent bottom totals dock so they're always reachable.
+ * and undo/redo. Export PDF and Share moved to the persistent bottom totals
+ * dock so they're always reachable.
  *
  * The title is inline-editable: clicking the H1 swaps in an input. The "back
  * to quotes" link is a tiny breadcrumb above. This consolidates four
@@ -27,7 +27,6 @@ export default function QuoteHeader({
   profileId,
   view,
   onViewChange,
-  onOpenPalette,
   onUpdateQuote,
   onUndo,
   onRedo,
@@ -123,30 +122,7 @@ export default function QuoteHeader({
               canRedo={canRedo}
             />
 
-            <button
-              type="button"
-              onClick={onOpenPalette}
-              className="btn-ghost text-xs hidden sm:inline-flex"
-              title="Acciones rápidas"
-            >
-              <Command size={12} />
-              <span className="hidden md:inline">Acciones</span>
-              <kbd className="kbd ml-1">{shortcutLabel('mod+k')}</kbd>
-            </button>
-
             <ViewToggle view={view} onChange={onViewChange} />
-
-            {/* Mobile: condense Export + palette into a single icon-only menu.
-                btn-icon is the 44pt-on-coarse, 36pt-on-fine square target.
-                Pushed to the right edge of the stacked actions row. */}
-            <button
-              type="button"
-              onClick={onOpenPalette}
-              className="btn-icon sm:hidden ml-auto"
-              aria-label="Acciones"
-            >
-              <MoreHorizontal size={18} />
-            </button>
           </div>
         </div>
 
