@@ -420,8 +420,8 @@ export default function Quotes() {
           <tbody>
             {orderGroups.map((u) => (u.type === 'group' ? (
               <Fragment key={`order-${u.order.id}`}>
-                <tr className="bg-ink-50/70 border-t border-ink-200">
-                  <td colSpan={7} className="px-3 py-2">
+                <tr className="bg-ink-100/60">
+                  <td colSpan={7} className="border-l-2 border-t-2 border-ink-300 px-3 py-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         to={`/orders/${u.order.id}`}
@@ -452,6 +452,11 @@ export default function Quotes() {
                     rates={displayRatesFor(qu, settings)}
                   />
                 ))}
+                {/* Closing floor — left bar + bottom border seal the group so
+                    the rows beneath it clearly aren't part of it. */}
+                <tr aria-hidden="true" className="bg-ink-50/40">
+                  <td colSpan={7} className="h-1.5 p-0 border-l-2 border-b-2 border-ink-300" />
+                </tr>
               </Fragment>
             ) : (
               <QuoteRow
@@ -531,8 +536,8 @@ function QuoteRow({ qu, customer, creator, total, rates, grouped = false }) {
   const creatorLabel = creatorDisplay(creator);
 
   return (
-    <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
-      <td className={`font-medium whitespace-nowrap ${grouped ? 'pl-6' : ''}`}>#{qu.number || '—'}</td>
+    <tr className={`cursor-pointer ${grouped ? 'bg-ink-50/40' : ''}`} onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
+      <td className={`font-medium whitespace-nowrap ${grouped ? 'border-l-2 border-ink-300 pl-5' : ''}`}>#{qu.number || '—'}</td>
       <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
