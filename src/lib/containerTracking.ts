@@ -11,6 +11,7 @@
  */
 
 import { lookupPort } from './portCoordinates.js';
+import { haversineKm } from './voyageGeometry.js';
 
 /* ----------------------------- ISO 6346 ----------------------------- */
 
@@ -302,20 +303,22 @@ export function buildTrackingRoute(summary: TrackingSummary | null | undefined):
     const coords = milestoneCoords(m);
     if (!coords) continue;
     const key = (m.unloc && m.unloc.toUpperCase()) || `${coords.lat.toFixed(3)},${coords.lon.toFixed(3)}`;
+    // A "real" name is an event place name that isn't just the bare UN/LOCODE.
+    // When the event carries only the code, the port table's nicer name wins.
+    const realName = m.location && m.location !== m.unloc ? m.location : null;
     const prev = stops[stops.length - 1];
     if (prev && prev.key === key) {
       prev.events.push(m);
       if (m.at != null && (prev.at == null || m.at > prev.at)) prev.at = m.at;
-      // Prefer an event-supplied name over the table fallback.
-      if (!prev.nameFromEvent && m.location) { prev.name = m.location; prev.nameFromEvent = true; }
+      if (!prev.nameFromEvent && realName) { prev.name = realName; prev.nameFromEvent = true; }
       continue;
     }
     stops.push({
       key,
       lat: coords.lat,
       lon: coords.lon,
-      name: m.location || coords.name || m.unloc || '—',
-      nameFromEvent: !!m.location,
+      name: realName || coords.name || m.location || m.unloc || '—',
+      nameFromEvent: !!realName,
       unloc: m.unloc,
       at: m.at,
       events: [m],
@@ -333,4 +336,76 @@ export function buildTrackingRoute(summary: TrackingSummary | null | undefined):
 
   const cleaned: RouteStop[] = stops.map(({ key, nameFromEvent, ...rest }) => rest);
   return { stops: cleaned, lastIndex, etaIndex };
+}
+
+/* --------------------------- voyage summary ------------------------- */
+
+/** High-level facts for the map's voyage HUD: endpoints, the vessel/voyage,
+ *  key timestamps, and great-circle progress. All derived — no I/O. */
+export interface VoyageSummary {
+  origin: RouteStop | null;
+  destination: RouteStop | null; // the ETA stop, else the last known stop
+  current: RouteStop | null;     // the last-known ACTual position
+  vessel: string | null;
+  voyage: string | null;
+  carrier: string | null;        // guessed from the container's owner prefix
+  departedAt: number | null;     // most recent activity at the origin, ms
+  updatedAt: number | null;      // last ACTual event time, ms
+  etaAt: number | null;          // estimated arrival, ms
+  totalKm: number;               // great-circle length origin → destination
+  sailedKm: number;              // origin → current
+  remainingKm: number;
+  progressPct: number;           // 0..100
+  arrived: boolean;
+}
+
+/** Sum the great-circle distance over stops[from..to] (inclusive indices). */
+function legSumKm(stops: RouteStop[], from: number, to: number): number {
+  let sum = 0;
+  for (let i = from + 1; i <= to; i++) {
+    sum += haversineKm([stops[i - 1].lat, stops[i - 1].lon], [stops[i].lat, stops[i].lon]);
+  }
+  return sum;
+}
+
+export function summarizeVoyage(
+  route: TrackingRoute | null | undefined,
+  summary: TrackingSummary | null | undefined,
+  containerNo?: string | null,
+): VoyageSummary {
+  const stops = route?.stops || [];
+  const base: VoyageSummary = {
+    origin: null, destination: null, current: null,
+    vessel: null, voyage: null, carrier: detectCarrier(containerNo),
+    departedAt: null, updatedAt: summary?.last?.at ?? null, etaAt: summary?.eta?.at ?? null,
+    totalKm: 0, sailedKm: 0, remainingKm: 0, progressPct: 0, arrived: false,
+  };
+  if (stops.length === 0 || !route) return base;
+
+  const lastIndex = route.lastIndex;
+  const destIndex = route.etaIndex >= 0 ? route.etaIndex : stops.length - 1;
+
+  base.origin = stops[0];
+  base.destination = stops[destIndex] || null;
+  base.current = lastIndex >= 0 ? stops[lastIndex] : null;
+  base.departedAt = base.origin?.at ?? null;
+
+  // Vessel + voyage: the most recent event that names each.
+  const ms = summary?.milestones || [];
+  for (let i = ms.length - 1; i >= 0; i--) {
+    if (!base.vessel && ms[i].vessel) base.vessel = ms[i].vessel;
+    if (!base.voyage && ms[i].voyage) base.voyage = ms[i].voyage;
+    if (base.vessel && base.voyage) break;
+  }
+
+  base.totalKm = legSumKm(stops, 0, destIndex);
+  const sailedTo = lastIndex >= 0 ? Math.min(lastIndex, destIndex) : 0;
+  base.sailedKm = legSumKm(stops, 0, sailedTo);
+  base.remainingKm = Math.max(0, base.totalKm - base.sailedKm);
+  base.arrived = lastIndex >= 0 && lastIndex >= destIndex;
+  base.progressPct = base.arrived
+    ? 100
+    : base.totalKm > 0 ? Math.min(100, (base.sailedKm / base.totalKm) * 100) : 0;
+
+  return base;
 }

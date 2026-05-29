@@ -195,9 +195,9 @@ export default function TotalsDock({
               single row. */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure. Both currencies read
-                at once (USD large, the live DOP equivalent beneath), so there's
-                nothing to toggle: the figure is complete at a glance. It doubles
-                as the breakdown toggle — a big, obvious tap target. */}
+                at once on a single line (USD, then the live DOP equivalent), so
+                there's nothing to toggle: the figure is complete at a glance. It
+                doubles as the breakdown toggle — a big, obvious tap target. */}
             <div className="min-w-0 sm:flex-1">
               <button
                 type="button"
@@ -206,32 +206,34 @@ export default function TotalsDock({
                 className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
                 title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
               >
-                <div className="flex items-center gap-2">
-                  <span className="eyebrow-xs">Total</span>
+                {/* One line: eyebrow, the grand total, the discount chip and the
+                    live DOP conversion all read across in a single row. The
+                    amount holds its size; the conversion truncates first when
+                    space runs out, and the chevron is pinned to the far right. */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="eyebrow-xs flex-shrink-0">Total</span>
+                  <span className="text-xl font-semibold tabular-nums leading-tight flex-shrink-0">{fmt(totals.grandTotal)}</span>
                   {discountPct > 0 && (
-                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200">−{discountPct}%</span>
+                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
                   )}
-                </div>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-2xl sm:text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
+                  {dopRate && currency === 'USD' && (
+                    <span className="text-[11px] text-ink-500 tabular-nums inline-flex items-center gap-1 truncate">
+                      ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
+                      {rateLocked ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
+                          <Lock size={10} /> @ {dopRate.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
+                      )}
+                    </span>
+                  )}
                   <ChevronUp
                     size={18}
-                    className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                    className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                     aria-hidden
                   />
                 </div>
-                {dopRate && currency === 'USD' && (
-                  <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1 truncate">
-                    ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-                    {rateLocked ? (
-                      <span className="inline-flex items-center gap-1 text-amber-700" title="Tasa bloqueada al enviar">
-                        <Lock size={10} /> @ {dopRate.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="text-ink-400">@ {dopRate.toFixed(2)}</span>
-                    )}
-                  </div>
-                )}
               </button>
             </div>
 
