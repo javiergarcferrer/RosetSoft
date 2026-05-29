@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
-  Loader2, X, GripVertical, DownloadCloud, RefreshCw, AlertTriangle, FileText,
+  Loader2, X, GripVertical, AlertTriangle, FileText,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { supabase } from '../../db/supabaseClient.js';
-import { mergeCatalog } from '../../lib/lrCatalog.js';
-import { mergePriceList } from '../../lib/materialsPdf.js';
+import { syncCatalog } from '../../lib/catalogSync.js';
 import { parsePriceListPdfs } from '../../lib/loadMaterialsPdf.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
@@ -54,8 +53,7 @@ export default function Materials() {
   const [filters, setFilters] = useState({}); // { grade: <grade> }
   const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
-  const [importing, setImporting] = useState(false); // LR website sync modal open?
-  const [importingPdf, setImportingPdf] = useState(false); // price-list PDF modal open?
+  const [importing, setImporting] = useState(false); // catalog import modal open?
 
   // Category tabs (the primary dimension). Counts ride the full materials
   // list so each tab shows "how many would I see if I tapped this",
@@ -156,17 +154,10 @@ export default function Materials() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setImportingPdf(true)}
-              className="btn-ghost"
-            >
-              <FileText size={14} /> Importar precios (PDF)
-            </button>
-            <button
-              type="button"
               onClick={() => setImporting(true)}
               className="btn-ghost"
             >
-              <DownloadCloud size={14} /> Sincronizar con Ligne Roset
+              <FileText size={14} /> Importar precios (PDF)
             </button>
             <button
               type="button"
@@ -680,289 +671,76 @@ function MaterialEditor({ material, profileId, onClose }) {
         </div>
       </div>
     </Modal>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
-/*  Ligne Roset live importer                                                 */
-/* -------------------------------------------------------------------------- */
-
-const LR_EXAMPLE_URL =
-  'https://www.ligne-roset.com/us/p/armchairs/fireside-chair-togo-r-3230';
-
-/**
- * Syncs the fabric/leather catalog from ligne-roset.com via the `lr-catalog`
- * Edge Function, with the site as source of truth.
- *
- *   • "Sincronizar todo el catálogo" sweeps the whole site (~1 min) and is the
- *     primary action — it reconciles every material.
- *   • Pasting a product URL syncs just that product's fabrics (faster).
- *
- * The merge overwrites the fields the site carries (name, composition, notes,
- * color set) and preserves dealer-only data (grade, price, uploaded photos). It
- * never deletes: on a full sweep, materials the site no longer offers are
- * flagged "no en sitio" for review. A preview shows exactly what will change
- * before anything is written (see lib/lrCatalog).
- */
-function LrImportModal({ materials, profileId, onClose }) {
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(null);  // null | 'catalog' | 'url' | 'apply'
-  const [error, setError] = useState(null);
-  const [preview, setPreview] = useState(null); // { source, patternCount, rows, summary, complete }
-  const [done, setDone] = useState(null);        // applied summary
-
-  // opts: { all: true } for the whole catalog, or { url } for one product.
-  async function analyze(opts) {
-    const complete = !!opts.all;
-    const body = complete ? { all: true } : { url: (opts.url || '').trim() };
-    if (!complete && !body.url) { setError('Pega la URL de un producto de ligne-roset.com.'); return; }
-    setError(null);
-    setBusy(complete ? 'catalog' : 'url');
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('lr-catalog', { body });
-      if (fnError) {
-        let msg = fnError.message || 'No se pudo leer el sitio.';
-        try {
-          // The function returns { error } on bad input / upstream failures;
-          // surface the cause instead of a generic message.
-          const detail = await fnError.context?.json?.();
-          if (detail?.error) msg = detail.error;
-        } catch { /* body already consumed / not JSON */ }
-        throw new Error(msg);
-      }
-      if (data?.error) throw new Error(data.error);
-      const patterns = data?.patterns || [];
-      if (!patterns.length) throw new Error('No se encontraron telas.');
-      // A partial sweep didn't see the whole catalog, so it must not flag
-      // materials as "no en sitio" this run.
-      const partial = !!data.source?.partial;
-      const effectiveComplete = complete && !partial;
-      const { rows, summary } = mergeCatalog(materials, patterns, {
-        profileId,
-        now: Date.now(),
-        newId,
-        complete: effectiveComplete,
-      });
-      setPreview({
-        source: data.source || {},
-        patternCount: patterns.length,
-        rows, summary,
-        complete: effectiveComplete,
-        partial,
-      });
-    } catch (e) {
-      setError(e?.message || 'No se pudo leer el sitio.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function apply() {
-    if (!preview?.rows?.length) return;
-    setError(null);
-    setBusy('apply');
-    try {
-      await db.materials.bulkPut(preview.rows);
-      setDone(preview.summary);
-    } catch (e) {
-      setError(e?.message || 'No se pudieron guardar los cambios.');
-      setBusy(null);
-    }
-  }
-
-  return (
-    <Modal open onClose={onClose} title="Sincronizar con Ligne Roset">
-      <div className="space-y-4">
-        {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-            {error}
-          </div>
-        )}
-
-        {done ? (
-          <>
-            <div className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">
-              <Check size={16} className="flex-shrink-0 mt-0.5" />
-              <span>Catálogo actualizado desde Ligne Roset.</span>
-            </div>
-            <ImportSummaryList summary={done} />
-            <div className="flex items-center justify-end pt-2 border-t border-ink-100">
-              <button type="button" onClick={onClose} className="btn-primary">
-                <Check size={14} /> Listo
-              </button>
-            </div>
-          </>
-        ) : preview ? (
-          <>
-            <p className="text-sm text-ink-600">
-              {preview.complete
-                ? <>{preview.patternCount} telas en el catálogo de Ligne Roset.</>
-                : <>{preview.patternCount} {preview.patternCount === 1 ? 'tela' : 'telas'}
-                    {preview.source?.title ? <> en <span className="font-medium text-ink-900">“{preview.source.title}”</span></> : null}.</>}
-            </p>
-            {preview.partial && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                Lectura parcial del sitio — no se marcará ninguna tela como “no en sitio” en esta pasada.
-              </p>
-            )}
-            <ImportSummaryList summary={preview.summary} />
-            {preview.rows.length === 0 ? (
-              <p className="text-sm text-ink-500 italic">El catálogo ya está al día — no hay cambios que aplicar.</p>
-            ) : (
-              <p className="text-xs text-ink-500">
-                El sitio manda en nombre, composición, notas y colores. Se conservan grade, precio y fotos.
-                {preview.complete ? ' Las telas que ya no estén en el sitio se marcan “no en sitio” (no se borran).' : ' Nada se elimina.'}
-              </p>
-            )}
-            <div className="flex items-center justify-between pt-2 border-t border-ink-100">
-              <button type="button" onClick={() => setPreview(null)} className="btn-ghost" disabled={!!busy}>
-                Volver
-              </button>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
-                <button
-                  type="button"
-                  onClick={apply}
-                  disabled={!!busy || preview.rows.length === 0}
-                  className="btn-primary"
-                >
-                  {busy === 'apply'
-                    ? <><Loader2 size={14} className="animate-spin" /> Aplicando…</>
-                    : <><Check size={14} /> Aplicar ({preview.rows.length})</>}
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-ink-600">
-              Sincroniza el catálogo de telas y colores directamente desde Ligne Roset.
-            </p>
-            <button
-              type="button"
-              onClick={() => analyze({ all: true })}
-              disabled={!!busy}
-              className="btn-primary w-full justify-center"
-            >
-              {busy === 'catalog'
-                ? <><Loader2 size={14} className="animate-spin" /> Leyendo el catálogo… (~1 min)</>
-                : <><RefreshCw size={14} /> Sincronizar todo el catálogo</>}
-            </button>
-
-            <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-400">
-              <span className="h-px flex-1 bg-ink-100" /> o un solo producto <span className="h-px flex-1 bg-ink-100" />
-            </div>
-
-            <label className="flex flex-col gap-1">
-              <span className="label">URL del producto</span>
-              <input
-                className="input"
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={LR_EXAMPLE_URL}
-              />
-            </label>
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setUrl(LR_EXAMPLE_URL)}
-                className="text-xs text-brand-600 hover:underline"
-              >
-                Usar ejemplo (Togo)
-              </button>
-              <button
-                type="button"
-                onClick={() => analyze({ url })}
-                disabled={!!busy || !url.trim()}
-                className="btn-ghost"
-              >
-                {busy === 'url'
-                  ? <><Loader2 size={14} className="animate-spin" /> Leyendo…</>
-                  : <><DownloadCloud size={14} /> Analizar producto</>}
-              </button>
-            </div>
-            <div className="flex items-center justify-end pt-2 border-t border-ink-100">
-              <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
-            </div>
-          </>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-// The non-zero rows of a merge summary, as a compact list. Hidden entirely
-// when a merge changed nothing.
-function ImportSummaryList({ summary }) {
-  const rows = [
-    ['Materiales nuevos', summary.newMaterials],
-    ['Materiales actualizados', summary.updatedMaterials],
-    ['Colores añadidos', summary.newColors],
-    ['Colores retirados', summary.removedColors],
-    ['Reactivados', summary.restored],
-    ['Marcados “no en sitio”', summary.flaggedMissing],
-    ['Sin cambios', summary.unchangedMaterials],
-  ].filter(([, n]) => n > 0);
-  if (!rows.length) return null;
-  return (
-    <ul className="text-sm border border-ink-100 rounded-lg overflow-hidden divide-y divide-ink-100">
-      {rows.map(([label, n]) => (
-        <li key={label} className="flex items-center justify-between px-3 py-1.5">
-          <span className="text-ink-600">{label}</span>
-          <span className="tabular-nums font-semibold text-ink-900">{n}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Price-list (PDF) importer                                                 */
+/*  Catalog import — PDF price list + automatic website sync                  */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Imports the Ligne Roset price-list PDF(s) — the source of truth for
- * commercial spec (grade, wear, Martindale, width, per-yard price, composition,
- * and the FABRICS/LEATHER/OUTDOOR category). Parsing runs in the browser
- * (pdfjs); colors/swatches come from the website sync. Accepts several files at
- * once; "complete list" flags any material not found as "no en lista" (kept,
- * never deleted). A preview shows every change before applying.
+ * The single catalog-update flow. The dealer uploads the Ligne Roset price-list
+ * PDF(s); we parse them (grade / price / width / composition / category) AND
+ * sync colors + photos from ligne-roset.com in the same pass, merging both into
+ * one set of changes (lib/catalogSync) with a preview before anything is
+ * written. No separate sync button, no per-product URL — the PDF drives it.
  */
-function PriceListImportModal({ materials, profileId, onClose }) {
+function ImportCatalogModal({ materials, profileId, onClose }) {
   const [files, setFiles] = useState([]);
   const [complete, setComplete] = useState(true);
-  const [busy, setBusy] = useState(null); // null | 'parse' | 'apply'
+  const [busy, setBusy] = useState(null);       // null | 'analyze' | 'apply'
+  const [step, setStep] = useState('');          // progress label while analyzing
   const [error, setError] = useState(null);
-  const [preview, setPreview] = useState(null); // { count, rows, summary, complete }
+  const [preview, setPreview] = useState(null);  // { rows, deleteIds, summary, siteFailed }
   const [done, setDone] = useState(null);
 
   async function analyze() {
     if (!files.length) { setError('Elige al menos un PDF de lista de precios.'); return; }
     setError(null);
-    setBusy('parse');
+    setBusy('analyze');
     try {
+      // 1) Price-list PDF (required).
+      setStep('Leyendo el PDF…');
       const parsed = await parsePriceListPdfs(files);
       if (!parsed.length) {
-        throw new Error('No se reconocieron materiales en el PDF. ¿Es la lista de materiales de Ligne Roset?');
+        throw new Error('No se reconocieron telas en el PDF. ¿Es la lista de materiales de Ligne Roset?');
       }
-      const { rows, summary } = mergePriceList(materials, parsed, {
-        profileId, now: Date.now(), newId, complete,
+
+      // 2) Website colors/photos — best-effort; the import still works without it.
+      setStep('Sincronizando colores con Ligne Roset… (~1 min)');
+      let sitePatterns = null;
+      let siteComplete = true;
+      let siteFailed = false;
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('lr-catalog', { body: { all: true } });
+        if (fnError || data?.error || !Array.isArray(data?.patterns) || !data.patterns.length) {
+          siteFailed = true;
+        } else {
+          sitePatterns = data.patterns;
+          siteComplete = !data.source?.partial;
+        }
+      } catch {
+        siteFailed = true;
+      }
+
+      // 3) Stack both into one set of writes + deletes.
+      setStep('Combinando el catálogo…');
+      const { rows, deleteIds, summary } = syncCatalog(materials, sitePatterns, parsed, {
+        profileId, now: Date.now(), newId, complete, siteComplete,
       });
-      setPreview({ count: parsed.length, rows, summary, complete });
+      setPreview({ rows, deleteIds, summary, siteFailed });
     } catch (e) {
-      setError(e?.message || 'No se pudo leer el PDF.');
+      setError(e?.message || 'No se pudo procesar el PDF.');
     } finally {
       setBusy(null);
+      setStep('');
     }
   }
 
   async function apply() {
-    if (!preview?.rows?.length) return;
+    if (!preview) return;
     setError(null);
     setBusy('apply');
     try {
-      await db.materials.bulkPut(preview.rows);
+      if (preview.rows.length) await db.materials.bulkPut(preview.rows);
+      if (preview.deleteIds.length) await db.materials.bulkDelete(preview.deleteIds);
       setDone(preview.summary);
     } catch (e) {
       setError(e?.message || 'No se pudieron guardar los cambios.');
@@ -970,9 +748,10 @@ function PriceListImportModal({ materials, profileId, onClose }) {
     }
   }
 
-  const s = preview?.summary;
+  const changeCount = preview ? preview.rows.length + preview.deleteIds.length : 0;
+
   return (
-    <Modal open onClose={onClose} title="Importar lista de precios (PDF)">
+    <Modal open onClose={onClose} title="Importar precios (PDF)">
       <div className="space-y-4">
         {error && (
           <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
@@ -984,38 +763,42 @@ function PriceListImportModal({ materials, profileId, onClose }) {
           <>
             <div className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">
               <Check size={16} className="flex-shrink-0 mt-0.5" />
-              <span>Lista de precios aplicada al catálogo.</span>
+              <span>Catálogo actualizado.</span>
             </div>
-            <PriceListSummaryList summary={done} />
+            <SyncSummaryList summary={done} />
             <div className="flex items-center justify-end pt-2 border-t border-ink-100">
               <button type="button" onClick={onClose} className="btn-primary"><Check size={14} /> Listo</button>
             </div>
           </>
         ) : preview ? (
           <>
-            <p className="text-sm text-ink-600">{preview.count} materiales en el PDF.</p>
-            <PriceListSummaryList summary={s} />
-            {preview.complete && s.flaggedMissing > 0 && (
+            <p className="text-sm text-ink-600">
+              {preview.summary.pdfCount} telas en el PDF
+              {preview.summary.siteSynced
+                ? <> · {preview.summary.siteCount} en el sitio de Ligne Roset</>
+                : null}.
+            </p>
+            {preview.siteFailed && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                {s.flaggedMissing} material(es) no aparecen en estos PDFs y se marcarán “no en lista”.
-                Si te faltan archivos, vuelve y súbelos todos juntos.
+                No se pudo leer ligne-roset.com — se importan los precios del PDF, pero no se actualizaron colores ni fotos esta vez.
               </p>
             )}
-            {preview.rows.length === 0 ? (
-              <p className="text-sm text-ink-500 italic">El catálogo ya coincide con la lista — nada que aplicar.</p>
+            <SyncSummaryList summary={preview.summary} />
+            {changeCount === 0 ? (
+              <p className="text-sm text-ink-500 italic">El catálogo ya está al día — no hay cambios que aplicar.</p>
             ) : (
               <p className="text-xs text-ink-500">
-                La lista manda en grade, precio, ancho, composición y categoría. Conserva colores, fotos y notas. No elimina nada.
+                El PDF manda en grade, precio, ancho, composición y categoría; el sitio aporta colores y fotos. No se borra nada salvo duplicados “/FR” que se fusionan.
               </p>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-ink-100">
               <button type="button" onClick={() => setPreview(null)} className="btn-ghost" disabled={!!busy}>Volver</button>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
-                <button type="button" onClick={apply} disabled={!!busy || preview.rows.length === 0} className="btn-primary">
+                <button type="button" onClick={apply} disabled={!!busy || changeCount === 0} className="btn-primary">
                   {busy === 'apply'
                     ? <><Loader2 size={14} className="animate-spin" /> Aplicando…</>
-                    : <><Check size={14} /> Aplicar ({preview.rows.length})</>}
+                    : <><Check size={14} /> Aplicar ({changeCount})</>}
                 </button>
               </div>
             </div>
@@ -1023,7 +806,8 @@ function PriceListImportModal({ materials, profileId, onClose }) {
         ) : (
           <>
             <p className="text-sm text-ink-600">
-              Sube la(s) lista(s) de precios de Ligne Roset en PDF. Leeremos grade, precio, ancho, composición y categoría.
+              Sube la(s) lista(s) de precios de Ligne Roset en PDF. Leeremos grade, precio, ancho,
+              composición y categoría, y sincronizaremos los colores y fotos desde el sitio automáticamente.
             </p>
             <label className="flex flex-col gap-1">
               <span className="label">Archivos PDF</span>
@@ -1047,8 +831,8 @@ function PriceListImportModal({ materials, profileId, onClose }) {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-ink-100">
               <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
               <button type="button" onClick={analyze} disabled={!!busy || !files.length} className="btn-primary">
-                {busy === 'parse'
-                  ? <><Loader2 size={14} className="animate-spin" /> Leyendo PDF…</>
+                {busy === 'analyze'
+                  ? <><Loader2 size={14} className="animate-spin" /> {step || 'Procesando…'}</>
                   : <><FileText size={14} /> Analizar</>}
               </button>
             </div>
@@ -1059,13 +843,14 @@ function PriceListImportModal({ materials, profileId, onClose }) {
   );
 }
 
-function PriceListSummaryList({ summary }) {
+function SyncSummaryList({ summary }) {
   const rows = [
-    ['Materiales nuevos', summary.newMaterials],
-    ['Materiales actualizados', summary.updatedMaterials],
-    ['Reactivados', summary.restored],
-    ['Marcados “no en lista”', summary.flaggedMissing],
-    ['Sin cambios', summary.unchangedMaterials],
+    ['Telas nuevas', summary.newMaterials],
+    ['Telas actualizadas', summary.updatedMaterials],
+    ['Colores añadidos', summary.colorsAdded],
+    ['Duplicados “/FR” fusionados', summary.consolidated],
+    ['Marcadas “no en lista”', summary.flaggedNoList],
+    ['Marcadas “no en sitio”', summary.flaggedNoSite],
   ].filter(([, n]) => n > 0);
   if (!rows.length) return null;
   return (

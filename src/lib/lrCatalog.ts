@@ -157,7 +157,8 @@ export function mergeCatalog(
     if (!key) continue;
     seen.add(key);
 
-    const name = trimmed(p.name);
+    // Drop the "/FR" suffix so website + price-list names agree (see normalizeName).
+    const name = trimmed(p.name).replace(/\s*\/\s*FR$/i, '');
     const composition = trimmed(p.composition) || null;
     const notes = cleanNotes(p.remark);
     const siteColors = dedupeColors(p.colors);

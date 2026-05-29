@@ -25,7 +25,7 @@
  *  - Widths can carry a fraction glyph (54½"). The "/FR" (fire-retardant)
  *    suffix some names carry is dropped.
  */
-import type { Material, MaterialCategory } from '../types/domain';
+import type { Material, MaterialCategory, MaterialColor } from '../types/domain';
 import { normalizeName } from './lrCatalog';
 
 export interface PdfTextItem {
@@ -246,6 +246,8 @@ export interface PriceListSummary {
   unchangedMaterials: number;
   flaggedMissing: number;
   restored: number;
+  /** Stale /FR-vs-clean duplicates folded into one row and removed. */
+  consolidated: number;
 }
 
 export interface PriceListMergeContext {
@@ -275,6 +277,22 @@ function materialKey(category: string, name: string): string {
   return `${category} ${normalizeName(name)}`;
 }
 
+/** Union a group of duplicate materials' colors by code, keeping any photo. */
+function mergeColors(group: Material[]): MaterialColor[] {
+  const byCode = new Map<string, MaterialColor>();
+  const noCode: MaterialColor[] = [];
+  for (const m of group) {
+    for (const c of m.colors || []) {
+      const code = (c.code || '').trim();
+      if (!code) { noCode.push({ ...c }); continue; }
+      const ex = byCode.get(code);
+      if (!ex) byCode.set(code, { ...c });
+      else if (!ex.imageId && c.imageId) byCode.set(code, { ...c }); // prefer the one with a photo
+    }
+  }
+  return [...byCode.values(), ...noCode];
+}
+
 /**
  * Merge parsed price-list materials into the catalog. The price list is the
  * source of truth for commercial spec — name, category, grade, wear, Martindale,
@@ -288,23 +306,30 @@ export function mergePriceList(
   existing: Material[],
   parsed: ParsedPdfMaterial[],
   { profileId, now, newId, complete = false }: PriceListMergeContext,
-): { rows: Material[]; summary: PriceListSummary } {
-  const byKey = new Map<string, Material>();
-  for (const m of existing) byKey.set(materialKey(m.category, m.name), m);
+): { rows: Material[]; deleteIds: string[]; summary: PriceListSummary } {
+  // Group existing materials by (category, /FR-insensitive name). The catalog
+  // can carry stale duplicates of one material (a website-clean "APPA" plus an
+  // older PDF-made "APPA/FR"); grouping lets us consolidate them into one row.
+  const groups = new Map<string, Material[]>();
+  for (const m of existing) {
+    const k = materialKey(m.category, m.name);
+    const g = groups.get(k);
+    if (g) g.push(m); else groups.set(k, [m]);
+  }
 
   const rows: Material[] = [];
-  const seen = new Set<string>();
+  const deleteIds: string[] = [];
+  const matched = new Set<string>(); // existing ids the price list accounts for
   const summary: PriceListSummary = {
-    newMaterials: 0, updatedMaterials: 0, unchangedMaterials: 0, flaggedMissing: 0, restored: 0,
+    newMaterials: 0, updatedMaterials: 0, unchangedMaterials: 0,
+    flaggedMissing: 0, restored: 0, consolidated: 0,
   };
 
   for (const p of parsed) {
-    const key = materialKey(p.category, p.name);
     if (!normalizeName(p.name)) continue;
-    seen.add(key);
-    const current = byKey.get(key);
+    const group = groups.get(materialKey(p.category, p.name));
 
-    if (!current) {
+    if (!group || !group.length) {
       rows.push({
         id: newId(),
         profileId,
@@ -329,39 +354,53 @@ export function mergePriceList(
       continue;
     }
 
-    const wasFlagged = current.notInPricelistAt != null;
+    // The row to keep: an exact name match if present (avoids a needless
+    // rename), else the richest (most colors/photos). Anything else in the
+    // group is a stale duplicate to fold in and delete.
+    const primary =
+      group.find((m) => m.name === p.name) ??
+      group.slice().sort((a, b) => (b.colors?.length || 0) - (a.colors?.length || 0))[0];
+    for (const m of group) matched.add(m.id);
+    const redundant = group.filter((m) => m.id !== primary.id);
+
+    const wasFlagged = primary.notInPricelistAt != null;
+    const colors = redundant.length ? mergeColors(group) : (primary.colors || []);
+    const next: Material = {
+      ...primary,
+      name: p.name,
+      category: p.category,
+      grade: p.grade,
+      wearRating: p.wearRating,
+      wearDoubleRubs: p.wearDoubleRubs,
+      measure: p.measure,
+      measureUnit: p.measureUnit,
+      price: p.price,
+      priceUnit: p.priceUnit,
+      composition: p.composition,
+      colors,
+      notInPricelistAt: null,
+      updatedAt: now,
+    };
     const changed =
-      (current.name ?? '') !== p.name ||
-      current.category !== p.category ||
-      PDF_FIELDS.some((f) => (current[f] ?? null) !== (p[f] ?? null)) ||
-      wasFlagged;
+      redundant.length > 0 ||
+      wasFlagged ||
+      (primary.name ?? '') !== p.name ||
+      primary.category !== p.category ||
+      PDF_FIELDS.some((f) => (primary[f] ?? null) !== (p[f] ?? null));
 
     if (changed) {
-      rows.push({
-        ...current,
-        name: p.name,
-        category: p.category,
-        grade: p.grade,
-        wearRating: p.wearRating,
-        wearDoubleRubs: p.wearDoubleRubs,
-        measure: p.measure,
-        measureUnit: p.measureUnit,
-        price: p.price,
-        priceUnit: p.priceUnit,
-        composition: p.composition,
-        notInPricelistAt: null,
-        updatedAt: now,
-      });
+      rows.push(next);
       summary.updatedMaterials += 1;
       if (wasFlagged) summary.restored += 1;
     } else {
       summary.unchangedMaterials += 1;
     }
+    for (const r of redundant) { deleteIds.push(r.id); summary.consolidated += 1; }
   }
 
   if (complete) {
     for (const m of existing) {
-      if (seen.has(materialKey(m.category, m.name))) continue;
+      if (matched.has(m.id)) continue;
       if (m.notInPricelistAt == null) {
         rows.push({ ...m, notInPricelistAt: now, updatedAt: now });
         summary.flaggedMissing += 1;
@@ -371,5 +410,5 @@ export function mergePriceList(
     }
   }
 
-  return { rows, summary };
+  return { rows, deleteIds, summary };
 }

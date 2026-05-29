@@ -225,3 +225,39 @@ test('PDF category differing from the catalog: creates the new-category row, fla
   assert.equal(rows.find((r) => r.category === 'outdoor' && r.name === 'GAYAC').grade, 'D');
   assert.equal(rows.find((r) => r.id === 'g').notInPricelistAt, 1000);
 });
+
+test('consolidates an /FR duplicate into the clean row (merges colors, deletes the dup)', () => {
+  const existing = [
+    { id: 'clean', profileId: 'team', category: 'fabric', name: 'APPA', grade: 'X',
+      colors: [{ name: 'ANIS', code: '855', imageId: 'photo' }], createdAt: 1, updatedAt: 1 },
+    { id: 'fr', profileId: 'team', category: 'fabric', name: 'APPA/FR', grade: null,
+      colors: [{ name: 'BLEU', code: '900' }], notInPricelistAt: 500, createdAt: 1, updatedAt: 1 },
+  ];
+  const { rows, deleteIds, summary } = mergePriceList(
+    existing, [PARSED({ name: 'APPA', grade: 'I', price: 330 })], ctx({ complete: true }),
+  );
+  assert.deepEqual(deleteIds, ['fr']);     // the /FR dup is removed
+  assert.equal(summary.consolidated, 1);
+  assert.equal(summary.flaggedMissing, 0); // neither row wrongly flagged "no en lista"
+  const appa = rows.find((r) => r.id === 'clean');
+  assert.equal(appa.name, 'APPA');
+  assert.equal(appa.grade, 'I');           // PDF spec applied
+  assert.equal(appa.price, 330);
+  assert.deepEqual(appa.colors.map((c) => c.code).sort(), ['855', '900']); // colors merged
+  assert.equal(appa.colors.find((c) => c.code === '855').imageId, 'photo');
+  assert.ok(rows.every((r) => !/\/FR$/i.test(r.name)));
+});
+
+test('a lone /FR row is renamed to the clean name — not flagged "no en lista" (the reported bug)', () => {
+  const existing = [{ id: 'fr', profileId: 'team', category: 'fabric', name: 'ARDA/FR', grade: 'X',
+    colors: [{ name: 'X', code: '1', imageId: 'p' }], createdAt: 1, updatedAt: 1 }];
+  const { rows, deleteIds, summary } = mergePriceList(
+    existing, [PARSED({ name: 'ARDA', grade: 'I' })], ctx({ complete: true }),
+  );
+  assert.deepEqual(deleteIds, []);
+  assert.equal(summary.flaggedMissing, 0);
+  const r = rows.find((x) => x.id === 'fr');
+  assert.equal(r.name, 'ARDA');            // /FR dropped, same row (id preserved)
+  assert.equal(r.grade, 'I');
+  assert.deepEqual(r.colors, [{ name: 'X', code: '1', imageId: 'p' }]); // colors kept
+});

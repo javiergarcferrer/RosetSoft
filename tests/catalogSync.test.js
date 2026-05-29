@@ -1,0 +1,49 @@
+// Tests for src/lib/catalogSync.js — stacking the website sync and the price-
+// list PDF into one set of catalog changes.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { syncCatalog } from '../src/lib/catalogSync.js';
+
+const ctx = (over) => { let n = 0; return { profileId: 'team', now: 1000, newId: () => `n${++n}`, ...over }; };
+const pdf = (over = {}) => ({
+  name: 'ACATE', category: 'fabric', grade: 'A', wearRating: null, wearDoubleRubs: null,
+  measure: 55, measureUnit: 'in', price: 73, priceUnit: 'yard', composition: 'COTTON 80%', ...over,
+});
+
+test('stacks website colors + PDF spec into one new material', () => {
+  const site = [{ name: 'ACATE', type: 'Fabrics', colors: [{ code: '855', name: 'ANIS' }] }];
+  const { rows, deleteIds, summary } = syncCatalog([], site, [pdf()], ctx());
+  assert.equal(deleteIds.length, 0);
+  assert.equal(rows.length, 1);
+  const m = rows[0];
+  assert.equal(m.grade, 'A');                 // PDF owns spec
+  assert.equal(m.price, 73);
+  assert.equal(m.composition, 'COTTON 80%');
+  assert.deepEqual(m.colors.map((c) => c.code), ['855']); // website owns colors
+  assert.equal(summary.newMaterials, 1);
+  assert.equal(summary.colorsAdded, 1);
+  assert.equal(summary.siteSynced, true);
+});
+
+test('works PDF-only when the website is unreachable', () => {
+  const { rows, summary } = syncCatalog([], null, [pdf({ composition: null })], ctx());
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].grade, 'A');
+  assert.equal(rows[0].colors.length, 0);
+  assert.equal(summary.siteSynced, false);
+});
+
+test('website /FR name reconciles with the PDF clean name — one row, photo kept', () => {
+  const existing = [{ id: 'a', profileId: 'team', category: 'fabric', name: 'ACATE',
+    colors: [{ name: 'ANIS', code: '855', imageId: 'ph' }], createdAt: 1, updatedAt: 1 }];
+  const site = [{ name: 'ACATE/FR', type: 'Fabrics', colors: [{ code: '855', name: 'ANIS' }] }];
+  const { rows, deleteIds } = syncCatalog(existing, site, [pdf({ composition: null })], ctx());
+  assert.equal(deleteIds.length, 0);
+  const acate = rows.find((r) => r.id === 'a');
+  assert.equal(acate.name, 'ACATE');           // never "ACATE/FR"
+  assert.equal(acate.grade, 'A');
+  assert.equal(acate.colors.find((c) => c.code === '855').imageId, 'ph'); // photo preserved
+  assert.ok(rows.every((r) => !/\/FR$/i.test(r.name)));
+  assert.ok(!rows.some((r) => r.id !== 'a' && r.name === 'ACATE')); // no duplicate created
+});
