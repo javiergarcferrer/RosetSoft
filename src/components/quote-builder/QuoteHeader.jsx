@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
+import { ArrowLeft, Briefcase, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
@@ -69,22 +69,32 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      {/* Breadcrumb row — back link anchors the left, the seller picker the
-          right. The seller is an attribution control, not quote data, so it
-          belongs up here away from the customer/professional chips rather than
-          crowding the meta row. Admin-only; non-admins just see the back link. */}
+      {/* Breadcrumb row — back link anchors the left; the order pill and the
+          seller picker sit on the right, out of the customer/professional meta
+          strip below. The seller is an attribution control (admin-only) and the
+          order pill is a navigation shortcut — neither is core quote data, so
+          both belong up here rather than crowding the meta row. The right group
+          wraps (seller drops under the order pill) when an admin opens an
+          accepted quote on a narrow phone and the two can't share a line. */}
       <div className="flex items-center justify-between gap-2 mb-3">
         <Link to="/quotes" className="back-link mb-0">
           <ArrowLeft size={12} />
           <span>Volver<span className="hidden sm:inline"> a cotizaciones</span></span>
         </Link>
-        {isAdmin && (
-          <SellerSelect
+        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
+          <OrderChip
             quote={quote}
-            assignableSellers={assignableSellers}
-            onUpdateQuote={onUpdateQuote}
+            profileId={profileId}
+            onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
-        )}
+          {isAdmin && (
+            <SellerSelect
+              quote={quote}
+              assignableSellers={assignableSellers}
+              onUpdateQuote={onUpdateQuote}
+            />
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -127,9 +137,10 @@ export default function QuoteHeader({
         </div>
 
         {/* Meta row: customer + professional (with its order-type/commission
-            tier jointed in) + order, in one horizontal group. Wraps naturally
-            when the chips don't all fit on a single line; each chip is a single
-            flex child, so a pill never splits across the wrap. */}
+            tier jointed in), in one horizontal group. Wraps naturally when the
+            chips don't all fit on a single line; each chip is a single flex
+            child, so a pill never splits across the wrap. The order pill moved
+            up to the breadcrumb row, out of this strip. */}
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
@@ -142,11 +153,6 @@ export default function QuoteHeader({
             professionals={professionals}
             profileId={profileId}
             onUpdateQuote={onUpdateQuote}
-          />
-          <OrderChip
-            quote={quote}
-            profileId={profileId}
-            onAttach={(orderId) => onUpdateQuote({ orderId })}
           />
         </div>
 
@@ -166,11 +172,12 @@ export default function QuoteHeader({
 }
 
 /**
- * Compact "Vendedor" select rendered as a chip in the meta row so it
- * sits adjacent to the customer, professional, and order chips
- * instead of getting its own row above. Visually matches the chip
- * vocabulary (rounded, ink-200 border, hover state) so the eye reads
- * the row as a single horizontal group.
+ * Compact seller (Vendedor) select rendered as a chip in the breadcrumb row
+ * beside the order pill, away from the customer/professional meta strip. A
+ * leading briefcase icon denotes it — no text label, no native dropdown arrow
+ * (we drop the arrow with appearance-none; the team knows the name is a
+ * picker). Visually matches the chip vocabulary (rounded, ink-200 border,
+ * hover state) so the eye reads the row as a single horizontal group.
  *
  * The blank option lets an admin explicitly null out attribution for
  * training / sandbox quotes. Inactive sellers stay listed only when
@@ -179,12 +186,15 @@ export default function QuoteHeader({
  */
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
   return (
-    <label className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs">
-      <span className="text-ink-500 select-none">Vendedor</span>
+    <label
+      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs"
+      title="Vendedor"
+    >
+      <Briefcase size={12} className="text-ink-500 flex-shrink-0" aria-hidden />
       <select
         value={quote?.createdByUserId || ''}
         onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
-        className="bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer max-w-[110px] sm:max-w-[180px] lg:max-w-[220px] truncate"
+        className="appearance-none bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer max-w-[110px] sm:max-w-[180px] lg:max-w-[220px] truncate"
         aria-label="Vendedor asignado"
       >
         <option value="">— sin vendedor —</option>
