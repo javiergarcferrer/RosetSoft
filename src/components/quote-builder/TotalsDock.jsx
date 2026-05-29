@@ -189,61 +189,57 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar. On phones it stacks into two tight rows — the
-              grand total as the hero line, then a segmented row of action tiles
-              that fill the width edge to edge (no stranded icons). From sm: up it
-              collapses to one row: total left, compact icon cluster right. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-            {/* The total leads the row — the hero figure. Both currencies read
-                at once on a single line (USD, then the live DOP equivalent), so
-                there's nothing to toggle: the figure is complete at a glance. It
-                doubles as the breakdown toggle — a big, obvious tap target. */}
-            <div className="min-w-0 sm:flex-1">
-              <button
-                type="button"
-                onClick={() => toggle('breakdown')}
-                aria-expanded={breakdownOpen}
-                className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
-                title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
-              >
-                {/* One line: eyebrow, the grand total, the discount chip and the
-                    live DOP conversion all read across in a single row. The
-                    amount holds its size; the conversion truncates first when
-                    space runs out, and the chevron is pinned to the far right. */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="eyebrow-xs flex-shrink-0">Total</span>
-                  <span className="text-xl font-semibold tabular-nums leading-tight flex-shrink-0">{fmt(totals.grandTotal)}</span>
-                  {discountPct > 0 && (
-                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
-                  )}
-                  {dopRate && currency === 'USD' && (
-                    <span className="text-[11px] text-ink-500 tabular-nums inline-flex items-center gap-1 truncate">
-                      ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-                      {rateLocked ? (
-                        <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
-                          <Lock size={10} /> @ {dopRate.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
-                      )}
+          {/* Always-visible bar — ONE compact row at every width: the running
+              total leads (eyebrow · amount · live DOP conversion), then a tight
+              cluster of icon buttons with the filled Export CTA last. The mobile
+              layout mirrors the desktop dock exactly; only the touch targets
+              grow (44px on coarse pointers). Nothing stacks. */}
+          <div className="flex items-center gap-2 sm:gap-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            {/* The total leads the row — the hero figure, and the breakdown
+                toggle. Eyebrow + amount are pinned (never shrink); the DOP
+                conversion fills the slack and is the first thing to give up room
+                — it shrinks-to-truncate, then hides outright on the narrowest
+                phones (where the breakdown panel still carries the full figure). */}
+            <button
+              type="button"
+              onClick={() => toggle('breakdown')}
+              aria-expanded={breakdownOpen}
+              className="group min-w-0 flex-1 flex items-center gap-2 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
+              title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
+            >
+              {/* Eyebrow hides on the narrowest phones to give the figure room
+                  (the leading "$" already labels it as the total there). */}
+              <span className="eyebrow-xs flex-shrink-0 hidden min-[380px]:inline-block">Total</span>
+              <span className="text-base min-[380px]:text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
+              {discountPct > 0 && (
+                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
+              )}
+              {/* Live DOP conversion — inline only from sm: up, where the four
+                  touch targets still leave room for the full string. Below that
+                  the breakdown panel (a tap away) carries it, so it's never shown
+                  as a clipped fragment. */}
+              {dopRate && currency === 'USD' && (
+                <span className="hidden sm:inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
+                  <span className="truncate">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
+                  {rateLocked ? (
+                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
+                      <Lock size={10} /> @ {dopRate.toFixed(2)}
                     </span>
+                  ) : (
+                    <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
                   )}
-                  <ChevronUp
-                    size={18}
-                    className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
-                    aria-hidden
-                  />
-                </div>
-              </button>
-            </div>
+                </span>
+              )}
+              <ChevronUp
+                size={18}
+                className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                aria-hidden
+              />
+            </button>
 
-            {/* Action toolbar. On phones it's a segmented row of equal-width
-                tiles (filled surfaces, so they read as one deliberate control
-                rather than icons floating in space); the export tile carries the
-                filled accent. From sm: up the labels and surfaces drop away and
-                it collapses to the compact right-aligned icon cluster the desktop
-                dock has always used. */}
-            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-2 sm:gap-1 flex-shrink-0">
+            {/* Action cluster — compact icon buttons at every width (the filled
+                Export CTA last), pinned to the right and never shrinking. */}
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
               <DockAction
                 icon={SlidersHorizontal}
                 label="Ajustes"
@@ -253,8 +249,6 @@ export default function TotalsDock({
                 ariaLabel="Ajustes: descuento y envío"
                 title="Descuento y envío de la cotización"
               />
-
-              <span className="hidden sm:block w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
 
               {/* Catálogo — phone/tablet only; the header and items card carry it
                   on desktop. */}
@@ -332,25 +326,24 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
 }
 
 /**
- * One action in the dock's toolbar. Two faces from a single definition:
- *   • phone — a flex-1 tile with a filled surface and an icon-over-label, so the
- *     row reads as one segmented control that fills the width edge to edge
- *     instead of icons floating in space.
- *   • sm+ — sheds the surface and collapses to the compact 36/44px bordered icon
- *     square the desktop dock uses, label hidden.
- * `primary` paints the filled CTA (export); `pressed` is the active-panel
- * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
- * stays put whether the cell is a wide tile (phone) or a square (desktop).
+ * One action in the dock's toolbar — a single compact icon button at every
+ * width, matching the desktop dock's aesthetic: a 9×9 square (11×11 on coarse
+ * pointers, per Apple HIG / WCAG 2.5.5), label carried by the tooltip /
+ * accessible name rather than visible text so the whole bar stays on one row.
+ *   • primary (Export) — the filled ink-900 CTA.
+ *   • pressed — the active-panel (toggle) state, also filled.
+ *   • default — quiet ghost; `dot` flags an applied adjustment, anchored to the
+ *     icon's top-right.
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
   disabled, busy, pressed, primary, dot, className = '',
 }) {
-  const surface = primary
-    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
+  const tone = primary
+    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700 shadow-sm'
     : pressed
       ? 'bg-ink-900 text-white'
-      : 'bg-ink-100 text-ink-700 hover:bg-ink-200 active:bg-ink-200 sm:bg-transparent sm:hover:bg-ink-100 sm:border sm:border-ink-200';
+      : 'text-ink-600 hover:bg-ink-100 active:bg-ink-200';
   return (
     <button
       type="button"
@@ -358,22 +351,19 @@ function DockAction({
       disabled={disabled}
       aria-busy={busy || undefined}
       aria-pressed={pressed}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel || label}
       title={title}
-      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-2.5 sm:py-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-xl sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${surface} ${className}`}
+      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-lg transition-colors active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait ${tone} ${className}`}
     >
-      <span className="relative inline-flex">
-        {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
-        {dot && (
-          <span
-            className={`absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full ring-2 ${
-              pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
-            }`}
-            aria-hidden
-          />
-        )}
-      </span>
-      <span className="text-[11px] font-medium leading-none sm:hidden">{label}</span>
+      {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
+      {dot && (
+        <span
+          className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ring-2 ${
+            pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
+          }`}
+          aria-hidden
+        />
+      )}
     </button>
   );
 }
