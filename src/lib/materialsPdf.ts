@@ -57,6 +57,10 @@ const RUBS_RE = /^\d{3,6}$/;                 // Martindale, e.g. 50000
 // Header words present on every table page — used both to detect the cipher
 // shift and to resolve the per-page column geometry.
 const HEADER_WORDS = ['Composition', 'Grade', 'Name', 'Width', 'Wear'];
+// The full-page section sidebar ("FABRICS" / "LEATHER" / "OUTDOOR FABRICS")
+// sits to the left of the table and can share a data row's y. It is never a
+// material name, so it's excluded from name capture by exact content.
+const SECTION_LABELS = new Set(['FABRICS', 'LEATHER', 'OUTDOOR', 'OUTDOOR FABRICS']);
 
 /** Apply the constant glyph shift `k` (0 = none, 29 = the LR font cipher). */
 function applyShift(s: string, k: number): string {
@@ -96,7 +100,7 @@ function cleanName(s: string): string {
 
 interface PageColumns {
   category: MaterialCategory;
-  nameLeft: number; gradeL: number; gradeR: number;
+  gradeL: number; gradeR: number;
   wearR: number; widthR: number; priceR: number;
 }
 
@@ -139,7 +143,6 @@ function pageColumns(pageItems: PdfTextItem[]): PageColumns | null {
   if (grade == null || wear == null || width == null || price == null || comp == null) return null;
   return {
     category: pageCategory(pageItems),
-    nameLeft: name - 22,                  // names start a touch left of the header
     gradeL: (name + grade) / 2,
     gradeR: (grade + wear) / 2,
     wearR: (wear + width) / 2,
@@ -179,11 +182,20 @@ export function parseMaterialsPdf(rawItems: PdfTextItem[]): ParsedPdfMaterial[] 
       .sort((a, b) => a.y - b.y);
 
     anchors.forEach((g, gi) => {
-      // Name = the token(s) left of the grade on the grade's own line. Colors
-      // live on later lines; the section sidebar sits left of nameLeft.
+      // Name = every token left of the grade column on the grade's own line.
+      // Colors and care notes live on later lines (>10pt away), so the row's
+      // y-window isolates the name; we only have to drop the section sidebar,
+      // which can share a row's y. No fixed left margin — names indent further
+      // left than the header on some pages (STEELCUT TRIO, UNIFORM MELANGE),
+      // and a "Name − 22" floor silently clipped those rows to nothing.
       const name = cleanName(
         pageItems
-          .filter((it) => Math.abs(it.y - g.y) <= Y_ROW && it.x >= col.nameLeft && it.x < col.gradeL)
+          .filter(
+            (it) =>
+              Math.abs(it.y - g.y) <= Y_ROW &&
+              it.x < col.gradeL &&
+              !SECTION_LABELS.has(it.str.toUpperCase()),
+          )
           .sort((a, b) => a.x - b.x)
           .map((it) => it.str)
           .join(' '),
@@ -295,9 +307,12 @@ function mergeColors(group: Material[]): MaterialColor[] {
 
 /**
  * Merge parsed price-list materials into the catalog. The price list is the
- * source of truth for commercial spec — name, category, grade, wear, Martindale,
- * width, price, composition — and OWNS those fields. It preserves everything the
- * website owns: colors (and their uploaded photos) and care notes. A material
+ * source of truth for commercial spec — category, grade, wear, Martindale,
+ * width, price, composition — and OWNS those fields. Names are matched
+ * diacritic-insensitively (see `normalizeName`); on a match the existing,
+ * website-synced spelling is kept, since the PDF font mis-decodes accents.
+ * It preserves everything the website owns: colors (and their uploaded photos)
+ * and care notes. A material
  * the list carries is a current product, so its "no en sitio" (`discontinuedAt`)
  * flag is cleared. Nothing is deleted (stale /FR duplicates are consolidated);
  * on a complete import, materials not in the price list are flagged
@@ -368,7 +383,9 @@ export function mergePriceList(
     const colors = redundant.length ? mergeColors(group) : (primary.colors || []);
     const next: Material = {
       ...primary,
-      name: p.name,
+      // Keep the existing (website-synced) name — it's the canonical spelling.
+      // The PDF font mis-decodes accents, so it must not overwrite it; matching
+      // already folded accents/case/whitespace away (`normalizeName`).
       category: p.category,
       grade: p.grade,
       wearRating: p.wearRating,
@@ -388,7 +405,6 @@ export function mergePriceList(
       redundant.length > 0 ||
       wasFlagged ||
       primary.discontinuedAt != null ||
-      (primary.name ?? '') !== p.name ||
       primary.category !== p.category ||
       PDF_FIELDS.some((f) => (primary[f] ?? null) !== (p[f] ?? null));
 

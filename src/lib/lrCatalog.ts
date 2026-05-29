@@ -77,9 +77,21 @@ export function lrTypeToCategory(type: string | null | undefined): MaterialCateg
   return 'fabric';
 }
 
-/** Canonical key for matching a pattern to an existing material by name. */
+/**
+ * Canonical key for matching a material by name across sources. Case- and
+ * whitespace-insensitive, and — crucially — DIACRITIC-insensitive: the
+ * price-list PDF's embedded font ships no ToUnicode map, so accented glyphs
+ * get mis-decoded (e.g. the website's "MOSAÏC" comes back as "MOSAÍC"). Folding
+ * accents away lets the PDF row match its website twin instead of spawning a
+ * duplicate and falsely flagging the original "not in the price list".
+ */
 export function normalizeName(name: string | null | undefined): string {
-  return String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  return String(name || '')
+    .normalize('NFD')                       // split accented letters into base + mark
+    .replace(/[\u0300-\u036f]/g, '') // drop the combining diacritical marks
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
 }
 
 /**
