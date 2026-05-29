@@ -199,31 +199,37 @@ const dupKeys = (rows) => {
   return keys.length - new Set(keys).size; // 0 ⇒ no collisions
 };
 
-test('same name in two categories: each matches its own row, no (category,name) collision', () => {
+test('same name across categories consolidates to one row (not flagged)', () => {
   const existing = [
     { id: 'rf', profileId: 'team', category: 'fabric', name: 'ROMA', grade: 'F',
       colors: [{ name: 'x', code: '1', imageId: 'photo' }], createdAt: 1, updatedAt: 1 },
     { id: 'rl', profileId: 'team', category: 'leather', name: 'ROMA', grade: 'C', colors: [], createdAt: 1, updatedAt: 1 },
     { id: 'o', profileId: 'team', category: 'fabric', name: 'OTHER', colors: [], createdAt: 1, updatedAt: 1 },
   ];
-  // Only the FABRIC ROMA is in this price list.
-  const { rows } = mergePriceList(existing, [PARSED({ name: 'ROMA', category: 'fabric', grade: 'A' })], ctx({ complete: true }));
-  assert.equal(dupKeys(rows), 0, 'no two rows collide on (category, name)');
+  // Matching is by NAME, so the two ROMA rows are the same fabric → consolidated.
+  const { rows, deleteIds } = mergePriceList(existing, [PARSED({ name: 'ROMA', category: 'fabric', grade: 'A' })], ctx({ complete: true }));
+  assert.equal(dupKeys(rows), 0);
+  assert.deepEqual(deleteIds, ['rl']);                 // duplicate ROMA folded in + removed
   const rf = rows.find((r) => r.id === 'rf');
-  assert.equal(rf.grade, 'A');                                   // fabric ROMA updated
-  assert.deepEqual(rf.colors, [{ name: 'x', code: '1', imageId: 'photo' }]); // colors preserved
-  assert.equal(rows.find((r) => r.id === 'rl').notInPricelistAt, 1000);      // leather ROMA flagged, untouched grade
-  assert.equal(rows.find((r) => r.id === 'rl').grade, 'C');
+  assert.equal(rf.grade, 'A');                          // kept row, updated from the PDF
+  assert.equal(rf.notInPricelistAt, null);             // NOT wrongly flagged
+  assert.deepEqual(rf.colors, [{ name: 'x', code: '1', imageId: 'photo' }]); // colors kept
+  assert.equal(rows.find((r) => r.id === 'o').notInPricelistAt, 1000); // a genuinely-absent one is flagged
 });
 
-test('PDF category differing from the catalog: creates the new-category row, flags the old, no collision', () => {
-  const existing = [{ id: 'g', profileId: 'team', category: 'fabric', name: 'GAYAC', grade: 'X', colors: [], createdAt: 1, updatedAt: 1 }];
-  const { rows, summary } = mergePriceList(existing, [PARSED({ name: 'GAYAC', category: 'outdoor', grade: 'D' })], ctx({ complete: true }));
+test('PDF category MOVES the existing row instead of stranding it (the ELIOS/GAYAC bug)', () => {
+  const existing = [{ id: 'g', profileId: 'team', category: 'fabric', name: 'GAYAC', grade: 'X',
+    colors: [{ name: 'c', code: '9', imageId: 'p' }], createdAt: 1, updatedAt: 1 }];
+  // Website typed GAYAC "fabric"; the PDF lists it under OUTDOOR.
+  const { rows, deleteIds, summary } = mergePriceList(existing, [PARSED({ name: 'GAYAC', category: 'outdoor', grade: 'D' })], ctx({ complete: true }));
   assert.equal(dupKeys(rows), 0);
-  assert.equal(summary.newMaterials, 1);
-  assert.equal(summary.flaggedMissing, 1);
-  assert.equal(rows.find((r) => r.category === 'outdoor' && r.name === 'GAYAC').grade, 'D');
-  assert.equal(rows.find((r) => r.id === 'g').notInPricelistAt, 1000);
+  assert.deepEqual(deleteIds, []);
+  assert.equal(summary.newMaterials, 0);               // no duplicate created
+  assert.equal(summary.flaggedMissing, 0);             // old row NOT stranded "no en lista"
+  const g = rows.find((r) => r.id === 'g');
+  assert.equal(g.category, 'outdoor');                 // moved to the PDF's category
+  assert.equal(g.grade, 'D');
+  assert.deepEqual(g.colors, [{ name: 'c', code: '9', imageId: 'p' }]); // colors kept
 });
 
 test('consolidates an /FR duplicate into the clean row (merges colors, deletes the dup)', () => {

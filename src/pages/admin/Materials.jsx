@@ -734,8 +734,11 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
     setError(null);
     setBusy('apply');
     try {
-      if (preview.rows.length) await db.materials.bulkPut(preview.rows);
+      // Delete consolidated duplicates FIRST: a material moving category (e.g.
+      // a fabric the PDF lists under OUTDOOR) would otherwise transiently
+      // collide on the (category, name) unique index during the upsert.
       if (preview.deleteIds.length) await db.materials.bulkDelete(preview.deleteIds);
+      if (preview.rows.length) await db.materials.bulkPut(preview.rows);
       setDone(preview.summary);
     } catch (e) {
       setError(e?.message || 'No se pudieron guardar los cambios.');

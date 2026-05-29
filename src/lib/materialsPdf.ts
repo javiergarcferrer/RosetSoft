@@ -222,14 +222,12 @@ export function parseMaterialsPdf(rawItems: PdfTextItem[]): ParsedPdfMaterial[] 
         composition,
       };
 
-      // Identity is (category, name) — the catalog's unique key — so the same
-      // name appearing in two sections (e.g. ROMA as both a fabric and an
-      // outdoor sling) is kept as two materials; a real repeat within one
-      // category takes the last reading.
-      const key = `${rec.category} ${normalizeName(rec.name)}`;
-      const at = byKey.get(key);
-      if (at != null) out[at] = rec;
-      else { byKey.set(key, out.length); out.push(rec); }
+      // One material per NAME. A fabric also re-listed under OUTDOOR keeps its
+      // first (fabric) reading; the merge moves category if the PDF says so.
+      const key = normalizeName(rec.name);
+      if (byKey.has(key)) return; // first occurrence wins (fabric pages precede outdoor)
+      byKey.set(key, out.length);
+      out.push(rec);
     });
   }
 
@@ -267,14 +265,16 @@ const PDF_FIELDS = [
 ] as const;
 
 /**
- * The catalog's identity key — the SAME shape as the
- * `(profile_id, category, lower(name))` unique index. Keying the merge off this
- * (not name alone) is what lets a name that legitimately exists in two
- * categories coexist, and guarantees the merge never emits two rows that
- * collide on the index.
+ * Catalog identity key for matching — the material NAME alone (normalized,
+ * /FR-stripped). We deliberately ignore category so the price list can MOVE a
+ * material to the category it lists it under (e.g. a fabric the website typed
+ * "fabric" but the PDF lists under OUTDOOR) by UPDATING the existing row,
+ * instead of stranding it as "no en lista" and creating a duplicate.
+ * Consolidation keeps exactly one row per name, so the DB's
+ * (category, lower(name)) unique index is never violated.
  */
-function materialKey(category: string, name: string): string {
-  return `${category} ${normalizeName(name)}`;
+function materialKey(name: string): string {
+  return normalizeName(name);
 }
 
 /** Union a group of duplicate materials' colors by code, keeping any photo. */
@@ -313,7 +313,7 @@ export function mergePriceList(
   // older PDF-made "APPA/FR"); grouping lets us consolidate them into one row.
   const groups = new Map<string, Material[]>();
   for (const m of existing) {
-    const k = materialKey(m.category, m.name);
+    const k = materialKey(m.name);
     const g = groups.get(k);
     if (g) g.push(m); else groups.set(k, [m]);
   }
@@ -328,7 +328,7 @@ export function mergePriceList(
 
   for (const p of parsed) {
     if (!normalizeName(p.name)) continue;
-    const group = groups.get(materialKey(p.category, p.name));
+    const group = groups.get(materialKey(p.name));
 
     if (!group || !group.length) {
       rows.push({
