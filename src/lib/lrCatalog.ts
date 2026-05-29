@@ -79,7 +79,13 @@ export function lrTypeToCategory(type: string | null | undefined): MaterialCateg
 
 /** Canonical key for matching a pattern to an existing material by name. */
 export function normalizeName(name: string | null | undefined): string {
-  return String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  return String(name || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    // "APPA/FR" (fire-retardant) and "APPA" are the same fabric — match them as
+    // one so a re-import never strands or duplicates an /FR-vs-clean pair.
+    .replace(/\s*\/\s*FR$/, '');
 }
 
 /**

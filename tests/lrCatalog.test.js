@@ -30,7 +30,9 @@ test('lrTypeToCategory — leather/outdoor/fabric buckets', () => {
 
 test('normalizeName — upper, trim, collapse whitespace', () => {
   assert.equal(normalizeName('  alcantara - a '), 'ALCANTARA - A');
-  assert.equal(normalizeName('Steelcut  Trio 3/FR'), 'STEELCUT TRIO 3/FR');
+  // The "/FR" (fire-retardant) suffix is dropped — "X/FR" and "X" are one fabric.
+  assert.equal(normalizeName('Steelcut  Trio 3/FR'), 'STEELCUT TRIO 3');
+  assert.equal(normalizeName('APPA / FR'), 'APPA');
   assert.equal(normalizeName(null), '');
 });
 

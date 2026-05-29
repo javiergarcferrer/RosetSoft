@@ -296,18 +296,10 @@ export default function Materials() {
       )}
 
       {importing && (
-        <LrImportModal
+        <ImportCatalogModal
           materials={materials}
           profileId={profileId}
           onClose={() => setImporting(false)}
-        />
-      )}
-
-      {importingPdf && (
-        <PriceListImportModal
-          materials={materials}
-          profileId={profileId}
-          onClose={() => setImportingPdf(false)}
         />
       )}
     </>
@@ -671,6 +663,9 @@ function MaterialEditor({ material, profileId, onClose }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Catalog import — PDF price list + automatic website sync                  */
 /* -------------------------------------------------------------------------- */
