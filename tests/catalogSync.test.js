@@ -34,19 +34,6 @@ test('works PDF-only when the website is unreachable', () => {
   assert.equal(summary.siteSynced, false);
 });
 
-test('website /FR name reconciles with the PDF clean name — one row, photo kept', () => {
-  const existing = [{ id: 'a', profileId: 'team', category: 'fabric', name: 'ACATE',
-    colors: [{ name: 'ANIS', code: '855', imageId: 'ph' }], createdAt: 1, updatedAt: 1 }];
-  const site = [{ name: 'ACATE/FR', type: 'Fabrics', colors: [{ code: '855', name: 'ANIS' }] }];
-  const { rows, deleteIds } = syncCatalog(existing, site, [pdf({ composition: null })], ctx());
-  assert.equal(deleteIds.length, 0);
-  const acate = rows.find((r) => r.id === 'a');
-  assert.equal(acate.name, 'ACATE');                        // never "ACATE/FR"
-  assert.equal(acate.grade, 'A');
-  assert.equal(acate.colors.find((c) => c.code === '855').imageId, 'ph'); // photo preserved
-  assert.ok(rows.every((r) => !/\/FR$/i.test(r.name)));
-  assert.ok(!rows.some((r) => r.id !== 'a' && r.name === 'ACATE')); // no duplicate created
-});
 
 test('a material in the price list is un-flagged "no en sitio" even if the site scraper missed it', () => {
   // ARDA is flagged discontinued and the website sweep doesn't return it (a

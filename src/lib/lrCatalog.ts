@@ -79,13 +79,7 @@ export function lrTypeToCategory(type: string | null | undefined): MaterialCateg
 
 /** Canonical key for matching a pattern to an existing material by name. */
 export function normalizeName(name: string | null | undefined): string {
-  return String(name || '')
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, ' ')
-    // "APPA/FR" (fire-retardant) and "APPA" are the same fabric — match them as
-    // one so a re-import never strands or duplicates an /FR-vs-clean pair.
-    .replace(/\s*\/\s*FR$/, '');
+  return String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
 /**
@@ -163,8 +157,7 @@ export function mergeCatalog(
     if (!key) continue;
     seen.add(key);
 
-    // Drop the "/FR" suffix so website + price-list names agree (see normalizeName).
-    const name = trimmed(p.name).replace(/\s*\/\s*FR$/i, '');
+    const name = trimmed(p.name);
     const composition = trimmed(p.composition) || null;
     const notes = cleanNotes(p.remark);
     const siteColors = dedupeColors(p.colors);

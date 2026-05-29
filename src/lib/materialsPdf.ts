@@ -89,9 +89,9 @@ function parseMeasure(s: string): number | null {
   return Number(m[1]) + (s.length > m[1].length ? 0.5 : 0);
 }
 
-/** Drop the "/FR" (fire-retardant) suffix the price list appends to some names. */
+/** Normalize a parsed name's whitespace. */
 function cleanName(s: string): string {
-  return s.replace(/\s*\/FR\s*$/i, '').replace(/\s+/g, ' ').trim();
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 interface PageColumns {

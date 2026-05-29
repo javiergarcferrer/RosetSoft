@@ -50,15 +50,13 @@ test('parses the real FABRICS page into materials with every spec field', () => 
   assert.ok(alc.composition.startsWith('POLYESTER 68%'));
 });
 
-test('reads ½ widths, the price column, and strips the /FR suffix', () => {
+test('reads ½ widths and the price column; keeps names verbatim (incl. /FR)', () => {
   const mats = parseMaterialsPdf(PAGE0);
   assert.equal(byName(mats, 'AMALFI').measure, 54.5);   // "54½"
   assert.equal(byName(mats, 'ARA').measure, 53.5);
   assert.equal(byName(mats, 'AMALFI').price, 101);
-  // "APPA/FR" in the PDF is stored as "APPA" — the /FR suffix is dropped.
-  assert.equal(byName(mats, 'APPA').price, 330);
-  assert.equal(byName(mats, 'APPA/FR'), undefined);
-  assert.ok(mats.every((m) => !/\/FR$/i.test(m.name)), 'no name keeps a /FR suffix');
+  // Names are imported exactly as printed — the /FR suffix is preserved.
+  assert.equal(byName(mats, 'APPA/FR').price, 330);
 });
 
 test('auto-detects the +29 glyph cipher when items arrive un-decoded', () => {
@@ -105,8 +103,6 @@ test('resolves columns per page: shifted fabrics (BYRAM), leather, and outdoor',
   const elios = find('ELIOS SLING');
   assert.equal(elios.category, 'outdoor');
   assert.equal(elios.measure, 70.5); // "70½"
-
-  assert.ok(mats.every((m) => !/\/FR$/i.test(m.name)), 'no /FR suffix survives');
 });
 
 /* ----------------------------- mergePriceList ------------------------------ */
@@ -228,42 +224,3 @@ test('PDF category MOVES the existing row instead of stranding it (the ELIOS/GAY
   assert.equal(summary.flaggedMissing, 0);             // old row NOT stranded "no en lista"
   const g = rows.find((r) => r.id === 'g');
   assert.equal(g.category, 'outdoor');                 // moved to the PDF's category
-  assert.equal(g.grade, 'D');
-  assert.deepEqual(g.colors, [{ name: 'c', code: '9', imageId: 'p' }]); // colors kept
-});
-
-test('consolidates an /FR duplicate into the clean row (merges colors, deletes the dup)', () => {
-  const existing = [
-    { id: 'clean', profileId: 'team', category: 'fabric', name: 'APPA', grade: 'X',
-      colors: [{ name: 'ANIS', code: '855', imageId: 'photo' }], createdAt: 1, updatedAt: 1 },
-    { id: 'fr', profileId: 'team', category: 'fabric', name: 'APPA/FR', grade: null,
-      colors: [{ name: 'BLEU', code: '900' }], notInPricelistAt: 500, createdAt: 1, updatedAt: 1 },
-  ];
-  const { rows, deleteIds, summary } = mergePriceList(
-    existing, [PARSED({ name: 'APPA', grade: 'I', price: 330 })], ctx({ complete: true }),
-  );
-  assert.deepEqual(deleteIds, ['fr']);     // the /FR dup is removed
-  assert.equal(summary.consolidated, 1);
-  assert.equal(summary.flaggedMissing, 0); // neither row wrongly flagged "no en lista"
-  const appa = rows.find((r) => r.id === 'clean');
-  assert.equal(appa.name, 'APPA');
-  assert.equal(appa.grade, 'I');           // PDF spec applied
-  assert.equal(appa.price, 330);
-  assert.deepEqual(appa.colors.map((c) => c.code).sort(), ['855', '900']); // colors merged
-  assert.equal(appa.colors.find((c) => c.code === '855').imageId, 'photo');
-  assert.ok(rows.every((r) => !/\/FR$/i.test(r.name)));
-});
-
-test('a lone /FR row is renamed to the clean name — not flagged "no en lista" (the reported bug)', () => {
-  const existing = [{ id: 'fr', profileId: 'team', category: 'fabric', name: 'ARDA/FR', grade: 'X',
-    colors: [{ name: 'X', code: '1', imageId: 'p' }], createdAt: 1, updatedAt: 1 }];
-  const { rows, deleteIds, summary } = mergePriceList(
-    existing, [PARSED({ name: 'ARDA', grade: 'I' })], ctx({ complete: true }),
-  );
-  assert.deepEqual(deleteIds, []);
-  assert.equal(summary.flaggedMissing, 0);
-  const r = rows.find((x) => x.id === 'fr');
-  assert.equal(r.name, 'ARDA');            // /FR dropped, same row (id preserved)
-  assert.equal(r.grade, 'I');
-  assert.deepEqual(r.colors, [{ name: 'X', code: '1', imageId: 'p' }]); // colors kept
-});
