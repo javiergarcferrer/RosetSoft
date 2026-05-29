@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check, CloudOff, Ship } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
-import Switch from '../components/primitives/Switch.jsx';
 import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
@@ -109,14 +108,13 @@ export default function PublicQuoteView() {
   const toggleOptional = (lineId, on) => applyPick({ optionals: { [lineId]: on } });
   const pickMaterial = (id, grade) => applyPick({ materials: { [id]: grade } });
 
-  // Choosable bits for the options panel. `hasMaterials` flags that at least
-  // one line/component can be re-quoted in another material (those pickers live
-  // in-line in the preview below). Optionals are the dealer-OFFERED standalone
-  // add-ons (optionalOffered) — listed whether currently in or out so the
-  // toggle stays put after the client folds one in (and can take it back out).
-  const { altGroups, optionals, hasMaterials } = useMemo(() => {
+  // Choosable bits for the options panel: alternatives (pick-one menus) and a
+  // flag that some line/component can be re-quoted in another material.
+  // Optionals are NOT here — each dealer-offered optional carries its own
+  // Agregar / Quitar action ON its product card in the preview below, where it
+  // belongs, instead of a checklist divorced at the top of the page.
+  const { altGroups, hasMaterials } = useMemo(() => {
     const groups = new Map();
-    const opts = [];
     let mats = false;
     for (const l of lines) {
       if (l.materialOptions?.options?.length) mats = true;
@@ -126,11 +124,9 @@ export default function PublicQuoteView() {
       if (l.alternativeGroup) {
         if (!groups.has(l.alternativeGroup)) groups.set(l.alternativeGroup, []);
         groups.get(l.alternativeGroup).push(l);
-      } else if (l.optionalOffered && !l.setGroup) {
-        opts.push(l);
       }
     }
-    return { altGroups: [...groups.entries()], optionals: opts, hasMaterials: mats };
+    return { altGroups: [...groups.entries()], hasMaterials: mats };
   }, [lines]);
 
   function selectedAltMember(members) {
@@ -157,7 +153,7 @@ export default function PublicQuoteView() {
     );
   }
 
-  const hasChoices = altGroups.length > 0 || optionals.length > 0 || hasMaterials;
+  const hasChoices = altGroups.length > 0 || hasMaterials;
 
   return (
     // Lives outside the app shell, so it can't lean on the Layout's <main>
@@ -224,41 +220,6 @@ export default function PublicQuoteView() {
                 </div>
               );
             })}
-
-            {optionals.length > 0 && (
-              <div className="mt-1">
-                <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Complementos opcionales</div>
-                <div className="space-y-1.5">
-                  {optionals.map((o) => {
-                    // `isOptional` false ⇒ the add-on is currently folded into
-                    // the quote (the toggle reads ON). Flipping it fires a pick
-                    // both ways, and the total recomputes instantly.
-                    const included = !o.isOptional;
-                    return (
-                      <div
-                        key={o.id}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
-                          included ? 'border-emerald-300 bg-emerald-50/50' : 'border-ink-200'
-                        }`}
-                      >
-                        <Switch
-                          checked={included}
-                          onChange={(on) => toggleOptional(o.id, on)}
-                          label={`${included ? 'Quitar' : 'Agregar'} ${o.name || 'complemento'}`}
-                        />
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium text-ink-900 truncate">{o.name || '—'}</span>
-                          {o.subtype && <span className="block text-[11px] text-ink-500 truncate">{o.subtype}</span>}
-                        </span>
-                        <span className={`text-sm tabular-nums whitespace-nowrap ${included ? 'text-emerald-700 font-semibold' : 'text-ink-700'}`}>
-                          {included ? `Incluido · ${fmt(lineTotal(o))}` : `+ ${fmt(lineTotal(o))}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {hasMaterials && (
               <div className="mt-3 text-[11px] text-ink-500 border-t border-ink-100 pt-3">

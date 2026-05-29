@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import { Boxes, GitFork, ChevronDown } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
-import Switch from '../primitives/Switch.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
@@ -412,15 +411,16 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(offered || optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
+      {((optional && !offered) || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
-          {offered ? (
-            <OptionalToggle included={included} name={line.name} onToggle={(on) => onToggleOptional(line.id, on)} />
-          ) : optional ? (
+          {/* Read-only surfaces (editor preview / PDF twin) keep the static
+              optional caption. The interactive link instead gets the on-card
+              action footer below, so this line stays quiet there (offered). */}
+          {optional && !offered && (
             <span className="text-ink-500">
               Opcional · no incluido en el total
             </span>
-          ) : null}
+          )}
           {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
@@ -535,6 +535,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
           </div>
         </div>
       </div>
+      {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(line.id, on)} />}
     </li>
   );
 }
@@ -590,13 +591,11 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      {(offered || optional || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
+      {((optional && !offered) || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
-          {offered ? (
-            <OptionalToggle included={included} name={line.name} onToggle={(on) => onToggleOptional(line.id, on)} />
-          ) : optional ? (
+          {optional && !offered && (
             <span className="text-ink-500">Opcional · no incluido en el total</span>
-          ) : null}
+          )}
           {showRowGroupChrome && inGroup && groupInfo && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
@@ -684,6 +683,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
           </div>
         </div>
       </div>
+      {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(line.id, on)} />}
     </li>
   );
 }
@@ -825,24 +825,48 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
   );
 }
 
-// Inline ON/OFF toggle for a dealer-offered optional add-on, rendered in a
-// client line's eyebrow. `relative z-[2]` lifts it above the row's dimming
-// veil so it stays tappable even when the optional is currently OFF (and the
-// rest of the row is veiled). ON reads emerald "incluido"; OFF invites the
-// client to add it. The total recomputes from the pick the toggle fires.
-function OptionalToggle({ included, name, onToggle }) {
+// On-card action row for a dealer-offered optional the client can fold in or
+// out. It sits at the FOOT of the product card — beside the product it acts
+// on, not in a panel divorced at the top — and speaks the app's own button
+// vocabulary (a brand CTA to add, a quiet bordered button to remove) rather
+// than a foreign switch. The dashed top hairline rhymes with the dashed left
+// border the excluded-optional card already wears.
+//
+// `relative z-[2]` lifts it above the card's dimming veil, so the "Agregar"
+// CTA stays lit and tappable even while the rest of the (excluded) card is
+// washed out — the one clear next step on an otherwise quiet card.
+function OptionalAction({ included, onToggle }) {
   return (
-    <span className="relative z-[2] inline-flex items-center gap-2">
-      <Switch
-        checked={included}
-        onChange={onToggle}
-        size="sm"
-        label={`${included ? 'Quitar del total' : 'Agregar al total'}: ${name || 'opcional'}`}
-      />
-      <span className={included ? 'text-emerald-700 font-semibold' : 'text-ink-500 font-semibold'}>
-        {included ? 'Opcional · incluido' : 'Opcional · agregar'}
-      </span>
-    </span>
+    <div className="relative z-[2] mt-3 pt-3 border-t border-dashed border-ink-200 flex items-center justify-between gap-3">
+      {included ? (
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+          <Check size={14} className="flex-shrink-0" aria-hidden />
+          Incluido en tu cotización
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-xs text-ink-500">
+          <Sparkles size={13} className="flex-shrink-0 opacity-80" aria-hidden />
+          Complemento opcional
+        </span>
+      )}
+      {included ? (
+        <button
+          type="button"
+          onClick={() => onToggle(false)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:bg-ink-100 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+        >
+          <X size={13} aria-hidden /> Quitar
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onToggle(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 min-h-8 coarse:min-h-10 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600 active:bg-brand-700 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+        >
+          <Plus size={14} aria-hidden /> Agregar
+        </button>
+      )}
+    </div>
   );
 }
 
