@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, X, Download, Loader2, PackageSearch, Share2,
+  SlidersHorizontal, Download, Loader2, PackageSearch, Share2,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -21,26 +21,26 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * an off-canvas drawer). Its inner content lines up with the page's
  * `max-w-[1400px]` container so the figures sit under the columns above.
  *
- * Three states:
- *   • Collapsed bar — currency toggle, the grand total + live DOP conversion,
- *     an icon-only "Ajustes" toggle, and the Share + Export PDF actions pinned
- *     at every width (Catálogo rides along on mobile, where the header hides
- *     it). Always visible.
- *   • Breakdown — tapping the total slides up the full step-by-step total
+ * Two states:
+ *   • Collapsed bar — the grand total + live DOP conversion (USD and DOP on a
+ *     single line at every width) and the Share + Export PDF actions, pinned at
+ *     every width (Catálogo rides along on mobile, where the header hides it).
+ *     Always visible.
+ *   • Open panel — tapping the total slides up the full step-by-step total
  *     (subtotal → margin → discount → ITBIS → shipping), margin gauge,
- *     professional commission, and the "Cómo se calcula" explainer.
- *   • Adjustments — tapping "Ajustes" slides up the OPTIONAL discount card
- *     (quote-level discount % + shipping + DOP rate refresh). Hidden until
- *     clicked; an amber dot on the button flags when an adjustment is applied.
+ *     professional commission, the "Cómo se calcula" explainer, AND the quote
+ *     adjustments (discount % + shipping + DOP rate refresh). Folding the
+ *     adjustments in here is what frees the collapsed bar to stay a single
+ *     clean line.
  *
- * Only one panel is open at a time. Margin lives on lines, not quote-wide, by
+ * Margin lives on lines, not quote-wide, by
  * design — so a quote-wide margin gauge shows only when one is actually set.
  */
 export default function TotalsDock({
   quote, totals, professional, onUpdateQuote,
   onOpenCatalog, onExport, exporting, onShare, sharing,
 }) {
-  const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown' | 'adjust'
+  const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
@@ -88,8 +88,12 @@ export default function TotalsDock({
   const toggle = (name) => setPanel((p) => (p === name ? 'closed' : name));
   const breakdownOpen = panel === 'breakdown';
 
-  /* ----------------------------- panel bodies ----------------------------- */
+  /* ----------------------------- panel body ------------------------------ */
 
+  // One drop-up panel, opened by tapping the total. It carries the full
+  // step-by-step breakdown AND the quote adjustments (discount / shipping /
+  // DOP rate), so the bottom bar itself stays a single clean row — the total
+  // (USD + DOP inline) plus the Share / Export actions.
   const breakdown = (
     <div className="py-4 space-y-2.5">
       <Row label="Subtotal" value={fmt(totals.subtotal)} />
@@ -117,74 +121,76 @@ export default function TotalsDock({
         </summary>
         <BreakdownExplainer quote={quote} totals={totals} fmt={fmt} />
       </details>
-    </div>
-  );
 
-  const adjust = (
-    <div className="py-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-sm">Ajustes de la cotización</h2>
-        <button type="button" onClick={() => setPanel('closed')} className="btn-icon -mr-2" aria-label="Cerrar ajustes">
-          <X size={16} />
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-3 max-w-md">
-        <div>
-          <div className="label">Descuento %</div>
-          <DebouncedInput
-            type="number"
-            min="0"
-            max="100"
-            className="input"
-            value={quote.discountPct ?? 0}
-            onCommit={(v) => onUpdateQuote({ discountPct: clampPct(v) })}
-          />
+      {/* Adjustments — discount %, shipping, and the DOP rate. Lives in the
+          panel (not a separate bar button) so the dock's collapsed row stays a
+          single clean line. */}
+      <div className="border-t border-ink-100 pt-3 mt-1 space-y-3">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal size={13} className="text-ink-500" />
+          <h2 className="font-semibold text-sm">Ajustes de la cotización</h2>
+          {hasAdjustment && (
+            <span className="chip bg-amber-50 text-amber-700 border border-amber-200">Aplicado</span>
+          )}
         </div>
-        <div>
-          <div className="label">Envío ({currency})</div>
-          <DebouncedInput
-            type="number"
-            min="0"
-            className="input"
-            value={quote.shipping ?? 0}
-            onCommit={(v) => onUpdateQuote({ shipping: Math.max(0, Number(v) || 0) })}
-          />
+        <div className="grid grid-cols-2 gap-3 max-w-md">
+          <div>
+            <div className="label">Descuento %</div>
+            <DebouncedInput
+              type="number"
+              min="0"
+              max="100"
+              className="input"
+              value={quote.discountPct ?? 0}
+              onCommit={(v) => onUpdateQuote({ discountPct: clampPct(v) })}
+            />
+          </div>
+          <div>
+            <div className="label">Envío ({currency})</div>
+            <DebouncedInput
+              type="number"
+              min="0"
+              className="input"
+              value={quote.shipping ?? 0}
+              onCommit={(v) => onUpdateQuote({ shipping: Math.max(0, Number(v) || 0) })}
+            />
+          </div>
         </div>
-      </div>
-      <div className="text-[10px] text-ink-500 space-y-1.5">
-        <p>ITBIS fijo en {ITBIS_PCT}%. El descuento se aplica sobre el subtotal antes de impuestos.</p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span>
-            {rateLocked
-              ? 'Tasa DOP bloqueada al enviar.'
-              : 'Tasa DOP en vivo (Banco Popular).'}
-          </span>
-          <button
-            type="button"
-            onClick={handleRefreshRate}
-            disabled={refreshingRate}
-            className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
-            title={rateLocked
-              ? 'Trae la tasa USD→DOP de hoy (Banco Popular) y reprecia esta cotización con ella'
-              : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
-          >
-            <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
-            {refreshingRate
-              ? 'Actualizando…'
-              : rateLocked ? 'Actualizar tasa de hoy' : 'Actualizar tasa'}
-          </button>
+        <div className="text-[10px] text-ink-500 space-y-1.5">
+          <p>ITBIS fijo en {ITBIS_PCT}%. El descuento se aplica sobre el subtotal antes de impuestos.</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>
+              {rateLocked
+                ? 'Tasa DOP bloqueada al enviar.'
+                : 'Tasa DOP en vivo (Banco Popular).'}
+            </span>
+            <button
+              type="button"
+              onClick={handleRefreshRate}
+              disabled={refreshingRate}
+              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
+              title={rateLocked
+                ? 'Trae la tasa USD→DOP de hoy (Banco Popular) y reprecia esta cotización con ella'
+                : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
+            >
+              <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
+              {refreshingRate
+                ? 'Actualizando…'
+                : rateLocked ? 'Actualizar tasa de hoy' : 'Actualizar tasa'}
+            </button>
+          </div>
+          {rateLocked && (
+            <p>
+              Al actualizar se reprecia esta cotización con la tasa de hoy. La tasa la gestiona{' '}
+              <Link to="/settings" className="underline">configuración</Link>.
+            </p>
+          )}
+          {rateError && (
+            <p className="text-red-600 flex items-start gap-1">
+              <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" /> {rateError}
+            </p>
+          )}
         </div>
-        {rateLocked && (
-          <p>
-            Al actualizar se reprecia esta cotización con la tasa de hoy. La tasa la gestiona{' '}
-            <Link to="/settings" className="underline">configuración</Link>.
-          </p>
-        )}
-        {rateError && (
-          <p className="text-red-600 flex items-start gap-1">
-            <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" /> {rateError}
-          </p>
-        )}
       </div>
     </div>
   );
@@ -204,23 +210,25 @@ export default function TotalsDock({
           >
             <div className="overflow-hidden min-h-0">
               <div className="max-h-[55vh] overflow-y-auto border-b border-ink-100">
-                {panel === 'adjust' ? adjust : panel === 'breakdown' ? breakdown : null}
+                {panel === 'breakdown' ? breakdown : null}
               </div>
             </div>
           </div>
 
-          {/* Always-visible bar — ONE compact row at every width: the running
-              total leads (eyebrow · amount · live DOP conversion), then a tight
-              cluster of icon buttons with the filled Export CTA last. The mobile
-              layout mirrors the desktop dock exactly; only the touch targets
-              grow (44px on coarse pointers). Nothing stacks. */}
+          {/* Always-visible bar: the running total (eyebrow · USD amount · live
+              DOP conversion · chevron) then the Share / Export icon cluster. With
+              Ajustes folded into the drop-up panel only Share + Export (+ Añadir
+              on phones) remain here. On wide screens USD and DOP read on a single
+              line, matching the desktop reference; on a narrow phone — where a
+              five-figure USD, a seven-figure DOP and the touch icons can't all
+              share one line — the DOP conversion wraps to its own line just
+              beneath the amount, so it's always shown in full, never clipped. */}
           <div className="flex items-center gap-2 sm:gap-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-            {/* The total leads the row — the hero figure, and the breakdown
-                toggle. On phones the row wraps: eyebrow · amount · chevron sit
-                on top, and the live DOP conversion drops to its own full-width
-                line just beneath (never clipped). From sm: up there's room for
-                everything inline, matching the desktop dock — the conversion
-                tucks between the amount and the chevron via `order`. */}
+            {/* The total leads the row — the hero figure and the breakdown
+                toggle. The row wraps: amount + chevron hold the first line and
+                the DOP conversion takes the second on phones; from sm: up there's
+                room for everything inline (conversion tucked before the chevron
+                via `order`). */}
             <button
               type="button"
               onClick={() => toggle('breakdown')}
@@ -228,9 +236,9 @@ export default function TotalsDock({
               className="group min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
               title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
             >
-              {/* Eyebrow shows from sm: up. On phones it's dropped so the amount
-                  and its chevron hug each other on line 1 (the bold leading "$"
-                  already reads as the total) and the conversion gets line 2. */}
+              {/* Eyebrow from sm: up only — on a phone the bold leading "$"
+                  already reads as the total, and dropping it lets the amount and
+                  its chevron hug on line one. */}
               <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block">Total</span>
               <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
               {discountPct > 0 && (
@@ -242,24 +250,20 @@ export default function TotalsDock({
                   between the amount and the chevron — the desktop layout. */}
               {dopRate && currency === 'USD' && (
                 <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
-                  {/* The converted total is the figure that matters — keep it
-                      whole. The "@ rate" suffix is what gives way first: hidden
-                      below 380px (the lock icon still flags the locked state),
-                      back inline from there up. */}
-                  <span className="flex-shrink-0">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
+                  <span className="truncate">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
                   {rateLocked ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa Ajustes para actualizarla">
-                      <Lock size={10} /> <span className="hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
+                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa el total para actualizarla">
+                      <Lock size={10} /> @ {dopRate.toFixed(2)}
                     </span>
                   ) : (
-                    <span className="text-ink-400 flex-shrink-0 hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
+                    <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
                   )}
                 </span>
               )}
-              {/* Sits right after the amount (no ml-auto) so the toggle reads as
-                  part of the price. On phones the conversion's `order-last`
-                  jumps past it to the next line, keeping the chevron on the
-                  amount's row; on desktop it trails the conversion inline. */}
+              {/* Hugs the figure (no ml-auto) so the toggle reads as part of the
+                  price. On phones the conversion's `order-last` jumps past it to
+                  line two, keeping the chevron on the amount's line; on desktop
+                  it trails the conversion inline. */}
               <ChevronUp
                 size={16}
                 className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
@@ -268,18 +272,10 @@ export default function TotalsDock({
             </button>
 
             {/* Action cluster — compact icon buttons at every width (the filled
-                Export CTA last), pinned to the right and never shrinking. */}
+                Export CTA last), pinned to the right and never shrinking.
+                Ajustes moved into the drop-up panel (tap the total), which frees
+                the width here to keep USD + DOP inline on one line. */}
             <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-              <DockAction
-                icon={SlidersHorizontal}
-                label="Ajustes"
-                onClick={() => toggle('adjust')}
-                pressed={panel === 'adjust'}
-                dot={hasAdjustment}
-                ariaLabel="Ajustes: descuento y envío"
-                title="Descuento y envío de la cotización"
-              />
-
               {/* Catálogo — phone/tablet only; the header and items card carry it
                   on desktop. */}
               <DockAction

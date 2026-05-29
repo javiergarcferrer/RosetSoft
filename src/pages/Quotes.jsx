@@ -12,6 +12,8 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
+import { isValidContainerNo } from '../lib/containerTracking.js';
+import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import { quoteStagePill } from '../lib/statusPill.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
@@ -107,6 +109,13 @@ export default function Quotes() {
   // N round-trips for N visible quotes. Cheaper for the dashboard's six
   // recent quotes and an order of magnitude cheaper for the full list page.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
+  // Containers loaded once (small table) so a suitable quote row can offer
+  // shipment tracking without an N-row fan-out of per-order queries.
+  const containers = useLiveQuery(
+    () => db.containers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
 
   // Search header query state. The status dimension is the primary tab
   // strip ('all' = Todas); secondary filters (currently just vendedor)
@@ -141,6 +150,18 @@ export default function Quotes() {
     for (const o of orders) m.set(o.id, o);
     return m;
   }, [orders]);
+
+  // orderId → that order's TRACKABLE containers (valid ISO 6346 number), so a
+  // quote row offers tracking only when its order has a real shipment to track.
+  const trackableByOrderId = useMemo(() => {
+    const m = new Map();
+    for (const c of containers) {
+      if (!c.orderId || !isValidContainerNo(c.code)) continue;
+      if (!m.has(c.orderId)) m.set(c.orderId, []);
+      m.get(c.orderId).push(c);
+    }
+    return m;
+  }, [containers]);
 
   // Per-quote grand total. Previously inline `qty * unitPrice`, which
   // (a) ignored compound lines (their own qty/unitPrice are 0 by
@@ -265,6 +286,23 @@ export default function Quotes() {
     return sorted;
   }, [scopedQuotes, effectiveScope, q, tab, filters, sort, customerById, totalByQuoteId]);
 
+  // One track button per ORDER, not per quote: several quotes can share an
+  // order and would otherwise each repeat an identical "Rastrear envío" for the
+  // same containers. Give the tracker to the first quote of each order in the
+  // current list order; the rest render without it.
+  const trackingByQuoteId = useMemo(() => {
+    const seen = new Set();
+    const byQuote = new Map();
+    for (const qu of filtered) {
+      const conts = qu.orderId ? trackableByOrderId.get(qu.orderId) : null;
+      if (conts?.length && !seen.has(qu.orderId)) {
+        seen.add(qu.orderId);
+        byQuote.set(qu.id, conts);
+      }
+    }
+    return byQuote;
+  }, [filtered, trackableByOrderId]);
+
   if (!loaded) {
     return (
       <>
@@ -326,6 +364,7 @@ export default function Quotes() {
             customer={customerById.get(qu.customerId)}
             creator={profileById.get(qu.createdByUserId)}
             order={ordersById.get(qu.orderId)}
+            tracking={trackingByQuoteId.get(qu.id)}
             total={totalByQuoteId.get(qu.id) || 0}
             rates={displayRatesFor(qu, settings)}
           />
@@ -360,6 +399,7 @@ export default function Quotes() {
                 customer={customerById.get(qu.customerId)}
                 creator={profileById.get(qu.createdByUserId)}
                 order={ordersById.get(qu.orderId)}
+                tracking={trackingByQuoteId.get(qu.id)}
                 total={totalByQuoteId.get(qu.id) || 0}
                 rates={displayRatesFor(qu, settings)}
               />
@@ -389,7 +429,7 @@ function OrderIndicator({ order }) {
   );
 }
 
-function QuoteCard({ qu, customer, creator, order, total, rates }) {
+function QuoteCard({ qu, customer, creator, order, tracking, total, rates }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -420,36 +460,48 @@ function QuoteCard({ qu, customer, creator, order, total, rates }) {
           <Trash2 size={16} />
         </button>
       </div>
+      {tracking?.length > 0 && (
+        <ShipmentTracking containers={tracking} collapsible className="mt-2 pt-2 border-t border-ink-100" />
+      )}
     </div>
   );
 }
 
-function QuoteRow({ qu, customer, creator, order, total, rates }) {
+function QuoteRow({ qu, customer, creator, order, tracking, total, rates }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
   return (
-    <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
-      <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
-      <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
-      <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
-        {creatorLabel || '—'}
-      </td>
-      <td>
-        <div className="flex items-center gap-1.5">
-          <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
-          <TradeFlag quote={qu} />
-        </div>
-      </td>
-      <td><OrderIndicator order={order} /></td>
-      <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
-      <td className="text-right w-12">
-        <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
-          <Trash2 size={14} />
-        </button>
-      </td>
-    </tr>
+    <>
+      <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
+        <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
+        <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
+        <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
+          {creatorLabel || '—'}
+        </td>
+        <td>
+          <div className="flex items-center gap-1.5">
+            <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
+            <TradeFlag quote={qu} />
+          </div>
+        </td>
+        <td><OrderIndicator order={order} /></td>
+        <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
+        <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
+        <td className="text-right w-12">
+          <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
+            <Trash2 size={14} />
+          </button>
+        </td>
+      </tr>
+      {tracking?.length > 0 && (
+        <tr className="bg-ink-50/40">
+          <td colSpan={8} className="px-3 py-2">
+            <ShipmentTracking containers={tracking} collapsible />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
