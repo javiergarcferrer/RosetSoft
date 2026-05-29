@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
-import { Plus, FileText, Trash2 } from 'lucide-react';
+import { Plus, FileText, Trash2, Truck } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
@@ -303,6 +303,33 @@ export default function Quotes() {
     return byQuote;
   }, [filtered, trackableByOrderId]);
 
+  // Desktop table groups quotes under their order: an order header row (which
+  // carries the shipment tracker) followed by that order's quote rows. A group
+  // appears at the position of its first quote in the current list; quotes with
+  // no order render as standalone rows. (Mobile keeps the flat card layout.)
+  const orderGroups = useMemo(() => {
+    const byOrder = new Map();
+    for (const qu of filtered) {
+      const ord = qu.orderId ? ordersById.get(qu.orderId) : null;
+      if (!ord) continue;
+      if (!byOrder.has(ord.id)) byOrder.set(ord.id, []);
+      byOrder.get(ord.id).push(qu);
+    }
+    const emitted = new Set();
+    const units = [];
+    for (const qu of filtered) {
+      const ord = qu.orderId ? ordersById.get(qu.orderId) : null;
+      if (ord) {
+        if (emitted.has(ord.id)) continue;
+        emitted.add(ord.id);
+        units.push({ type: 'group', order: ord, quotes: byOrder.get(ord.id) });
+      } else {
+        units.push({ type: 'quote', quote: qu });
+      }
+    }
+    return units;
+  }, [filtered, ordersById]);
+
   if (!loaded) {
     return (
       <>
@@ -385,25 +412,57 @@ export default function Quotes() {
               <th>Cliente</th>
               <th className="hidden xl:table-cell">Creada por</th>
               <th>Estado</th>
-              <th>Pedido</th>
               <th className="hidden lg:table-cell">Actualizada</th>
               <th className="text-right">Total</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {filtered.map((qu) => (
+            {orderGroups.map((u) => (u.type === 'group' ? (
+              <Fragment key={`order-${u.order.id}`}>
+                <tr className="bg-ink-50/70 border-t border-ink-200">
+                  <td colSpan={7} className="px-3 py-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        to={`/orders/${u.order.id}`}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-800 hover:text-brand-700 transition-colors"
+                      >
+                        <Truck size={14} className="text-ink-500" />
+                        Pedido #{u.order.number ?? u.order.id.slice(-4)}
+                        {u.order.name ? <span className="font-normal text-ink-500">· {u.order.name}</span> : null}
+                      </Link>
+                      <span className="text-[11px] text-ink-400">
+                        {u.quotes.length} cotización{u.quotes.length === 1 ? '' : 'es'}
+                      </span>
+                      <span className="flex-1" />
+                      {trackableByOrderId.get(u.order.id)?.length > 0 && (
+                        <ShipmentTracking containers={trackableByOrderId.get(u.order.id)} collapsible />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {u.quotes.map((qu) => (
+                  <QuoteRow
+                    key={qu.id}
+                    qu={qu}
+                    grouped
+                    customer={customerById.get(qu.customerId)}
+                    creator={profileById.get(qu.createdByUserId)}
+                    total={totalByQuoteId.get(qu.id) || 0}
+                    rates={displayRatesFor(qu, settings)}
+                  />
+                ))}
+              </Fragment>
+            ) : (
               <QuoteRow
-                key={qu.id}
-                qu={qu}
-                customer={customerById.get(qu.customerId)}
-                creator={profileById.get(qu.createdByUserId)}
-                order={ordersById.get(qu.orderId)}
-                tracking={trackingByQuoteId.get(qu.id)}
-                total={totalByQuoteId.get(qu.id) || 0}
-                rates={displayRatesFor(qu, settings)}
+                key={u.quote.id}
+                qu={u.quote}
+                customer={customerById.get(u.quote.customerId)}
+                creator={profileById.get(u.quote.createdByUserId)}
+                total={totalByQuoteId.get(u.quote.id) || 0}
+                rates={displayRatesFor(u.quote, settings)}
               />
-            ))}
+            )))}
           </tbody>
         </table>
       </div>
@@ -467,41 +526,31 @@ function QuoteCard({ qu, customer, creator, order, tracking, total, rates }) {
   );
 }
 
-function QuoteRow({ qu, customer, creator, order, tracking, total, rates }) {
+function QuoteRow({ qu, customer, creator, total, rates, grouped = false }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
   return (
-    <>
-      <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
-        <td className="font-medium whitespace-nowrap">#{qu.number || '—'}</td>
-        <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
-        <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
-          {creatorLabel || '—'}
-        </td>
-        <td>
-          <div className="flex items-center gap-1.5">
-            <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
-            <TradeFlag quote={qu} />
-          </div>
-        </td>
-        <td><OrderIndicator order={order} /></td>
-        <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-        <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
-        <td className="text-right w-12">
-          <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
-            <Trash2 size={14} />
-          </button>
-        </td>
-      </tr>
-      {tracking?.length > 0 && (
-        <tr className="bg-ink-50/40">
-          <td colSpan={8} className="px-3 py-2">
-            <ShipmentTracking containers={tracking} collapsible />
-          </td>
-        </tr>
-      )}
-    </>
+    <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
+      <td className={`font-medium whitespace-nowrap ${grouped ? 'pl-6' : ''}`}>#{qu.number || '—'}</td>
+      <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
+      <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
+        {creatorLabel || '—'}
+      </td>
+      <td>
+        <div className="flex items-center gap-1.5">
+          <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
+          <TradeFlag quote={qu} />
+        </div>
+      </td>
+      <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
+      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
+      <td className="text-right w-12">
+        <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
+          <Trash2 size={14} />
+        </button>
+      </td>
+    </tr>
   );
 }
 
