@@ -280,11 +280,17 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     const { data } = await admin.from(table).select('*').eq('id', id).maybeSingle();
     return (data as Row) || null;
   };
-  const [customerRow, professionalRow, sellerRow, settingsRow] = await Promise.all([
+  const [customerRow, professionalRow, sellerRow, settingsRow, containerRows] = await Promise.all([
     fetchOne('customers', quote.customer_id),
     fetchOne('professionals', quote.professional_id),
     fetchOne('profiles', quote.created_by_user_id),
     admin.from('settings').select('*').eq('profile_id', quote.profile_id).maybeSingle().then((r) => (r.data as Row) || null),
+    // The attached order's containers, so the link can track the shipment. Only
+    // the number (a label) and the ISO 6346 code leave the server — the client
+    // tracks via the keyless hl-track function; no order/cost data is exposed.
+    quote.order_id
+      ? admin.from('containers').select('number, code').eq('order_id', quote.order_id).then((r) => (r.data as Row[]) || [])
+      : Promise.resolve([] as Row[]),
   ]);
 
   const customer = customerRow ? {
@@ -298,6 +304,12 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     companyName: settingsRow.company_name, logoImageId: settingsRow.logo_image_id,
     quoteFooter: settingsRow.quote_footer,
   } : {};
+
+  // Containers with a real code only (label + code); the client validates the
+  // ISO 6346 number and renders one tracking panel each.
+  const containers = (containerRows as Row[])
+    .filter((c) => String(c.code || '').trim())
+    .map((c) => ({ number: c.number, code: c.code }));
 
   return {
     quote: {
@@ -316,6 +328,7 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     professional,
     seller,
     settings,
+    containers,
   };
 }
 
