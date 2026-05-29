@@ -434,11 +434,12 @@ export default function Quotes() {
                       <span className="text-[11px] text-ink-400">
                         {u.quotes.length} cotización{u.quotes.length === 1 ? '' : 'es'}
                       </span>
-                      <span className="flex-1" />
-                      {trackableByOrderId.get(u.order.id)?.length > 0 && (
-                        <ShipmentTracking containers={trackableByOrderId.get(u.order.id)} collapsible />
-                      )}
                     </div>
+                    {/* Full cell width below the header line, so the opened
+                        tracker can use the whole row (not a squished column). */}
+                    {trackableByOrderId.get(u.order.id)?.length > 0 && (
+                      <ShipmentTracking containers={trackableByOrderId.get(u.order.id)} collapsible className="mt-2" />
+                    )}
                   </td>
                 </tr>
                 {u.quotes.map((qu) => (

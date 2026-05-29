@@ -112,7 +112,7 @@ const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, v
       <div className="relative h-full">
         <div
           ref={elRef}
-          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-72'}`}
+          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-64'}`}
           aria-label="Mapa del viaje del contenedor"
         />
 

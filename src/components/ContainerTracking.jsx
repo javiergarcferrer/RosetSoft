@@ -112,11 +112,11 @@ export default function ContainerTracking({ containerNo }) {
       )}
 
       {status === 'done' && summary && summary.count > 0 && (
-        <>
+        <div className={route.stops.length > 0 ? 'vtrack-grid' : 'space-y-3'}>
           {/* Voyage summary — route, status, progress and last position in one
-              clean band. The map below stays uncluttered; its overlay HUD only
-              appears when the map is expanded to full screen. */}
-          <div className="rounded-lg border border-ink-100 bg-white p-2.5 space-y-2">
+              clean band. On wide panels the map sits beside it (see .vtrack-grid);
+              the map's overlay HUD only appears when expanded to full screen. */}
+          <div className="vtrack-summary rounded-lg border border-ink-100 bg-white p-2.5 space-y-2">
             <div className="flex items-center justify-between gap-2">
               {voyage.origin ? (
                 <div className="flex min-w-0 items-center gap-1.5 font-semibold text-ink-900">
@@ -162,10 +162,15 @@ export default function ContainerTracking({ containerNo }) {
             )}
           </div>
 
-          {route.stops.length > 0 && <ContainerTrackingMap ref={mapRef} route={route} voyage={voyage} />}
+          {route.stops.length > 0 && (
+            <div className="vtrack-map">
+              <ContainerTrackingMap ref={mapRef} route={route} voyage={voyage} />
+            </div>
+          )}
 
-          {/* All tracking points live in a dropdown so the panel stays
-              compact; picking one focuses its marker on the map. */}
+          {/* Tracking points + the "consultado" stamp share the left column on
+              wide panels; a dropdown keeps the list compact. */}
+          <div className="vtrack-points space-y-2">
           <Dropdown
             align="left"
             panelClassName="w-[min(20rem,calc(100vw-1.5rem))]"
@@ -210,7 +215,8 @@ export default function ContainerTracking({ containerNo }) {
           {fetchedAt && (
             <p className="text-[10px] text-ink-400">Consultado {formatDateTime(Date.parse(fetchedAt))}</p>
           )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
