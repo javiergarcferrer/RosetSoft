@@ -17,10 +17,10 @@ test('stacks website colors + PDF spec into one new material', () => {
   assert.equal(deleteIds.length, 0);
   assert.equal(rows.length, 1);
   const m = rows[0];
-  assert.equal(m.grade, 'A');                 // PDF owns spec
+  assert.equal(m.grade, 'A');                              // PDF owns spec
   assert.equal(m.price, 73);
   assert.equal(m.composition, 'COTTON 80%');
-  assert.deepEqual(m.colors.map((c) => c.code), ['855']); // website owns colors
+  assert.deepEqual(m.colors.map((c) => c.code), ['855']);  // website owns colors
   assert.equal(summary.newMaterials, 1);
   assert.equal(summary.colorsAdded, 1);
   assert.equal(summary.siteSynced, true);
@@ -41,9 +41,21 @@ test('website /FR name reconciles with the PDF clean name — one row, photo kep
   const { rows, deleteIds } = syncCatalog(existing, site, [pdf({ composition: null })], ctx());
   assert.equal(deleteIds.length, 0);
   const acate = rows.find((r) => r.id === 'a');
-  assert.equal(acate.name, 'ACATE');           // never "ACATE/FR"
+  assert.equal(acate.name, 'ACATE');                        // never "ACATE/FR"
   assert.equal(acate.grade, 'A');
   assert.equal(acate.colors.find((c) => c.code === '855').imageId, 'ph'); // photo preserved
   assert.ok(rows.every((r) => !/\/FR$/i.test(r.name)));
   assert.ok(!rows.some((r) => r.id !== 'a' && r.name === 'ACATE')); // no duplicate created
+});
+
+test('a material in the price list is un-flagged "no en sitio" even if the site scraper missed it', () => {
+  // ARDA is flagged discontinued and the website sweep doesn't return it (a
+  // scraper gap) — but it IS in the price list, so it must un-flag.
+  const existing = [{ id: 'a', profileId: 'team', category: 'fabric', name: 'ARDA',
+    discontinuedAt: 500, colors: [{ name: 'X', code: '1', imageId: 'p' }], createdAt: 1, updatedAt: 1 }];
+  const { rows, summary } = syncCatalog(existing, [], [pdf({ name: 'ARDA', composition: null })], ctx());
+  const arda = rows.find((r) => r.id === 'a');
+  assert.equal(arda.discontinuedAt, null); // no longer "no en sitio"
+  assert.equal(arda.grade, 'A');
+  assert.equal(summary.flaggedNoSite, 0);  // the website sync never flags
 });

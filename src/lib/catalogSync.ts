@@ -63,9 +63,11 @@ export function syncCatalog(
 ): { rows: Material[]; deleteIds: string[]; summary: SyncSummary } {
   const base = { profileId: ctx.profileId, now: ctx.now, newId: ctx.newId };
 
-  // 1) Website first — colors / photos / notes; flags "no en sitio" on a full sweep.
+  // 1) Website first — colors / photos / notes only. We DON'T let it flag
+  // "no en sitio": the price-list PDF is the roster now, and the site scraper
+  // has coverage gaps (it can miss a current fabric like ARDA). So complete:false.
   const site = sitePatterns
-    ? mergeCatalog(existing, sitePatterns, { ...base, complete: ctx.siteComplete ?? true })
+    ? mergeCatalog(existing, sitePatterns, { ...base, complete: false })
     : { rows: [] as Material[], summary: { newColors: 0 } };
 
   const afterSite = new Map(existing.map((m) => [m.id, m]));

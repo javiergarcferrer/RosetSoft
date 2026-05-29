@@ -297,10 +297,11 @@ function mergeColors(group: Material[]): MaterialColor[] {
  * Merge parsed price-list materials into the catalog. The price list is the
  * source of truth for commercial spec — name, category, grade, wear, Martindale,
  * width, price, composition — and OWNS those fields. It preserves everything the
- * website owns: colors (and their uploaded photos), care notes, and the
- * website's `discontinuedAt` flag. Nothing is deleted; on a complete import,
- * materials not in the price list are flagged `notInPricelistAt` (and un-flagged
- * if they return). Pure + idempotent.
+ * website owns: colors (and their uploaded photos) and care notes. A material
+ * the list carries is a current product, so its "no en sitio" (`discontinuedAt`)
+ * flag is cleared. Nothing is deleted (stale /FR duplicates are consolidated);
+ * on a complete import, materials not in the price list are flagged
+ * `notInPricelistAt` (and un-flagged if they return). Pure + idempotent.
  */
 export function mergePriceList(
   existing: Material[],
@@ -379,11 +380,14 @@ export function mergePriceList(
       composition: p.composition,
       colors,
       notInPricelistAt: null,
+      // In the price list ⇒ a current product, so it can't be "no en sitio".
+      discontinuedAt: null,
       updatedAt: now,
     };
     const changed =
       redundant.length > 0 ||
       wasFlagged ||
+      primary.discontinuedAt != null ||
       (primary.name ?? '') !== p.name ||
       primary.category !== p.category ||
       PDF_FIELDS.some((f) => (primary[f] ?? null) !== (p[f] ?? null));
