@@ -1,0 +1,1208 @@
+[
+{
+"x": 64.3,
+"y": 49.3,
+"str": "Name",
+"page": 1
+},
+{
+"x": 227.4,
+"y": 54.3,
+"str": "USD",
+"page": 1
+},
+{
+"x": 548.8,
+"y": 806.1,
+"str": "19",
+"page": 1
+},
+{
+"x": 214.5,
+"y": 808.8,
+"str": "05.09.2026/USA 02/AMERICAN/USD",
+"page": 1
+},
+{
+"x": 538.9,
+"y": 65.3,
+"str": "FABRICS",
+"page": 1
+},
+{
+"x": 119.2,
+"y": 49.3,
+"str": "Grade",
+"page": 1
+},
+{
+"x": 150.1,
+"y": 49.3,
+"str": "Wear",
+"page": 1
+},
+{
+"x": 215.1,
+"y": 44.4,
+"str": "Price per yard",
+"page": 1
+},
+{
+"x": 179.3,
+"y": 49.3,
+"str": "Width",
+"page": 1
+},
+{
+"x": 266.3,
+"y": 49.3,
+"str": "Composition",
+"page": 1
+},
+{
+"x": 64.9,
+"y": 705.3,
+"str": "DIOS",
+"page": 1
+},
+{
+"x": 125.6,
+"y": 705.5,
+"str": "C",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 705.3,
+"str": "COTTON 40%, POLYESTER 25%, ACRYLIC 15%, VISCOSE 10%, WOOL 10%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 718.9,
+"str": "ANTHRACITE:785 CRAIE:780 ECORCE:783 ECRU:781 LIN:782 PIGEON:784",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 701.0,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 709.5,
+"str": "30000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 705.3,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 705.8,
+"str": "129",
+"page": 1
+},
+{
+"x": 61.8,
+"y": 634.4,
+"str": "DAVOS",
+"page": 1
+},
+{
+"x": 125.6,
+"y": 634.7,
+"str": "D",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 634.4,
+"str": "VISCOSE 62%, COTTON 18%, POLYESTER 12%, LINEN 8%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 648.0,
+"str": "BOULEAU:813 EBENE:812 GREGE:810 NUIT:814",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 654.4,
+"str": "A moir (watered) effect will sometimes be noticeable on certain items covered in CHENILLE fabrics. This is perfectly normal, and is wholly due to the natural characteristics of the fabric   as with",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 660.8,
+"str": "velours, the individual bres will atten with use.",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 630.2,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 638.7,
+"str": "25000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 634.4,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 634.9,
+"str": "162",
+"page": 1
+},
+{
+"x": 54.4,
+"y": 563.6,
+"str": "CRAQUELIN",
+"page": 1
+},
+{
+"x": 125.6,
+"y": 563.9,
+"str": "D",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 563.6,
+"str": "POLYESTER 45%, COTTON 37%, VISCOSE 10%, ACRYLIC 8%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 577.2,
+"str": "ARDOISE:1009 AUBERGINE:1002 BRUME:1008 NACRE:1011 OLIVE:1001 POUDRE:1004 ROSE:1003 SABLE:1007 SOIE:1010 TERRACOTTA:1005 VIEIL OR:1006",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 559.4,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 567.9,
+"str": "25000",
+"page": 1
+},
+{
+"x": 181.7,
+"y": 563.6,
+"str": "54½",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 564.1,
+"str": "162",
+"page": 1
+},
+{
+"x": 57.8,
+"y": 492.8,
+"str": "COWO/FR",
+"page": 1
+},
+{
+"x": 125.4,
+"y": 493.0,
+"str": "G",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 492.8,
+"str": "WOOL 72%, COTTON 21%, ACRYLIC 3%, POLYAMID 2%, VISCOSE 1%, POLYESTER 1%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 506.4,
+"str": "GRIS:663 MOKA:662 NATUREL:664 NOIR:660 OURS:661",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 488.5,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 497.0,
+"str": "40000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 492.8,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 493.3,
+"str": "263",
+"page": 1
+},
+{
+"x": 58.6,
+"y": 421.9,
+"str": "CODA/FR",
+"page": 1
+},
+{
+"x": 126.9,
+"y": 422.2,
+"str": "I",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 421.9,
+"str": "WOOL 90%, POLYAMID (NYLON) 10%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 435.5,
+"str": "AMANDE:7558 ARGILE:7557 BOULEAU:7559 BRIQUE/NOIR:4714 CIEL:7567 CORIANDRE:7560 CREME/KIWI:4702 CREME/NOIR:4701 CREME/ROUGE:4704 ETANG:7569 FRAMBOISE:7566",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 441.9,
+"str": "JAUNE/NOIR:4713 PETROLE:7568 RAPHIA:7563 SAFRAN:7564 SAUMON:7565",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 448.3,
+"str": "In the case of two-color threads, the rst colour corresponds to the effect thread and the second to the bonding thread.",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 417.7,
+"str": "3C",
+"page": 1
+},
+{
+"x": 147.3,
+"y": 426.2,
+"str": "100000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 421.9,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 422.4,
+"str": "330",
+"page": 1
+},
+{
+"x": 61.6,
+"y": 351.1,
+"str": "CLOUD",
+"page": 1
+},
+{
+"x": 125.6,
+"y": 351.3,
+"str": "D",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 351.1,
+"str": "ACRYLIC 56%, POLYESTER 44%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 364.7,
+"str": "BRONZE:2174 CERISE:2169 FORET:2163 GREGE:2165 KAKI:2164 LAZULI:2171 MARINE:2166 PERLE:2172 POUDRE:2173 SAUGE:2175 SCHISTE:2167",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 371.1,
+"str": "The moir effect (often irreversible) one might note on certain models covered in velour fabrics is a natural characteristic of such a fabric. During use, or in the case of strong accidental pressure, zones",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 377.5,
+"str": "of crushed pile may become apparent in Cloud (56 % acrylic velvet / 44 % polyester). However it is still possible to improve its appearance with a combination of heat diffusion via a hair dryer and very",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 383.9,
+"str": "gentle brushing.",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 346.9,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 355.4,
+"str": "50000",
+"page": 1
+},
+{
+"x": 181.7,
+"y": 351.1,
+"str": "56½",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 351.6,
+"str": "162",
+"page": 1
+},
+{
+"x": 59.2,
+"y": 280.3,
+"str": "CAPA/FR",
+"page": 1
+},
+{
+"x": 125.9,
+"y": 280.5,
+"str": "F",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 276.7,
+"str": "VISCOSE 31%, POLYACRYLIC 24%, COTTON 14%, WOOL 12%, POLYESTER 9%, LINEN 7%,",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 283.9,
+"str": "POLYAMID 2%, ELASTHANE 1%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 293.9,
+"str": "AMANDE:3798 ANTHRACITE:3791 BLEU:3795 BOUTON D'OR:3787 BRIQUE:3788 ECRU:3790 GREGE:3796 GRIS:3797 OUTREMER:3789 ROSE:3793 TERRE BRULEE:3792 VERT:3794",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 276.0,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 284.5,
+"str": "30000",
+"page": 1
+},
+{
+"x": 181.7,
+"y": 280.3,
+"str": "54½",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 280.8,
+"str": "229",
+"page": 1
+},
+{
+"x": 42.7,
+"y": 209.4,
+"str": "CANVAS LAINE 2/FR",
+"page": 1
+},
+{
+"x": 125.6,
+"y": 209.7,
+"str": "D",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 209.4,
+"str": "WOOL 90%, POLYAMID (NYLON) 10%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 223.0,
+"str": "ACIER:4674 ALBATRE:4677 AMBRE:4684 ARGENT:4673 BLE:4657 BRONZE:4680 CANNELLE:4679 CAROTTE:4658 CASSIS:4691 CORAIL:4687 DENIM:4695 ECRU:4655 ECUREUIL:4685",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 229.4,
+"str": "EMERAUDE:4670 FLAMENCO:4661 GRAPHITE:4676 HERBE:4668 INDIGO:4690 KOALA:4669 MARINE:4694 MATELOT:4664 MENTHE:4667 NUIT:4666 ORAGE:4692 PAIN BRULE:4693",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 235.8,
+"str": "PECHE:4660 PERLE:4672 PIGEON:4663 PLOMB:4675 PRUNE:4681 ROSE:4686 ROUILLE:4659 SANTAL:4689 SAPIN:4671 SEIGLE:4678 TAGA:4698 VERT PAON:4699",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 205.2,
+"str": "2C",
+"page": 1
+},
+{
+"x": 147.3,
+"y": 213.7,
+"str": "100000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 209.4,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 209.9,
+"str": "162",
+"page": 1
+},
+{
+"x": 57.4,
+"y": 138.6,
+"str": "CADENCE",
+"page": 1
+},
+{
+"x": 125.9,
+"y": 138.8,
+"str": "F",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 138.6,
+"str": "POLYESTER 58%, POLYACRYLIC 42%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 152.2,
+"str": "NATURE:156",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 158.6,
+"str": "IMPORTANT : CADENCE IS FOR EXCLUSIVE USE ON THE \"PRADO - EDITION SPECIALE\" ONLY.",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 142.8,
+"str": "16000",
+"page": 1
+},
+{
+"x": 181.7,
+"y": 138.6,
+"str": "56½",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 139.1,
+"str": "229",
+"page": 1
+},
+{
+"x": 56.4,
+"y": 67.8,
+"str": "BYRAM/FR",
+"page": 1
+},
+{
+"x": 125.8,
+"y": 68.0,
+"str": "P",
+"page": 1
+},
+{
+"x": 266.6,
+"y": 67.8,
+"str": "MOHAIR 60%, COTTON 40%",
+"page": 1
+},
+{
+"x": 36.8,
+"y": 81.4,
+"str": "BORDEAUX:1284 CANARD:1280 CELADON:1281 GRIS:1287 HORIZON:1286 MIEL:1283 OLIVE:1282 POUDRE:1285 SOIE:1289 TAUPE:1288",
+"page": 1
+},
+{
+"x": 153.4,
+"y": 63.5,
+"str": "3C",
+"page": 1
+},
+{
+"x": 148.9,
+"y": 72.0,
+"str": "70000",
+"page": 1
+},
+{
+"x": 184.2,
+"y": 67.8,
+"str": "55",
+"page": 1
+},
+{
+"x": 228.8,
+"y": 68.3,
+"str": "564",
+"page": 1
+},
+{
+"x": 258.6,
+"y": 54.3,
+"str": "USD",
+"page": 7
+},
+{
+"x": 28.9,
+"y": 806.1,
+"str": "28",
+"page": 7
+},
+{
+"x": 214.5,
+"y": 808.8,
+"str": "05.09.2026/USA 02/AMERICAN/USD",
+"page": 7
+},
+{
+"x": 19.0,
+"y": 65.4,
+"str": "LEATHER",
+"page": 7
+},
+{
+"x": 95.4,
+"y": 49.3,
+"str": "Name",
+"page": 7
+},
+{
+"x": 150.3,
+"y": 49.3,
+"str": "Grade",
+"page": 7
+},
+{
+"x": 181.3,
+"y": 49.3,
+"str": "Wear",
+"page": 7
+},
+{
+"x": 247.6,
+"y": 44.4,
+"str": "Price per SM",
+"page": 7
+},
+{
+"x": 204.7,
+"y": 49.3,
+"str": "Thickness",
+"page": 7
+},
+{
+"x": 297.5,
+"y": 49.3,
+"str": "Composition",
+"page": 7
+},
+{
+"x": 84.0,
+"y": 280.3,
+"str": "SOFT TOUCH",
+"page": 7
+},
+{
+"x": 156.9,
+"y": 280.5,
+"str": "X",
+"page": 7
+},
+{
+"x": 297.8,
+"y": 280.3,
+"str": "BULL LEATHER, NUBUCK 100%",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 293.9,
+"str": "ANTHRACIT:5030 CHATAIGNE:5031 GOLD:5033 TAUPE:5032",
+"page": 7
+},
+{
+"x": 187.6,
+"y": 276.0,
+"str": ".",
+"page": 7
+},
+{
+"x": 186.8,
+"y": 284.5,
+"str": "0",
+"page": 7
+},
+{
+"x": 215.3,
+"y": 280.3,
+"str": "13",
+"page": 7
+},
+{
+"x": 259.9,
+"y": 280.8,
+"str": "363",
+"page": 7
+},
+{
+"x": 92.8,
+"y": 209.4,
+"str": "KYOTO",
+"page": 7
+},
+{
+"x": 156.9,
+"y": 209.7,
+"str": "X",
+"page": 7
+},
+{
+"x": 297.8,
+"y": 209.4,
+"str": "CATTLE LEATHER, SEMI-ANILINE GLOSS FINISH FULL GRAIN BULLHIDE 100%",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 223.0,
+"str": "ANTHRACITE:5292 BRONZE:5289 CAFE:5290 CHATAIGNE:5288 FAUVE:5297 FORET:5287 GOLD:5298 GRIS:5295 IVOIRE:5293 MAKE UP:5294 MASTIC:5296 NOIR:5291 TAUPE:5299",
+"page": 7
+},
+{
+"x": 215.3,
+"y": 209.4,
+"str": "15",
+"page": 7
+},
+{
+"x": 259.9,
+"y": 209.9,
+"str": "363",
+"page": 7
+},
+{
+"x": 91.0,
+"y": 138.6,
+"str": "INDIANA",
+"page": 7
+},
+{
+"x": 156.8,
+"y": 138.8,
+"str": "U",
+"page": 7
+},
+{
+"x": 297.8,
+"y": 138.6,
+"str": "CATTLE LEATHER, COW, EMBOSSED CORRECTED GRAIN PIGMENTED LEATHER 100%",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 152.2,
+"str": "ARGILE:5099 BLANC:5090 BRUN:5092 CRAIE:5086 EBENE:5097 GRIS:5096 LIN:5094 MASTIC:5082 NOIR:5085 SCHISTE:5098",
+"page": 7
+},
+{
+"x": 215.3,
+"y": 138.6,
+"str": "12",
+"page": 7
+},
+{
+"x": 259.9,
+"y": 139.1,
+"str": "157",
+"page": 7
+},
+{
+"x": 96.6,
+"y": 67.8,
+"str": "DIVA",
+"page": 7
+},
+{
+"x": 156.9,
+"y": 68.0,
+"str": "V",
+"page": 7
+},
+{
+"x": 297.8,
+"y": 67.8,
+"str": "CATTLE LEATHER, SEMI-ANILINE COW FULL GRAIN PIGMENTED LEATHER 100%",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 81.4,
+"str": "ACIER:5312 ALBATRE:5300 AMANDE:5407 ARDOISE:5329 BELUGA:5421 BISQUE:5165 BLANC:4999 CACAO:5420 CACHOU:5180 CAMEL:5326 CERISE:5160 CHAMOIS:5318 CHANVRE:5147",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 87.8,
+"str": "COURGE:5162 CYPRES:5332 EGE:5187 FAUVE:4993 FORT:5199 FUDGE:5181 GOLD:5320 GRAPHITE:5184 GREGE:5301 ICE:4990 INDIGO:5175 LAURIER:5146 LILAS:5393 MARINE:4992",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 94.2,
+"str": "MARRON:5330 MASTIC:5316 NOIR:5012 NOISETTE:5159 OCRE:5411 PERLE:5125 PIERRE:5315 PLATINE:5171 ROCHE:5313 ROUGE:5167 SABLE:5157 SILEX:5153 SILICE:5302 SOLEIL:5412",
+"page": 7
+},
+{
+"x": 68.0,
+"y": 100.6,
+"str": "SUNSET:5409 TAUPE:5143",
+"page": 7
+},
+{
+"x": 215.3,
+"y": 67.8,
+"str": "12",
+"page": 7
+},
+{
+"x": 259.9,
+"y": 68.3,
+"str": "291",
+"page": 7
+},
+{
+"x": 258.6,
+"y": 54.3,
+"str": "USD",
+"page": 8
+},
+{
+"x": 24.5,
+"y": 806.1,
+"str": "908",
+"page": 8
+},
+{
+"x": 214.4,
+"y": 808.8,
+"str": "05.09.2026/USA 02/AMERICAN/USD",
+"page": 8
+},
+{
+"x": 19.0,
+"y": 65.3,
+"str": "OUTDOOR FABRICS",
+"page": 8
+},
+{
+"x": 95.4,
+"y": 49.3,
+"str": "Name",
+"page": 8
+},
+{
+"x": 150.3,
+"y": 49.3,
+"str": "Grade",
+"page": 8
+},
+{
+"x": 181.3,
+"y": 49.3,
+"str": "Wear",
+"page": 8
+},
+{
+"x": 246.3,
+"y": 44.4,
+"str": "Price per yard",
+"page": 8
+},
+{
+"x": 210.5,
+"y": 49.3,
+"str": "Width",
+"page": 8
+},
+{
+"x": 297.5,
+"y": 49.3,
+"str": "Composition",
+"page": 8
+},
+{
+"x": 97.4,
+"y": 421.9,
+"str": "TOP",
+"page": 8
+},
+{
+"x": 156.8,
+"y": 422.2,
+"str": "C",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 421.9,
+"str": "MULTILAYER COMPOSITE 100%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 435.5,
+"str": "BALTIQUE:510 BRUME:529 CAPUCINE:508 NOIR:532 NOISETTE:527 POUDRE:502",
+"page": 8
+},
+{
+"x": 184.6,
+"y": 417.7,
+"str": "3C",
+"page": 8
+},
+{
+"x": 178.4,
+"y": 426.2,
+"str": "120000",
+"page": 8
+},
+{
+"x": 215.3,
+"y": 421.9,
+"str": "55",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 422.4,
+"str": "129",
+"page": 8
+},
+{
+"x": 95.6,
+"y": 351.1,
+"str": "TESS",
+"page": 8
+},
+{
+"x": 156.8,
+"y": 351.3,
+"str": "C",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 351.1,
+"str": "POLYPROPYLENE 100%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 364.7,
+"str": "ANTHRACITE:943 COBALT:944 CRAIE:940 GALET:942 SABLE:941",
+"page": 8
+},
+{
+"x": 184.6,
+"y": 346.9,
+"str": "3C",
+"page": 8
+},
+{
+"x": 180.1,
+"y": 355.3,
+"str": "60000",
+"page": 8
+},
+{
+"x": 212.8,
+"y": 351.1,
+"str": "54½",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 351.6,
+"str": "129",
+"page": 8
+},
+{
+"x": 82.1,
+"y": 280.3,
+"str": "SILVERTEX/FR",
+"page": 8
+},
+{
+"x": 156.8,
+"y": 280.5,
+"str": "B",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 280.3,
+"str": "PVC 81%, POLYESTER 19%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 293.9,
+"str": "ALUMINIUM:472 AUBERGINE:467 AVOCADO:476 BALTIC:468 BASIL:461 BEIGE:451 BLACK:489 BOTTLE:475 CAMEL:456 CARBON:488 CELERY:471 CHAMPAGNE:455 CITRUS:481",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 300.3,
+"str": "COBRE:433 CORAL:464 CREAM:445 DELFT:473 FOREST:485 GRAPHITE:487 GRENADINE:439 ICE:435 ICE CREAM:440 JET:479 LOTUS:458 LUGGAGE:442 MACADAMIA:431 MAGENTA:449",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 306.7,
+"str": "MANDARIN:443 MELON:470 METEOR:432 MOCCA:437 ORANGE:438 ORCHID:454 PETROL:478 PISTACHO:466 PLATA:477 RASPBERRY:452 RED:444 ROSE:459 RUBIN:457 SAFRAN:465",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 313.1,
+"str": "SAGE:480 SANDSTONE:436 SAPPHIRE:474 SHIITAKE:446 SISAL:450 SKYLIGHT:469 SQUASH:460 STERLING:482 STORM:484 SUNKIST:448 TAUPE:441 TEAL:486 TITANIUM:483 TOMATO:434",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 319.5,
+"str": "TURQUOISE:463 UMBER:447 WHITE:430 WINE:453",
+"page": 8
+},
+{
+"x": 186.6,
+"y": 276.0,
+"str": "A",
+"page": 8
+},
+{
+"x": 178.4,
+"y": 284.5,
+"str": "300000",
+"page": 8
+},
+{
+"x": 215.3,
+"y": 280.3,
+"str": "54",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 280.8,
+"str": "101",
+"page": 8
+},
+{
+"x": 94.4,
+"y": 209.4,
+"str": "ROMA",
+"page": 8
+},
+{
+"x": 157.1,
+"y": 209.7,
+"str": "F",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 209.4,
+"str": "ACRYLIC 100%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 223.0,
+"str": "CARMIN:670 CHAUX:671 CITRUS:673 PAON:672 SAUGE:674",
+"page": 8
+},
+{
+"x": 184.6,
+"y": 205.2,
+"str": "3C",
+"page": 8
+},
+{
+"x": 180.1,
+"y": 213.7,
+"str": "40000",
+"page": 8
+},
+{
+"x": 215.3,
+"y": 209.4,
+"str": "55",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 209.9,
+"str": "229",
+"page": 8
+},
+{
+"x": 93.1,
+"y": 138.6,
+"str": "GAYAC",
+"page": 8
+},
+{
+"x": 156.8,
+"y": 138.8,
+"str": "D",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 138.6,
+"str": "POLYPROPYLENE 90%, POLYESTER 10%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 152.2,
+"str": "BOIS:562 NUAGE:560 PIERRE:561",
+"page": 8
+},
+{
+"x": 184.6,
+"y": 134.3,
+"str": "3C",
+"page": 8
+},
+{
+"x": 180.1,
+"y": 142.8,
+"str": "30000",
+"page": 8
+},
+{
+"x": 212.8,
+"y": 138.6,
+"str": "54½",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 139.1,
+"str": "162",
+"page": 8
+},
+{
+"x": 84.4,
+"y": 67.8,
+"str": "ELIOS SLING",
+"page": 8
+},
+{
+"x": 156.8,
+"y": 68.0,
+"str": "C",
+"page": 8
+},
+{
+"x": 297.8,
+"y": 67.8,
+"str": "PVC 65%, POLYESTER 35%",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 81.4,
+"str": "EPIDOTE:1064 JASPE:1062 ONYX:1060",
+"page": 8
+},
+{
+"x": 68.0,
+"y": 87.8,
+"str": "IMPORTANT : ELIOS SLING IS FOR EXCLUSIVE USE ON THE SABBIA CHILIENNE ONLY.",
+"page": 8
+},
+{
+"x": 180.1,
+"y": 72.0,
+"str": "50000",
+"page": 8
+},
+{
+"x": 212.8,
+"y": 67.8,
+"str": "70½",
+"page": 8
+},
+{
+"x": 259.9,
+"y": 68.3,
+"str": "129",
+"page": 8
+}
+]
