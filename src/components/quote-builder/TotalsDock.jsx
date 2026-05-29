@@ -230,9 +230,12 @@ export default function TotalsDock({
                   )}
                 </span>
               )}
+              {/* Sits immediately after the figure (no ml-auto) so the toggle
+                  affordance reads as part of the price, not stranded by the
+                  action icons. A small left margin keeps it off the numerals. */}
               <ChevronUp
-                size={18}
-                className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                size={16}
+                className={`text-ink-400 flex-shrink-0 ml-0.5 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                 aria-hidden
               />
             </button>
@@ -330,20 +333,23 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
  * width, matching the desktop dock's aesthetic: a 9×9 square (11×11 on coarse
  * pointers, per Apple HIG / WCAG 2.5.5), label carried by the tooltip /
  * accessible name rather than visible text so the whole bar stays on one row.
+ * Every button is the same rounded square so the cluster reads as one even,
+ * deliberate rhythm:
  *   • primary (Export) — the filled ink-900 CTA.
  *   • pressed — the active-panel (toggle) state, also filled.
- *   • default — quiet ghost; `dot` flags an applied adjustment, anchored to the
- *     icon's top-right.
+ *   • default — bordered ghost square (hairline ink-200), the consistent
+ *     enclosure the rest of the cluster shares; `dot` flags an applied
+ *     adjustment, anchored to the icon's top-right.
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
   disabled, busy, pressed, primary, dot, className = '',
 }) {
   const tone = primary
-    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700 shadow-sm'
+    ? 'bg-ink-900 text-white border border-ink-900 hover:bg-ink-800 active:bg-ink-700'
     : pressed
-      ? 'bg-ink-900 text-white'
-      : 'text-ink-600 hover:bg-ink-100 active:bg-ink-200';
+      ? 'bg-ink-900 text-white border border-ink-900'
+      : 'text-ink-700 border border-ink-200 hover:bg-ink-100 hover:border-ink-300 active:bg-ink-200';
   return (
     <button
       type="button"
