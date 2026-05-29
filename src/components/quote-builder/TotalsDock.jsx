@@ -189,11 +189,11 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar. On phones it stacks into two rows so the grand
-              total — the hero figure — keeps the full width instead of being
-              truncated by the action cluster; from sm: up it collapses back to a
-              single row. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {/* Always-visible bar. On phones it stacks into two tight rows — the
+              grand total as the hero line, then a segmented row of action tiles
+              that fill the width edge to edge (no stranded icons). From sm: up it
+              collapses to one row: total left, compact icon cluster right. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure. Both currencies read
                 at once on a single line (USD, then the live DOP equivalent), so
                 there's nothing to toggle: the figure is complete at a glance. It
@@ -237,13 +237,13 @@ export default function TotalsDock({
               </button>
             </div>
 
-            {/* Action toolbar. On phones it's a full-width row of labelled
-                actions that share the width evenly (tab-bar style) so it reads
-                as a deliberate toolbar rather than buttons stranded in a corner;
-                the export CTA carries the filled accent. From sm: up the labels
-                drop away and it collapses to the compact right-aligned icon
-                cluster the desktop dock has always used. */}
-            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
+            {/* Action toolbar. On phones it's a segmented row of equal-width
+                tiles (filled surfaces, so they read as one deliberate control
+                rather than icons floating in space); the export tile carries the
+                filled accent. From sm: up the labels and surfaces drop away and
+                it collapses to the compact right-aligned icon cluster the desktop
+                dock has always used. */}
+            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-2 sm:gap-1 flex-shrink-0">
               <DockAction
                 icon={SlidersHorizontal}
                 label="Ajustes"
@@ -333,24 +333,24 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
 
 /**
  * One action in the dock's toolbar. Two faces from a single definition:
- *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
- *     bar's width evenly and read as a real toolbar (labels remove the "what
- *     does this icon do" guesswork on the small target).
- *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
- *     uses, label hidden.
+ *   • phone — a flex-1 tile with a filled surface and an icon-over-label, so the
+ *     row reads as one segmented control that fills the width edge to edge
+ *     instead of icons floating in space.
+ *   • sm+ — sheds the surface and collapses to the compact 36/44px bordered icon
+ *     square the desktop dock uses, label hidden.
  * `primary` paints the filled CTA (export); `pressed` is the active-panel
  * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
- * stays put whether the cell is wide (phone) or square (desktop).
+ * stays put whether the cell is a wide tile (phone) or a square (desktop).
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
   disabled, busy, pressed, primary, dot, className = '',
 }) {
-  const variant = primary
+  const surface = primary
     ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
     : pressed
       ? 'bg-ink-900 text-white'
-      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
+      : 'bg-ink-100 text-ink-700 hover:bg-ink-200 active:bg-ink-200 sm:bg-transparent sm:hover:bg-ink-100 sm:border sm:border-ink-200';
   return (
     <button
       type="button"
@@ -360,7 +360,7 @@ function DockAction({
       aria-pressed={pressed}
       aria-label={ariaLabel}
       title={title}
-      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-2.5 sm:py-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-xl sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${surface} ${className}`}
     >
       <span className="relative inline-flex">
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
@@ -373,7 +373,7 @@ function DockAction({
           />
         )}
       </span>
-      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
+      <span className="text-[11px] font-medium leading-none sm:hidden">{label}</span>
     </button>
   );
 }
