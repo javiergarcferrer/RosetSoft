@@ -587,3 +587,65 @@
   .overscroll-contain { overscroll-behavior: contain; }
   .overscroll-none    { overscroll-behavior: none; }
 }
+
+/* ===================================================================
+   Container voyage map (ContainerTrackingMap) — Leaflet markers, the
+   animated route flow, and the heading-rotated vessel. Plain CSS (not a
+   Tailwind layer) so the Leaflet-targeted selectors are never purged.
+   =================================================================== */
+
+/* Let the route arcs glow without a hard edge. */
+.vmap-leaf .leaflet-container { background: #eef1f4; font-family: inherit; }
+.vmap-leaf .leaflet-control-zoom a { color: theme('colors.ink.700'); }
+.vmap-leaf .leaflet-popup-content { margin: 8px 10px; }
+.vmap-leaf .leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: theme('boxShadow.pop'); }
+
+/* Strip Leaflet's default white divIcon box so only our glyphs show. */
+.vmap-icon { background: transparent; border: 0; }
+.vmap-icon, .vmap-vessel-wrap { overflow: visible; }
+
+/* Port markers — small, crisp, divIcon-based so they can carry rings. */
+.vmap-dot { display: block; box-sizing: border-box; border-radius: 9999px; background: #fff; }
+.vmap-origin { width: 13px; height: 13px; background: theme('colors.brand.600'); border: 2.5px solid #fff; box-shadow: 0 0 0 1.5px theme('colors.brand.600'), theme('boxShadow.soft'); }
+.vmap-via    { width: 11px; height: 11px; border: 2.5px solid theme('colors.ink.500'); box-shadow: theme('boxShadow.soft'); }
+.vmap-dest   { width: 15px; height: 15px; border: 3px solid theme('colors.brand.600'); box-shadow: 0 0 0 3px rgba(165,83,34,0.18), theme('boxShadow.soft'); }
+.vmap-dest.vmap-arrived { background: theme('colors.emerald.600'); border-color: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,0.20), theme('boxShadow.soft'); }
+
+/* The vessel: a heading-rotated glyph over a soft pulsing halo. */
+.vmap-vessel-wrap { position: relative; width: 30px; height: 30px; }
+.vmap-vessel-halo {
+  position: absolute; inset: 0; margin: auto; width: 30px; height: 30px; border-radius: 9999px;
+  background: radial-gradient(circle, rgba(5,150,105,0.35) 0%, rgba(5,150,105,0) 70%);
+  animation: vmap-pulse 2.4s ease-out infinite;
+}
+.vmap-vessel-glyph {
+  position: absolute; inset: 0; margin: auto; width: 24px; height: 24px;
+  display: grid; place-items: center; transform-origin: 50% 50%;
+  filter: drop-shadow(0 1px 2px rgba(23,22,18,0.45));
+}
+.vmap-vessel-glyph svg { width: 22px; height: 22px; display: block; }
+
+@keyframes vmap-pulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  70%  { transform: scale(2.0); opacity: 0; }
+  100% { transform: scale(2.0); opacity: 0; }
+}
+
+/* Animated directional flow on the not-yet-sailed leg (Leaflet draws the
+   polyline as an SVG <path>; we march its dashes toward the destination). */
+.vmap-flow { stroke-dasharray: 1 9; animation: vmap-dash 1.1s linear infinite; }
+@keyframes vmap-dash { to { stroke-dashoffset: -100; } }
+
+/* Permanent origin/destination labels: quiet, legible, no marker box. */
+.vmap-leaf .leaflet-tooltip.vmap-label {
+  background: rgba(255,255,255,0.92); border: 1px solid theme('colors.ink.100');
+  border-radius: 6px; padding: 1px 6px; font-size: 10px; font-weight: 600;
+  color: theme('colors.ink.700'); box-shadow: theme('boxShadow.soft');
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.vmap-leaf .leaflet-tooltip.vmap-label::before { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vmap-vessel-halo { animation: none; }
+  .vmap-flow { animation: none; }
+}

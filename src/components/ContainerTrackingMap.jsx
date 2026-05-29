@@ -1,27 +1,50 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Maximize2, Minimize2, LocateFixed } from 'lucide-react';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
 import { formatDateTime } from '../lib/format.js';
-import { CLASSIFIER_LABELS } from '../lib/containerTracking.js';
+import { CLASSIFIER_LABELS, MODE_LABELS } from '../lib/containerTracking.js';
+import { greatCircle, splitAntimeridian, bearingDeg } from '../lib/voyageGeometry.js';
 
 /**
- * Renders a container's Track & Trace route on a Leaflet map: one marker per
- * port hop (from `buildTrackingRoute`), a solid line through the legs already
- * sailed and a dashed line to the estimated arrival. It plots port-level
- * positions, NOT live vessel GPS — DCSA Track & Trace is event-based, so the
- * honest unit is "which port, in what order".
+ * The container voyage map. Draws a Hapag-Lloyd Track & Trace route as
+ * great-circle arcs (curved, the way a real sea route reads on a Mercator
+ * map), with the legs already sailed solid and the leg still to come animated
+ * toward the destination; a heading-rotated vessel marker sits at the
+ * last-known position. A glass HUD reports origin → destination, vessel,
+ * carrier, ETA and great-circle progress.
  *
- * Leaflet (+ its CSS) is loaded on demand via `safeDynamicImport`, the same
- * code-split path the PDF export uses, so the library stays out of the initial
- * bundle and only downloads when a dealer actually opens tracking. Tiles are
- * CARTO Positron (free, no API key, light styling that fits the app) and load
- * in the dealer's browser at runtime.
+ * Honest scope: these are PORT-level positions derived from DCSA events, not
+ * live vessel GPS — the vessel marker sits at the last reported port, pointed
+ * at the next one.
  *
- * @param {{ route: import('../lib/containerTracking.js').TrackingRoute }} props
+ * Leaflet (+ CSS) loads on demand via `safeDynamicImport`, the same code-split
+ * path the PDF export uses, so the library stays out of the initial bundle.
+ * Tiles are CARTO (free, keyless) and load in the dealer's browser.
+ *
+ * Exposes `focusStop(index)` via ref so the timeline can drive the map.
+ *
+ * @param {{ route: import('../lib/containerTracking.js').TrackingRoute,
+ *           voyage: import('../lib/containerTracking.js').VoyageSummary }} props
  */
-export default function ContainerTrackingMap({ route }) {
+const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, voyage }, ref) {
+  const wrapRef = useRef(null);
   const elRef = useRef(null);
   const mapRef = useRef(null);
+  const markersRef = useRef([]);   // stop index → Leaflet marker
+  const boundsRef = useRef(null);  // fitted bounds, for the reset control
   const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [expanded, setExpanded] = useState(false);
+
+  // Let the timeline pan the map to a stop and pop its detail.
+  useImperativeHandle(ref, () => ({
+    focusStop(index) {
+      const map = mapRef.current;
+      const marker = markersRef.current[index];
+      if (!map || !marker) return;
+      map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 4), { duration: 0.6 });
+      marker.openPopup();
+    },
+  }), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,26 +58,27 @@ export default function ContainerTrackingMap({ route }) {
         const L = mod.default || mod;
 
         const map = L.map(elRef.current, {
-          // A panel-embedded map shouldn't hijack the page's scroll; pan/zoom
-          // stay available via drag, the zoom control, and double-click.
-          scrollWheelZoom: false,
-          zoomControl: true,
+          scrollWheelZoom: false,        // don't hijack page scroll
+          zoomControl: false,            // re-added bottom-right, clear of the HUD
           attributionControl: true,
+          worldCopyJump: true,
         });
         mapRef.current = map;
         map.attributionControl.setPrefix(false);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          subdomains: 'abcd',
-          maxZoom: 19,
-        }).addTo(map);
+        // Soft coloured land, then a labels-only layer on top so place names
+        // sit above the route without the basemap competing with it.
+        const tile = (suffix) => L.tileLayer(
+          `https://{s}.basemaps.cartocdn.com/rastertiles/${suffix}/{z}/{x}/{y}{r}.png`,
+          { attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19 },
+        );
+        tile('voyager_nolabels').addTo(map);
+        tile('voyager_only_labels').addTo(map);
 
-        drawRoute(L, map, route);
+        drawVoyage(L, map, route, voyage, markersRef, boundsRef);
         if (cancelled) { map.remove(); mapRef.current = null; return; }
         setStatus('ready');
-        // Guard against a zero-size container at first paint (the panel may
-        // still be settling its layout); recompute once the frame is in.
         setTimeout(() => { if (!cancelled && mapRef.current) mapRef.current.invalidateSize(); }, 0);
       } catch {
         if (!cancelled) setStatus('error');
@@ -63,92 +87,224 @@ export default function ContainerTrackingMap({ route }) {
 
     return () => {
       cancelled = true;
+      markersRef.current = [];
+      boundsRef.current = null;
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
-  }, [route]);
+  }, [route, voyage]);
+
+  // Resize the map when toggling the expanded (near-fullscreen) overlay.
+  useEffect(() => {
+    if (mapRef.current) setTimeout(() => mapRef.current && mapRef.current.invalidateSize(), 60);
+  }, [expanded]);
+
+  function resetView() {
+    if (mapRef.current && boundsRef.current) {
+      mapRef.current.fitBounds(boundsRef.current, FIT_PADDING);
+    }
+  }
 
   return (
-    <div className="space-y-1.5">
-      <div className="relative">
+    <div
+      ref={wrapRef}
+      className={`vmap-leaf ${expanded ? 'fixed inset-2 z-[60] sm:inset-4' : 'relative'}`}
+    >
+      <div className="relative h-full">
         <div
           ref={elRef}
-          className="h-60 w-full rounded-md border border-ink-100 bg-ink-50 z-0"
-          aria-label="Mapa de rastreo del contenedor"
+          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-72'}`}
+          aria-label="Mapa del viaje del contenedor"
         />
+
+        {status === 'ready' && voyage?.origin && (
+          <VoyageHud voyage={voyage} />
+        )}
+
+        {/* Top-right controls */}
+        <div className="absolute top-2 right-2 z-[1000] flex gap-1">
+          <MapButton title="Centrar el recorrido" onClick={resetView}><LocateFixed size={14} /></MapButton>
+          <MapButton title={expanded ? 'Reducir' : 'Ampliar'} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </MapButton>
+        </div>
+
         {status !== 'ready' && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-md bg-ink-50/80 text-ink-500 text-[11px] pointer-events-none">
+          <div className="absolute inset-0 z-[500] flex items-center justify-center rounded-lg bg-ink-50/80 text-ink-500 text-[11px]">
             {status === 'error' ? 'No se pudo cargar el mapa' : 'Cargando mapa…'}
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-500">
-        <LegendDot className="bg-ink-400" /> Recorrido
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-500 mt-1.5">
+        <LegendDot className="bg-brand-600" /> Recorrido
+        <LegendDot className="ring-2 ring-ink-500 bg-white" /> Escala
         <LegendDot className="bg-emerald-600" /> Posición actual
-        <LegendDot className="bg-white border-2 border-brand-600" /> Destino (ETA)
+        <LegendDot className="ring-2 ring-brand-600 bg-white" /> Destino
       </div>
+    </div>
+  );
+});
+
+export default ContainerTrackingMap;
+
+/* -------------------------------- HUD -------------------------------- */
+
+function VoyageHud({ voyage }) {
+  const { origin, destination, vessel, voyage: voyageNo, carrier, etaAt, updatedAt, progressPct, arrived } = voyage;
+  const meta = [vessel, voyageNo, carrier].filter(Boolean).join(' · ');
+  const days = etaAt ? Math.round((etaAt - Date.now()) / 86_400_000) : null;
+  const etaLabel = etaAt
+    ? `ETA ${formatDateTime(etaAt)}${!arrived && days != null ? (days >= 0 ? ` · en ${days} d` : ' · vencida') : ''}`
+    : null;
+
+  return (
+    <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-white/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
+      <div className="flex items-center gap-1.5 font-semibold text-ink-900 leading-tight">
+        <span className="truncate">{origin?.name || '—'}</span>
+        <span className="text-ink-300">→</span>
+        <span className="truncate">{destination?.name || '—'}</span>
+      </div>
+      {meta && <div className="text-[10px] text-ink-500 mt-0.5 truncate">{meta}</div>}
+
+      <div className="mt-2 h-1.5 rounded-full bg-ink-100 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${arrived ? 'bg-emerald-600' : 'bg-brand-500'}`}
+          style={{ width: `${Math.max(2, Math.round(progressPct))}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2 mt-1 text-[10px]">
+        <span className={arrived ? 'text-emerald-700 font-medium' : 'text-ink-600 font-medium'}>
+          {arrived ? 'Entregado' : `${Math.round(progressPct)}% del trayecto`}
+        </span>
+        {etaLabel && <span className="text-ink-500 truncate">{etaLabel}</span>}
+      </div>
+      {updatedAt && <div className="text-[10px] text-ink-400 mt-0.5">Act. {formatDateTime(updatedAt)}</div>}
     </div>
   );
 }
 
+function MapButton({ title, onClick, children }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className="w-7 h-7 grid place-items-center rounded-md border border-ink-200 bg-white/90 backdrop-blur text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
 function LegendDot({ className }) {
-  return <span className={`inline-block w-2 h-2 rounded-full align-middle mr-0.5 ${className}`} />;
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full align-middle mr-0.5 ${className}`} />;
 }
 
 /* --------------------------- Leaflet drawing -------------------------- */
 
-const STYLES = {
-  leg:    { color: '#544f43', weight: 2.5, opacity: 0.8 },                 // ink-600, travelled
-  legEta: { color: '#a55322', weight: 2.5, opacity: 0.8, dashArray: '5,6' }, // brand-600, remaining
-  stop:   { radius: 5, color: '#544f43', weight: 1.5, fillColor: '#878374', fillOpacity: 0.9 }, // ink
-  last:   { radius: 7, color: '#047857', weight: 2,   fillColor: '#059669', fillOpacity: 1 },   // emerald
-  eta:    { radius: 6, color: '#a55322', weight: 2.5, fillColor: '#ffffff', fillOpacity: 1, dashArray: '3' }, // brand ring
-};
+const FIT_PADDING = { paddingTopLeft: [44, 88], paddingBottomRight: [44, 36], maxZoom: 6 };
 
-function drawRoute(L, map, route) {
+// Navigation glyph pointing north (0°); rotated to the vessel's heading.
+const VESSEL_SVG =
+  '<svg viewBox="0 0 24 24" fill="#059669" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round">' +
+  '<path d="M12 1.8 L19.6 21 L12 16.3 L4.4 21 Z"/></svg>';
+
+const SAILED_STYLE = { color: '#a55322', weight: 3.5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
+const REMAIN_STYLE = { color: '#a55322', weight: 3, opacity: 0.7, lineCap: 'round', className: 'vmap-flow' };
+
+function dotIcon(L, cls, size) {
+  return L.divIcon({
+    className: 'vmap-icon',
+    html: `<span class="vmap-dot ${cls}"></span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function vesselIcon(L, headingDeg) {
+  return L.divIcon({
+    className: 'vmap-icon',
+    html: `<div class="vmap-vessel-wrap"><span class="vmap-vessel-halo"></span>`
+      + `<span class="vmap-vessel-glyph" style="transform:rotate(${headingDeg}deg)">${VESSEL_SVG}</span></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+}
+
+function drawVoyage(L, map, route, voyage, markersRef, boundsRef) {
   const stops = route?.stops || [];
-  if (stops.length === 0) {
-    map.setView([20, -40], 2); // mid-Atlantic fallback; should be unreachable
-    return;
+  if (stops.length === 0) { map.setView([24, -45], 3); return; }
+
+  const ll = stops.map((s) => [s.lat, s.lon]);
+  const lastIndex = route.lastIndex;
+  const destIndex = route.etaIndex >= 0 ? route.etaIndex : stops.length - 1;
+  const arrived = !!voyage?.arrived;
+  const allPts = [];
+
+  // Route arcs: per leg, sampled along the great circle and split at the
+  // antimeridian. Legs up to the last-known stop are "sailed"; the rest flow.
+  for (let i = 1; i < stops.length; i++) {
+    const sailed = lastIndex >= 0 && i <= lastIndex;
+    const style = sailed ? SAILED_STYLE : REMAIN_STYLE;
+    for (const seg of splitAntimeridian(greatCircle(ll[i - 1], ll[i], 48))) {
+      if (seg.length >= 2) { L.polyline(seg, style).addTo(map); allPts.push(...seg); }
+    }
+  }
+  if (allPts.length === 0) allPts.push(...ll);
+
+  // Port markers.
+  markersRef.current = [];
+  stops.forEach((s, i) => {
+    const cls = i === destIndex
+      ? `vmap-dest${arrived ? ' vmap-arrived' : ''}`
+      : i === 0 ? 'vmap-origin' : 'vmap-via';
+    const size = i === destIndex ? 15 : i === 0 ? 13 : 11;
+    const marker = L.marker([s.lat, s.lon], { icon: dotIcon(L, cls, size), zIndexOffset: i === destIndex ? 200 : 100 })
+      .addTo(map)
+      .bindPopup(popupHtml(s));
+    if (i === 0 || i === destIndex) {
+      marker.bindTooltip(s.name, { permanent: true, direction: i === 0 ? 'right' : 'left', className: 'vmap-label', offset: i === 0 ? [8, 0] : [-8, 0] });
+    }
+    markersRef.current[i] = marker;
+  });
+
+  // Vessel at the last-known position, pointed at the next stop. When the box
+  // has arrived we leave the (checked) destination marker speak for itself.
+  if (!arrived && lastIndex >= 0 && lastIndex < stops.length) {
+    const next = stops[Math.min(lastIndex + 1, stops.length - 1)];
+    const cur = stops[lastIndex];
+    const heading = next && next !== cur ? bearingDeg([cur.lat, cur.lon], [next.lat, next.lon]) : 0;
+    L.marker([cur.lat, cur.lon], { icon: vesselIcon(L, heading), zIndexOffset: 1000 })
+      .addTo(map)
+      .bindPopup(popupHtml(cur));
   }
 
-  const pts = stops.map((s) => [s.lat, s.lon]);
-
-  // The voyage line: solid through the legs already sailed (up to the
-  // last-known position), dashed onward to the ETA. `cut` is that boundary;
-  // -1 means nothing actual yet, so the whole path is the dashed "planned" leg.
-  if (pts.length >= 2) {
-    const cut = route.lastIndex;
-    if (cut >= 1) L.polyline(pts.slice(0, cut + 1), STYLES.leg).addTo(map);
-    if (cut >= 0 && cut < pts.length - 1) L.polyline(pts.slice(cut), STYLES.legEta).addTo(map);
-    if (cut < 0) L.polyline(pts, STYLES.legEta).addTo(map);
-  }
-
-  for (const s of stops) {
-    const style = s.isLast ? STYLES.last : s.isEta ? STYLES.eta : STYLES.stop;
-    L.circleMarker([s.lat, s.lon], style).addTo(map).bindPopup(popupHtml(s));
-  }
-
-  if (pts.length === 1) {
-    map.setView(pts[0], 5);
+  // Fit to the arcs (not just the stops) so the curves never clip.
+  if (allPts.length === 1) {
+    map.setView(allPts[0], 4);
+    boundsRef.current = null;
   } else {
-    map.fitBounds(L.latLngBounds(pts), { padding: [24, 24], maxZoom: 7 });
+    const bounds = L.latLngBounds(allPts);
+    boundsRef.current = bounds;
+    map.fitBounds(bounds, FIT_PADDING);
   }
 }
 
 function esc(s) {
-  return String(s ?? '').replace(/[&<>"]/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
-  ));
+  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 function popupHtml(stop) {
-  const head = `<strong>${esc(stop.name)}</strong>${stop.unloc ? ` · ${esc(stop.unloc)}` : ''}`;
-  const rows = stop.events.map((e) => {
+  const head = `<strong>${esc(stop.name)}</strong>${stop.unloc ? ` · <span style="color:#878374">${esc(stop.unloc)}</span>` : ''}`;
+  const rows = (stop.events || []).map((e) => {
     const when = e.at ? formatDateTime(e.at) : '';
-    const cls = e.classifier && e.classifier !== 'ACT'
-      ? ` (${esc(CLASSIFIER_LABELS[e.classifier] || e.classifier)})`
-      : '';
-    return `<div style="margin-top:2px">${esc(e.label)}${cls}${when ? ` — <span style="color:#878374">${esc(when)}</span>` : ''}</div>`;
+    const bits = [
+      e.mode ? esc(MODE_LABELS[e.mode] || e.mode) : null,
+      e.classifier && e.classifier !== 'ACT' ? esc(CLASSIFIER_LABELS[e.classifier] || e.classifier) : null,
+    ].filter(Boolean).join(' · ');
+    return `<div style="margin-top:3px">${esc(e.label)}${bits ? ` <span style="color:#aba79a">(${bits})</span>` : ''}`
+      + `${when ? `<br><span style="color:#878374">${esc(when)}</span>` : ''}</div>`;
   }).join('');
-  return `<div style="font-size:11px;line-height:1.35;min-width:140px">${head}${rows}</div>`;
+  return `<div style="font-size:11px;line-height:1.35;min-width:150px">${head}${rows}</div>`;
 }
