@@ -649,3 +649,16 @@
   .vmap-vessel-halo { animation: none; }
   .vmap-flow { animation: none; }
 }
+
+/* ===================================================================
+   Dropdown primitive (primitives/Dropdown) — the portaled panel's enter
+   animation. Plain CSS so the keyframe is never purged.
+   =================================================================== */
+.dropdown-pop { animation: dropdown-pop 0.14s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes dropdown-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-pop { animation: none; }
+}
