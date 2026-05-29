@@ -157,7 +157,7 @@ export default function Materials() {
               onClick={() => setImporting(true)}
               className="btn-ghost"
             >
-              <FileText size={14} /> Importar precios (PDF)
+              <FileText size={14} /> Importar
             </button>
             <button
               type="button"
