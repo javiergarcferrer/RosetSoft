@@ -53,6 +53,19 @@ export default function TotalsDock({
 
   const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 
+  // Pull today's published rate and apply it. On a DRAFT the quote tracks the
+  // live settings rate, so refreshing settings is enough — the figure follows.
+  // On a SENT quote the rate is a frozen snapshot (quote.rates); refreshing has
+  // to write the new rate straight onto THIS quote, deliberately re-pricing it
+  // at today's number (the one case where a sent figure is allowed to move,
+  // because the dealer asked for it).
+  const handleRefreshRate = async () => {
+    const next = await refreshRate();
+    if (rateLocked && next && typeof next === 'object' && next.DOP) {
+      onUpdateQuote({ rates: next });
+    }
+  };
+
   const fmt = (v) => formatMoney(v, currency, rates);
 
   // Quote-level margin health — surfaced only when a quote-wide margin is
@@ -140,25 +153,32 @@ export default function TotalsDock({
       </div>
       <div className="text-[10px] text-ink-500 space-y-1.5">
         <p>ITBIS fijo en {ITBIS_PCT}%. El descuento se aplica sobre el subtotal antes de impuestos.</p>
-        {rateLocked ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span>
+            {rateLocked
+              ? 'Tasa DOP bloqueada al enviar.'
+              : 'Tasa DOP en vivo (Banco Popular).'}
+          </span>
+          <button
+            type="button"
+            onClick={handleRefreshRate}
+            disabled={refreshingRate}
+            className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
+            title={rateLocked
+              ? 'Trae la tasa USD→DOP de hoy (Banco Popular) y reprecia esta cotización con ella'
+              : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
+          >
+            <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
+            {refreshingRate
+              ? 'Actualizando…'
+              : rateLocked ? 'Actualizar tasa de hoy' : 'Actualizar tasa'}
+          </button>
+        </div>
+        {rateLocked && (
           <p>
-            Tasa DOP bloqueada al enviar · se gestiona en{' '}
+            Al actualizar se reprecia esta cotización con la tasa de hoy. La tasa la gestiona{' '}
             <Link to="/settings" className="underline">configuración</Link>.
           </p>
-        ) : (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span>Tasa DOP en vivo (Banco Popular).</span>
-            <button
-              type="button"
-              onClick={refreshRate}
-              disabled={refreshingRate}
-              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
-              title="Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano"
-            >
-              <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
-              {refreshingRate ? 'Actualizando…' : 'Actualizar tasa'}
-            </button>
-          </div>
         )}
         {rateError && (
           <p className="text-red-600 flex items-start gap-1">
@@ -196,46 +216,53 @@ export default function TotalsDock({
               grow (44px on coarse pointers). Nothing stacks. */}
           <div className="flex items-center gap-2 sm:gap-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure, and the breakdown
-                toggle. Eyebrow + amount are pinned (never shrink); the DOP
-                conversion fills the slack and is the first thing to give up room
-                — it shrinks-to-truncate, then hides outright on the narrowest
-                phones (where the breakdown panel still carries the full figure). */}
+                toggle. On phones the row wraps: eyebrow · amount · chevron sit
+                on top, and the live DOP conversion drops to its own full-width
+                line just beneath (never clipped). From sm: up there's room for
+                everything inline, matching the desktop dock — the conversion
+                tucks between the amount and the chevron via `order`. */}
             <button
               type="button"
               onClick={() => toggle('breakdown')}
               aria-expanded={breakdownOpen}
-              className="group min-w-0 flex-1 flex items-center gap-2 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
+              className="group min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
               title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
             >
-              {/* Eyebrow hides on the narrowest phones to give the figure room
-                  (the leading "$" already labels it as the total there). */}
-              <span className="eyebrow-xs flex-shrink-0 hidden min-[380px]:inline-block">Total</span>
-              <span className="text-base min-[380px]:text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
+              {/* Eyebrow shows from sm: up. On phones it's dropped so the amount
+                  and its chevron hug each other on line 1 (the bold leading "$"
+                  already reads as the total) and the conversion gets line 2. */}
+              <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block">Total</span>
+              <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
               {discountPct > 0 && (
                 <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
               )}
-              {/* Live DOP conversion — inline only from sm: up, where the four
-                  touch targets still leave room for the full string. Below that
-                  the breakdown panel (a tap away) carries it, so it's never shown
-                  as a clipped fragment. */}
+              {/* Live DOP conversion. On phones `order-last w-full` parks it on
+                  its own line beneath the amount (always shown, never clipped);
+                  from sm: up `order-none w-auto` pulls it back inline, sitting
+                  between the amount and the chevron — the desktop layout. */}
               {dopRate && currency === 'USD' && (
-                <span className="hidden sm:inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
-                  <span className="truncate">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
+                <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
+                  {/* The converted total is the figure that matters — keep it
+                      whole. The "@ rate" suffix is what gives way first: hidden
+                      below 380px (the lock icon still flags the locked state),
+                      back inline from there up. */}
+                  <span className="flex-shrink-0">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
                   {rateLocked ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
-                      <Lock size={10} /> @ {dopRate.toFixed(2)}
+                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa Ajustes para actualizarla">
+                      <Lock size={10} /> <span className="hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
                     </span>
                   ) : (
-                    <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
+                    <span className="text-ink-400 flex-shrink-0 hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
                   )}
                 </span>
               )}
-              {/* Sits immediately after the figure (no ml-auto) so the toggle
-                  affordance reads as part of the price, not stranded by the
-                  action icons. A small left margin keeps it off the numerals. */}
+              {/* Sits right after the amount (no ml-auto) so the toggle reads as
+                  part of the price. On phones the conversion's `order-last`
+                  jumps past it to the next line, keeping the chevron on the
+                  amount's row; on desktop it trails the conversion inline. */}
               <ChevronUp
                 size={16}
-                className={`text-ink-400 flex-shrink-0 ml-0.5 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                 aria-hidden
               />
             </button>
