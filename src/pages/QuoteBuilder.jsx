@@ -18,6 +18,7 @@ import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js'
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
+import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import { useQuoteController } from '../components/quote-builder/useQuoteController.js';
@@ -423,6 +424,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
+          {/* Shipment tracking — renders only when this quote's order has a
+              trackable container; one quote per page, so the map stays open. */}
+          {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}
         </div>
       )}
 

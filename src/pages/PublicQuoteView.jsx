@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, CloudOff } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, Ship } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
+import ContainerTracking from '../components/ContainerTracking.jsx';
 import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
+import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
 import { formatMoney } from '../lib/format.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
 import { applyClientPick as applyPickLocally } from '../lib/clientPick.js';
@@ -60,6 +62,13 @@ export default function PublicQuoteView() {
   const rates = quote?.rates || { USD: 1 };
   const fmt = (v) => formatMoney(v, currency, rates);
   const lines = useMemo(() => bundle?.lines || [], [bundle]);
+  // The attached order's trackable containers (from the share bundle), so the
+  // client can follow their shipment from the same link they used to configure
+  // the quote. Validated here; each renders its own keyless tracking panel.
+  const trackable = useMemo(
+    () => (bundle?.containers || []).filter((c) => isValidContainerNo(c.code)),
+    [bundle],
+  );
 
   // The lines ARE the truth now (picks already mutated them), so the total is
   // just the priced lines — same isPricedLine gate the editor + PDF use.
@@ -260,6 +269,27 @@ export default function PublicQuoteView() {
           families={undefined}
           onSelectMaterial={pickMaterial}
         />
+
+        {/* Shipment tracking — appears once the quote's order has a container
+            with a real number. Same link, now also follows the delivery. */}
+        {trackable.length > 0 && (
+          <section className="card p-4 sm:p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
+              <Ship size={16} className="text-ink-500" /> Seguimiento de tu envío
+            </h2>
+            {trackable.map((c) => (
+              <div key={c.code} className="space-y-1.5">
+                {trackable.length > 1 && (
+                  <div className="text-[11px] font-medium text-ink-600">
+                    Contenedor #{c.number ?? '—'}
+                    <span className="font-mono text-ink-400"> · {normalizeContainerNo(c.code)}</span>
+                  </div>
+                )}
+                <ContainerTracking containerNo={normalizeContainerNo(c.code)} />
+              </div>
+            ))}
+          </section>
+        )}
       </div>
 
       {/* Save status — fixed so it's visible no matter where on the long quote
