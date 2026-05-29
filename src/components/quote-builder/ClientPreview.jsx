@@ -8,6 +8,7 @@ import {
   quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
   alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
+  computeTotalsRange, isRangeLine, lineTotalRange, selectedAlternative,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
@@ -71,6 +72,14 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // non-zero so the concessions don't read as silent post-discount
   // numbers.
   const savings = useMemo(() => quoteSavings(lines, totals), [lines, totals]);
+  // Grand-total RANGE — computed here from the lines (not the `totals` prop) so
+  // the public share link, which has no catalog, still widens the total for
+  // material-less pieces. Collapses to a point once every line is specified.
+  const totalsRange = useMemo(
+    () => computeTotalsRange(lines, { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping }),
+    [lines, quote.marginPct, quote.discountPct, quote.shipping],
+  );
+  const hasRange = totalsRange.max > totalsRange.min;
   // "Alternativa N de M" and "Conjunto N de M" position lookups, keyed by
   // line id. Both come from the shared lib helpers rather than being
   // re-derived here, so the caption reads identically across editor /
@@ -208,9 +217,18 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                   const isSet = run.type === 'set';
                   // Only Conjuntos can be optional — an Alternativa always uses one.
                   const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
-                  const footerValue = isSet
-                    ? setSubtotal(lines, run.groupId)
-                    : alternativeSubtotal(lines, run.groupId);
+                  let footerValueLabel;
+                  if (isSet) {
+                    footerValueLabel = fmt(setSubtotal(lines, run.groupId));
+                  } else {
+                    const altSel = selectedAlternative(lines, run.groupId);
+                    if (altSel && isRangeLine(altSel)) {
+                      const rr = lineTotalRange(altSel);
+                      footerValueLabel = `${fmt(rr.min)} – ${fmt(rr.max)}`;
+                    } else {
+                      footerValueLabel = fmt(alternativeSubtotal(lines, run.groupId));
+                    }
+                  }
                   return (
                     <ClientGroupCard
                       key={`grp-${run.groupId}-${run.start}`}
@@ -218,7 +236,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                       memberCount={members.length}
                       optional={optional}
                       footerLabel={isSet ? 'Total del conjunto' : 'Total'}
-                      footerValue={fmt(footerValue)}
+                      footerValue={footerValueLabel}
                     >
                       {members.map((l) => (
                         <ClientLine
@@ -287,8 +305,10 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           </div>
           {/* The anchored grand-total band. */}
           <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-ink-900 px-5 py-3.5">
-            <span className="eyebrow-xs tracking-[0.18em] text-ink-200">Total</span>
-            <span className="text-2xl font-semibold text-white">{fmt(totals.grandTotal)}</span>
+            <span className="eyebrow-xs tracking-[0.18em] text-ink-200 flex-shrink-0">Total</span>
+            <span className="text-xl sm:text-2xl font-semibold text-white text-right whitespace-nowrap">
+              {hasRange ? `${fmt(totalsRange.min)} – ${fmt(totalsRange.max)}` : fmt(totals.grandTotal)}
+            </span>
           </div>
           {savings > 0 && (
             <div className="mt-2 text-right text-xs font-medium text-brand-700">
@@ -297,7 +317,9 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           )}
           {dopRate && currency === 'USD' && (
             <div className="text-[11px] text-ink-500 text-right pt-0.5">
-              ≈ {formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
+              ≈ {hasRange
+                ? `${formatMoney(totalsRange.min, 'DOP', rates)} – ${formatMoney(totalsRange.max, 'DOP', rates)}`
+                : formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
             </div>
           )}
         </div>
@@ -356,6 +378,9 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
   const total = lineTotal(line);
   const discount = clampPct(line.lineDiscountPct);
   const discounted = discount > 0;
+  // Material-less line — show its price RANGE instead of a single total.
+  const ranged = isRangeLine(line);
+  const totalR = ranged ? lineTotalRange(line) : null;
   // Layout shape, mobile-first:
   //
   //   row 1   image + text side-by-side
@@ -511,27 +536,45 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               to a right rail (sm:block sm:text-right). The struck list /
               −Y% discount pair + per-line savings ride along when present. */}
           <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
-            <div className="min-w-0">
-              <div className="text-[13px] text-ink-500 whitespace-nowrap">
-                {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
-              </div>
-              {discounted && (
-                <div className="mt-0.5 whitespace-nowrap">
-                  <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
-                  <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+            {ranged ? (
+              <>
+                <div className="min-w-0">
+                  <div className="text-[13px] text-ink-500 whitespace-nowrap">
+                    {qty} <span className="text-ink-400" aria-hidden>×</span> <span className="text-brand-700">rango</span>
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
-                {fmt(total)}
-              </div>
-              {discounted && qty > 1 && (
-                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
-                  ahorras {fmt(listTotal - total)}
+                <div className="text-right">
+                  <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+                    {fmt(totalR.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(totalR.max)}
+                  </div>
+                  <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
                 </div>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="min-w-0">
+                  <div className="text-[13px] text-ink-500 whitespace-nowrap">
+                    {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
+                  </div>
+                  {discounted && (
+                    <div className="mt-0.5 whitespace-nowrap">
+                      <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
+                      <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+                    {fmt(total)}
+                  </div>
+                  {discounted && qty > 1 && (
+                    <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                      ahorras {fmt(listTotal - total)}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

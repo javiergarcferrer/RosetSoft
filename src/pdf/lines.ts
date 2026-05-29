@@ -3,7 +3,7 @@ import type { QuoteLine, LineComponent, MaterialOptions } from '../types/domain.
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
   lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
-  materialOptionDeltas,
+  materialOptionDeltas, isRangeLine, lineTotalRange, selectedAlternative,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
 import { swatchProxyUrl } from '../lib/swatchImage.js';
@@ -1272,6 +1272,7 @@ export function drawGroupFooterBand(
   zone: GroupZone,
   label: string,
   amount: number,
+  amountRange?: { min: number; max: number } | null,
 ): Cursor {
   const { fontBold } = ctx;
   const rightX = PAGE_W - MARGIN_R;
@@ -1302,8 +1303,12 @@ export function drawGroupFooterBand(
   } as DrawTextOptions);
 
   // Right-aligned amount in ink, bold — same money formatter as the rows.
+  // A material-less selected alternative rolls up as a "min – max" range.
+  const amountText = amountRange
+    ? `${formatMoney(amountRange.min, ctx.currency, ctx.rates)} – ${formatMoney(amountRange.max, ctx.currency, ctx.rates)}`
+    : formatMoney(amount, ctx.currency, ctx.rates);
   drawRightAt(
-    page, formatMoney(amount, ctx.currency, ctx.rates), rightX - 6, baselineY,
+    page, amountText, rightX - 6, baselineY,
     GROUP_FOOTER_VALUE_SIZE, fontBold, INK,
   );
 
@@ -1323,7 +1328,7 @@ export function groupFooterSpec(
   lines: QuoteLine[],
   groupId: string,
   optional: boolean = false,
-): { label: string; amount: number; zone: GroupZone } {
+): { label: string; amount: number; amountRange?: { min: number; max: number }; zone: GroupZone } {
   if (type === 'set') {
     return {
       label: optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO',
@@ -1331,9 +1336,12 @@ export function groupFooterSpec(
       zone: GROUP_ZONES.set,
     };
   }
+  // An alternative whose SELECTED option is material-less rolls up as a RANGE.
+  const sel = selectedAlternative(lines, groupId);
   return {
     label: 'TOTAL',
     amount: alternativeSubtotal(lines, groupId),
+    amountRange: sel && isRangeLine(sel) ? lineTotalRange(sel) : undefined,
     zone: GROUP_ZONES.alternative,
   };
 }
@@ -1438,17 +1446,23 @@ export async function drawLineRow(
   const discount = Number(line.lineDiscountPct) || 0;
   const listUnit = lineListUnit(line);
   const moneyRight = cols.numeric.rightX;
+  // Material-less line — no single unit price; show "qty × rango" and the
+  // price RANGE as the anchor instead of a concrete total.
+  const ranged = isRangeLine(line);
+  const totalR = ranged ? lineTotalRange(line) : null;
 
   let ny = innerTop;
   // "qty × $unit" — the per-unit story in one compact muted line.
-  const eq = `${line.qty || 0} × ${formatMoney(unit, ctx.currency, ctx.rates)}`;
+  const eq = ranged
+    ? `${line.qty || 0} × rango`
+    : `${line.qty || 0} × ${formatMoney(unit, ctx.currency, ctx.rates)}`;
   drawRightAt(page, eq, moneyRight, ny - T.moneyLine.size, T.moneyLine.size, fontRegular, T.moneyLine.color);
   ny -= T.moneyLine.lh;
 
   // Discount: struck list price + "−Y%" caption, hugging the equation.
   // pdf-lib has no text-decoration, so we draw a 0.6pt rule across the
   // list-price string at the x-height.
-  if (discount > 0) {
+  if (!ranged && discount > 0) {
     const listText = formatMoney(listUnit, ctx.currency, ctx.rates);
     const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
     const listY = ny - T.numStrike.size;
@@ -1469,9 +1483,13 @@ export async function drawLineRow(
   // Line TOTAL — the bold ink-900 anchor, ~12pt so it never rivals the
   // 24pt grand total but clearly owns the row's price.
   ny -= NUMERIC_GAP;
+  const totalText = totalR
+    ? `${formatMoney(totalR.min, ctx.currency, ctx.rates)} – ${formatMoney(totalR.max, ctx.currency, ctx.rates)}`
+    : formatMoney(total, ctx.currency, ctx.rates);
+  const totalTextSize = totalR ? T.totalValue.size * 0.8 : T.totalValue.size;
   drawRightAt(
-    page, formatMoney(total, ctx.currency, ctx.rates), moneyRight,
-    ny - T.totalValue.size, T.totalValue.size, fontBold, T.totalValue.color,
+    page, totalText, moneyRight,
+    ny - totalTextSize, totalTextSize, fontBold, T.totalValue.color,
   );
 
   // ---- Option / alternative treatment ----------------------------------

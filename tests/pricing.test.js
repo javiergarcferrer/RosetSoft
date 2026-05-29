@@ -25,6 +25,10 @@ import {
   alternativeSubtotal,
   groupRuns,
   sectionSubtotal,
+  isRangeLine,
+  lineTotalRange,
+  quoteHasRange,
+  computeTotalsRange,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -476,4 +480,57 @@ test('sectionSubtotal is 0 for empty / all-optional sections', () => {
   assert.equal(sectionSubtotal([]), 0);
   assert.equal(sectionSubtotal(null), 0);
   assert.equal(sectionSubtotal([{ id: 'o', kind: 'item', qty: 1, unitPrice: 80, isOptional: true }]), 0);
+});
+
+/* --------------------- price ranges (material-less lines) --------------------- */
+
+test('isRangeLine — needs both bounds set and max > min', () => {
+  assert.equal(isRangeLine({ priceMin: 100, priceMax: 180 }), true);
+  assert.equal(isRangeLine({ priceMin: 100, priceMax: 100 }), false); // a point, not a range
+  assert.equal(isRangeLine({ priceMin: 100 }), false);                // half-specified
+  assert.equal(isRangeLine({ unitPrice: 100 }), false);               // normal line
+  assert.equal(isRangeLine(null), false);
+  // A compound never carries a range — its price is the sum of its components.
+  assert.equal(isRangeLine({ priceMin: 1, priceMax: 9, components: [{ qty: 1, unitPrice: 5 }] }), false);
+});
+
+test('lineTotalRange — qty × each bound, line margin/discount on both ends', () => {
+  const r = lineTotalRange({ qty: 2, priceMin: 100, priceMax: 150 });
+  assert.deepEqual(r, { min: 200, max: 300 });
+  // 10% line discount eats both ends; collapses for a normal line.
+  const d = lineTotalRange({ qty: 1, priceMin: 100, priceMax: 200, lineDiscountPct: 10 });
+  assert.deepEqual(d, { min: 90, max: 180 });
+  const flat = lineTotalRange({ qty: 3, unitPrice: 50 });
+  assert.deepEqual(flat, { min: 150, max: 150 }); // a point for a single-price line
+});
+
+test('computeTotalsRange — runs the full pipeline on both ends; collapses when no ranges', () => {
+  const lines = [
+    { id: 'a', kind: 'item', qty: 1, priceMin: 100, priceMax: 200 },
+    { id: 'b', kind: 'item', qty: 2, unitPrice: 50 }, // flat 100
+  ];
+  const r = computeTotalsRange(lines, {});
+  // subtotal range [200, 300]; ITBIS 18% ⇒ [236, 354]
+  assert.equal(Math.round(r.min), 236);
+  assert.equal(Math.round(r.max), 354);
+  // With no range lines it collapses to a point equal to computeTotals.grandTotal.
+  const flatLines = [{ id: 'b', kind: 'item', qty: 2, unitPrice: 50 }];
+  const flat = computeTotalsRange(flatLines, {});
+  assert.equal(flat.min, flat.max);
+  const scalar = computeTotals(flatLines.map((l) => ({ qty: l.qty, basePrice: l.unitPrice })), {});
+  assert.equal(Math.round(flat.min), Math.round(scalar.grandTotal));
+});
+
+test('computeTotalsRange — only the selected alternative / non-optional lines count', () => {
+  const lines = [
+    { id: 's', kind: 'item', qty: 1, priceMin: 100, priceMax: 300, alternativeGroup: 'g', isSelectedAlternative: true },
+    { id: 'n', kind: 'item', qty: 1, priceMin: 999, priceMax: 9999, alternativeGroup: 'g', isSelectedAlternative: false },
+    { id: 'o', kind: 'item', qty: 1, priceMin: 500, priceMax: 800, isOptional: true },
+  ];
+  const r = computeTotalsRange(lines, {});
+  // Only the selected alternative (100..300) is billed; +18% ITBIS.
+  assert.equal(Math.round(r.min), 118);
+  assert.equal(Math.round(r.max), 354);
+  assert.equal(quoteHasRange(lines), true);
+  assert.equal(quoteHasRange([{ id: 'x', kind: 'item', unitPrice: 10 }]), false);
 });

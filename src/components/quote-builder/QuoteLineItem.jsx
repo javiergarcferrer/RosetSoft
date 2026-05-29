@@ -18,8 +18,9 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import {
   applyLineAdjustments, materialOptionDeltas,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
+  isRangeLine, lineTotalRange,
 } from '../../lib/pricing.js';
-import { splitSkuGrade, switchLineProduct } from '../../lib/catalog.js';
+import { splitSkuGrade, switchLineProduct, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId } from '../../db/database.js';
@@ -80,6 +81,10 @@ export default function QuoteLineItem({
   const compound = isCompoundLine(line);
   const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
   const rowTotal = compound ? lineTotal(line) : unit * (line.qty || 0);
+  // Material-less RANGE line — priced cheapest→priciest grade until a fabric is
+  // picked. Shows a range band instead of the qty × unit = total calculator.
+  const range = !compound && isRangeLine(line);
+  const totalRange = range ? lineTotalRange(line) : null;
   const fmt = (v) => formatMoney(v, currency, rates);
   // Only render the adjustment chip when there's a live discount or a
   // legacy margin to explain (new lines never set margin, but old quotes
@@ -222,6 +227,8 @@ export default function QuoteLineItem({
             currency={currency}
             rates={rates}
           />
+        ) : range ? (
+          <RangeBand line={line} totalRange={totalRange} fmt={fmt} onChange={onChange} />
         ) : (
           <CalculatorBand
             line={line}
@@ -629,6 +636,14 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   const commit = (next) => {
     const patch = { subtype: composeSubtype(next.grade, next.fabric) };
     if ('swatchImageId' in next) patch.swatchImageId = next.swatchImageId;
+    // Resolving a material-less RANGE line: picking a grade pins the price to
+    // that grade's catalog SKU and drops the range so it bills as a normal line.
+    if ((line.priceMin != null || line.priceMax != null) && next.grade) {
+      const p = family ? productForGrade(family, next.grade) : null;
+      if (p) patch.unitPrice = Number(p.priceUsd) || 0;
+      patch.priceMin = null;
+      patch.priceMax = null;
+    }
     onChange(patch);
   };
   const swatchImageId = line.swatchImageId || null;
@@ -1113,6 +1128,43 @@ function CalculatorBand({
           />
         )}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Range band — a material-less line's pricing. There's no single unit price:
+// the model is quoted across its fabric grades, so we show qty × [min … max]
+// and a hint to pick a fabric (which pins the price and clears the range, via
+// GradeFabricRow.commit). The qty input reuses the calculator's CalcCell so it
+// reads identically to a normal row.
+// ---------------------------------------------------------------------------
+function RangeBand({ line, totalRange, fmt, onChange }) {
+  return (
+    <div className="qli-pricing">
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <CalcCell label="Cant.">
+          <DebouncedInput
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="any"
+            className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+            value={line.qty ?? 1}
+            onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
+            aria-label="Cantidad"
+          />
+        </CalcCell>
+        <div className="text-right ml-auto">
+          <div className="eyebrow-xs tracking-wide text-brand-700">Rango · sin material</div>
+          <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
+            {fmt(totalRange.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(totalRange.max)}
+          </div>
+          <div className="text-[10px] text-ink-500 leading-tight mt-0.5">
+            Elige una tela para fijar el precio
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

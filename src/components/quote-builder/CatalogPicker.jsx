@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, MoveHorizontal } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import ModelBrowser from './ModelBrowser.jsx';
@@ -83,6 +83,33 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
     setSel(fam);
   }
 
+  // Insert the model WITHOUT a material — a price RANGE line. We snapshot the
+  // cheapest and priciest grade prices (grades are price-sorted asc) onto the
+  // line so it reads "min – max" and the quote total widens accordingly; the
+  // dealer (or the designer) pins a concrete fabric later. Identity comes from
+  // the cheapest SKU so the line's reference root still resolves the family
+  // when a material is finally chosen.
+  function insertRange(fam) {
+    const lo = productForGrade(fam, fam.grades[0]);
+    const hi = productForGrade(fam, fam.grades[fam.grades.length - 1]);
+    if (!lo || !hi) return;
+    const min = Number(lo.priceUsd) || 0;
+    const max = Number(hi.priceUsd) || 0;
+    onInsert({
+      family: lo.family || fam.family,
+      reference: lo.reference,
+      name: lo.name || fam.name,
+      dimensions: lo.dimensions,
+      subtype: '',
+      unitPrice: min,
+      unitCost: lo.cost,
+      swatchImageId: null,
+      priceMin: min,
+      priceMax: max,
+    });
+    onClose();
+  }
+
   // Step 2 — does the catalog carry ANY material in one of this model's
   // grades? Drives the fallback: when none match we let the dealer pick the
   // price tier (grade) directly so the flow still works. The actual material→
@@ -106,6 +133,25 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       ) : (
         <>
           <button type="button" onClick={() => setSel(null)} className="back-link"><ChevronLeft size={12} /> Volver a modelos</button>
+          {/* Quote this model WITHOUT a material — a price RANGE the designer
+              resolves later. A first-class choice above the fabric list, not a
+              fallback: the dealer picks the model and defers the fabric. */}
+          {sel.grades.length >= 2 && (
+            <button
+              type="button"
+              onClick={() => insertRange(sel)}
+              className="w-full text-left rounded-lg border border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 px-3 py-2.5 mb-2 flex items-center justify-between gap-3 transition-colors"
+              title="Agregar este modelo sin elegir tela — se cotiza como un rango de precio (del grado más económico al más caro)"
+            >
+              <span className="text-sm font-medium text-brand-800 inline-flex items-center gap-1.5">
+                <MoveHorizontal size={14} className="opacity-70" aria-hidden />
+                Sin material · cotizar por rango
+              </span>
+              <span className="text-sm tabular-nums text-brand-800 whitespace-nowrap">
+                {usd(productForGrade(sel, sel.grades[0])?.priceUsd)} – {usd(productForGrade(sel, sel.grades[sel.grades.length - 1])?.priceUsd)}
+              </span>
+            </button>
+          )}
           {!hasGradeMaterials ? (
             // No fabric in the catalog for this model's grades — let the dealer
             // pick the price tier (grade) directly so the flow still works.

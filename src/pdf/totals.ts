@@ -1,6 +1,6 @@
 import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
 import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
-import { ITBIS_PCT, quoteSavings } from '../lib/pricing.js';
+import { ITBIS_PCT, quoteSavings, computeTotalsRange } from '../lib/pricing.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
   INK_HIGH, INK_MID, INK_LINE, BRAND_700,
@@ -126,11 +126,25 @@ export function drawTotals(
     size: labelSize, font: fontBold, color: BAND_CREAM,
     characterSpacing: 2,
   } as DrawTextOptions);
-  drawRightAt(
-    page,
-    formatMoney(totals.grandTotal, currency, rates),
-    rightX - BAND_PAD, valueBaseline, FS_TOTAL_BIG, fontBold, WHITE,
-  );
+  // Grand total — a RANGE while any priced line is material-less; shrink the
+  // headline size until the wider "min – max" string clears the TOTAL label.
+  const range = computeTotalsRange(lines || [], quote);
+  const hasRange = range.max > range.min;
+  if (hasRange) {
+    const rangeText = `${formatMoney(range.min, currency, rates)} – ${formatMoney(range.max, currency, rates)}`;
+    const labelW = fontBold.widthOfTextAtSize(labelText, labelSize);
+    const avail = BAND_W - BAND_PAD * 2 - labelW - 10;
+    let size = FS_TOTAL_BIG;
+    while (size > 9 && fontBold.widthOfTextAtSize(rangeText, size) > avail) size -= 0.5;
+    const asc = fontBold.heightAtSize(size, { descender: false });
+    drawRightAt(page, rangeText, rightX - BAND_PAD, bandBottom + (BAND_H - asc) / 2, size, fontBold, WHITE);
+  } else {
+    drawRightAt(
+      page,
+      formatMoney(totals.grandTotal, currency, rates),
+      rightX - BAND_PAD, valueBaseline, FS_TOTAL_BIG, fontBold, WHITE,
+    );
+  }
   y = bandBottom - 14;
 
   // ---- "Ahorras $X" callout (below the band, right-aligned) -----------
@@ -150,8 +164,9 @@ export function drawTotals(
   // while a draft) so this FX line agrees with the band above it.
   const dopRate = Number(rates?.DOP) || 0;
   if (dopRate && currency === 'USD') {
-    const dopTotal = totals.grandTotal * dopRate;
-    const fx = `≈ RD$ ${formatPlain(dopTotal)} a ${dopRate.toFixed(2)} DOP/USD`;
+    const fx = hasRange
+      ? `≈ RD$ ${formatPlain(range.min * dopRate)} – ${formatPlain(range.max * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`
+      : `≈ RD$ ${formatPlain(totals.grandTotal * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`;
     drawRightAt(page, fx, rightX, y - FS_META, FS_META, fontRegular, INK_MID);
     y -= 20;
   } else {

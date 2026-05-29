@@ -291,7 +291,7 @@ export async function generateQuotePdf({
           cursor = await drawLineRow(page, ctx, cursor, line, groupInfo, zone);
           if (isLastInRun && footer && zone) {
             cursor = drawGroupFooterBand(
-              page, ctx, cursor, zone, footer.label, footer.amount,
+              page, ctx, cursor, zone, footer.label, footer.amount, footer.amountRange,
             );
           }
         }

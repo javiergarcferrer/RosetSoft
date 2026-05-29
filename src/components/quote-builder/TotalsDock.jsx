@@ -37,7 +37,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * design — so a quote-wide margin gauge shows only when one is actually set.
  */
 export default function TotalsDock({
-  quote, totals, professional, onUpdateQuote,
+  quote, totals, totalsRange, professional, onUpdateQuote,
   onOpenCatalog, onExport, exporting, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
@@ -67,6 +67,16 @@ export default function TotalsDock({
   };
 
   const fmt = (v) => formatMoney(v, currency, rates);
+  // Range twin of the grand total — while any priced line is quoted by range
+  // (material-less), the total reads "min – max" and the DOP approx widens too.
+  // Collapses to the single figure the moment every line carries a real price.
+  const hasRange = !!totalsRange && totalsRange.max > totalsRange.min;
+  const totalLabel = hasRange ? `${fmt(totalsRange.min)} – ${fmt(totalsRange.max)}` : fmt(totals.grandTotal);
+  const dopTotalLabel = dopRate
+    ? (hasRange
+        ? `RD$ ${Math.round(totalsRange.min * dopRate).toLocaleString('en-US')} – ${Math.round(totalsRange.max * dopRate).toLocaleString('en-US')}`
+        : `RD$ ${Math.round(dopTotal).toLocaleString('en-US')}`)
+    : null;
 
   // Quote-level margin health — surfaced only when a quote-wide margin is
   // actually applied (totals.marginAmt !== 0). See <meter> rules in index.css.
@@ -102,7 +112,7 @@ export default function TotalsDock({
       <Row label={`ITBIS (${ITBIS_PCT}%)`} value={`+${fmt(totals.taxAmt)}`} muted />
       {shipping ? <Row label="Envío" value={`+${fmt(totals.shipping)}`} muted /> : null}
       <div className="border-t border-ink-100 pt-2 mt-2">
-        <Row label="Total" value={fmt(totals.grandTotal)} bold />
+        <Row label="Total" value={totalLabel} bold />
       </div>
       {showMarginMeter && <MarginMeter marginPct={marginPct} />}
       {professional && (
@@ -240,7 +250,7 @@ export default function TotalsDock({
                   already reads as the total, and dropping it lets the amount and
                   its chevron hug on line one. */}
               <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block">Total</span>
-              <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
+              <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{totalLabel}</span>
               {discountPct > 0 && (
                 <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
               )}
@@ -250,7 +260,7 @@ export default function TotalsDock({
                   between the amount and the chevron — the desktop layout. */}
               {dopRate && currency === 'USD' && (
                 <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
-                  <span className="truncate">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
+                  <span className="truncate">≈ {dopTotalLabel}</span>
                   {rateLocked ? (
                     <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa el total para actualizarla">
                       <Lock size={10} /> @ {dopRate.toFixed(2)}

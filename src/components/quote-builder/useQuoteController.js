@@ -216,6 +216,9 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         unitCost: seed.unitCost ?? null,
         lineMarginPct: seed.lineMarginPct ?? 0,
         lineDiscountPct: seed.lineDiscountPct ?? 0,
+        // Price range (material-less lines); null on a normal line.
+        priceMin: seed.priceMin ?? null,
+        priceMax: seed.priceMax ?? null,
         notes: seed.notes || '',
         components: Array.isArray(seed.components) ? seed.components : [],
       });

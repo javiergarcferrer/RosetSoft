@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles } from 'lucide-react';
+import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import ImageView from '../ImageView.jsx';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
-  sectionSubtotal,
+  sectionSubtotal, selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
 } from '../../lib/pricing.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
@@ -88,6 +89,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   // -------- drag-reorder --------
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
+  // Alternatives render as a compact pick-pane (radio + summary + price) so the
+  // group reads like the client quote-pane; the dealer taps "Editar" to expand
+  // ONE option to its full editor inline. `expandedAltId` is that option's id.
+  const [expandedAltId, setExpandedAltId] = useState(null);
 
   function onDragStart(e, id) {
     setDraggingId(id);
@@ -240,9 +245,45 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     const accent = isSet ? 'violet' : 'brand';
     // Only Conjuntos can be optional — an Alternativa always uses one option.
     const optional = isSet && isGroupOptional(groups, run.groupId);
-    const footerValue = isSet
-      ? setSubtotal(lines, run.groupId)
-      : alternativeSubtotal(lines, run.groupId);
+
+    // Footer total — range-aware for an Alternativa whose SELECTED option is
+    // material-less ("min – max" instead of a single figure).
+    const fmt = (v) => formatMoney(v, currency, rates);
+    let footerValueLabel;
+    if (isSet) {
+      footerValueLabel = fmt(setSubtotal(lines, run.groupId));
+    } else {
+      const sel = selectedAlternative(lines, run.groupId);
+      if (sel && isRangeLine(sel)) {
+        const r = lineTotalRange(sel);
+        footerValueLabel = `${fmt(r.min)} – ${fmt(r.max)}`;
+      } else {
+        footerValueLabel = fmt(alternativeSubtotal(lines, run.groupId));
+      }
+    }
+
+    // Members: a Conjunto keeps the full editor rows (every piece is priced and
+    // edited); an Alternativa renders the compact pick-pane — radio + summary +
+    // price — expanding ONE option to its full editor inline on "Editar".
+    const memberNodes = isSet
+      ? members.map((l) => renderRow(l, { insideGroupCard: true }))
+      : members.map((l) => {
+          const expanded = expandedAltId === l.id;
+          return (
+            <AlternativeOption
+              key={l.id}
+              line={l}
+              fmt={fmt}
+              groupInfo={groupInfo.get(l.id)}
+              selected={!!l.isSelectedAlternative}
+              expanded={expanded}
+              onSelect={() => onSelectAlternative?.(l)}
+              onToggleEdit={() => setExpandedAltId((id) => (id === l.id ? null : l.id))}
+            >
+              {expanded ? renderRow(l, { insideGroupCard: true }) : null}
+            </AlternativeOption>
+          );
+        });
 
     return (
       <GroupCard
@@ -255,10 +296,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
           isSet && onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId) : undefined
         }
         footerLabel={isSet ? 'Total del conjunto' : 'Total'}
-        footerValue={formatMoney(footerValue, currency, rates)}
+        footerValue={footerValueLabel}
       >
         <ul className="divide-y divide-ink-100">
-          {members.map((l) => renderRow(l, { insideGroupCard: true }))}
+          {memberNodes}
         </ul>
       </GroupCard>
     );
@@ -411,5 +452,81 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, foot
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Compact alternative-option row — the quote-pane "pick one" treatment for the
+ * editor. A radio selects the option (flipping the group's total); a thumbnail
+ * + name + material + price summarise it; "Editar" expands the full
+ * QuoteLineItem inline (passed as `children`). A material-less option shows its
+ * price RANGE. Non-selected options dim so the chosen one wins the eye,
+ * mirroring the client preview.
+ */
+function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect, onToggleEdit, children }) {
+  if (expanded) {
+    return (
+      <li className="list-none bg-brand-50/20">
+        <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
+          <span className="eyebrow-xs text-brand-700 font-semibold">
+            Editando alternativa{groupInfo ? ` ${groupInfo.index}/${groupInfo.total}` : ''}
+          </span>
+          <button
+            type="button"
+            onClick={onToggleEdit}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-900 rounded-md px-2 py-1 coarse:min-h-9"
+          >
+            <Check size={12} aria-hidden /> Listo
+          </button>
+        </div>
+        {children}
+      </li>
+    );
+  }
+  const ranged = isRangeLine(line);
+  const r = ranged ? lineTotalRange(line) : null;
+  const priceLabel = r ? `${fmt(r.min)} – ${fmt(r.max)}` : fmt(lineTotal(line));
+  const material = line.subtype || (ranged ? 'Sin material · rango' : 'Sin material');
+  const dim = selected ? '' : 'opacity-60';
+  return (
+    <li className={`list-none flex items-center gap-3 px-3 py-2.5 transition-colors ${selected ? 'bg-brand-50/40' : 'hover:bg-ink-50'}`}>
+      <button
+        type="button"
+        onClick={onSelect}
+        role="radio"
+        aria-checked={selected}
+        aria-label="Seleccionar esta alternativa"
+        title={selected ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
+        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors flex-shrink-0 ${
+          selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+        }`}
+      >
+        {selected && <Check size={11} strokeWidth={3} aria-hidden />}
+      </button>
+      {line.imageId ? (
+        <ImageView
+          id={line.imageId}
+          alt={line.name || ''}
+          className={`w-12 h-12 rounded-md object-contain bg-ink-50 border border-ink-100 flex-shrink-0 ${dim}`}
+        />
+      ) : (
+        <div className="w-12 h-12 rounded-md bg-ink-50 border border-ink-100 flex-shrink-0" />
+      )}
+      <button type="button" onClick={onSelect} className={`min-w-0 flex-1 text-left ${dim}`}>
+        <div className="text-sm font-medium text-ink-900 truncate">{line.name || 'Alternativa'}</div>
+        <div className="text-[11px] text-ink-500 truncate">{material}</div>
+      </button>
+      <div className={`text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap ${dim}`}>
+        {priceLabel}
+      </div>
+      <button
+        type="button"
+        onClick={onToggleEdit}
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-md px-2 py-1 coarse:min-h-9 flex-shrink-0"
+        title="Editar esta alternativa"
+      >
+        <Pencil size={12} className="opacity-80" aria-hidden /> Editar
+      </button>
+    </li>
   );
 }

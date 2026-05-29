@@ -4,7 +4,7 @@ import { Hash, AlertCircle, PackageSearch, Share2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
+import { computeTotals, computeTotalsRange, lineForTotals } from '../lib/pricing.js';
 import { groupFamilies } from '../lib/catalog.js';
 import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, isPricedLine } from '../lib/constants.js';
@@ -301,10 +301,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
-  const totals = computeTotals(
-    lines.filter(isPricedLine).map(lineForTotals),
-    { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
-  );
+  const totalsQuote = { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping };
+  const totals = computeTotals(lines.filter(isPricedLine).map(lineForTotals), totalsQuote);
+  // Range twin of the grand total — widens to "min … max" while any priced
+  // line is quoted by range (material-less). Collapses to a point (and the UI
+  // falls back to the single figure) once every line carries a real price.
+  const totalsRange = computeTotalsRange(lines, totalsQuote);
 
   /* ---------------------------- render ---------------------------- */
 
@@ -372,6 +374,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           lines={lines}
           quoteGroups={groups}
           totals={totals}
+          totalsRange={totalsRange}
           customer={customer}
           professional={professional}
           seller={seller}
@@ -439,6 +442,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <TotalsDock
         quote={quote}
         totals={totals}
+        totalsRange={totalsRange}
         professional={professional}
         onUpdateQuote={hx(updateQuote)}
         onOpenCatalog={() => setCatalogOpen(true)}

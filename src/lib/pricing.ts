@@ -484,3 +484,74 @@ export function groupRuns(
   return runs;
 }
 
+/* ------------------------------ price ranges (material-less lines) ------------------------------ */
+
+export interface MoneyRange { min: number; max: number; }
+
+/**
+ * A line quoted WITHOUT a chosen material carries a PRICE RANGE — the model's
+ * cheapest→priciest fabric grade, snapshotted onto the line as priceMin /
+ * priceMax when it's added (so totals AND the PDF stay pure, with no live
+ * catalog lookup — the public share link has no catalog at all). A normal,
+ * fully-specified line has neither set and prices at its single unitPrice.
+ * Picking a material on the line clears the range and pins a concrete price.
+ */
+export function isRangeLine(line: QuoteLine | null | undefined): boolean {
+  if (!line || isCompoundLine(line)) return false;
+  const min = line.priceMin;
+  const max = line.priceMax;
+  return min != null && max != null && safeNum(max) > safeNum(min);
+}
+
+/**
+ * Per-line TOTAL range — line-level margin/discount + qty applied to BOTH the
+ * low and high ends. Collapses to a point (min === max === lineTotal) for a
+ * normal single-price line, so range-aware callers never special-case.
+ */
+export function lineTotalRange(line: QuoteLine | null | undefined): MoneyRange {
+  if (!isRangeLine(line)) {
+    const t = lineTotal(line);
+    return { min: t, max: t };
+  }
+  const qty = lineQty(line);
+  const adj = (base: number): number =>
+    applyLineAdjustments(base, line?.lineMarginPct, line?.lineDiscountPct) * qty;
+  return { min: adj(safeNum(line!.priceMin)), max: adj(safeNum(line!.priceMax)) };
+}
+
+/** True when any line that counts toward the total carries a price range. */
+export function quoteHasRange(lines: readonly QuoteLine[] | null | undefined): boolean {
+  return (lines || []).some((l) => isPricedLine(l) && isRangeLine(l));
+}
+
+/**
+ * Grand-total RANGE — the SAME pipeline `computeTotals` runs (margin → discount
+ * → ITBIS → shipping), applied to the low and high ends of every priced line's
+ * total. Takes RAW quote lines and filters with the same `isPricedLine` rule
+ * the scalar total does (so optionals + non-selected alternatives drop out and
+ * the two figures can never diverge). Collapses to a point (min === max) when
+ * nothing carries a range, so a fully-specified quote shows one number.
+ */
+export function computeTotalsRange(
+  lines: readonly QuoteLine[] | null | undefined,
+  quote: PricingQuote = {},
+): MoneyRange {
+  let subMin = 0;
+  let subMax = 0;
+  for (const l of lines || []) {
+    if (!isPricedLine(l)) continue;
+    const r = lineTotalRange(l);
+    subMin += r.min;
+    subMax += r.max;
+  }
+  const marginPct = safeNum(quote.marginPct, 0);
+  const discountPct = clampPct(quote.discountPct);
+  const shipping = Math.max(0, safeNum(quote.shipping, 0));
+  const grand = (subtotal: number): number => {
+    const afterMargin = subtotal * (1 + marginPct / 100);
+    const taxable = afterMargin * (1 - discountPct / 100);
+    return taxable + taxable * (ITBIS_PCT / 100) + shipping;
+  };
+  return { min: safeNum(grand(subMin)), max: safeNum(grand(subMax)) };
+}
+

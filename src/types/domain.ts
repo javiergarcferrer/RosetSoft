@@ -278,6 +278,16 @@ export interface QuoteLine {
   unitCost?: number;
   lineMarginPct?: number;
   lineDiscountPct?: number;
+  /**
+   * Price RANGE for a line quoted WITHOUT a chosen material — the model's
+   * cheapest→priciest fabric grade, snapshotted from the catalog when the line
+   * is added (mirrors how `unitPrice` is snapshotted). Both set ⇒ the line
+   * shows "min – max" instead of a single total and the quote total widens to a
+   * range; picking a material clears them and pins `unitPrice`. Null on a
+   * normal line. See lib/pricing:isRangeLine / computeTotalsRange.
+   */
+  priceMin?: number | null;
+  priceMax?: number | null;
 
   /* Compound article — non-empty array makes this line compound. */
   components?: LineComponent[];
