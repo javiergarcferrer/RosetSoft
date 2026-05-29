@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, UserSquare2 } from 'lucide-react';
+import { DraftingCompass } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampCommissionPct, baseCommissionPct, decoratorBilling } from '../../lib/commissions.js';
@@ -10,8 +10,8 @@ import { clampCommissionPct, baseCommissionPct, decoratorBilling } from '../../l
  *
  * Visual model:
  *
- *   assigned:    [ 🟧 Pilar Ferrer ⌄ │ Piso · Especial │ 15.0 % ]
- *   unassigned:  [ ＋ Asignar profesional │ Piso · Especial ]
+ *   assigned:    [ 📐 Pilar Ferrer │ Piso · Especial │ 15.0 % ]
+ *   unassigned:  [ 📐 Asignar profesional │ Piso · Especial ]
  *
  * Why everything in one pill: the order type (Piso 15% / Especial 20%) is the
  * professional's base commission rate, and the % segment is the per-quote
@@ -44,7 +44,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
       <>
         <span className={PILL}>
           <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-ink-900 pl-3 pr-2.5`}>
-            <UserSquare2 size={12} />
+            <DraftingCompass size={12} />
             Asignar profesional
           </button>
           <Seam />
@@ -70,13 +70,13 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         className={PILL}
         title={[professional.name, professional.company, professional.email].filter(Boolean).join(' · ')}
       >
-        {/* Professional — avatar + name + chevron, opens the picker. */}
-        <button type="button" onClick={openPicker} className={`${SEG} pl-2 pr-1.5 min-w-0`}>
-          <Avatar name={professional.name} />
+        {/* Professional — icon + name, opens the picker. No chevron: it's a
+            picker, not a link, and the team knows the chip opens. */}
+        <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
+          <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
           <span className="font-medium text-ink-900 truncate max-w-[100px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
-          <ChevronDown size={12} className="text-ink-400 flex-shrink-0" />
         </button>
 
         <Seam />
@@ -211,15 +211,3 @@ function TierSegments({ quote, onUpdateQuote }) {
   );
 }
 
-function Avatar({ name }) {
-  const initials = (name || '?')
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((n) => n.charAt(0).toUpperCase())
-    .join('');
-  return (
-    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-semibold flex-shrink-0">
-      {initials || '?'}
-    </span>
-  );
-}

@@ -973,8 +973,8 @@ function SpecStrip({
       />
       {/* Catalog page input ("Pág.") intentionally hidden — the field
           remains in the data model (line.pageRef) and is still surfaced
-          by autocomplete, QuickActions, and PDF rendering; only the
-          edit control has been removed at the dealer's request. */}
+          in PDF rendering; only the edit control has been removed at the
+          dealer's request. */}
       <InlineEditor
         label="Dim."
         value={dimensions || ''}

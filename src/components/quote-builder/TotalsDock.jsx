@@ -53,6 +53,19 @@ export default function TotalsDock({
 
   const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 
+  // Pull today's published rate and apply it. On a DRAFT the quote tracks the
+  // live settings rate, so refreshing settings is enough — the figure follows.
+  // On a SENT quote the rate is a frozen snapshot (quote.rates); refreshing has
+  // to write the new rate straight onto THIS quote, deliberately re-pricing it
+  // at today's number (the one case where a sent figure is allowed to move,
+  // because the dealer asked for it).
+  const handleRefreshRate = async () => {
+    const next = await refreshRate();
+    if (rateLocked && next && typeof next === 'object' && next.DOP) {
+      onUpdateQuote({ rates: next });
+    }
+  };
+
   const fmt = (v) => formatMoney(v, currency, rates);
 
   // Quote-level margin health — surfaced only when a quote-wide margin is
@@ -140,25 +153,32 @@ export default function TotalsDock({
       </div>
       <div className="text-[10px] text-ink-500 space-y-1.5">
         <p>ITBIS fijo en {ITBIS_PCT}%. El descuento se aplica sobre el subtotal antes de impuestos.</p>
-        {rateLocked ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span>
+            {rateLocked
+              ? 'Tasa DOP bloqueada al enviar.'
+              : 'Tasa DOP en vivo (Banco Popular).'}
+          </span>
+          <button
+            type="button"
+            onClick={handleRefreshRate}
+            disabled={refreshingRate}
+            className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
+            title={rateLocked
+              ? 'Trae la tasa USD→DOP de hoy (Banco Popular) y reprecia esta cotización con ella'
+              : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
+          >
+            <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
+            {refreshingRate
+              ? 'Actualizando…'
+              : rateLocked ? 'Actualizar tasa de hoy' : 'Actualizar tasa'}
+          </button>
+        </div>
+        {rateLocked && (
           <p>
-            Tasa DOP bloqueada al enviar · se gestiona en{' '}
+            Al actualizar se reprecia esta cotización con la tasa de hoy. La tasa la gestiona{' '}
             <Link to="/settings" className="underline">configuración</Link>.
           </p>
-        ) : (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span>Tasa DOP en vivo (Banco Popular).</span>
-            <button
-              type="button"
-              onClick={refreshRate}
-              disabled={refreshingRate}
-              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
-              title="Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano"
-            >
-              <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
-              {refreshingRate ? 'Actualizando…' : 'Actualizar tasa'}
-            </button>
-          </div>
         )}
         {rateError && (
           <p className="text-red-600 flex items-start gap-1">
@@ -189,61 +209,67 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar. On phones it stacks into two rows so the grand
-              total — the hero figure — keeps the full width instead of being
-              truncated by the action cluster; from sm: up it collapses back to a
-              single row. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-            {/* The total leads the row — the hero figure. Both currencies read
-                at once on a single line (USD, then the live DOP equivalent), so
-                there's nothing to toggle: the figure is complete at a glance. It
-                doubles as the breakdown toggle — a big, obvious tap target. */}
-            <div className="min-w-0 sm:flex-1">
-              <button
-                type="button"
-                onClick={() => toggle('breakdown')}
-                aria-expanded={breakdownOpen}
-                className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
-                title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
-              >
-                {/* One line: eyebrow, the grand total, the discount chip and the
-                    live DOP conversion all read across in a single row. The
-                    amount holds its size; the conversion truncates first when
-                    space runs out, and the chevron is pinned to the far right. */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="eyebrow-xs flex-shrink-0">Total</span>
-                  <span className="text-xl font-semibold tabular-nums leading-tight flex-shrink-0">{fmt(totals.grandTotal)}</span>
-                  {discountPct > 0 && (
-                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
-                  )}
-                  {dopRate && currency === 'USD' && (
-                    <span className="text-[11px] text-ink-500 tabular-nums inline-flex items-center gap-1 truncate">
-                      ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-                      {rateLocked ? (
-                        <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
-                          <Lock size={10} /> @ {dopRate.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
-                      )}
+          {/* Always-visible bar — ONE compact row at every width: the running
+              total leads (eyebrow · amount · live DOP conversion), then a tight
+              cluster of icon buttons with the filled Export CTA last. The mobile
+              layout mirrors the desktop dock exactly; only the touch targets
+              grow (44px on coarse pointers). Nothing stacks. */}
+          <div className="flex items-center gap-2 sm:gap-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            {/* The total leads the row — the hero figure, and the breakdown
+                toggle. On phones the row wraps: eyebrow · amount · chevron sit
+                on top, and the live DOP conversion drops to its own full-width
+                line just beneath (never clipped). From sm: up there's room for
+                everything inline, matching the desktop dock — the conversion
+                tucks between the amount and the chevron via `order`. */}
+            <button
+              type="button"
+              onClick={() => toggle('breakdown')}
+              aria-expanded={breakdownOpen}
+              className="group min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
+              title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
+            >
+              {/* Eyebrow shows from sm: up. On phones it's dropped so the amount
+                  and its chevron hug each other on line 1 (the bold leading "$"
+                  already reads as the total) and the conversion gets line 2. */}
+              <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block">Total</span>
+              <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{fmt(totals.grandTotal)}</span>
+              {discountPct > 0 && (
+                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
+              )}
+              {/* Live DOP conversion. On phones `order-last w-full` parks it on
+                  its own line beneath the amount (always shown, never clipped);
+                  from sm: up `order-none w-auto` pulls it back inline, sitting
+                  between the amount and the chevron — the desktop layout. */}
+              {dopRate && currency === 'USD' && (
+                <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
+                  {/* The converted total is the figure that matters — keep it
+                      whole. The "@ rate" suffix is what gives way first: hidden
+                      below 380px (the lock icon still flags the locked state),
+                      back inline from there up. */}
+                  <span className="flex-shrink-0">≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}</span>
+                  {rateLocked ? (
+                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa Ajustes para actualizarla">
+                      <Lock size={10} /> <span className="hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
                     </span>
+                  ) : (
+                    <span className="text-ink-400 flex-shrink-0 hidden min-[380px]:inline">@ {dopRate.toFixed(2)}</span>
                   )}
-                  <ChevronUp
-                    size={18}
-                    className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
-                    aria-hidden
-                  />
-                </div>
-              </button>
-            </div>
+                </span>
+              )}
+              {/* Sits right after the amount (no ml-auto) so the toggle reads as
+                  part of the price. On phones the conversion's `order-last`
+                  jumps past it to the next line, keeping the chevron on the
+                  amount's row; on desktop it trails the conversion inline. */}
+              <ChevronUp
+                size={16}
+                className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                aria-hidden
+              />
+            </button>
 
-            {/* Action toolbar. On phones it's a full-width row of labelled
-                actions that share the width evenly (tab-bar style) so it reads
-                as a deliberate toolbar rather than buttons stranded in a corner;
-                the export CTA carries the filled accent. From sm: up the labels
-                drop away and it collapses to the compact right-aligned icon
-                cluster the desktop dock has always used. */}
-            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
+            {/* Action cluster — compact icon buttons at every width (the filled
+                Export CTA last), pinned to the right and never shrinking. */}
+            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
               <DockAction
                 icon={SlidersHorizontal}
                 label="Ajustes"
@@ -253,8 +279,6 @@ export default function TotalsDock({
                 ariaLabel="Ajustes: descuento y envío"
                 title="Descuento y envío de la cotización"
               />
-
-              <span className="hidden sm:block w-px h-8 bg-ink-200 mx-0.5 flex-shrink-0" aria-hidden />
 
               {/* Catálogo — phone/tablet only; the header and items card carry it
                   on desktop. */}
@@ -332,25 +356,27 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
 }
 
 /**
- * One action in the dock's toolbar. Two faces from a single definition:
- *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
- *     bar's width evenly and read as a real toolbar (labels remove the "what
- *     does this icon do" guesswork on the small target).
- *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
- *     uses, label hidden.
- * `primary` paints the filled CTA (export); `pressed` is the active-panel
- * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
- * stays put whether the cell is wide (phone) or square (desktop).
+ * One action in the dock's toolbar — a single compact icon button at every
+ * width, matching the desktop dock's aesthetic: a 9×9 square (11×11 on coarse
+ * pointers, per Apple HIG / WCAG 2.5.5), label carried by the tooltip /
+ * accessible name rather than visible text so the whole bar stays on one row.
+ * Every button is the same rounded square so the cluster reads as one even,
+ * deliberate rhythm:
+ *   • primary (Export) — the filled ink-900 CTA.
+ *   • pressed — the active-panel (toggle) state, also filled.
+ *   • default — bordered ghost square (hairline ink-200), the consistent
+ *     enclosure the rest of the cluster shares; `dot` flags an applied
+ *     adjustment, anchored to the icon's top-right.
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
   disabled, busy, pressed, primary, dot, className = '',
 }) {
-  const variant = primary
-    ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
+  const tone = primary
+    ? 'bg-ink-900 text-white border border-ink-900 hover:bg-ink-800 active:bg-ink-700'
     : pressed
-      ? 'bg-ink-900 text-white'
-      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
+      ? 'bg-ink-900 text-white border border-ink-900'
+      : 'text-ink-700 border border-ink-200 hover:bg-ink-100 hover:border-ink-300 active:bg-ink-200';
   return (
     <button
       type="button"
@@ -358,22 +384,19 @@ function DockAction({
       disabled={disabled}
       aria-busy={busy || undefined}
       aria-pressed={pressed}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel || label}
       title={title}
-      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-lg transition-colors active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait ${tone} ${className}`}
     >
-      <span className="relative inline-flex">
-        {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
-        {dot && (
-          <span
-            className={`absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full ring-2 ${
-              pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
-            }`}
-            aria-hidden
-          />
-        )}
-      </span>
-      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
+      {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
+      {dot && (
+        <span
+          className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ring-2 ${
+            pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
+          }`}
+          aria-hidden
+        />
+      )}
     </button>
   );
 }

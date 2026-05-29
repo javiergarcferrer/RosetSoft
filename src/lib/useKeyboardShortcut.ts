@@ -4,13 +4,13 @@ import { useEffect } from 'react';
  * Bind a handler to a keyboard combo. Use 'mod' for the platform meta key
  * (⌘ on macOS, Ctrl elsewhere). Examples:
  *
- *   useKeyboardShortcut('mod+k', open);
+ *   useKeyboardShortcut('mod+s', save);
  *   useKeyboardShortcut('mod+enter', addLine, { ignoreInInput: false });
  *   useKeyboardShortcut('escape', close);
  *
  * `ignoreInInput` (default true) suppresses the shortcut while the user is
- * typing in an input/textarea/contenteditable — so e.g. Cmd+K still opens
- * the palette but plain letters never collide with text entry.
+ * typing in an input/textarea/contenteditable — so e.g. ⌘S still saves but
+ * plain letters never collide with text entry.
  */
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 

@@ -19,7 +19,6 @@ import { QuoteActionsContext, useQuoteActions } from '../components/quote-builde
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
-import QuickActions from '../components/quote-builder/QuickActions.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import { useQuoteController } from '../components/quote-builder/useQuoteController.js';
 import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
@@ -36,9 +35,8 @@ import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
  * read-only `ClientPreview` of the quote, styled like the PDF, so the dealer
  * can show the client what they're getting without downloading a file.
  *
- * Lines are still free-form (typed from the price-list PDF). The command
- * palette (⌘K) surfaces past-quote line items as insertable suggestions —
- * our catalog substitute that grows with usage.
+ * Lines are still free-form (typed from the price-list PDF), and the catalog
+ * picker (⌘↵) surfaces real products to insert as a starting point.
  */
 export default function QuoteBuilder() {
   const navigate = useNavigate();
@@ -281,17 +279,15 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // builder now stays focused on quote construction; price-list lookup
   // happens outside the app.
   const [view, setView] = useState('compose'); // 'compose' | 'client'
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
-   *   ⌘K       — open the command palette (the universal launcher)
    *   ⌘↵       — open the catalog to add a product (works even inside an input)
    *   ⌘P       — export PDF (commandeers the browser's print shortcut on
    *              purpose — the PDF IS the print equivalent for this app)
    * The client-view toggle is intentionally NOT bound — every browser has
-   * its own ⌘E meaning, and the palette + header toggle cover the need.
+   * its own ⌘E meaning, and the header toggle covers the need.
    *
    * These hooks live above the `!quote` guard so the hook count stays
    * stable between the initial "loading" render and the post-load render.
@@ -299,7 +295,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
    * before their lexical position is fine; they're only invoked on user
    * keypress, by which point `quote` is populated.
    */
-  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v));
   useKeyboardShortcut('mod+enter', () => setCatalogOpen(true), { ignoreInInput: false });
   useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
 
@@ -325,7 +320,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         profileId={profileId}
         view={view}
         onViewChange={setView}
-        onOpenPalette={() => setPaletteOpen(true)}
         onUpdateQuote={hx(updateQuote)}
         onUndo={undo}
         onRedo={redo}
@@ -448,22 +442,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         exporting={exporting}
         onShare={shareQuote}
         sharing={sharing}
-      />
-
-      <QuickActions
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        customers={customers}
-        currentCustomerId={quote.customerId}
-        onInsertLine={hx((seed) => addLine(seed))}
-        onAddSection={hx(addSection)}
-        onOpenCatalog={() => setCatalogOpen(true)}
-        onSelectCustomer={hx((id) => updateQuote({ customerId: id }))}
-        onExportPdf={exportPdf}
-        onToggleClientView={() => setView((v) => v === 'compose' ? 'client' : 'compose')}
-        clientView={view === 'client'}
-        currency={quote.currencyCode || 'USD'}
-        rates={quote.rates || { USD: 1 }}
       />
 
       <CatalogPicker
