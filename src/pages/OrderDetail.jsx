@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
@@ -26,7 +26,7 @@ import {
 import { supabase } from '../db/supabaseClient.js';
 import {
   validateContainerNo, detectCarrier, normalizeContainerNo,
-  summarizeTracking, buildTrackingRoute, MODE_LABELS, CLASSIFIER_LABELS,
+  summarizeTracking, buildTrackingRoute, summarizeVoyage, MODE_LABELS, CLASSIFIER_LABELS,
 } from '../lib/containerTracking.js';
 import ContainerTrackingMap from '../components/ContainerTrackingMap.jsx';
 
@@ -615,9 +615,19 @@ function ContainerTracking({ containerNo }) {
   useEffect(() => { load(); }, [containerNo]);
 
   const { status, summary, error, fetchedAt } = state;
+  const mapRef = useRef(null);
   // Geocoded port hops for the map; empty when no event carries a known
   // UN/LOCODE, in which case the textual timeline below stands on its own.
   const route = useMemo(() => buildTrackingRoute(summary), [summary]);
+  // High-level voyage facts for the map's HUD (endpoints, ETA, progress).
+  const voyage = useMemo(() => summarizeVoyage(route, summary, containerNo), [route, summary, containerNo]);
+  // Which map stop each timeline event belongs to, so clicking a row focuses
+  // the matching marker. Built from the same milestone object identities.
+  const milestoneStop = useMemo(() => {
+    const m = new Map();
+    route.stops.forEach((s, i) => (s.events || []).forEach((e) => m.set(e, i)));
+    return m;
+  }, [route]);
 
   return (
     <div className="rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3">
@@ -674,30 +684,39 @@ function ContainerTracking({ containerNo }) {
             )}
           </div>
 
-          {route.stops.length > 0 && <ContainerTrackingMap route={route} />}
+          {route.stops.length > 0 && <ContainerTrackingMap ref={mapRef} route={route} voyage={voyage} />}
 
           <ol className="space-y-1.5 border-l border-ink-200 pl-3">
-            {[...summary.milestones].reverse().map((m, i) => (
-              <li key={i} className="relative">
-                <span className="absolute -left-[14.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-ink-300" />
-                <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                  <span className="text-ink-800 font-medium">
-                    {m.label}
-                    {m.location ? <span className="font-normal text-ink-500"> · {m.location}</span> : null}
-                  </span>
-                  <span className="text-[10px] text-ink-400 whitespace-nowrap">{formatDateTime(m.at)}</span>
-                </div>
-                {(() => {
-                  const meta = [
-                    m.mode ? (MODE_LABELS[m.mode] || m.mode) : null,
-                    m.vessel,
-                    m.voyage,
-                    CLASSIFIER_LABELS[m.classifier] || m.classifier || null,
-                  ].filter(Boolean).join(' · ');
-                  return meta ? <div className="text-[10px] text-ink-400">{meta}</div> : null;
-                })()}
-              </li>
-            ))}
+            {[...summary.milestones].reverse().map((m, i) => {
+              const stopIndex = milestoneStop.get(m);
+              const clickable = stopIndex != null;
+              return (
+                <li
+                  key={i}
+                  className={`relative ${clickable ? 'cursor-pointer group' : ''}`}
+                  onClick={clickable ? () => mapRef.current?.focusStop(stopIndex) : undefined}
+                  title={clickable ? 'Ver en el mapa' : undefined}
+                >
+                  <span className={`absolute -left-[14.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-ink-300 ${clickable ? 'group-hover:bg-brand-500' : ''}`} />
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                    <span className={`text-ink-800 font-medium ${clickable ? 'group-hover:text-brand-700' : ''}`}>
+                      {m.label}
+                      {m.location ? <span className="font-normal text-ink-500"> · {m.location}</span> : null}
+                    </span>
+                    <span className="text-[10px] text-ink-400 whitespace-nowrap">{formatDateTime(m.at)}</span>
+                  </div>
+                  {(() => {
+                    const meta = [
+                      m.mode ? (MODE_LABELS[m.mode] || m.mode) : null,
+                      m.vessel,
+                      m.voyage,
+                      CLASSIFIER_LABELS[m.classifier] || m.classifier || null,
+                    ].filter(Boolean).join(' · ');
+                    return meta ? <div className="text-[10px] text-ink-400">{meta}</div> : null;
+                  })()}
+                </li>
+              );
+            })}
           </ol>
 
           {fetchedAt && (

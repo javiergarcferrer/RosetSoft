@@ -16,6 +16,7 @@ import {
   normalizeEvent,
   summarizeTracking,
   buildTrackingRoute,
+  summarizeVoyage,
 } from '../src/lib/containerTracking.js';
 
 /* ----------------------------- ISO 6346 ----------------------------- */
@@ -206,4 +207,55 @@ test('buildTrackingRoute skips unmappable events and handles empties', () => {
   for (const input of [null, undefined, summarizeTracking([])]) {
     assert.equal(buildTrackingRoute(input).stops.length, 0);
   }
+});
+
+/* -------------------------- summarizeVoyage ------------------------- */
+
+test('summarizeVoyage derives endpoints, vessel/voyage, carrier and progress', () => {
+  const events = [
+    { eventType: 'TRANSPORT', eventClassifierCode: 'ACT', eventDateTime: '2026-05-01T18:00:00Z',
+      transportEventTypeCode: 'DEPA',
+      transportCall: { UNLocationCode: 'FRLEH', modeOfTransport: 'VESSEL', vessel: { vesselName: 'Bremen Express' }, exportVoyageNumber: '014W' } },
+    // last known ACTual position: arrived at the Algeciras transshipment hub
+    { eventType: 'TRANSPORT', eventClassifierCode: 'ACT', eventDateTime: '2026-05-05T06:00:00Z',
+      transportEventTypeCode: 'ARRI', transportCall: { UNLocationCode: 'ESALG', modeOfTransport: 'VESSEL' } },
+    // estimated arrival at the destination
+    { eventType: 'TRANSPORT', eventClassifierCode: 'EST', eventDateTime: '2026-05-22T12:00:00Z',
+      transportEventTypeCode: 'ARRI', transportCall: { UNLocationCode: 'DOCAU' } },
+  ];
+  const summary = summarizeTracking(events);
+  const route = buildTrackingRoute(summary);
+  const v = summarizeVoyage(route, summary, 'HLBU1234564');
+
+  assert.equal(v.origin.unloc, 'FRLEH');
+  assert.equal(v.destination.unloc, 'DOCAU');
+  assert.equal(v.current.unloc, 'ESALG');
+  assert.equal(v.vessel, 'Bremen Express');
+  assert.equal(v.voyage, '014W');
+  assert.equal(v.carrier, 'Hapag-Lloyd');           // from the HLBU owner prefix
+  assert.equal(v.arrived, false);
+  // Partway: sailed FRLEH→ESALG, still ESALG→DOCAU to go.
+  assert.ok(v.progressPct > 0 && v.progressPct < 100);
+  assert.ok(v.totalKm > v.sailedKm && v.remainingKm > 0);
+  assert.equal(v.etaAt, Date.parse('2026-05-22T12:00:00Z'));
+  assert.equal(v.departedAt, Date.parse('2026-05-01T18:00:00Z'));
+});
+
+test('summarizeVoyage flags an arrived voyage at 100% and tolerates empties', () => {
+  const events = [
+    { eventType: 'TRANSPORT', eventClassifierCode: 'ACT', eventDateTime: '2026-05-01T00:00:00Z',
+      transportEventTypeCode: 'DEPA', transportCall: { UNLocationCode: 'FRLEH' } },
+    { eventType: 'EQUIPMENT', eventClassifierCode: 'ACT', eventDateTime: '2026-05-20T00:00:00Z',
+      equipmentEventTypeCode: 'DISC', eventLocation: { UNLocationCode: 'DOCAU' } },
+  ];
+  const route = buildTrackingRoute(summarizeTracking(events));
+  const v = summarizeVoyage(route, summarizeTracking(events), 'HLBU1234564');
+  assert.equal(v.arrived, true);
+  assert.equal(v.progressPct, 100);
+  assert.equal(v.remainingKm, 0);
+
+  const empty = summarizeVoyage(buildTrackingRoute(null), null, null);
+  assert.equal(empty.origin, null);
+  assert.equal(empty.progressPct, 0);
+  assert.equal(empty.carrier, null);
 });
