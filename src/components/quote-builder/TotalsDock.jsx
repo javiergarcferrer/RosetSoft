@@ -189,16 +189,15 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar. On phones it stacks into two rows so the grand
-              total — the hero figure — keeps the full width instead of being
-              truncated by the action cluster; from sm: up it collapses back to a
-              single row. */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {/* Always-visible bar — a single row at every width: the grand total
+              leads (flex-1, truncating if cramped) with the action cluster
+              pinned to the right. */}
+          <div className="flex flex-row items-center gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure. Both currencies read
                 at once (USD large, the live DOP equivalent beneath), so there's
                 nothing to toggle: the figure is complete at a glance. It doubles
                 as the breakdown toggle — a big, obvious tap target. */}
-            <div className="min-w-0 sm:flex-1">
+            <div className="min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => toggle('breakdown')}
@@ -213,7 +212,7 @@ export default function TotalsDock({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-2xl sm:text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
+                  <span className="text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
                   <ChevronUp
                     size={18}
                     className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
@@ -235,13 +234,9 @@ export default function TotalsDock({
               </button>
             </div>
 
-            {/* Action toolbar. On phones it's a full-width row of labelled
-                actions that share the width evenly (tab-bar style) so it reads
-                as a deliberate toolbar rather than buttons stranded in a corner;
-                the export CTA carries the filled accent. From sm: up the labels
-                drop away and it collapses to the compact right-aligned icon
-                cluster the desktop dock has always used. */}
-            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
+            {/* Action toolbar — a compact icon cluster pinned to the right at
+                every width; the export CTA carries the filled accent. */}
+            <div className="flex items-center gap-1.5 sm:gap-1 flex-shrink-0">
               <DockAction
                 icon={SlidersHorizontal}
                 label="Ajustes"
@@ -330,15 +325,12 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
 }
 
 /**
- * One action in the dock's toolbar. Two faces from a single definition:
- *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
- *     bar's width evenly and read as a real toolbar (labels remove the "what
- *     does this icon do" guesswork on the small target).
- *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
- *     uses, label hidden.
+ * One action in the dock's toolbar — a compact icon-only square at every width
+ * (44px touch target on coarse pointers, 36px on a fine pointer). The label
+ * rides along as the tooltip / accessible name, never as visible text, so the
+ * cluster stays on the bar's single row.
  * `primary` paints the filled CTA (export); `pressed` is the active-panel
- * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
- * stays put whether the cell is wide (phone) or square (desktop).
+ * (toggle) state; `dot` flags an applied adjustment, anchored to the icon.
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
@@ -348,7 +340,7 @@ function DockAction({
     ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
     : pressed
       ? 'bg-ink-900 text-white'
-      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
+      : 'text-ink-700 border border-ink-200 hover:bg-ink-100';
   return (
     <button
       type="button"
@@ -356,9 +348,9 @@ function DockAction({
       disabled={disabled}
       aria-busy={busy || undefined}
       aria-pressed={pressed}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel || label}
       title={title}
-      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+      className={`relative flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
     >
       <span className="relative inline-flex">
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
@@ -371,7 +363,6 @@ function DockAction({
           />
         )}
       </span>
-      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
     </button>
   );
 }
