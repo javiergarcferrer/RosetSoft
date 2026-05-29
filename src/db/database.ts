@@ -780,13 +780,6 @@ export async function saveImage({ kind, ownerId, file, label = '' }: SaveImageAr
   return id;
 }
 
-export async function imageObjectUrl(id: string | null | undefined): Promise<string | null> {
-  if (!id) return null;
-  const rec = await db.images.get(id);
-  if (!rec?.storagePath) return null;
-  return publicImageUrl(rec.storagePath);
-}
-
 export async function deleteImage(id: string | null | undefined): Promise<void> {
   if (!id) return;
   const rec = await db.images.get(id);

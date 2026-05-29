@@ -37,12 +37,6 @@ export function drawRightAt(
   } as DrawTextOptions);
 }
 
-/** Cap a string at `n` characters with an ellipsis tail. */
-export function truncate(s: string | null | undefined, n: number): string {
-  if (!s) return '';
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
-}
-
 /**
  * Greedy word-wrap into lines of approximately `perLine` characters. We bound
  * on character count rather than measured width because terms text is mostly

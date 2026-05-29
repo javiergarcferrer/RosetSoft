@@ -42,8 +42,6 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL, anonKey || 'a
   },
 });
 
-export const supabaseConfigured: boolean = !!(url && anonKey);
-
 export const IMAGES_BUCKET = 'images';
 
 export function publicImageUrl(path: string | null | undefined): string | null {

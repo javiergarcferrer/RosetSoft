@@ -33,20 +33,6 @@ export function formatMoney(
   }
 }
 
-/** Short form — no currency symbol, just the rounded number. */
-export function formatMoneyShort(
-  value: number | null | undefined,
-  code: CurrencyCode | string = 'USD',
-  rates: RatesMap | Record<string, number> = DEFAULT_RATES,
-): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  const rate = (rates as Record<string, number | undefined>)?.[code] ?? 1;
-  const converted = value * rate;
-  return code === 'DOP'
-    ? Math.round(converted).toLocaleString('en-US')
-    : converted.toLocaleString('en-US', { maximumFractionDigits: 2 });
-}
-
 export function formatDate(ts: number | null | undefined): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString(undefined, {

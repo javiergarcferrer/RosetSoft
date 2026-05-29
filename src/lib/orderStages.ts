@@ -129,11 +129,6 @@ export function currentOrderStage(order: Pick<Order, 'status'> | null | undefine
   return 'draft';
 }
 
-/** Cancelled is the only terminal alt currently. */
-export function isTerminalOrderStage(key: string | null | undefined): boolean {
-  return ORDER_TERMINAL_STAGES.some((s) => s.key === key);
-}
-
 /**
  * Can the dealer move this order forward to its next main-track stage?
  *

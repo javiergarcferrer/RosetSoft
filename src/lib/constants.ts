@@ -26,7 +26,6 @@ import type {
  */
 export const LINE_KIND_ITEM:    LineKind = 'item';
 export const LINE_KIND_SECTION: LineKind = 'section';
-export const LINE_KINDS: readonly LineKind[] = [LINE_KIND_ITEM, LINE_KIND_SECTION];
 
 /* ---------------------------------- feature flags --------------------------------- */
 
@@ -100,26 +99,3 @@ export const QUOTE_STATUS_SENT:     QuoteStatus = 'sent';
 export const QUOTE_STATUS_ACCEPTED: QuoteStatus = 'accepted';
 export const QUOTE_STATUS_DECLINED: QuoteStatus = 'declined';
 export const QUOTE_STATUS_ARCHIVED: QuoteStatus = 'archived';
-
-export const QUOTE_STATUSES: readonly QuoteStatus[] = [
-  QUOTE_STATUS_DRAFT,
-  QUOTE_STATUS_SENT,
-  QUOTE_STATUS_ACCEPTED,
-  QUOTE_STATUS_DECLINED,
-  QUOTE_STATUS_ARCHIVED,
-];
-
-/**
- * Statuses where the quote is still being negotiated with the
- * customer — the editor / list views overlay live exchange rates
- * for these instead of the snapshot. Once a quote is accepted or
- * beyond, the rate the customer agreed to is the historical record.
- */
-export const QUOTE_STATUS_ACTIVE: ReadonlySet<QuoteStatus> = new Set([
-  QUOTE_STATUS_DRAFT,
-  QUOTE_STATUS_SENT,
-]);
-
-export function isActiveQuoteStatus(status: string | null | undefined): boolean {
-  return !!status && QUOTE_STATUS_ACTIVE.has(status as QuoteStatus);
-}

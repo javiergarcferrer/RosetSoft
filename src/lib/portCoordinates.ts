@@ -90,9 +90,6 @@ const PORTS: Record<string, PortCoord> = {
   MYTPP: { name: 'Tanjung Pelepas', lat: 1.3667, lon: 103.5500 },
 };
 
-/** Number of ports in the bundled table (handy for tests/diagnostics). */
-export const KNOWN_PORT_COUNT = Object.keys(PORTS).length;
-
 /**
  * Resolve a UN/LOCODE to its coordinate, or null if we don't carry it.
  * Tolerant of casing and embedded separators (e.g. "FR LEH" / "fr-leh").

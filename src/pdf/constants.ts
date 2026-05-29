@@ -51,15 +51,6 @@ export const BAND_GROUP_SET:  RGB = rgb(0.915, 0.905, 0.885); // header/footer b
 export const BRAND_50:        RGB = rgb(0.985, 0.955, 0.925); // alternativa member tint — brand-50
 export const BAND_GROUP_ALT:  RGB = rgb(0.975, 0.925, 0.875); // alternativa header/footer band — brand-50 deeper
 
-// Violet shades for the Conjunto (set) treatment — the take-all twin of
-// the alternative group. ClientPreview / LineItemList mark set members
-// with a violet-300 solid left border + a violet-700 "Conjunto" eyebrow;
-// these mirror those Tailwind tokens so the PDF reads the same as the
-// on-screen preview. Distinct from the brand accent so a customer can
-// tell "sold together" (violet) apart from "pick one" (brand).
-export const VIOLET_300: RGB = rgb(0.77, 0.71, 0.97);   // violet-300 #c4b5fd
-export const VIOLET_700: RGB = rgb(0.42, 0.24, 0.80);   // violet-700 #6d28d9
-
 // Grand-total band — the headline of the "confident commercial" redesign.
 // A solid near-black bar anchors the total; the label reads in a muted
 // cream tone inside the band, the value in pure white. These two tones

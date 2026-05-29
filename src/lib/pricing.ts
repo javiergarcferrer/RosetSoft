@@ -194,15 +194,6 @@ export function lineQty(line: QuoteLine | null | undefined): number {
   return safeNum(line?.qty, 0);
 }
 
-/**
- * Pre-line-adjustment subtotal: lineBasePrice × lineQty. Useful in
- * places (breakdown popovers, totals rails) that need the
- * pre-discount figure for a compound or a normal line uniformly.
- */
-export function lineSubtotal(line: QuoteLine | null | undefined): number {
-  return lineBasePrice(line) * lineQty(line);
-}
-
 /** Final per-line total, after line-level margin and discount. */
 export function lineTotal(line: QuoteLine | null | undefined): number {
   const base = lineBasePrice(line);

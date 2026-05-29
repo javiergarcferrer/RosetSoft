@@ -49,11 +49,6 @@ export function effectiveDopRate(settings: Settings | null | undefined): number 
   return Number(rate.sell) || Number(rate.buy) || 60.0;
 }
 
-/** Friendly label printed on PDFs and in Settings hints. */
-export function rateSourceLabel(_settings?: Settings | null): string {
-  return 'Banco Popular Dominicano';
-}
-
 /**
  * Build a `formatMoney`-shaped rates map from settings, with USD as
  * the base unit (1) and DOP populated from whichever rate mode the

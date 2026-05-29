@@ -13,7 +13,21 @@
   user pastes); act, then report. Ask only on a real fork the user must own —
   never to confirm the obvious or offload a decision. Diagnose once, act once
   (don't flip-flop).
-- **Verify before every push:** `npm run typecheck`, `npm run build`, `npm test`.
+- **Verify proportionately — never run the whole suite by reflex.** Match the
+  check to the change:
+  - **UI only** (JSX/TSX, CSS, components, pages, copy): no tests. `npm run
+    typecheck`, and `npm run build` before a `main` push. That's it.
+  - **A logic module** (`src/lib/*`, `src/db/*`, `src/pdf/*`): run ONLY that
+    module's test if one exists (e.g. `node --import tsx --test
+    tests/pricing.test.js`) plus `npm run typecheck`. Don't run unrelated suites.
+  - `npm run build` must pass before any push to `main` (Vercel builds with it).
+  The suite is deliberately small — it covers ONLY money, complex parsing, and
+  data-integrity logic (pricing, commissions, containerTracking, catalog/
+  lrCatalog merge, priceListCsv, quoteMilestones, exchangeRate, voyageGeometry,
+  clientPick, subtype). **Don't add tests** for presentational maps, one-line
+  getters, label/colour mappings, or trivial helpers — write the code so it is
+  obviously correct instead. Reporting "N/N tests passed" for an unrelated
+  change is noise, not verification.
 - Match the user's language; keep code, comments, and commits in English.
 
 ## The integration — GitHub ↔ Supabase ↔ Vercel (circular)
