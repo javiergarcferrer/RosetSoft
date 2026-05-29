@@ -189,15 +189,16 @@ export default function TotalsDock({
             </div>
           </div>
 
-          {/* Always-visible bar — a single row at every width: the grand total
-              leads (flex-1, truncating if cramped) with the action cluster
-              pinned to the right. */}
-          <div className="flex flex-row items-center gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {/* Always-visible bar. On phones it stacks into two rows so the grand
+              total — the hero figure — keeps the full width instead of being
+              truncated by the action cluster; from sm: up it collapses back to a
+              single row. */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure. Both currencies read
-                at once (USD large, the live DOP equivalent beneath), so there's
-                nothing to toggle: the figure is complete at a glance. It doubles
-                as the breakdown toggle — a big, obvious tap target. */}
-            <div className="min-w-0 flex-1">
+                at once on a single line (USD, then the live DOP equivalent), so
+                there's nothing to toggle: the figure is complete at a glance. It
+                doubles as the breakdown toggle — a big, obvious tap target. */}
+            <div className="min-w-0 sm:flex-1">
               <button
                 type="button"
                 onClick={() => toggle('breakdown')}
@@ -205,38 +206,44 @@ export default function TotalsDock({
                 className="block w-full min-w-0 text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-ink-50 transition-colors"
                 title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
               >
-                <div className="flex items-center gap-2">
-                  <span className="eyebrow-xs">Total</span>
+                {/* One line: eyebrow, the grand total, the discount chip and the
+                    live DOP conversion all read across in a single row. The
+                    amount holds its size; the conversion truncates first when
+                    space runs out, and the chevron is pinned to the far right. */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="eyebrow-xs flex-shrink-0">Total</span>
+                  <span className="text-xl font-semibold tabular-nums leading-tight flex-shrink-0">{fmt(totals.grandTotal)}</span>
                   {discountPct > 0 && (
-                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200">−{discountPct}%</span>
+                    <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
                   )}
-                </div>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xl font-semibold tabular-nums truncate leading-tight">{fmt(totals.grandTotal)}</span>
+                  {dopRate && currency === 'USD' && (
+                    <span className="text-[11px] text-ink-500 tabular-nums inline-flex items-center gap-1 truncate">
+                      ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
+                      {rateLocked ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar">
+                          <Lock size={10} /> @ {dopRate.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
+                      )}
+                    </span>
+                  )}
                   <ChevronUp
                     size={18}
-                    className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                    className={`text-ink-400 flex-shrink-0 ml-auto transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                     aria-hidden
                   />
                 </div>
-                {dopRate && currency === 'USD' && (
-                  <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-1 truncate">
-                    ≈ RD$ {Math.round(dopTotal).toLocaleString('en-US')}
-                    {rateLocked ? (
-                      <span className="inline-flex items-center gap-1 text-amber-700" title="Tasa bloqueada al enviar">
-                        <Lock size={10} /> @ {dopRate.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="text-ink-400">@ {dopRate.toFixed(2)}</span>
-                    )}
-                  </div>
-                )}
               </button>
             </div>
 
-            {/* Action toolbar — a compact icon cluster pinned to the right at
-                every width; the export CTA carries the filled accent. */}
-            <div className="flex items-center gap-1.5 sm:gap-1 flex-shrink-0">
+            {/* Action toolbar. On phones it's a full-width row of labelled
+                actions that share the width evenly (tab-bar style) so it reads
+                as a deliberate toolbar rather than buttons stranded in a corner;
+                the export CTA carries the filled accent. From sm: up the labels
+                drop away and it collapses to the compact right-aligned icon
+                cluster the desktop dock has always used. */}
+            <div className="flex items-stretch sm:items-center w-full sm:w-auto gap-1.5 sm:gap-1 flex-shrink-0">
               <DockAction
                 icon={SlidersHorizontal}
                 label="Ajustes"
@@ -325,12 +332,15 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
 }
 
 /**
- * One action in the dock's toolbar — a compact icon-only square at every width
- * (44px touch target on coarse pointers, 36px on a fine pointer). The label
- * rides along as the tooltip / accessible name, never as visible text, so the
- * cluster stays on the bar's single row.
+ * One action in the dock's toolbar. Two faces from a single definition:
+ *   • phone — a flex-1 stacked icon-over-label cell, so the actions share the
+ *     bar's width evenly and read as a real toolbar (labels remove the "what
+ *     does this icon do" guesswork on the small target).
+ *   • sm+ — collapses to the compact 36/44px icon-only square the desktop dock
+ *     uses, label hidden.
  * `primary` paints the filled CTA (export); `pressed` is the active-panel
- * (toggle) state; `dot` flags an applied adjustment, anchored to the icon.
+ * (toggle) state; `dot` flags an applied adjustment, anchored to the icon so it
+ * stays put whether the cell is wide (phone) or square (desktop).
  */
 function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
@@ -340,7 +350,7 @@ function DockAction({
     ? 'bg-ink-900 text-white hover:bg-ink-800 active:bg-ink-700'
     : pressed
       ? 'bg-ink-900 text-white'
-      : 'text-ink-700 border border-ink-200 hover:bg-ink-100';
+      : 'text-ink-600 hover:bg-ink-100 sm:text-ink-700 sm:border sm:border-ink-200';
   return (
     <button
       type="button"
@@ -348,9 +358,9 @@ function DockAction({
       disabled={disabled}
       aria-busy={busy || undefined}
       aria-pressed={pressed}
-      aria-label={ariaLabel || label}
+      aria-label={ariaLabel}
       title={title}
-      className={`relative flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
+      className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-0 py-1.5 sm:py-0 min-h-12 sm:min-h-0 sm:w-9 sm:h-9 sm:coarse:w-11 sm:coarse:h-11 rounded-lg sm:rounded-md transition-colors active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait ${variant} ${className}`}
     >
       <span className="relative inline-flex">
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
@@ -363,6 +373,7 @@ function DockAction({
           />
         )}
       </span>
+      <span className="text-[10px] font-medium leading-none sm:hidden">{label}</span>
     </button>
   );
 }
