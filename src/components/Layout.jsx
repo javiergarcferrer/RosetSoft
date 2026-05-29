@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
+import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
 
 // Sidebar groups. The two single-item groups at the ends (Inicio and
@@ -198,6 +199,11 @@ export default function Layout() {
             <X size={20} />
           </button>
         </div>
+
+        {/* Admin-only "Ver como" preview — sits right under the brand mark so
+            it's discreet but always at hand. Renders nothing for non-admins
+            and is hidden in the mobile drawer (the component owns both). */}
+        <ViewAsToggle />
 
         <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain">
           {navGroups.map((group, gi) => (

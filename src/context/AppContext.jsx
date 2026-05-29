@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
 import { shouldPullDailyRate } from '../lib/exchangeRate.js';
@@ -33,6 +33,13 @@ export function AppProvider({ children }) {
   const [settings, setSettings] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [currentProfile, setCurrentProfile] = useState(null);
+  // Admin-only "view as" preview. When an admin picks a non-admin role
+  // here, the whole UI re-gates as if they had that role (sidebar nav,
+  // per-page access, in-quote controls) WITHOUT touching their real
+  // identity or server privileges — see the effectiveProfile derivation
+  // below. Held in memory only: a reload or sign-out drops them back to
+  // their real admin view, so they can never get stranded in a role.
+  const [viewAsRole, setViewAsRoleState] = useState(null);
   const [ready, setReady] = useState(false);
 
   const refreshProfiles = useCallback(async () => {
@@ -171,15 +178,55 @@ export function AppProvider({ children }) {
     await refreshSettings();
   }, [profileId, refreshSettings]);
 
+  // "View as" preview (admin only). We override ONLY the role on the
+  // exposed profile, so every existing consumer — the sidebar nav, the
+  // per-page `isAdmin` gates, the in-quote seller picker — re-renders as
+  // that role with zero changes on their side. Identity (id, email,
+  // active, passwordSetAt) keeps the admin's real values, so data writes,
+  // commission attribution, and the App-level Gate stay untouched, and
+  // RLS on the server still sees the real admin. The override is honored
+  // only when the *real* role is admin, so it can never be an escalation.
+  const realRole = currentProfile?.role || null;
+  const canViewAs = realRole === 'admin';
+  const effectiveRole = canViewAs && viewAsRole ? viewAsRole : realRole;
+
+  const setViewAsRole = useCallback((role) => {
+    setViewAsRoleState(role === 'employee' || role === 'accounting' ? role : null);
+  }, []);
+
+  // Defensive: if this user ever stops being an admin (e.g. another admin
+  // demotes them and the realtime profiles channel lands), drop any active
+  // preview so they fall straight back to their real role's view.
+  useEffect(() => {
+    if (realRole !== 'admin' && viewAsRole) setViewAsRoleState(null);
+  }, [realRole, viewAsRole]);
+
+  const effectiveProfile = useMemo(
+    () =>
+      currentProfile && effectiveRole !== currentProfile.role
+        ? { ...currentProfile, role: effectiveRole }
+        : currentProfile,
+    [currentProfile, effectiveRole],
+  );
+
   const value = {
     ready,
     profileId,
     profiles,
     settings,
-    currentProfile,
-    isAdmin: currentProfile?.role === 'admin',
-    isAccounting: currentProfile?.role === 'accounting',
+    // The role-overridden projection — what the app gates its UI off.
+    currentProfile: effectiveProfile,
+    // The untouched signed-in profile, for anything that needs the real
+    // role regardless of the preview (e.g. gating the toggle itself).
+    realProfile: currentProfile,
+    realRole,
+    isAdmin: effectiveRole === 'admin',
+    isAccounting: effectiveRole === 'accounting',
     isActive: !!currentProfile?.active,
+    // Admin "view as" preview controls.
+    canViewAs,
+    viewAsRole: canViewAs ? viewAsRole : null,
+    setViewAsRole,
     refreshProfiles,
     refreshSettings,
     refreshCurrentProfile,
