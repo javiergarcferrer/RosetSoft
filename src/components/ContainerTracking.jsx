@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Ship, RefreshCw, AlertCircle, List } from 'lucide-react';
+import { Ship, RefreshCw, AlertCircle, List, ArrowRight, CheckCircle2, Navigation, MapPin } from 'lucide-react';
 import { supabase } from '../db/supabaseClient.js';
 import { formatDateTime } from '../lib/format.js';
 import {
@@ -73,6 +73,12 @@ export default function ContainerTracking({ containerNo }) {
     return m;
   }, [route]);
 
+  const meta = [voyage.vessel, voyage.voyage, voyage.carrier].filter(Boolean).join(' · ');
+  const etaDays = !voyage.arrived && voyage.etaAt ? Math.round((voyage.etaAt - Date.now()) / 86_400_000) : null;
+  const etaLabel = !voyage.arrived && voyage.etaAt
+    ? `ETA ${formatDateTime(voyage.etaAt)}${etaDays != null ? (etaDays >= 0 ? ` · en ${etaDays} d` : ' · vencida') : ''}`
+    : null;
+
   return (
     <div className="rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -107,23 +113,51 @@ export default function ContainerTracking({ containerNo }) {
 
       {status === 'done' && summary && summary.count > 0 && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {summary.last && (
-              <div className="rounded bg-white border border-ink-100 p-2">
-                <div className="eyebrow text-[10px] text-ink-400">Última posición</div>
-                <div className="font-medium text-ink-800">
-                  {summary.last.label}{summary.last.location ? ` · ${summary.last.location}` : ''}
+          {/* Voyage summary — route, status, progress and last position in one
+              clean band. The map below stays uncluttered; its overlay HUD only
+              appears when the map is expanded to full screen. */}
+          <div className="rounded-lg border border-ink-100 bg-white p-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              {voyage.origin ? (
+                <div className="flex min-w-0 items-center gap-1.5 font-semibold text-ink-900">
+                  <span className="truncate">{voyage.origin.name}</span>
+                  <ArrowRight size={13} className="shrink-0 text-ink-300" />
+                  <span className="truncate">{voyage.destination?.name || '—'}</span>
                 </div>
-                <div className="text-[10px] text-ink-500">{formatDateTime(summary.last.at)}</div>
+              ) : (
+                <span className="font-semibold text-ink-900">Seguimiento del contenedor</span>
+              )}
+              <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${voyage.arrived ? 'bg-emerald-50 text-emerald-700' : 'bg-brand-50 text-brand-700'}`}>
+                {voyage.arrived ? <CheckCircle2 size={11} /> : <Navigation size={11} />}
+                {voyage.arrived ? 'Entregado' : 'En tránsito'}
+              </span>
+            </div>
+
+            {meta && <div className="truncate text-[11px] text-ink-500">{meta}</div>}
+
+            {voyage.totalKm > 0 && (
+              <div className="space-y-1">
+                <div className="h-1.5 overflow-hidden rounded-full bg-ink-100">
+                  <div
+                    className={`h-full rounded-full ${voyage.arrived ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                    style={{ width: `${Math.max(3, Math.round(voyage.progressPct))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[10px] text-ink-500">
+                  <span className="font-medium">{voyage.arrived ? 'Entregado' : `${Math.round(voyage.progressPct)}% del trayecto`}</span>
+                  {etaLabel && <span className="truncate">{etaLabel}</span>}
+                </div>
               </div>
             )}
-            {summary.eta && (
-              <div className="rounded bg-white border border-ink-100 p-2">
-                <div className="eyebrow text-[10px] text-ink-400">Llegada estimada</div>
-                <div className="font-medium text-ink-800">{summary.eta.location || '—'}</div>
-                <div className="text-[10px] text-ink-500">
-                  {formatDateTime(summary.eta.at)} · {CLASSIFIER_LABELS[summary.eta.classifier] || summary.eta.classifier}
-                </div>
+
+            {summary.last && (
+              <div className="flex items-start gap-1.5 border-t border-ink-100 pt-2 text-[11px] text-ink-600">
+                <MapPin size={12} className="mt-0.5 shrink-0 text-ink-400" />
+                <span className="min-w-0">
+                  <span className="font-medium text-ink-800">{summary.last.label}</span>
+                  {summary.last.location ? ` · ${summary.last.location}` : ''}
+                  <span className="text-ink-400"> · {formatDateTime(summary.last.at)}</span>
+                </span>
               </div>
             )}
           </div>
@@ -134,7 +168,7 @@ export default function ContainerTracking({ containerNo }) {
               compact; picking one focuses its marker on the map. */}
           <Dropdown
             align="left"
-            panelClassName="w-[19rem]"
+            panelClassName="w-[min(20rem,calc(100vw-1.5rem))]"
             label={(
               <span className="inline-flex items-center gap-1.5">
                 <List size={12} className="text-ink-500" />

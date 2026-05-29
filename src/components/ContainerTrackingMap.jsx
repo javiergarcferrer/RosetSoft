@@ -116,7 +116,9 @@ const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, v
           aria-label="Mapa del viaje del contenedor"
         />
 
-        {status === 'ready' && voyage?.origin && (
+        {/* The panel above carries the voyage summary inline, so the map stays
+            clean; the overlay HUD only appears when expanded to full screen. */}
+        {status === 'ready' && expanded && voyage?.origin && (
           <VoyageHud voyage={voyage} />
         )}
 
