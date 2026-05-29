@@ -6,6 +6,7 @@ import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { formatMoney } from '../lib/format.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
+import { applyClientPick as applyPickLocally } from '../lib/clientPick.js';
 
 /**
  * Public, logged-OUT interactive quote view (route #/q/:token).
@@ -24,14 +25,31 @@ export default function PublicQuoteView() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
-  // Guards against an out-of-order response clobbering a newer pick.
-  const seqRef = useRef(0);
+  // The bundle we're currently showing (kept in a ref too, so the optimistic
+  // chain can build each pick on the latest local state without waiting for a
+  // re-render).
+  const bundleRef = useRef(null);
+  // Writes are serialized through this promise chain so the server applies
+  // picks in the order they were made; `pending` counts in-flight writes so we
+  // only reconcile to the server bundle once the queue drains.
+  const chainRef = useRef(Promise.resolve());
+  const pendingRef = useRef(0);
+
+  // Show a bundle now — both in the ref (for the next optimistic pick) and on
+  // screen.
+  function commit(b) {
+    bundleRef.current = b;
+    setState((s) => ({ ...s, bundle: b }));
+  }
 
   useEffect(() => {
     let active = true;
     setState({ status: 'loading', bundle: null, error: null });
+    setSave('idle');
+    pendingRef.current = 0;
+    chainRef.current = Promise.resolve();
     fetchSharedQuote(token)
-      .then((bundle) => { if (active) setState({ status: 'ready', bundle, error: null }); })
+      .then((bundle) => { if (active) { bundleRef.current = bundle; setState({ status: 'ready', bundle, error: null }); } })
       .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: e?.message || 'error' }); });
     return () => { active = false; };
   }, [token]);
@@ -50,22 +68,31 @@ export default function PublicQuoteView() {
     [lines, quote],
   );
 
-  const busy = save === 'saving';
-
-  // Apply ONE pick to the real quote and swap in the returned bundle. Picks are
-  // serialized (ignored while one is in flight) so two rapid clicks can't race
-  // a read-modify-write on the shared quote.
+  // Apply a pick. The preview updates INSTANTLY by replaying the pick locally
+  // (applyPickLocally mirrors the Edge Function), then we persist in the
+  // background. The controls stay live the whole time — no waiting on the save.
+  // We reconcile to the server's authoritative bundle only after the write
+  // queue drains (an earlier response is stale vs. a later optimistic pick); a
+  // failed write re-syncs to server truth.
   function applyPick(pick) {
-    if (busy) return;
-    const seq = ++seqRef.current;
+    if (!bundleRef.current) return;
+    const optimistic = applyPickLocally(bundleRef.current, pick);
+    if (optimistic !== bundleRef.current) commit(optimistic);
     setSave('saving');
-    applyClientPick(token, pick)
-      .then((updated) => {
-        if (seqRef.current !== seq) return;
-        setState((s) => ({ ...s, bundle: updated }));
-        setSave('saved');
+    pendingRef.current += 1;
+    chainRef.current = chainRef.current
+      .then(() => applyClientPick(token, pick))
+      .then((server) => {
+        pendingRef.current = Math.max(0, pendingRef.current - 1);
+        if (pendingRef.current === 0) { commit(server); setSave('saved'); }
       })
-      .catch(() => { if (seqRef.current === seq) setSave('error'); });
+      .catch(async () => {
+        pendingRef.current = 0;
+        setSave('error');
+        // Re-sync to the server's truth so the preview can't drift after a
+        // failed write.
+        try { const fresh = await fetchSharedQuote(token); commit(fresh); } catch { /* keep what we have */ }
+      });
   }
 
   const pickAlternative = (group, lineId) => applyPick({ alternatives: { [group]: lineId } });
@@ -128,7 +155,7 @@ export default function PublicQuoteView() {
     <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
         {hasChoices && (
-          <section className={`card p-4 sm:p-5 transition-opacity ${busy ? 'opacity-60' : ''}`}>
+          <section className="card p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="text-sm font-semibold text-ink-900">Personaliza tu cotización</h2>
               <SaveBadge state={save} />
@@ -151,7 +178,7 @@ export default function PublicQuoteView() {
                       return (
                         <label
                           key={m.id}
-                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${busy ? 'cursor-default' : 'cursor-pointer'} ${
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
                             isSel ? 'border-brand-400 bg-brand-50' : 'border-ink-200 hover:bg-ink-50'
                           }`}
                         >
@@ -159,7 +186,6 @@ export default function PublicQuoteView() {
                             type="radio"
                             name={`alt-${group}`}
                             checked={isSel}
-                            disabled={busy}
                             onChange={() => pickAlternative(group, m.id)}
                             className="accent-brand-600"
                           />
@@ -194,12 +220,11 @@ export default function PublicQuoteView() {
                   {optionals.map((o) => (
                     <label
                       key={o.id}
-                      className={`flex items-center gap-3 rounded-lg border border-ink-200 px-3 py-2 transition-colors ${busy ? 'cursor-default' : 'cursor-pointer hover:bg-ink-50'}`}
+                      className="flex items-center gap-3 rounded-lg border border-ink-200 px-3 py-2 transition-colors cursor-pointer hover:bg-ink-50"
                     >
                       <input
                         type="checkbox"
                         checked={false}
-                        disabled={busy}
                         onChange={(e) => toggleOptional(o.id, e.target.checked)}
                         className="accent-emerald-600"
                       />

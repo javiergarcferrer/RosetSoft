@@ -1,0 +1,116 @@
+// Tests for src/lib/clientPick.js — the optimistic, client-side replay of a
+// public-quote pick. Must mirror the quote-share Edge Function so the
+// instant preview matches the server's reconciled bundle.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { applyClientPick } from '../src/lib/clientPick.js';
+
+function bundle() {
+  return {
+    quote: { currencyCode: 'USD', rates: { USD: 1 } },
+    lines: [
+      { id: 'a', alternativeGroup: 'g1', isSelectedAlternative: true, name: 'Opción A', unitPrice: 100, qty: 1 },
+      { id: 'b', alternativeGroup: 'g1', isSelectedAlternative: false, name: 'Opción B', unitPrice: 120, qty: 1 },
+      { id: 'opt', isOptional: true, name: 'Cojín', unitPrice: 50, qty: 1 },
+      {
+        id: 'm', name: 'Sofá', reference: '12345678A', subtype: 'Grade A — Tela X',
+        unitPrice: 100, qty: 2, swatchImageId: 'sw-A',
+        materialOptions: {
+          baseGrade: 'A', baseLabel: 'Tela X', options: [
+            { grade: 'C', label: 'Tela Y', code: '111', swatchImageId: 'sw-C', delta: 50 },
+            { grade: 'D', label: 'Cuero Z', code: '222', swatchImageId: 'sw-D', delta: 90 },
+          ],
+        },
+      },
+      {
+        id: 'cmp', name: 'Modular', components: [
+          {
+            id: 'c1', name: 'Chaise', reference: '87654321A', subtype: 'Grade A — Tela X',
+            unitPrice: 200, qty: 1, swatchImageId: 'sw-cA',
+            materialOptions: { baseGrade: 'A', baseLabel: 'Tela X', options: [{ grade: 'C', label: 'Tela Y', swatchImageId: 'sw-cC', delta: 30 }] },
+          },
+        ],
+      },
+    ],
+  };
+}
+const line = (b, id) => b.lines.find((l) => l.id === id);
+
+test('alternative: only the chosen member stays selected', () => {
+  const out = applyClientPick(bundle(), { alternatives: { g1: 'b' } });
+  assert.equal(line(out, 'a').isSelectedAlternative, false);
+  assert.equal(line(out, 'b').isSelectedAlternative, true);
+});
+
+test('alternative: no-op picks return the same bundle reference', () => {
+  const b = bundle();
+  assert.equal(applyClientPick(b, { alternatives: { g1: 'a' } }), b); // a already selected
+  assert.equal(applyClientPick(b, { alternatives: { g1: 'ghost' } }), b); // invalid member
+  assert.equal(applyClientPick(b, { alternatives: { nope: 'b' } }), b); // invalid group
+});
+
+test('optional: include folds the add-on in (isOptional=false), include-only', () => {
+  const b = bundle();
+  const out = applyClientPick(b, { optionals: { opt: true } });
+  assert.equal(line(out, 'opt').isOptional, false);
+  // Once included it's no longer optional → re-applying does nothing.
+  assert.equal(applyClientPick(out, { optionals: { opt: true } }), out);
+});
+
+test('material (line): reprices via delta, recomposes subtype/reference/swatch, re-anchors options', () => {
+  const out = applyClientPick(bundle(), { materials: { m: 'C' } });
+  const m = line(out, 'm');
+  assert.equal(m.unitPrice, 150);                  // 100 + delta(50)
+  assert.equal(m.subtype, 'Grade C — Tela Y');
+  assert.equal(m.reference, '12345678C');
+  assert.equal(m.swatchImageId, 'sw-C');
+  assert.equal(m.materialOptions.baseGrade, 'C');
+  assert.equal(m.materialOptions.baseLabel, 'Tela Y');
+  const opts = m.materialOptions.options;
+  const d = opts.find((o) => o.grade === 'D');
+  const oldBase = opts.find((o) => o.grade === 'A');
+  assert.equal(d.delta, 40);                        // 90 - 50, re-based to new base C
+  assert.equal(oldBase.delta, -50);                 // old base demoted, carries -picked
+  assert.equal(oldBase.swatchImageId, 'sw-A');      // keeps the swatch it had
+  assert.equal(oldBase.label, 'Tela X');
+});
+
+test('material (line): switching there and back round-trips price + options exactly', () => {
+  const once = applyClientPick(bundle(), { materials: { m: 'C' } });
+  const back = applyClientPick(once, { materials: { m: 'A' } });
+  const m = line(back, 'm');
+  assert.equal(m.unitPrice, 100);
+  assert.equal(m.subtype, 'Grade A — Tela X');
+  assert.equal(m.reference, '12345678A');
+  assert.equal(m.swatchImageId, 'sw-A');
+  assert.equal(m.materialOptions.baseGrade, 'A');
+  assert.equal(m.materialOptions.options.find((o) => o.grade === 'C').delta, 50);
+  assert.equal(m.materialOptions.options.find((o) => o.grade === 'D').delta, 90);
+});
+
+test('material: an unoffered grade is left untouched', () => {
+  const b = bundle();
+  assert.equal(applyClientPick(b, { materials: { m: 'Z' } }), b);
+});
+
+test('material (component): switches the right component inside a compound line', () => {
+  const out = applyClientPick(bundle(), { materials: { c1: 'C' } });
+  const c = line(out, 'cmp').components[0];
+  assert.equal(c.unitPrice, 230);                  // 200 + delta(30)
+  assert.equal(c.subtype, 'Grade C — Tela Y');
+  assert.equal(c.reference, '87654321C');
+  assert.equal(c.swatchImageId, 'sw-cC');
+  assert.equal(c.materialOptions.baseGrade, 'C');
+  // other lines untouched
+  assert.equal(line(out, 'm').unitPrice, 100);
+});
+
+test('does not mutate the input bundle', () => {
+  const b = bundle();
+  applyClientPick(b, { materials: { m: 'C' }, alternatives: { g1: 'b' }, optionals: { opt: true } });
+  assert.equal(line(b, 'm').unitPrice, 100);
+  assert.equal(line(b, 'm').subtype, 'Grade A — Tela X');
+  assert.equal(line(b, 'a').isSelectedAlternative, true);
+  assert.equal(line(b, 'opt').isOptional, true);
+});
