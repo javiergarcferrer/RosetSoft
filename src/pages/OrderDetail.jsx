@@ -3,12 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
   FileText, CheckCircle2, Package, DollarSign, Wallet,
-  MapPin, Ship, RefreshCw, AlertCircle,
+  Ship, RefreshCw, AlertCircle, List,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
-import { DebouncedInput, DebouncedTextarea } from '../components/DebouncedInput.jsx';
+import { DebouncedInput } from '../components/DebouncedInput.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -29,6 +29,7 @@ import {
   summarizeTracking, buildTrackingRoute, summarizeVoyage, MODE_LABELS, CLASSIFIER_LABELS,
 } from '../lib/containerTracking.js';
 import ContainerTrackingMap from '../components/ContainerTrackingMap.jsx';
+import Dropdown, { DropdownItem } from '../components/primitives/Dropdown.jsx';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -42,14 +43,13 @@ import ContainerTrackingMap from '../components/ContainerTrackingMap.jsx';
  *      transition manually; the only gated step is the last one, which
  *      requires every attached container to be marked filled.
  *
- *   2. Order info card — customer + deposit + delivery address + notes.
+ *   2. Containers section — every container in this order. Each shows a
+ *      fill toggle and its ISO 6346 number; a valid number tracks itself
+ *      automatically (Hapag-Lloyd Track & Trace) with a voyage map and a
+ *      dropdown of every tracking point. Add a container with the header
+ *      button.
  *
- *   3. Containers section — every container in this order, each rendered
- *      as its own card with a 6-stage container stepper. Each container
- *      can be advanced/undone independently. Add a new container with the
- *      header button.
- *
- *   4. Quotes section — every quote attached to this order. Attaching
+ *   3. Quotes section — every quote attached to this order. Attaching
  *      pulls from the quotes that aren't yet in an order (and that match
  *      the order's customer if set, so the dealer doesn't accidentally
  *      mix customers).
@@ -59,12 +59,6 @@ export default function OrderDetail() {
   const { profileId, settings, profiles } = useApp();
 
   const order = useLiveQuery(() => db.orders.get(orderId), [orderId], null);
-
-  const customer = useLiveQuery(
-    () => (order?.customerId ? db.customers.get(order.customerId) : Promise.resolve(null)),
-    [order?.customerId],
-    null,
-  );
 
   const containers = useLiveQuery(
     () => db.containers.where('orderId').equals(orderId).toArray(),
@@ -167,10 +161,6 @@ export default function OrderDetail() {
   const gateOpts = { totalAmount: orderTotal, threshold };
   const canAdvance = canAdvanceOrder(order, containers, gateOpts);
   const blockedReason = advanceBlockedReason(order, containers, gateOpts);
-
-  async function updateOrder(patch) {
-    await db.orders.update(orderId, { ...patch, updatedAt: Date.now() });
-  }
 
   async function advance(to) {
     if (!canAdvance) return;
@@ -302,8 +292,7 @@ export default function OrderDetail() {
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="space-y-6 mt-6">
           {/* Containers section */}
           <section className="card overflow-hidden">
             <header className="card-header">
@@ -375,57 +364,6 @@ export default function OrderDetail() {
               </ul>
             )}
           </section>
-        </div>
-
-        {/* Sidebar — order metadata */}
-        <aside className="space-y-4">
-          <div className="card card-pad space-y-3">
-            <h2 className="font-semibold text-sm">Información</h2>
-            <div>
-              <div className="label">Nombre</div>
-              <DebouncedInput
-                className="input"
-                value={order.name || ''}
-                onCommit={(v) => updateOrder({ name: v })}
-                placeholder='e.g. "García — Sala 2026"'
-              />
-            </div>
-            <div>
-              <div className="label">Cliente principal</div>
-              <CustomerLink customer={customer} />
-            </div>
-            <div>
-              <div className="label">Depósito recibido (USD)</div>
-              <DebouncedInput
-                className="input"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="100"
-                value={order.depositAmount ?? 0}
-                onCommit={(v) => updateOrder({ depositAmount: Math.max(0, Number(v) || 0) })}
-              />
-            </div>
-            <div>
-              <div className="label">Dirección de entrega</div>
-              <DebouncedTextarea
-                className="input min-h-[60px]"
-                value={order.deliveryAddress || ''}
-                onCommit={(v) => updateOrder({ deliveryAddress: v })}
-                autoCapitalize="words"
-              />
-            </div>
-            <div>
-              <div className="label">Notas</div>
-              <DebouncedTextarea
-                className="input min-h-[60px]"
-                value={order.notes || ''}
-                onCommit={(v) => updateOrder({ notes: v })}
-                autoCapitalize="sentences"
-              />
-            </div>
-          </div>
-        </aside>
       </div>
 
       {/* Attach-quote picker */}
@@ -459,11 +397,10 @@ export default function OrderDetail() {
 // ---------------------------------------------------------------------------
 function ContainerRow({ container }) {
   const filled = !!container.filledAt;
-  const [tracking, setTracking] = useState(false);
 
   // The container number lives in `code`. Validate it (ISO 6346 check
-  // digit) so a typo is caught before the dealer tries to track it, and
-  // hint the carrier from the owner prefix.
+  // digit) so a typo is caught before we track it, and hint the carrier
+  // from the owner prefix.
   const validation = validateContainerNo(container.code);
   const carrier = detectCarrier(container.code);
   const trackable = validation.status === 'valid';
@@ -485,8 +422,8 @@ function ContainerRow({ container }) {
 
   return (
     <li className="px-5 py-4 space-y-3">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex-1 min-w-[200px]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <Package size={14} className="text-ink-500" />
             <span className="text-sm font-semibold">Contenedor #{container.number || '—'}</span>
@@ -498,19 +435,42 @@ function ContainerRow({ container }) {
               <span className="status-pill status-pill-draft">Por llenar</span>
             )}
           </div>
-          <div className="mt-2">
-            <DebouncedInput
-              className="input font-mono text-xs max-w-xs"
-              placeholder="MSCU1234567"
-              value={container.code || ''}
-              onCommit={(v) => update({ code: normalizeContainerNo(v) })}
-            />
-            <ContainerNoHint validation={validation} carrier={carrier} />
+
+          {/* Container number + fill toggle, side by side. ISO 6346 is a
+              fixed 11 characters (4 letters + 7 digits), so the field is
+              sized to exactly that — no wider. */}
+          <div className="mt-2 flex items-start gap-2 flex-wrap">
+            <div>
+              <DebouncedInput
+                className="input font-mono text-xs uppercase w-auto"
+                size={11}
+                placeholder="MSCU1234567"
+                aria-label="Número de contenedor"
+                value={container.code || ''}
+                onCommit={(v) => update({ code: normalizeContainerNo(v) })}
+              />
+              <ContainerNoHint validation={validation} carrier={carrier} />
+            </div>
+            <button
+              type="button"
+              onClick={toggleFilled}
+              className={`inline-flex items-center gap-1.5 px-3 min-h-9 coarse:min-h-11 rounded-md text-xs font-medium transition-colors ${
+                filled
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  : 'btn-primary'
+              }`}
+            >
+              {filled ? (
+                <><CheckCircle2 size={12} /> Lleno — desmarcar</>
+              ) : (
+                <><Package size={12} /> Marcar lleno</>
+              )}
+            </button>
           </div>
         </div>
         <button
           onClick={del}
-          className="text-ink-400 hover:text-red-600 p-1.5"
+          className="text-ink-400 hover:text-red-600 p-1.5 flex-shrink-0"
           title="Eliminar contenedor"
           aria-label="Eliminar contenedor"
         >
@@ -518,35 +478,8 @@ function ContainerRow({ container }) {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={toggleFilled}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-            filled
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-              : 'btn-primary'
-          }`}
-        >
-          {filled ? (
-            <><CheckCircle2 size={12} /> Lleno — desmarcar</>
-          ) : (
-            <><Package size={12} /> Marcar lleno</>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setTracking((v) => !v)}
-          disabled={!trackable}
-          title={trackable ? 'Rastrear con Hapag-Lloyd' : 'Ingresa un número de contenedor válido para rastrear'}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-ink-200 bg-white text-ink-700 hover:border-ink-400 hover:text-ink-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <MapPin size={12} /> {tracking ? 'Ocultar rastreo' : 'Rastrear'}
-        </button>
-      </div>
-
-      {tracking && trackable && <ContainerTracking containerNo={validation.value} />}
+      {/* A valid number tracks itself — no button to press. */}
+      {trackable && <ContainerTracking containerNo={validation.value} />}
     </li>
   );
 }
@@ -686,38 +619,48 @@ function ContainerTracking({ containerNo }) {
 
           {route.stops.length > 0 && <ContainerTrackingMap ref={mapRef} route={route} voyage={voyage} />}
 
-          <ol className="space-y-1.5 border-l border-ink-200 pl-3">
-            {[...summary.milestones].reverse().map((m, i) => {
+          {/* All tracking points live in a dropdown so the panel stays
+              compact; picking one focuses its marker on the map. */}
+          <Dropdown
+            align="left"
+            panelClassName="w-[19rem]"
+            label={(
+              <span className="inline-flex items-center gap-1.5">
+                <List size={12} className="text-ink-500" />
+                Puntos de seguimiento
+                <span className="font-normal text-ink-400">· {summary.count}</span>
+              </span>
+            )}
+          >
+            {({ close }) => [...summary.milestones].reverse().map((m, i) => {
               const stopIndex = milestoneStop.get(m);
-              const clickable = stopIndex != null;
+              const mappable = stopIndex != null;
+              const meta = [
+                m.mode ? (MODE_LABELS[m.mode] || m.mode) : null,
+                m.vessel,
+                m.voyage,
+                CLASSIFIER_LABELS[m.classifier] || m.classifier || null,
+              ].filter(Boolean).join(' · ');
               return (
-                <li
+                <DropdownItem
                   key={i}
-                  className={`relative ${clickable ? 'cursor-pointer group' : ''}`}
-                  onClick={clickable ? () => mapRef.current?.focusStop(stopIndex) : undefined}
-                  title={clickable ? 'Ver en el mapa' : undefined}
+                  onSelect={() => { if (mappable) mapRef.current?.focusStop(stopIndex); close(); }}
                 >
-                  <span className={`absolute -left-[14.5px] top-1.5 w-1.5 h-1.5 rounded-full bg-ink-300 ${clickable ? 'group-hover:bg-brand-500' : ''}`} />
-                  <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                    <span className={`text-ink-800 font-medium ${clickable ? 'group-hover:text-brand-700' : ''}`}>
-                      {m.label}
-                      {m.location ? <span className="font-normal text-ink-500"> · {m.location}</span> : null}
+                  <span className={`mt-[5px] h-1.5 w-1.5 flex-shrink-0 rounded-full ${mappable ? 'bg-brand-500' : 'bg-ink-300'}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="font-medium text-ink-800">
+                        {m.label}
+                        {m.location ? <span className="font-normal text-ink-500"> · {m.location}</span> : null}
+                      </span>
+                      <span className="whitespace-nowrap text-[10px] text-ink-400">{formatDateTime(m.at)}</span>
                     </span>
-                    <span className="text-[10px] text-ink-400 whitespace-nowrap">{formatDateTime(m.at)}</span>
-                  </div>
-                  {(() => {
-                    const meta = [
-                      m.mode ? (MODE_LABELS[m.mode] || m.mode) : null,
-                      m.vessel,
-                      m.voyage,
-                      CLASSIFIER_LABELS[m.classifier] || m.classifier || null,
-                    ].filter(Boolean).join(' · ');
-                    return meta ? <div className="text-[10px] text-ink-400">{meta}</div> : null;
-                  })()}
-                </li>
+                    {meta && <span className="mt-0.5 block text-[10px] text-ink-400">{meta}</span>}
+                  </span>
+                </DropdownItem>
               );
             })}
-          </ol>
+          </Dropdown>
 
           {fetchedAt && (
             <p className="text-[10px] text-ink-400">Consultado {formatDateTime(Date.parse(fetchedAt))}</p>
@@ -725,21 +668,6 @@ function ContainerTracking({ containerNo }) {
         </>
       )}
     </div>
-  );
-}
-
-function CustomerLink({ customer }) {
-  if (!customer) {
-    return <div className="text-sm text-ink-400">Sin cliente asignado</div>;
-  }
-  return (
-    <Link
-      to={`/customers`}
-      className="text-sm text-ink-900 hover:text-brand-700 transition-colors"
-    >
-      {customer.name}
-      {customer.company ? <span className="text-ink-500"> · {customer.company}</span> : null}
-    </Link>
   );
 }
 
