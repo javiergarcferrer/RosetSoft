@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
-import { QUOTE_STATUS_DRAFT } from '../../lib/constants.js';
 import { formatMoney } from '../../lib/format.js';
 import { effectiveCommissionPct, commissionBreakdown } from '../../lib/commissions.js';
 import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
@@ -46,18 +45,18 @@ export default function TotalsDock({
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
   const dopTotal = dopRate ? totals.grandTotal * dopRate : null;
-  // The rate floats live while the quote is a draft; once sent it's frozen to
-  // the snapshot taken at send time (by design — a figure the client has seen
-  // can't move). Flag it so a locked rate isn't mistaken for a stale one.
-  const rateLocked = !!quote.status && quote.status !== QUOTE_STATUS_DRAFT;
+  // The rate floats live until the quote is ACCEPTED; once accepted it's frozen
+  // to the snapshot taken at accept time (by design — a figure the client has
+  // committed to can't move). Flag it so a locked rate isn't mistaken for a stale one.
+  const rateLocked = !!quote.acceptedAt;
 
   const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 
-  // Pull today's published rate and apply it. On a DRAFT the quote tracks the
+  // Pull today's published rate and apply it. Before accept the quote tracks the
   // live settings rate, so refreshing settings is enough — the figure follows.
-  // On a SENT quote the rate is a frozen snapshot (quote.rates); refreshing has
-  // to write the new rate straight onto THIS quote, deliberately re-pricing it
-  // at today's number (the one case where a sent figure is allowed to move,
+  // On an ACCEPTED quote the rate is a frozen snapshot (quote.rates); refreshing
+  // writes the new rate straight onto THIS quote, deliberately re-pricing it at
+  // today's number (the one case where a committed figure is allowed to move,
   // because the dealer asked for it).
   const handleRefreshRate = async () => {
     const next = await refreshRate();
@@ -171,7 +170,7 @@ export default function TotalsDock({
           <div className="flex items-center gap-2 flex-wrap">
             <span>
               {rateLocked
-                ? 'Tasa DOP bloqueada al enviar.'
+                ? 'Tasa DOP bloqueada al aceptar.'
                 : 'Tasa DOP en vivo (Banco Popular).'}
             </span>
             <button
@@ -262,7 +261,7 @@ export default function TotalsDock({
                 <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
                   <span className="truncate">≈ {dopTotalLabel}</span>
                   {rateLocked ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al enviar · pulsa el total para actualizarla">
+                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al aceptar · pulsa el total para actualizarla">
                       <Lock size={10} /> @ {dopRate.toFixed(2)}
                     </span>
                   ) : (
