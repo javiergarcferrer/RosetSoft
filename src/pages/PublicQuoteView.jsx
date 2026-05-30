@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, CloudOff, Ship } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
@@ -146,9 +146,10 @@ export default function PublicQuoteView() {
           onSelectAlternative={pickAlternative}
         />
 
-        {/* Shipment tracking — appears once the quote's order has a container
-            with a real number. Same link, now also follows the delivery. */}
-        {trackable.length > 0 && (
+        {/* Shipment tracking. With a trackable container we show the live
+            Hapag-Lloyd panels; before one is attached we still show the block,
+            promising the client real-time geolocation once the order ships. */}
+        {trackable.length > 0 ? (
           <section className="card p-4 sm:p-5 space-y-3">
             <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
               <Ship size={16} className="text-ink-500" /> Seguimiento de tu envío
@@ -164,6 +165,25 @@ export default function PublicQuoteView() {
                 <ContainerTracking containerNo={normalizeContainerNo(c.code)} shareToken={token} />
               </div>
             ))}
+          </section>
+        ) : (
+          <section className="card p-4 sm:p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
+              <Ship size={16} className="text-ink-500" /> Seguimiento de tu envío
+            </h2>
+            <div className="flex items-start gap-3 rounded-lg border border-ink-100 bg-ink-50/60 p-3.5">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                <MapPin size={16} />
+              </span>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-ink-800">Geolocalización en tiempo real</p>
+                <p className="text-[11px] leading-relaxed text-ink-600">
+                  En cuanto tu pedido se embarque, podrás geolocalizarlo en tiempo
+                  real desde este mismo enlace, gracias a nuestra conexión directa
+                  con las actualizaciones de los buques de Hapag-Lloyd.
+                </p>
+              </div>
+            </div>
           </section>
         )}
       </div>
