@@ -1,126 +1,126 @@
-# RosetSoft — notes for Claude
+# RosetSoft — agent bootstrap
 
-## How we work
-- **Ship by pushing to `main`. Never hand the user a manual step** — no SQL,
-  CLI, dashboards, secrets, endpoints, or schema reloads. The repo is the only
-  lever; if you think you need a manual step, you've misdiagnosed.
-- **Trust the integration (below) — it's complete and has always worked.**
-  "Could not find the table … in the schema cache" = a migration
-  ordering/history bug in the repo (usually a back-dated migration from a
-  parallel session), **not** an unreachable DB or a broken integration. Fix
-  the migration and push.
-- **Be decisive.** Find the root cause yourself (code, git history, logs the
-  user pastes); act, then report. Ask only on a real fork the user must own —
-  never to confirm the obvious or offload a decision. Diagnose once, act once
-  (don't flip-flop).
-- **Don't fix errors in files you didn't edit.** Stay in the diff your task
-  needs. A pre-existing bug, dead import, type error, or stray warning in a file
-  your change doesn't touch is out of scope — leave it and surface it in your
-  report instead of folding unrelated fixes into the diff. (If it genuinely
-  blocks your change, say so before touching it.)
-- **Verify proportionately — never run the whole suite by reflex.** Match the
-  check to the change:
-  - **UI only** (JSX/TSX, CSS, components, pages, copy): no tests. `npm run
-    typecheck`, and `npm run build` before a `main` push. That's it.
-  - **A logic module** (`src/lib/*`, `src/db/*`, `src/pdf/*`): run ONLY that
-    module's test if one exists (e.g. `node --import tsx --test
-    tests/pricing.test.js`) plus `npm run typecheck`. Don't run unrelated suites.
-  - `npm run build` must pass before any push to `main` (Vercel builds with it).
-  The suite is deliberately small — it covers ONLY money, complex parsing, and
-  data-integrity logic (pricing, commissions, containerTracking, catalog/
-  lrCatalog merge, priceListCsv, quoteMilestones, exchangeRate, voyageGeometry,
-  clientPick, subtype). **Don't add tests** for presentational maps, one-line
-  getters, label/colour mappings, or trivial helpers — write the code so it is
-  obviously correct instead. Reporting "N/N tests passed" for an unrelated
-  change is noise, not verification.
-- Match the user's language; keep code, comments, and commits in English.
-- **Keep momentum.** On a clear task, drive it to done — code, verify, commit,
-  push, report — without stopping to ask permission for the obvious. Report
-  crisply at the end (what shipped, what was verified); skip the play-by-play.
-- **Parallelize independent work.** Fire independent tool calls in a single batch
-  — reads, greps, status checks — rather than serially; only sequence what truly
-  depends on a prior result. Scale the same instinct up to multi-agent sweeps on
-  disjoint files (see Gotchas).
+React/Vite quoting app (Ligne Roset furniture, Dominican Republic). Prices in
+USD, displayed in DOP via a live exchange rate. Single-tenant Supabase backend.
+This file is the fast-start; trust it, don't re-derive what's here. Reply in the
+user's language; keep code/comments/commits in English.
 
-## Architecture — MVVM is the backbone
-The app is **Model → ViewModel → View**, and staying on-pattern is what keeps it
-fast to change. The View renders and **derives nothing**.
-- **Model** — pure logic + data, no React/Supabase/pdf-lib. Lives in `src/lib/*`
-  (pricing, commissions, exchangeRate, containerTracking, …) and is surfaced as a
-  clean API through `src/core/*` barrels (`core/quote`, `core/tracking`,
-  `core/accounting`).
-- **ViewModel** — pure projections named `resolveX(...)`, one per view, in
-  `src/core/quote/views/*` (+ `core/accounting/sales.js`, `core/tracking/*`). They
-  take already-fetched rows + params and return exactly what a surface renders. No
-  React, no `db`, no `supabase` inside a `resolveX`. The lone exception is a hook
-  VM (`useContainerTracking`) that owns inherently-effectful data-access.
+## Ship = push to `main` (the only lever)
+Pushing `main` deploys end-to-end. **Never hand the user a manual step** — no SQL,
+CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
+- `main` → **Vercel**: auto build+deploy.
+- `main` → **Supabase**: auto-applies new `supabase/migrations/*.sql` AND
+  auto-deploys CHANGED Edge Functions in `supabase/functions/*` ("Deploy to
+  production" is on). No `db push`, no `functions deploy`, no dashboard paste.
+- **Supabase → Vercel**: supplies `SUPABASE_URL`/`ANON_KEY` → `vite.config.js`
+  forwards to `VITE_*` at build.
+- Sandbox has **no DB creds** — only code pushes reach prod. So "Could not find
+  the table … in the schema cache" = a migration-ordering bug in the repo (a
+  back-dated file), NOT a broken DB/integration → fix the migration, push.
+- Git ship: branch off, `git push -u origin HEAD:main` (retry 2/4/8/16s on network
+  fail). No PRs unless asked.
+
+## Commands + verify policy
+- build `npm run build` (`vite build`) · typecheck `npm run typecheck`
+  (`tsc --noEmit`) · all tests `npm run test` (`node --import tsx --test
+  tests/*.test.js`) · ONE test `node --import tsx --test tests/<name>.test.js` ·
+  dev `npm run dev`.
+- **Match the check to the change — never run the full suite by reflex:**
+  - UI only (jsx/tsx/css/pages/copy) → typecheck + build. No tests.
+  - Logic module (`src/lib|db|pdf`) → that module's test if it exists + typecheck.
+  - Every `main` push → build MUST pass (Vercel builds with it).
+- Tests cover ONLY money/parsing/data-integrity:
+  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype}.test.js`.
+  Don't add tests for presentational/getters/label maps — write obviously-correct
+  code instead. "N/N passed" on an unrelated change is noise, not verification.
+
+## Architecture = MVVM (Model → ViewModel → View; the View derives NOTHING)
+- **Model** — pure logic+data, no React/Supabase/pdf-lib. `src/lib/*` (pricing,
+  commissions, exchangeRate, containerTracking, subtype, catalog, …), surfaced via
+  `src/core/*` barrels. Import the Model from the barrel: `core/quote`,
+  `core/tracking`, `core/accounting`.
+- **ViewModel** — pure projection `resolveX(rows, params)` → exactly what one
+  surface renders. No React/`db`/`supabase` inside a `resolveX`. Lives in
+  `src/core/quote/views/*`, `core/accounting/sales.js`, `core/tracking/*`. Lone
+  exception: hook VM `useContainerTracking` owns its (effectful) fetch.
 - **View** — `src/pages/*`, `src/components/*`, `src/pdf/*`. Fetches via `db`
-  hooks, holds UI state (search/tab/sort), calls a `resolveX` in a `useMemo`,
-  renders the result. Leaf Model-selector calls (`formatMoney`, `displayRatesFor`,
-  status-pill maps) may stay at the render site; multi-step derivation may not.
+  hooks, holds UI state (search/tab/sort), calls a `resolveX` in `useMemo`,
+  renders. Leaf Model-selector calls may stay at the render site (`formatMoney`,
+  `displayRatesFor`, status-pill maps); multi-step derivation may NOT.
+- **New derivation** → write a `resolveX`, render it from the View, export it from
+  the `core/*` barrel. Don't recompute in a component what a VM can own.
 
-**One ViewModel, many surfaces** is the whole point — it's why screen and paper
-can't drift: `resolveQuoteView` is THE content tree for the editor preview, the
-public client link (both `ClientPreview`) **and** the PDF (`src/pdf/quotePdf.ts`);
-`resolveVoyageHud` feeds both the map HUD and the summary band; `core/quote/
-totals.js` is the single per-quote sum for every list/detail page. New code: put
-the derivation in a `resolveX`, render it from the View, export it from the
-relevant `core/*` barrel. Don't recompute in a component what a ViewModel can own.
-
-## The integration — GitHub ↔ Supabase ↔ Vercel (circular)
-Pushing to `main` ships everything end-to-end:
-- **→ Vercel:** auto-builds and deploys the app.
-- **→ Supabase:** auto-applies any new `supabase/migrations/*.sql` — no manual
-  `db push`, SQL console, or schema reload. End migrations with
-  `notify pgrst, 'reload schema';`. **Also auto-deploys Edge Functions in
-  `supabase/functions/`** ("Deploy to production" is enabled) — no `supabase
-  functions deploy`, no dashboard paste. Gotcha: a function only deploys if it's
-  declared in `supabase/config.toml` (`[functions.<name>]`); a brand-new
-  function won't ship until that block exists. The integration deploys
-  **changed** functions — to force a redeploy, make a trivial edit to the
-  function's file.
-- **Supabase → Vercel:** supplies `SUPABASE_URL`/`ANON_KEY`; `vite.config.js`
-  forwards them to the `VITE_` slots at build time.
-
-The sandbox has **no DB credentials** — only code pushes reach production.
-That's the mechanism; rely on it.
-
-## Migrations — ordering is load-bearing
-- Name `YYYYMMDDHHMMSS_desc.sql` with a timestamp **later than every existing
-  migration**. **Never back-date** — an out-of-order file jams `supabase db
-  push` and aborts the whole pending chain, so the table/column never appears.
-- Keep them additive + idempotent (`if not exists`, drop-then-add constraints).
-- **Parallel sessions share ONE production DB.** `git fetch` and check the
-  latest migration on `origin/main` before adding yours.
+### Shared VMs (reuse — this is why screen/paper/list never drift)
+- `resolveQuoteView` (`core/quote/views/quoteView.js`) = THE content tree for the
+  editor preview + public client link (both `ClientPreview`) + PDF
+  (`src/pdf/quotePdf.ts`).
+- `core/quote/totals.js` (`quoteTotals`/`quoteGrandTotal`/`linesByQuoteId`) = the
+  single per-quote sum for every list/detail page.
+- `resolveVoyageHud` (`core/tracking/voyage.js`) = map HUD + summary band.
+  `useContainerTracking` = all tracking surfaces (quote list, client link, order).
+- `applyAction` (`core/quote/actions.js`) = optimistic client pick reducer (see
+  Deno↔Vite trap).
+- Per-page VMs: `views/{editor:resolveLineList, lineItem:resolveLineItem,
+  dashboard:resolveDashboard, lists:resolveQuotesList+resolveOrdersList,
+  detail:resolveOrderDetail+resolveCustomerDetail+resolveProfessionalDetail}`;
+  `accounting/sales.js: resolveSales + resolveCommissionPayout`.
 
 ## Data layer
-Cloud **Supabase Postgres + Storage**, shared via one `'team'` profile
-(`TEAM_PROFILE_ID`) with RLS. `src/db/database.ts` is a **Dexie-shaped API over
-Supabase** (`db.<table>.where().equals().toArray()`), not browser IndexedDB.
-`db/rowMapping.ts` auto-converts camelCase ↔ snake_case, so a new field works
-once its column exists (add a migration). Live schema: `supabase/CLAUDE.md`.
+Supabase Postgres + Storage, one shared `'team'` profile (`TEAM_PROFILE_ID`) + RLS.
+`src/db/database.ts` is a **Dexie-shaped API over Supabase**
+(`db.<table>.where(c).equals(v).toArray()`, `.get/.put/.update/.delete/.bulkPut`),
+NOT browser IndexedDB. `db/rowMapping.ts` auto-converts camelCase↔snake_case and
+JS-ms↔ISO `timestamptz` (any `*At` field) — a new field works end-to-end once its
+column exists. Types: `src/types/domain.ts` (camelCase). **Full schema + domain
+facts: `supabase/CLAUDE.md` — read it before DB work.**
 
-## Gotchas & hard-won lessons
-- **Reconcile parallel-session state FIRST.** Sessions share this branch + one DB.
-  Starting a real task, `git fetch origin main`, check `git log origin/main`, and
-  scan `git status` — a parallel session can leave half-wired files (VM created,
-  imports rewritten, never plugged in → undefined refs that fail the build) or a
-  back-dated migration. Finish or reset it before building on top; don't assume a
-  clean slate.
-- **Deno ↔ Vite is a hard wall.** Two separate programs with separate dependency
-  graphs and deploys: the app (`src/*`) is bundled by Vite for the browser; Edge
-  Functions (`supabase/functions/*`) run on Deno server-side (URL imports,
-  `Deno.env`, the service-role key). Neither can `import` the other — **only data
-  crosses the wall (HTTP/JSON), never code.** So logic that must run both
-  optimistically on the client AND authoritatively on the server is TWO
-  hand-maintained copies on purpose — e.g. the quote-pick mutation: client
-  `core/quote/actions.js` (`applyAction`) ↔ server `quote-share` (the client copy
-  literally says "mirrors the server"). Change one, change the other; don't try to
-  "DRY" it by sharing a module — impossible across the wall, and it breaks the deploy.
-- **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.js`),
-  always — PDF, Leaflet, etc. A raw `import()` strands users on a stale deploy with
+Pricing model (the complex part): a `quote_line` may be compound (`components[]`),
+optional (`isOptional`, excluded from total), pick-one (`alternativeGroup` +
+`isSelectedAlternative` — only the selected member priced), or take-all set
+(`setGroup` — every member priced). `isPricedLine`/`isPricedComponent`
+(`lib/constants`) gate the totals; ranges via `priceMin`/`priceMax`. USD→DOP rate
+locks at ACCEPT, single source `quoteRateState` (keyed on `acceptedAt`). Engine =
+`lib/pricing.ts`.
+
+## Migrations (ordering is load-bearing)
+- `YYYYMMDDHHMMSS_desc.sql`, timestamp **later than every existing** file. **Never
+  back-date** — an out-of-order file jams `supabase db push` and aborts the whole
+  pending chain, so the table/column never appears.
+- Additive + idempotent (`add column if not exists`, drop-then-add constraints).
+  End with `notify pgrst, 'reload schema';`.
+- Parallel sessions share ONE prod DB → `git fetch origin main` + check the latest
+  migration timestamp before adding yours.
+
+## Conventions
+- **Decisive**: find the root cause yourself (code, git history, pasted logs), act,
+  then report. Ask only on a real fork the user must own. Diagnose once, act once —
+  no flip-flop.
+- **Stay in your diff**: don't fix pre-existing bugs / dead imports / type errors in
+  files your task doesn't touch — surface them, don't fold them in. (Genuinely
+  blocks you? say so before touching.)
+- **Momentum**: drive a clear task to done (code → verify → commit → push → report).
+  Report crisply at the end; skip the play-by-play.
+- **Parallelize**: batch independent tool calls in one turn; fan out agents for big
+  sweeps (see Traps).
+
+## Traps (symptom → cause → fix)
+- **Reconcile parallel-session state FIRST**: start with `git fetch origin main` +
+  `git log origin/main` + `git status`. A parallel session can leave half-wired
+  files (VM created, imports rewritten, never plugged in → undefined refs that fail
+  the build) or a back-dated migration. Finish or reset it before building on top.
+- **Deno ↔ Vite is a hard wall**: app `src/*` (Vite, browser) and Edge Functions
+  `supabase/functions/*` (Deno, server: URL imports, `Deno.env`, service-role key)
+  are separate dependency graphs + deploys. Neither imports the other — **only data
+  crosses (HTTP/JSON), never code.** Logic that must run both client-optimistic AND
+  server-authoritative is TWO hand-kept copies on purpose: client
+  `core/quote/actions.js` (`applyAction`) ↔ server `quote-share`. Edit one → edit
+  the other. Never "DRY" across the wall (impossible + breaks the deploy).
+- **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.js`)
+  always — PDF, Leaflet, etc. A raw `import()` strands stale-deploy users on
   "failed to fetch dynamically imported module"; the helper reloads once and recovers.
-- **Big sweeps → orchestrate parallel agents on DISJOINT files.** Partition by file
+- **New Edge Function won't deploy** until declared in `supabase/config.toml`
+  (`[functions.<name>]`); the integration only ships CHANGED functions → a trivial
+  edit forces a redeploy.
+- **Big sweep → orchestrate parallel agents on DISJOINT files**: partition by file
   ownership so they can't collide; the orchestrator owns the shared barrels and runs
-  the SINGLE final `typecheck` + targeted tests + `build`. Agents don't commit, push,
-  or build. (This is how the MVVM sweep shipped fast and clean.)
+  the SINGLE final typecheck + targeted tests + build; agents don't commit/push/build.
