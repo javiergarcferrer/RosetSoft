@@ -8,7 +8,7 @@ import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
   sectionSubtotal, selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
-  setSubtotalRange, lineHasRange,
+  setSubtotalRange, lineHasRange, isCompoundLine,
 } from '../../lib/pricing.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
@@ -496,7 +496,14 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
   const ranged = lineHasRange(line);
   const r = ranged ? lineTotalRange(line) : null;
   const priceLabel = r ? `${fmt(r.min)} – ${fmt(r.max)}` : fmt(lineTotal(line));
-  const material = line.subtype || (ranged ? 'Sin material · rango' : 'Sin material');
+  // A compound option is a take-all bundle (a "conjunto") used as an
+  // alternative — label it by its piece count, not the (empty) line subtype,
+  // so it doesn't misread as "Sin material".
+  const compound = isCompoundLine(line);
+  const pieces = compound ? (line.components || []).length : 0;
+  const material = compound
+    ? `Compuesto · ${pieces} pieza${pieces === 1 ? '' : 's'}`
+    : (line.subtype || (ranged ? 'Sin material · rango' : 'Sin material'));
   const dim = selected ? '' : 'opacity-60';
   return (
     <li className={`list-none flex items-center gap-3 px-3 py-2.5 transition-colors ${selected ? 'bg-brand-50/40' : 'hover:bg-ink-50'}`}>
