@@ -3,6 +3,7 @@ import { Ship, RefreshCw, AlertCircle, List, ArrowRight, CheckCircle2, Navigatio
 import { formatDateTime } from '../lib/format.js';
 import { MODE_LABELS, CLASSIFIER_LABELS } from '../lib/containerTracking.js';
 import { useContainerTracking } from '../core/tracking/useContainerTracking.js';
+import { resolveVoyageHud } from '../core/tracking/voyage.js';
 import ContainerTrackingMap from './ContainerTrackingMap.jsx';
 import Dropdown, { DropdownItem } from './primitives/Dropdown.jsx';
 
