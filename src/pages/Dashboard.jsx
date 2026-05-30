@@ -11,8 +11,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine } from '../lib/constants.js';
+import { resolveDashboard } from '../core/quote/views/dashboard.js';
 
 /**
  * Seller home — a quoting-activity workspace, not an admin report. Built
@@ -32,15 +31,6 @@ import { isPricedLine } from '../lib/constants.js';
  * Per-quote deal value is shown (it helps prioritise), but no aggregate
  * "sales number" — that's an admin concern, not a seller's daily driver.
  */
-
-// Accepted-quote next step, from the quote-level milestone chain
-// (deposit → balance → delivery). `rank` sorts the most-pending to the top.
-function acceptedNextStep(q) {
-  if (!q.depositReceivedAt) return { label: 'Anticipo pendiente', cls: 'status-pill-pending', rank: 0 };
-  if (!q.balancePaidAt)     return { label: 'Balance pendiente',  cls: 'status-pill-sent',    rank: 1 };
-  if (!q.deliveredAt)       return { label: 'Entrega pendiente',  cls: 'status-pill-accepted',rank: 2 };
-  return { label: 'Entregada', cls: 'status-pill-archived', rank: 3 };
-}
 
 // "hoy" / "ayer" / "hace N días" from a timestamp.
 function relDays(ts) {
@@ -73,39 +63,18 @@ export default function Dashboard() {
   const allQuotes = allQuotesQ.data;
   const loaded = allQuotesQ.loaded && allCustomersQ.loaded && allLinesQ.loaded;
 
-  const derived = useMemo(() => {
-    const customersById = new Map();
-    for (const c of allCustomersQ.data) customersById.set(c.id, c);
-
-    const linesByQuote = new Map();
-    for (const ln of allLinesQ.data) {
-      if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
-      linesByQuote.get(ln.quoteId).push(ln);
-    }
-    const totalByQuote = new Map();
-    for (const q of allQuotes) {
-      const lines = (linesByQuote.get(q.id) || []).filter(isPricedLine).map(lineForTotals);
-      totalByQuote.set(q.id, computeTotals(lines, q).grandTotal);
-    }
-
-    const inScope = (q) => effectiveScope === SCOPE_TEAM || q.createdByUserId === meId;
-    const scoped = allQuotes.filter(inScope);
-
-    const sent = scoped
-      .filter((q) => q.status === 'sent')
-      .sort((a, b) => (a.sentAt || a.updatedAt || 0) - (b.sentAt || b.updatedAt || 0));
-
-    const accepted = scoped
-      .filter((q) => q.status === 'accepted')
-      .map((q) => ({ q, step: acceptedNextStep(q) }))
-      .sort((a, b) => a.step.rank - b.step.rank || (b.q.acceptedAt || 0) - (a.q.acceptedAt || 0));
-
-    const drafts = scoped
-      .filter((q) => q.status === 'draft')
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-    return { customersById, totalByQuote, sent, accepted, drafts };
-  }, [allQuotes, allCustomersQ.data, allLinesQ.data, effectiveScope, meId]);
+  // Derivation lives in the Model (core/quote/views/dashboard); the page passes
+  // the data + the resolved scope flag and renders the result.
+  const derived = useMemo(
+    () => resolveDashboard({
+      quotes: allQuotes,
+      customers: allCustomersQ.data,
+      lines: allLinesQ.data,
+      scopeIsTeam: effectiveScope === SCOPE_TEAM,
+      meId,
+    }),
+    [allQuotes, allCustomersQ.data, allLinesQ.data, effectiveScope, meId],
+  );
 
   const firstName = (currentProfile?.name || '').trim().split(/\s+/)[0];
   const money = (q) => formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', displayRatesFor(q, settings));
