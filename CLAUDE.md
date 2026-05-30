@@ -37,6 +37,10 @@
 - **Keep momentum.** On a clear task, drive it to done — code, verify, commit,
   push, report — without stopping to ask permission for the obvious. Report
   crisply at the end (what shipped, what was verified); skip the play-by-play.
+- **Parallelize independent work.** Fire independent tool calls in a single batch
+  — reads, greps, status checks — rather than serially; only sequence what truly
+  depends on a prior result. Scale the same instinct up to multi-agent sweeps on
+  disjoint files (see Gotchas).
 
 ## Architecture — MVVM is the backbone
 The app is **Model → ViewModel → View**, and staying on-pattern is what keeps it
