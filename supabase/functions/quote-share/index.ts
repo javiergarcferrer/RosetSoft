@@ -306,6 +306,7 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
   const seller = sellerRow ? { name: sellerRow.name } : null;
   const settings = settingsRow ? {
     companyName: settingsRow.company_name, logoImageId: settingsRow.logo_image_id,
+    rateLogoImageId: settingsRow.rate_logo_image_id,
     quoteFooter: settingsRow.quote_footer,
   } : {};
 
