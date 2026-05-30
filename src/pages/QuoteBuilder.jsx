@@ -439,9 +439,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      {/* Spacer so the last content can scroll clear of the fixed bottom dock
-          (sized to the collapsed bar: label + amount + DOP line + safe area). */}
-      <div className="h-[calc(5rem+env(safe-area-inset-bottom))]" aria-hidden />
+      {/* Bottom clearance for the fixed dock. The app shell (Layout MainContent)
+          already pads the page bottom by the home-indicator safe area + 1.5rem,
+          so this only adds the remaining dock height — NOT another safe-area
+          inset. (Re-adding it double-counted the home indicator, leaving a dead
+          gap under the bar.) Matches the collapsed bar: amount + DOP line. */}
+      <div className="h-12" aria-hidden />
 
       {/* Persistent totals dock — pinned to the bottom of the screen at every
           width, replacing the old desktop right-rail and the mobile totals bar. */}
