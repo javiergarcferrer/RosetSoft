@@ -2,7 +2,7 @@ import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent, MaterialOptions } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
+  lineTotal, lineListUnit, lineQty, setSubtotal, setSubtotalRange, alternativeSubtotal,
   materialOptionDeltas, isRangeLine, lineTotalRange, lineHasRange, selectedAlternative,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
@@ -1330,18 +1330,22 @@ export function groupFooterSpec(
   optional: boolean = false,
 ): { label: string; amount: number; amountRange?: { min: number; max: number }; zone: GroupZone } {
   if (type === 'set') {
+    // Range-aware: a Conjunto widens when any take-all member is material-less.
+    const sr = setSubtotalRange(lines, groupId);
     return {
       label: optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO',
       amount: setSubtotal(lines, groupId),
+      amountRange: sr.max > sr.min ? sr : undefined,
       zone: GROUP_ZONES.set,
     };
   }
-  // An alternative whose SELECTED option is material-less rolls up as a RANGE.
+  // An alternative whose SELECTED option is material-less rolls up as a RANGE —
+  // lineHasRange so a COMPOUND alternative (range component) counts too.
   const sel = selectedAlternative(lines, groupId);
   return {
     label: 'TOTAL',
     amount: alternativeSubtotal(lines, groupId),
-    amountRange: sel && isRangeLine(sel) ? lineTotalRange(sel) : undefined,
+    amountRange: sel && lineHasRange(sel) ? lineTotalRange(sel) : undefined,
     zone: GROUP_ZONES.alternative,
   };
 }

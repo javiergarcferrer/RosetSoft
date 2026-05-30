@@ -8,6 +8,7 @@ import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
   sectionSubtotal, selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
+  setSubtotalRange, lineHasRange,
 } from '../../lib/pricing.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
@@ -251,10 +252,17 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     const fmt = (v) => formatMoney(v, currency, rates);
     let footerValueLabel;
     if (isSet) {
-      footerValueLabel = fmt(setSubtotal(lines, run.groupId));
+      // Range-aware: a Conjunto widens when ANY take-all member is material-less
+      // (a range line, or a compound with a range component).
+      const sr = setSubtotalRange(lines, run.groupId);
+      footerValueLabel = sr.max > sr.min
+        ? `${fmt(sr.min)} – ${fmt(sr.max)}`
+        : fmt(setSubtotal(lines, run.groupId));
     } else {
       const sel = selectedAlternative(lines, run.groupId);
-      if (sel && isRangeLine(sel)) {
+      // lineHasRange (not isRangeLine) so a COMPOUND selected alternative with a
+      // material-less component rolls up as a range too.
+      if (sel && lineHasRange(sel)) {
         const r = lineTotalRange(sel);
         footerValueLabel = `${fmt(r.min)} – ${fmt(r.max)}`;
       } else {
@@ -483,7 +491,9 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
       </li>
     );
   }
-  const ranged = isRangeLine(line);
+  // lineHasRange (not isRangeLine) so a COMPOUND alternative made of a
+  // material-less piece shows its "min – max" in the collapsed pick-pane too.
+  const ranged = lineHasRange(line);
   const r = ranged ? lineTotalRange(line) : null;
   const priceLabel = r ? `${fmt(r.min)} – ${fmt(r.max)}` : fmt(lineTotal(line));
   const material = line.subtype || (ranged ? 'Sin material · rango' : 'Sin material');

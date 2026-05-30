@@ -5,7 +5,7 @@ import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  quoteSavings, setSubtotal, setGroupInfo, alternativeGroupInfo,
+  quoteSavings, setSubtotal, setSubtotalRange, setGroupInfo, alternativeGroupInfo,
   alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
   computeTotalsRange, isRangeLine, lineTotalRange, selectedAlternative,
@@ -236,10 +236,17 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                   const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
                   let footerValueLabel;
                   if (isSet) {
-                    footerValueLabel = fmt(setSubtotal(lines, run.groupId));
+                    // Range-aware: a Conjunto widens when any take-all member is
+                    // material-less (a range line or a compound with one).
+                    const sr = setSubtotalRange(lines, run.groupId);
+                    footerValueLabel = sr.max > sr.min
+                      ? `${fmt(sr.min)} – ${fmt(sr.max)}`
+                      : fmt(setSubtotal(lines, run.groupId));
                   } else {
                     const altSel = selectedAlternative(lines, run.groupId);
-                    if (altSel && isRangeLine(altSel)) {
+                    // lineHasRange (not isRangeLine) so a COMPOUND selected
+                    // alternative rolls up as a range too.
+                    if (altSel && lineHasRange(altSel)) {
                       const rr = lineTotalRange(altSel);
                       footerValueLabel = `${fmt(rr.min)} – ${fmt(rr.max)}`;
                     } else {

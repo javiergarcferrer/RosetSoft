@@ -311,6 +311,28 @@ export function setSubtotal(
 }
 
 /**
+ * Set subtotal RANGE — Σ of every member's total range (take-all). Collapses to
+ * a point (min === max) when no member is material-less, so a set footer only
+ * widens to "min – max" when a piece genuinely carries a range (a range line,
+ * or a compound with a range component).
+ */
+export function setSubtotalRange(
+  lines: readonly QuoteLine[] | null | undefined,
+  setGroup: string | null | undefined,
+): MoneyRange {
+  if (!setGroup) return { min: 0, max: 0 };
+  return (lines || [])
+    .filter((l) => l?.setGroup === setGroup)
+    .reduce(
+      (acc, l) => {
+        const r = lineTotalRange(l);
+        return { min: acc.min + r.min, max: acc.max + r.max };
+      },
+      { min: 0, max: 0 },
+    );
+}
+
+/**
  * Per-line "N de M" position info for a grouping key, keyed by line id.
  *
  * The shared engine behind setGroupInfo / alternativeGroupInfo: position is

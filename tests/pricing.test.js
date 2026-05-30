@@ -33,6 +33,7 @@ import {
   componentSubtotalRange,
   compoundSubtotalRange,
   lineHasRange,
+  setSubtotalRange,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -597,4 +598,16 @@ test('computeTotalsRange — a compound range flows into the grand-total spread'
   assert.equal(Math.round(r.min), 236);
   assert.equal(Math.round(r.max), 472);
   assert.equal(quoteHasRange(lines), true);
+});
+
+test('setSubtotalRange — sums take-all member ranges; collapses when none is material-less', () => {
+  const lines = [
+    { id: 'a', kind: 'item', setGroup: 's', qty: 1, priceMin: 100, priceMax: 300 },
+    { id: 'b', kind: 'item', setGroup: 's', qty: 2, unitPrice: 50 }, // flat 100
+    { id: 'c', kind: 'item', unitPrice: 999 },                       // not in the set
+  ];
+  assert.deepEqual(setSubtotalRange(lines, 's'), { min: 200, max: 400 });
+  const fixed = [{ id: 'x', kind: 'item', setGroup: 's', qty: 1, unitPrice: 80 }];
+  assert.deepEqual(setSubtotalRange(fixed, 's'), { min: 80, max: 80 });
+  assert.deepEqual(setSubtotalRange(lines, null), { min: 0, max: 0 });
 });

@@ -10,7 +10,6 @@ import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
-import ProductPicker from './ProductPicker.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
 import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
@@ -21,7 +20,7 @@ import {
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
 } from '../../lib/pricing.js';
-import { splitSkuGrade, switchLineProduct, productForGrade } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId, saveImage } from '../../db/database.js';
@@ -457,12 +456,24 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
   // The per-product grade/fabric + spec strip live inside each component.
   const [productPickerOpen, setProductPickerOpen] = useState(false);
 
-  // Switch the line to a different catalog model. The patch re-snapshots the
-  // product's ref/name/dimensions/price and KEEPS the materials the new model
-  // offers a grade for, dropping the rest (lib/catalog:switchLineProduct).
-  function switchProduct(model) {
-    const patch = switchLineProduct(line, model);
-    if (patch) onChange(patch);
+  // Pick the line's product from the catalog with the SAME flow as adding a
+  // line — model → material + color OR "sin material · cotizar por rango" — so
+  // selecting a product always prompts for the material (or a range). Applies
+  // the catalog seed to this line and resets any prior alternative materials.
+  function insertProductToLine(seed) {
+    onChange({
+      family: seed.family ?? line.family,
+      reference: seed.reference,
+      name: seed.name,
+      dimensions: seed.dimensions,
+      subtype: seed.subtype,
+      unitPrice: seed.unitPrice,
+      unitCost: seed.unitCost ?? null,
+      swatchImageId: seed.swatchImageId ?? null,
+      priceMin: seed.priceMin ?? null,
+      priceMax: seed.priceMax ?? null,
+      materialOptions: null,
+    });
   }
 
   return (
@@ -478,17 +489,17 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
             enterKeyHint="next"
           />
         </div>
-        {/* Product selector — the catalog twin of the material Palette button
-            below. Opens the model browser and switches this line's product,
-            keeping compatible materials. Gated to simple lines (a compound's
-            product identity lives per-component, not on the parent). */}
+        {/* Product selector — opens the full catalog flow (model → material +
+            color OR a price range), the same one the Catálogo button uses, so
+            picking a product prompts for its material. Gated to simple lines (a
+            compound's product identity lives per-component, not on the parent). */}
         {!compound && (
           <button
             type="button"
             onClick={() => setProductPickerOpen(true)}
             className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
-            title="Cambiar el producto del catálogo"
-            aria-label="Cambiar el producto del catálogo"
+            title="Elegir el producto del catálogo"
+            aria-label="Elegir el producto del catálogo"
           >
             <PackageSearch size={15} />
           </button>
@@ -528,10 +539,10 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
         onCommit={(v) => onChange({ notes: v })}
       />
       {!compound && (
-        <ProductPicker
+        <CatalogPicker
           open={productPickerOpen}
           onClose={() => setProductPickerOpen(false)}
-          onSelect={switchProduct}
+          onInsert={insertProductToLine}
         />
       )}
     </div>

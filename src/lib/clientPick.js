@@ -80,6 +80,10 @@ function switchMaterial(entity, grade) {
     materialOptions: r.newMo,
     swatchImageId: r.newSwatchId,
     subtype: composeSubtype(grade, r.label),
+    // Picking a material resolves a material-less RANGE — drop it (the price is
+    // now pinned), mirroring the server (quote-share) and the editor.
+    priceMin: null,
+    priceMax: null,
   };
   if (root) next.reference = root + String(grade).toUpperCase();
   // Reprice only when a numeric delta is available — same graceful skip the

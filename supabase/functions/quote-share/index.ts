@@ -112,6 +112,10 @@ function clientLine(
   const components = rawComponents.map((c) => {
     const safe = pick(c, COMPONENT_KEYS);
     safe.unitPrice = num(c.unitPrice) * marginFactor;
+    // Component price RANGE (material-less sub-piece) — margin baked into BOTH
+    // ends like unitPrice, so the client link shows "min – max" with no markup.
+    if (c.priceMin != null) safe.priceMin = num(c.priceMin) * marginFactor;
+    if (c.priceMax != null) safe.priceMax = num(c.priceMax) * marginFactor;
     safe.materialOptions = withDeltas(
       c.materialOptions as Row | null, c.reference, marginFactor, priceByRootGrade,
     );
@@ -133,6 +137,10 @@ function clientLine(
     // Margin baked in; the margin field is zeroed so the viewer reproduces the
     // same total without ever seeing the markup.
     unitPrice: num(row.unit_price) * marginFactor,
+    // Price RANGE for a material-less line — margin baked into both ends so the
+    // client link widens to "min – max" with the markup still invisible.
+    priceMin: row.price_min != null ? num(row.price_min) * marginFactor : null,
+    priceMax: row.price_max != null ? num(row.price_max) * marginFactor : null,
     lineMarginPct: 0,
     lineDiscountPct: row.line_discount_pct,
     materialOptions: withDeltas(
@@ -228,6 +236,10 @@ function lineMaterialPatch(
     material_options: r.newMo,
     swatch_image_id: r.newSwatchId,
     subtype: composeSubtype(grade, r.label),
+    // Picking a material resolves a material-less RANGE — drop it (the price is
+    // now pinned), mirroring the editor's GradeFabricRow.commit.
+    price_min: null,
+    price_max: null,
   };
   if (root) patch.reference = root + grade.toUpperCase();
   if (info) { patch.unit_price = info.price; patch.unit_cost = info.cost; }
@@ -244,7 +256,8 @@ function switchComponentMaterial(
   if (!r) return comp;
   const root = rootOf(comp.reference);
   const info = root ? priceMap.get(root)?.get(grade.toUpperCase()) : null;
-  const next: Row = { ...comp, materialOptions: r.newMo, swatchImageId: r.newSwatchId, subtype: composeSubtype(grade, r.label) };
+  // Picking a material resolves a material-less RANGE — drop it (price pinned).
+  const next: Row = { ...comp, materialOptions: r.newMo, swatchImageId: r.newSwatchId, subtype: composeSubtype(grade, r.label), priceMin: null, priceMax: null };
   if (root) next.reference = root + grade.toUpperCase();
   if (info) next.unitPrice = info.price;
   return next;
