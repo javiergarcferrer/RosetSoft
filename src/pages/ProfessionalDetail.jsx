@@ -8,9 +8,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../lib/constants.js';
-import { effectiveCommissionPct, commissionAmount, isTradeDiscount, reportedCommission } from '../lib/commissions.js';
+import { resolveProfessionalDetail } from '../core/quote/views/detail.js';
 
 /**
  * Detail view for one professional — the financial roll-up the
@@ -77,99 +75,19 @@ export default function ProfessionalDetail() {
     [profileId],
     [],
   );
-  const customerById = useMemo(() => {
-    const m = new Map();
-    for (const c of customers) m.set(c.id, c);
-    return m;
-  }, [customers]);
-
-  // Group by status; inside each group precompute total + commission so
-  // the table renders straight from this shape without re-doing the
-  // arithmetic on every paint.
-  const grouped = useMemo(() => {
-    if (!pro) return new Map();
-    const linesByQuote = new Map();
-    for (const ln of allLines) {
-      if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
-      linesByQuote.get(ln.quoteId).push(ln);
-    }
-    const byStatus = new Map();
-    for (const q of quotes) {
-      // Map `unitPrice` → `basePrice` for computeTotals — the pricing
-      // module expects the post-catalog price under a different name
-      // than what the DB stores. Compound lines collapse their
-      // components into a single basePrice inside lineForTotals.
-      // Sections are stripped: they have no qty/price, they're just
-      // visual dividers in the quote.
-      const lines = (linesByQuote.get(q.id) || [])
-        .filter(isPricedLine)
-        .map(lineForTotals);
-      const totals = computeTotals(lines, q);
-      const pct = effectiveCommissionPct(q);
-      // Same rate, two AR directions. The $ amount is computed off the base
-      // imponible (pre-ITBIS, pre-shipping) with any client discount drawn
-      // out of it; whether it lands as a commission WE pay or a trade
-      // discount WE bill the decorator is the per-quote modality. Trade
-      // discount accrues no commission.
-      // Once the commission is paid, freeze to the amount snapshotted at
-      // payout so a later rate/order-type change can't restate this pro's
-      // paid history; unpaid (and trade, which never pays a commission) stay
-      // live. Trade discounts never set commissionPaidAt, so they pass through.
-      const liveAmount = commissionAmount(totals, pct);
-      const amount = reportedCommission(q.commissionPaidAt, q.commissionPaidAmount, liveAmount);
-      const trade = isTradeDiscount(q);
-      const entry = {
-        quote: q,
-        customer: q.customerId ? customerById.get(q.customerId) : null,
-        base: totals.taxableBase,
-        grandTotal: totals.grandTotal,
-        pct,
-        trade,
-        amount,
-        commission: trade ? 0 : amount,
-        tradeDiscount: trade ? amount : 0,
-      };
-      const key = q.status || 'draft';
-      if (!byStatus.has(key)) byStatus.set(key, []);
-      byStatus.get(key).push(entry);
-    }
-    // Sort each group by most recent first — the dealer usually wants
-    // to see the freshest deal at the top of each section.
-    for (const arr of byStatus.values()) {
-      arr.sort((a, b) => (b.quote.updatedAt || 0) - (a.quote.updatedAt || 0));
-    }
-    return byStatus;
-  }, [pro, quotes, allLines, customerById]);
-
-  // Overall roll-up across every status, plus accepted-only as the
-  // "committed" figure the dealer cares about most for payouts.
-  const summary = useMemo(() => {
-    // "Sales" here is the taxable base (base imponible) — the same
-    // amount commissions are calculated on, so the headline figures
-    // and the commission column always line up arithmetically.
-    let totalBase = 0;
-    let totalCommission = 0;
-    let totalTrade = 0;
-    let acceptedBase = 0;
-    let acceptedCommission = 0;
-    let acceptedTrade = 0;
-    for (const [status, entries] of grouped) {
-      for (const e of entries) {
-        totalBase += e.base;
-        totalCommission += e.commission;
-        totalTrade += e.tradeDiscount;
-        if (status === QUOTE_STATUS_ACCEPTED) {
-          acceptedBase += e.base;
-          acceptedCommission += e.commission;
-          acceptedTrade += e.tradeDiscount;
-        }
-      }
-    }
-    return {
-      totalBase, totalCommission, totalTrade,
-      acceptedBase, acceptedCommission, acceptedTrade,
-    };
-  }, [grouped]);
+  // The ViewModel: every assigned quote grouped (and sorted) by status with
+  // its base/total/commission split precomputed, plus the overall +
+  // accepted-only summaries the headline cards show. The page renders
+  // straight from this shape without re-doing the arithmetic on every paint.
+  const { grouped, summary } = useMemo(
+    () => resolveProfessionalDetail({
+      pro,
+      quotes,
+      lines: allLines,
+      customers,
+    }),
+    [pro, quotes, allLines, customers],
+  );
 
   if (!pro) {
     return (

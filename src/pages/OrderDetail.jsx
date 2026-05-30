@@ -14,13 +14,7 @@ import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine } from '../lib/constants.js';
-import {
-  ORDER_STAGES, ORDER_STAGE_BY_KEY,
-  currentOrderStage, nextOrderStage, orderStageIndex,
-  canAdvanceOrder, advanceBlockedReason, orderDispatchThreshold,
-} from '../lib/orderStages.js';
+import { ORDER_STAGES, orderStageIndex } from '../lib/orderStages.js';
 import {
   canMarkDeposit, canMarkBalance, canMarkDelivered, deliveryBlockedReason,
 } from '../lib/quoteMilestones.js';
@@ -28,6 +22,7 @@ import {
   validateContainerNo, detectCarrier, normalizeContainerNo,
 } from '../lib/containerTracking.js';
 import ContainerTracking from '../components/ContainerTracking.jsx';
+import { resolveOrderDetail } from '../core/quote/views/detail.js';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -77,45 +72,33 @@ export default function OrderDetail() {
     [],
   );
 
-  // Customers for this profile, indexed by id — used to label each quote
-  // (attached and candidate) with its client name.
+  // Customers for this profile, indexed (in the ViewModel) by id — used to
+  // label each quote (attached and candidate) with its client name.
   const customers = useLiveQuery(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     [],
   );
-  const customerById = useMemo(() => {
-    const m = new Map();
-    for (const c of customers) m.set(c.id, c);
-    return m;
-  }, [customers]);
 
-  // Per-quote totals. Goes through the canonical computeTotals path so
-  // compound lines (qty/unitPrice=0 on the parent — math lives in
-  // `components`) roll up correctly and line-level + quote-level
-  // adjustments (discount, ITBIS, shipping) are included. The previous
-  // inline `qty * unitPrice` math showed $0 for compound quotes and
-  // dropped every adjustment.
+  // Lines drive the per-quote grand-total roll-up.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
-  const totalByQuote = useMemo(() => {
-    const linesByQuote = new Map();
-    for (const l of allLines) {
-      if (!linesByQuote.has(l.quoteId)) linesByQuote.set(l.quoteId, []);
-      linesByQuote.get(l.quoteId).push(l);
-    }
-    const m = new Map();
-    // Both the attached quotes AND the unattached candidates need totals —
-    // the attach picker lists candidates, so omitting them showed $0.00 for
-    // every row in the "Añadir cotización al pedido" sheet.
-    for (const q of [...quotes, ...unattachedQuotes]) {
-      if (m.has(q.id)) continue;
-      const rows = (linesByQuote.get(q.id) || [])
-        .filter(isPricedLine)
-        .map(lineForTotals);
-      m.set(q.id, computeTotals(rows, q).grandTotal);
-    }
-    return m;
-  }, [allLines, quotes, unattachedQuotes]);
+
+  // The ViewModel: per-quote totals (attached + the unattached attach-picker
+  // candidates), the customer index, the order-wide total, the dispatch-
+  // threshold figures and the stage machine (current/next/prev + the advance
+  // gates). Tolerates a null `order` so it can run above the loading guard.
+  const vm = useMemo(
+    () => resolveOrderDetail({
+      order,
+      quotes,
+      unattachedQuotes,
+      containers,
+      customers,
+      lines: allLines,
+      settings,
+    }),
+    [order, quotes, unattachedQuotes, containers, customers, allLines, settings],
+  );
 
   const [picker, setPicker] = useState(false);
 
@@ -127,38 +110,12 @@ export default function OrderDetail() {
     );
   }
 
-  const stage = currentOrderStage(order);
-  const stageDef = ORDER_STAGE_BY_KEY[stage];
-  const isCancelled = stage === 'cancelled';
-  const nxt = isCancelled ? null : nextOrderStage(stage);
-  const idx = orderStageIndex(stage);
-
-  // Roll-up: sum of all quote totals attached to this order. Per the
-  // dealer's rule ("todas las cotizaciones aportan a ese total sin
-  // importar a cual contenedor pertenecen") this is order-wide and
-  // doesn't try to attribute totals to specific containers.
-  const orderTotal = quotes.reduce((acc, q) => acc + (totalByQuote.get(q.id) || 0), 0);
-
-  // Dispatch threshold scales with the number of container rows. Floor
-  // of 1 means a fresh order without any containers still gets a
-  // meaningful "minimum to place" indicator.
-  const perContainerThreshold = Number(settings?.dispatchThreshold) || 50000;
-  const { containerCount, threshold } = orderDispatchThreshold(containers, perContainerThreshold);
-  const thresholdMet = orderTotal >= threshold;
-
-  // Two gates fire on stage advance:
-  //   • draft → placed   blocked when orderTotal < threshold (the
-  //                      dispatch minimum the dealer set in Settings).
-  //                      LR rejects under-minimum orders, so the app
-  //                      enforces it client-side rather than letting
-  //                      the dealer hit "Avanzar" and get a bounce.
-  //   • in_customs → received   blocked unless every container is
-  //                      packed (each has a filledAt timestamp).
-  // The helpers in orderStages.js carry both rules so the OrderDetail
-  // page doesn't have to know them per-transition.
-  const gateOpts = { totalAmount: orderTotal, threshold };
-  const canAdvance = canAdvanceOrder(order, containers, gateOpts);
-  const blockedReason = advanceBlockedReason(order, containers, gateOpts);
+  const {
+    customerById, totalByQuote,
+    stage, stageDef, isCancelled, nxt, idx, prev,
+    orderTotal, containerCount, threshold, thresholdMet,
+    canAdvance, blockedReason,
+  } = vm;
 
   async function advance(to) {
     if (!canAdvance) return;
@@ -237,9 +194,6 @@ export default function OrderDetail() {
     await db.quotes.update(quoteId, { orderId: null, updatedAt: Date.now() });
     invalidate();
   }
-
-  // The previous main-track stage (for the "Volver" undo button).
-  const prev = idx > 0 ? ORDER_STAGES[idx - 1] : null;
 
   return (
     <>

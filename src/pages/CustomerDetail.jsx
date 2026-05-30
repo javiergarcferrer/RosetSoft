@@ -11,9 +11,8 @@ import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine } from '../lib/constants.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
+import { resolveCustomerDetail } from '../core/quote/views/detail.js';
 
 /**
  * One customer's detail view — the dealer asked for the customer card
@@ -37,10 +36,6 @@ const QUOTE_STATUS_LABELS = {
   declined: 'Rechazadas',
   archived: 'Archivadas',
 };
-
-const ORDER_STAGE_ORDER = [
-  'received', 'in_customs', 'in_transit', 'confirmed', 'placed', 'draft', 'cancelled',
-];
 
 export default function CustomerDetail() {
   const { customerId } = useParams();
@@ -88,68 +83,19 @@ export default function CustomerDetail() {
 
   const loaded = quotesLoaded && ordersLoaded && linesLoaded;
 
-  const derived = useMemo(() => {
-    const linesByQuote = new Map();
-    for (const ln of allLines) {
-      if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
-      linesByQuote.get(ln.quoteId).push(ln);
-    }
-    function totalFor(q) {
-      const rows = (linesByQuote.get(q.id) || [])
-        .filter(isPricedLine)
-        .map(lineForTotals);
-      return computeTotals(rows, q).grandTotal;
-    }
-
-    // Per-quote total + grouping by status.
-    const totalByQuote = new Map();
-    const quotesByStatus = new Map();
-    for (const q of quotes) {
-      totalByQuote.set(q.id, totalFor(q));
-      const key = q.status || 'draft';
-      if (!quotesByStatus.has(key)) quotesByStatus.set(key, []);
-      quotesByStatus.get(key).push(q);
-    }
-    for (const arr of quotesByStatus.values()) {
-      arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    }
-
-    // Orders related to this customer: direct match OR any quote of
-    // theirs is attached. The relevant-order Set holds order ids that
-    // qualify; we then pull the full order rows for rendering.
-    const customerQuoteIds = new Set(quotes.map((q) => q.id));
-    const relevantOrderIds = new Set();
-    for (const o of allOrders) {
-      if (o.customerId === customerId) relevantOrderIds.add(o.id);
-    }
-    for (const q of quotes) {
-      if (q.orderId) relevantOrderIds.add(q.orderId);
-    }
-    const orders = allOrders.filter((o) => relevantOrderIds.has(o.id));
-    // Sort orders by stage progression (received last → draft first
-    // would be weird; do the opposite: in-flight first, archived last).
-    orders.sort((a, b) => {
-      const ai = ORDER_STAGE_ORDER.indexOf(a.status);
-      const bi = ORDER_STAGE_ORDER.indexOf(b.status);
-      if (ai !== bi) return ai - bi;
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    });
-
-    // Roll-ups: accepted-quotes value, all-time value.
-    const acceptedTotal = (quotesByStatus.get('accepted') || [])
-      .reduce((s, q) => s + (totalByQuote.get(q.id) || 0), 0);
-    const allTimeTotal = quotes
-      .reduce((s, q) => s + (totalByQuote.get(q.id) || 0), 0);
-
-    return {
-      totalByQuote,
-      quotesByStatus,
-      orders,
-      acceptedTotal,
-      allTimeTotal,
-      customerQuoteIds,
-    };
-  }, [quotes, allOrders, allLines, customerId]);
+  // The ViewModel: per-quote totals, the quotes grouped (and sorted) by
+  // status, the related orders (direct customerId match OR any of the
+  // customer's quotes is attached, sorted by stage), and the committed /
+  // all-time value roll-ups. The page renders straight from this.
+  const derived = useMemo(
+    () => resolveCustomerDetail({
+      customerId,
+      quotes,
+      orders: allOrders,
+      lines: allLines,
+    }),
+    [quotes, allOrders, allLines, customerId],
+  );
 
   if (!customer) {
     return (

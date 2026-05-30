@@ -37,4 +37,7 @@ export { applyAction, applyClientPick } from './actions.js';
 // ---- ViewModels (per-view projections off the Model)
 export { resolveQuoteView } from './views/quoteView.js';
 export { resolveLineList } from './views/editor.js';
+export { resolveLineItem } from './views/lineItem.js';
 export { resolveDashboard } from './views/dashboard.js';
+export { resolveQuotesList, resolveOrdersList } from './views/lists.js';
+export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';
