@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, PackageSearch, Share2 } from 'lucide-react';
+import { Hash, AlertCircle, PackageSearch, Share2, Plus } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -409,6 +409,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             onJoinSet: hx(joinSet),
             onReorder: hx(reorderLines),
             onAddSection: hx(addSection),
+            onAddLine: hx(() => addLine({})),
             onOpenCatalog: () => setCatalogOpen(true),
             // Catalog side-effect (not an undoable line edit): remember a
             // material's swatch so the next quote that picks it is pre-filled.
@@ -470,7 +471,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 function LineItemsCard({ lines, groups, quote, focusLineId }) {
   // The header/footer add buttons use just these two; LineItemList subscribes
   // to the rest of the editor actions from context itself.
-  const { onAddSection, onOpenCatalog } = useQuoteActions();
+  const { onAddSection, onAddLine, onOpenCatalog } = useQuoteActions();
   return (
     <div className="card overflow-hidden">
       <header className="card-header">
@@ -484,13 +485,24 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           >
             <Hash size={12} /> Sección
           </button>
-          {/* Catalog is the ONLY add path — picking a real product fills the
-              line (ref, name, price, cost, grade/fabric) instead of leaving the
-              dealer to type everything from the paper price list. */}
+          {/* Quiet companion to the catalog CTA — adds a BLANK line to fill by
+              hand (no picker), for when the dealer is typing from a paper price
+              list. Small, gray icon so the Catálogo button stays the headline. */}
+          <button
+            type="button"
+            onClick={onAddLine}
+            className="inline-flex items-center justify-center w-9 h-9 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors"
+            title="Agregar un artículo vacío para llenar a mano"
+            aria-label="Agregar artículo vacío"
+          >
+            <Plus size={18} />
+          </button>
+          {/* The catalog fills a line from a real product (ref, name, price,
+              cost, grade/fabric); the blank button beside it is the manual path. */}
           <button
             type="button"
             onClick={onOpenCatalog}
-            className="btn-primary"
+            className="btn-primary transition-all hover:shadow-md"
             title={`Elegir un producto del catálogo (${shortcutLabel('mod+enter')})`}
           >
             <PackageSearch size={18} /> Catálogo
