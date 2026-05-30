@@ -103,11 +103,16 @@ once its column exists (add a migration). Live schema: `supabase/CLAUDE.md`.
   imports rewritten, never plugged in → undefined refs that fail the build) or a
   back-dated migration. Finish or reset it before building on top; don't assume a
   clean slate.
-- **Deno ↔ Vite is a hard wall.** Edge Functions (`supabase/functions/*`, Deno)
-  can't import app code (`src/*`, Vite). Logic that must run both optimistically on
-  the client and authoritatively on the server is therefore TWO copies on purpose
-  — e.g. the quote-pick mutation: client `core/quote/actions.js` (`applyAction`) ↔
-  server `quote-share`. Change one, change the other.
+- **Deno ↔ Vite is a hard wall.** Two separate programs with separate dependency
+  graphs and deploys: the app (`src/*`) is bundled by Vite for the browser; Edge
+  Functions (`supabase/functions/*`) run on Deno server-side (URL imports,
+  `Deno.env`, the service-role key). Neither can `import` the other — **only data
+  crosses the wall (HTTP/JSON), never code.** So logic that must run both
+  optimistically on the client AND authoritatively on the server is TWO
+  hand-maintained copies on purpose — e.g. the quote-pick mutation: client
+  `core/quote/actions.js` (`applyAction`) ↔ server `quote-share` (the client copy
+  literally says "mirrors the server"). Change one, change the other; don't try to
+  "DRY" it by sharing a module — impossible across the wall, and it breaks the deploy.
 - **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.js`),
   always — PDF, Leaflet, etc. A raw `import()` strands users on a stale deploy with
   "failed to fetch dynamically imported module"; the helper reloads once and recovers.
