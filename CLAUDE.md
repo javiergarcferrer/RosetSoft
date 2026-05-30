@@ -13,6 +13,11 @@
   user pastes); act, then report. Ask only on a real fork the user must own —
   never to confirm the obvious or offload a decision. Diagnose once, act once
   (don't flip-flop).
+- **Don't fix errors in files you didn't edit.** Stay in the diff your task
+  needs. A pre-existing bug, dead import, type error, or stray warning in a file
+  your change doesn't touch is out of scope — leave it and surface it in your
+  report instead of folding unrelated fixes into the diff. (If it genuinely
+  blocks your change, say so before touching it.)
 - **Verify proportionately — never run the whole suite by reflex.** Match the
   check to the change:
   - **UI only** (JSX/TSX, CSS, components, pages, copy): no tests. `npm run
