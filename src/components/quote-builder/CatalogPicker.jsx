@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, MoveHorizontal } from 'lucide-react';
+import { ChevronLeft, MoveHorizontal, ExternalLink, Link2, X } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import ModelBrowser from './ModelBrowser.jsx';
@@ -8,6 +8,7 @@ import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
+import { fetchModelFabrics, saveModelFabrics, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -49,6 +50,18 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
     () => (profileId ? db.materials.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId, open],
     [],
+  );
+
+  // The selected model's Ligne Roset link + its offered-fabric allowlist (if the
+  // dealer has linked it). Drives the fabric restriction in step 2.
+  const modelRec = useLiveQuery(
+    () => (sel?.root ? db.modelFabrics.get(sel.root) : Promise.resolve(null)),
+    [sel?.root],
+    null,
+  );
+  const nameFilter = useMemo(
+    () => (modelRec?.patternNames?.length ? new Set(modelRec.patternNames) : undefined),
+    [modelRec],
   );
 
   // Insert a line. `product` carries the price/reference (productForGrade for
@@ -133,6 +146,11 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       ) : (
         <>
           <button type="button" onClick={() => setSel(null)} className="back-link"><ChevronLeft size={12} /> Volver a modelos</button>
+          {/* Link this model to its Ligne Roset page → restrict the fabric list
+              to what the model actually offers (not every fabric in a grade is a
+              technical option), and keep the link a click away. */}
+          <ModelLinkBar root={sel.root} profileId={profileId} record={modelRec} />
+
           {/* Quote this model WITHOUT a material — a price RANGE the designer
               resolves later. A first-class choice above the fabric list, not a
               fallback: the dealer picks the model and defers the fabric. */}
@@ -175,6 +193,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
             <MaterialColorPicker
               materials={materials}
               gradeFilter={sel.grades}
+              nameFilter={nameFilter}
               family={sel}
               currentGrade=""
               currentFabric=""
@@ -187,5 +206,86 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
         </>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Link bar for the catalog's step 2. When the model has no link yet it shows a
+ * paste-URL input + "Vincular" that calls the `lr-catalog` Edge Function
+ * (single-product mode) and stores the offered fabrics keyed by family root.
+ * Once linked it shows a "Ver en Ligne Roset" external link (with the fabric
+ * count) and a way to refresh / remove the link.
+ */
+function ModelLinkBar({ root, profileId, record }) {
+  const [url, setUrl] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function link() {
+    const clean = url.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const res = await fetchModelFabrics(clean);
+      await saveModelFabrics(root, profileId, res);
+      setUrl('');
+      setEditing(false);
+    } catch (e) {
+      setErr(e?.message || 'No se pudo vincular el modelo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (record?.sourceUrl && !editing) {
+    return (
+      <div className="flex items-center gap-2 my-2 text-[11px]">
+        <a
+          href={record.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium"
+        >
+          <ExternalLink size={12} /> Ver en Ligne Roset
+        </a>
+        {record.patternNames?.length > 0 && (
+          <span className="text-ink-400">· {record.patternNames.length} telas disponibles</span>
+        )}
+        <span className="ml-auto inline-flex items-center gap-2">
+          <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800">Actualizar</button>
+          <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800">Quitar</button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-2">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Link2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); link(); } }}
+            placeholder="Pega el enlace de Ligne Roset de este modelo para filtrar las telas…"
+            className="input pl-8 text-xs py-1.5"
+            autoFocus={editing}
+          />
+        </div>
+        <button type="button" onClick={link} disabled={busy || !url.trim()} className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+          {busy ? 'Vinculando…' : 'Vincular'}
+        </button>
+        {editing && (
+          <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
+            <X size={13} />
+          </button>
+        )}
+      </div>
+      {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
+    </div>
   );
 }

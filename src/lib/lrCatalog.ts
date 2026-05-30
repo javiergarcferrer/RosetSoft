@@ -95,6 +95,18 @@ export function normalizeName(name: string | null | undefined): string {
 }
 
 /**
+ * Canonical key for matching a fabric NAME across a model's offered patterns and
+ * the `materials` catalog. Builds on `normalizeName` (case/accent/space folding)
+ * and additionally strips the "/FR" fire-retardant suffix, because the catalog
+ * consolidates "VIDAR" and "VIDAR/FR" into one material row (see catalogSync's
+ * `frBase`) while a model page may list either. Used by the per-model fabric
+ * restriction (`src/lib/lrModelFabrics.js`, `MaterialColorPicker`).
+ */
+export function fabricKey(name: string | null | undefined): string {
+  return normalizeName(String(name || '').replace(/\s*\/\s*FR\b/i, ''));
+}
+
+/**
  * Ligne Roset's `remark` is free-text care/usage notes (e.g. "THIS FABRIC IS
  * NOT TB117-2013 APPROVED…", "Treated against stains (TEFLON)") — NOT a grade.
  * Drop the trivial "SWATCH A"/"SWATCH B" markers (the swatch-book letter is

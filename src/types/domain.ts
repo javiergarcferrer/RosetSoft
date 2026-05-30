@@ -416,6 +416,24 @@ export interface Product {
 }
 
 /**
+ * Per-model fabric availability, keyed by the family root (`splitSkuGrade`).
+ * Captured from a Ligne Roset product page (`lr-catalog` single-product mode):
+ * `patternNames` are the fabrics that model actually offers, stored normalized
+ * (`fabricKey`) so they match `Material.name`. Used to restrict the material
+ * picker to in-grade AND offered fabrics. See `src/lib/lrModelFabrics.js`.
+ */
+export interface ModelFabrics {
+  id: string;            // the family root (e.g. "15420000")
+  profileId: string;
+  sourceUrl?: string | null;
+  title?: string | null;
+  patternNames: string[];
+  fetchedAt?: number | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * Per-group attributes for a Conjunto (set) or Alternativa, keyed by the same
  * id the member lines carry in `setGroup` / `alternativeGroup`. The flat
  * grouping + groupRuns are unchanged; this just hangs state off the group.

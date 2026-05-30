@@ -264,3 +264,29 @@ test('dedupes repeated color codes within a pattern (first non-empty name wins)'
   );
   assert.deepEqual(rows[0].colors, [{ name: 'RED', code: '100' }, { name: 'BLUE', code: '200' }]);
 });
+
+// fabricKey — the name-matching key used by the per-model fabric restriction
+// (lrModelFabrics + MaterialColorPicker). Builds on normalizeName and strips the
+// "/FR" fire-retardant suffix so a model's offered "VIDAR/FR" matches the catalog
+// material "VIDAR" (the catalog consolidates the two into one row).
+test('fabricKey: strips the /FR suffix so offered names match catalog names', () => {
+  assert.equal(fabricKey('VIDAR/FR'), fabricKey('VIDAR'));
+  assert.equal(fabricKey('VIDAR / FR'), 'VIDAR');
+  assert.equal(fabricKey('Steelcut Trio 3/FR'), 'STEELCUT TRIO 3');
+});
+
+test('fabricKey: folds case, accents and whitespace (inherits normalizeName)', () => {
+  assert.equal(fabricKey('  Mosaïc  '), fabricKey('MOSAIC'));
+});
+
+test('fabricKey: an in-grade fabric NOT on the model is excluded by the allowlist', () => {
+  // Mirror the MaterialColorPicker filter: only offered (by fabricKey) pass.
+  const offered = new Set(['VIDAR/FR', 'DIVA'].map(fabricKey));
+  const materials = [
+    { name: 'VIDAR', grade: 'C' },   // offered (matches VIDAR/FR)
+    { name: 'DIVA', grade: 'C' },    // offered
+    { name: 'ALCANTARA - A', grade: 'C' }, // in-grade but NOT offered
+  ];
+  const visible = materials.filter((m) => offered.has(fabricKey(m.name))).map((m) => m.name);
+  assert.deepEqual(visible, ['VIDAR', 'DIVA']);
+});

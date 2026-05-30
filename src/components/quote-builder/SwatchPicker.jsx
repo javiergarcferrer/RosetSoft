@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from '../Modal.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import { composeFabricLabel } from '../../lib/subtype.js';
@@ -45,6 +45,18 @@ export default function SwatchPicker({
     [],
   );
 
+  // If this line's model is linked to its Ligne Roset page, restrict the picker
+  // to the fabrics it actually offers (same allowlist the catalog flow uses).
+  const modelRec = useLiveQuery(
+    () => (family?.root ? db.modelFabrics.get(family.root) : Promise.resolve(null)),
+    [family?.root, open],
+    null,
+  );
+  const nameFilter = useMemo(
+    () => (modelRec?.patternNames?.length ? new Set(modelRec.patternNames) : undefined),
+    [modelRec],
+  );
+
   const initialTitle = multiSelect ? 'Elegir materiales' : 'Elegir material';
   const [title, setTitle] = useState(initialTitle);
 
@@ -86,6 +98,7 @@ export default function SwatchPicker({
         <MaterialColorPicker
           materials={materials}
           family={family}
+          nameFilter={nameFilter}
           currentGrade={currentGrade}
           currentFabric={currentFabric}
           autoDrill={!multiSelect}

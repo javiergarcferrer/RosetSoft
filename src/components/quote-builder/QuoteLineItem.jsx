@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch, ImagePlus, Loader2 } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -20,7 +20,8 @@ import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
-import { newId, saveImage } from '../../db/database.js';
+import { db, newId, saveImage } from '../../db/database.js';
+import { useLiveQuery } from '../../db/hooks.js';
 
 /**
  * One quote line — a product card read top→bottom:
@@ -771,6 +772,14 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   // material-option chips can show a list-price delta. A line with no (or a
   // non-graded) reference simply yields no family → deltas read as 0.
   const family = families?.get(splitSkuGrade(line.reference).root) || null;
+  // The model's linked Ligne Roset page (if the dealer linked it in the catalog),
+  // surfaced as a quick "Ver en Ligne Roset" link beside the material row.
+  const modelRoot = family?.root || splitSkuGrade(line.reference).root;
+  const modelRec = useLiveQuery(
+    () => (modelRoot ? db.modelFabrics.get(modelRoot) : Promise.resolve(null)),
+    [modelRoot],
+    null,
+  );
   const materialOptions = line.materialOptions || null;
   // When a swatch is attached inline, also remember it in the catalog so the
   // next quote that picks the same material/color is pre-filled. The catalog
@@ -984,6 +993,21 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
             <Plus size={12} className="opacity-80" aria-hidden />
             Opción
           </button>
+          {/* Quick jump to this model's Ligne Roset page when it's been linked
+              in the catalog — lets the dealer (or designer) open the exact
+              product to confirm the offered fabrics. */}
+          {modelRec?.sourceUrl && (
+            <a
+              href={modelRec.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-brand-50 transition-colors flex-shrink-0"
+              title="Ver este modelo en Ligne Roset"
+            >
+              <ExternalLink size={12} className="opacity-80" aria-hidden />
+              Ligne Roset
+            </a>
+          )}
         </div>
       </div>
 

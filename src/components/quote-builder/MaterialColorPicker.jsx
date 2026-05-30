@@ -4,6 +4,7 @@ import ImageView from '../ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { locateColor } from '../../lib/swatchMatch.js';
 import { composeSubtype } from '../../lib/subtype.js';
+import { fabricKey } from '../../lib/lrCatalog.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/composition.js';
@@ -33,6 +34,9 @@ import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/compos
  * Props:
  *   materials      catalog materials (already loaded by the caller)
  *   gradeFilter?   string[] of grade letters to restrict the material list to
+ *   nameFilter?    Set<string> of fabricKey(name) values a linked MODEL actually
+ *                  offers — restricts the list to in-grade AND offered fabrics.
+ *                  A "Mostrar todas" toggle clears it for the session.
  *   currentGrade   the line's current grade (informational hint in the list)
  *   currentFabric  the line's current fabric label (drives the "active" color
  *                  highlight and, with autoDrill, which material to pre-open)
@@ -48,6 +52,7 @@ import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/compos
 export default function MaterialColorPicker({
   materials,
   gradeFilter,
+  nameFilter,
   family = null,
   currentGrade,
   currentFabric,
@@ -63,6 +68,7 @@ export default function MaterialColorPicker({
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('name');
   const [groupByFiber, setGroupByFiber] = useState(false);
+  const [showAllNames, setShowAllNames] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // material the dealer drilled into
   const [selected, setSelected] = useState(() => new Set());  // multi-select ids
@@ -89,10 +95,18 @@ export default function MaterialColorPicker({
     return new Set(gradeFilter.map((g) => String(g).toUpperCase()));
   }, [gradeFilter]);
 
+  // A linked model's offered-fabric allowlist. Active only while the dealer
+  // hasn't hit "Mostrar todas" (the per-session escape hatch).
+  const nameAllow = useMemo(() => {
+    if (showAllNames || !nameFilter || nameFilter.size === 0) return null;
+    return nameFilter;
+  }, [nameFilter, showAllNames]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return list
       .filter((m) => (allowGrade ? allowGrade.has(String(m.grade || '').toUpperCase()) : true))
+      .filter((m) => (nameAllow ? nameAllow.has(fabricKey(m.name)) : true))
       .filter((m) => (category ? m.category === category : true))
       .filter((m) => {
         if (!needle) return true;
@@ -102,7 +116,7 @@ export default function MaterialColorPicker({
         if (m.colors?.some((c) => c.name?.toLowerCase().includes(needle) || c.code?.includes(needle))) return true;
         return false;
       });
-  }, [list, q, category, allowGrade]);
+  }, [list, q, category, allowGrade, nameAllow]);
 
   const cmp = useMemo(() => comparator(sort, family), [sort, family]);
   const ordered = useMemo(() => [...filtered].sort(cmp), [filtered, cmp]);
@@ -210,6 +224,10 @@ export default function MaterialColorPicker({
           groups={groups}
           total={list.length}
           gradeFiltered={!!allowGrade}
+          modelFiltered={!!nameAllow}
+          modelHasFilter={!!nameFilter && nameFilter.size > 0}
+          showAllNames={showAllNames}
+          onToggleShowAllNames={() => setShowAllNames((v) => !v)}
           family={family}
           q={q}
           setQ={setQ}
@@ -309,7 +327,8 @@ function MaterialPrice({ family, material }) {
 /* -------------------------------------------------------------------------- */
 
 function MaterialList({
-  displayList, groups, total, gradeFiltered, family, q, setQ, category, setCategory,
+  displayList, groups, total, gradeFiltered, modelFiltered, modelHasFilter,
+  showAllNames, onToggleShowAllNames, family, q, setQ, category, setCategory,
   sort, setSort, groupByFiber, setGroupByFiber, activeIdx, setActiveIdx,
   multiSelect, selected, onActivate, onConfirmMany, inputRef, currentGrade,
 }) {
@@ -397,6 +416,29 @@ function MaterialList({
       {currentGrade && !gradeFiltered && (
         <div className="text-[11px] text-ink-500">
           La línea actual tiene <b className="text-ink-700">Grade {currentGrade}</b>; al elegir un material se reemplaza por el grade del catálogo.
+        </div>
+      )}
+
+      {/* When the model is linked to its Ligne Roset page, restrict to the
+          fabrics it actually offers — with an escape hatch to show every
+          in-grade fabric, and a way back to the offered-only set. */}
+      {modelHasFilter && (
+        <div className="text-[11px] text-ink-500 flex items-center gap-1.5">
+          {modelFiltered ? (
+            <>
+              <span>Mostrando solo las telas <b className="text-ink-700">disponibles para este modelo</b>.</span>
+              <button type="button" onClick={onToggleShowAllNames} className="text-brand-700 hover:underline font-medium">
+                Mostrar todas
+              </button>
+            </>
+          ) : (
+            <>
+              <span>Mostrando <b className="text-ink-700">todas</b> las telas del grade.</span>
+              <button type="button" onClick={onToggleShowAllNames} className="text-brand-700 hover:underline font-medium">
+                Solo las del modelo
+              </button>
+            </>
+          )}
         </div>
       )}
 
