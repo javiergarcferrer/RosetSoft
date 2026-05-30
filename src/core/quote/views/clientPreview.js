@@ -8,26 +8,8 @@
 // helpers. Changing what the preview shows is a change here, in one place, not
 // scattered through the renderer.
 import {
-  quoteSavings, computeTotalsRange, alternativeGroupInfo, setGroupInfo,
+  quoteSavings, computeTotalsRange, alternativeGroupInfo, setGroupInfo, groupBySection,
 } from '../../../lib/pricing.js';
-import { LINE_KIND_SECTION } from '../../../lib/constants.js';
-
-// Group lines under their preceding section, if any. Top-level items (no
-// section before them) live under a null-key group rendered without a heading.
-function groupBySection(lines) {
-  const groups = [];
-  let cur = { label: null, items: [] };
-  for (const l of lines) {
-    if (l.kind === LINE_KIND_SECTION) {
-      if (cur.items.length || cur.label) groups.push(cur);
-      cur = { label: l.name || 'Sección', items: [] };
-    } else {
-      cur.items.push(l);
-    }
-  }
-  if (cur.items.length || cur.label) groups.push(cur);
-  return groups;
-}
 
 /**
  * Resolve the client-preview ViewModel.

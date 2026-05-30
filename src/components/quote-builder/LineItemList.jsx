@@ -6,10 +6,11 @@ import ImageView from '../ImageView.jsx';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
-  setSubtotal, alternativeSubtotal, groupRuns, setGroupInfo, alternativeGroupInfo,
-  sectionSubtotal, selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
+  setSubtotal, alternativeSubtotal, groupRuns,
+  selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
   setSubtotalRange, lineHasRange, isCompoundLine,
 } from '../../lib/pricing.js';
+import { resolveLineList } from '../../core/quote/views/editor.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney } from '../../lib/format.js';
 
@@ -56,36 +57,14 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
     onAddSection, onOpenCatalog,
   } = useQuoteActions();
-  // Per-line "Alternativa N de M" / "Conjunto N de M" position maps, from the
-  // shared lib helpers so the editor, the client preview, and the PDF all
-  // read the same caption instead of each re-scanning the list.
-  const groupInfo = alternativeGroupInfo(lines);
-  const setInfo = setGroupInfo(lines);
+  // ViewModel — position maps ("Alternativa/Conjunto N de M") + per-section
+  // subtotals, all derived by the quote Model (core/quote/views/editor); the
+  // view reads them and re-scans nothing itself.
+  const { groupInfo, setInfo, sectionSubtotals } = resolveLineList({ lines });
 
   const currency = quote?.currencyCode || 'USD';
   const rates = quote?.rates || { USD: 1 };
   const byId = new Map(lines.map((l) => [l.id, l]));
-
-  // Per-section roll-up — the sum of the priced items between each section
-  // header and the next, keyed by the section line's id. Same isPricedLine
-  // rule (via sectionSubtotal) the client preview + PDF use, so all three
-  // surfaces show an identical section total.
-  const sectionSubtotals = (() => {
-    const map = new Map();
-    let curId = null;
-    let acc = [];
-    for (const l of lines) {
-      if (l.kind === LINE_KIND_SECTION) {
-        if (curId != null) map.set(curId, sectionSubtotal(acc));
-        curId = l.id;
-        acc = [];
-      } else if (curId != null) {
-        acc.push(l);
-      }
-    }
-    if (curId != null) map.set(curId, sectionSubtotal(acc));
-    return map;
-  })();
 
   // -------- drag-reorder --------
   const [draggingId, setDraggingId] = useState(null);

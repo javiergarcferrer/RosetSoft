@@ -9,7 +9,7 @@
  * every quote — there is no per-quote override.
  */
 
-import { isPricedLine, isPricedComponent } from './constants.js';
+import { isPricedLine, isPricedComponent, LINE_KIND_SECTION } from './constants.js';
 import type {
   QuoteLine,
   LineComponent,
@@ -517,6 +517,32 @@ export interface MoneyRange { min: number; max: number; }
  * fully-specified line has neither set and prices at its single unitPrice.
  * Picking a material on the line clears the range and pins a concrete price.
  */
+/** A section header + the lines beneath it. Items before any section live
+ *  under a null-label group. */
+export interface LineSectionGroup { label: string | null; items: QuoteLine[]; }
+
+/**
+ * Group lines under their preceding section header — the shared section
+ * projection the client preview AND the PDF both lay out, so a section reads
+ * the same on screen and on paper.
+ */
+export function groupBySection(
+  lines: readonly QuoteLine[] | null | undefined,
+): LineSectionGroup[] {
+  const groups: LineSectionGroup[] = [];
+  let cur: LineSectionGroup = { label: null, items: [] };
+  for (const l of lines || []) {
+    if (l?.kind === LINE_KIND_SECTION) {
+      if (cur.items.length || cur.label) groups.push(cur);
+      cur = { label: l.name || 'Sección', items: [] };
+    } else if (l) {
+      cur.items.push(l);
+    }
+  }
+  if (cur.items.length || cur.label) groups.push(cur);
+  return groups;
+}
+
 export function isRangeLine(line: QuoteLine | null | undefined): boolean {
   if (!line || isCompoundLine(line)) return false;
   const min = line.priceMin;

@@ -32,3 +32,4 @@ export { applyAction, applyClientPick } from './actions.js';
 
 // ---- ViewModels (per-view projections off the Model)
 export { resolveClientPreview } from './views/clientPreview.js';
+export { resolveLineList } from './views/editor.js';

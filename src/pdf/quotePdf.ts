@@ -4,8 +4,7 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
-import { displayRatesFor } from '../core/quote/index.js';
-import { LINE_KIND_SECTION } from '../lib/constants.js';
+import { displayRatesFor, groupBySection } from '../core/quote/index.js';
 import { embedImageById } from './embed.js';
 import { setGroupInfo, groupRuns, sectionSubtotal } from '../lib/pricing.js';
 import { isGroupOptional } from '../lib/quoteGroups.js';
@@ -336,26 +335,6 @@ async function fetchFontBytes(url: string): Promise<ArrayBuffer> {
     throw new Error(`No se pudo cargar la fuente ${url} (HTTP ${res.status}).`);
   }
   return res.arrayBuffer();
-}
-
-interface LineGroup {
-  label: string | null;
-  items: QuoteLine[];
-}
-
-function groupBySection(lines: QuoteLine[]): LineGroup[] {
-  const groups: LineGroup[] = [];
-  let cur: LineGroup = { label: null, items: [] };
-  for (const l of lines) {
-    if (l.kind === LINE_KIND_SECTION) {
-      if (cur.items.length || cur.label) groups.push(cur);
-      cur = { label: l.name || 'Sección', items: [] };
-    } else {
-      cur.items.push(l);
-    }
-  }
-  if (cur.items.length || cur.label) groups.push(cur);
-  return groups;
 }
 
 /**
