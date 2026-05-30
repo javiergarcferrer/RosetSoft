@@ -252,6 +252,23 @@ function RateCard({ local, set, saveSettings }) {
           : '(La actualización automática diaria se activará en producción.)'} Se cotiza con la tasa de venta.
       </p>
 
+      {/* Bank logo shown SMALL next to the converted DOP rate on the client
+          link + PDF. Upload the official Banco Popular logo (SVG or PNG) once;
+          it lives in your storage, not the codebase. */}
+      <div className="mb-4 flex items-center gap-3">
+        <ImageDrop
+          imageId={local.rateLogoImageId}
+          onChange={(id) => set('rateLogoImageId', id)}
+          kind="logo"
+          label="Logo del banco"
+          imgClassName="h-12 w-12 object-contain bg-white rounded-md border border-ink-100"
+        />
+        <p className="text-[11px] text-ink-500 max-w-xs">
+          Se muestra pequeño junto a la tasa (“≈ RD$ … DOP/USD”) en el enlace del
+          cliente y el PDF. Sube el logo de Banco Popular (SVG o PNG).
+        </p>
+      </div>
+
       {/* Banco Popular — read-only. The dealer can't adjust it; the daily
           job and the button below are the only writers. */}
       <div className="rounded-md border border-ink-100 bg-ink-50 px-4 py-3 mb-3">

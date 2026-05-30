@@ -123,6 +123,13 @@ export interface Settings {
   companyEmail?: string;
   companyPhone?: string;
   logoImageId?: string | null;
+  /**
+   * Logo of the exchange-rate source bank (Banco Popular Dominicano), shown
+   * next to the converted DOP rate on the client link and the PDF. Uploaded
+   * once in Settings (an SVG/PNG); null ⇒ no logo shown. Same image infra as
+   * `logoImageId`.
+   */
+  rateLogoImageId?: string | null;
   defaultCurrency?: CurrencyCode;
   /**
    * Legacy. The rate's single source of truth is now `exchangeRate` (read

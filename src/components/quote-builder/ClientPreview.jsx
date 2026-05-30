@@ -321,10 +321,19 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             </div>
           )}
           {dopRate && currency === 'USD' && (
-            <div className="text-[11px] text-ink-500 text-right pt-0.5">
-              ≈ {hasRange
-                ? `${formatMoney(totalsRange.min, 'DOP', rates)} – ${formatMoney(totalsRange.max, 'DOP', rates)}`
-                : formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
+            <div className="flex items-center justify-end gap-1.5 text-[11px] text-ink-500 pt-0.5">
+              {settings?.rateLogoImageId && (
+                <ImageView
+                  id={settings.rateLogoImageId}
+                  alt="Banco Popular Dominicano"
+                  className="h-4 w-4 flex-shrink-0 object-contain"
+                />
+              )}
+              <span>
+                ≈ {hasRange
+                  ? `${formatMoney(totalsRange.min, 'DOP', rates)} – ${formatMoney(totalsRange.max, 'DOP', rates)}`
+                  : formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
+              </span>
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import type { PDFPage, PDFFont, RGB } from 'pdf-lib';
+import type { PDFPage, PDFFont, RGB, PDFImage } from 'pdf-lib';
 import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
 import { ITBIS_PCT, quoteSavings, computeTotalsRange } from '../lib/pricing.js';
 import {
@@ -63,6 +63,7 @@ export function drawTotals(
   cursor: Cursor,
   totals: Totals,
   lines: QuoteLine[],
+  rateLogo: PDFImage | null = null,
 ): Cursor {
   const { fontBold, fontRegular, quote, currency, rates } = ctx;
   const leftX = PAGE_W - MARGIN_R - BAND_W;
@@ -167,6 +168,13 @@ export function drawTotals(
     const fx = hasRange
       ? `≈ RD$ ${formatPlain(range.min * dopRate)} – ${formatPlain(range.max * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`
       : `≈ RD$ ${formatPlain(totals.grandTotal * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`;
+    // Small bank logo just left of the right-aligned FX text, when uploaded.
+    if (rateLogo) {
+      const lh = FS_META + 2;
+      const lw = (rateLogo.width / rateLogo.height) * lh;
+      const fxW = fontRegular.widthOfTextAtSize(fx, FS_META);
+      page.drawImage(rateLogo, { x: rightX - fxW - lw - 4, y: y - FS_META - 1.5, width: lw, height: lh });
+    }
     drawRightAt(page, fx, rightX, y - FS_META, FS_META, fontRegular, INK_MID);
     y -= 20;
   } else {

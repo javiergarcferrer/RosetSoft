@@ -156,6 +156,8 @@ export async function generateQuotePdf({
   };
 
   const logoImage = await embedImageById(doc, safeSettings?.logoImageId);
+  // Rate-source bank logo (Banco Popular) — drawn small beside the FX line.
+  const rateLogoImage = await embedImageById(doc, safeSettings?.rateLogoImageId);
 
   let page: PDFPage = doc.addPage([PAGE_W, PAGE_H]);
   let cursor: Cursor = drawHeader(page, ctx, logoImage);
@@ -305,7 +307,7 @@ export async function generateQuotePdf({
     page = doc.addPage([PAGE_W, PAGE_H]);
     cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
   }
-  cursor = drawTotals(page, ctx, cursor, totals, lines);
+  cursor = drawTotals(page, ctx, cursor, totals, lines, rateLogoImage);
   if (quote.terms) cursor = drawTerms(page, ctx, cursor);
 
   // ---- Footer on every page --------------------------------------------
