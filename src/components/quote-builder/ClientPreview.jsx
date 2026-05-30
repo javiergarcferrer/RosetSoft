@@ -311,7 +311,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
           </div>
           {/* The anchored grand-total band. */}
-          <div className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-ink-900 px-5 py-3.5">
+          <div className="mt-3 flex items-center justify-between gap-4 bg-ink-900 px-5 py-3.5">
             <span className="eyebrow-xs tracking-[0.18em] text-ink-200 flex-shrink-0">Total</span>
             <span className="text-xl sm:text-2xl font-semibold text-white text-right whitespace-nowrap">
               {hasRange ? `${fmt(totalsRange.min)} – ${fmt(totalsRange.max)}` : fmt(totals.grandTotal)}
