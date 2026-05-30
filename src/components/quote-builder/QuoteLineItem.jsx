@@ -11,6 +11,7 @@ import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
+import ModelLinkBar from './ModelLinkBar.jsx';
 import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
@@ -248,6 +249,10 @@ export default function QuoteLineItem({
           refInputRef={refInput}
           currency={currency}
           rates={rates}
+          modelKey={modelKey}
+          modelRec={modelRec}
+          nameFilter={modelNameFilter}
+          sourceUrl={modelSourceUrl}
         />
         {compound ? (
           <CompoundCalculatorBand
@@ -288,6 +293,8 @@ export default function QuoteLineItem({
           currency={currency}
           rates={rates}
           fmt={fmt}
+          nameFilter={modelNameFilter}
+          sourceUrl={modelSourceUrl}
           onAdd={addComponent}
           onUpdate={updateComponent}
           onRemove={removeComponent}
@@ -512,7 +519,7 @@ function TopStrip({
 // visible band because fabric grade is what drives price; hiding it behind
 // a disclosure made the dealer hunt for the most-used control.
 // ---------------------------------------------------------------------------
-function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }) {
+function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, modelKey, modelRec, nameFilter, sourceUrl }) {
   // Layout: product photo + name on top; the ref/dimensions strip and
   // the swatch + material (grade/fabric) stack BELOW them, full width —
   // not squeezed into a narrow column beside the photo. Material sits
@@ -581,7 +588,11 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
           refInputRef={refInputRef}
         />
       )}
-      {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} />}
+      {/* Ligne Roset link for THIS product line — restricts the material
+          picker(s) to the model's offered fabrics. On a compound it governs
+          every component within (the components inherit this link). */}
+      {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
+      {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
       {/* Descripción — promoted out of the old DetailsPanel disclosure to an
           always-visible, auto-growing field under the spec + material rows.
           It's the PDF-facing copy the dealer writes for the client, so it
@@ -764,7 +775,7 @@ function InternalNote({ value, onCommit }) {
 // controls write into the single `subtype` column on every commit via
 // composeSubtype, so on-disk format is identical to what dealers have
 // always typed — no migration, no PDF / autocomplete churn.
-function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
+function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, sourceUrl }) {
   const { rememberSwatch } = useQuoteActions();
   const families = useContext(FamiliesContext);
   const { grade, fabric } = parseSubtype(line.subtype);
@@ -772,14 +783,9 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
   // material-option chips can show a list-price delta. A line with no (or a
   // non-graded) reference simply yields no family → deltas read as 0.
   const family = families?.get(splitSkuGrade(line.reference).root) || null;
-  // The model's linked Ligne Roset page (if the dealer linked it in the catalog),
-  // surfaced as a quick "Ver en Ligne Roset" link beside the material row.
-  const modelRoot = family?.root || splitSkuGrade(line.reference).root;
-  const modelRec = useLiveQuery(
-    () => (modelRoot ? db.modelFabrics.get(modelRoot) : Promise.resolve(null)),
-    [modelRoot],
-    null,
-  );
+  // The model link (offered-fabric allowlist `nameFilter` + `sourceUrl` for the
+  // "Ver en Ligne Roset" jump) is owned by the product line and passed in, so a
+  // COMPOUND's single link governs every component within.
   const materialOptions = line.materialOptions || null;
   // When a swatch is attached inline, also remember it in the catalog so the
   // next quote that picks the same material/color is pre-filled. The catalog
@@ -996,9 +1002,9 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
           {/* Quick jump to this model's Ligne Roset page when it's been linked
               in the catalog — lets the dealer (or designer) open the exact
               product to confirm the offered fabrics. */}
-          {modelRec?.sourceUrl && (
+          {sourceUrl && (
             <a
-              href={modelRec.sourceUrl}
+              href={sourceUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-brand-50 transition-colors flex-shrink-0"
@@ -1028,6 +1034,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         currentGrade={grade}
         currentFabric={fabric}
         family={family}
+        nameFilter={nameFilter}
       />
       {/* Second picker instance dedicated to adding alternative materials;
           multi-select so the dealer can tick several fabrics at once. Each
@@ -1041,6 +1048,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         currentGrade=""
         currentFabric=""
         family={family}
+        nameFilter={nameFilter}
       />
       {/* Third picker — re-pick the color/material of an EXISTING option.
           Opens drilled into that option's material (autoDrill via its
@@ -1053,6 +1061,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates }) {
         currentGrade={materialOptions?.options?.[editingOption]?.grade || ''}
         currentFabric={materialOptions?.options?.[editingOption]?.label || ''}
         family={family}
+        nameFilter={nameFilter}
       />
     </div>
   );
@@ -1417,7 +1426,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1513,7 +1522,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, and the range swap (a material-less sub-piece

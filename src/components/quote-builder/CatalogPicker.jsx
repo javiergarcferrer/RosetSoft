@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, MoveHorizontal, ExternalLink, Link2, X } from 'lucide-react';
+import { ChevronLeft, MoveHorizontal } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import ModelBrowser from './ModelBrowser.jsx';
+import ModelLinkBar from './ModelLinkBar.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
-import { fetchModelFabrics, saveModelFabrics, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -149,7 +149,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
           {/* Link this model to its Ligne Roset page → restrict the fabric list
               to what the model actually offers (not every fabric in a grade is a
               technical option), and keep the link a click away. */}
-          <ModelLinkBar root={sel.root} profileId={profileId} record={modelRec} />
+          <ModelLinkBar root={sel.root} record={modelRec} />
 
           {/* Quote this model WITHOUT a material — a price RANGE the designer
               resolves later. A first-class choice above the fabric list, not a
@@ -182,77 +182,6 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
                     <span className="chip bg-ink-100 text-ink-700 border border-ink-200">Grado {g}</span>
                     <span className="text-sm tabular-nums text-ink-900 whitespace-nowrap">{usd(p?.priceUsd)}</span>
                   </button>
-                );
-              })}
-            </div>
-          ) : (
-            // Shared material→color body, restricted to the model's grades.
-            // Picking forces a specific COLOR before placing: the product
-            // (price/reference) comes from the material's own grade, the
-            // subtype + swatch from the chosen color.
-            <MaterialColorPicker
-              materials={materials}
-              gradeFilter={sel.grades}
-              nameFilter={nameFilter}
-              family={sel}
-              currentGrade=""
-              currentFabric=""
-              onPick={(material, color) => {
-                const grade = String(material.grade || '').toUpperCase();
-                insertProduct(sel, productForGrade(sel, grade), grade, material, color);
-              }}
-            />
-          )}
-        </>
-      )}
-    </Modal>
-  );
-}
-
-/**
- * Link bar for the catalog's step 2. When the model has no link yet it shows a
- * paste-URL input + "Vincular" that calls the `lr-catalog` Edge Function
- * (single-product mode) and stores the offered fabrics keyed by family root.
- * Once linked it shows a "Ver en Ligne Roset" external link (with the fabric
- * count) and a way to refresh / remove the link.
- */
-function ModelLinkBar({ root, profileId, record }) {
-  const [url, setUrl] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-
-  async function link() {
-    const clean = url.trim();
-    if (!clean || busy) return;
-    setBusy(true);
-    setErr('');
-    try {
-      const res = await fetchModelFabrics(clean);
-      await saveModelFabrics(root, profileId, res);
-      setUrl('');
-      setEditing(false);
-    } catch (e) {
-      setErr(e?.message || 'No se pudo vincular el modelo.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (record?.sourceUrl && !editing) {
-    return (
-      <div className="flex items-center gap-2 my-2 text-[11px]">
-        <a
-          href={record.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium"
-        >
-          <ExternalLink size={12} /> Ver en Ligne Roset
-        </a>
-        {record.patternNames?.length > 0 && (
-          <span className="text-ink-400">· {record.patternNames.length} telas disponibles</span>
-        )}
         <span className="ml-auto inline-flex items-center gap-2">
           <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800">Actualizar</button>
           <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800">Quitar</button>

@@ -36,7 +36,7 @@ import { useApp } from '../../context/AppContext.jsx';
  */
 export default function SwatchPicker({
   open, onClose, onSelect, onSelectMany, multiSelect = false,
-  currentGrade, currentFabric, family = null,
+  currentGrade, currentFabric, family = null, nameFilter: nameFilterProp,
 }) {
   const { profileId } = useApp();
   const materials = useLiveQuery(
@@ -45,17 +45,20 @@ export default function SwatchPicker({
     [],
   );
 
-  // If this line's model is linked to its Ligne Roset page, restrict the picker
-  // to the fabrics it actually offers (same allowlist the catalog flow uses).
-  const modelRec = useLiveQuery(
-    () => (family?.root ? db.modelFabrics.get(family.root) : Promise.resolve(null)),
-    [family?.root, open],
+  // The offered-fabric allowlist. The caller (a product line / compound parent)
+  // owns the model link and passes `nameFilter` in — for a compound that single
+  // link governs every component. When no prop is given we fall back to a lookup
+  // by this line's own model root, so a standalone use still filters.
+  const useOwnLookup = nameFilterProp === undefined;
+  const ownRec = useLiveQuery(
+    () => (useOwnLookup && family?.root ? db.modelFabrics.get(family.root) : Promise.resolve(null)),
+    [family?.root, open, useOwnLookup],
     null,
   );
-  const nameFilter = useMemo(
-    () => (modelRec?.patternNames?.length ? new Set(modelRec.patternNames) : undefined),
-    [modelRec],
-  );
+  const nameFilter = useMemo(() => {
+    if (nameFilterProp !== undefined) return nameFilterProp;
+    return ownRec?.patternNames?.length ? new Set(ownRec.patternNames) : undefined;
+  }, [nameFilterProp, ownRec]);
 
   const initialTitle = multiSelect ? 'Elegir materiales' : 'Elegir material';
   const [title, setTitle] = useState(initialTitle);
