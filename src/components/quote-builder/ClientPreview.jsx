@@ -130,8 +130,10 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         </div>
       </div>
 
-      {/* Customer block — client on the left, who's selling it (vendedor)
-          and the referring professional on the right. */}
+      {/* Customer block — client at the start; the vendedor + referring
+          professional sit together at the end. The outer row is
+          space-between (client start / vendor-pro end); the inner pair runs
+          INLINE on mobile (side by side) and stacks on sm+. */}
       {(customer || seller || professional) && (
         <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6">
           <div className="min-w-0">
@@ -151,7 +153,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             )}
           </div>
           {(seller || professional) && (
-            <div className="text-left sm:text-right shrink-0 space-y-3">
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-3 text-left shrink-0 sm:block sm:space-y-3 sm:text-right">
               {seller && (
                 <div>
                   <div className="eyebrow mb-0.5">Vendedor</div>

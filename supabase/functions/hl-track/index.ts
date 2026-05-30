@@ -7,11 +7,13 @@
 //   - Hapag-Lloyd's gateway won't serve a cross-origin browser request, so
 //     this proxy adds the key headers and forwards the call server-side.
 //
-// Called from a logged-in dealer's browser via `supabase.functions.invoke`
-// with { containerNo }. The container number is the DCSA `equipmentReference`
-// (a GET filter on /events). We verify the caller's JWT here because
-// verify_jwt is off at the gateway (so the CORS preflight, which carries no
-// Authorization header, isn't rejected).
+// Called with { containerNo } via `supabase.functions.invoke` from either a
+// logged-in dealer's browser OR the public client quote link (which adds its
+// secret { shareToken }). The container number is the DCSA `equipmentReference`
+// (a GET filter on /events). We authorize here — a dealer's JWT, or a share
+// token bound to the container's order — because verify_jwt is off at the
+// gateway (so the CORS preflight, which carries no Authorization header, isn't
+// rejected).
 //
 // The base URL is hardcoded to the production gateway — there is NO env
 // override — so a stray secret can never point the function elsewhere.
@@ -93,31 +95,52 @@ function sanitizeReference(raw: unknown): string {
   return String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
 }
 
+// Public-link authorization: does this share token map to an ENABLED quote
+// whose order owns the requested container? Runs with the service role (RLS is
+// `to authenticated`, and the public link is logged-out). Scopes a share link
+// to tracking its OWN shipment — never an arbitrary container number — so it
+// can't be turned into a free HL lookup oracle. Any failure (bad/disabled
+// token, no matching container, DB error) denies.
+async function shareLinkTracksContainer(
+  url: string,
+  serviceKey: string,
+  token: string,
+  equipmentReference: string,
+): Promise<boolean> {
+  try {
+    const admin = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: quote } = await admin
+      .from('quotes')
+      .select('order_id')
+      .eq('share_token', token)
+      .eq('share_enabled', true)
+      .maybeSingle();
+    const orderId = (quote as { order_id?: unknown } | null)?.order_id;
+    if (!orderId) return false;
+    const { data: containers } = await admin
+      .from('containers')
+      .select('code')
+      .eq('order_id', orderId);
+    return ((containers as { code?: unknown }[] | null) || []).some(
+      (c) => sanitizeReference(c.code) === equipmentReference,
+    );
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const CLIENT_ID = Deno.env.get('HL_CLIENT_ID')?.trim();
   const CLIENT_SECRET = Deno.env.get('HL_CLIENT_SECRET')?.trim();
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return json({ error: 'Server misconfigured: faltan HL_CLIENT_ID / HL_CLIENT_SECRET' }, 500);
-  }
-
-  // Require a logged-in dealer so the daily quota can't be drained by
-  // anonymous traffic. verify_jwt is off at the gateway (so the CORS
-  // preflight passes); we verify the token here instead.
-  const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return json({ error: 'Authorization header required' }, 401);
-  }
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data, error } = await caller.auth.getUser();
-    if (error || !data?.user) return json({ error: 'Invalid or expired session' }, 401);
   }
 
   let body: Record<string, unknown> = {};
@@ -126,6 +149,34 @@ Deno.serve(async (req) => {
   if (!equipmentReference) {
     return json({ error: 'containerNo requerido' }, 400);
   }
+
+  // Authorize before spending the HL quota — anonymous traffic must never drain
+  // it. TWO accepted callers, each gated a different way:
+  //   1. A logged-in dealer  — a valid Supabase user JWT (editor / order view /
+  //      quotes list).
+  //   2. The public client link — logged-OUT, but it carries the quote's secret
+  //      shareToken. Accepted only when the token maps to an enabled share AND
+  //      the requested container belongs to that quote's order (so a link tracks
+  //      its own shipment, nothing else).
+  // verify_jwt is off at the gateway (so the CORS preflight passes); we do the
+  // check here instead.
+  const authHeader = req.headers.get('Authorization') || '';
+  const shareToken = String(body?.shareToken ?? '').trim();
+  let authorized = false;
+  if (authHeader.startsWith('Bearer ') && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = await caller.auth.getUser();
+    if (data?.user) authorized = true;
+  }
+  if (!authorized && shareToken && SUPABASE_URL && SERVICE_ROLE_KEY) {
+    authorized = await shareLinkTracksContainer(
+      SUPABASE_URL, SERVICE_ROLE_KEY, shareToken, equipmentReference,
+    );
+  }
+  if (!authorized) return json({ error: 'Invalid or expired session' }, 401);
 
   try {
     console.log('[hl-track] start', { equipmentReference, clientId: CLIENT_ID });

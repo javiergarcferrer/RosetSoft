@@ -161,7 +161,7 @@ export default function PublicQuoteView() {
                     <span className="font-mono text-ink-400"> · {normalizeContainerNo(c.code)}</span>
                   </div>
                 )}
-                <ContainerTracking containerNo={normalizeContainerNo(c.code)} />
+                <ContainerTracking containerNo={normalizeContainerNo(c.code)} shareToken={token} />
               </div>
             ))}
           </section>

@@ -12,24 +12,27 @@ import Dropdown, { DropdownItem } from './primitives/Dropdown.jsx';
  * Hapag-Lloyd Track & Trace panel for a single container number.
  *
  * Calls the `hl-track` Edge Function (which holds the HL keys server-side and
- * runs keyless/`verify_jwt = false`, so this works the same logged-in or on the
- * public quote link) and renders the returned DCSA events as a voyage map + a
- * dropdown of every tracking point, plus the last known position and the ETA.
- * The API is BETA and only knows Hapag-Lloyd-booked containers; an empty result
- * reads as "not an HL booking", not "broken".
+ * runs keyless/`verify_jwt = false`) and renders the returned DCSA events as a
+ * voyage map + a dropdown of every tracking point, plus the last known position
+ * and the ETA. The API is BETA and only knows Hapag-Lloyd-booked containers; an
+ * empty result reads as "not an HL booking", not "broken".
  *
  * Pure and self-contained — give it a normalized container number and it does
  * its own fetch — so it drops into the order, the quote editor, the quotes
- * list, and the public client link unchanged.
+ * list, and the public client link unchanged. On the public link (logged-OUT)
+ * pass `shareToken`: the function authorizes either a dealer's session OR a
+ * share token bound to the container's order, so tracking works the same in the
+ * app and on the public link — without it the keyless call reads as an expired
+ * session.
  */
-export default function ContainerTracking({ containerNo }) {
+export default function ContainerTracking({ containerNo, shareToken }) {
   const [state, setState] = useState({ status: 'loading', summary: null, error: null, fetchedAt: null });
 
   async function load() {
     setState({ status: 'loading', summary: null, error: null, fetchedAt: null });
     try {
       const { data, error } = await supabase.functions.invoke('hl-track', {
-        body: { containerNo },
+        body: { containerNo, shareToken },
       });
       if (error) {
         let msg = error.message || 'No se pudo rastrear el contenedor';
@@ -56,7 +59,7 @@ export default function ContainerTracking({ containerNo }) {
     }
   }
 
-  useEffect(() => { load(); }, [containerNo]);
+  useEffect(() => { load(); }, [containerNo, shareToken]);
 
   const { status, summary, error, fetchedAt } = state;
   const mapRef = useRef(null);
