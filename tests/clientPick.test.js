@@ -33,12 +33,17 @@ function bundle() {
             unitPrice: 200, qty: 1, swatchImageId: 'sw-cA',
             materialOptions: { baseGrade: 'A', baseLabel: 'Tela X', options: [{ grade: 'C', label: 'Tela Y', swatchImageId: 'sw-cC', delta: 30 }] },
           },
+          // An offered-optional sub-piece the client may fold in / out.
+          { id: 'c2', name: 'Otomana', unitPrice: 75, qty: 1, isOptional: true, optionalOffered: true },
+          // Optional but NOT offered — the client must not be able to flip it.
+          { id: 'c3', name: 'Garantía', unitPrice: 20, qty: 1, isOptional: true },
         ],
       },
     ],
   };
 }
 const line = (b, id) => b.lines.find((l) => l.id === id);
+const comp = (b, lineId, compId) => line(b, lineId).components.find((c) => c.id === compId);
 
 test('alternative: only the chosen member stays selected', () => {
   const out = applyClientPick(bundle(), { alternatives: { g1: 'b' } });
@@ -69,6 +74,22 @@ test('optional: a non-offered optional can NOT be toggled by the client', () => 
   const b = bundle();
   assert.equal(applyClientPick(b, { optionals: { optLocked: true } }), b);
   assert.equal(line(b, 'optLocked').isOptional, true);
+});
+
+test('optional (component): an offered sub-piece toggles in AND back out', () => {
+  const b = bundle();
+  const on = applyClientPick(b, { optionals: { c2: true } });
+  assert.equal(comp(on, 'cmp', 'c2').isOptional, false);              // folded in
+  assert.equal(applyClientPick(on, { optionals: { c2: true } }), on); // same state → no-op
+  const off = applyClientPick(on, { optionals: { c2: false } });
+  assert.equal(comp(off, 'cmp', 'c2').isOptional, true);              // taken back out
+  assert.equal(comp(on, 'cmp', 'c1').unitPrice, 200);                 // siblings untouched
+});
+
+test('optional (component): a non-offered component optional can NOT be toggled', () => {
+  const b = bundle();
+  assert.equal(applyClientPick(b, { optionals: { c3: true } }), b);
+  assert.equal(comp(b, 'cmp', 'c3').isOptional, true);
 });
 
 test('material (line): reprices via delta, recomposes subtype/reference/swatch, re-anchors options', () => {

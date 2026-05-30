@@ -50,7 +50,7 @@ function pick<T extends Record<string, unknown>>(obj: T | null | undefined, keys
 
 const COMPONENT_KEYS = [
   'id', 'name', 'reference', 'subtype', 'dimensions', 'description',
-  'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'materialOptions',
+  'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'optionalOffered', 'materialOptions',
 ];
 
 // 8-digit family root of an upholstered SKU ("15420000G" -> "15420000").
@@ -386,6 +386,9 @@ Deno.serve(async (req: Request) => {
     // optional_offered (the stable designation), NOT is_optional (the current
     // include state), so a toggled-in optional can be toggled back OUT.
     const optionalIds = new Set<string>();
+    // Components the dealer OFFERED as toggleable optionals — same role as
+    // optionalIds, one level down (gated on the component's optionalOffered).
+    const componentOptionalOffered = new Set<string>();
     const materialGrades = new Map<string, Set<string>>();     // line OR component id → valid grades
     const componentIndex = new Map<string, { lineId: string }>(); // component id → its line
     const addMaterialTarget = (id: unknown, mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined) => {
@@ -408,6 +411,7 @@ Deno.serve(async (req: Request) => {
       const comps = Array.isArray(l.components) ? l.components as Row[] : [];
       for (const c of comps) {
         if (c?.id != null) componentIndex.set(String(c.id), { lineId: id });
+        if (c?.optionalOffered) componentOptionalOffered.add(String(c.id));
         addMaterialTarget(c?.id, c?.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
       }
     }
@@ -449,10 +453,23 @@ Deno.serve(async (req: Request) => {
 
     // Optionals — a TOGGLE: on=true folds the add-on into the quote
     // (is_optional=false), on=false takes it back out (is_optional=true).
-    // Validated against the lines the dealer OFFERED as optional
-    // (optional_offered), so an already-included optional can be toggled off.
-    for (const [lineId, on] of Object.entries(body.optionals || {})) {
-      if (optionalIds.has(String(lineId))) merge(String(lineId), { is_optional: !on });
+    // The id is either a LINE the dealer offered (optional_offered) or a
+    // COMPONENT the dealer offered (its optionalOffered, one level down). A
+    // component toggle flips isOptional on its own entry within the line's
+    // working components copy, so it composes with a material pick on the same
+    // line — same pattern as the material branch below.
+    for (const [id, on] of Object.entries(body.optionals || {})) {
+      const key = String(id);
+      if (optionalIds.has(key)) { merge(key, { is_optional: !on }); continue; }
+      if (componentOptionalOffered.has(key) && componentIndex.has(key)) {
+        const lineId = componentIndex.get(key)!.lineId;
+        const comps = compsOf(lineId);
+        const idx = comps.findIndex((c) => String(c.id) === key);
+        if (idx >= 0) {
+          comps[idx] = { ...comps[idx], isOptional: !on };
+          merge(lineId, { components: comps });
+        }
+      }
     }
 
     // Materials — re-anchor the line (or component) to the chosen grade.

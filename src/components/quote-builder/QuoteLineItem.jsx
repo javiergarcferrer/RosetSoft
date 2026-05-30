@@ -1434,10 +1434,14 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
             so a single sub-piece (e.g. an ottoman in a sectional)
             can be offered as an add-on without changing the rest of
             the composition. Pricing math (compoundSubtotal) skips
-            optional components when summing. */}
+            optional components when summing. Stamps optionalOffered too,
+            so the client can fold this sub-piece in/out on the share link
+            (same stable designation as the line-level optional). */}
         <button
           type="button"
-          onClick={() => onChange({ isOptional: !optional })}
+          onClick={() => onChange(optional
+            ? { isOptional: false, optionalOffered: false }
+            : { isOptional: true, optionalOffered: true })}
           className={`chip font-medium ${
             optional
               ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'

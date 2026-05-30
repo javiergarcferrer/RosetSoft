@@ -11,7 +11,8 @@
 //   - alternatives: only the chosen group member stays selected.
 //   - optionals:    a toggle — `on` folds the add-on into the quote
 //                   (isOptional = !on) and `off` takes it back out; only lines
-//                   the dealer OFFERED as optional (optionalOffered) toggle.
+//                   (or COMPONENTS one level down) the dealer OFFERED as
+//                   optional (optionalOffered) toggle.
 //   - materials:    re-anchor the line/component to the chosen grade, recompose
 //                   subtype + reference + swatch, and reprice.
 //
@@ -113,15 +114,33 @@ export function applyClientPick(bundle, pick) {
   }
 
   // Optionals — a TOGGLE: `on` includes the add-on (isOptional = !on), and it
-  // flips back out when `on` is false. Eligible = lines the dealer OFFERED as
-  // optional (optionalOffered), NOT just the currently-excluded ones, so an
-  // already-included optional can be toggled off again — mirrors the server.
-  for (const [lineId, on] of Object.entries(pick.optionals || {})) {
-    const i = next.findIndex((l) => l.id === lineId);
-    if (i < 0 || !next[i].optionalOffered) continue;
-    if (!!next[i].isOptional === !on) continue; // already in the requested state
-    next[i] = { ...next[i], isOptional: !on };
-    changed = true;
+  // flips back out when `on` is false. Eligible = lines (or components one
+  // level down) the dealer OFFERED as optional (optionalOffered), NOT just the
+  // currently-excluded ones, so an already-included optional can be toggled off
+  // again — mirrors the server.
+  for (const [id, on] of Object.entries(pick.optionals || {})) {
+    // Line-level offered optional (a standalone dealer add-on).
+    const li = next.findIndex((l) => l.id === id);
+    if (li >= 0) {
+      if (!next[li].optionalOffered || !!next[li].isOptional === !on) continue;
+      next[li] = { ...next[li], isOptional: !on };
+      changed = true;
+      continue;
+    }
+    // Component-level offered optional inside a compound line.
+    for (let i = 0; i < next.length; i++) {
+      const comps = next[i].components;
+      if (!Array.isArray(comps)) continue;
+      const ci = comps.findIndex((c) => c.id === id && c.optionalOffered);
+      if (ci < 0) continue;
+      if (!!comps[ci].isOptional !== !on) {
+        const newComps = comps.slice();
+        newComps[ci] = { ...newComps[ci], isOptional: !on };
+        next[i] = { ...next[i], components: newComps };
+        changed = true;
+      }
+      break;
+    }
   }
 
   // Materials — the id is a line OR a component within a compound line.

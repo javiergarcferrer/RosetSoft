@@ -789,6 +789,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 families={families}
                 materialSelections={materialSelections}
                 onSelectMaterial={onSelectMaterial}
+                onToggleOptional={onToggleOptional}
               />
             ))}
           </ul>
@@ -823,80 +824,88 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families, materialSelections, onSelectMaterial }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families, materialSelections, onSelectMaterial, onToggleOptional }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
   const optional = !!component.isOptional;
+  // A dealer-offered optional sub-piece the client can fold in / out right
+  // here — the SAME add/remove affordance as a standalone optional line, one
+  // level down. Only on the interactive link (onToggleOptional present).
+  const offered = !!onToggleOptional && !!component.optionalOffered;
+  const included = !optional;
   return (
-    <li className={`py-2 flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4 ${
-      optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''
-    }`}>
+    <li className={`py-2 ${optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''}`}>
       {/* Optional: dim with a white veil; the swatch carries its own
           z-[2] so the fabric colour stays visible to the client. */}
       {optional && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
-      <div className="min-w-0 sm:flex-1">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
-          {optional && (
-            <span className="eyebrow-xs font-normal tracking-widest">
-              Opcional · no incluido
-            </span>
-          )}
-        </div>
-        {(component.subtype || component.reference || component.dimensions) && (
-          <div className="min-w-0 mt-0.5">
-            {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
-            {(component.reference || component.dimensions) && (
-              <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                {component.reference && <span className="font-mono">REF. {component.reference}</span>}
-                {component.dimensions && <span>DIM. {component.dimensions}</span>}
-              </div>
+      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4">
+        <div className="min-w-0 sm:flex-1">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
+            {/* Read-only surfaces keep the static caption; the interactive link
+                shows the on-row add/remove action below instead (offered). */}
+            {optional && !offered && (
+              <span className="eyebrow-xs font-normal tracking-widest">
+                Opcional · no incluido
+              </span>
             )}
           </div>
-        )}
-        {/* Fabric swatch — suppressed when the material-options grid renders
-            (it already leads with this same material), mirroring the
-            standalone line. */}
-        {!component.materialOptions?.options?.length && (component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
-          <div className="mt-2">
-            <ImageZoom
-              id={component.swatchImageId}
-              fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
-              alt="Muestra de tela"
-              className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
-            />
-          </div>
-        )}
-        <MaterialOptionsStrip
-          materialOptions={component.materialOptions}
-          reference={component.reference}
-          families={families}
-          currency={currency}
-          rates={rates}
-          baseSwatchImageId={component.swatchImageId}
-          selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
-          onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
-        />
-        {component.description && (
-          <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
-            {component.description}
-          </div>
-        )}
+          {(component.subtype || component.reference || component.dimensions) && (
+            <div className="min-w-0 mt-0.5">
+              {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
+              {(component.reference || component.dimensions) && (
+                <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
+                  {component.reference && <span className="font-mono">REF. {component.reference}</span>}
+                  {component.dimensions && <span>DIM. {component.dimensions}</span>}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Fabric swatch — suppressed when the material-options grid renders
+              (it already leads with this same material), mirroring the
+              standalone line. */}
+          {!component.materialOptions?.options?.length && (component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
+            <div className="mt-2">
+              <ImageZoom
+                id={component.swatchImageId}
+                fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
+                alt="Muestra de tela"
+                className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
+              />
+            </div>
+          )}
+          <MaterialOptionsStrip
+            materialOptions={component.materialOptions}
+            reference={component.reference}
+            families={families}
+            currency={currency}
+            rates={rates}
+            baseSwatchImageId={component.swatchImageId}
+            selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
+            onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
+          />
+          {component.description && (
+            <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
+              {component.description}
+            </div>
+          )}
+        </div>
+        <div className={`text-right tabular-nums whitespace-nowrap text-xs sm:text-sm ${
+          optional ? 'text-ink-500' : ''
+        }`}>
+          <span className="text-ink-700">{qty}</span>
+          <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
+          <span className="text-ink-700">{fmt(unit)}</span>
+          <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
+          <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
+            {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
+          </span>
+        </div>
       </div>
-      <div className={`text-right tabular-nums whitespace-nowrap text-xs sm:text-sm ${
-        optional ? 'text-ink-500' : ''
-      }`}>
-        <span className="text-ink-700">{qty}</span>
-        <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
-        <span className="text-ink-700">{fmt(unit)}</span>
-        <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-        <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
-          {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
-        </span>
-      </div>
+      {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(component.id, on)} />}
     </li>
   );
 }

@@ -215,6 +215,14 @@ export interface LineComponent {
    */
   isOptional?: boolean;
   /**
+   * The dealer designated this component as a CLIENT-toggleable optional
+   * add-on (mirrors the line-level `optionalOffered`). Stable across client
+   * picks, so the recipient can fold the sub-piece IN and back OUT on the
+   * public share link; `isOptional` is the current include/exclude state.
+   * Also lives on the JSONB component shape — no DB column.
+   */
+  optionalOffered?: boolean;
+  /**
    * Fabric swatch image (by `images.id`) chosen via the SwatchPicker
    * for this component. Distinct from the parent line's imageId
    * (the product photo). Lives inline on the JSONB component shape.
