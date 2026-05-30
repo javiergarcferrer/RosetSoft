@@ -182,39 +182,29 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
                     <span className="chip bg-ink-100 text-ink-700 border border-ink-200">Grado {g}</span>
                     <span className="text-sm tabular-nums text-ink-900 whitespace-nowrap">{usd(p?.priceUsd)}</span>
                   </button>
-        <span className="ml-auto inline-flex items-center gap-2">
-          <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800">Actualizar</button>
-          <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800">Quitar</button>
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-2">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Link2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); link(); } }}
-            placeholder="Pega el enlace de Ligne Roset de este modelo para filtrar las telas…"
-            className="input pl-8 text-xs py-1.5"
-            autoFocus={editing}
-          />
-        </div>
-        <button type="button" onClick={link} disabled={busy || !url.trim()} className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
-          {busy ? 'Vinculando…' : 'Vincular'}
-        </button>
-        {editing && (
-          <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
-            <X size={13} />
-          </button>
-        )}
-      </div>
-      {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
-    </div>
+                );
+              })}
+            </div>
+          ) : (
+            // Shared material→color body, restricted to the model's grades.
+            // Picking forces a specific COLOR before placing: the product
+            // (price/reference) comes from the material's own grade, the
+            // subtype + swatch from the chosen color.
+            <MaterialColorPicker
+              materials={materials}
+              gradeFilter={sel.grades}
+              nameFilter={nameFilter}
+              family={sel}
+              currentGrade=""
+              currentFabric=""
+              onPick={(material, color) => {
+                const grade = String(material.grade || '').toUpperCase();
+                insertProduct(sel, productForGrade(sel, grade), grade, material, color);
+              }}
+            />
+          )}
+        </>
+      )}
+    </Modal>
   );
 }
