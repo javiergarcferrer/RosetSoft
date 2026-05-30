@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
@@ -334,6 +334,13 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             <span className="text-xl sm:text-2xl font-semibold text-white text-right whitespace-nowrap">
               {hasRange ? `${fmt(totalsRange.min)} – ${fmt(totalsRange.max)}` : fmt(totals.grandTotal)}
             </span>
+          </div>
+          {/* Standing inclusion note — the quoted price already covers freight
+              + customs brokerage. Sits right under the total so it reads as a
+              qualifier of the number. */}
+          <div className="mt-2 flex items-center justify-end gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+            <Truck size={13} className="flex-shrink-0" aria-hidden />
+            Flete y agenciamiento incluido
           </div>
           {savings > 0 && (
             <div className="mt-2 text-right text-xs font-medium text-brand-700">

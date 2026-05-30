@@ -3,7 +3,7 @@ import type { Quote, QuoteLine, Totals } from '../types/domain.ts';
 import { ITBIS_PCT, quoteSavings, computeTotalsRange } from '../lib/pricing.js';
 import {
   PAGE_W, MARGIN_L, MARGIN_R,
-  INK_HIGH, INK_MID, INK_LINE, BRAND_700,
+  INK_HIGH, INK_MID, INK_LINE, BRAND_700, EMERALD_700,
   BAND_INK, BAND_CREAM, WHITE,
   FS_TOTAL_BIG, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
@@ -147,6 +147,12 @@ export function drawTotals(
     );
   }
   y = bandBottom - 14;
+
+  // ---- "Flete y agenciamiento incluido" note (right under the band) ----
+  // Standing reassurance that the quoted price already covers freight + customs
+  // brokerage; mirrors the on-screen ClientPreview note.
+  drawRightAt(page, 'FLETE Y AGENCIAMIENTO INCLUIDO', rightX, y - FS_META, FS_META, fontBold, EMERALD_700);
+  y -= 16;
 
   // ---- "Ahorras $X" callout (below the band, right-aligned) -----------
   // Aggregates per-line discounts + the quote-level discount into one
