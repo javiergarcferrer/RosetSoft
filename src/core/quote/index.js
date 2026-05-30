@@ -1,0 +1,34 @@
+// The quote MODEL — the logic + data core, framework-agnostic (no React, no
+// Supabase, no pdf-lib). It's the single place the quote's rules live; the
+// per-view ViewModels and the Views derive from here and nothing re-implements
+// the logic on its own.
+//
+// MVVM layering:
+//   • Model      — this package: pricing, grouping, predicates, the exchange-
+//                  rate state, and `applyAction` (the one mutation reducer).
+//   • ViewModel  — `views/*`: pure projections shaped to what each view needs.
+//   • View       — the renderers (ClientPreview, the editor, the PDF) that read
+//                  a ViewModel and render it; they derive nothing themselves.
+//
+// (During the migration the pricing/grouping/rate helpers physically still live
+// under src/lib and are surfaced here; new code imports them from the Model.)
+
+// ---- derivations: pricing + grouping (totals, ranges, group runs, positions)
+export * from '../../lib/pricing.js';
+
+// ---- predicates (what counts toward the total)
+export { isPricedLine, isPricedComponent } from '../../lib/constants.js';
+
+// ---- group attributes
+export { isGroupOptional, selectAlternativePatches } from '../../lib/quoteGroups.js';
+
+// ---- exchange-rate state (live-until-accept lock; the single source of truth)
+export {
+  quoteRateState, displayRatesFor, effectiveRates, effectiveDopRate, readExchangeRate,
+} from '../../lib/exchangeRate.js';
+
+// ---- the one mutation reducer (optimistic client + authoritative server share it)
+export { applyAction, applyClientPick } from './actions.js';
+
+// ---- ViewModels (per-view projections off the Model)
+export { resolveClientPreview } from './views/clientPreview.js';

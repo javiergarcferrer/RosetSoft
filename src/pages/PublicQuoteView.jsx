@@ -3,11 +3,10 @@ import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine } from '../lib/constants.js';
+// Derivations + the one mutation reducer come from the quote Model.
+import { computeTotals, lineForTotals, isPricedLine, applyAction } from '../core/quote/index.js';
 import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
-import { applyClientPick as applyPickLocally } from '../lib/clientPick.js';
 
 /**
  * Public, logged-OUT interactive quote view (route #/q/:token).
@@ -73,15 +72,15 @@ export default function PublicQuoteView() {
     [lines, quote],
   );
 
-  // Apply a pick. The preview updates INSTANTLY by replaying the pick locally
-  // (applyPickLocally mirrors the Edge Function), then we persist in the
-  // background. The controls stay live the whole time — no waiting on the save.
-  // We reconcile to the server's authoritative bundle only after the write
+  // Apply a pick. The preview updates INSTANTLY by replaying the action locally
+  // through the Model (applyAction mirrors the Edge Function), then we persist
+  // in the background. The controls stay live the whole time — no waiting on the
+  // save. We reconcile to the server's authoritative bundle only after the write
   // queue drains (an earlier response is stale vs. a later optimistic pick); a
   // failed write re-syncs to server truth.
   function applyPick(pick) {
     if (!bundleRef.current) return;
-    const optimistic = applyPickLocally(bundleRef.current, pick);
+    const optimistic = applyAction(bundleRef.current, pick);
     if (optimistic !== bundleRef.current) commit(optimistic);
     setSave('saving');
     pendingRef.current += 1;

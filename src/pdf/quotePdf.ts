@@ -4,7 +4,7 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
-import { displayRatesFor } from '../lib/exchangeRate.js';
+import { displayRatesFor } from '../core/quote/index.js';
 import { LINE_KIND_SECTION } from '../lib/constants.js';
 import { embedImageById } from './embed.js';
 import { setGroupInfo, groupRuns, sectionSubtotal } from '../lib/pricing.js';

@@ -4,10 +4,13 @@ import { Hash, AlertCircle, PackageSearch, Share2, Plus } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { computeTotals, computeTotalsRange, lineForTotals } from '../lib/pricing.js';
+// Derivations, the rate state, and predicates all come from the quote Model.
+import {
+  computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
+  effectiveRates, quoteRateState,
+} from '../core/quote/index.js';
 import { groupFamilies } from '../lib/catalog.js';
-import { effectiveRates, quoteRateState } from '../lib/exchangeRate.js';
-import { LINE_KIND_ITEM, isPricedLine } from '../lib/constants.js';
+import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 

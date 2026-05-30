@@ -5,13 +5,13 @@ import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  quoteSavings, setSubtotal, setSubtotalRange, setGroupInfo, alternativeGroupInfo,
+  setSubtotal, setSubtotalRange,
   alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
-  computeTotalsRange, isRangeLine, lineTotalRange, selectedAlternative,
+  isRangeLine, lineTotalRange, selectedAlternative,
   isRangeComponent, componentSubtotalRange, lineHasRange, componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
-import { LINE_KIND_SECTION } from '../../lib/constants.js';
+import { resolveClientPreview } from '../../core/quote/views/clientPreview.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
@@ -68,29 +68,14 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // recipient knows they can configure the quote right here.
   const interactive = !!(onSelectMaterial || onSelectAlternative || onToggleOptional);
 
-  // Group lines under their preceding section, if any. Top-level items (no
-  // section before them) live under a null-key group rendered without a
-  // heading.
-  const groups = useMemo(() => groupBySection(lines), [lines]);
-  // Total cash the customer is saving across line-level + quote-level
-  // discounts. Surfaced under the totals as a one-line callout when
-  // non-zero so the concessions don't read as silent post-discount
-  // numbers.
-  const savings = useMemo(() => quoteSavings(lines, totals), [lines, totals]);
-  // Grand-total RANGE — computed here from the lines (not the `totals` prop) so
-  // the public share link, which has no catalog, still widens the total for
-  // material-less pieces. Collapses to a point once every line is specified.
-  const totalsRange = useMemo(
-    () => computeTotalsRange(lines, { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping }),
-    [lines, quote.marginPct, quote.discountPct, quote.shipping],
+  // ViewModel — the derived facts this view renders (section groups, the
+  // savings callout, the grand-total range, and the "Alternativa/Conjunto N de
+  // M" position lookups). All of it is computed by the quote Model
+  // (core/quote/views/clientPreview); the View derives nothing itself.
+  const { groups, savings, totalsRange, hasRange, groupInfo, setInfo } = useMemo(
+    () => resolveClientPreview({ quote, lines, totals }),
+    [quote, lines, totals],
   );
-  const hasRange = totalsRange.max > totalsRange.min;
-  // "Alternativa N de M" and "Conjunto N de M" position lookups, keyed by
-  // line id. Both come from the shared lib helpers rather than being
-  // re-derived here, so the caption reads identically across editor /
-  // preview / PDF.
-  const groupInfo = useMemo(() => alternativeGroupInfo(lines), [lines]);
-  const setInfo = useMemo(() => setGroupInfo(lines), [lines]);
 
   // overflow-clip (not -hidden) so the rounded corners still clip the
   // full-bleed banner WITHOUT establishing a scroll container — an
@@ -1093,17 +1078,3 @@ function TotalRow({ label, value, muted, accent }) {
   );
 }
 
-function groupBySection(lines) {
-  const groups = [];
-  let cur = { label: null, items: [] };
-  for (const l of lines) {
-    if (l.kind === LINE_KIND_SECTION) {
-      if (cur.items.length || cur.label) groups.push(cur);
-      cur = { label: l.name || 'Sección', items: [] };
-    } else {
-      cur.items.push(l);
-    }
-  }
-  if (cur.items.length || cur.label) groups.push(cur);
-  return groups;
-}
