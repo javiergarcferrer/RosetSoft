@@ -5,14 +5,11 @@ import ImageZoom from './ImageZoom.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  setSubtotal, setSubtotalRange,
-  alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
-  isRangeLine, lineTotalRange, selectedAlternative,
+  isRangeLine, lineTotalRange,
   isRangeComponent, componentSubtotalRange, lineHasRange, componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
-import { resolveClientPreview } from '../../core/quote/views/clientPreview.js';
-import { isGroupOptional } from '../../lib/quoteGroups.js';
+import { resolveQuoteView } from '../../core/quote/views/quoteView.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
@@ -68,14 +65,17 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // recipient knows they can configure the quote right here.
   const interactive = !!(onSelectMaterial || onSelectAlternative || onToggleOptional);
 
-  // ViewModel — the derived facts this view renders (section groups, the
-  // savings callout, the grand-total range, and the "Alternativa/Conjunto N de
-  // M" position lookups). All of it is computed by the quote Model
-  // (core/quote/views/clientPreview); the View derives nothing itself.
-  const { groups, savings, totalsRange, hasRange, groupInfo, setInfo } = useMemo(
-    () => resolveClientPreview({ quote, lines, totals }),
-    [quote, lines, totals],
+  // ViewModel — the SHARED content tree (sections → group-runs with footer
+  // data, savings, the grand-total range, the "Alternativa/Conjunto N de M"
+  // position maps). Computed by the quote Model (core/quote/views/quoteView);
+  // the PDF renders the same tree. This view derives nothing itself.
+  const view = useMemo(
+    () => resolveQuoteView({ quote, lines, settings, quoteGroups }),
+    [quote, lines, settings, quoteGroups],
   );
+  const { savings, totalsRange, hasRange, groupInfo, setInfo, sections } = view;
+  // id → line, for resolving a run's `lineIds` back to its line objects.
+  const byId = useMemo(() => new Map(lines.map((l) => [l.id, l])), [lines]);
 
   // overflow-clip (not -hidden) so the rounded corners still clip the
   // full-bleed banner WITHOUT establishing a scroll container — an
@@ -177,23 +177,15 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             Aún no hay artículos en esta cotización.
           </div>
         ) : (
-          groups.map((g, gi) => {
-            // groupRuns is THE shared source of truth for card boundaries —
-            // the SAME helper the editor (LineItemList) uses. We run it over
-            // this section's items (sections are stripped by groupBySection,
-            // so a run never straddles a section boundary) and render each
-            // run: 'single' → a flat row as before; 'set' / 'alternative' →
-            // a bordered container card (header eyebrow + member rows + one
-            // footer total), mirroring the editor's GroupCard with the
-            // read-only customer treatment.
-            const byId = new Map(g.items.map((l) => [l.id, l]));
-            const runs = groupRuns(g.items);
+          sections.map((section, gi) => {
+            // The ViewModel already resolved the card boundaries (runs) + each
+            // group's footer DATA; the view just renders them. 'single' → a flat
+            // row; 'set' / 'alternative' → a bordered card (header + member rows
+            // + one footer total), formatting the footer numbers for currency.
             const list = (
               <ul>
-                {runs.map((run) => {
+                {section.runs.map((run) => {
                   if (run.type === 'single') {
-                    // Ungrouped line — render the row flat, exactly as
-                    // before. (Sections never appear here.)
                     const l = byId.get(run.lineIds[0]);
                     if (!l) return null;
                     return (
@@ -217,33 +209,16 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                   // Group run → a container card wrapping the member rows.
                   const members = run.lineIds.map((id) => byId.get(id)).filter(Boolean);
                   const isSet = run.type === 'set';
-                  // Only Conjuntos can be optional — an Alternativa always uses one.
-                  const optional = isSet && isGroupOptional(quoteGroups, run.groupId);
-                  let footerValueLabel;
-                  if (isSet) {
-                    // Range-aware: a Conjunto widens when any take-all member is
-                    // material-less (a range line or a compound with one).
-                    const sr = setSubtotalRange(lines, run.groupId);
-                    footerValueLabel = sr.max > sr.min
-                      ? `${fmt(sr.min)} – ${fmt(sr.max)}`
-                      : fmt(setSubtotal(lines, run.groupId));
-                  } else {
-                    const altSel = selectedAlternative(lines, run.groupId);
-                    // lineHasRange (not isRangeLine) so a COMPOUND selected
-                    // alternative rolls up as a range too.
-                    if (altSel && lineHasRange(altSel)) {
-                      const rr = lineTotalRange(altSel);
-                      footerValueLabel = `${fmt(rr.min)} – ${fmt(rr.max)}`;
-                    } else {
-                      footerValueLabel = fmt(alternativeSubtotal(lines, run.groupId));
-                    }
-                  }
+                  const { footer } = run;
+                  const footerValueLabel = footer.amountRange
+                    ? `${fmt(footer.amountRange.min)} – ${fmt(footer.amountRange.max)}`
+                    : fmt(footer.amount);
                   return (
                     <ClientGroupCard
                       key={`grp-${run.groupId}-${run.start}`}
                       type={run.type}
                       memberCount={members.length}
-                      optional={optional}
+                      optional={footer.optional}
                       footerLabel={isSet ? 'Total del conjunto' : 'Total'}
                       footerValue={footerValueLabel}
                     >
@@ -269,18 +244,13 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                 })}
               </ul>
             );
-            // Section roll-up — the sum of the priced products under this
-            // header (same isPricedLine rule as the grand total). Shown only
-            // for labelled sections with something to total.
-            const secSub = g.label ? sectionSubtotal(g.items) : 0;
+            const secSub = section.subtotal;
             return (
               <div key={gi} className="mb-2">
-                {g.label ? (
-                  // Labelled section → collapsible <details> landmark. The
-                  // summary carries the same terracotta eyebrow + rule the
-                  // PDF uses + the section subtotal; open by default, a chevron
-                  // flags it's collapsible on touch.
-                  <SectionDisclosure label={g.label} subtotalLabel={secSub > 0 ? fmt(secSub) : null}>{list}</SectionDisclosure>
+                {section.label ? (
+                  // Labelled section → collapsible <details> landmark with the
+                  // section subtotal; open by default.
+                  <SectionDisclosure label={section.label} subtotalLabel={secSub > 0 ? fmt(secSub) : null}>{list}</SectionDisclosure>
                 ) : (
                   // Top-level / unlabelled group — flush, no disclosure.
                   list
