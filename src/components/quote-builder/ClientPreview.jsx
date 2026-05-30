@@ -131,12 +131,14 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
       </div>
 
       {/* Customer block — client at the start; the vendedor + referring
-          professional sit together at the end. The outer row is
-          space-between (client start / vendor-pro end); the inner pair runs
-          INLINE on mobile (side by side) and stacks on sm+. */}
+          professional sit together at the end. On sm+ the row does NOT wrap:
+          the client column flexes (its long address wraps INSIDE that column)
+          and the vendor/pro stack stays pinned at the end, so the two blocks
+          stay justified instead of the second wrapping below. The inner pair
+          runs INLINE on mobile (side by side) and stacks on sm+. */}
       {(customer || seller || professional) && (
-        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-6">
-          <div className="min-w-0">
+        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-nowrap sm:items-start sm:justify-between sm:gap-x-6">
+          <div className="min-w-0 sm:flex-1">
             <div className="eyebrow mb-1.5">Cliente</div>
             {customer ? (
               <>
@@ -144,8 +146,16 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                     identity after the company, matching the PDF. */}
                 <div className="text-lg font-semibold text-ink-900">{customer.name}</div>
                 {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
-                <div className="text-[11px] text-ink-500 leading-relaxed mt-1">
-                  {[customer.address, [customer.city, customer.state, customer.zip].filter(Boolean).join(', '), customer.country, customer.email, customer.phone].filter(Boolean).join(' · ')}
+                {/* Stacked details, one line each: contact (email · phone),
+                    then street, then city/state/zip. Country is omitted. */}
+                <div className="text-[11px] text-ink-500 leading-relaxed mt-1 space-y-0.5">
+                  {(customer.email || customer.phone) && (
+                    <div>{[customer.email, customer.phone].filter(Boolean).join(' · ')}</div>
+                  )}
+                  {customer.address && <div>{customer.address}</div>}
+                  {(customer.city || customer.state || customer.zip) && (
+                    <div>{[customer.city, customer.state, customer.zip].filter(Boolean).join(', ')}</div>
+                  )}
                 </div>
               </>
             ) : (
