@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Ship, ChevronDown } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
-import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
+import { normalizeContainerNo, resolveTrackableContainers } from '../core/tracking/index.js';
 import ContainerTracking from './ContainerTracking.jsx';
 
 /**
@@ -36,7 +36,7 @@ export default function ShipmentTracking({
     null,
   );
   const trackable = useMemo(
-    () => (provided ?? queried ?? []).filter((c) => isValidContainerNo(c.code)),
+    () => resolveTrackableContainers(provided ?? queried),
     [provided, queried],
   );
   const [open, setOpen] = useState(false);

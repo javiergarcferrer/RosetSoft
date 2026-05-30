@@ -5,7 +5,7 @@ import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 // Derivations + the one mutation reducer come from the quote Model.
 import { computeTotals, lineForTotals, isPricedLine, applyAction } from '../core/quote/index.js';
-import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
+import { normalizeContainerNo, resolveTrackableContainers } from '../core/tracking/index.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
 
 /**
@@ -61,7 +61,7 @@ export default function PublicQuoteView() {
   // client can follow their shipment from the same link they used to configure
   // the quote. Validated here; each renders its own keyless tracking panel.
   const trackable = useMemo(
-    () => (bundle?.containers || []).filter((c) => isValidContainerNo(c.code)),
+    () => resolveTrackableContainers(bundle?.containers),
     [bundle],
   );
 

@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Ship, RefreshCw, AlertCircle, List, ArrowRight, CheckCircle2, Navigation, MapPin } from 'lucide-react';
-import { supabase } from '../db/supabaseClient.js';
 import { formatDateTime } from '../lib/format.js';
-import {
-  summarizeTracking, buildTrackingRoute, summarizeVoyage, MODE_LABELS, CLASSIFIER_LABELS,
-} from '../lib/containerTracking.js';
+import { MODE_LABELS, CLASSIFIER_LABELS } from '../lib/containerTracking.js';
+import { useContainerTracking } from '../core/tracking/useContainerTracking.js';
 import ContainerTrackingMap from './ContainerTrackingMap.jsx';
 import Dropdown, { DropdownItem } from './primitives/Dropdown.jsx';
 
@@ -26,55 +24,11 @@ import Dropdown, { DropdownItem } from './primitives/Dropdown.jsx';
  * session.
  */
 export default function ContainerTracking({ containerNo, shareToken }) {
-  const [state, setState] = useState({ status: 'loading', summary: null, error: null, fetchedAt: null });
-
-  async function load() {
-    setState({ status: 'loading', summary: null, error: null, fetchedAt: null });
-    try {
-      const { data, error } = await supabase.functions.invoke('hl-track', {
-        body: { containerNo, shareToken },
-      });
-      if (error) {
-        let msg = error.message || 'No se pudo rastrear el contenedor';
-        try {
-          // The function returns { error, status, detail } on upstream
-          // failures; surface the cause instead of a generic message.
-          const body = await error.context?.json?.();
-          if (body?.error) {
-            msg = body.error;
-            if (body.status) msg += ` (HTTP ${body.status})`;
-          }
-        } catch { /* body already consumed / not JSON */ }
-        throw new Error(msg);
-      }
-      if (data?.error) throw new Error(data.error);
-      setState({
-        status: 'done',
-        summary: summarizeTracking(data?.events),
-        error: null,
-        fetchedAt: data?.fetchedAt || null,
-      });
-    } catch (e) {
-      setState({ status: 'error', summary: null, error: e?.message || 'Error', fetchedAt: null });
-    }
-  }
-
-  useEffect(() => { load(); }, [containerNo, shareToken]);
-
-  const { status, summary, error, fetchedAt } = state;
+  // ViewModel — owns the hl-track fetch + the summary → route → voyage
+  // derivation; this view renders it and derives nothing itself.
+  const { status, summary, error, fetchedAt, route, voyage, milestoneStop, reload } =
+    useContainerTracking(containerNo, shareToken);
   const mapRef = useRef(null);
-  // Geocoded port hops for the map; empty when no event carries a known
-  // UN/LOCODE, in which case the textual timeline below stands on its own.
-  const route = useMemo(() => buildTrackingRoute(summary), [summary]);
-  // High-level voyage facts for the map's HUD (endpoints, ETA, progress).
-  const voyage = useMemo(() => summarizeVoyage(route, summary, containerNo), [route, summary, containerNo]);
-  // Which map stop each timeline event belongs to, so clicking a row focuses
-  // the matching marker. Built from the same milestone object identities.
-  const milestoneStop = useMemo(() => {
-    const m = new Map();
-    route.stops.forEach((s, i) => (s.events || []).forEach((e) => m.set(e, i)));
-    return m;
-  }, [route]);
 
   const meta = [voyage.vessel, voyage.voyage, voyage.carrier].filter(Boolean).join(' · ');
   const etaDays = !voyage.arrived && voyage.etaAt ? Math.round((voyage.etaAt - Date.now()) / 86_400_000) : null;
@@ -91,7 +45,7 @@ export default function ContainerTracking({ containerNo, shareToken }) {
         </span>
         <button
           type="button"
-          onClick={load}
+          onClick={reload}
           disabled={status === 'loading'}
           className="text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-50"
         >

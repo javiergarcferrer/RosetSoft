@@ -12,7 +12,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
-import { isValidContainerNo } from '../lib/containerTracking.js';
+import { resolveTrackableContainers } from '../core/tracking/index.js';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import { quoteStagePill } from '../lib/statusPill.js';
@@ -155,8 +155,8 @@ export default function Quotes() {
   // quote row offers tracking only when its order has a real shipment to track.
   const trackableByOrderId = useMemo(() => {
     const m = new Map();
-    for (const c of containers) {
-      if (!c.orderId || !isValidContainerNo(c.code)) continue;
+    for (const c of resolveTrackableContainers(containers)) {
+      if (!c.orderId) continue;
       if (!m.has(c.orderId)) m.set(c.orderId, []);
       m.get(c.orderId).push(c);
     }
