@@ -3,10 +3,9 @@ import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check, CloudOff, Ship } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
-import { computeTotals, lineForTotals, lineTotal } from '../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { isValidContainerNo, normalizeContainerNo } from '../lib/containerTracking.js';
-import { formatMoney } from '../lib/format.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
 import { applyClientPick as applyPickLocally } from '../lib/clientPick.js';
 
@@ -58,9 +57,6 @@ export default function PublicQuoteView() {
 
   const bundle = state.bundle;
   const quote = bundle?.quote || null;
-  const currency = quote?.currencyCode || 'USD';
-  const rates = quote?.rates || { USD: 1 };
-  const fmt = (v) => formatMoney(v, currency, rates);
   const lines = useMemo(() => bundle?.lines || [], [bundle]);
   // The attached order's trackable containers (from the share bundle), so the
   // client can follow their shipment from the same link they used to configure
@@ -108,31 +104,6 @@ export default function PublicQuoteView() {
   const toggleOptional = (lineId, on) => applyPick({ optionals: { [lineId]: on } });
   const pickMaterial = (id, grade) => applyPick({ materials: { [id]: grade } });
 
-  // Choosable bits for the options panel: alternatives (pick-one menus) and a
-  // flag that some line/component can be re-quoted in another material.
-  // Optionals are NOT here — each dealer-offered optional carries its own
-  // Agregar / Quitar action ON its product card in the preview below, where it
-  // belongs, instead of a checklist divorced at the top of the page.
-  const { altGroups, hasMaterials } = useMemo(() => {
-    const groups = new Map();
-    let mats = false;
-    for (const l of lines) {
-      if (l.materialOptions?.options?.length) mats = true;
-      if (Array.isArray(l.components)) {
-        for (const c of l.components) if (c?.materialOptions?.options?.length) mats = true;
-      }
-      if (l.alternativeGroup) {
-        if (!groups.has(l.alternativeGroup)) groups.set(l.alternativeGroup, []);
-        groups.get(l.alternativeGroup).push(l);
-      }
-    }
-    return { altGroups: [...groups.entries()], hasMaterials: mats };
-  }, [lines]);
-
-  function selectedAltMember(members) {
-    return members.find((m) => m.isSelectedAlternative) || members[0] || null;
-  }
-
   if (state.status === 'loading') {
     return (
       <div className="h-full flex items-center justify-center bg-ink-50 text-ink-500">
@@ -153,8 +124,6 @@ export default function PublicQuoteView() {
     );
   }
 
-  const hasChoices = altGroups.length > 0 || hasMaterials;
-
   return (
     // Lives outside the app shell, so it can't lean on the Layout's <main>
     // scroll container — and html/body/#root are pinned to the viewport with
@@ -162,74 +131,6 @@ export default function PublicQuoteView() {
     // quote is clipped at the fold with no way to scroll on mobile.
     <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
-        {hasChoices && (
-          <section className="card p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <h2 className="text-sm font-semibold text-ink-900">Personaliza tu cotización</h2>
-              <SaveBadge state={save} />
-            </div>
-
-            {altGroups.map(([group, members]) => {
-              // Price each option as the DIFFERENCE vs. the one currently in the
-              // quote: the selected option shows its absolute total, the others
-              // show +/− what switching costs.
-              const selMember = selectedAltMember(members);
-              const selId = selMember?.id;
-              const selTotal = selMember ? lineTotal(selMember) : 0;
-              return (
-                <div key={group} className="mb-4 last:mb-0">
-                  <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Elige una opción</div>
-                  <div className="space-y-1.5">
-                    {members.map((m) => {
-                      const isSel = selId === m.id;
-                      const diff = lineTotal(m) - selTotal;
-                      return (
-                        <label
-                          key={m.id}
-                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
-                            isSel ? 'border-brand-400 bg-brand-50' : 'border-ink-200 hover:bg-ink-50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`alt-${group}`}
-                            checked={isSel}
-                            onChange={() => pickAlternative(group, m.id)}
-                            className="accent-brand-600"
-                          />
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-medium text-ink-900 truncate">{m.name || '—'}</span>
-                            {m.subtype && <span className="block text-[11px] text-ink-500 truncate">{m.subtype}</span>}
-                          </span>
-                          <span className="text-right whitespace-nowrap">
-                            {isSel ? (
-                              <>
-                                <span className="block text-sm font-semibold tabular-nums text-ink-900">{fmt(lineTotal(m))}</span>
-                                <span className="block text-[10px] text-ink-400">en tu total</span>
-                              </>
-                            ) : (
-                              <span className={`block text-sm font-semibold tabular-nums ${diff < 0 ? 'text-emerald-700' : 'text-ink-700'}`}>
-                                {diff === 0 ? 'Mismo precio' : `${diff < 0 ? '−' : '+'}${fmt(Math.abs(diff))}`}
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-
-            {hasMaterials && (
-              <div className="mt-3 text-[11px] text-ink-500 border-t border-ink-100 pt-3">
-                ¿Quieres otra tela o piel? Elígela en cada artículo más abajo —
-                verás la diferencia de precio y el total se actualiza al instante.
-              </div>
-            )}
-          </section>
-        )}
-
         <ClientPreview
           quote={quote}
           settings={bundle.settings || {}}
@@ -242,6 +143,7 @@ export default function PublicQuoteView() {
           families={undefined}
           onSelectMaterial={pickMaterial}
           onToggleOptional={toggleOptional}
+          onSelectAlternative={pickAlternative}
         />
 
         {/* Shipment tracking — appears once the quote's order has a container
@@ -272,19 +174,6 @@ export default function PublicQuoteView() {
       <SaveToast state={save} />
     </div>
   );
-}
-
-function SaveBadge({ state }) {
-  if (state === 'saving') {
-    return <span className="text-[11px] text-ink-400 inline-flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Guardando…</span>;
-  }
-  if (state === 'saved') {
-    return <span className="text-[11px] text-emerald-600 inline-flex items-center gap-1"><Check size={12} /> Guardado</span>;
-  }
-  if (state === 'error') {
-    return <span className="text-[11px] text-red-600 inline-flex items-center gap-1"><CloudOff size={12} /> No se pudo guardar</span>;
-  }
-  return null;
 }
 
 function SaveToast({ state }) {

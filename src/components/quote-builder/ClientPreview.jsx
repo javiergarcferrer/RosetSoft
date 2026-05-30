@@ -57,11 +57,15 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial, onToggleOptional }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
   const fmt = (v) => formatMoney(v, currency, rates);
+  // Interactive (the public share link wires onSelect* handlers) vs. read-only
+  // (the dealer's in-editor "Vista cliente"). Drives the banner copy so the
+  // recipient knows they can configure the quote right here.
+  const interactive = !!(onSelectMaterial || onSelectAlternative || onToggleOptional);
 
   // Group lines under their preceding section, if any. Top-level items (no
   // section before them) live under a null-key group rendered without a
@@ -95,7 +99,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
     <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
       {/* Banner so the dealer knows this is a preview, not the live editor */}
       <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between">
-        <span>Vista previa del cliente · de solo lectura</span>
+        <span>{interactive ? 'Personaliza tu cotización · elige opciones y telas' : 'Vista previa del cliente · de solo lectura'}</span>
         <span className="opacity-60">{formatDate(quote.updatedAt)}</span>
       </div>
 
@@ -252,6 +256,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                           materialSelections={materialSelections}
                           onSelectMaterial={onSelectMaterial}
                           onToggleOptional={onToggleOptional}
+                          onSelectAlternative={onSelectAlternative}
                         />
                       ))}
                     </ClientGroupCard>
@@ -343,7 +348,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional }) {
+function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -362,6 +367,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
         materialSelections={materialSelections}
         onSelectMaterial={onSelectMaterial}
         onToggleOptional={onToggleOptional}
+        onSelectAlternative={onSelectAlternative}
       />
     );
   }
@@ -413,9 +419,12 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
   // and the alternative dimming (so the customer sees which option is
   // selected) are preserved either way.
   const showRowGroupChrome = !insideGroupCard;
-  // A compact in-card eyebrow still flags the SELECTED alternative so the
-  // read-only menu reads clearly without a radio.
-  const showSelectedFlag = insideGroupCard && inGroup && isSelected;
+  // Interactive on the public share link: when onSelectAlternative is provided,
+  // each option gets a radio IN PLACE (no selector panel at the top of the
+  // page), mirroring the editor's pick-pane. The static flags are suppressed
+  // then — the radio already shows which option is the client's choice.
+  const selectable = inGroup && !!onSelectAlternative;
+  const showSelectedFlag = insideGroupCard && inGroup && isSelected && !selectable;
   return (
     <li className={`px-4 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
@@ -436,6 +445,9 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
+      {selectable && (
+        <AlternativeRadio line={line} groupInfo={groupInfo} isSelected={isSelected} onSelect={onSelectAlternative} />
+      )}
       {((optional && !offered) || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {/* Read-only surfaces (editor preview / PDF twin) keep the static
@@ -446,7 +458,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               Opcional · no incluido en el total
             </span>
           )}
-          {showRowGroupChrome && inGroup && groupInfo && (
+          {showRowGroupChrome && inGroup && groupInfo && !selectable && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
@@ -583,6 +595,35 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
   );
 }
 
+// Inline "pick one" radio for an alternative option on the interactive public
+// link — the SAME affordance the editor's pick-pane uses, placed ON the option
+// (not in a selector panel at the top of the page). Sits above the dimming veil
+// (z-[2]) so a non-selected option stays tappable; selecting re-prices the
+// quote optimistically (PublicQuoteView.applyPick).
+function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(line.alternativeGroup, line.id)}
+      aria-pressed={isSelected}
+      title={isSelected ? 'Esta es tu elección' : 'Elegir esta opción'}
+      className="group/alt relative z-[2] mb-2.5 flex w-full items-center gap-2.5 text-left"
+    >
+      <span className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+        isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white group-hover/alt:border-brand-400'
+      }`}>
+        {isSelected && <Check size={11} strokeWidth={3} aria-hidden />}
+      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest">
+        {isSelected
+          ? <span className="text-brand-700">Tu elección</span>
+          : <span className="text-ink-500 transition-colors group-hover/alt:text-brand-700">Elegir esta opción</span>}
+        {groupInfo && <span className="ml-1.5 font-normal normal-case text-ink-400">Opción {groupInfo.index} de {groupInfo.total}</span>}
+      </span>
+    </button>
+  );
+}
+
 // Compound line — one family + one image header, then a stacked list of
 // component rows underneath. Each row has its own name / ref / dim /
 // subtype + its own qty × unit = subtotal. The whole block resolves into
@@ -593,7 +634,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional }) {
+function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -614,7 +655,9 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   // standalone eyebrow to avoid doubling. Optional treatment + alternative
   // dimming are preserved.
   const showRowGroupChrome = !insideGroupCard;
-  const showSelectedFlag = insideGroupCard && inGroup && isSelected;
+  // Interactive radio on the public link (same as the simple line).
+  const selectable = inGroup && !!onSelectAlternative;
+  const showSelectedFlag = insideGroupCard && inGroup && isSelected && !selectable;
   return (
     <li className={`px-4 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
@@ -634,12 +677,15 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
       {dimmed && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
       )}
+      {selectable && (
+        <AlternativeRadio line={line} groupInfo={groupInfo} isSelected={isSelected} onSelect={onSelectAlternative} />
+      )}
       {((optional && !offered) || (showRowGroupChrome && (inGroup || inSet)) || showSelectedFlag) && (
         <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest">
           {optional && !offered && (
             <span className="text-ink-500">Opcional · no incluido en el total</span>
           )}
-          {showRowGroupChrome && inGroup && groupInfo && (
+          {showRowGroupChrome && inGroup && groupInfo && !selectable && (
             <span className="text-brand-700 font-semibold">
               Alternativa {groupInfo.index} de {groupInfo.total}
               {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
