@@ -17,6 +17,14 @@
 // notes, commission, etc. are simply never copied into the bundle.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+// The pick REDUCER (pure domain Model) lives in ./pick.ts and is the SERVER half
+// of a rule the client's src/core/quote/actions.js (applyAction) also implements
+// — one rule, two layers (persisted rows here; the client-facing bundle there).
+// This file is the imperative SHELL: auth, I/O, the catalog price fetch,
+// persistence, and the client-bundle projection. Parity of the two layers is
+// pinned by tests/quotePickParity.test.js.
+import { num, rootOf, applyPicks, rootsForMaterialPicks } from './pick.ts';
+import type { GradeInfo } from './pick.ts';
 
 type Admin = ReturnType<typeof createClient>;
 type Row = Record<string, unknown>;
@@ -35,11 +43,6 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const num = (v: unknown): number => {
-  const n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
 // Pick a subset of an object's keys (shallow; for camelCase JSONB components).
 function pick<T extends Record<string, unknown>>(obj: T | null | undefined, keys: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -53,27 +56,6 @@ const COMPONENT_KEYS = [
   'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'optionalOffered',
   'alternativeGroup', 'isSelectedAlternative', 'materialOptions',
 ];
-
-// 8-digit family root of an upholstered SKU ("15420000G" -> "15420000").
-function rootOf(ref: unknown): string | null {
-  const m = /^(\d{8})[A-Za-z]$/.exec(String(ref || '').trim());
-  return m ? m[1] : null;
-}
-
-// Grade taxonomy + canonical subtype composer, mirrored from src/lib/subtype.ts
-// so a material switch writes the SAME "Grade X — Fabric" string the editor would
-// (T/Y/Z are intentionally absent from the price list).
-const ALPHA_GRADES = new Set(
-  'A B C D E F G H I J K L M N O P Q R S U V W X'.split(' '),
-);
-function composeSubtype(grade: string, fabric: string): string {
-  const g = (grade || '').trim();
-  const f = (fabric || '').trim();
-  if (!g && !f) return '';
-  if (!g) return f;
-  const gradeStr = ALPHA_GRADES.has(g.toUpperCase()) ? `Grade ${g.toUpperCase()}` : g;
-  return f ? `${gradeStr} — ${f}` : gradeStr;
-}
 
 // Enrich a line/component's materialOptions with a per-option `delta`: the
 // list-price difference between that grade's SKU and the base grade's SKU,
@@ -162,7 +144,6 @@ function clientLine(
 // Catalog list price (+ wholesale cost) per root→grade, for the given roots.
 // Scoped to the roots actually in play, which also dodges PostgREST's default
 // 1000-row cap silently truncating a large price list.
-interface GradeInfo { price: number; cost: number }
 async function priceMapForRoots(
   admin: Admin,
   profileId: unknown,
@@ -196,72 +177,6 @@ function priceOnly(full: Map<string, Map<string, GradeInfo>>): Map<string, Map<s
     out.set(root, m);
   }
   return out;
-}
-
-// Re-anchor a materialOptions blob so `pickedGrade` becomes the base (the
-// chosen material). The old base is demoted into the options list carrying the
-// entity's CURRENT swatch, so switching back later keeps that swatch. Returns
-// null when the grade isn't offered (a stale/invalid pick — leave untouched).
-function reanchor(
-  mo: { baseGrade?: unknown; baseLabel?: unknown; options?: unknown[] } | null | undefined,
-  pickedGrade: string,
-  currentSwatchId: unknown,
-): { newMo: Record<string, unknown>; label: string; newSwatchId: unknown } | null {
-  if (!mo) return null;
-  const options = Array.isArray(mo.options) ? mo.options as Record<string, unknown>[] : [];
-  if (String(mo.baseGrade) === pickedGrade) {
-    return { newMo: mo as Record<string, unknown>, label: String(mo.baseLabel ?? ''), newSwatchId: currentSwatchId ?? null };
-  }
-  const picked = options.find((o) => String(o.grade) === pickedGrade);
-  if (!picked) return null;
-  const oldBase = { grade: mo.baseGrade, label: mo.baseLabel ?? '', code: null, swatchImageId: currentSwatchId ?? null };
-  const newOptions = options.filter((o) => String(o.grade) !== pickedGrade).concat([oldBase]);
-  return {
-    newMo: { baseGrade: picked.grade, baseLabel: picked.label ?? '', options: newOptions },
-    label: String(picked.label ?? ''),
-    newSwatchId: picked.swatchImageId ?? null,
-  };
-}
-
-// snake_case patch to switch a LINE's own material to `grade`.
-function lineMaterialPatch(
-  line: Row,
-  grade: string,
-  priceMap: Map<string, Map<string, GradeInfo>>,
-): Row | null {
-  const r = reanchor(line.material_options as Row, grade, line.swatch_image_id);
-  if (!r) return null;
-  const root = rootOf(line.reference);
-  const info = root ? priceMap.get(root)?.get(grade.toUpperCase()) : null;
-  const patch: Row = {
-    material_options: r.newMo,
-    swatch_image_id: r.newSwatchId,
-    subtype: composeSubtype(grade, r.label),
-    // Picking a material resolves a material-less RANGE — drop it (the price is
-    // now pinned), mirroring the editor's GradeFabricRow.commit.
-    price_min: null,
-    price_max: null,
-  };
-  if (root) patch.reference = root + grade.toUpperCase();
-  if (info) { patch.unit_price = info.price; patch.unit_cost = info.cost; }
-  return patch;
-}
-
-// Return a NEW component object with its material switched to `grade`.
-function switchComponentMaterial(
-  comp: Row,
-  grade: string,
-  priceMap: Map<string, Map<string, GradeInfo>>,
-): Row {
-  const r = reanchor(comp.materialOptions as Row, grade, comp.swatchImageId);
-  if (!r) return comp;
-  const root = rootOf(comp.reference);
-  const info = root ? priceMap.get(root)?.get(grade.toUpperCase()) : null;
-  // Picking a material resolves a material-less RANGE — drop it (price pinned).
-  const next: Row = { ...comp, materialOptions: r.newMo, swatchImageId: r.newSwatchId, subtype: composeSubtype(grade, r.label), priceMin: null, priceMax: null };
-  if (root) next.reference = root + grade.toUpperCase();
-  if (info) next.unitPrice = info.price;
-  return next;
 }
 
 // Build the whole client-facing bundle for a resolved quote row. Re-reads the
@@ -401,141 +316,15 @@ Deno.serve(async (req: Request) => {
       .eq('quote_id', quote.id);
     const lineRows = (lineRowsData || []) as Row[];
 
-    // Indexes for validation + lookup.
-    const lineById = new Map<string, Row>();
-    const groupMembers = new Map<string, Set<string>>();
-    // Lines the dealer OFFERED as toggleable optionals — gated on
-    // optional_offered (the stable designation), NOT is_optional (the current
-    // include state), so a toggled-in optional can be toggled back OUT.
-    const optionalIds = new Set<string>();
-    // Components the dealer OFFERED as toggleable optionals — same role as
-    // optionalIds, one level down (gated on the component's optionalOffered).
-    const componentOptionalOffered = new Set<string>();
-    // Component alternative groups → { lineId, members } so the public link can
-    // pick a component-level alternative through the same channel as a line one.
-    const componentAltGroups = new Map<string, { lineId: string; members: Set<string> }>();
-    const materialGrades = new Map<string, Set<string>>();     // line OR component id → valid grades
-    const componentIndex = new Map<string, { lineId: string }>(); // component id → its line
-    const addMaterialTarget = (id: unknown, mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined) => {
-      if (!id || !mo || !Array.isArray(mo.options) || !mo.options.length) return;
-      const set = new Set<string>();
-      if (mo.baseGrade != null) set.add(String(mo.baseGrade));
-      for (const o of mo.options) { const g = (o as { grade?: unknown })?.grade; if (g != null) set.add(String(g)); }
-      if (set.size) materialGrades.set(String(id), set);
-    };
-    for (const l of lineRows) {
-      const id = String(l.id);
-      lineById.set(id, l);
-      if (l.alternative_group) {
-        const g = String(l.alternative_group);
-        if (!groupMembers.has(g)) groupMembers.set(g, new Set());
-        groupMembers.get(g)!.add(id);
-      }
-      if (l.optional_offered) optionalIds.add(id);
-      addMaterialTarget(l.id, l.material_options as { baseGrade?: unknown; options?: unknown[] } | null);
-      const comps = Array.isArray(l.components) ? l.components as Row[] : [];
-      for (const c of comps) {
-        if (c?.id != null) componentIndex.set(String(c.id), { lineId: id });
-        if (c?.optionalOffered) componentOptionalOffered.add(String(c.id));
-        if (c?.alternativeGroup != null && c?.id != null) {
-          const g = String(c.alternativeGroup);
-          if (!componentAltGroups.has(g)) componentAltGroups.set(g, { lineId: id, members: new Set() });
-          componentAltGroups.get(g)!.members.add(String(c.id));
-        }
-        addMaterialTarget(c?.id, c?.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
-      }
-    }
-
-    // Catalog prices for the roots touched by material picks (line + component).
-    const matRoots = new Set<string>();
-    for (const [id, grade] of Object.entries(body.materials || {})) {
-      const key = String(id);
-      if (!materialGrades.get(key)?.has(String(grade))) continue;
-      if (lineById.has(key)) { const r = rootOf(lineById.get(key)!.reference); if (r) matRoots.add(r); }
-      else if (componentIndex.has(key)) {
-        const line = lineById.get(componentIndex.get(key)!.lineId);
-        const comp = (line?.components as Row[] | undefined)?.find((c) => String(c.id) === key);
-        const r = rootOf(comp?.reference); if (r) matRoots.add(r);
-      }
-    }
+    // Which catalog roots the material picks touch — resolved by the Model so we
+    // fetch exactly those prices (the I/O stays in this shell).
+    const matRoots = rootsForMaterialPicks(lineRows, body);
     const priceMap = await priceMapForRoots(admin, quote.profile_id, matRoots);
 
-    // Accumulate one patch per line, then write each once. Component edits
-    // build on a working copy of the line's components so several picks on the
-    // same compound line compose.
-    const patches = new Map<string, Row>();
-    const workingComps = new Map<string, Row[]>();
-    const merge = (id: string, p: Row) => patches.set(id, { ...(patches.get(id) || {}), ...p });
-    const compsOf = (lineId: string): Row[] => {
-      if (!workingComps.has(lineId)) {
-        const comps = lineById.get(lineId)?.components;
-        workingComps.set(lineId, (Array.isArray(comps) ? comps as Row[] : []).map((c) => ({ ...c })));
-      }
-      return workingComps.get(lineId)!;
-    };
-
-    // Alternatives — only the chosen member of a group stays selected. The
-    // group is a LINE alternative group or a COMPONENT one (inside a compound).
-    for (const [group, pickedId] of Object.entries(body.alternatives || {})) {
-      const members = groupMembers.get(group);
-      if (members) {
-        if (!members.has(String(pickedId))) continue;
-        for (const memberId of members) merge(memberId, { is_selected_alternative: memberId === String(pickedId) });
-        continue;
-      }
-      // Component-level alternative group → flip isSelectedAlternative on the
-      // line's working components copy (composes with material/optional edits).
-      const cg = componentAltGroups.get(group);
-      if (cg && cg.members.has(String(pickedId))) {
-        const comps = compsOf(cg.lineId);
-        for (let i = 0; i < comps.length; i++) {
-          if (String(comps[i].alternativeGroup) === group) {
-            comps[i] = { ...comps[i], isSelectedAlternative: String(comps[i].id) === String(pickedId) };
-          }
-        }
-        merge(cg.lineId, { components: comps });
-      }
-    }
-
-    // Optionals — a TOGGLE: on=true folds the add-on into the quote
-    // (is_optional=false), on=false takes it back out (is_optional=true).
-    // The id is either a LINE the dealer offered (optional_offered) or a
-    // COMPONENT the dealer offered (its optionalOffered, one level down). A
-    // component toggle flips isOptional on its own entry within the line's
-    // working components copy, so it composes with a material pick on the same
-    // line — same pattern as the material branch below.
-    for (const [id, on] of Object.entries(body.optionals || {})) {
-      const key = String(id);
-      if (optionalIds.has(key)) { merge(key, { is_optional: !on }); continue; }
-      if (componentOptionalOffered.has(key) && componentIndex.has(key)) {
-        const lineId = componentIndex.get(key)!.lineId;
-        const comps = compsOf(lineId);
-        const idx = comps.findIndex((c) => String(c.id) === key);
-        if (idx >= 0) {
-          comps[idx] = { ...comps[idx], isOptional: !on };
-          merge(lineId, { components: comps });
-        }
-      }
-    }
-
-    // Materials — re-anchor the line (or component) to the chosen grade.
-    for (const [id, gradeRaw] of Object.entries(body.materials || {})) {
-      const key = String(id);
-      const grade = String(gradeRaw);
-      if (!materialGrades.get(key)?.has(grade)) continue;
-      if (lineById.has(key)) {
-        const p = lineMaterialPatch(lineById.get(key)!, grade, priceMap);
-        if (p) merge(key, p);
-      } else if (componentIndex.has(key)) {
-        const lineId = componentIndex.get(key)!.lineId;
-        const comps = compsOf(lineId);
-        const idx = comps.findIndex((c) => String(c.id) === key);
-        if (idx >= 0) {
-          comps[idx] = switchComponentMaterial(comps[idx], grade, priceMap);
-          merge(lineId, { components: comps });
-        }
-      }
-    }
+    // Apply the recipient's picks — the pure REDUCER (Model), mirrored by the
+    // client's applyAction. Validates against what the dealer offered and
+    // returns one snake_case patch per touched line.
+    const patches = applyPicks(lineRows, body, priceMap);
 
     // Persist — one UPDATE per touched line, scoped to this quote.
     for (const [id, patch] of patches) {

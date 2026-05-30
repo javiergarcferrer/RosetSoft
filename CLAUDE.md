@@ -111,10 +111,14 @@ locks at ACCEPT, single source `quoteRateState` (keyed on `acceptedAt`). Engine 
 - **Deno ↔ Vite is a hard wall**: app `src/*` (Vite, browser) and Edge Functions
   `supabase/functions/*` (Deno, server: URL imports, `Deno.env`, service-role key)
   are separate dependency graphs + deploys. Neither imports the other — **only data
-  crosses (HTTP/JSON), never code.** Logic that must run both client-optimistic AND
-  server-authoritative is TWO hand-kept copies on purpose: client
-  `core/quote/actions.js` (`applyAction`) ↔ server `quote-share`. Edit one → edit
-  the other. Never "DRY" across the wall (impossible + breaks the deploy).
+  crosses (HTTP/JSON), never code.** A rule needed both client-optimistic AND
+  server-authoritative therefore lives at TWO layers on purpose (can't share the
+  module): the quote-pick reducer is client `core/quote/actions.js` (`applyAction`,
+  over the bundle) ↔ server `quote-share/pick.ts` (`applyPicks`, over the rows;
+  `index.ts` is the thin shell). Both are pure Models, pinned equivalent by
+  `tests/quotePickParity.test.js` — edit one layer → edit the other; the parity
+  test goes red if they drift. Don't "DRY" by importing across the wall (impossible
+  + breaks the deploy).
 - **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.js`)
   always — PDF, Leaflet, etc. A raw `import()` strands stale-deploy users on
   "failed to fetch dynamically imported module"; the helper reloads once and recovers.
