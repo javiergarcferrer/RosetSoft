@@ -13,6 +13,7 @@ import {
   normalizeName,
   cleanNotes,
   mergeCatalog,
+  fabricKey,
 } from '../src/lib/lrCatalog.js';
 
 /* ------------------------------ type → category ----------------------------- */
