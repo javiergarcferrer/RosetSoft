@@ -4,15 +4,13 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
-import { displayRatesFor, groupBySection } from '../core/quote/index.js';
+import { displayRatesFor, resolveQuoteView } from '../core/quote/index.js';
 import { embedImageById } from './embed.js';
-import { setGroupInfo, groupRuns, sectionSubtotal } from '../lib/pricing.js';
-import { isGroupOptional } from '../lib/quoteGroups.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
   drawLineRow, drawEmptyLineBody, drawSectionHeader, measureLineRowHeight,
   drawGroupHeaderBand, drawGroupFooterBand, measureGroupHeaderHeight,
-  measureGroupFooterHeight, groupFooterSpec, groupZoneFor,
+  measureGroupFooterHeight, groupZoneFor,
 } from './lines.js';
 import { drawTotals, drawTerms, drawFooter, estimateTotalsHeight } from './totals.js';
 import { shouldUseWebShare } from './shareTarget.js';
@@ -166,7 +164,10 @@ export async function generateQuotePdf({
   if (!lines.length) {
     cursor = drawEmptyLineBody(page, ctx, cursor);
   } else {
-    const groups = groupBySection(lines);
+    // The SHARED content tree — the same resolveQuoteView the on-screen
+    // ClientPreview renders. The PDF maps it to pdf-lib; screen + paper can't
+    // diverge on grouping, footers, positions, or section subtotals.
+    const view = resolveQuoteView({ quote, lines, settings, quoteGroups });
     // Bottom-reserve constant for the line/section page-break checks.
     // The previous value (MARGIN_B + 80 = 136pt) was supposed to keep
     // "enough space for the next line or the totals" — but the totals
@@ -180,34 +181,11 @@ export async function generateQuotePdf({
     // at y=28 with a divider at y=42, so MARGIN_B + 10 leaves the
     // last line a comfortable 10pt above the footer hairline.
     const PAGE_BREAK_RESERVE = MARGIN_B + 10;
-    // Pre-compute alternative-group index/total lookup so the
-    // PDF caption reads "ALTERNATIVA 1 DE 2 · SELECCIONADA" with
-    // the same N/M the editor + ClientPreview show. Built off the
-    // full lines list (NOT the per-section groups) because an
-    // alternative group could in principle straddle a section
-    // divider — the lookup is keyed by line.id so order doesn't
-    // matter.
-    const altGroupInfo = new Map<string, { index: number; total: number }>();
-    {
-      const counts = new Map<string, number>();
-      for (const l of lines) {
-        if (!l.alternativeGroup) continue;
-        counts.set(l.alternativeGroup, (counts.get(l.alternativeGroup) || 0) + 1);
-      }
-      const seen = new Map<string, number>();
-      for (const l of lines) {
-        if (!l.alternativeGroup) continue;
-        const idx = (seen.get(l.alternativeGroup) || 0) + 1;
-        seen.set(l.alternativeGroup, idx);
-        altGroupInfo.set(l.id, { index: idx, total: counts.get(l.alternativeGroup) as number });
-      }
-    }
-    // Same "Conjunto N de M" position lookup for set members. Built off
-    // the full lines list (keyed by id) so it survives section grouping.
-    // A line is never both a set member and an alternative (DB CHECK), so
-    // the two maps never collide on the same id.
-    const setInfo = setGroupInfo(lines);
-    for (const group of groups) {
+    // "Alternativa / Conjunto N de M" position maps come from the shared
+    // ViewModel (same N/M the editor + ClientPreview show).
+    const { groupInfo: altGroupInfo, setInfo } = view;
+    for (const section of view.sections) {
+      const group = section;
       if (group.label) {
         // The first item under the header may open a grouped zone — reserve
         // its in-zone row height + the opening header band so a section header
@@ -225,18 +203,15 @@ export async function generateQuotePdf({
           page = doc.addPage([PAGE_W, PAGE_H]);
           cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
         }
-        cursor = drawSectionHeader(page, ctx, cursor, group.label, sectionSubtotal(group.items));
+        cursor = drawSectionHeader(page, ctx, cursor, group.label, section.subtotal);
       }
-      // groupRuns(group.items) is THE shared source of truth for run
-      // boundaries — the same helper the editor (LineItemList) and the
-      // on-screen ClientPreview consume. Each 'set' / 'alternative' run is a
-      // contiguous block whose members draw as today, capped by ONE footer
-      // total after the last member; 'single' runs render as a lone row.
-      // (Sections are stripped by groupBySection, so a run never straddles a
-      // section divider.) We index members by id within this section so a
-      // run's lineIds resolve to the right QuoteLine.
+      // The runs (card boundaries) + their footer data come resolved on the
+      // section from the shared ViewModel — the SAME tree ClientPreview renders.
+      // Each 'set' / 'alternative' run is a contiguous block whose members draw
+      // capped by ONE footer total; 'single' runs render as a lone row. We index
+      // this section's members by id so a run's lineIds resolve to their lines.
       const byId = new Map(group.items.map((l) => [l.id, l]));
-      const runs = groupRuns(group.items);
+      const runs = section.runs;
       for (const run of runs) {
         const members = run.lineIds
           .map((id) => byId.get(id))
@@ -247,18 +222,19 @@ export async function generateQuotePdf({
         // two runs back-to-back read as distinct containers separated by a
         // white gutter, and a split run still reads as one zone across pages.
         const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
-        // Whole-Conjunto "optional" state (take-all-or-nothing add-on). Drives
-        // the band captions; the totals already exclude its members. Only sets
-        // can be optional — an Alternativa always uses one option.
-        const groupOptional = run.type === 'set' ? isGroupOptional(quoteGroups, run.groupId) : false;
-        // Footer presentation for a grouped run — Spanish uppercase eyebrow,
-        // rolled-up amount, and zone palette. Conjunto → "TOTAL DEL
-        // CONJUNTO"/setSubtotal/neutral; Alternativa → "TOTAL"/
-        // alternativeSubtotal/brand. Presentational only — the grand total in
-        // totals.ts is untouched (members already priced / only the selected
-        // alternative billed).
-        const footer = isGrouped && run.groupId
-          ? groupFooterSpec(run.type as 'set' | 'alternative', lines, run.groupId, groupOptional)
+        // Footer DATA comes resolved on the run (from the shared ViewModel).
+        // Conjunto → "TOTAL DEL CONJUNTO" (+ "· NO INCLUIDO" when the whole set
+        // is an optional add-on); Alternativa → "TOTAL". Presentation only — the
+        // grand total in totals.ts is untouched.
+        const groupOptional = run.footer?.optional ?? false;
+        const footer = run.footer
+          ? {
+              label: run.footer.kind === 'set'
+                ? (run.footer.optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO')
+                : 'TOTAL',
+              amount: run.footer.amount,
+              amountRange: run.footer.amountRange,
+            }
           : null;
 
         for (let m = 0; m < members.length; m++) {

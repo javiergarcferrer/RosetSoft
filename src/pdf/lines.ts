@@ -2,8 +2,8 @@ import type { PDFPage, PDFFont, PDFImage, RGB } from 'pdf-lib';
 import type { QuoteLine, LineComponent, MaterialOptions } from '../types/domain.ts';
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
-  lineTotal, lineListUnit, lineQty, setSubtotal, setSubtotalRange, alternativeSubtotal,
-  materialOptionDeltas, isRangeLine, lineTotalRange, lineHasRange, selectedAlternative,
+  lineTotal, lineListUnit, lineQty,
+  materialOptionDeltas, isRangeLine, lineTotalRange, lineHasRange,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
 import { swatchProxyUrl } from '../lib/swatchImage.js';
@@ -1319,40 +1319,6 @@ export function drawGroupFooterBand(
 
   // Trail a white gutter so the next block clearly separates.
   return { x: MARGIN_L, y: bottom - GROUP_GAP_AFTER };
-}
-
-/**
- * Resolve a group run's footer presentation — the Spanish uppercase eyebrow
- * label, the rolled-up amount, and the zone palette — for a `set` or
- * `alternative` run. `lines` is the full quote list (the subtotal helpers
- * filter by groupId). Centralised so the caller (quotePdf.ts) stays a thin
- * loop and both group types share one footer code path.
- */
-export function groupFooterSpec(
-  type: 'set' | 'alternative',
-  lines: QuoteLine[],
-  groupId: string,
-  optional: boolean = false,
-): { label: string; amount: number; amountRange?: { min: number; max: number }; zone: GroupZone } {
-  if (type === 'set') {
-    // Range-aware: a Conjunto widens when any take-all member is material-less.
-    const sr = setSubtotalRange(lines, groupId);
-    return {
-      label: optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO',
-      amount: setSubtotal(lines, groupId),
-      amountRange: sr.max > sr.min ? sr : undefined,
-      zone: GROUP_ZONES.set,
-    };
-  }
-  // An alternative whose SELECTED option is material-less rolls up as a RANGE —
-  // lineHasRange so a COMPOUND alternative (range component) counts too.
-  const sel = selectedAlternative(lines, groupId);
-  return {
-    label: 'TOTAL',
-    amount: alternativeSubtotal(lines, groupId),
-    amountRange: sel && lineHasRange(sel) ? lineTotalRange(sel) : undefined,
-    zone: GROUP_ZONES.alternative,
-  };
 }
 
 /**
