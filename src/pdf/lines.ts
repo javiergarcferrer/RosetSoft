@@ -920,8 +920,13 @@ function componentDetail(
     const lines = wrapToWidth(text, w, fontFor(ctx, token), token.size);
     return lines.length ? [{ token, lines }] : [];
   };
-  // Optional components prefix the name with an "OPCIONAL · " eyebrow.
-  const namePrefix = component.isOptional ? 'OPCIONAL · ' : '';
+  // Optional / alternative components prefix the name with an eyebrow so the
+  // opt-in or pick-one status reads in the PDF the same as on screen.
+  const namePrefix = component.isOptional
+    ? 'OPCIONAL · '
+    : component.alternativeGroup
+      ? (component.isSelectedAlternative ? 'ALTERNATIVA ELEGIDA · ' : 'ALTERNATIVA · ')
+      : '';
   const meta = [
     component.reference ? `REF. ${component.reference}` : null,
     component.dimensions ? `DIM. ${component.dimensions}` : null,
@@ -1632,7 +1637,9 @@ async function drawCompoundLineRow(
     // preview: a dashed accent bar in the gutter + a white wash that
     // fades the block so it reads as an opt-in add-on, not part of the
     // base composition. The swatch is redrawn ON TOP so its colour shows.
-    if (components[i].isOptional) {
+    const compDimmed = components[i].isOptional
+      || (!!components[i].alternativeGroup && !components[i].isSelectedAlternative);
+    if (compDimmed) {
       drawComponentOptional(page, cols, compTop, sy);
       if (componentSwatchShown(components[i])) {
         await drawSwatch(page, ctx.doc, components[i].swatchImageId as string, cols.detail.x, swatchTopY, SWATCH_SIZE);

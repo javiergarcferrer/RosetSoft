@@ -92,6 +92,24 @@ test('optional (component): a non-offered component optional can NOT be toggled'
   assert.equal(comp(b, 'cmp', 'c3').isOptional, true);
 });
 
+test('alternative (component): selecting flips the chosen sub-piece within a compound', () => {
+  const b = {
+    quote: { currencyCode: 'USD', rates: { USD: 1 } },
+    lines: [{
+      id: 'cmp2', name: 'Sofá', components: [
+        { id: 'p', alternativeGroup: 'cg', isSelectedAlternative: true, name: 'Tela', unitPrice: 100, qty: 1 },
+        { id: 'q', alternativeGroup: 'cg', isSelectedAlternative: false, name: 'Cuero', unitPrice: 200, qty: 1 },
+      ],
+    }],
+  };
+  const out = applyClientPick(b, { alternatives: { cg: 'q' } });
+  const comps = out.lines[0].components;
+  assert.equal(comps.find((c) => c.id === 'p').isSelectedAlternative, false);
+  assert.equal(comps.find((c) => c.id === 'q').isSelectedAlternative, true);
+  // Invalid member → no-op (same reference back).
+  assert.equal(applyClientPick(b, { alternatives: { cg: 'ghost' } }), b);
+});
+
 test('material (line): reprices via delta, recomposes subtype/reference/swatch, re-anchors options', () => {
   const out = applyClientPick(bundle(), { materials: { m: 'C' } });
   const m = line(out, 'm');

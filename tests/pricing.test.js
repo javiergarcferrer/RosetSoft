@@ -34,6 +34,8 @@ import {
   compoundSubtotalRange,
   lineHasRange,
   setSubtotalRange,
+  compoundSubtotal,
+  componentAlternativeGroupInfo,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -598,6 +600,32 @@ test('computeTotalsRange — a compound range flows into the grand-total spread'
   assert.equal(Math.round(r.min), 236);
   assert.equal(Math.round(r.max), 472);
   assert.equal(quoteHasRange(lines), true);
+});
+
+test('compoundSubtotal — counts only the SELECTED component alternative (pick-one)', () => {
+  const line = {
+    kind: 'item',
+    components: [
+      { id: 'x', alternativeGroup: 'cg', isSelectedAlternative: true, qty: 1, unitPrice: 200 },
+      { id: 'y', alternativeGroup: 'cg', isSelectedAlternative: false, qty: 1, unitPrice: 500 },
+      { id: 'z', qty: 1, unitPrice: 100 }, // take-all, always counts
+    ],
+  };
+  // 200 (selected option) + 100 (take-all); the 500 non-selected option drops.
+  assert.equal(compoundSubtotal(line), 300);
+  const info = componentAlternativeGroupInfo(line.components);
+  assert.deepEqual(info.get('x'), { index: 1, total: 2 });
+  assert.deepEqual(info.get('y'), { index: 2, total: 2 });
+  assert.equal(info.has('z'), false);
+});
+
+test('compoundSubtotalRange — a material-less component alternative widens only when selected', () => {
+  const sel = { kind: 'item', components: [
+    { id: 'a', alternativeGroup: 'g', isSelectedAlternative: true, qty: 1, priceMin: 100, priceMax: 300 },
+    { id: 'b', alternativeGroup: 'g', isSelectedAlternative: false, qty: 1, priceMin: 999, priceMax: 9999 },
+  ] };
+  assert.deepEqual(compoundSubtotalRange(sel), { min: 100, max: 300 }); // only the selected option
+  assert.equal(lineHasRange(sel), true);
 });
 
 test('setSubtotalRange — sums take-all member ranges; collapses when none is material-less', () => {

@@ -19,6 +19,7 @@ import {
   applyLineAdjustments, materialOptionDeltas,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
+  componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
@@ -107,13 +108,49 @@ export default function QuoteLineItem({
     onChange({ components });
   }
   function removeComponent(id) {
-    const components = (line.components || []).filter((c) => c.id !== id);
-    onChange({ components });
+    const remaining = (line.components || []).filter((c) => c.id !== id);
+    onChange({ components: healComponentAlternatives(remaining) });
   }
   function reorderComponents(orderedIds) {
     const byId = new Map((line.components || []).map((c) => [c.id, c]));
     const components = orderedIds.map((id) => byId.get(id)).filter(Boolean);
     onChange({ components });
+  }
+  // Component-level ALTERNATIVE (pick-one among sub-pieces) — the compound twin
+  // of addAlternative: assign the source a group (selecting it if new), then
+  // insert a copy right after as another, non-selected option.
+  function addComponentAlternative(componentId) {
+    const comps = Array.isArray(line.components) ? line.components : [];
+    const src = comps.find((c) => c.id === componentId);
+    if (!src || src.isOptional) return;  // optional ⊕ alternative are exclusive
+    const groupId = src.alternativeGroup || newId();
+    const dup = { ...src, id: newId(), alternativeGroup: groupId, isSelectedAlternative: false, optionalOffered: false, isOptional: false };
+    const next = [];
+    for (const c of comps) {
+      if (c.id === componentId) {
+        next.push({
+          ...c,
+          alternativeGroup: groupId,
+          // First time grouping this piece → it becomes the selected option.
+          isSelectedAlternative: c.alternativeGroup ? !!c.isSelectedAlternative : true,
+        });
+        next.push(dup);
+      } else {
+        next.push(c);
+      }
+    }
+    onChange({ components: next });
+  }
+  function selectComponentAlternative(componentId) {
+    const comps = Array.isArray(line.components) ? line.components : [];
+    const target = comps.find((c) => c.id === componentId);
+    if (!target?.alternativeGroup) return;
+    const g = target.alternativeGroup;
+    onChange({
+      components: comps.map((c) =>
+        c.alternativeGroup === g ? { ...c, isSelectedAlternative: c.id === componentId } : c,
+      ),
+    });
   }
   function convertToCompound() {
     // Promote the current line's own ref/subtype/dimensions/description/
@@ -256,6 +293,8 @@ export default function QuoteLineItem({
           onUpdate={updateComponent}
           onRemove={removeComponent}
           onReorder={reorderComponents}
+          onAddAlternative={addComponentAlternative}
+          onSelectAlternative={selectComponentAlternative}
         />
       )}
 
@@ -292,6 +331,35 @@ function makeBlankComponent(overrides = {}) {
     unitPrice: 0,
     ...overrides,
   };
+}
+
+// Keep component alternative groups well-formed after a removal: a group that
+// drops to a SINGLE member dissolves back to a normal component, and a group
+// that lost its selected member promotes its first survivor — so a removed
+// option can never leave an orphan that's silently excluded from the total.
+function healComponentAlternatives(components) {
+  const counts = new Map();
+  const hasSelected = new Map();
+  for (const c of components) {
+    if (!c?.alternativeGroup) continue;
+    counts.set(c.alternativeGroup, (counts.get(c.alternativeGroup) || 0) + 1);
+    if (c.isSelectedAlternative) hasSelected.set(c.alternativeGroup, true);
+  }
+  const promoted = new Set();
+  return components.map((c) => {
+    const g = c?.alternativeGroup;
+    if (!g) return c;
+    if (counts.get(g) === 1) {
+      // Lone survivor → no longer an alternative.
+      const { alternativeGroup, isSelectedAlternative, ...rest } = c;
+      return rest;
+    }
+    if (!hasSelected.get(g) && !promoted.has(g)) {
+      promoted.add(g);
+      return { ...c, isSelectedAlternative: true };
+    }
+    return c;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,8 +1394,10 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove, onReorder }) {
+function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
   const components = line.components || [];
+  // "Opción N de M" positions for any component alternative groups.
+  const altInfo = componentAlternativeGroupInfo(components);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
 
@@ -1392,8 +1462,11 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
                 currency={currency}
                 rates={rates}
                 fmt={fmt}
+                groupInfo={altInfo.get(c.id)}
                 onChange={(patch) => onUpdate(c.id, patch)}
                 onRemove={() => onRemove(c.id)}
+                onAddAlternative={() => onAddAlternative?.(c.id)}
+                onSelectAlternative={() => onSelectAlternative?.(c.id)}
                 dragHandleProps={dragHandleProps}
               />
             </div>
@@ -1414,9 +1487,14 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
   );
 }
 
-function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove, dragHandleProps }) {
+function ComponentRow({ index, component, currency, rates, fmt, groupInfo, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
   const total = componentSubtotal(component);
   const optional = !!component.isOptional;
+  // Component-level alternative (pick-one) — the compound twin of a line
+  // alternative: dim the non-selected options, radio to choose the billed one.
+  const inGroup = !!component.alternativeGroup;
+  const isSelected = !!component.isSelectedAlternative;
+  const dimmed = inGroup && !isSelected;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
@@ -1448,10 +1526,12 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
   return (
     <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-white space-y-2 ${
       optional ? 'border-l-2 border-dashed border-ink-300' : ''
+    } ${
+      inGroup ? 'border-l-2 border-solid border-brand-300' : ''
     }`}>
-      {/* Deactivated (optional) component: white veil fades the block;
-          the swatch (z-[2] in GradeFabricRow) stays full-colour. */}
-      {optional && (
+      {/* Deactivated (optional) OR non-selected alternative: a white veil fades
+          the block; the radio + swatch stay lifted (z-[2]) and clickable. */}
+      {(optional || dimmed) && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
       )}
       <div className="flex items-center gap-2">
@@ -1463,35 +1543,65 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         >
           <GripVertical size={13} />
         </span>
-        <span className="eyebrow-xs tracking-wide text-ink-400 select-none">
-          Componente {index + 1}
-        </span>
-        {/* Per-component optional toggle. Mirrors the line-level
-            "Marcar como opcional" but at the inner-compound layer
-            so a single sub-piece (e.g. an ottoman in a sectional)
-            can be offered as an add-on without changing the rest of
-            the composition. Pricing math (compoundSubtotal) skips
-            optional components when summing. Stamps optionalOffered too,
-            so the client can fold this sub-piece in/out on the share link
-            (same stable designation as the line-level optional). */}
-        <button
-          type="button"
-          onClick={() => onChange(optional
-            ? { isOptional: false, optionalOffered: false }
-            : { isOptional: true, optionalOffered: true })}
-          className={`chip font-medium ${
-            optional
-              ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
-              : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
-          }`}
-          title={optional
-            ? 'Quitar el marcador opcional — el componente vuelve a sumar al total compuesto'
-            : 'Marcar este componente como opcional — se muestra pero no suma al total'}
-          aria-pressed={optional}
-        >
-          <Sparkles size={10} className="opacity-70" aria-hidden />
-          {optional ? 'Opcional' : 'Hacer opcional'}
-        </button>
+        {inGroup ? (
+          // Pick-one radio + "Alternativa N de M" — lifted above the dim veil.
+          <button
+            type="button"
+            onClick={onSelectAlternative}
+            aria-pressed={isSelected}
+            title={isSelected ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
+            className="relative z-[2] inline-flex items-center gap-1.5"
+          >
+            <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+            }`}>
+              {isSelected && <Check size={9} strokeWidth={3} aria-hidden />}
+            </span>
+            <span className="eyebrow-xs tracking-wide font-semibold text-brand-700 select-none">
+              Alternativa {groupInfo?.index ?? '?'} de {groupInfo?.total ?? '?'}
+            </span>
+          </button>
+        ) : (
+          <span className="eyebrow-xs tracking-wide text-ink-400 select-none">
+            Componente {index + 1}
+          </span>
+        )}
+        {/* Per-component optional toggle — hidden inside an alternative group
+            (optional ⊕ alternative are mutually exclusive). Stamps
+            optionalOffered too so the client can fold the sub-piece in/out. */}
+        {!inGroup && (
+          <button
+            type="button"
+            onClick={() => onChange(optional
+              ? { isOptional: false, optionalOffered: false }
+              : { isOptional: true, optionalOffered: true })}
+            className={`chip font-medium ${
+              optional
+                ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
+                : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
+            }`}
+            title={optional
+              ? 'Quitar el marcador opcional — el componente vuelve a sumar al total compuesto'
+              : 'Marcar este componente como opcional — se muestra pero no suma al total'}
+            aria-pressed={optional}
+          >
+            <Sparkles size={10} className="opacity-70" aria-hidden />
+            {optional ? 'Opcional' : 'Hacer opcional'}
+          </button>
+        )}
+        {/* + Alternativa — offer this sub-piece as a pick-one option (or add
+            another to its group); hidden when it's an excluded optional. */}
+        {!optional && onAddAlternative && (
+          <button
+            type="button"
+            onClick={onAddAlternative}
+            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            title="Agregar una alternativa de este componente — el cliente elige una"
+          >
+            <GitFork size={10} className="opacity-80" aria-hidden />
+            Alternativa
+          </button>
+        )}
         <div className="flex-1" />
         <button
           type="button"

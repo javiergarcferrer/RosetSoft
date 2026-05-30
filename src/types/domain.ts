@@ -232,6 +232,16 @@ export interface LineComponent {
    */
   optionalOffered?: boolean;
   /**
+   * Component-level ALTERNATIVE (pick-one among sub-pieces) — the mirror of the
+   * line-level alternativeGroup / isSelectedAlternative, scoped within one
+   * compound. Members share an `alternativeGroup`; exactly one carries
+   * `isSelectedAlternative` and is the one that counts toward the compound
+   * subtotal (see lib/constants:isPricedComponent). Both live on the JSONB
+   * component shape — no DB column. Mutually exclusive with `isOptional`.
+   */
+  alternativeGroup?: string | null;
+  isSelectedAlternative?: boolean;
+  /**
    * Fabric swatch image (by `images.id`) chosen via the SwatchPicker
    * for this component. Distinct from the parent line's imageId
    * (the product photo). Lives inline on the JSONB component shape.

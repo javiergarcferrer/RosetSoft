@@ -9,7 +9,7 @@ import {
   alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
   computeTotalsRange, isRangeLine, lineTotalRange, selectedAlternative,
-  isRangeComponent, componentSubtotalRange, lineHasRange,
+  isRangeComponent, componentSubtotalRange, lineHasRange, componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
@@ -686,6 +686,8 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   // instead of a single total, just like a standalone range line.
   const ranged = lineHasRange(line);
   const tr = ranged ? lineTotalRange(line) : null;
+  // "Opción N de M" positions for any component-level alternatives.
+  const compAltInfo = componentAlternativeGroupInfo(line.components);
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -799,9 +801,11 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 rates={rates}
                 fmt={fmt}
                 families={families}
+                groupInfo={compAltInfo.get(c.id)}
                 materialSelections={materialSelections}
                 onSelectMaterial={onSelectMaterial}
                 onToggleOptional={onToggleOptional}
+                onSelectAlternative={onSelectAlternative}
               />
             ))}
           </ul>
@@ -840,7 +844,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families, materialSelections, onSelectMaterial, onToggleOptional }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -849,17 +853,30 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, mater
   // mirroring a standalone range line.
   const ranged = isRangeComponent(component);
   const cr = ranged ? componentSubtotalRange(component) : null;
+  // Component-level alternative (pick-one). The interactive link gives each
+  // option a radio; read-only surfaces flag the chosen one and dim the rest.
+  const inGroup = !!component.alternativeGroup;
+  const isSelected = !!component.isSelectedAlternative;
+  const selectable = inGroup && !!onSelectAlternative;
+  const dimmed = inGroup && !isSelected;
   // A dealer-offered optional sub-piece the client can fold in / out right
   // here — the SAME add/remove affordance as a standalone optional line, one
   // level down. Only on the interactive link (onToggleOptional present).
   const offered = !!onToggleOptional && !!component.optionalOffered;
   const included = !optional;
   return (
-    <li className={`py-2 ${optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''}`}>
-      {/* Optional: dim with a white veil; the swatch carries its own
-          z-[2] so the fabric colour stays visible to the client. */}
-      {optional && (
+    <li className={`py-2 ${
+      optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''
+    } ${
+      inGroup ? 'relative pl-3 border-l-2 border-solid border-brand-300' : ''
+    }`}>
+      {/* Optional OR non-selected alternative: dim with a white veil; the radio
+          + swatch carry their own z-[2] so they stay clickable / vivid. */}
+      {(optional || dimmed) && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
+      )}
+      {selectable && (
+        <AlternativeRadio line={component} groupInfo={groupInfo} isSelected={isSelected} onSelect={onSelectAlternative} />
       )}
       <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4">
         <div className="min-w-0 sm:flex-1">
@@ -870,6 +887,13 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, mater
             {optional && !offered && (
               <span className="eyebrow-xs font-normal tracking-widest">
                 Opcional · no incluido
+              </span>
+            )}
+            {/* Read-only alternative flag + position. */}
+            {inGroup && !selectable && (
+              <span className="eyebrow-xs font-semibold tracking-widest text-brand-700">
+                Alternativa {groupInfo?.index ?? '?'} de {groupInfo?.total ?? '?'}
+                {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· elegida</span>}
               </span>
             )}
           </div>

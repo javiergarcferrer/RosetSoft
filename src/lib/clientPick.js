@@ -106,14 +106,37 @@ export function applyClientPick(bundle, pick) {
   const next = lines.slice(); // replace only touched entries
   let changed = false;
 
-  // Alternatives — only the chosen member of a group stays selected.
-  for (const [group, lineId] of Object.entries(pick.alternatives || {})) {
+  // Alternatives — only the chosen member of a group stays selected. The group
+  // is EITHER a line alternative group OR a component alternative group inside a
+  // compound; component ids are globally unique, so one channel serves both.
+  for (const [group, pickedId] of Object.entries(pick.alternatives || {})) {
+    // Line-level group.
     const memberIdxs = [];
     for (let i = 0; i < next.length; i++) if (next[i].alternativeGroup === group) memberIdxs.push(i);
-    if (!memberIdxs.some((i) => next[i].id === lineId)) continue; // invalid group / member
-    for (const i of memberIdxs) {
-      const sel = next[i].id === lineId;
-      if (!!next[i].isSelectedAlternative !== sel) { next[i] = { ...next[i], isSelectedAlternative: sel }; changed = true; }
+    if (memberIdxs.length > 0) {
+      if (!memberIdxs.some((i) => next[i].id === pickedId)) continue; // invalid member
+      for (const i of memberIdxs) {
+        const sel = next[i].id === pickedId;
+        if (!!next[i].isSelectedAlternative !== sel) { next[i] = { ...next[i], isSelectedAlternative: sel }; changed = true; }
+      }
+      continue;
+    }
+    // Component-level group inside a compound line.
+    for (let i = 0; i < next.length; i++) {
+      const comps = next[i].components;
+      if (!Array.isArray(comps)) continue;
+      const members = comps.filter((c) => c.alternativeGroup === group);
+      if (members.length === 0) continue;
+      if (members.some((c) => c.id === pickedId)) {
+        next[i] = {
+          ...next[i],
+          components: comps.map((c) =>
+            c.alternativeGroup === group ? { ...c, isSelectedAlternative: c.id === pickedId } : c,
+          ),
+        };
+        changed = true;
+      }
+      break;
     }
   }
 

@@ -14,6 +14,7 @@ import type {
   LineKind,
   QuoteStatus,
   QuoteLine,
+  LineComponent,
 } from '../types/domain.ts';
 
 /* ---------------------------------- quote lines --------------------------------- */
@@ -84,6 +85,24 @@ export function isPricedLine(
   if (line.kind === LINE_KIND_SECTION) return false;
   if (line.isOptional) return false;
   if (line.alternativeGroup && !line.isSelectedAlternative) return false;
+  return true;
+}
+
+/**
+ * Component twin of isPricedLine — within a compound, a sub-piece counts toward
+ * the compound subtotal unless it's an excluded optional OR a non-selected
+ * alternative. (No section/set cases: a component is never a section, and a
+ * Conjunto is a line concept, not a component one.)
+ */
+export function isPricedComponent(
+  component:
+    | Pick<LineComponent, 'isOptional' | 'alternativeGroup' | 'isSelectedAlternative'>
+    | null
+    | undefined,
+): boolean {
+  if (!component) return true;
+  if (component.isOptional) return false;
+  if (component.alternativeGroup && !component.isSelectedAlternative) return false;
   return true;
 }
 

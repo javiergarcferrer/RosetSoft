@@ -9,7 +9,7 @@
  * every quote — there is no per-quote override.
  */
 
-import { isPricedLine } from './constants.js';
+import { isPricedLine, isPricedComponent } from './constants.js';
 import type {
   QuoteLine,
   LineComponent,
@@ -167,14 +167,13 @@ export function componentSubtotal(component: LineComponent | null | undefined): 
 
 export function compoundSubtotal(line: QuoteLine | null | undefined): number {
   if (!isCompoundLine(line)) return 0;
-  // Optional components render to the customer but don't roll up
-  // into the compound's billable subtotal — same semantic as the
-  // line-level isOptional flag, applied one level down. The filter
-  // is keyed by truthy isOptional so a missing field (default
-  // false on every existing component) leaves prior behaviour
-  // unchanged.
+  // Only PRICED components roll up into the compound's billable subtotal: an
+  // excluded optional, or a non-selected component alternative, still renders to
+  // the customer but doesn't count — the component twin of isPricedLine
+  // (lib/constants:isPricedComponent). A plain component (no flags) always
+  // counts, so prior behaviour is unchanged.
   return line.components
-    .filter((c) => !c?.isOptional)
+    .filter((c) => isPricedComponent(c))
     .reduce((sum, c) => sum + componentSubtotal(c), 0);
 }
 
@@ -551,7 +550,7 @@ export function componentSubtotalRange(component: LineComponent | null | undefin
 export function compoundSubtotalRange(line: QuoteLine | null | undefined): MoneyRange {
   if (!isCompoundLine(line)) return { min: 0, max: 0 };
   return line.components
-    .filter((c) => !c?.isOptional)
+    .filter((c) => isPricedComponent(c))
     .reduce(
       (acc, c) => {
         const r = componentSubtotalRange(c);
@@ -561,6 +560,39 @@ export function compoundSubtotalRange(line: QuoteLine | null | undefined): Money
     );
 }
 
+/** "Opción N de M" position map for a compound's component alternatives, keyed
+ *  by component id (the component twin of alternativeGroupInfo). */
+export function componentAlternativeGroupInfo(
+  components: readonly LineComponent[] | null | undefined,
+): Map<string, { index: number; total: number }> {
+  const map = new Map<string, { index: number; total: number }>();
+  const counts = new Map<string, number>();
+  for (const c of components || []) {
+    const g = c?.alternativeGroup;
+    if (g) counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  for (const c of components || []) {
+    const g = c?.alternativeGroup;
+    if (!g || !c?.id) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(c.id, { index: idx, total: counts.get(g) as number });
+  }
+  return map;
+}
+
+/** The selected member of a component alternative group (first as a fallback). */
+export function selectedAlternativeComponent(
+  components: readonly LineComponent[] | null | undefined,
+  groupId: string | null | undefined,
+): LineComponent | null {
+  if (!groupId) return null;
+  const members = (components || []).filter((c) => c?.alternativeGroup === groupId);
+  if (members.length === 0) return null;
+  return members.find((c) => c?.isSelectedAlternative) || members[0];
+}
+
 /**
  * True when a line shows a price range — a compound with at least one
  * material-less (range) component, OR a standalone range item. The compound-
@@ -568,7 +600,7 @@ export function compoundSubtotalRange(line: QuoteLine | null | undefined): Money
  */
 export function lineHasRange(line: QuoteLine | null | undefined): boolean {
   if (isCompoundLine(line)) {
-    return (line!.components || []).some((c) => !c?.isOptional && isRangeComponent(c));
+    return (line!.components || []).some((c) => isPricedComponent(c) && isRangeComponent(c));
   }
   return isRangeLine(line);
 }

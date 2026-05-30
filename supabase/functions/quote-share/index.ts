@@ -50,7 +50,8 @@ function pick<T extends Record<string, unknown>>(obj: T | null | undefined, keys
 
 const COMPONENT_KEYS = [
   'id', 'name', 'reference', 'subtype', 'dimensions', 'description',
-  'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'optionalOffered', 'materialOptions',
+  'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'optionalOffered',
+  'alternativeGroup', 'isSelectedAlternative', 'materialOptions',
 ];
 
 // 8-digit family root of an upholstered SKU ("15420000G" -> "15420000").
@@ -402,6 +403,9 @@ Deno.serve(async (req: Request) => {
     // Components the dealer OFFERED as toggleable optionals — same role as
     // optionalIds, one level down (gated on the component's optionalOffered).
     const componentOptionalOffered = new Set<string>();
+    // Component alternative groups → { lineId, members } so the public link can
+    // pick a component-level alternative through the same channel as a line one.
+    const componentAltGroups = new Map<string, { lineId: string; members: Set<string> }>();
     const materialGrades = new Map<string, Set<string>>();     // line OR component id → valid grades
     const componentIndex = new Map<string, { lineId: string }>(); // component id → its line
     const addMaterialTarget = (id: unknown, mo: { baseGrade?: unknown; options?: unknown[] } | null | undefined) => {
@@ -425,6 +429,11 @@ Deno.serve(async (req: Request) => {
       for (const c of comps) {
         if (c?.id != null) componentIndex.set(String(c.id), { lineId: id });
         if (c?.optionalOffered) componentOptionalOffered.add(String(c.id));
+        if (c?.alternativeGroup != null && c?.id != null) {
+          const g = String(c.alternativeGroup);
+          if (!componentAltGroups.has(g)) componentAltGroups.set(g, { lineId: id, members: new Set() });
+          componentAltGroups.get(g)!.members.add(String(c.id));
+        }
         addMaterialTarget(c?.id, c?.materialOptions as { baseGrade?: unknown; options?: unknown[] } | null);
       }
     }
@@ -457,11 +466,27 @@ Deno.serve(async (req: Request) => {
       return workingComps.get(lineId)!;
     };
 
-    // Alternatives — only the chosen member of a group stays selected.
-    for (const [group, lineId] of Object.entries(body.alternatives || {})) {
+    // Alternatives — only the chosen member of a group stays selected. The
+    // group is a LINE alternative group or a COMPONENT one (inside a compound).
+    for (const [group, pickedId] of Object.entries(body.alternatives || {})) {
       const members = groupMembers.get(group);
-      if (!members || !members.has(String(lineId))) continue;
-      for (const memberId of members) merge(memberId, { is_selected_alternative: memberId === String(lineId) });
+      if (members) {
+        if (!members.has(String(pickedId))) continue;
+        for (const memberId of members) merge(memberId, { is_selected_alternative: memberId === String(pickedId) });
+        continue;
+      }
+      // Component-level alternative group → flip isSelectedAlternative on the
+      // line's working components copy (composes with material/optional edits).
+      const cg = componentAltGroups.get(group);
+      if (cg && cg.members.has(String(pickedId))) {
+        const comps = compsOf(cg.lineId);
+        for (let i = 0; i < comps.length; i++) {
+          if (String(comps[i].alternativeGroup) === group) {
+            comps[i] = { ...comps[i], isSelectedAlternative: String(comps[i].id) === String(pickedId) };
+          }
+        }
+        merge(cg.lineId, { components: comps });
+      }
     }
 
     // Optionals — a TOGGLE: on=true folds the add-on into the quote
