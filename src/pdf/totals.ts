@@ -167,8 +167,8 @@ export function drawTotals(
 
   // ---- Inline FX shadow (below the savings line, muted ink) -----------
   // Single muted line: "≈ RD$ 1,576,686 a 59.07 DOP/USD". Use the rate
-  // already resolved for this quote (locked snapshot once sent, live
-  // while a draft) so this FX line agrees with the band above it.
+  // already resolved for this quote (live until accepted, then the
+  // accept-time snapshot) so this FX line agrees with the band above it.
   const dopRate = Number(rates?.DOP) || 0;
   if (dopRate && currency === 'USD') {
     const fx = hasRange

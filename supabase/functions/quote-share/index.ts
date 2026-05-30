@@ -324,6 +324,14 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     quoteFooter: settingsRow.quote_footer,
   } : {};
 
+  // FX rate for the link: LIVE (Banco Popular venta) until the quote is
+  // ACCEPTED, then the frozen accept-time snapshot — the same rule as
+  // displayRatesFor, so the public link agrees with the dealer's surfaces and a
+  // sent quote the client is still deciding on tracks today's rate.
+  const ex = (settingsRow?.exchange_rate || settingsRow?.bsc || settingsRow?.bpd || {}) as { buy?: unknown; sell?: unknown };
+  const liveDop = Number(ex.sell) || Number(ex.buy) || 60.0;
+  const rates = (quote.accepted_at && quote.rates) ? quote.rates : { USD: 1, DOP: liveDop };
+
   // Containers with a real code only (label + code); the client validates the
   // ISO 6346 number and renders one tracking panel each.
   const containers = (containerRows as Row[])
@@ -336,7 +344,7 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
       number: quote.number,
       status: quote.status,
       currencyCode: quote.currency_code,
-      rates: quote.rates,
+      rates,
       terms: quote.terms,
       marginPct: 0,
       discountPct: quote.discount_pct,

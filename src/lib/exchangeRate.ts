@@ -16,7 +16,6 @@
  * `bpd` shapes as fallbacks so pre-existing data isn't lost.
  */
 
-import { QUOTE_STATUS_DRAFT } from './constants.js';
 import type {
   Settings,
   ExchangeRate,
@@ -62,30 +61,30 @@ export function effectiveRates(settings: Settings | null | undefined): RatesMap 
 }
 
 /**
- * Rates to use when displaying totals for a specific quote on list /
- * detail surfaces (Quotes, Orders, OrderDetail, Dashboard,
- * CustomerDetail, ProfessionalDetail, AcceptedQuotes, etc.).
+ * Rates to use when displaying totals for a specific quote on list / detail /
+ * client-facing surfaces (Quotes, Orders, OrderDetail, Dashboard, accounting,
+ * the PDF, the public link).
  *
  * Rule of thumb:
- *   • Draft → live rate from settings. The dealer is still building the
- *     quote; the figure should track today's published rate.
- *   • Sent and beyond (sent / accepted / declined / archived) → the
- *     snapshot frozen the moment the quote was sent. Once the client has
- *     seen a peso figure it must not move under them, even if the bank's
- *     rate changes the next day. (QuoteBuilder.updateQuote captures this
- *     snapshot on the send transition.)
+ *   • Not yet accepted (draft / sent — or declined, which was never accepted) →
+ *     today's LIVE rate from settings. The peso figure tracks the bank's
+ *     published rate right up until the client commits.
+ *   • Accepted (and beyond) → the snapshot frozen the moment the quote was
+ *     ACCEPTED. Once the client commits to a peso figure it must not move, even
+ *     if the bank's rate changes the next day. `acceptedAt` is the lock signal
+ *     and the instant QuoteBuilder/useQuoteController captures the snapshot onto
+ *     `quote.rates`.
  *
- * Falls back to USD-only when both sides are missing so formatMoney
- * still has a valid map to read.
+ * Falls back to the live rate when there's no accepted snapshot yet.
  */
 export function displayRatesFor(
-  quote: Pick<Quote, 'status' | 'rates'> | null | undefined,
+  quote: Pick<Quote, 'rates' | 'acceptedAt'> | null | undefined,
   settings: Settings | null | undefined,
 ): RatesMap {
-  if (quote && quote.status === QUOTE_STATUS_DRAFT) {
-    return effectiveRates(settings);
+  if (quote && quote.acceptedAt && quote.rates) {
+    return quote.rates;
   }
-  return (quote && quote.rates) || { USD: 1 };
+  return effectiveRates(settings);
 }
 
 /**

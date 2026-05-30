@@ -13,6 +13,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import {
@@ -562,7 +563,7 @@ function QuoteRow({ quote, order, creator, total, onDetach }) {
           </div>
         </Link>
         <div className="text-sm font-medium tabular-nums whitespace-nowrap">
-          {formatMoney(total, quote.currencyCode || 'USD', quote.rates || { USD: 1 })}
+          {formatMoney(total, quote.currencyCode || 'USD', displayRatesFor(quote, settings))}
         </div>
         <button
           onClick={onDetach}

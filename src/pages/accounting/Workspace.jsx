@@ -11,6 +11,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
+import { displayRatesFor } from '../../lib/exchangeRate.js';
 import {
   computeTotals, applyLineAdjustments, lineForTotals, isCompoundLine,
 } from '../../lib/pricing.js';
@@ -692,7 +693,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
   const [open, setOpen] = useState(false);
   const pdf = usePdfDownload({ quote, customer, lines, settings });
   const currency = quote.currencyCode || 'USD';
-  const rates = quote.rates || { USD: 1 };
+  const rates = displayRatesFor(quote, settings);
   const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
   const customerName = customer?.company || customer?.name || '—';
 

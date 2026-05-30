@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldPullDailyRate } from '../src/lib/exchangeRate.js';
+import { shouldPullDailyRate, displayRatesFor } from '../src/lib/exchangeRate.js';
 
 // Build a ms timestamp for a given AST wall-clock by pinning the -04:00 offset.
 const ast = (iso) => Date.parse(`${iso}-04:00`);
@@ -57,6 +57,26 @@ test('fires exactly at the 08:00 boundary', () => {
   const updatedAt = ast('2026-05-27T15:00:00');
   const now = ast('2026-05-28T08:00:00');        // exactly 08:00 AST
   assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
+});
+
+/* ----------------------- displayRatesFor (the accept-time lock) ---------------------- */
+
+test('displayRatesFor — live until ACCEPTED, then the frozen snapshot', () => {
+  const settings = { exchangeRate: { buy: 58, sell: 62, updatedAt: 1 } }; // live venta = 62
+  // Draft / sent (not yet accepted) → today's live rate, NOT the stale field.
+  assert.equal(displayRatesFor({ status: 'draft', rates: { USD: 1, DOP: 50 } }, settings).DOP, 62);
+  assert.equal(displayRatesFor({ status: 'sent', sentAt: 1, rates: { USD: 1, DOP: 50 } }, settings).DOP, 62);
+  // Declined (was never accepted) → live too.
+  assert.equal(displayRatesFor({ status: 'declined', rates: { USD: 1, DOP: 50 } }, settings).DOP, 62);
+  // Accepted with a snapshot → the FROZEN snapshot, not the live rate.
+  assert.deepEqual(
+    displayRatesFor({ status: 'accepted', acceptedAt: 123, rates: { USD: 1, DOP: 55 } }, settings),
+    { USD: 1, DOP: 55 },
+  );
+  // Accepted but no snapshot yet → falls back to live.
+  assert.equal(displayRatesFor({ acceptedAt: 9, rates: null }, settings).DOP, 62);
+  // No quote / no settings → live fallback (effectiveDopRate default 60).
+  assert.equal(displayRatesFor(null, null).DOP, 60);
 });
 
 test('reads the legacy bsc / bpd shapes as fallbacks', () => {

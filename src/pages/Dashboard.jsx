@@ -10,6 +10,7 @@ import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.j
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 
@@ -107,7 +108,7 @@ export default function Dashboard() {
   }, [allQuotes, allCustomersQ.data, allLinesQ.data, effectiveScope, meId]);
 
   const firstName = (currentProfile?.name || '').trim().split(/\s+/)[0];
-  const money = (q) => formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 });
+  const money = (q) => formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', displayRatesFor(q, settings));
   const customerName = (q) => {
     const c = derived.customersById.get(q.customerId);
     return c?.company || c?.name || 'Sin cliente';

@@ -174,11 +174,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const baseQuote = dbQuote || draftQuote || null;
   // Resolve the exchange rate the editor (and everything it feeds —
   // totals rail, line items, client preview, PDF export) renders with.
-  // While a quote is a DRAFT it tracks the live published rate from
-  // Settings, so the dealer always builds against today's number. Once
-  // the quote is SENT the rate is locked to the snapshot taken at send
-  // time (displayRatesFor returns baseQuote.rates), so a later rate
-  // change can't move a figure the client has already seen.
+  // Until a quote is ACCEPTED it tracks the live published rate from
+  // Settings, so the dealer (and the client on the link) always sees
+  // today's number. Once the quote is ACCEPTED the rate is locked to the
+  // snapshot taken at accept time (displayRatesFor returns baseQuote.rates),
+  // so a later rate change can't move a figure the client committed to.
   const quote = useMemo(() => {
     if (!baseQuote) return null;
     return { ...baseQuote, rates: displayRatesFor(baseQuote, settings) };

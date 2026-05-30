@@ -162,13 +162,14 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     markSaving();
     try {
       await ensurePersisted();
-      // Lock the exchange rate the instant the quote is sent: freeze the
-      // current live rate onto the quote so later Settings changes can't
-      // move a figure the client has already seen. `patch.sentAt` is set
-      // only on a real send (the stepper's advance), not on an undo back
-      // to 'sent' — so re-sending after an undo re-locks at the
-      // then-current rate, while undo preserves the existing snapshot.
-      const next = (patch.status === 'sent' && patch.sentAt)
+      // Lock the exchange rate the instant the quote is ACCEPTED: freeze the
+      // current live rate onto the quote so later Settings changes can't move a
+      // figure the client committed to. Until then (draft / sent) the rate stays
+      // live, so a quote the client is still deciding on tracks today's bank
+      // rate. `patch.acceptedAt` is set only on a real accept (the stepper's
+      // advance), not on an undo back to 'accepted' — so re-accepting after an
+      // undo re-locks at the then-current rate, while undo preserves the snapshot.
+      const next = (patch.status === 'accepted' && patch.acceptedAt)
         ? { ...patch, rates: effectiveRates(settings) }
         : patch;
       // ensurePersisted() may have just materialized a brand-new draft and
