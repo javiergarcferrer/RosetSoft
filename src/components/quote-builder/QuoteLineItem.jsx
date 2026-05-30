@@ -1399,6 +1399,19 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
 function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemove, dragHandleProps }) {
   const total = componentSubtotal(component);
   const optional = !!component.isOptional;
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  // Switch THIS sub-piece to a different catalog model — the compound twin of
+  // the line-level product selector. Keeps the materials the new model offers a
+  // grade for; the patch's line-only fields (family, unitCost) are dropped, as
+  // a component carries neither.
+  function switchProduct(family) {
+    const patch = switchLineProduct(component, family);
+    if (!patch) return;
+    const componentPatch = { ...patch };
+    delete componentPatch.family;
+    delete componentPatch.unitCost;
+    onChange(componentPatch);
+  }
   // ComponentRow used to be a two-column grid (specs on the left, calc
   // cells on the right via `sm:grid-cols-[minmax(0,1fr)_auto]`). The
   // auto-sized right column happily grabbed ~300px for its CANT × UNIT
@@ -1467,12 +1480,28 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         </button>
       </div>
 
-      <HeroInput
-        placeholder="Nombre del componente"
-        value={component.name || ''}
-        onCommit={(v) => onChange({ name: v })}
-        autoCapitalize="words"
-      />
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <HeroInput
+            placeholder="Nombre del componente"
+            value={component.name || ''}
+            onCommit={(v) => onChange({ name: v })}
+            autoCapitalize="words"
+          />
+        </div>
+        {/* Catalog product picker for THIS sub-piece — the compound twin of the
+            line-level selector. Switches the component's product, keeping the
+            materials the new model offers a grade for. */}
+        <button
+          type="button"
+          onClick={() => setProductPickerOpen(true)}
+          className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+          title="Elegir el producto del catálogo"
+          aria-label="Elegir el producto del catálogo"
+        >
+          <PackageSearch size={15} />
+        </button>
+      </div>
 
       <SpecStrip
         reference={component.reference}
@@ -1515,6 +1544,12 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
           unitAriaLabel="Precio unitario del componente"
         />
       </div>
+
+      <ProductPicker
+        open={productPickerOpen}
+        onClose={() => setProductPickerOpen(false)}
+        onSelect={switchProduct}
+      />
     </div>
   );
 }
