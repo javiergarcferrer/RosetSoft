@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch, ImagePlus, Loader2 } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -23,7 +23,7 @@ import {
 import { splitSkuGrade, switchLineProduct, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
-import { newId } from '../../db/database.js';
+import { newId, saveImage } from '../../db/database.js';
 
 /**
  * One quote line — a product card read top→bottom:
@@ -467,13 +467,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
   return (
     <div className="flex-1 min-w-0 space-y-2.5">
       <div className="flex items-start gap-3">
-        <Thumbnail
-          imageId={line.imageId}
-          onChange={(id) => onChange({ imageId: id })}
-          kind="quote-line"
-          ownerId={line.id}
-          hoverPreview
-        />
+        <LinePhotos line={line} onChange={onChange} />
         <div className="flex-1 min-w-0">
           <HeroInput
             placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
@@ -540,6 +534,85 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates }
         />
       )}
     </div>
+  );
+}
+
+// Product photos for a line — the COVER (the big Thumbnail every surface that
+// shows one image keeps using) plus a strip of ADDITIONAL photos so the dealer
+// can attach several angles the client sees on the share link. Extras live in
+// line.extraImageIds; each reuses the same Thumbnail (so drag/drop, paste,
+// validation and delete-on-remove come for free), and a trailing tile appends.
+function LinePhotos({ line, onChange }) {
+  const extra = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
+  // Store null (not []) when empty so the column reads "no extras" cleanly.
+  const setExtra = (next) => onChange({ extraImageIds: next.length ? next : null });
+  return (
+    <div className="flex-shrink-0">
+      <Thumbnail
+        imageId={line.imageId}
+        onChange={(id) => onChange({ imageId: id })}
+        kind="quote-line"
+        ownerId={line.id}
+        hoverPreview
+      />
+      <div className="mt-1.5 flex w-20 flex-wrap gap-1.5 sm:w-24">
+        {extra.map((id, i) => (
+          <Thumbnail
+            key={id}
+            imageId={id}
+            onChange={(nid) => {
+              const next = extra.slice();
+              if (nid) next[i] = nid; else next.splice(i, 1);
+              setExtra(next);
+            }}
+            kind="quote-line"
+            ownerId={line.id}
+            sizeClass="w-9 h-9"
+            hoverPreview
+          />
+        ))}
+        <AddPhotoTile kind="quote-line" ownerId={line.id} onAdd={(id) => setExtra([...extra, id])} />
+      </div>
+    </div>
+  );
+}
+
+// Small "+ add another photo" tile beside a line's extra photos. Uploads via
+// saveImage (same validation/limits as Thumbnail) and hands the new id up to
+// append. Supports click and drag-drop, like the main thumbnail.
+function AddPhotoTile({ kind, ownerId, onAdd }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  async function handleFiles(files) {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try { onAdd(await saveImage({ kind, ownerId, file })); }
+    catch (e) { console.error('[quote] add photo failed', e); }
+    finally { setBusy(false); }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+        disabled={busy}
+        title="Agregar otra foto"
+        aria-label="Agregar otra foto al artículo"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-md border-2 border-dashed border-ink-300 bg-ink-50 text-ink-400 transition-colors hover:border-ink-500 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-60"
+      >
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+      />
+    </>
   );
 }
 

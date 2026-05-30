@@ -266,6 +266,13 @@ export interface QuoteLine {
    * and in the client preview + PDF next to the subtype.
    */
   swatchImageId?: string | null;
+  /**
+   * Additional product photos beyond the cover `imageId` — the dealer can
+   * attach several angles / detail shots so the client sees the piece properly
+   * on the share link. Ordered; the gallery shown is [imageId, ...extraImageIds].
+   * Stored as a jsonb array (db column extra_image_ids); null/absent ⇒ no extras.
+   */
+  extraImageIds?: string[] | null;
   /** Alternative-material options with price deltas (see MaterialOptions). */
   materialOptions?: MaterialOptions | null;
 

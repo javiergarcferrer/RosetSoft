@@ -387,6 +387,8 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
   // Material-less line — show its price RANGE instead of a single total.
   const ranged = isRangeLine(line);
   const totalR = ranged ? lineTotalRange(line) : null;
+  // Extra product photos beyond the cover — a small zoomable strip under it.
+  const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Layout shape, mobile-first:
   //
   //   row 1   image + text side-by-side
@@ -483,15 +485,29 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
           scale (w-44 / lg:w-52) so the on-screen preview reads at the same
           physical size as the printed PDF. */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-5">
-        {line.imageId ? (
-          <ImageZoom
-            id={line.imageId}
-            alt={line.name || ''}
-            className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
-          />
-        ) : (
-          <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100 flex-shrink-0" />
-        )}
+        <div className="flex-shrink-0">
+          {line.imageId ? (
+            <ImageZoom
+              id={line.imageId}
+              alt={line.name || ''}
+              className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
+            />
+          ) : (
+            <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100" />
+          )}
+          {extras.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
+              {extras.map((id) => (
+                <ImageZoom
+                  key={id}
+                  id={id}
+                  alt={line.name || ''}
+                  className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50"
+                />
+              ))}
+            </div>
+          )}
+        </div>
         <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
           <div className="min-w-0 sm:flex-1">
             {line.family && (
@@ -637,6 +653,8 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
+  // Extra product photos beyond the cover — a small zoomable strip under it.
+  const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
   // "−Y%" caption can't show an out-of-range value; the money above already
   // routes through compoundSubtotal / lineTotal.
@@ -721,6 +739,13 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
             />
           ) : (
             <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100" />
+          )}
+          {extras.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
+              {extras.map((id) => (
+                <ImageZoom key={id} id={id} alt={line.name || ''} className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50" />
+              ))}
+            </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
