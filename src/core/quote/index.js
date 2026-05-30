@@ -16,6 +16,10 @@
 // ---- derivations: pricing + grouping (totals, ranges, group runs, positions)
 export * from '../../lib/pricing.js';
 
+// ---- per-quote money rollups (the single "sum a quote" helpers for the
+//      list/detail surfaces — dashboard, quotes/orders lists, customer/pro)
+export { linesByQuoteId, quoteTotals, quoteGrandTotal } from './totals.js';
+
 // ---- predicates (what counts toward the total)
 export { isPricedLine, isPricedComponent } from '../../lib/constants.js';
 

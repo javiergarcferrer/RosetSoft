@@ -30,11 +30,9 @@ export default function ContainerTracking({ containerNo, shareToken }) {
     useContainerTracking(containerNo, shareToken);
   const mapRef = useRef(null);
 
-  const meta = [voyage.vessel, voyage.voyage, voyage.carrier].filter(Boolean).join(' · ');
-  const etaDays = !voyage.arrived && voyage.etaAt ? Math.round((voyage.etaAt - Date.now()) / 86_400_000) : null;
-  const etaLabel = !voyage.arrived && voyage.etaAt
-    ? `ETA ${formatDateTime(voyage.etaAt)}${etaDays != null ? (etaDays >= 0 ? ` · en ${etaDays} d` : ' · vencida') : ''}`
-    : null;
+  // Same voyage projection the map's HUD reads; `transitEtaLabel` is the band
+  // form (suppressed once arrived — see resolveVoyageHud).
+  const { meta, transitEtaLabel: etaLabel, progressLabel } = resolveVoyageHud(voyage);
 
   return (
     <div className="rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3">
@@ -101,7 +99,7 @@ export default function ContainerTracking({ containerNo, shareToken }) {
                   />
                 </div>
                 <div className="flex items-center justify-between gap-2 text-[10px] text-ink-500">
-                  <span className="font-medium">{voyage.arrived ? 'Entregado' : `${Math.round(voyage.progressPct)}% del trayecto`}</span>
+                  <span className="font-medium">{progressLabel}</span>
                   {etaLabel && <span className="truncate">{etaLabel}</span>}
                 </div>
               </div>

@@ -12,8 +12,9 @@ import { formatDateTime, formatMoney } from '../../lib/format.js';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import {
-  cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
+  cycleEnding, isoDate, parseISODate, formatCycle,
 } from '../../lib/commissionCycle.js';
+import { resolveCommissionPayout } from '../../core/accounting/sales.js';
 
 /**
  * Admin-only monthly commissions report. The dealer pays out on the
@@ -116,61 +117,9 @@ export default function AdminCommissions() {
       return { base: t.taxableBase, grandTotal: t.grandTotal };
     }
 
-    // Quotes in the window: deposited within window AND attributable
-    // to a user.
-    const inWindow = quotes.filter((q) =>
-      q.depositReceivedAt &&
-      q.depositReceivedAt >= window.start &&
-      q.depositReceivedAt <= window.end &&
-      q.createdByUserId
-    );
-
-    // Group by creator.
-    const byUser = new Map();
-    let cycleBase = 0;
-    let cycleCommission = 0;
-    for (const q of inWindow) {
-      const user = profilesById.get(q.createdByUserId);
-      if (!user) continue;          // attributed to a deleted profile
-      const { base, grandTotal } = totalsFor(q);
-      const pct = clampPct(user.commissionPct);
-      const commission = base * (pct / 100);
-      cycleBase += base;
-      cycleCommission += commission;
-      if (!byUser.has(user.id)) {
-        byUser.set(user.id, {
-          user,
-          pct,
-          quotes: [],
-          base: 0,
-          commission: 0,
-        });
-      }
-      const entry = byUser.get(user.id);
-      entry.quotes.push({
-        quote: q,
-        customer: q.customerId ? customersById.get(q.customerId) : null,
-        base,
-        grandTotal,
-        commission,
-      });
-      entry.base += base;
-      entry.commission += commission;
-    }
-
-    const rows = [...byUser.values()]
-      // Don't show 0-commission rows — better to omit than render a
-      // zero that looks like a bug.
-      .filter((r) => r.commission > 0 || r.base > 0)
-      .sort((a, b) => b.commission - a.commission);
-
-    return {
-      rows,
-      cycleBase,
-      cycleCommission,
-      depositedCount: inWindow.length,
-      activeEmployees: rows.length,
-    };
+    // Windowing + per-seller grouping live in the accounting Model, shared
+    // with the per-sale Contabilidad surface so the commission math agrees.
+    return resolveCommissionPayout({ quotes, profilesById, customersById, totalsFor, window });
   }, [profiles, quotes, lines, customers, window]);
 
   if (!isAdmin) {

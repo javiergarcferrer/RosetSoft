@@ -4,6 +4,7 @@ import { safeDynamicImport } from '../lib/dynamicImport.js';
 import { formatDateTime } from '../lib/format.js';
 import { CLASSIFIER_LABELS, MODE_LABELS } from '../lib/containerTracking.js';
 import { greatCircle, splitAntimeridian, bearingDeg } from '../lib/voyageGeometry.js';
+import { resolveVoyageHud } from '../core/tracking/voyage.js';
 
 /**
  * The container voyage map. Draws a Hapag-Lloyd Track & Trace route as
@@ -152,19 +153,15 @@ export default ContainerTrackingMap;
 /* -------------------------------- HUD -------------------------------- */
 
 function VoyageHud({ voyage }) {
-  const { origin, destination, vessel, voyage: voyageNo, carrier, etaAt, updatedAt, progressPct, arrived } = voyage;
-  const meta = [vessel, voyageNo, carrier].filter(Boolean).join(' · ');
-  const days = etaAt ? Math.round((etaAt - Date.now()) / 86_400_000) : null;
-  const etaLabel = etaAt
-    ? `ETA ${formatDateTime(etaAt)}${!arrived && days != null ? (days >= 0 ? ` · en ${days} d` : ' · vencida') : ''}`
-    : null;
+  const { originName, destName, meta, etaLabel, progressPct, progressLabel, arrived, updatedLabel } =
+    resolveVoyageHud(voyage);
 
   return (
     <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-white/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
       <div className="flex items-center gap-1.5 font-semibold text-ink-900 leading-tight">
-        <span className="truncate">{origin?.name || '—'}</span>
+        <span className="truncate">{originName}</span>
         <span className="text-ink-300">→</span>
-        <span className="truncate">{destination?.name || '—'}</span>
+        <span className="truncate">{destName}</span>
       </div>
       {meta && <div className="text-[10px] text-ink-500 mt-0.5 truncate">{meta}</div>}
 
@@ -176,11 +173,11 @@ function VoyageHud({ voyage }) {
       </div>
       <div className="flex items-center justify-between gap-2 mt-1 text-[10px]">
         <span className={arrived ? 'text-emerald-700 font-medium' : 'text-ink-600 font-medium'}>
-          {arrived ? 'Entregado' : `${Math.round(progressPct)}% del trayecto`}
+          {progressLabel}
         </span>
         {etaLabel && <span className="text-ink-500 truncate">{etaLabel}</span>}
       </div>
-      {updatedAt && <div className="text-[10px] text-ink-400 mt-0.5">Act. {formatDateTime(updatedAt)}</div>}
+      {updatedLabel && <div className="text-[10px] text-ink-400 mt-0.5">{updatedLabel}</div>}
     </div>
   );
 }

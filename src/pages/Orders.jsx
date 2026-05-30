@@ -7,8 +7,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { computeTotals, lineForTotals } from '../lib/pricing.js';
-import { isPricedLine } from '../lib/constants.js';
+import { resolveOrdersList } from '../core/quote/views/lists.js';
 import { currentOrderStage } from '../lib/orderStages.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
@@ -59,74 +58,19 @@ export default function Orders() {
   // quotes vs N round-trips for N visible orders.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
-  const customerById = useMemo(() => {
-    const m = new Map();
-    for (const c of customers) m.set(c.id, c);
-    return m;
-  }, [customers]);
-
-  // For each order, build the set of customer rows attached via its
-  // quotes. Many orders are created from a quote (the OrderChip flow
-  // pre-sets order.customerId), but some are created manually via
-  // "Nuevo pedido" and never have a direct customer — they inherit
-  // their customer from whichever quote(s) are attached. Without this
-  // lookup the Pedidos list rendered "Sin cliente" for those orders,
-  // which read as a data problem when it was just a display gap.
-  const customersByOrder = useMemo(() => {
-    const m = new Map();
-    for (const q of allQuotes) {
-      if (!q.orderId || !q.customerId) continue;
-      const customer = customerById.get(q.customerId);
-      if (!customer) continue;
-      if (!m.has(q.orderId)) m.set(q.orderId, []);
-      const list = m.get(q.orderId);
-      if (!list.some((c) => c.id === customer.id)) list.push(customer);
-    }
-    return m;
-  }, [allQuotes, customerById]);
-
-  // Resolve the customer label for an order: prefer the direct
-  // assignment (order.customerId), fall back to the quotes', cap
-  // visible at the first customer plus "+N más" when several.
-  function orderCustomerLabel(o) {
-    const direct = o.customerId ? customerById.get(o.customerId) : null;
-    if (direct) return direct.company || direct.name;
-    const fromQuotes = customersByOrder.get(o.id) || [];
-    if (fromQuotes.length === 0) return null;
-    const head = fromQuotes[0].company || fromQuotes[0].name;
-    return fromQuotes.length === 1 ? head : `${head} + ${fromQuotes.length - 1} más`;
-  }
-
-  const { totalByOrder, quoteCountByOrder, containerCountByOrder } = useMemo(() => {
-    // Group lines by quote, then run each quote through the canonical
-    // computeTotals so compounds (qty/unitPrice=0 by design) roll up
-    // their components and line-level + quote-level adjustments
-    // (discount, ITBIS, shipping) land in the figure. Previously the
-    // inline `qty * unitPrice` math showed $0 for compound quotes and
-    // ignored every adjustment.
-    const linesByQuote = new Map();
-    for (const l of allLines) {
-      if (!linesByQuote.has(l.quoteId)) linesByQuote.set(l.quoteId, []);
-      linesByQuote.get(l.quoteId).push(l);
-    }
-    const totalByOrder = new Map();
-    const quoteCountByOrder = new Map();
-    for (const q of allQuotes) {
-      if (!q.orderId) continue;
-      const rows = (linesByQuote.get(q.id) || [])
-        .filter(isPricedLine)
-        .map(lineForTotals);
-      const t = computeTotals(rows, q).grandTotal;
-      totalByOrder.set(q.orderId, (totalByOrder.get(q.orderId) || 0) + t);
-      quoteCountByOrder.set(q.orderId, (quoteCountByOrder.get(q.orderId) || 0) + 1);
-    }
-    const containerCountByOrder = new Map();
-    for (const c of allContainers) {
-      if (!c.orderId) continue;
-      containerCountByOrder.set(c.orderId, (containerCountByOrder.get(c.orderId) || 0) + 1);
-    }
-    return { totalByOrder, quoteCountByOrder, containerCountByOrder };
-  }, [allQuotes, allLines, allContainers]);
+  // Everything the list renders — the per-order customer label and the
+  // per-order rollups (total / quote count / container count) — is a pure
+  // projection of the already-fetched rows. The page derives nothing itself;
+  // it reads `customerLabelByOrderId` as a plain string per order and the
+  // count/total Maps straight through (the del() handler reads the counts too).
+  const {
+    customerLabelByOrderId, totalByOrder, quoteCountByOrder, containerCountByOrder,
+  } = useMemo(
+    () => resolveOrdersList({
+      orders, customers, quotes: allQuotes, containers: allContainers, lines: allLines,
+    }),
+    [orders, customers, allQuotes, allContainers, allLines],
+  );
 
   async function newOrder() {
     const id = newId();
@@ -203,7 +147,7 @@ export default function Orders() {
           <OrderCard
             key={o.id}
             o={o}
-            customerLabel={orderCustomerLabel(o)}
+            customerLabel={customerLabelByOrderId.get(o.id)}
             quoteCount={quoteCountByOrder.get(o.id) || 0}
             containerCount={containerCountByOrder.get(o.id) || 0}
             total={totalByOrder.get(o.id) || 0}
@@ -233,7 +177,7 @@ export default function Orders() {
               <OrderRow
                 key={o.id}
                 o={o}
-                customerLabel={orderCustomerLabel(o)}
+                customerLabel={customerLabelByOrderId.get(o.id)}
                 quoteCount={quoteCountByOrder.get(o.id) || 0}
                 containerCount={containerCountByOrder.get(o.id) || 0}
                 total={totalByOrder.get(o.id) || 0}

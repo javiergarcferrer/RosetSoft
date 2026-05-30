@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch, ImagePlus, Loader2 } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
@@ -15,14 +15,10 @@ import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
-import {
-  applyLineAdjustments, materialOptionDeltas,
-  isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
-  componentAlternativeGroupInfo,
-} from '../../lib/pricing.js';
+import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
+import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { newId, saveImage } from '../../db/database.js';
 
@@ -79,21 +75,21 @@ export default function QuoteLineItem({
 
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
-  const compound = isCompoundLine(line);
-  const unit = applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
-  const rowTotal = compound ? lineTotal(line) : unit * (line.qty || 0);
+  // All per-line DISPLAY derivation lives in the ViewModel — the card reads
+  // fields, never computes them. Currency formatting stays here (the VM is a
+  // plain-data projection, rate-agnostic) via the `fmt` closure below.
+  const vm = useMemo(() => resolveLineItem(line), [line]);
+  const compound = vm.isCompound;
+  const unit = vm.unitNet;
+  const rowTotal = vm.subtotal;
   // Material-less RANGE line — priced cheapest→priciest grade until a fabric is
   // picked. Shows a range band instead of the qty × unit = total calculator.
-  const range = !compound && isRangeLine(line);
-  const totalRange = range ? lineTotalRange(line) : null;
+  const range = vm.isRange;
+  const totalRange = vm.range;
   const fmt = (v) => formatMoney(v, currency, rates);
-  // Only render the adjustment chip when there's a live discount or a
-  // legacy margin to explain (new lines never set margin, but old quotes
-  // may have it). Without this gate the c/u line shows on every adjusted
-  // row even when the chip itself is empty.
-  const discount = Number(line.lineDiscountPct) || 0;
-  const margin = Number(line.lineMarginPct) || 0;
-  const hasAdjustment = discount !== 0 || margin !== 0;
+  // Only render the adjustment chip when there's a live discount or a legacy
+  // margin to explain (gate resolved in the VM as `hasAdjustment`).
+  const hasAdjustment = vm.hasAdjustment;
 
   // ----- compound mutations -----
   function addComponent() {
@@ -198,7 +194,7 @@ export default function QuoteLineItem({
   // fabric swatch — lifted to z-[2] in GradeFabricRow — stays full-colour
   // while the product photo, text and prices dim. Same treatment the
   // client preview and the PDF export use.
-  const dimmed = !!line.isOptional || (!!line.alternativeGroup && !line.isSelectedAlternative);
+  const dimmed = vm.dimmed;
 
   return (
     // qli-row turns each row into its own container-query root, so the
@@ -255,6 +251,7 @@ export default function QuoteLineItem({
         {compound ? (
           <CompoundCalculatorBand
             line={line}
+            compound={vm.compound}
             rowTotal={rowTotal}
             fmt={fmt}
             hasAdjustment={hasAdjustment}
@@ -286,6 +283,7 @@ export default function QuoteLineItem({
       {compound && (
         <ComponentsPanel
           line={line}
+          components={vm.components}
           currency={currency}
           rates={rates}
           fmt={fmt}
@@ -1330,14 +1328,15 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
 // line-level discount).
 // ---------------------------------------------------------------------------
 function CompoundCalculatorBand({
-  line, rowTotal, fmt, hasAdjustment, breakdownOpen,
+  line, compound, rowTotal, fmt, hasAdjustment, breakdownOpen,
   onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
-  const count = (line.components || []).length;
-  // A compound made of material-less pieces shows a price RANGE, exactly like a
-  // standalone range line; lineTotalRange collapses to a point otherwise.
-  const ranged = lineHasRange(line);
-  const tr = ranged ? lineTotalRange(line) : null;
+  // Compound roll-up resolved in the VM: component count, whether it shows a
+  // price RANGE (any material-less piece — like a standalone range line), and
+  // that range (null when fully specified, where lineTotalRange is a point).
+  const count = compound.count;
+  const ranged = compound.hasRange;
+  const tr = compound.range;
   return (
     <div className="qli-pricing">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1394,10 +1393,13 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
   const components = line.components || [];
-  // "Opción N de M" positions for any component alternative groups.
-  const altInfo = componentAlternativeGroupInfo(components);
+  // Per-component display projection (total, range swap, optional/alternative
+  // flags + dim state, and the "Opción N de M" position) resolved once in the
+  // VM, keyed by component id. The raw components above still drive the map's
+  // keys, drag/reorder and the edit handlers.
+  const vmById = new Map((componentVMs || []).map((v) => [v.id, v]));
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
 
@@ -1459,10 +1461,10 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
               <ComponentRow
                 index={i}
                 component={c}
+                vm={vmById.get(c.id)}
                 currency={currency}
                 rates={rates}
                 fmt={fmt}
-                groupInfo={altInfo.get(c.id)}
                 onChange={(patch) => onUpdate(c.id, patch)}
                 onRemove={() => onRemove(c.id)}
                 onAddAlternative={() => onAddAlternative?.(c.id)}
@@ -1487,14 +1489,12 @@ function ComponentsPanel({ line, currency, rates, fmt, onAdd, onUpdate, onRemove
   );
 }
 
-function ComponentRow({ index, component, currency, rates, fmt, groupInfo, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
-  const total = componentSubtotal(component);
-  const optional = !!component.isOptional;
-  // Component-level alternative (pick-one) — the compound twin of a line
-  // alternative: dim the non-selected options, radio to choose the billed one.
-  const inGroup = !!component.alternativeGroup;
-  const isSelected = !!component.isSelectedAlternative;
-  const dimmed = inGroup && !isSelected;
+function ComponentRow({ index, component, vm, currency, rates, fmt, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
+  // Display fields resolved in the VM (see resolveComponents): the component's
+  // total, its optional/alternative flags, the resulting "off" (dimmed) state,
+  // the "Opción N de M" position, and the range swap (a material-less sub-piece
+  // shows a range like the standalone line, one level down).
+  const { total, optional, inGroup, isSelected, dimmed, groupInfo } = vm;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
@@ -1666,10 +1666,10 @@ function ComponentRow({ index, component, currency, rates, fmt, groupInfo, onCha
           when the sub-piece is quoted material-less, else the SAME <PricingRow>
           primitive the article line uses, rendered one size down ('md'). The
           range ↔ calculator swap mirrors the standalone line exactly. */}
-      {isRangeComponent(component) ? (
+      {vm.hasRange ? (
         <RangeBand
           line={component}
-          totalRange={componentSubtotalRange(component)}
+          totalRange={vm.range}
           fmt={fmt}
           onChange={onChange}
         />
