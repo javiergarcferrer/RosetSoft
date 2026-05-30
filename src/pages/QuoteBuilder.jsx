@@ -6,7 +6,7 @@ import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { computeTotals, computeTotalsRange, lineForTotals } from '../lib/pricing.js';
 import { groupFamilies } from '../lib/catalog.js';
-import { effectiveRates, displayRatesFor } from '../lib/exchangeRate.js';
+import { effectiveRates, quoteRateState } from '../lib/exchangeRate.js';
 import { LINE_KIND_ITEM, isPricedLine } from '../lib/constants.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
@@ -177,12 +177,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // Until a quote is ACCEPTED it tracks the live published rate from
   // Settings, so the dealer (and the client on the link) always sees
   // today's number. Once the quote is ACCEPTED the rate is locked to the
-  // snapshot taken at accept time (displayRatesFor returns baseQuote.rates),
-  // so a later rate change can't move a figure the client committed to.
+  // snapshot taken at accept time. The lock + the rate map come from ONE
+  // place — quoteRateState — so the totals-dock padlock and the priced figure
+  // can never disagree; we resolve it once here and pass both down.
+  const rateState = useMemo(() => quoteRateState(baseQuote, settings), [baseQuote, settings]);
   const quote = useMemo(() => {
     if (!baseQuote) return null;
-    return { ...baseQuote, rates: displayRatesFor(baseQuote, settings) };
-  }, [baseQuote, settings]);
+    return { ...baseQuote, rates: rateState.rates };
+  }, [baseQuote, rateState]);
   const lines = useLiveQuery(
     () => db.quoteLines.where('quoteId').equals(quoteId).sortBy('sortOrder'),
     [quoteId],
@@ -442,6 +444,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           width, replacing the old desktop right-rail and the mobile totals bar. */}
       <TotalsDock
         quote={quote}
+        rateLocked={rateState.locked}
         totals={totals}
         totalsRange={totalsRange}
         professional={professional}

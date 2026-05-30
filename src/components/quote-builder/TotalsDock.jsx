@@ -36,7 +36,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * design — so a quote-wide margin gauge shows only when one is actually set.
  */
 export default function TotalsDock({
-  quote, totals, totalsRange, professional, onUpdateQuote,
+  quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
   onOpenCatalog, onExport, exporting, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
@@ -45,10 +45,9 @@ export default function TotalsDock({
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
   const dopTotal = dopRate ? totals.grandTotal * dopRate : null;
-  // The rate floats live until the quote is ACCEPTED; once accepted it's frozen
-  // to the snapshot taken at accept time (by design — a figure the client has
-  // committed to can't move). Flag it so a locked rate isn't mistaken for a stale one.
-  const rateLocked = !!quote.acceptedAt;
+  // `rateLocked` is the shared rate-lock state (lib/exchangeRate:quoteRateState),
+  // resolved once in QuoteBuilder and passed in — never re-derived here, so this
+  // padlock can't disagree with the priced figure.
 
   const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 

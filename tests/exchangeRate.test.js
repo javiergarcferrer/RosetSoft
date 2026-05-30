@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldPullDailyRate, displayRatesFor } from '../src/lib/exchangeRate.js';
+import { shouldPullDailyRate, displayRatesFor, quoteRateState } from '../src/lib/exchangeRate.js';
 
 // Build a ms timestamp for a given AST wall-clock by pinning the -04:00 offset.
 const ast = (iso) => Date.parse(`${iso}-04:00`);
@@ -57,6 +57,24 @@ test('fires exactly at the 08:00 boundary', () => {
   const updatedAt = ast('2026-05-27T15:00:00');
   const now = ast('2026-05-28T08:00:00');        // exactly 08:00 AST
   assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
+});
+
+/* ----------------------- quoteRateState (single source of truth) ---------------------- */
+
+test('quoteRateState — one source for BOTH the lock flag and the rate map', () => {
+  const settings = { exchangeRate: { buy: 58, sell: 62, updatedAt: 1 } }; // live venta = 62
+  // Not accepted → unlocked + live rate (the padlock must read the SAME).
+  const sent = quoteRateState({ status: 'sent', sentAt: 1, rates: { USD: 1, DOP: 50 } }, settings);
+  assert.equal(sent.locked, false);
+  assert.equal(sent.rates.DOP, 62);
+  assert.equal(sent.dopRate, 62);
+  // Accepted → locked + the frozen snapshot.
+  const acc = quoteRateState({ status: 'accepted', acceptedAt: 9, rates: { USD: 1, DOP: 55 } }, settings);
+  assert.equal(acc.locked, true);
+  assert.deepEqual(acc.rates, { USD: 1, DOP: 55 });
+  assert.equal(acc.dopRate, 55);
+  // displayRatesFor is literally the `.rates` of the same state — they can't diverge.
+  assert.deepEqual(displayRatesFor({ acceptedAt: 9, rates: { USD: 1, DOP: 55 } }, settings), acc.rates);
 });
 
 /* ----------------------- displayRatesFor (the accept-time lock) ---------------------- */

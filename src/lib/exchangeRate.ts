@@ -61,30 +61,45 @@ export function effectiveRates(settings: Settings | null | undefined): RatesMap 
 }
 
 /**
- * Rates to use when displaying totals for a specific quote on list / detail /
- * client-facing surfaces (Quotes, Orders, OrderDetail, Dashboard, accounting,
- * the PDF, the public link).
+ * THE single source of truth for a quote's exchange-rate lock: the rate map to
+ * price / display with, AND whether it's frozen. Every surface derives from this
+ * one function — the totals-dock padlock, the list/detail figures, the PDF, the
+ * public link — instead of re-deriving the condition, so the lock can never read
+ * one way in one place and another way somewhere else (the bug class this
+ * replaces).
  *
- * Rule of thumb:
- *   • Not yet accepted (draft / sent — or declined, which was never accepted) →
- *     today's LIVE rate from settings. The peso figure tracks the bank's
- *     published rate right up until the client commits.
- *   • Accepted (and beyond) → the snapshot frozen the moment the quote was
- *     ACCEPTED. Once the client commits to a peso figure it must not move, even
- *     if the bank's rate changes the next day. `acceptedAt` is the lock signal
- *     and the instant QuoteBuilder/useQuoteController captures the snapshot onto
- *     `quote.rates`.
+ *   • locked === false → not yet accepted (draft / sent / declined). `rates`
+ *     floats with today's live Banco Popular venta from settings.
+ *   • locked === true  → accepted. `rates` is the snapshot frozen the instant
+ *     the quote was accepted (`acceptedAt`); it can't move under the client.
  *
- * Falls back to the live rate when there's no accepted snapshot yet.
+ * The accept-time snapshot itself is written once by useQuoteController on the
+ * accept transition; this function only READS the resulting state.
  */
+export interface QuoteRateState {
+  /** Frozen to the accept-time snapshot? */
+  locked: boolean;
+  /** The rate map to price / display this quote with (snapshot when locked, else live). */
+  rates: RatesMap;
+  /** Convenience: the USD→DOP figure in `rates` (null when absent). */
+  dopRate: number | null;
+}
+
+export function quoteRateState(
+  quote: Pick<Quote, 'rates' | 'acceptedAt'> | null | undefined,
+  settings: Settings | null | undefined,
+): QuoteRateState {
+  const locked = !!(quote && quote.acceptedAt && quote.rates);
+  const rates = locked ? (quote!.rates as RatesMap) : effectiveRates(settings);
+  return { locked, rates, dopRate: rates?.DOP ?? null };
+}
+
+/** The rate map to price / display a quote with — `.rates` of {@link quoteRateState}. */
 export function displayRatesFor(
   quote: Pick<Quote, 'rates' | 'acceptedAt'> | null | undefined,
   settings: Settings | null | undefined,
 ): RatesMap {
-  if (quote && quote.acceptedAt && quote.rates) {
-    return quote.rates;
-  }
-  return effectiveRates(settings);
+  return quoteRateState(quote, settings).rates;
 }
 
 /**
