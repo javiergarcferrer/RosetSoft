@@ -11,6 +11,7 @@ import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import ProductPicker from './ProductPicker.jsx';
+import CatalogPicker from './CatalogPicker.jsx';
 import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
@@ -18,7 +19,7 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import {
   applyLineAdjustments, materialOptionDeltas,
   isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
-  isRangeLine, lineTotalRange,
+  isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
 } from '../../lib/pricing.js';
 import { splitSkuGrade, switchLineProduct, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
@@ -1254,6 +1255,10 @@ function CompoundCalculatorBand({
   onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
   const count = (line.components || []).length;
+  // A compound made of material-less pieces shows a price RANGE, exactly like a
+  // standalone range line; lineTotalRange collapses to a point otherwise.
+  const ranged = lineHasRange(line);
+  const tr = ranged ? lineTotalRange(line) : null;
   return (
     <div className="qli-pricing">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1262,7 +1267,7 @@ function CompoundCalculatorBand({
         </div>
         <div className="relative text-right ml-auto">
           <div className="eyebrow-xs tracking-wide mb-0.5">
-            Total compuesto
+            {ranged ? 'Total compuesto · rango' : 'Total compuesto'}
           </div>
           <button
             type="button"
@@ -1272,7 +1277,9 @@ function CompoundCalculatorBand({
             aria-expanded={breakdownOpen}
           >
             <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight">
-              {fmt(rowTotal)}
+              {ranged
+                ? <>{fmt(tr.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(tr.max)}</>
+                : fmt(rowTotal)}
             </div>
             {hasAdjustment ? (
               <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
@@ -1400,17 +1407,23 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
   const total = componentSubtotal(component);
   const optional = !!component.isOptional;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
-  // Switch THIS sub-piece to a different catalog model — the compound twin of
-  // the line-level product selector. Keeps the materials the new model offers a
-  // grade for; the patch's line-only fields (family, unitCost) are dropped, as
-  // a component carries neither.
-  function switchProduct(family) {
-    const patch = switchLineProduct(component, family);
-    if (!patch) return;
-    const componentPatch = { ...patch };
-    delete componentPatch.family;
-    delete componentPatch.unitCost;
-    onChange(componentPatch);
+  // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
+  // pick a model, then a material + color OR "sin material · cotizar por rango".
+  // The catalog seed is applied to the component (dropping the line-only family
+  // / unitCost), carrying priceMin/priceMax for a range pick and resetting any
+  // prior alternative materials so a freshly-picked product starts clean.
+  function insertProductToComponent(seed) {
+    onChange({
+      reference: seed.reference,
+      name: seed.name,
+      dimensions: seed.dimensions,
+      subtype: seed.subtype,
+      unitPrice: seed.unitPrice,
+      swatchImageId: seed.swatchImageId ?? null,
+      priceMin: seed.priceMin ?? null,
+      priceMax: seed.priceMax ?? null,
+      materialOptions: null,
+    });
   }
   // ComponentRow used to be a two-column grid (specs on the left, calc
   // cells on the right via `sm:grid-cols-[minmax(0,1fr)_auto]`). The
@@ -1517,6 +1530,10 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
             swatchImageId: component.swatchImageId,
             reference: component.reference,
             materialOptions: component.materialOptions,
+            // Range fields so picking a material clears the component's range and
+            // pins its price, exactly as on a standalone line (GradeFabricRow.commit).
+            priceMin: component.priceMin,
+            priceMax: component.priceMax,
           }}
           onChange={(patch) => onChange(patch)}
           currency={currency}
@@ -1524,31 +1541,39 @@ function ComponentRow({ index, component, currency, rates, fmt, onChange, onRemo
         />
       </div>
 
-      {/* Pricing row — the SAME <PricingRow> primitive the article line
-          uses, so the equation reads identically (right-aligned cluster
-          on wide widths, labelled stack when narrow). The component total
-          is a plain read-out (no breakdown button — the parent line owns
-          the compound breakdown) and rendered one size down ('md'). */}
-      <div className="qli-pricing">
-        <PricingRow
-          qty={component.qty}
-          unitPrice={component.unitPrice}
-          total={total}
+      {/* Pricing — a range band (qty + "min – max" + a pick-a-fabric hint)
+          when the sub-piece is quoted material-less, else the SAME <PricingRow>
+          primitive the article line uses, rendered one size down ('md'). The
+          range ↔ calculator swap mirrors the standalone line exactly. */}
+      {isRangeComponent(component) ? (
+        <RangeBand
+          line={component}
+          totalRange={componentSubtotalRange(component)}
           fmt={fmt}
-          currency={currency}
-          onQtyChange={(q) => onChange({ qty: q })}
-          onUnitChange={(v) => onChange({ unitPrice: v })}
-          totalSize="md"
-          totalLabel="Total"
-          qtyAriaLabel="Cantidad del componente"
-          unitAriaLabel="Precio unitario del componente"
+          onChange={onChange}
         />
-      </div>
+      ) : (
+        <div className="qli-pricing">
+          <PricingRow
+            qty={component.qty}
+            unitPrice={component.unitPrice}
+            total={total}
+            fmt={fmt}
+            currency={currency}
+            onQtyChange={(q) => onChange({ qty: q })}
+            onUnitChange={(v) => onChange({ unitPrice: v })}
+            totalSize="md"
+            totalLabel="Total"
+            qtyAriaLabel="Cantidad del componente"
+            unitAriaLabel="Precio unitario del componente"
+          />
+        </div>
+      )}
 
-      <ProductPicker
+      <CatalogPicker
         open={productPickerOpen}
         onClose={() => setProductPickerOpen(false)}
-        onSelect={switchProduct}
+        onInsert={insertProductToComponent}
       />
     </div>
   );

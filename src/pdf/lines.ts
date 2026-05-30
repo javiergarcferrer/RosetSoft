@@ -3,7 +3,7 @@ import type { QuoteLine, LineComponent, MaterialOptions } from '../types/domain.
 import {
   applyLineAdjustments, isCompoundLine, componentSubtotal, compoundSubtotal,
   lineTotal, lineListUnit, lineQty, setSubtotal, alternativeSubtotal,
-  materialOptionDeltas, isRangeLine, lineTotalRange, selectedAlternative,
+  materialOptionDeltas, isRangeLine, lineTotalRange, lineHasRange, selectedAlternative,
 } from '../lib/pricing.js';
 import { splitSkuGrade } from '../lib/catalog.js';
 import { swatchProxyUrl } from '../lib/swatchImage.js';
@@ -1649,8 +1649,12 @@ async function drawCompoundLineRow(
   const discount = Number(line.lineDiscountPct) || 0;
   const grandTotal = lineTotal(line);
   const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
+  // Material-less components make the compound a RANGE — "min – max" anchor,
+  // same as a standalone range line; the discount strike is skipped then.
+  const ranged = lineHasRange(line);
+  const tr = ranged ? lineTotalRange(line) : null;
 
-  if (discount !== 0) {
+  if (!ranged && discount !== 0) {
     // Struck-through subtotal — same treatment as the article line's
     // "antes" strike under UNITARIO. pdf-lib has no text-decoration,
     // so we draw a 0.6pt rule across the price string at the x-height.
@@ -1683,10 +1687,12 @@ async function drawCompoundLineRow(
     T.compTotalLabel.size, fontBold, T.compTotalLabel.color, T.compTotalLabel.cs,
   );
   sy -= T.compTotalLabel.lh;
-  const totalValY = sy - T.compTotalValue.size;
+  const compValText = tr ? `${fmt(tr.min)} – ${fmt(tr.max)}` : fmt(grandTotal);
+  const compValSize = tr ? T.compTotalValue.size * 0.8 : T.compTotalValue.size;
+  const totalValY = sy - compValSize;
   drawRightAt(
-    page, fmt(grandTotal), cols.detail.rightX, totalValY,
-    T.compTotalValue.size, fontBold, T.compTotalValue.color,
+    page, compValText, cols.detail.rightX, totalValY,
+    compValSize, fontBold, T.compTotalValue.color,
   );
 
   // ---- Option / alternative treatment ----------------------------------

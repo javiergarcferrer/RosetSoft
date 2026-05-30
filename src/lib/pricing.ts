@@ -504,11 +504,69 @@ export function isRangeLine(line: QuoteLine | null | undefined): boolean {
 }
 
 /**
+ * A COMPONENT quoted without a chosen material carries a price range — the
+ * mirror of isRangeLine, one level down. Drives the compound's range so a
+ * compound made of material-less pieces widens just like a standalone line.
+ */
+export function isRangeComponent(component: LineComponent | null | undefined): boolean {
+  if (!component) return false;
+  const min = component.priceMin;
+  const max = component.priceMax;
+  return min != null && max != null && safeNum(max) > safeNum(min);
+}
+
+/** Component subtotal RANGE — qty on both ends; a point for a fixed component. */
+export function componentSubtotalRange(component: LineComponent | null | undefined): MoneyRange {
+  if (!isRangeComponent(component)) {
+    const t = componentSubtotal(component);
+    return { min: t, max: t };
+  }
+  const qty = safeNum(component!.qty, 0);
+  return { min: safeNum(component!.priceMin) * qty, max: safeNum(component!.priceMax) * qty };
+}
+
+/** Compound subtotal RANGE — sum of the non-optional components' subtotal ranges. */
+export function compoundSubtotalRange(line: QuoteLine | null | undefined): MoneyRange {
+  if (!isCompoundLine(line)) return { min: 0, max: 0 };
+  return line.components
+    .filter((c) => !c?.isOptional)
+    .reduce(
+      (acc, c) => {
+        const r = componentSubtotalRange(c);
+        return { min: acc.min + r.min, max: acc.max + r.max };
+      },
+      { min: 0, max: 0 },
+    );
+}
+
+/**
+ * True when a line shows a price range — a compound with at least one
+ * material-less (range) component, OR a standalone range item. The compound-
+ * aware predicate the UI uses to decide between "min – max" and a single total.
+ */
+export function lineHasRange(line: QuoteLine | null | undefined): boolean {
+  if (isCompoundLine(line)) {
+    return (line!.components || []).some((c) => !c?.isOptional && isRangeComponent(c));
+  }
+  return isRangeLine(line);
+}
+
+/**
  * Per-line TOTAL range — line-level margin/discount + qty applied to BOTH the
  * low and high ends. Collapses to a point (min === max === lineTotal) for a
  * normal single-price line, so range-aware callers never special-case.
  */
 export function lineTotalRange(line: QuoteLine | null | undefined): MoneyRange {
+  // Compound: sum the component ranges, then apply the line-level margin /
+  // discount to each end (a compound's qty is always 1). Collapses to a point
+  // (= lineTotal) when no component carries a range, so existing behaviour is
+  // unchanged for a fully-specified compound.
+  if (isCompoundLine(line)) {
+    const r = compoundSubtotalRange(line);
+    const adj = (base: number): number =>
+      applyLineAdjustments(base, line?.lineMarginPct, line?.lineDiscountPct);
+    return { min: adj(r.min), max: adj(r.max) };
+  }
   if (!isRangeLine(line)) {
     const t = lineTotal(line);
     return { min: t, max: t };
@@ -519,9 +577,10 @@ export function lineTotalRange(line: QuoteLine | null | undefined): MoneyRange {
   return { min: adj(safeNum(line!.priceMin)), max: adj(safeNum(line!.priceMax)) };
 }
 
-/** True when any line that counts toward the total carries a price range. */
+/** True when any line that counts toward the total carries a price range
+ *  (compound-aware — a compound with a material-less component counts). */
 export function quoteHasRange(lines: readonly QuoteLine[] | null | undefined): boolean {
-  return (lines || []).some((l) => isPricedLine(l) && isRangeLine(l));
+  return (lines || []).some((l) => isPricedLine(l) && lineHasRange(l));
 }
 
 /**

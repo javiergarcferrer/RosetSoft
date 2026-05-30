@@ -29,6 +29,10 @@ import {
   lineTotalRange,
   quoteHasRange,
   computeTotalsRange,
+  isRangeComponent,
+  componentSubtotalRange,
+  compoundSubtotalRange,
+  lineHasRange,
 } from '../src/lib/pricing.js';
 
 /* ----------------------------- clampPct ------------------------------- */
@@ -533,4 +537,64 @@ test('computeTotalsRange — only the selected alternative / non-optional lines 
   assert.equal(Math.round(r.max), 354);
   assert.equal(quoteHasRange(lines), true);
   assert.equal(quoteHasRange([{ id: 'x', kind: 'item', unitPrice: 10 }]), false);
+});
+
+/* ------------------- compound (component) price ranges ------------------- */
+
+test('isRangeComponent — needs both bounds set and max > min', () => {
+  assert.equal(isRangeComponent({ priceMin: 100, priceMax: 180 }), true);
+  assert.equal(isRangeComponent({ priceMin: 100, priceMax: 100 }), false);
+  assert.equal(isRangeComponent({ priceMin: 100 }), false);
+  assert.equal(isRangeComponent({ unitPrice: 100 }), false);
+  assert.equal(isRangeComponent(null), false);
+});
+
+test('componentSubtotalRange — qty × each bound; a point for a fixed component', () => {
+  assert.deepEqual(componentSubtotalRange({ qty: 2, priceMin: 100, priceMax: 150 }), { min: 200, max: 300 });
+  assert.deepEqual(componentSubtotalRange({ qty: 3, unitPrice: 50 }), { min: 150, max: 150 });
+});
+
+test('compoundSubtotalRange — sums non-optional component ranges; skips optionals', () => {
+  const line = {
+    kind: 'item',
+    components: [
+      { id: 'r', qty: 1, priceMin: 100, priceMax: 200 }, // range
+      { id: 'f', qty: 2, unitPrice: 50 },                // fixed → 100..100
+      { id: 'o', qty: 1, priceMin: 999, priceMax: 9999, isOptional: true }, // excluded
+    ],
+  };
+  assert.deepEqual(compoundSubtotalRange(line), { min: 200, max: 300 });
+});
+
+test('lineHasRange / lineTotalRange — a compound widens when a component is material-less', () => {
+  const ranged = {
+    kind: 'item',
+    components: [
+      { id: 'r', qty: 1, priceMin: 100, priceMax: 200 },
+      { id: 'f', qty: 1, unitPrice: 50 },
+    ],
+  };
+  assert.equal(lineHasRange(ranged), true);
+  assert.deepEqual(lineTotalRange(ranged), { min: 150, max: 250 }); // (100+50)..(200+50)
+  // A fully-specified compound collapses to a point (= lineTotal); no false range.
+  const fixed = { kind: 'item', components: [{ id: 'a', qty: 1, unitPrice: 80 }] };
+  assert.equal(lineHasRange(fixed), false);
+  assert.deepEqual(lineTotalRange(fixed), { min: 80, max: 80 });
+});
+
+test('computeTotalsRange — a compound range flows into the grand-total spread', () => {
+  const lines = [
+    {
+      id: 'c', kind: 'item',
+      components: [
+        { id: 'r', qty: 1, priceMin: 100, priceMax: 300 },
+        { id: 'f', qty: 1, unitPrice: 100 },
+      ],
+    },
+  ];
+  const r = computeTotalsRange(lines, {});
+  // subtotal range [200, 400]; +18% ITBIS ⇒ [236, 472]
+  assert.equal(Math.round(r.min), 236);
+  assert.equal(Math.round(r.max), 472);
+  assert.equal(quoteHasRange(lines), true);
 });

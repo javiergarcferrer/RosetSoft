@@ -9,6 +9,7 @@ import {
   alternativeSubtotal, groupRuns, sectionSubtotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
   computeTotalsRange, isRangeLine, lineTotalRange, selectedAlternative,
+  isRangeComponent, componentSubtotalRange, lineHasRange,
 } from '../../lib/pricing.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
@@ -674,6 +675,10 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
+  // Material-less components make the whole compound a RANGE — "min – max"
+  // instead of a single total, just like a standalone range line.
+  const ranged = lineHasRange(line);
+  const tr = ranged ? lineTotalRange(line) : null;
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -798,7 +803,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
               optional struck list price / −Y% sit above when discounted. */}
           <div className="mt-3 pt-2 border-t border-ink-100 tabular-nums">
             <div className="ml-auto w-fit text-right">
-              {discounted && (
+              {discounted && !ranged && (
                 <div className="whitespace-nowrap">
                   <span className="text-[13px] text-ink-400 line-through">{fmt(subtotal)}</span>
                   <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
@@ -808,9 +813,13 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 Total compuesto
               </div>
               <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
-                {fmt(grandTotal)}
+                {ranged
+                  ? <>{fmt(tr.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(tr.max)}</>
+                  : fmt(grandTotal)}
               </div>
-              {discounted && (
+              {ranged ? (
+                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
+              ) : discounted && (
                 <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
                   ahorras {fmt(subtotal - grandTotal)}
                 </div>
@@ -829,6 +838,10 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, mater
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
   const optional = !!component.isOptional;
+  // Material-less sub-piece — show its price RANGE instead of qty × unit,
+  // mirroring a standalone range line.
+  const ranged = isRangeComponent(component);
+  const cr = ranged ? componentSubtotalRange(component) : null;
   // A dealer-offered optional sub-piece the client can fold in / out right
   // here — the SAME add/remove affordance as a standalone optional line, one
   // level down. Only on the interactive link (onToggleOptional present).
@@ -896,13 +909,24 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, mater
         <div className={`text-right tabular-nums whitespace-nowrap text-xs sm:text-sm ${
           optional ? 'text-ink-500' : ''
         }`}>
-          <span className="text-ink-700">{qty}</span>
-          <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
-          <span className="text-ink-700">{fmt(unit)}</span>
-          <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-          <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
-            {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
-          </span>
+          {ranged ? (
+            <>
+              <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
+                {fmt(cr.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(cr.max)}
+              </span>
+              <span className="block text-[10px] text-ink-500 mt-0.5">sin material</span>
+            </>
+          ) : (
+            <>
+              <span className="text-ink-700">{qty}</span>
+              <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
+              <span className="text-ink-700">{fmt(unit)}</span>
+              <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
+              <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
+                {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
+              </span>
+            </>
+          )}
         </div>
       </div>
       {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(component.id, on)} />}

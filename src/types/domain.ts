@@ -204,6 +204,15 @@ export interface LineComponent {
   qty?: number;
   unitPrice?: number;
   /**
+   * Price RANGE for a component quoted WITHOUT a chosen material — the mirror
+   * of the line-level priceMin/priceMax, one level down. Both set ⇒ the
+   * component (and the compound that holds it) shows "min – max"; picking a
+   * material clears them and pins `unitPrice`. Lives on the JSONB component
+   * shape — no DB column.
+   */
+  priceMin?: number | null;
+  priceMax?: number | null;
+  /**
    * When true, the component is shown to the customer as an opt-in
    * add-on but excluded from the compound's subtotal. Mirrors the
    * line-level isOptional flag — see lib/pricing:compoundSubtotal,
