@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Copy } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
+import ApplyMaterialToAllButton from './ApplyMaterialToAllButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
 import { parseSubtype, composeFabricLabel, canPropagateMaterial } from '../../lib/subtype.js';
 import {
@@ -998,17 +999,12 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             return (
               <>
                 <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} />
-                {/* Pick once, apply everywhere — only while a sibling still
-                    differs (canApplyToAll), so it vanishes once they all match. */}
+                {/* Pick once, apply everywhere — the quiet icon twin of the
+                    picker, stacked right beneath it. Icon-only (the explanation
+                    is on hover) so a multi-piece list stays calm, and shown only
+                    while a sibling still differs, so it self-hides once all match. */}
                 {canApplyToAll && onApplyToAll && (
-                  <button
-                    type="button"
-                    onClick={onApplyToAll}
-                    className="relative z-[2] mt-2 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
-                    title="Usar esta misma tela en todos los componentes de este producto"
-                  >
-                    <Copy size={13} aria-hidden /> Aplicar esta tela a todos
-                  </button>
+                  <ApplyMaterialToAllButton onClick={onApplyToAll} className="mt-1.5" />
                 )}
               </>
             );
