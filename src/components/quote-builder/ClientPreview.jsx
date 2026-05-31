@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Palette } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
+import MaterialPickerButton from './MaterialPickerButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
 import { parseSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import {
@@ -652,9 +653,10 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 }
 
 // Full catalog fabric picker for an upholstered line/component on the
-// interactive client link. Renders a quiet "Elegir tela" button that opens the
-// SAME two-step <MaterialColorPicker> the editor uses (fabric → color), so the
-// client link and the dealer's in-app preview show one identical picker. The
+// interactive client link. Renders the shared <MaterialPickerButton> (the same
+// icon-only trigger the editor uses) which opens the SAME two-step
+// <MaterialColorPicker> the editor uses (fabric → color), so the client link
+// and the dealer's in-app preview show one identical picker. The
 // catalog + the commit handler arrive via `picker` (the share bundle); the
 // per-line `gradePrices` drive both the in-grade restriction and the price each
 // fabric shows. On pick we hand back the SAME { grade, fabric, swatchImageId }
@@ -680,13 +682,7 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker }) {
   const { grade, fabric } = parseSubtype(subtype);
   return (
     <div className="relative z-[2] mt-2.5">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
-      >
-        <Palette size={13} aria-hidden /> Elegir tela
-      </button>
+      <MaterialPickerButton onClick={() => setOpen(true)} />
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
           <MaterialColorPicker

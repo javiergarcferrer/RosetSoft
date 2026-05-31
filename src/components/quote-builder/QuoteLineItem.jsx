@@ -10,6 +10,7 @@ import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
+import MaterialPickerButton from './MaterialPickerButton.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
 import { FamiliesContext } from './FamiliesContext.js';
@@ -991,15 +992,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
               material + color instead of typing the name and guessing the
               code. Selecting writes back grade + fabric (and the swatch) in
               one shot; the input above still works for freeform overrides. */}
-          <button
-            type="button"
-            onClick={() => setSwatchOpen(true)}
-            className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
-            title="Elegir del catálogo de materiales"
-            aria-label="Elegir tela del catálogo"
-          >
-            <Palette size={14} />
-          </button>
+          <MaterialPickerButton onClick={() => setSwatchOpen(true)} />
           {/* Quick jump to this model's Ligne Roset page when it's been linked
               in the catalog — lets the dealer (or designer) open the exact
               product to confirm the offered fabrics. */}
