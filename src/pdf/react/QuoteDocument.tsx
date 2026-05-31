@@ -395,7 +395,14 @@ export function QuoteDocument({
   quoteGroups = [], families = null, images,
 }: QuoteDocumentProps) {
   const view = resolveQuoteView({ quote, lines, settings, quoteGroups });
-  const rates = displayRatesFor(quote, settings || ({} as Settings)) as Record<string, number>;
+  // Match ClientPreview's rate source so screen and paper agree: the quote's
+  // own rate map wins (the public share bundle and an accepted quote both
+  // carry it), falling back to displayRatesFor (live settings rate) only for
+  // an editor draft that has none.
+  const quoteRates = quote.rates as Record<string, number> | null | undefined;
+  const rates = (quoteRates && quoteRates.DOP
+    ? quoteRates
+    : displayRatesFor(quote, settings || ({} as Settings))) as Record<string, number>;
   const currency = (quote.currencyCode || 'USD') as CurrencyCode;
   const fmt: Fmt = (v) => formatMoney(v, currency, rates);
   const priced = lines.filter(isPricedLine);

@@ -1,4 +1,5 @@
-import { downloadImageBytes } from '../../db/database.js';
+import { downloadImageBytes, db } from '../../db/database.js';
+import { publicImageUrl } from '../../db/supabaseClient.js';
 import { isCompoundLine } from '../../lib/pricing.js';
 import { materialCells } from './materialCells.js';
 import { coverKey, swatchKey } from './imageKeys.js';
@@ -23,12 +24,15 @@ import type { CatalogFamily } from '../../lib/catalog.ts';
 type Src = { imageId?: string | null; url?: string | null };
 
 export async function resolveQuoteImages({
-  settings, lines, families, currency,
+  settings, lines, families, currency, publicUrls = false,
 }: {
   settings: Settings | null | undefined;
   lines: QuoteLine[];
   families?: Map<string, CatalogFamily> | null;
   currency: CurrencyCode;
+  /** Public client link (anonymous): resolve ids via the public bucket URL
+   *  instead of the authed storage download (which isn't available there). */
+  publicUrls?: boolean;
 }): Promise<ImageMap> {
   const sources = new Map<string, Src>();
   const addId = (key: string, imageId: string | null | undefined): void => {
@@ -65,15 +69,24 @@ export async function resolveQuoteImages({
   const map: ImageMap = new Map();
   await Promise.all([...sources].map(async ([key, src]) => {
     try {
-      const uri = await resolveOne(src);
+      const uri = await resolveOne(src, publicUrls);
       if (uri) map.set(key, uri);
     } catch { /* leave absent → empty tile */ }
   }));
   return map;
 }
 
-async function resolveOne(src: Src): Promise<string | null> {
+async function resolveOne(src: Src, publicUrls: boolean): Promise<string | null> {
   if (src.imageId) {
+    // Public link (anonymous): the authed storage download isn't available, so
+    // resolve through the public bucket URL — the same path ImageView uses
+    // (db.images.get works for anon; the bucket is public).
+    if (publicUrls) {
+      const rec = await db.images.get(src.imageId) as { storagePath?: string } | null | undefined;
+      const url = rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
+      const bytes = url ? await fetchUrlBytes(url) : null;
+      return bytes ? bytesToDataUri(bytes, '') : null;
+    }
     const res = await downloadImageBytes(src.imageId);
     return res?.bytes ? bytesToDataUri(res.bytes, res.contentType) : null;
   }

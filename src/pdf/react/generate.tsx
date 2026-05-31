@@ -11,13 +11,17 @@ import type { CurrencyCode } from '../../types/domain.ts';
  * layer (Web Share / anchor download). Same input shape as the legacy
  * `generateQuotePdf`, so callers and `downloadBlob` stay untouched.
  */
-export async function generateQuotePdf(props: QuoteDocumentProps): Promise<Blob> {
+export async function generateQuotePdf(
+  { publicImages = false, ...props }: QuoteDocumentProps & { publicImages?: boolean },
+): Promise<Blob> {
   registerInterFonts('/fonts');
   const images = await resolveQuoteImages({
     settings: props.settings,
     lines: props.lines,
     families: props.families,
     currency: (props.quote.currencyCode || 'USD') as CurrencyCode,
+    // The public client link is anonymous → resolve images via public URLs.
+    publicUrls: publicImages,
   });
   return pdf(<QuoteDocument {...props} images={images} />).toBlob();
 }

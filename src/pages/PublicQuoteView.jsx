@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin, Download } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 // Derivations + the one mutation reducer come from the quote Model.
 import { computeTotals, lineForTotals, isPricedLine, applyAction } from '../core/quote/index.js';
 import { normalizeContainerNo, resolveTrackableContainers } from '../core/tracking/index.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
+import { safeDynamicImport } from '../lib/dynamicImport.js';
 
 /**
  * Public, logged-OUT interactive quote view (route #/q/:token).
@@ -25,6 +26,7 @@ export default function PublicQuoteView() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
+  const [pdf, setPdf] = useState('idle'); // idle | working | error — PDF download
   // The bundle we're currently showing (kept in a ref too, so the optimistic
   // chain can build each pick on the latest local state without waiting for a
   // re-render).
@@ -109,6 +111,36 @@ export default function PublicQuoteView() {
   // Edge Function reprice each piece at its own model's price in a single write.
   const pickMaterialFreeMany = (selsById) => applyPick({ materialPick: selsById });
 
+  // Download the quote as a branded PDF. The link is anonymous, so the renderer
+  // resolves images through public bucket URLs (publicImages). react-pdf is
+  // lazy-imported via safeDynamicImport — the heavy renderer loads only on
+  // demand, and a stale-deploy chunk reference recovers with a one-time reload.
+  async function downloadPdf() {
+    if (pdf === 'working' || !quote) return;
+    setPdf('working');
+    try {
+      const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
+        () => import('../pdf/react/index.js'),
+      );
+      const blob = await generateQuotePdf({
+        quote,
+        settings: bundle.settings || {},
+        lines,
+        totals,
+        customer: bundle.customer || null,
+        professional: bundle.professional || null,
+        seller: bundle.seller || null,
+        quoteGroups: [],
+        publicImages: true,
+      });
+      await downloadBlob(blob, `${quoteFileName(quote, bundle.customer || null)}.pdf`);
+      setPdf('idle');
+    } catch (e) {
+      console.error('[PublicQuoteView] PDF download failed:', e);
+      setPdf('error');
+    }
+  }
+
   if (state.status === 'loading') {
     return (
       <div className="h-full flex items-center justify-center bg-ink-50 text-ink-500">
@@ -136,6 +168,22 @@ export default function PublicQuoteView() {
     // quote is clipped at the fold with no way to scroll on mobile.
     <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={pdf === 'working'}
+            className="inline-flex items-center gap-2 rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-ink-800 disabled:opacity-60"
+          >
+            {pdf === 'working'
+              ? <Loader2 size={15} className="animate-spin" aria-hidden />
+              : <Download size={15} aria-hidden />}
+            {pdf === 'working' ? 'Generando PDF…' : 'Descargar PDF'}
+          </button>
+          {pdf === 'error' && (
+            <p className="text-xs text-red-600">No se pudo generar el PDF. Inténtalo de nuevo.</p>
+          )}
+        </div>
         <ClientPreview
           quote={quote}
           settings={bundle.settings || {}}
