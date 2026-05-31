@@ -22,6 +22,54 @@ import { embedImageById, embedSwatch } from './embed.js';
 import type { PdfCtx, Cursor } from './types.js';
 
 // ---------------------------------------------------------------------------
+// Rounded-rectangle primitive. pdf-lib's drawRectangle has no border-radius,
+// so we synthesize a rounded rect as an SVG path and fill/stroke it with
+// drawSvgPath. The path is authored in SVG space (origin top-left, y DOWN);
+// drawSvgPath places that origin at {x,y} and flips y, so passing the box's
+// TOP-LEFT in PDF coords (x = left, y = topY) yields a box occupying
+// [topY − h, topY]. `corners` lets a band round only its top or bottom pair,
+// so a header (rounded top) and a footer (rounded bottom) bracket the member
+// rows into one rounded card — the same rounded silhouette the on-screen
+// client link uses. Verified against pdftoppm before relying on it.
+interface Corners { tl?: number; tr?: number; br?: number; bl?: number; }
+function roundedRectPath(w: number, h: number, c: Corners): string {
+  const cap = Math.min(w / 2, h / 2);
+  const tl = Math.max(0, Math.min(c.tl ?? 0, cap));
+  const tr = Math.max(0, Math.min(c.tr ?? 0, cap));
+  const br = Math.max(0, Math.min(c.br ?? 0, cap));
+  const bl = Math.max(0, Math.min(c.bl ?? 0, cap));
+  return [
+    `M ${tl} 0`,
+    `H ${w - tr}`, tr ? `A ${tr} ${tr} 0 0 1 ${w} ${tr}` : `L ${w} 0`,
+    `V ${h - br}`, br ? `A ${br} ${br} 0 0 1 ${w - br} ${h}` : `L ${w} ${h}`,
+    `H ${bl}`, bl ? `A ${bl} ${bl} 0 0 1 0 ${h - bl}` : `L 0 ${h}`,
+    `V ${tl}`, tl ? `A ${tl} ${tl} 0 0 1 ${tl} 0` : `L 0 0`,
+    'Z',
+  ].join(' ');
+}
+interface RoundedRectStyle {
+  color?: RGB; borderColor?: RGB; borderWidth?: number;
+  opacity?: number; radius?: number; corners?: Corners;
+}
+function drawRoundedRect(
+  page: PDFPage, x: number, topY: number, w: number, h: number, s: RoundedRectStyle,
+): void {
+  const r = s.radius ?? 0;
+  const corners = s.corners ?? { tl: r, tr: r, br: r, bl: r };
+  page.drawSvgPath(roundedRectPath(w, h, corners), {
+    x, y: topY,
+    color: s.color,
+    borderColor: s.borderColor,
+    borderWidth: s.borderWidth,
+    opacity: s.opacity,
+  });
+}
+const CARD_RADIUS   = 11;   // rounded-card corners — mirrors the client link's rounded-xl bands
+const IMG_RADIUS    = 10;   // product-image corner radius (client link: rounded-lg)
+const SWATCH_RADIUS = 6;    // swatch-tile corner radius (client link: rounded-md)
+const ZONE_PAD      = 12;   // content inset inside a shaded zone / compound card (clears the rail)
+
+// ---------------------------------------------------------------------------
 // Line-items layout. Mirrors the on-screen ClientPreview.jsx so the PDF
 // the customer receives looks identical to what the dealer showed them
 // in the live preview.
@@ -169,13 +217,17 @@ interface CompoundColumns {
   detail: { x: number; rightX: number; w: number };
 }
 
-function lineColumns(): LineColumns {
-  const right = PAGE_W - MARGIN_R;
-  const imgX = MARGIN_L;
-  const detailX = imgX + IMAGE_SIZE + IMG_GUTTER;
-  const numericRight = right;
-  // Detail column ends where the numeric column starts (with padding).
-  const detailW = CONTENT_W - IMAGE_SIZE - IMG_GUTTER - NUMERIC_COL_W - SPEC_TO_NUMERIC_PAD;
+function lineColumns(inset: number = 0): LineColumns {
+  const left = MARGIN_L + inset;
+  const right = PAGE_W - MARGIN_R - inset;
+  // Image lives on the RIGHT edge of the row so it never collides with the
+  // group rail / left accent bar (the bug this redesign fixes). Detail flows
+  // from the left margin; the compact numeric cell tucks just left of the
+  // image, so the price reads beside its own photo.
+  const imgX = right - IMAGE_SIZE;
+  const numericRight = imgX - IMG_GUTTER;
+  const detailX = left;
+  const detailW = numericRight - NUMERIC_COL_W - SPEC_TO_NUMERIC_PAD - detailX;
 
   return {
     img:     { x: imgX, y: null, w: IMAGE_SIZE, h: IMAGE_SIZE },
@@ -304,12 +356,14 @@ function drawSwatchImage(
   size: number,
 ): void {
   const boxY = topY - size;
-  page.drawRectangle({
-    x, y: boxY, width: size, height: size,
-    color: BG_SOFT, borderColor: INK_LINE2, borderWidth: 0.5,
+  // Rounded tile frame (client link uses rounded-md swatches).
+  drawRoundedRect(page, x, topY, size, size, {
+    color: BG_SOFT, borderColor: INK_LINE2, borderWidth: 0.5, radius: SWATCH_RADIUS,
   });
   if (img) {
-    const scale = Math.min(size / img.width, size / img.height);
+    // Slight matte (0.92) so the square photo doesn't paint over the rounded
+    // corners of its frame.
+    const scale = Math.min(size / img.width, size / img.height) * 0.92;
     const w = img.width * scale;
     const h = img.height * scale;
     page.drawImage(img, {
@@ -507,14 +561,15 @@ async function drawMaterialOptions(
  * option/alternative dim wash.
  */
 function drawProductImage(page: PDFPage, img: PDFImage | null, x: number, bottomY: number): void {
-  page.drawRectangle({
-    x, y: bottomY, width: IMAGE_SIZE, height: IMAGE_SIZE,
-    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5,
+  // Rounded tile (stone-50 placeholder + hairline frame) — matches the client
+  // link's `rounded-lg border` product image, even when empty.
+  drawRoundedRect(page, x, bottomY + IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE, {
+    color: BG_SOFT, borderColor: INK_LINE, borderWidth: 0.5, radius: IMG_RADIUS,
   });
   if (img) {
-    // 0.96 contain-scale leaves the slightest matte so the photo doesn't
-    // touch the box border (reads as intentional, not clipped).
-    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.96;
+    // 0.94 contain-scale leaves a small matte so the square photo's corners
+    // sit comfortably inside the rounded frame (reads as intentional).
+    const scale = Math.min(IMAGE_SIZE / img.width, IMAGE_SIZE / img.height) * 0.94;
     const w = img.width * scale;
     const h = img.height * scale;
     page.drawImage(img, {
@@ -573,7 +628,7 @@ function numericHeight(line: QuoteLine): number {
  */
 export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
   if (isCompoundLine(line)) return compoundRowHeight(ctx, line, inZone);
-  const cols = lineColumns();
+  const cols = lineColumns(inZone ? ZONE_PAD : 0);
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
   const inner = Math.max(IMAGE_SIZE, detailH, numericHeight(line));
   // Reserve the top caption band when the row paints anything in it — its OWN
@@ -640,23 +695,23 @@ function reservesTopBand(line: QuoteLine, inZone: boolean): boolean {
 // list without zig-zagging across to a right column.
 
 const COMP_HEADER_GAP = 6;        // gap between parent identity and components
-const COMP_TOP_GAP    = 4;        // gap above each component (after divider)
-const COMP_BLOCK_GAP  = 4;        // gap between component meta and next divider
+const COMP_TOP_GAP    = 7;        // gap above each component (after divider) — wider so blocks read as distinct rows
+const COMP_BLOCK_GAP  = 6;        // gap between a component's meta and the next divider
 const COMP_TOTAL_GAP  = 10;       // gap between last component and total block
-const COMPOUND_DETAIL_GUTTER = 12; // breathing room between detail and right edge
 
-function compoundColumns(): CompoundColumns {
-  const right = PAGE_W - MARGIN_R;
-  const imgX = MARGIN_L;
-  const detailX = imgX + IMAGE_SIZE + IMG_GUTTER;
-  // Compound's detail column extends nearly to the right margin —
-  // the per-component qty × unit = subtotal equation lives inside
-  // this column (right-aligned), so we don't reserve a separate
-  // numeric track like normal lines do.
-  const detailW = CONTENT_W - IMAGE_SIZE - IMG_GUTTER - COMPOUND_DETAIL_GUTTER;
+function compoundColumns(inset: number = 0): CompoundColumns {
+  const left = MARGIN_L + inset;
+  const right = PAGE_W - MARGIN_R - inset;
+  // Image on the RIGHT, mirroring the article row so it clears the left rail.
+  // The per-component "qty × unit = subtotal" equations right-align to the
+  // detail column's right edge, which now ends just left of the image.
+  const imgX = right - IMAGE_SIZE;
+  const detailX = left;
+  const detailRightX = imgX - IMG_GUTTER;
+  const detailW = detailRightX - detailX;
   return {
     img:    { x: imgX, w: IMAGE_SIZE, h: IMAGE_SIZE },
-    detail: { x: detailX, rightX: right, w: detailW },
+    detail: { x: detailX, rightX: detailRightX, w: detailW },
   };
 }
 
@@ -965,7 +1020,7 @@ function drawCompSegs(page: PDFPage, ctx: PdfCtx, segs: CompoundSegment[], x: nu
 }
 
 function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
-  const cols = compoundColumns();
+  const cols = compoundColumns(inZone ? ZONE_PAD : 0);
   // Parent identity (family + name) block.
   let textH = 0;
   for (const seg of compoundHeaderSegments(ctx, line, cols.detail.w)) {
@@ -1235,15 +1290,14 @@ export function drawGroupHeaderBand(
   const top = cursor.y - GROUP_GAP_BEFORE;          // white gutter above
   const bottom = top - GROUP_HEADER_H;
 
-  // Band fill across the content width.
-  page.drawRectangle({
-    x: MARGIN_L, y: bottom, width: CONTENT_W, height: GROUP_HEADER_H,
-    color: zone.bandFill,
+  // Band fill across the content width — rounded TOP corners so the zone reads
+  // as a card (the footer rounds the bottom; member rows fill the middle).
+  drawRoundedRect(page, MARGIN_L, top, CONTENT_W, GROUP_HEADER_H, {
+    color: zone.bandFill, corners: { tl: CARD_RADIUS, tr: CARD_RADIUS },
   });
-  // Solid left cap — same rail as the members, continuous into the band.
-  page.drawRectangle({
-    x: MARGIN_L, y: bottom, width: GROUP_RAIL_W, height: GROUP_HEADER_H,
-    color: zone.rail,
+  // Left rail — same accent as the members, its top-left following the corner.
+  drawRoundedRect(page, MARGIN_L, top, GROUP_RAIL_W, GROUP_HEADER_H, {
+    color: zone.rail, corners: { tl: CARD_RADIUS },
   });
 
   // Eyebrow: bold tracked label + a quieter descriptor. Only a Conjunto can
@@ -1284,15 +1338,14 @@ export function drawGroupFooterBand(
   const top = cursor.y;
   const bottom = top - GROUP_FOOTER_H;
 
-  // Band fill across the content width — deeper than the member tint.
-  page.drawRectangle({
-    x: MARGIN_L, y: bottom, width: CONTENT_W, height: GROUP_FOOTER_H,
-    color: zone.bandFill,
+  // Band fill — rounded BOTTOM corners so it closes the rounded card the
+  // header opened (deeper tint than the member rows between them).
+  drawRoundedRect(page, MARGIN_L, top, CONTENT_W, GROUP_FOOTER_H, {
+    color: zone.bandFill, corners: { bl: CARD_RADIUS, br: CARD_RADIUS },
   });
-  // Solid left cap — closes the rail at the bottom of the zone.
-  page.drawRectangle({
-    x: MARGIN_L, y: bottom, width: GROUP_RAIL_W, height: GROUP_FOOTER_H,
-    color: zone.rail,
+  // Left rail — closes the accent, its bottom-left following the corner.
+  drawRoundedRect(page, MARGIN_L, top, GROUP_RAIL_W, GROUP_FOOTER_H, {
+    color: zone.rail, corners: { bl: CARD_RADIUS },
   });
 
   const baselineY = bottom + GROUP_FOOTER_BOTTOM_PAD
@@ -1358,9 +1411,9 @@ export async function drawLineRow(
     return drawCompoundLineRow(page, ctx, cursor, line, groupInfo, zone);
   }
   const { doc, fontBold, fontRegular } = ctx;
-  const cols = lineColumns();
-  const rowY = cursor.y;
   const inZone = !!zone;
+  const cols = lineColumns(inZone ? ZONE_PAD : 0);
+  const rowY = cursor.y;
   const rowH = measureLineRowHeight(ctx, line, inZone);
 
   // ---- Group-zone backdrop — tint fill + continuous left rail, drawn
@@ -1523,9 +1576,9 @@ async function drawCompoundLineRow(
   zone?: GroupZone | null,
 ): Promise<Cursor> {
   const { doc, fontBold, fontRegular } = ctx;
-  const cols = compoundColumns();
-  const rowY = cursor.y;
   const inZone = !!zone;
+  const cols = compoundColumns(inZone ? ZONE_PAD : 0);
+  const rowY = cursor.y;
   const rowH = measureLineRowHeight(ctx, line, inZone);
 
   // Group-zone backdrop — tint fill + continuous left rail under everything.
@@ -1583,11 +1636,13 @@ async function drawCompoundLineRow(
 
   for (let i = 0; i < components.length; i++) {
     if (i > 0) {
-      // Hairline between components.
+      // Divider between components — INK_LINE2 (a touch darker than the
+      // header hairline) sitting in the wider COMP_TOP_GAP so each component
+      // reads as its own row, like the client link's divide-y list.
       page.drawLine({
         start: { x: cols.detail.x, y: sy + 2 },
         end:   { x: cols.detail.rightX, y: sy + 2 },
-        thickness: 0.5, color: INK_LINE,
+        thickness: 0.5, color: INK_LINE2,
       });
       sy -= COMP_TOP_GAP;
     }
