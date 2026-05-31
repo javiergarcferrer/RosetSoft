@@ -370,6 +370,179 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
+// ── Shared line content ────────────────────────────────────────────────────
+// ONE renderer for the actual CONTENT of a priced line. A standalone product, a
+// set member, and a component inside a compound ALL go through it, so the name,
+// family, specs, swatch, material picker, description and price look identical
+// everywhere and change in exactly one place. The product photo and the row
+// chrome (group accents, the optional veil, the alternative radio, the "N de M"
+// eyebrow, group/compound footers) belong to the wrappers — this owns only the
+// inner [text column | price cell] block.
+
+// Family eyebrow + name — the line's identity, rendered the same for a simple
+// product, a compound's header, and a sub-component.
+function LineIdentity({ family, name }) {
+  return (
+    <>
+      {family && (
+        <div className="eyebrow-xs tracking-widest text-ink-500 mb-0.5">{family}</div>
+      )}
+      <div className="text-base font-semibold text-ink-900 sm:text-sm">{name || '—'}</div>
+    </>
+  );
+}
+
+// The money cell: "n × $unit" (+ struck list price / −Y% when discounted) on the
+// left, the bold total — or a "min – max" range — on the right. Mobile: a full
+// width footer under a hairline; sm+: a right rail. `priced` is assembled from
+// the pricing Model (linePriced / componentPriced) so the numbers can't drift.
+function LinePriceCell({ priced, fmt }) {
+  const { qty, unit, listUnit, total, listTotal, discount, ranged, range } = priced;
+  const discounted = discount > 0;
+  return (
+    <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
+      {ranged ? (
+        <>
+          <div className="min-w-0">
+            <div className="text-[13px] text-ink-500 whitespace-nowrap">
+              {qty} <span className="text-ink-400" aria-hidden>×</span> <span className="text-brand-700">rango</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+              {fmt(range.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(range.max)}
+            </div>
+            <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="min-w-0">
+            <div className="text-[13px] text-ink-500 whitespace-nowrap">
+              {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
+            </div>
+            {discounted && (
+              <div className="mt-0.5 whitespace-nowrap">
+                <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
+                <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">{fmt(total)}</div>
+            {discounted && qty > 1 && (
+              <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                ahorras {fmt(listTotal - total)}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Assemble the price numbers — a standalone/set-member line and a compound's
+// component use different pricing primitives but render through one shape.
+function linePriced(line) {
+  const qty = lineQty(line);
+  const listUnit = lineListUnit(line);
+  const ranged = isRangeLine(line);
+  return {
+    qty,
+    unit: applyLineAdjustments(lineBasePrice(line), line.lineMarginPct, line.lineDiscountPct),
+    listUnit,
+    total: lineTotal(line),
+    listTotal: listUnit * qty,
+    discount: clampPct(line.lineDiscountPct),
+    ranged,
+    range: ranged ? lineTotalRange(line) : null,
+  };
+}
+function componentPriced(component) {
+  const qty = Number(component.qty) || 0;
+  const unit = Number(component.unitPrice) || 0;
+  const ranged = isRangeComponent(component);
+  return {
+    qty,
+    unit,
+    listUnit: unit, // components carry no per-line discount
+    total: componentSubtotal(component),
+    listTotal: unit * qty,
+    discount: 0,
+    ranged,
+    range: ranged ? componentSubtotalRange(component) : null,
+  };
+}
+
+// The shared content block: identity + specs + swatch/picker + options + price.
+// `mf` is the per-line margin factor the picker grade prices + option-chip
+// deltas bake; `canApplyToAll`/`onApplyToAll` are only passed for compound
+// components (a standalone line has no siblings to copy a material to).
+function LineContent({ entity, mf, priced, families, currency, rates, fmt, materialSelections, picker, onSelectMaterial, canApplyToAll, onApplyToAll }) {
+  const gp = picker && (entity.gradePrices || picker.gradePricesFor?.(entity.reference, mf));
+  // A standalone swatch shows only when there's NO material-options grid (the
+  // grid already leads with this same material). The picker controls ride to the
+  // swatch's RIGHT; with a grid instead they render beneath it.
+  const showSwatch = !entity.materialOptions?.options?.length
+    && !!(entity.swatchImageId || swatchUrl(colorCodeFromSubtype(entity.subtype)));
+  // FabricPicker (+ the "apply to all" twin for compound components). z-[2] keeps
+  // both controls above any dimming veil so the material stays pickable in every
+  // state (an excluded optional, a non-selected alternative).
+  const pickerStack = gp ? (
+    <div className="relative z-[2] flex flex-col items-start gap-1.5">
+      <FabricPicker id={entity.id} subtype={entity.subtype} reference={entity.reference} gradePrices={gp} picker={picker} className="" />
+      {canApplyToAll && onApplyToAll && <ApplyMaterialToAllButton onClick={onApplyToAll} />}
+    </div>
+  ) : null;
+  return (
+    <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
+      <div className="min-w-0 sm:flex-1">
+        <LineIdentity family={entity.family} name={entity.name} />
+        {(entity.subtype || entity.reference || entity.dimensions) && (
+          <div className="min-w-0 mt-1">
+            {entity.subtype && <div className="text-xs text-ink-500 sm:text-[11px]">{entity.subtype}</div>}
+            {(entity.reference || entity.dimensions) && (
+              <div className="text-[11px] text-ink-500 sm:text-[10px] mt-0.5 flex flex-wrap gap-x-2">
+                {entity.reference && <span className="font-mono">REF. {entity.reference}</span>}
+                {entity.dimensions && <span>DIM. {entity.dimensions}</span>}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Chosen-fabric swatch (with a clear ×) + picker controls, side by side.
+            Suppressed when the material-options grid renders — it leads with the
+            same material. */}
+        {showSwatch && (
+          <div className="mt-2 flex items-start gap-3">
+            <ClearSwatch id={entity.id} subtype={entity.subtype} swatchImageId={entity.swatchImageId} gradePrices={gp} picker={picker} />
+            {pickerStack}
+          </div>
+        )}
+        <MaterialOptionsStrip
+          materialOptions={entity.materialOptions}
+          reference={entity.reference}
+          families={families}
+          marginFactor={mf}
+          currency={currency}
+          rates={rates}
+          baseSwatchImageId={entity.swatchImageId}
+          selectedGrade={materialSelections?.[entity.id] ?? entity.materialOptions?.baseGrade}
+          onSelect={onSelectMaterial ? (g) => onSelectMaterial(entity.id, g) : undefined}
+        />
+        {/* No standalone swatch (a grid showed instead) → controls render here. */}
+        {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
+        {entity.description && (
+          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+            {entity.description}
+          </div>
+        )}
+      </div>
+      <LinePriceCell priced={priced} fmt={fmt} />
+    </div>
+  );
+}
+
 function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
@@ -399,40 +572,8 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
   // (so the editor preview matches the margin-baked public link; factor 1 on the
   // link, where the margin fields are already zeroed).
   const mf = marginFactor(quoteMarginPct, line.lineMarginPct);
-  // All line math routes through lib/pricing so the customer preview can
-  // never diverge from the editor / PDF / totals — and so the line-discount
-  // clamp (0–100) is applied here too (a stray out-of-range pct can't invert
-  // or balloon the unit price). listUnit = post-margin, pre-discount: the
-  // catalogue price the customer would have paid without the discount, so the
-  // strike-through reflects what they're saving against, not the cost basis.
-  const qty = lineQty(line);
-  const listUnit = lineListUnit(line);
-  const unit = applyLineAdjustments(lineBasePrice(line), line.lineMarginPct, line.lineDiscountPct);
-  const listTotal = listUnit * qty;
-  const total = lineTotal(line);
-  const discount = clampPct(line.lineDiscountPct);
-  const discounted = discount > 0;
-  // Material-less line — show its price RANGE instead of a single total.
-  const ranged = isRangeLine(line);
-  const totalR = ranged ? lineTotalRange(line) : null;
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
-  // Layout shape, mobile-first:
-  //
-  //   row 1   image + text side-by-side
-  //   row 2   compact label/value strip at the card bottom — three
-  //           pairs (CANTIDAD / UNITARIO / TOTAL) rendered as a
-  //           horizontal flex with a top hairline so it reads as a
-  //           summary footer, not a leftover wrapped column.
-  //
-  // On sm+ the strip promotes back to a vertical column in a third
-  // grid column to the right of the text — same vocabulary, denser.
-  //
-  // The previous full-width col-span-2 wrap was technically right-
-  // aligned but left a tall dead zone next to it on mobile because
-  // each label/value pair sat on its own row. A horizontal strip
-  // uses the width that's already there instead of stacking
-  // vertically into the void.
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
   const inSet = !!line.setGroup;
@@ -536,108 +677,18 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
             </div>
           )}
         </div>
-        <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
-          <div className="min-w-0 sm:flex-1">
-            {line.family && (
-              <div className="eyebrow-xs tracking-widest text-ink-500 mb-0.5">
-                {line.family}
-              </div>
-            )}
-            <div className="text-base font-semibold text-ink-900 sm:text-sm">{line.name || '—'}</div>
-            {(line.subtype || line.reference || line.dimensions) && (
-              <div className="min-w-0 mt-1">
-                {line.subtype && <div className="text-xs text-ink-500 sm:text-[11px]">{line.subtype}</div>}
-                {(line.reference || line.dimensions) && (
-                  <div className="text-[11px] text-ink-500 sm:text-[10px] mt-0.5 flex flex-wrap gap-x-2">
-                    {line.reference && <span className="font-mono">REF. {line.reference}</span>}
-                    {line.dimensions && <span>DIM. {line.dimensions}</span>}
-                  </div>
-                )}
-              </div>
-            )}
-            <MaterialOptionsStrip
-              materialOptions={line.materialOptions}
-              reference={line.reference}
-              families={families}
-              marginFactor={mf}
-              currency={currency}
-              rates={rates}
-              baseSwatchImageId={line.swatchImageId}
-              selectedGrade={materialSelections?.[line.id] ?? line.materialOptions?.baseGrade}
-              onSelect={onSelectMaterial ? (g) => onSelectMaterial(line.id, g) : undefined}
-            />
-            {(() => {
-              const gp = picker && (line.gradePrices || picker.gradePricesFor?.(line.reference, mf));
-              // The chosen-fabric swatch stands alone only when there's NO
-              // options grid (the grid already leads with the selected
-              // material). When it shows, the picker rides to its RIGHT and the
-              // swatch carries a clear ×; otherwise the picker is on its own.
-              const showSwatch = !line.materialOptions?.options?.length
-                && !!(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype)));
-              if (!gp && !showSwatch) return null;
-              return showSwatch ? (
-                <div className="mt-2 flex items-start gap-3">
-                  <ClearSwatch id={line.id} subtype={line.subtype} swatchImageId={line.swatchImageId} gradePrices={gp} picker={picker} />
-                  {gp && <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} className="" />}
-                </div>
-              ) : (
-                <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} />
-              );
-            })()}
-            {line.description && (
-              <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
-                {line.description}
-              </div>
-            )}
-          </div>
-
-          {/* Price strip — on mobile it anchors the full card width
-              (flex items-end justify-between: "n × $unit" on the left, the
-              bold TOTAL on the right under a hairline); on sm+ it promotes
-              to a right rail (sm:block sm:text-right). The struck list /
-              −Y% discount pair + per-line savings ride along when present. */}
-          <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
-            {ranged ? (
-              <>
-                <div className="min-w-0">
-                  <div className="text-[13px] text-ink-500 whitespace-nowrap">
-                    {qty} <span className="text-ink-400" aria-hidden>×</span> <span className="text-brand-700">rango</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
-                    {fmt(totalR.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(totalR.max)}
-                  </div>
-                  <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="min-w-0">
-                  <div className="text-[13px] text-ink-500 whitespace-nowrap">
-                    {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
-                  </div>
-                  {discounted && (
-                    <div className="mt-0.5 whitespace-nowrap">
-                      <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
-                      <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
-                    </div>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
-                    {fmt(total)}
-                  </div>
-                  {discounted && qty > 1 && (
-                    <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
-                      ahorras {fmt(listTotal - total)}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <LineContent
+          entity={line}
+          mf={mf}
+          priced={linePriced(line)}
+          families={families}
+          currency={currency}
+          rates={rates}
+          fmt={fmt}
+          materialSelections={materialSelections}
+          picker={picker}
+          onSelectMaterial={onSelectMaterial}
+        />
       </div>
       {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(line.id, on)} />}
     </li>
@@ -901,14 +952,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
           )}
         </div>
         <div className="flex-1 min-w-0">
-          {line.family && (
-            <div className="eyebrow-xs tracking-widest text-brand-700 mb-0.5">
-              {line.family}
-            </div>
-          )}
-          {line.name && (
-            <div className="text-base font-semibold text-ink-900 sm:text-sm">{line.name}</div>
-          )}
+          <LineIdentity family={line.family} name={line.name} />
           <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
             {(line.components || []).map((c, i) => (
               <CompoundComponentRow
@@ -966,37 +1010,21 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
 }
 
 function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
-  const qty = Number(component.qty) || 0;
-  const unit = Number(component.unitPrice) || 0;
-  const subtotal = componentSubtotal(component);
   const optional = !!component.isOptional;
-  // Material-less sub-piece — show its price RANGE instead of qty × unit,
-  // mirroring a standalone range line.
-  const ranged = isRangeComponent(component);
-  const cr = ranged ? componentSubtotalRange(component) : null;
   // Component-level alternative (pick-one). The interactive link gives each
   // option a radio; read-only surfaces flag the chosen one and dim the rest.
   const inGroup = !!component.alternativeGroup;
   const isSelected = !!component.isSelectedAlternative;
   const selectable = inGroup && !!onSelectAlternative;
   const dimmed = inGroup && !isSelected;
-  // A dealer-offered optional sub-piece the client can fold in / out right
-  // here — the SAME add/remove affordance as a standalone optional line, one
-  // level down. Only on the interactive link (onToggleOptional present).
+  // A dealer-offered optional sub-piece the client can fold in / out right here
+  // — the SAME add/remove affordance as a standalone optional line, one level
+  // down. Only on the interactive link (onToggleOptional present).
   const offered = !!onToggleOptional && !!component.optionalOffered;
   const included = !optional;
-  // The full fabric picker + its "apply to all" twin, as a compact vertical icon
-  // stack. It rides to the RIGHT of the standalone swatch when one shows; with a
-  // material-options grid instead, it renders beneath that grid (below).
-  const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference, mf));
-  const showSwatch = !component.materialOptions?.options?.length
-    && !!(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype)));
-  const pickerStack = gp ? (
-    <div className="flex flex-col items-start gap-1.5">
-      <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} className="" />
-      {canApplyToAll && onApplyToAll && <ApplyMaterialToAllButton onClick={onApplyToAll} />}
-    </div>
-  ) : null;
+  // Static optional / alternative caption — suppressed when the inline radio
+  // (selectable) or the on-row add/remove action (offered) already conveys it.
+  const showCaption = (optional && !offered) || (inGroup && !selectable);
   return (
     <li className={`py-2 ${
       optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''
@@ -1011,89 +1039,33 @@ function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fm
       {selectable && (
         <AlternativeRadio line={component} groupInfo={groupInfo} isSelected={isSelected} onSelect={onSelectAlternative} />
       )}
-      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-x-4">
-        <div className="min-w-0 sm:flex-1">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-sm font-medium text-ink-900">{component.name || '—'}</span>
-            {/* Read-only surfaces keep the static caption; the interactive link
-                shows the on-row add/remove action below instead (offered). */}
-            {optional && !offered && (
-              <span className="eyebrow-xs font-normal tracking-widest">
-                Opcional · no incluido
-              </span>
-            )}
-            {/* Read-only alternative flag + position. */}
-            {inGroup && !selectable && (
-              <span className="eyebrow-xs font-semibold tracking-widest text-brand-700">
-                Alternativa {groupInfo?.index ?? '?'} de {groupInfo?.total ?? '?'}
-                {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· elegida</span>}
-              </span>
-            )}
-          </div>
-          {(component.subtype || component.reference || component.dimensions) && (
-            <div className="min-w-0 mt-0.5">
-              {component.subtype && <div className="text-[11px] text-ink-500">{component.subtype}</div>}
-              {(component.reference || component.dimensions) && (
-                <div className="text-[10px] text-ink-500 mt-0.5 flex flex-wrap gap-x-2">
-                  {component.reference && <span className="font-mono">REF. {component.reference}</span>}
-                  {component.dimensions && <span>DIM. {component.dimensions}</span>}
-                </div>
-              )}
-            </div>
+      {showCaption && (
+        <div className="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-widest">
+          {optional && !offered && (
+            <span className="text-ink-500">Opcional · no incluido</span>
           )}
-          {/* Fabric swatch — suppressed when the material-options grid renders
-              (it already leads with this same material), mirroring the standalone
-              line. The picker controls sit to the RIGHT of the swatch, which
-              carries a clear × that reverts to "no material". */}
-          {showSwatch && (
-            <div className="mt-2 flex items-start gap-3">
-              <ClearSwatch id={component.id} subtype={component.subtype} swatchImageId={component.swatchImageId} gradePrices={gp} picker={picker} />
-              {pickerStack}
-            </div>
-          )}
-          <MaterialOptionsStrip
-            materialOptions={component.materialOptions}
-            reference={component.reference}
-            families={families}
-            marginFactor={mf}
-            currency={currency}
-            rates={rates}
-            baseSwatchImageId={component.swatchImageId}
-            selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
-            onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
-          />
-          {/* No standalone swatch (a material-options grid showed instead) → the
-              picker controls render here, beneath that grid. */}
-          {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
-          {component.description && (
-            <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
-              {component.description}
-            </div>
+          {inGroup && !selectable && (
+            <span className="text-brand-700 font-semibold">
+              Alternativa {groupInfo?.index ?? '?'} de {groupInfo?.total ?? '?'}
+              {isSelected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· elegida</span>}
+            </span>
           )}
         </div>
-        <div className={`text-right tabular-nums whitespace-nowrap text-xs sm:text-sm ${
-          optional ? 'text-ink-500' : ''
-        }`}>
-          {ranged ? (
-            <>
-              <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
-                {fmt(cr.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(cr.max)}
-              </span>
-              <span className="block text-[10px] text-ink-500 mt-0.5">sin material</span>
-            </>
-          ) : (
-            <>
-              <span className="text-ink-700">{qty}</span>
-              <span className="text-ink-400 mx-1.5" aria-hidden>×</span>
-              <span className="text-ink-700">{fmt(unit)}</span>
-              <span className="text-ink-400 mx-1.5" aria-hidden>=</span>
-              <span className={optional ? 'text-ink-500 font-medium' : 'text-ink-900 font-semibold'}>
-                {optional ? `+ ${fmt(subtotal)}` : fmt(subtotal)}
-              </span>
-            </>
-          )}
-        </div>
-      </div>
+      )}
+      <LineContent
+        entity={component}
+        mf={mf}
+        priced={componentPriced(component)}
+        families={families}
+        currency={currency}
+        rates={rates}
+        fmt={fmt}
+        materialSelections={materialSelections}
+        picker={picker}
+        onSelectMaterial={onSelectMaterial}
+        canApplyToAll={canApplyToAll}
+        onApplyToAll={onApplyToAll}
+      />
       {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(component.id, on)} />}
     </li>
   );
