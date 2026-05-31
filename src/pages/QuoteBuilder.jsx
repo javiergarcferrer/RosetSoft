@@ -302,12 +302,38 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     return patch;
   }, [families]);
 
+  // Clearing the chosen fabric (the swatch's red ×) — return the line/component
+  // to its material-less RANGE, the same shape CatalogPicker.insertRange adds it
+  // in (cheapest→priciest grade price). The editor's own path to the rule
+  // applyAction/quote-share encode for the client link; a no-op when the model
+  // can't span a range. The reference is left as-is (still root-resolvable).
+  const editorClearPatch = useCallback((entity) => {
+    const root = splitSkuGrade(entity.reference || '').root;
+    const fam = root ? families.get(root) : null;
+    if (!fam || !fam.graded || fam.grades.length < 2) return null;
+    const lo = productForGrade(fam, fam.grades[0]);
+    const hi = productForGrade(fam, fam.grades[fam.grades.length - 1]);
+    if (!lo || !hi || lo.priceUsd == null || hi.priceUsd == null) return null;
+    const min = Number(lo.priceUsd) || 0;
+    const max = Number(hi.priceUsd) || 0;
+    if (!(max > min)) return null;
+    return {
+      subtype: '',
+      swatchImageId: null,
+      unitPrice: min,
+      unitCost: lo.cost == null ? null : Number(lo.cost),
+      priceMin: min,
+      priceMax: max,
+    };
+  }, [families]);
+
   const pickMaterialInEditor = useCallback((id, sel) => {
+    // An empty grade is a CLEAR (the swatch ×) → revert to the range; otherwise
+    // it's a fabric pick → reprice to that grade.
     const grade = String(sel?.grade ?? '').trim();
-    if (!grade) return;
     const line = lines.find((l) => l.id === id);
     if (line) {
-      const patch = editorMaterialPatch(line, sel, grade);
+      const patch = grade ? editorMaterialPatch(line, sel, grade) : editorClearPatch(line);
       if (patch) updateLine(id, patch);
       return;
     }
@@ -316,7 +342,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       if (!Array.isArray(comps)) continue;
       const idx = comps.findIndex((c) => c.id === id);
       if (idx < 0) continue;
-      const patch = editorMaterialPatch(comps[idx], sel, grade);
+      const patch = grade ? editorMaterialPatch(comps[idx], sel, grade) : editorClearPatch(comps[idx]);
       if (patch) {
         const newComps = comps.slice();
         newComps[idx] = { ...comps[idx], ...patch };
@@ -324,7 +350,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       }
       break;
     }
-  }, [lines, editorMaterialPatch, updateLine]);
+  }, [lines, editorMaterialPatch, editorClearPatch, updateLine]);
 
   // Apply-to-all twin: dress many components (a materialPick map of id → sel) in
   // one pass, batching every target that shares a line into a single updateLine

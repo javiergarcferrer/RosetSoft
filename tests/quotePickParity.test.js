@@ -253,6 +253,41 @@ test('parity — free material pick reprices the right component identically', (
   assert.equal(ccomp(client, 'cmp', 'c2').unitPrice, scomp(server, 'cmp', 'c2').unitPrice);
 });
 
+test('parity — clear material: a line reverts to its model price range on both sides', () => {
+  // An empty grade is the recipient CLEARING their fabric (the swatch's red ×).
+  const { client, server } = both({ materialPick: { m: { grade: '', fabric: '', swatchImageId: null } } });
+  const c = cl(client, 'm');
+  const s = sl(server, 'm');
+  // Range restored from the model's grade prices (100..190), fabric dropped.
+  assert.equal(c.priceMin, s.price_min);                   // 100 both
+  assert.equal(c.priceMax, s.price_max);                   // 190 both
+  assert.equal(c.priceMin, 100);
+  assert.equal(c.priceMax, 190);
+  assert.equal(c.unitPrice, s.unit_price);                 // 100 (cheapest grade)
+  assert.equal(c.subtype, s.subtype);                      // '' both
+  assert.equal(c.subtype, '');
+  assert.equal(c.swatchImageId, s.swatch_image_id);        // null both
+  assert.equal(c.swatchImageId, null);
+  assert.equal(c.reference, s.reference);                  // '12345678A' (unchanged)
+  assert.equal(s.unit_cost, 40);                           // server persists the cheapest grade's cost
+});
+
+test('parity — clear material: a component reverts to its range identically', () => {
+  const { client, server } = both({ materialPick: { c1: { grade: '' } } });
+  const c = ccomp(client, 'cmp', 'c1');
+  const s = scomp(server, 'cmp', 'c1');
+  // c1 spans grades A..C → range 200..230.
+  assert.equal(c.priceMin, s.priceMin);                    // 200 both
+  assert.equal(c.priceMax, s.priceMax);                    // 230 both
+  assert.equal(c.priceMin, 200);
+  assert.equal(c.priceMax, 230);
+  assert.equal(c.unitPrice, s.unitPrice);                  // 200 (cheapest)
+  assert.equal(c.subtype, s.subtype);                      // '' both
+  assert.equal(c.swatchImageId, s.swatchImageId);          // null both
+  // sibling untouched on both
+  assert.equal(ccomp(client, 'cmp', 'c2').unitPrice, scomp(server, 'cmp', 'c2').unitPrice);
+});
+
 test('parity — composed picks (alt + optional + material) agree across the wall', () => {
   const pick = { alternatives: { g1: 'b' }, optionals: { opt: true, c2: true }, materials: { m: 'C', c1: 'C' } };
   const { client, server } = both(pick);

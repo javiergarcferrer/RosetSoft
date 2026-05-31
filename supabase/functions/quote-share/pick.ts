@@ -34,7 +34,8 @@ export interface Picks {
   // The client-link FULL catalog picker: set a line/component to ANY fabric the
   // model has a catalog SKU for, identified by { grade, fabric, swatchImageId }
   // (the same shape SwatchPicker hands the editor). Distinct from `materials`,
-  // which only re-anchors among the dealer's pre-offered grades.
+  // which only re-anchors among the dealer's pre-offered grades. An EMPTY grade
+  // clears the fabric instead — revert to the model's price range.
   materialPick?: Record<string, unknown>;
 }
 
@@ -138,13 +139,63 @@ function cleanFabric(v: unknown): string {
   return String(v ?? '').slice(0, 200);
 }
 
+// The price RANGE a model spans across its catalog grades — cheapest→priciest
+// price, plus the cheapest grade's cost (what a "sin material" line carries:
+// unit_price/unit_cost = the cheapest grade). null when the root has fewer than
+// two distinct prices (no range to form). The clear branch below reads this.
+function rangeOf(
+  root: string,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): { min: number; max: number; cost: number } | null {
+  const grades = priceMap.get(root);
+  if (!grades) return null;
+  let cheapest: GradeInfo | null = null;
+  let max = -Infinity;
+  for (const info of grades.values()) {
+    if (!Number.isFinite(info.price)) continue;
+    if (cheapest == null || info.price < cheapest.price) cheapest = info;
+    if (info.price > max) max = info.price;
+  }
+  if (cheapest == null || !(max > cheapest.price)) return null;
+  return { min: cheapest.price, max, cost: cheapest.cost };
+}
+
+// snake_case patch that returns a LINE to its material-less RANGE — the recipient
+// cleared the chosen fabric (empty grade). Mirrors the client's clearMaterial:
+// subtype + swatch dropped, price/cost back to the cheapest grade,
+// price_min..price_max the model's span. The reference is left as-is (still
+// root-resolvable for a later re-pick; the range, not the reference, prices it).
+// null when the model can't form a range — nothing to revert to.
+function clearLineMaterial(
+  root: string,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row | null {
+  const r = rangeOf(root, priceMap);
+  if (!r) return null;
+  return { subtype: '', swatch_image_id: null, unit_price: r.min, unit_cost: r.cost, price_min: r.min, price_max: r.max };
+}
+
+// camelCase mirror of clearLineMaterial for a COMPONENT (no separate cost on the
+// sub-piece row, matching componentFreeMaterialPatch). Returns a NEW component.
+function clearComponentMaterial(
+  comp: Row,
+  root: string,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row | null {
+  const r = rangeOf(root, priceMap);
+  if (!r) return null;
+  return { ...comp, subtype: '', swatchImageId: null, unitPrice: r.min, priceMin: r.min, priceMax: r.max };
+}
+
 // snake_case patch to set a LINE to an ARBITRARY catalog fabric+color (the
 // client-link full picker). Price/cost come AUTHORITATIVELY from the model's SKU
-// for the chosen grade; the fabric label + swatch are cosmetic. Returns null
-// when the model has no SKU for that grade (a stale/invalid pick — reject, never
-// trust a client-supplied price). When the line carried dealer-offered
-// alternatives we only re-base them (baseGrade/baseLabel) — GET recomputes each
-// option's delta from the new base, so the strip stays consistent.
+// for the chosen grade; the fabric label + swatch are cosmetic. An EMPTY grade
+// is the recipient CLEARING the fabric — revert to the model's range (see
+// clearLineMaterial). Returns null when the model has no SKU for that grade (a
+// stale/invalid pick — reject, never trust a client-supplied price). When the
+// line carried dealer-offered alternatives we only re-base them
+// (baseGrade/baseLabel) — GET recomputes each option's delta from the new base,
+// so the strip stays consistent.
 function lineFreeMaterialPatch(
   line: Row,
   sel: FreePick,
@@ -153,7 +204,7 @@ function lineFreeMaterialPatch(
   const root = rootOf(line.reference);
   if (!root) return null;
   const grade = String(sel.grade ?? '').trim();
-  if (!grade) return null;
+  if (!grade) return clearLineMaterial(root, priceMap);
   const info = priceMap.get(root)?.get(grade.toUpperCase());
   if (!info) return null;
   const fabric = cleanFabric(sel.fabric);
@@ -183,7 +234,7 @@ function componentFreeMaterialPatch(
   const root = rootOf(comp.reference);
   if (!root) return null;
   const grade = String(sel.grade ?? '').trim();
-  if (!grade) return null;
+  if (!grade) return clearComponentMaterial(comp, root, priceMap);
   const info = priceMap.get(root)?.get(grade.toUpperCase());
   if (!info) return null;
   const fabric = cleanFabric(sel.fabric);

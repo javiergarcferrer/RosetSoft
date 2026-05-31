@@ -45,6 +45,7 @@ export async function fetchSharedQuote(token) {
  *        | { optionals:    { [lineId]: boolean } }
  *        | { materials:    { [lineOrComponentId]: grade } }
  *        | { materialPick: { [lineOrComponentId]: { grade, fabric, swatchImageId } } }
+ *               (an empty grade clears the fabric → restores the model's range)
  */
 export async function applyClientPick(token, pick) {
   const r = await fetch(endpoint(token), {

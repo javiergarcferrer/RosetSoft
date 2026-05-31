@@ -555,20 +555,6 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
                 )}
               </div>
             )}
-            {/* Fabric swatch — shown only when there are NO material options.
-                When the options grid renders it already leads with this same
-                (selected) material as its "incluido" cell, so a separate hero
-                swatch would just repeat it. */}
-            {!line.materialOptions?.options?.length && (line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype))) && (
-              <div className="mt-2">
-                <ImageZoom
-                  id={line.swatchImageId}
-                  fallbackUrl={swatchUrl(colorCodeFromSubtype(line.subtype))}
-                  alt="Muestra de tela"
-                  className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
-                />
-              </div>
-            )}
             <MaterialOptionsStrip
               materialOptions={line.materialOptions}
               reference={line.reference}
@@ -582,9 +568,21 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
             />
             {(() => {
               const gp = picker && (line.gradePrices || picker.gradePricesFor?.(line.reference, mf));
-              return gp ? (
+              // The chosen-fabric swatch stands alone only when there's NO
+              // options grid (the grid already leads with the selected
+              // material). When it shows, the picker rides to its RIGHT and the
+              // swatch carries a clear ×; otherwise the picker is on its own.
+              const showSwatch = !line.materialOptions?.options?.length
+                && !!(line.swatchImageId || swatchUrl(colorCodeFromSubtype(line.subtype)));
+              if (!gp && !showSwatch) return null;
+              return showSwatch ? (
+                <div className="mt-2 flex items-start gap-3">
+                  <ClearSwatch id={line.id} subtype={line.subtype} swatchImageId={line.swatchImageId} gradePrices={gp} picker={picker} />
+                  {gp && <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} className="" />}
+                </div>
+              ) : (
                 <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} />
-              ) : null;
+              );
             })()}
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
@@ -728,6 +726,44 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, className =
         )}
       </Modal>
     </div>
+  );
+}
+
+// Can this model collapse back to a price RANGE? Only when it spans ≥2 distinct
+// grade prices — otherwise there's no "min–max" to revert to, so the clear ×
+// isn't offered. Mirrors the reducers' own range guard.
+function rangeable(gradePrices) {
+  const vals = Object.values(gradePrices || {}).map(Number).filter((n) => Number.isFinite(n));
+  return vals.length >= 2 && Math.max(...vals) > Math.min(...vals);
+}
+
+// The chosen-fabric swatch with a hover red × at its top-right corner that
+// returns the line/component to "no material" — the model's price range. The ×
+// rides the materialPick channel with an EMPTY grade; `applyAction` + the
+// quote-share Edge Function both read that as "drop the fabric, restore the
+// range". Only offered when the picker is wired AND the model can span a range.
+function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker }) {
+  const canClear = !!(picker?.onPick && gradePrices && rangeable(gradePrices));
+  return (
+    <span className="group/swatch relative z-[2] inline-flex">
+      <ImageZoom
+        id={swatchImageId}
+        fallbackUrl={swatchUrl(colorCodeFromSubtype(subtype))}
+        alt="Muestra de tela"
+        className="w-16 h-16 object-cover rounded border border-ink-200 bg-white"
+      />
+      {canClear && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); picker.onPick(id, { grade: '', fabric: '', swatchImageId: null }); }}
+          title="Quitar la tela — volver a cotizar sin material (rango de precio)"
+          aria-label="Quitar la tela seleccionada"
+          className="absolute -top-2 -right-2 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm opacity-0 transition-all hover:scale-110 hover:border-red-300 hover:bg-red-50 hover:text-red-600 group-hover/swatch:opacity-100 focus:opacity-100 coarse:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+        >
+          <X size={11} strokeWidth={2.5} aria-hidden />
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -1007,15 +1043,11 @@ function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fm
           )}
           {/* Fabric swatch — suppressed when the material-options grid renders
               (it already leads with this same material), mirroring the standalone
-              line. The picker controls sit to the RIGHT of the swatch. */}
+              line. The picker controls sit to the RIGHT of the swatch, which
+              carries a clear × that reverts to "no material". */}
           {showSwatch && (
             <div className="mt-2 flex items-start gap-3">
-              <ImageZoom
-                id={component.swatchImageId}
-                fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
-                alt="Muestra de tela"
-                className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
-              />
+              <ClearSwatch id={component.id} subtype={component.subtype} swatchImageId={component.swatchImageId} gradePrices={gp} picker={picker} />
               {pickerStack}
             </div>
           )}

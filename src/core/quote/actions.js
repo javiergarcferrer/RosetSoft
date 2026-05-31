@@ -21,7 +21,10 @@
 //                                         the FULL catalog picker — set a
 //                                         line/component to ANY fabric the model
 //                                         offers (not just the dealer's
-//                                         alternatives), repricing by grade.
+//                                         alternatives), repricing by grade. An
+//                                         EMPTY grade clears the fabric instead,
+//                                         restoring the model's price range
+//                                         (the "sin material" state).
 //
 // The client lacks the catalog price map; it doesn't need it — for `materials`
 // the bundle carries each option's per-unit `delta` (margin-applied), so
@@ -101,6 +104,27 @@ function switchMaterial(entity, grade) {
 }
 
 /**
+ * Remove the chosen fabric, returning the line/component to its material-less
+ * RANGE — the model's cheapest→priciest grade price (priceMin..priceMax), the
+ * exact shape a "sin material" line is added in. Mirrors the server's clear
+ * branch (quote-share/pick.ts `clearLineMaterial`/`clearComponentMaterial`).
+ * Reads the per-grade `gradePrices` the bundle already carries; a no-op when the
+ * model can't form a range (fewer than two distinct grade prices) — there's
+ * nothing to revert to. The reference is left as-is: it still resolves the
+ * family root for a later re-pick, and the range (not the reference) prices it.
+ */
+function clearMaterial(entity) {
+  const vals = entity.gradePrices
+    ? Object.values(entity.gradePrices).map(Number).filter((n) => Number.isFinite(n))
+    : [];
+  if (vals.length < 2) return entity;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  if (!(max > min)) return entity;
+  return { ...entity, subtype: '', swatchImageId: null, unitPrice: min, priceMin: min, priceMax: max };
+}
+
+/**
  * Set a line/component to an ARBITRARY catalog fabric (the full picker). Reprices
  * from the bundle's per-grade `gradePrices` (margin already baked); the fabric
  * label + swatch are cosmetic. Returns the same reference for an invalid grade
@@ -110,7 +134,9 @@ function switchMaterial(entity, grade) {
  */
 function applyFreeMaterial(entity, sel) {
   const grade = String(sel?.grade ?? '').trim();
-  if (!grade) return entity;
+  // An empty grade is the recipient CLEARING their fabric — drop it and return
+  // the line/component to the model's price range (the "sin material" state).
+  if (!grade) return clearMaterial(entity);
   const price = entity.gradePrices ? entity.gradePrices[grade.toUpperCase()] : undefined;
   if (typeof price !== 'number') return entity; // grade has no catalog SKU → reject
   const fabric = String(sel?.fabric ?? '').slice(0, 200);
