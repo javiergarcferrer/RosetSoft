@@ -9,11 +9,8 @@ import { formatMoney } from '../../lib/format.js';
  * Headless body for finding a catalog MODEL (a family of SKUs sharing the
  * 8-digit root, e.g. "Togo Fireside Chair") and picking one. Owns ONLY the
  * search box + the browse/search results; the caller wraps it in whatever
- * chrome it needs and decides what picking a model means:
- *
- *   • CatalogPicker  — picking advances to the fabric/grade step (new line).
- *   • ProductPicker  — picking switches an existing line's product, keeping
- *                      the materials the new model can be quoted in.
+ * chrome it needs and decides what picking a model means (e.g. CatalogPicker
+ * advances to the fabric/grade step to insert a new line).
  *
  * Two ways in, mirroring the admin Catalog:
  *   • Browse — every CATEGORY listed (collapsed); opening one lazy-loads its

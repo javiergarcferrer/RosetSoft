@@ -830,7 +830,6 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
   };
   const swatchImageId = line.swatchImageId || null;
   const [swatchOpen, setSwatchOpen] = useState(false);
-  const [optionOpen, setOptionOpen] = useState(false);
   // Index of the alternative option whose color we're re-picking (null = none).
   // Drives a dedicated SwatchPicker that drills into that option's material.
   const [editingOption, setEditingOption] = useState(null);
@@ -1001,20 +1000,6 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
           >
             <Palette size={14} />
           </button>
-          {/* Quiet "+ Opción" affordance — adds an ALTERNATIVE material the
-              customer could choose instead. Purely informational: it records
-              the option + a list-price delta, never changing this line's own
-              price or total. */}
-          <button
-            type="button"
-            onClick={() => setOptionOpen(true)}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-brand-50 transition-colors flex-shrink-0"
-            title="Agregar un material alternativo (solo informativo, no cambia el total)"
-            aria-label="Agregar material alternativo"
-          >
-            <Plus size={12} className="opacity-80" aria-hidden />
-            Opción
-          </button>
           {/* Quick jump to this model's Ligne Roset page when it's been linked
               in the catalog — lets the dealer (or designer) open the exact
               product to confirm the offered fabrics. */}
@@ -1043,30 +1028,21 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
         onEditColor={setEditingOption}
       />
 
+      {/* One picker: replaces the line's grade/fabric by default, and via its
+          "Agregar opciones" toggle batch-adds alternative materials (appended
+          to materialOptions instead of replacing the line's own fabric). */}
       <SwatchPicker
         open={swatchOpen}
         onClose={() => setSwatchOpen(false)}
         onSelect={(next) => commit(next)}
+        allowMultiSelect
+        onSelectMany={(picks) => addOptions(picks)}
         currentGrade={grade}
         currentFabric={fabric}
         family={family}
         nameFilter={nameFilter}
       />
-      {/* Second picker instance dedicated to adding alternative materials;
-          multi-select so the dealer can tick several fabrics at once. Each
-          selection is appended to materialOptions instead of replacing the
-          line's own grade/fabric. */}
-      <SwatchPicker
-        open={optionOpen}
-        onClose={() => setOptionOpen(false)}
-        multiSelect
-        onSelectMany={(picks) => addOptions(picks)}
-        currentGrade=""
-        currentFabric=""
-        family={family}
-        nameFilter={nameFilter}
-      />
-      {/* Third picker — re-pick the color/material of an EXISTING option.
+      {/* Re-pick the color/material of an EXISTING option.
           Opens drilled into that option's material (autoDrill via its
           grade/fabric) so clicking an option pill lands straight on its
           color grid; the pick overwrites just that option. */}

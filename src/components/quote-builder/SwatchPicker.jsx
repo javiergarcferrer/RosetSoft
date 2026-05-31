@@ -26,16 +26,17 @@ import { useApp } from '../../context/AppContext.jsx';
  * that material's ColorGrid (autoDrill) — MaterialColorPicker locates the
  * material via swatchMatch.locateColor on the current grade/fabric.
  *
- * Multi-select mode (`multiSelect` + `onSelectMany`): the picker shows
- * checkboxes and confirms ONCE with an array of selections — used by the
- * "+ Opción" flow to batch-add alternative materials to a line.
+ * Multi-select option (`allowMultiSelect` + `onSelectMany`): surfaces a
+ * "Agregar opciones" toggle inside the picker so the SAME modal can either
+ * replace the line's fabric OR batch-add alternative materials as options —
+ * confirming ONCE with an array of selections.
  *
  * Empty-catalog state: the picker shows a friendly nudge to import the
  * Ligne Roset 10.2025 list from /admin/materials. We don't trigger the
  * import inline because the catalog is admin-scoped.
  */
 export default function SwatchPicker({
-  open, onClose, onSelect, onSelectMany, multiSelect = false,
+  open, onClose, onSelect, onSelectMany, allowMultiSelect = false,
   currentGrade, currentFabric, family = null, nameFilter: nameFilterProp,
 }) {
   const { profileId } = useApp();
@@ -60,15 +61,15 @@ export default function SwatchPicker({
     return ownRec?.patternNames?.length ? new Set(ownRec.patternNames) : undefined;
   }, [nameFilterProp, ownRec]);
 
-  const initialTitle = multiSelect ? 'Elegir materiales' : 'Elegir material';
-  const [title, setTitle] = useState(initialTitle);
+  const [title, setTitle] = useState('Elegir material');
 
   // Reset the heading every time the modal opens. The inner picker remounts
   // on open (Modal returns null while closed), so its own step state resets
-  // too — a reopened picker never keeps the previous line's drilled material.
+  // too — a reopened picker never keeps the previous line's drilled material;
+  // it immediately re-syncs the title via onTitleChange.
   useEffect(() => {
-    if (open) setTitle(initialTitle);
-  }, [open, initialTitle]);
+    if (open) setTitle('Elegir material');
+  }, [open]);
 
   // material + color → the { grade, fabric, swatchImageId } shape the quote
   // line consumes. Pre-fill the swatch from the chosen color's own photo when
@@ -104,8 +105,8 @@ export default function SwatchPicker({
           nameFilter={nameFilter}
           currentGrade={currentGrade}
           currentFabric={currentFabric}
-          autoDrill={!multiSelect}
-          multiSelect={multiSelect}
+          autoDrill
+          allowMultiSelect={allowMultiSelect}
           onPick={commit}
           onPickMany={commitMany}
           onTitleChange={setTitle}

@@ -25,11 +25,13 @@ import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/compos
  *      chip grid. Picking a color (or "Sin color específico") fires
  *      onPick(material, color|null).
  *
- * Multi-select mode (`multiSelect`): the list shows checkboxes instead of
- * drilling into colors. The dealer ticks several fabrics and confirms, firing
- * onPickMany([{ material, color }]) once — the quote line appends them as
- * alternative material OPTIONS. Each pick carries the material's hero color
- * (first with a photo, else the first color) so the option chip gets a swatch.
+ * Multi-select mode: when `allowMultiSelect` is set the picker shows a segmented
+ * toggle at the top — "Reemplazar tela" (the default single-pick drill-down) vs
+ * "Agregar opciones". In the latter the list shows checkboxes; the dealer ticks
+ * several fabrics and confirms, firing onPickMany([{ material, color }]) once —
+ * the quote line appends them as alternative material OPTIONS. Each pick carries
+ * the material's hero color (first with a photo, else the first color) so the
+ * option chip gets a swatch.
  *
  * Props:
  *   materials      catalog materials (already loaded by the caller)
@@ -42,8 +44,7 @@ import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/compos
  *                  highlight and, with autoDrill, which material to pre-open)
  *   autoDrill?     when true, locate the material the current grade/fabric
  *                  refers to and start in its ColorGrid (re-editing a line)
- *   multiSelect?   when true, render checkboxes + a confirm bar instead of the
- *                  single-pick color drill-down
+ *   allowMultiSelect? when true, surface the "Agregar opciones" mode toggle
  *   onPick         (material, color|null) — the chosen combination
  *   onPickMany?    ([{ material, color }]) — the multi-select confirmation
  *   onTitleChange? (title) — lets the wrapper sync its modal heading with the
@@ -57,7 +58,7 @@ export default function MaterialColorPicker({
   currentGrade,
   currentFabric,
   autoDrill = false,
-  multiSelect = false,
+  allowMultiSelect = false,
   onPick,
   onPickMany,
   onTitleChange,
@@ -71,8 +72,18 @@ export default function MaterialColorPicker({
   const [showAllNames, setShowAllNames] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [picked, setPicked] = useState(null);   // material the dealer drilled into
+  const [multiMode, setMultiMode] = useState(false);          // "Agregar opciones" toggle
   const [selected, setSelected] = useState(() => new Set());  // multi-select ids
   const inputRef = useRef(null);
+
+  // Switch between the single-pick drill-down and the multi-select "options"
+  // mode. Leaving multi clears the ticked set; entering it leaves any drilled
+  // ColorGrid so the dealer lands back on the checkbox list.
+  function setMode(multi) {
+    setMultiMode(multi);
+    if (multi) setPicked(null);
+    else setSelected(new Set());
+  }
 
   // When re-editing a line that already carries a material, jump straight into
   // that material's ColorGrid. Match on the embedded #code/name (NOT a filtered
@@ -83,12 +94,12 @@ export default function MaterialColorPicker({
   // multi-select mode — there is no single "current" material to drill to.
   const didAutoDrill = useRef(false);
   useEffect(() => {
-    if (didAutoDrill.current || !autoDrill || multiSelect || list.length === 0) return;
+    if (didAutoDrill.current || !autoDrill || multiMode || list.length === 0) return;
     didAutoDrill.current = true;
     const hit = locateColor(list, composeSubtype(currentGrade, currentFabric));
     if (hit?.material) setPicked(hit.material);
     else queueMicrotask(() => inputRef.current?.focus());
-  }, [autoDrill, multiSelect, list, currentGrade, currentFabric]);
+  }, [autoDrill, multiMode, list, currentGrade, currentFabric]);
 
   const allowGrade = useMemo(() => {
     if (!gradeFilter || gradeFilter.length === 0) return null;
@@ -158,12 +169,12 @@ export default function MaterialColorPicker({
 
   // Keep the wrapper's heading in sync with the current step.
   useEffect(() => {
-    if (multiSelect) {
+    if (multiMode) {
       onTitleChange?.(selected.size ? `Elegir materiales · ${selected.size}` : 'Elegir materiales');
       return;
     }
     onTitleChange?.(picked ? `${picked.name} · elige color` : 'Elegir material');
-  }, [picked, multiSelect, selected, onTitleChange]);
+  }, [picked, multiMode, selected, onTitleChange]);
 
   function toggle(m) {
     setSelected((prev) => {
@@ -183,7 +194,7 @@ export default function MaterialColorPicker({
   }
 
   function activate(m) {
-    if (multiSelect) { toggle(m); return; }
+    if (multiMode) { toggle(m); return; }
     if (!m.colors?.length) onPick(m, null);
     else setPicked(m);
   }
@@ -202,7 +213,7 @@ export default function MaterialColorPicker({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       // Cmd/Ctrl+Enter confirms the whole multi-selection.
-      if (multiSelect && (e.metaKey || e.ctrlKey)) { confirmMany(); return; }
+      if (multiMode && (e.metaKey || e.ctrlKey)) { confirmMany(); return; }
       const m = displayList[activeIdx];
       if (m) activate(m);
     }
@@ -210,6 +221,10 @@ export default function MaterialColorPicker({
 
   return (
     <div onKeyDown={onKey}>
+      {/* Mode toggle — only when the caller offers the options flow. Replacing
+          the line's own fabric vs. adding alternative options the customer can
+          choose between live in ONE picker; the toggle swaps between them. */}
+      {allowMultiSelect && <ModeToggle multi={multiMode} onChange={setMode} />}
       {picked ? (
         <ColorGrid
           material={picked}
@@ -239,7 +254,7 @@ export default function MaterialColorPicker({
           setGroupByFiber={setGroupByFiber}
           activeIdx={activeIdx}
           setActiveIdx={setActiveIdx}
-          multiSelect={multiSelect}
+          multiSelect={multiMode}
           selected={selected}
           onActivate={activate}
           onConfirmMany={confirmMany}
@@ -247,6 +262,31 @@ export default function MaterialColorPicker({
           currentGrade={currentGrade}
         />
       )}
+    </div>
+  );
+}
+
+/* Segmented control for the single-pick vs. add-options modes. */
+function ModeToggle({ multi, onChange }) {
+  const opts = [
+    { v: false, label: 'Reemplazar tela' },
+    { v: true, label: 'Agregar opciones' },
+  ];
+  return (
+    <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs mb-3">
+      {opts.map((o, i) => (
+        <button
+          key={o.label}
+          type="button"
+          onClick={() => onChange(o.v)}
+          aria-pressed={multi === o.v}
+          className={`px-3 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
+            multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }
