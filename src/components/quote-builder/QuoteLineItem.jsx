@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, MessageSquarePlus, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -642,28 +642,16 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           every component within (the components inherit this link). */}
       {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
-      {/* Descripción — promoted out of the old DetailsPanel disclosure to an
-          always-visible, auto-growing field under the spec + material rows.
-          It's the PDF-facing copy the dealer writes for the client, so it
-          earns a permanent slot. Compound lines don't carry a line-level
-          description (the per-component rows do), so it's gated to simple
-          lines — same rule the old panel used. */}
-      {!compound && (
-        <AutoGrowTextarea
-          value={line.description || ''}
-          onCommit={(v) => onChange({ description: v })}
-          label="Descripción · visible en el PDF"
-          placeholder="Descripción · visible en el PDF"
-          autoCapitalize="sentences"
-        />
-      )}
-      {/* Notas internas — a quiet "+ Nota interna" toggle that reveals an
-          auto-growing field. Collapsed by default when empty; auto-shown
-          when the line already carries a note so existing copy isn't
-          hidden behind a click. */}
-      <InternalNote
-        value={line.notes || ''}
-        onCommit={(v) => onChange({ notes: v })}
+      {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
+          inline icons — the least vertical space — each expanding its field on
+          click. A compound line carries no line-level description (its
+          components do), so only the note icon shows there. */}
+      <LineNotes
+        showDescription={!compound}
+        description={line.description || ''}
+        onChangeDescription={(v) => onChange({ description: v })}
+        note={line.notes || ''}
+        onChangeNote={(v) => onChange({ notes: v })}
       />
       {!compound && (
         <CatalogPicker
@@ -787,33 +775,88 @@ function autoSize(el) {
   el.style.height = el.scrollHeight + 'px';
 }
 
-// Internal-note reveal. Collapsed to a quiet "+ Nota interna" link when the
-// line has no note; clicking opens the field. When the line ALREADY has a
-// note it opens automatically so existing copy is never hidden. These notes
-// never print — the placeholder says so.
-function InternalNote({ value, onCommit }) {
-  const [open, setOpen] = useState(!!value);
-  if (!open) {
-    return (
+// Descripción + Nota interna, collapsed to two inline icons so they cost the
+// least vertical space. Each toggles its own auto-growing field open on click;
+// a field that already carries copy shows a filled dot, and the hover tooltip
+// previews that copy (or states the field's purpose when empty) — so the dealer
+// reads it without expanding. Descripción is PDF-facing; the note never prints.
+function LineNotes({ showDescription, description, onChangeDescription, note, onChangeNote }) {
+  const [descOpen, setDescOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  return (
+    <div className="mt-1.5">
+      <div className="flex items-center gap-1">
+        {showDescription && (
+          <NoteToggle
+            icon={AlignLeft}
+            label="Descripción · visible en el PDF"
+            content={description}
+            open={descOpen}
+            onClick={() => setDescOpen((v) => !v)}
+          />
+        )}
+        <NoteToggle
+          icon={StickyNote}
+          label="Nota interna · no se imprime"
+          content={note}
+          open={noteOpen}
+          onClick={() => setNoteOpen((v) => !v)}
+        />
+      </div>
+      {showDescription && descOpen && (
+        <AutoGrowTextarea
+          value={description}
+          onCommit={onChangeDescription}
+          label="Descripción · visible en el PDF"
+          placeholder="Descripción · visible en el PDF"
+          autoCapitalize="sentences"
+          autoFocus
+        />
+      )}
+      {noteOpen && (
+        <AutoGrowTextarea
+          value={note}
+          onCommit={onChangeNote}
+          label="Notas internas · no se imprimen"
+          placeholder="Notas internas · no se imprimen"
+          autoCapitalize="sentences"
+          autoFocus
+        />
+      )}
+    </div>
+  );
+}
+
+// One collapsed note icon. Brand-tinted (with a dot) once its field carries
+// copy, pressed-looking while its field is open; an elegant hover tooltip
+// previews the copy, or explains the field's purpose when it's still empty.
+function NoteToggle({ icon: Icon, label, content, open, onClick }) {
+  const hasContent = !!(content && content.trim());
+  const active = open || hasContent;
+  const tip = hasContent ? content.trim() : label;
+  return (
+    <span className="group/note relative inline-flex">
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-ink-700 transition-colors px-1 -mx-1 py-1 rounded"
-        title="Agregar una nota interna — no se imprime en el PDF"
+        onClick={onClick}
+        aria-label={label}
+        aria-expanded={open}
+        className={`relative inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md transition-colors ${
+          active ? 'text-brand-700 hover:bg-brand-50' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50'
+        } ${open ? 'bg-brand-50' : ''}`}
       >
-        <MessageSquarePlus size={13} className="opacity-80" aria-hidden />
-        Nota interna
+        <Icon size={14} />
+        {hasContent && !open && (
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-white" aria-hidden />
+        )}
       </button>
-    );
-  }
-  return (
-    <AutoGrowTextarea
-      value={value}
-      onCommit={onCommit}
-      label="Notas internas · no se imprimen"
-      placeholder="Notas internas · no se imprimen"
-      autoCapitalize="sentences"
-    />
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[260px] whitespace-pre-line rounded-md bg-ink-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white shadow-soft opacity-0 transition-opacity duration-150 group-hover/note:opacity-100"
+      >
+        {tip}
+      </span>
+    </span>
   );
 }
 
