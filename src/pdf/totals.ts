@@ -7,7 +7,7 @@ import {
   BAND_INK, BAND_CREAM, WHITE,
   FS_TOTAL_BIG, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
-import { drawRightAt, formatMoney, formatPlain, wrapText } from './util.js';
+import { drawRightAt, formatMoney, formatPlain, wrapText, drawRoundedRect } from './util.js';
 import type { DrawTextOptions } from './util.js';
 import type { PdfCtx, Cursor } from './types.js';
 
@@ -43,6 +43,7 @@ type SubRow = [string, number, SubRowTone];
 const BAND_W   = 300;   // right-aligned block width
 const BAND_H   = 46;    // band height
 const BAND_PAD = 16;    // inner horizontal padding (label / value insets)
+const BAND_RADIUS = 12; // rounded corners — matches the rounded card language
 const SUB_ROW_LH = 15;  // line-height of each subtotal-stack row
 
 /**
@@ -143,9 +144,9 @@ export function drawTotals(
   y -= 12;                       // breathing between sub-rows and the band
   const bandTop = y;
   const bandBottom = bandTop - BAND_H;
-  page.drawRectangle({
-    x: leftX, y: bandBottom, width: BAND_W, height: BAND_H, color: BAND_INK,
-  });
+  // Rounded near-black bar — matches the rounded card language the line bands
+  // and images now use, so the grand total reads as the same design system.
+  drawRoundedRect(page, leftX, bandTop, BAND_W, BAND_H, { color: BAND_INK, radius: BAND_RADIUS });
 
   // Vertically center both label + value on the band. Use the value's
   // cap height (24pt) as the dominant element to find the baseline.

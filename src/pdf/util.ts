@@ -2,6 +2,50 @@ import type { PDFPage, PDFFont, RGB, PDFPageDrawTextOptions } from 'pdf-lib';
 import type { CurrencyCode, RatesMap } from '../types/domain.ts';
 import { INK } from './constants.js';
 
+// ---------------------------------------------------------------------------
+// Rounded-rectangle primitive. pdf-lib's drawRectangle has no border-radius,
+// so we synthesize a rounded rect as an SVG path and fill/stroke it with
+// drawSvgPath. The path is authored in SVG space (origin top-left, y DOWN);
+// drawSvgPath places that origin at {x,y} and flips y, so passing the box's
+// TOP-LEFT in PDF coords (x = left, y = topY) yields a box occupying
+// [topY − h, topY]. `corners` lets a band round only its top or bottom pair,
+// so a header (rounded top) and a footer (rounded bottom) bracket a group's
+// member rows into one rounded card — the rounded silhouette the on-screen
+// client link uses. Verified against pdftoppm before relying on it.
+export interface Corners { tl?: number; tr?: number; br?: number; bl?: number; }
+function roundedRectPath(w: number, h: number, c: Corners): string {
+  const cap = Math.min(w / 2, h / 2);
+  const tl = Math.max(0, Math.min(c.tl ?? 0, cap));
+  const tr = Math.max(0, Math.min(c.tr ?? 0, cap));
+  const br = Math.max(0, Math.min(c.br ?? 0, cap));
+  const bl = Math.max(0, Math.min(c.bl ?? 0, cap));
+  return [
+    `M ${tl} 0`,
+    `H ${w - tr}`, tr ? `A ${tr} ${tr} 0 0 1 ${w} ${tr}` : `L ${w} 0`,
+    `V ${h - br}`, br ? `A ${br} ${br} 0 0 1 ${w - br} ${h}` : `L ${w} ${h}`,
+    `H ${bl}`, bl ? `A ${bl} ${bl} 0 0 1 0 ${h - bl}` : `L 0 ${h}`,
+    `V ${tl}`, tl ? `A ${tl} ${tl} 0 0 1 ${tl} 0` : `L 0 0`,
+    'Z',
+  ].join(' ');
+}
+export interface RoundedRectStyle {
+  color?: RGB; borderColor?: RGB; borderWidth?: number;
+  opacity?: number; radius?: number; corners?: Corners;
+}
+export function drawRoundedRect(
+  page: PDFPage, x: number, topY: number, w: number, h: number, s: RoundedRectStyle,
+): void {
+  const r = s.radius ?? 0;
+  const corners = s.corners ?? { tl: r, tr: r, br: r, bl: r };
+  page.drawSvgPath(roundedRectPath(w, h, corners), {
+    x, y: topY,
+    color: s.color,
+    borderColor: s.borderColor,
+    borderWidth: s.borderWidth,
+    opacity: s.opacity,
+  });
+}
+
 /**
  * pdf-lib v1.x's `PDFPageDrawTextOptions` type omits `characterSpacing`,
  * but the runtime accepts and threads it through to the underlying PDF

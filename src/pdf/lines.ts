@@ -16,54 +16,14 @@ import {
   BG_GROUP_SET, BAND_GROUP_SET, BRAND_50, BAND_GROUP_ALT,
   FS_TITLE, FS_EYEBROW, FS_BODY, FS_META, FS_EYEBROW_SM,
 } from './constants.js';
-import { drawRightAt, formatMoney } from './util.js';
+import { drawRightAt, formatMoney, drawRoundedRect } from './util.js';
 import type { DrawTextOptions } from './util.js';
 import { embedImageById, embedSwatch } from './embed.js';
 import type { PdfCtx, Cursor } from './types.js';
 
-// ---------------------------------------------------------------------------
-// Rounded-rectangle primitive. pdf-lib's drawRectangle has no border-radius,
-// so we synthesize a rounded rect as an SVG path and fill/stroke it with
-// drawSvgPath. The path is authored in SVG space (origin top-left, y DOWN);
-// drawSvgPath places that origin at {x,y} and flips y, so passing the box's
-// TOP-LEFT in PDF coords (x = left, y = topY) yields a box occupying
-// [topY − h, topY]. `corners` lets a band round only its top or bottom pair,
-// so a header (rounded top) and a footer (rounded bottom) bracket the member
-// rows into one rounded card — the same rounded silhouette the on-screen
-// client link uses. Verified against pdftoppm before relying on it.
-interface Corners { tl?: number; tr?: number; br?: number; bl?: number; }
-function roundedRectPath(w: number, h: number, c: Corners): string {
-  const cap = Math.min(w / 2, h / 2);
-  const tl = Math.max(0, Math.min(c.tl ?? 0, cap));
-  const tr = Math.max(0, Math.min(c.tr ?? 0, cap));
-  const br = Math.max(0, Math.min(c.br ?? 0, cap));
-  const bl = Math.max(0, Math.min(c.bl ?? 0, cap));
-  return [
-    `M ${tl} 0`,
-    `H ${w - tr}`, tr ? `A ${tr} ${tr} 0 0 1 ${w} ${tr}` : `L ${w} 0`,
-    `V ${h - br}`, br ? `A ${br} ${br} 0 0 1 ${w - br} ${h}` : `L ${w} ${h}`,
-    `H ${bl}`, bl ? `A ${bl} ${bl} 0 0 1 0 ${h - bl}` : `L 0 ${h}`,
-    `V ${tl}`, tl ? `A ${tl} ${tl} 0 0 1 ${tl} 0` : `L 0 0`,
-    'Z',
-  ].join(' ');
-}
-interface RoundedRectStyle {
-  color?: RGB; borderColor?: RGB; borderWidth?: number;
-  opacity?: number; radius?: number; corners?: Corners;
-}
-function drawRoundedRect(
-  page: PDFPage, x: number, topY: number, w: number, h: number, s: RoundedRectStyle,
-): void {
-  const r = s.radius ?? 0;
-  const corners = s.corners ?? { tl: r, tr: r, br: r, bl: r };
-  page.drawSvgPath(roundedRectPath(w, h, corners), {
-    x, y: topY,
-    color: s.color,
-    borderColor: s.borderColor,
-    borderWidth: s.borderWidth,
-    opacity: s.opacity,
-  });
-}
+// Rounded-corner radii used across the line renderer (the drawRoundedRect
+// primitive lives in util.ts, shared with totals.ts). Mirrors the client
+// link's rounded-xl bands / rounded-lg images / rounded-md swatches.
 const CARD_RADIUS   = 11;   // rounded-card corners — mirrors the client link's rounded-xl bands
 const IMG_RADIUS    = 10;   // product-image corner radius (client link: rounded-lg)
 const SWATCH_RADIUS = 6;    // swatch-tile corner radius (client link: rounded-md)
