@@ -84,6 +84,22 @@ function withDeltas(
   return { ...mo, options: pricedOptions };
 }
 
+// The model's per-grade price (margin baked, like unitPrice) for the upholstered
+// SKU at `reference`'s root — what the client-link FULL fabric picker shows per
+// grade AND reprices to. Price-only: cost never leaves the server. null when the
+// reference isn't a graded catalog model.
+function gradePricesFor(
+  reference: unknown,
+  marginFactor: number,
+  priceByRootGrade: Map<string, Map<string, number>>,
+): Record<string, number> | null {
+  const grades = priceByRootGrade.get(rootOf(reference) || '');
+  if (!grades || !grades.size) return null;
+  const out: Record<string, number> = {};
+  for (const [g, p] of grades) out[g] = p * marginFactor;
+  return out;
+}
+
 // Map a raw snake_case quote_lines row to the client-facing camelCase shape,
 // baking `marginFactor` into every price so margin is invisible downstream.
 function clientLine(
@@ -102,6 +118,9 @@ function clientLine(
     safe.materialOptions = withDeltas(
       c.materialOptions as Row | null, c.reference, marginFactor, priceByRootGrade,
     );
+    // Per-grade model prices so the client-link picker can show + reprice this
+    // sub-piece to any catalog fabric (margin baked; cost stays server-side).
+    safe.gradePrices = gradePricesFor(c.reference, marginFactor, priceByRootGrade);
     return safe;
   });
   return {
@@ -129,6 +148,9 @@ function clientLine(
     materialOptions: withDeltas(
       row.material_options as Row | null, row.reference, marginFactor, priceByRootGrade,
     ),
+    // Per-grade model prices (margin baked) so the client-link picker can show +
+    // reprice this line to any catalog fabric; null for non-upholstered lines.
+    gradePrices: gradePricesFor(row.reference, marginFactor, priceByRootGrade),
     components,
     isOptional: row.is_optional ?? false,
     // The dealer-designated "client may toggle this optional in/out" marker.
@@ -168,6 +190,54 @@ async function priceMapForRoots(
   return map;
 }
 
+// The client-safe catalog for the FULL fabric picker: every material whose grade
+// is in play on this quote, projected to { id, name, grade, category,
+// composition, colors[] } — NO per-yard price / cost leaves the server (the
+// picker prices from the line's `gradePrices`, the model price). Bounded to the
+// grades actually quoted so the payload stays small.
+async function pickableMaterials(
+  admin: Admin,
+  profileId: unknown,
+  grades: Set<string>,
+): Promise<Record<string, unknown>[]> {
+  if (!grades.size) return [];
+  const { data } = await admin
+    .from('materials')
+    .select('id, name, grade, category, composition, colors')
+    .eq('profile_id', profileId);
+  return ((data || []) as Row[])
+    .filter((m) => grades.has(String(m.grade || '').toUpperCase()))
+    .map((m) => ({
+      id: m.id, name: m.name, grade: m.grade, category: m.category,
+      composition: m.composition,
+      colors: Array.isArray(m.colors)
+        ? (m.colors as Row[]).map((c) => ({ name: c.name, code: c.code, imageId: c.imageId ?? null }))
+        : [],
+    }));
+}
+
+// Per-model offered-fabric allowlists (model_fabrics.pattern_names), keyed by
+// family root — so the picker restricts to in-grade AND offered, exactly like
+// the editor's SwatchPicker. Only the roots in play are read.
+async function modelFabricsForRoots(
+  admin: Admin,
+  profileId: unknown,
+  roots: Set<string>,
+): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  if (!roots.size) return out;
+  const { data } = await admin
+    .from('model_fabrics')
+    .select('id, pattern_names')
+    .eq('profile_id', profileId)
+    .in('id', [...roots]);
+  for (const r of (data || []) as Row[]) {
+    const names = Array.isArray(r.pattern_names) ? r.pattern_names as string[] : [];
+    if (names.length) out[String(r.id)] = names;
+  }
+  return out;
+}
+
 // Just the list-price view of a root→grade map, for delta computation.
 function priceOnly(full: Map<string, Map<string, GradeInfo>>): Map<string, Map<string, number>> {
   const out = new Map<string, Map<string, number>>();
@@ -191,18 +261,26 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     .eq('quote_id', quote.id)
     .order('sort_order', { ascending: true });
 
-  // Catalog prices for every material option's grade → per-option delta.
+  // Catalog prices for every upholstered root in play — feeds both the
+  // per-option delta (lines with dealer alternatives) AND each line's
+  // `gradePrices` (the full picker reprices to any grade), so we collect EVERY
+  // resolvable root, not just those carrying material options.
   const roots = new Set<string>();
   for (const row of (lineRows || []) as Row[]) {
-    const mo = row.material_options as { options?: unknown[] } | null;
-    if (mo?.options?.length) { const r = rootOf(row.reference); if (r) roots.add(r); }
+    const r = rootOf(row.reference); if (r) roots.add(r);
     const comps = Array.isArray(row.components) ? row.components as Row[] : [];
-    for (const c of comps) {
-      const cmo = c.materialOptions as { options?: unknown[] } | null;
-      if (cmo?.options?.length) { const r = rootOf(c.reference); if (r) roots.add(r); }
-    }
+    for (const c of comps) { const cr = rootOf(c.reference); if (cr) roots.add(cr); }
   }
   const priceByRootGrade = priceOnly(await priceMapForRoots(admin, quote.profile_id, roots));
+
+  // The full fabric picker's catalog: materials in the grades actually quoted,
+  // plus each model's offered-fabric allowlist. Both bounded to what's in play.
+  const gradesInPlay = new Set<string>();
+  for (const grades of priceByRootGrade.values()) for (const g of grades.keys()) gradesInPlay.add(g);
+  const [materials, modelFabrics] = await Promise.all([
+    pickableMaterials(admin, quote.profile_id, gradesInPlay),
+    modelFabricsForRoots(admin, quote.profile_id, roots),
+  ]);
 
   const lines = ((lineRows || []) as Row[]).map((row) =>
     clientLine(row, baseFactor * (1 + num(row.line_margin_pct) / 100), priceByRootGrade),
@@ -271,6 +349,10 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
     seller,
     settings,
     containers,
+    // The full fabric picker's data — the client-safe catalog + per-model
+    // allowlists. Lines carry their own `gradePrices` (margin baked).
+    materials,
+    modelFabrics,
   };
 }
 
@@ -307,6 +389,7 @@ Deno.serve(async (req: Request) => {
       alternatives?: Record<string, unknown>;
       optionals?: Record<string, unknown>;
       materials?: Record<string, unknown>;
+      materialPick?: Record<string, unknown>;
     } = {};
     try { body = await req.json(); } catch { /* empty body ok */ }
 

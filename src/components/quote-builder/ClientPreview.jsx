@@ -1,8 +1,12 @@
-import { useMemo } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Palette } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
+import Modal from '../Modal.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
+import MaterialColorPicker from './MaterialColorPicker.jsx';
+import { splitSkuGrade } from '../../lib/catalog.js';
+import { parseSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
@@ -55,7 +59,7 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, materialSelections, onSelectMaterial, onPickMaterial, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -63,7 +67,13 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // Interactive (the public share link wires onSelect* handlers) vs. read-only
   // (the dealer's in-editor "Vista cliente"). Drives the banner copy so the
   // recipient knows they can configure the quote right here.
-  const interactive = !!(onSelectMaterial || onSelectAlternative || onToggleOptional);
+  const interactive = !!(onSelectMaterial || onPickMaterial || onSelectAlternative || onToggleOptional);
+  // The full fabric picker is available only when its catalog + commit handler
+  // are both wired (the public share link). Bundled once and threaded down so
+  // every upholstered line/component opens the SAME modal the editor uses.
+  const picker = onPickMaterial && materials?.length
+    ? { materials, modelFabrics: modelFabrics || {}, onPick: onPickMaterial }
+    : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
   // data, savings, the grand-total range, the "Alternativa/Conjunto N de M"
@@ -200,6 +210,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                         setInfo={undefined}
                         insideGroupCard={false}
                         materialSelections={materialSelections}
+                        picker={picker}
                         onSelectMaterial={onSelectMaterial}
                         onToggleOptional={onToggleOptional}
                       />
@@ -234,6 +245,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                           setInfo={isSet ? setInfo.get(l.id) : undefined}
                           insideGroupCard
                           materialSelections={materialSelections}
+                          picker={picker}
                           onSelectMaterial={onSelectMaterial}
                           onToggleOptional={onToggleOptional}
                           onSelectAlternative={onSelectAlternative}
@@ -339,7 +351,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -356,6 +368,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
         setInfo={setInfo}
         insideGroupCard={insideGroupCard}
         materialSelections={materialSelections}
+        picker={picker}
         onSelectMaterial={onSelectMaterial}
         onToggleOptional={onToggleOptional}
         onSelectAlternative={onSelectAlternative}
@@ -542,6 +555,15 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               selectedGrade={materialSelections?.[line.id] ?? line.materialOptions?.baseGrade}
               onSelect={onSelectMaterial ? (g) => onSelectMaterial(line.id, g) : undefined}
             />
+            {picker && line.gradePrices && (
+              <FabricPicker
+                id={line.id}
+                subtype={line.subtype}
+                reference={line.reference}
+                gradePrices={line.gradePrices}
+                picker={picker}
+              />
+            )}
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
                 {line.description}
@@ -631,6 +653,67 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
   );
 }
 
+// Full catalog fabric picker for an upholstered line/component on the
+// interactive client link. Renders a quiet "Elegir tela" button that opens the
+// SAME two-step <MaterialColorPicker> the editor uses (fabric → color), so the
+// client link and the dealer's in-app preview show one identical picker. The
+// catalog + the commit handler arrive via `picker` (the share bundle); the
+// per-line `gradePrices` drive both the in-grade restriction and the price each
+// fabric shows. On pick we hand back the SAME { grade, fabric, swatchImageId }
+// shape the dealer's SwatchPicker produces — the optimistic reducer + the Edge
+// Function reprice from it. `z-[2]` lifts the trigger above any dimming veil.
+function FabricPicker({ id, subtype, reference, gradePrices, picker }) {
+  const [open, setOpen] = useState(false);
+  // A CatalogFamily-shaped shim so MaterialColorPicker shows the MODEL price (the
+  // margin-baked `gradePrices`) per grade — never the material's own per-yard
+  // price, which the bundle deliberately withholds.
+  const family = useMemo(() => {
+    if (!gradePrices) return null;
+    const byGrade = new Map();
+    for (const [g, price] of Object.entries(gradePrices)) byGrade.set(String(g).toUpperCase(), { priceUsd: price });
+    return { root: splitSkuGrade(reference || '').root, name: '', family: '', graded: byGrade.size >= 2, byGrade, grades: [...byGrade.keys()] };
+  }, [gradePrices, reference]);
+  const gradeFilter = useMemo(() => Object.keys(gradePrices || {}), [gradePrices]);
+  const nameFilter = useMemo(() => {
+    const root = splitSkuGrade(reference || '').root;
+    const allow = root ? picker.modelFabrics?.[root] : null;
+    return allow?.length ? new Set(allow) : undefined;
+  }, [reference, picker.modelFabrics]);
+  const { grade, fabric } = parseSubtype(subtype);
+  return (
+    <div className="relative z-[2] mt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+      >
+        <Palette size={13} aria-hidden /> Elegir tela
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
+        {open && (
+          <MaterialColorPicker
+            materials={picker.materials}
+            family={family}
+            gradeFilter={gradeFilter}
+            nameFilter={nameFilter}
+            currentGrade={grade}
+            currentFabric={fabric}
+            autoDrill
+            onPick={(m, c) => {
+              picker.onPick(id, {
+                grade: m.grade || '',
+                fabric: composeFabricLabel(m, c),
+                swatchImageId: (c && c.imageId) || null,
+              });
+              setOpen(false);
+            }}
+          />
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 // Compound line — one family + one image header, then a stacked list of
 // component rows underneath. Each row has its own name / ref / dim /
 // subtype + its own qty × unit = subtotal. The whole block resolves into
@@ -641,7 +724,7 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   // Material-less components make the whole compound a RANGE — "min – max"
@@ -765,6 +848,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 families={families}
                 groupInfo={compAltInfo.get(c.id)}
                 materialSelections={materialSelections}
+                picker={picker}
                 onSelectMaterial={onSelectMaterial}
                 onToggleOptional={onToggleOptional}
                 onSelectAlternative={onSelectAlternative}
@@ -806,7 +890,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -893,6 +977,15 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
             onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
           />
+          {picker && component.gradePrices && (
+            <FabricPicker
+              id={component.id}
+              subtype={component.subtype}
+              reference={component.reference}
+              gradePrices={component.gradePrices}
+              picker={picker}
+            />
+          )}
           {component.description && (
             <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
               {component.description}

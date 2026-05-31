@@ -102,6 +102,8 @@ export default function PublicQuoteView() {
   const pickAlternative = (group, lineId) => applyPick({ alternatives: { [group]: lineId } });
   const toggleOptional = (lineId, on) => applyPick({ optionals: { [lineId]: on } });
   const pickMaterial = (id, grade) => applyPick({ materials: { [id]: grade } });
+  // The FULL catalog picker — `sel` is { grade, fabric, swatchImageId }.
+  const pickMaterialFree = (id, sel) => applyPick({ materialPick: { [id]: sel } });
 
   if (state.status === 'loading') {
     return (
@@ -140,7 +142,10 @@ export default function PublicQuoteView() {
           professional={bundle.professional || null}
           seller={bundle.seller || null}
           families={undefined}
+          materials={bundle.materials || []}
+          modelFabrics={bundle.modelFabrics || {}}
           onSelectMaterial={pickMaterial}
+          onPickMaterial={pickMaterialFree}
           onToggleOptional={toggleOptional}
           onSelectAlternative={pickAlternative}
         />

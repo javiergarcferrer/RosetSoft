@@ -41,6 +41,9 @@ function clientBundle() {
       {
         id: 'm', name: 'Sofá', reference: '12345678A', subtype: 'Grade A — Tela X',
         unitPrice: 100, qty: 2, swatchImageId: 'sw-A',
+        // Per-grade model prices (margin 1 ⇒ equal to the catalog) so the full
+        // picker can reprice optimistically; the server reprices from priceMap().
+        gradePrices: { A: 100, C: 150, D: 190 },
         materialOptions: {
           baseGrade: 'A', baseLabel: 'Tela X', options: [
             { grade: 'C', label: 'Tela Y', code: '111', swatchImageId: 'sw-C', delta: 50 },
@@ -53,6 +56,7 @@ function clientBundle() {
           {
             id: 'c1', name: 'Chaise', reference: '87654321A', subtype: 'Grade A — Tela X',
             unitPrice: 200, qty: 1, swatchImageId: 'sw-cA',
+            gradePrices: { A: 200, C: 230 },
             materialOptions: { baseGrade: 'A', baseLabel: 'Tela X', options: [{ grade: 'C', label: 'Tela Y', swatchImageId: 'sw-cC', delta: 30 }] },
           },
           { id: 'c2', name: 'Otomana', unitPrice: 75, qty: 1, isOptional: true, optionalOffered: true },
@@ -207,6 +211,46 @@ test('parity — component alternative selects the same sub-piece', () => {
   assert.equal(ccomp(client, 'cmp', 'p').isSelectedAlternative, scomp(server, 'cmp', 'p').isSelectedAlternative);
   assert.equal(ccomp(client, 'cmp', 'q').isSelectedAlternative, scomp(server, 'cmp', 'q').isSelectedAlternative);
   assert.equal(scomp(server, 'cmp', 'q').isSelectedAlternative, true);
+});
+
+test('parity — free material pick: any catalog fabric reprices a line by grade', () => {
+  const sel = { grade: 'C', fabric: 'Nueva Tela · Azul (#999)', swatchImageId: 'sw-new' };
+  const { client, server } = both({ materialPick: { m: sel } });
+  const c = cl(client, 'm');
+  const s = sl(server, 'm');
+  assert.equal(c.unitPrice, s.unit_price);                 // 150 both (grade C)
+  assert.equal(c.unitPrice, 150);
+  assert.equal(c.subtype, s.subtype);                      // 'Grade C — Nueva Tela · Azul (#999)'
+  assert.equal(c.subtype, 'Grade C — Nueva Tela · Azul (#999)');
+  assert.equal(c.reference, s.reference);                  // '12345678C'
+  assert.equal(c.swatchImageId, s.swatch_image_id);        // 'sw-new'
+  assert.equal(c.materialOptions.baseGrade, s.material_options.baseGrade); // 'C'
+  assert.equal(c.materialOptions.baseLabel, s.material_options.baseLabel); // the new fabric
+  // Picking a material pins the price → range dropped on both sides.
+  assert.equal(c.priceMin ?? null, null);
+  assert.equal(s.price_min, null);
+});
+
+test('parity — free material pick on a grade with no SKU is rejected by both', () => {
+  const { client, server } = both({ materialPick: { m: { grade: 'Z', fabric: 'Inventada' } } });
+  assert.equal(cl(client, 'm').unitPrice, 100);
+  assert.equal(sl(server, 'm').unit_price, 100);
+  assert.equal(cl(client, 'm').reference, '12345678A');
+  assert.equal(sl(server, 'm').reference, '12345678A');
+});
+
+test('parity — free material pick reprices the right component identically', () => {
+  const sel = { grade: 'C', fabric: 'Otra · Gris (#7)', swatchImageId: 'sw-x' };
+  const { client, server } = both({ materialPick: { c1: sel } });
+  const c = ccomp(client, 'cmp', 'c1');
+  const s = scomp(server, 'cmp', 'c1');
+  assert.equal(c.unitPrice, s.unitPrice);                  // 230 both
+  assert.equal(c.unitPrice, 230);
+  assert.equal(c.subtype, s.subtype);
+  assert.equal(c.reference, s.reference);                  // '87654321C'
+  assert.equal(c.swatchImageId, s.swatchImageId);          // 'sw-x'
+  // sibling untouched on both
+  assert.equal(ccomp(client, 'cmp', 'c2').unitPrice, scomp(server, 'cmp', 'c2').unitPrice);
 });
 
 test('parity — composed picks (alt + optional + material) agree across the wall', () => {

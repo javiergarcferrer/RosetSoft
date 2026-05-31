@@ -44,6 +44,7 @@ export async function fetchSharedQuote(token) {
  *   pick = { alternatives: { [group]: lineId } }
  *        | { optionals:    { [lineId]: boolean } }
  *        | { materials:    { [lineOrComponentId]: grade } }
+ *        | { materialPick: { [lineOrComponentId]: { grade, fabric, swatchImageId } } }
  */
 export async function applyClientPick(token, pick) {
   const r = await fetch(endpoint(token), {

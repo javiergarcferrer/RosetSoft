@@ -17,10 +17,17 @@
 //   - materials:    { [id]: grade }      re-anchor a line/component to a grade,
 //                                         recompose subtype + reference + swatch,
 //                                         reprice, and drop any price range.
+//   - materialPick: { [id]: { grade, fabric, swatchImageId } }
+//                                         the FULL catalog picker — set a
+//                                         line/component to ANY fabric the model
+//                                         offers (not just the dealer's
+//                                         alternatives), repricing by grade.
 //
-// The client lacks the catalog price map; it doesn't need it — the bundle
-// carries each option's per-unit `delta` (margin-applied), so
-// `newUnitPrice = unitPrice + delta` reproduces the server's repriced unit.
+// The client lacks the catalog price map; it doesn't need it — for `materials`
+// the bundle carries each option's per-unit `delta` (margin-applied), so
+// `newUnitPrice = unitPrice + delta` reproduces the server's repriced unit; for
+// `materialPick` the bundle carries each line's per-grade `gradePrices` (also
+// margin-applied), so the new unit is `gradePrices[grade]`.
 import { composeSubtype } from '../../lib/subtype.js';
 import { splitSkuGrade } from '../../lib/catalog.js';
 
@@ -90,6 +97,37 @@ function switchMaterial(entity, grade) {
   // Reprice only when a numeric delta is available — same graceful skip the
   // server makes when the catalog has no price for the grade.
   if (typeof r.delta === 'number') next.unitPrice = (Number(entity.unitPrice) || 0) + r.delta;
+  return next;
+}
+
+/**
+ * Set a line/component to an ARBITRARY catalog fabric (the full picker). Reprices
+ * from the bundle's per-grade `gradePrices` (margin already baked); the fabric
+ * label + swatch are cosmetic. Returns the same reference for an invalid grade
+ * (no SKU/price), mirroring the server's lineFreeMaterialPatch reject. When the
+ * entity carried dealer alternatives we only re-base them — the bundle's deltas
+ * already read relative to the live base.
+ */
+function applyFreeMaterial(entity, sel) {
+  const grade = String(sel?.grade ?? '').trim();
+  if (!grade) return entity;
+  const price = entity.gradePrices ? entity.gradePrices[grade.toUpperCase()] : undefined;
+  if (typeof price !== 'number') return entity; // grade has no catalog SKU → reject
+  const fabric = String(sel?.fabric ?? '').slice(0, 200);
+  const root = splitSkuGrade(entity.reference || '').root;
+  const next = {
+    ...entity,
+    subtype: composeSubtype(grade, fabric),
+    swatchImageId: sel?.swatchImageId == null ? null : sel.swatchImageId,
+    unitPrice: price,
+    priceMin: null,
+    priceMax: null,
+  };
+  if (root) next.reference = root + grade.toUpperCase();
+  const mo = entity.materialOptions;
+  if (mo && Array.isArray(mo.options) && mo.options.length) {
+    next.materialOptions = { ...mo, baseGrade: grade.toUpperCase(), baseLabel: fabric };
+  }
   return next;
 }
 
@@ -185,6 +223,31 @@ export function applyAction(bundle, pick) {
       if (offeredGrades(comps[ci].materialOptions).has(String(grade))) {
         const newComps = comps.slice();
         newComps[ci] = switchMaterial(comps[ci], grade);
+        next[i] = { ...next[i], components: newComps };
+        changed = true;
+      }
+      break;
+    }
+  }
+
+  // Full catalog picker — set a line/component to ANY fabric the model offers.
+  // The id is a line OR a component within a compound line.
+  for (const [id, sel] of Object.entries(pick.materialPick || {})) {
+    const li = next.findIndex((l) => l.id === id);
+    if (li >= 0) {
+      const applied = applyFreeMaterial(next[li], sel);
+      if (applied !== next[li]) { next[li] = applied; changed = true; }
+      continue;
+    }
+    for (let i = 0; i < next.length; i++) {
+      const comps = next[i].components;
+      if (!Array.isArray(comps)) continue;
+      const ci = comps.findIndex((c) => c.id === id);
+      if (ci < 0) continue;
+      const applied = applyFreeMaterial(comps[ci], sel);
+      if (applied !== comps[ci]) {
+        const newComps = comps.slice();
+        newComps[ci] = applied;
         next[i] = { ...next[i], components: newComps };
         changed = true;
       }

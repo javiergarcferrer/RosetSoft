@@ -31,7 +31,14 @@ export interface Picks {
   alternatives?: Record<string, unknown>;
   optionals?: Record<string, unknown>;
   materials?: Record<string, unknown>;
+  // The client-link FULL catalog picker: set a line/component to ANY fabric the
+  // model has a catalog SKU for, identified by { grade, fabric, swatchImageId }
+  // (the same shape SwatchPicker hands the editor). Distinct from `materials`,
+  // which only re-anchors among the dealer's pre-offered grades.
+  materialPick?: Record<string, unknown>;
 }
+
+interface FreePick { grade?: unknown; fabric?: unknown; swatchImageId?: unknown }
 
 export const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v);
@@ -125,6 +132,77 @@ function switchComponentMaterial(
   return next;
 }
 
+// Clamp a client-supplied fabric label — cosmetic free text from the picker, so
+// cap its length defensively before it lands in `subtype`.
+function cleanFabric(v: unknown): string {
+  return String(v ?? '').slice(0, 200);
+}
+
+// snake_case patch to set a LINE to an ARBITRARY catalog fabric+color (the
+// client-link full picker). Price/cost come AUTHORITATIVELY from the model's SKU
+// for the chosen grade; the fabric label + swatch are cosmetic. Returns null
+// when the model has no SKU for that grade (a stale/invalid pick — reject, never
+// trust a client-supplied price). When the line carried dealer-offered
+// alternatives we only re-base them (baseGrade/baseLabel) — GET recomputes each
+// option's delta from the new base, so the strip stays consistent.
+function lineFreeMaterialPatch(
+  line: Row,
+  sel: FreePick,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row | null {
+  const root = rootOf(line.reference);
+  if (!root) return null;
+  const grade = String(sel.grade ?? '').trim();
+  if (!grade) return null;
+  const info = priceMap.get(root)?.get(grade.toUpperCase());
+  if (!info) return null;
+  const fabric = cleanFabric(sel.fabric);
+  const patch: Row = {
+    reference: root + grade.toUpperCase(),
+    subtype: composeSubtype(grade, fabric),
+    swatch_image_id: sel.swatchImageId == null ? null : String(sel.swatchImageId),
+    unit_price: info.price,
+    unit_cost: info.cost,
+    price_min: null,
+    price_max: null,
+  };
+  const mo = line.material_options as { options?: unknown[] } | null | undefined;
+  if (mo && Array.isArray(mo.options) && mo.options.length) {
+    patch.material_options = { ...mo, baseGrade: grade.toUpperCase(), baseLabel: fabric };
+  }
+  return patch;
+}
+
+// camelCase patch for a COMPONENT (same rule as lineFreeMaterialPatch). Returns
+// a NEW component object, or null to leave the sub-piece untouched.
+function componentFreeMaterialPatch(
+  comp: Row,
+  sel: FreePick,
+  priceMap: Map<string, Map<string, GradeInfo>>,
+): Row | null {
+  const root = rootOf(comp.reference);
+  if (!root) return null;
+  const grade = String(sel.grade ?? '').trim();
+  if (!grade) return null;
+  const info = priceMap.get(root)?.get(grade.toUpperCase());
+  if (!info) return null;
+  const fabric = cleanFabric(sel.fabric);
+  const next: Row = {
+    ...comp,
+    reference: root + grade.toUpperCase(),
+    subtype: composeSubtype(grade, fabric),
+    swatchImageId: sel.swatchImageId == null ? null : String(sel.swatchImageId),
+    unitPrice: info.price,
+    priceMin: null,
+    priceMax: null,
+  };
+  const mo = comp.materialOptions as { options?: unknown[] } | null | undefined;
+  if (mo && Array.isArray(mo.options) && mo.options.length) {
+    next.materialOptions = { ...mo, baseGrade: grade.toUpperCase(), baseLabel: fabric };
+  }
+  return next;
+}
+
 interface LineIndex {
   lineById: Map<string, Row>;
   groupMembers: Map<string, Set<string>>;
@@ -189,6 +267,17 @@ export function rootsForMaterialPicks(lineRows: Row[], body: Picks): Set<string>
   for (const [id, grade] of Object.entries(body.materials || {})) {
     const key = String(id);
     if (!materialGrades.get(key)?.has(String(grade))) continue;
+    if (lineById.has(key)) { const r = rootOf(lineById.get(key)!.reference); if (r) matRoots.add(r); }
+    else if (componentIndex.has(key)) {
+      const line = lineById.get(componentIndex.get(key)!.lineId);
+      const comp = (line?.components as Row[] | undefined)?.find((c) => String(c.id) === key);
+      const r = rootOf(comp?.reference); if (r) matRoots.add(r);
+    }
+  }
+  // Free catalog picks — any grade the model has a SKU for is valid, so fetch the
+  // whole touched root's prices (the grade is gated against the catalog later).
+  for (const id of Object.keys(body.materialPick || {})) {
+    const key = String(id);
     if (lineById.has(key)) { const r = rootOf(lineById.get(key)!.reference); if (r) matRoots.add(r); }
     else if (componentIndex.has(key)) {
       const line = lineById.get(componentIndex.get(key)!.lineId);
@@ -282,6 +371,26 @@ export function applyPicks(
       if (idx >= 0) {
         comps[idx] = switchComponentMaterial(comps[idx], grade, priceMap);
         merge(lineId, { components: comps });
+      }
+    }
+  }
+
+  // Free catalog picks — set the line (or component) to ANY fabric the model has
+  // a catalog SKU for. Price/cost from the SKU; fabric label + swatch cosmetic.
+  // Rejected when the model has no SKU for the grade.
+  for (const [id, rawSel] of Object.entries(body.materialPick || {})) {
+    const key = String(id);
+    const sel = (rawSel || {}) as FreePick;
+    if (lineById.has(key)) {
+      const p = lineFreeMaterialPatch(lineById.get(key)!, sel, priceMap);
+      if (p) merge(key, p);
+    } else if (componentIndex.has(key)) {
+      const lineId = componentIndex.get(key)!.lineId;
+      const comps = compsOf(lineId);
+      const idx = comps.findIndex((c) => String(c.id) === key);
+      if (idx >= 0) {
+        const np = componentFreeMaterialPatch(comps[idx], sel, priceMap);
+        if (np) { comps[idx] = np; merge(lineId, { components: comps }); }
       }
     }
   }
