@@ -74,10 +74,10 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            // pdf-lib + fontkit ride together in their own chunk; the
-            // quote-builder lazy-imports them via dynamic import so the
+            // react-pdf is the quote PDF renderer; the quote-builder +
+            // accounting workspace lazy-import it via dynamic import so the
             // initial bundle stays under 500 KB.
-            pdflib: ['pdf-lib'],
+            reactpdf: ['@react-pdf/renderer'],
             // Leaflet is likewise dynamic-imported (only when a dealer opens
             // container tracking), so it gets its own on-demand chunk.
             leaflet: ['leaflet'],

@@ -976,7 +976,7 @@ function usePdfDownload({ quote, customer, lines, settings }) {
       // helper reloads once via sessionStorage so the dealer's
       // second tap succeeds.
       const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
-        () => import('../../pdf/quotePdf.js'),
+        () => import('../../pdf/react/index.js'),
       );
       const blob = await generateQuotePdf({ quote, settings, lines, totals, customer });
       await downloadBlob(blob, `${quoteFileName(quote, customer)}.pdf`);

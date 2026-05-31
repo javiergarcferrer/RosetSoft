@@ -103,7 +103,7 @@ export function useQuoteExport({
         { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
       );
       const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
-        () => import('../../pdf/quotePdf.js'),
+        () => import('../../pdf/react/index.js'),
       );
       // Pass *all* lines to the generator — including section breaks. The
       // generator's groupBySection() consumes them as headings; the earlier

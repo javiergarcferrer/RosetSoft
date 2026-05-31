@@ -13,3 +13,7 @@ dist
 
 # Dev-only PDF render harness (renders a sample quote to /tmp for eyeballing)
 /tools/render-sample.mjs
+
+# react-pdf verification harness output
+sample-quote.pdf
+sample-p*.png
