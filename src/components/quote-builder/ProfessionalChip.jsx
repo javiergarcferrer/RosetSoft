@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DraftingCompass } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
 import { DebouncedInput } from '../DebouncedInput.jsx';
-import { clampCommissionPct, baseCommissionPct, decoratorBilling } from '../../lib/commissions.js';
+import { clampCommissionPct, baseCommissionPct } from '../../lib/commissions.js';
 
 /**
  * The professional (architect / decorator earning a commission on this sale)
@@ -74,7 +74,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             picker, not a link, and the team knows the chip opens. */}
         <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
           <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
-          <span className="font-medium text-ink-900 truncate max-w-[88px] sm:max-w-[170px] lg:max-w-[210px]">
+          <span className="font-medium text-ink-900 truncate max-w-[150px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
         </button>
@@ -107,54 +107,14 @@ export default function ProfessionalChip({ quote, professional, professionals, p
         </label>
       </span>
 
-      <DecoratorBillingChip quote={quote} onUpdateQuote={onUpdateQuote} />
-
       {picker}
     </>
   );
 }
 
-/**
- * How this deal settles the professional's cut — chosen per quote, shown only
- * when a professional is assigned. The SAME % (the segment next door) is
- * realized either as a commission we pay the decorator, or as a trade discount
- * we bill the decorator. INTERNAL ONLY: it never touches the client PDF; it
- * just tells accounting how & whom to invoice. Trade-discount mode tints amber
- * so it reads as the exceptional path at a glance.
- */
-function DecoratorBillingChip({ quote, onUpdateQuote }) {
-  const mode = decoratorBilling(quote);
-  const trade = mode === 'trade_discount';
-  return (
-    <label
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-xs transition-colors ${
-        trade
-          ? 'border-amber-300 bg-amber-50 text-amber-800'
-          : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400'
-      }`}
-      title={
-        trade
-          ? 'Trade discount: se factura al decorador (menos su %), no se paga comisión. No aparece en el PDF del cliente.'
-          : 'Comisión: se factura al cliente (precio completo) y se paga la comisión al decorador.'
-      }
-    >
-      <span className="select-none text-ink-500">Facturación</span>
-      <select
-        value={mode}
-        onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
-        className="bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 cursor-pointer"
-        aria-label="Modalidad de facturación con el decorador"
-      >
-        <option value="commission">Comisión</option>
-        <option value="trade_discount">Trade discount</option>
-      </select>
-    </label>
-  );
-}
-
 /* The outer pill: one rounded-full segmented container shared by both states. */
 const PILL =
-  'inline-flex shrink-0 items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
+  'inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
   'transition-colors max-w-full min-w-0 text-xs overflow-hidden';
 
 /* A segment: full-height flex cell with consistent touch height + feedback. */

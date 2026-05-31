@@ -7,7 +7,7 @@ import {
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
-import { effectiveCommissionPct, commissionBreakdown } from '../../lib/commissions.js';
+import { effectiveCommissionPct, commissionBreakdown, decoratorBilling } from '../../lib/commissions.js';
 import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 
 /**
@@ -120,6 +120,8 @@ export default function TotalsDock({
           discountAmt={totals.discountAmt}
           netCommission={netCommission}
           fmt={fmt}
+          quote={quote}
+          onUpdateQuote={onUpdateQuote}
         />
       )}
       <details className="group">
@@ -332,9 +334,11 @@ export default function TotalsDock({
  * professional's cut, so the dealer sees exactly what the decorator earns
  * after a discount. Never shown to the client.
  */
-function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommission, fmt }) {
+function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommission, fmt, quote, onUpdateQuote }) {
   const hasDiscount = discountAmt > 0;
   const fullyAbsorbed = hasDiscount && netCommission <= 0;
+  const mode = decoratorBilling(quote);
+  const trade = mode === 'trade_discount';
   return (
     <div className="rounded-lg border border-ink-100 bg-ink-50/60 p-3 space-y-2 mt-1">
       <div className="flex items-center justify-between">
@@ -355,6 +359,27 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
               : 'El descuento al cliente sale de la comisión del profesional.')
           : 'Cualquier descuento al cliente saldrá de esta comisión.'}
       </p>
+      {/* Facturación mode — moved here from the header (internal accounting,
+          dealer-only, never on the client PDF). */}
+      <div className="border-t border-ink-100 pt-2 mt-2 flex items-center justify-between gap-2">
+        <span className="text-sm">Facturación</span>
+        <select
+          value={mode}
+          onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
+          className={`text-xs font-medium rounded-md border px-2 py-1 cursor-pointer focus:outline-none ${
+            trade ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-ink-200 bg-white text-ink-700'
+          }`}
+          aria-label="Modalidad de facturación con el decorador"
+        >
+          <option value="commission">Comisión al decorador</option>
+          <option value="trade_discount">Trade discount · facturar al decorador</option>
+        </select>
+      </div>
+      {trade && (
+        <p className="text-[10px] text-amber-700">
+          Se factura al decorador (menos su %); no se paga comisión. No aparece en el PDF del cliente.
+        </p>
+      )}
     </div>
   );
 }
