@@ -277,8 +277,14 @@ export async function generateQuotePdf({
   }
 
   // ---- Totals + terms (kept together when they fit) --------------------
-  const totalsHeight = estimateTotalsHeight(quote);
-  if (cursor.y - totalsHeight < MARGIN_B + 60) {
+  // estimateTotalsHeight now mirrors drawTotals/drawTerms exactly, so the gate
+  // no longer needs the old +60 fudge that was ejecting the block onto its own
+  // page whenever the last product left less than ~⅓ page free. MARGIN_B + 12
+  // keeps the totals a comfortable margin above the footer hairline (y≈42)
+  // while letting them pack into real whitespace under the last row — fixing
+  // the "totals stranded alone on the last page" report.
+  const totalsHeight = estimateTotalsHeight(quote, totals, lines, ctx.currency, ctx.rates);
+  if (cursor.y - totalsHeight < MARGIN_B + 12) {
     page = doc.addPage([PAGE_W, PAGE_H]);
     cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
   }

@@ -45,15 +45,50 @@ const BAND_H   = 46;    // band height
 const BAND_PAD = 16;    // inner horizontal padding (label / value insets)
 const SUB_ROW_LH = 15;  // line-height of each subtotal-stack row
 
-export function estimateTotalsHeight(quote: Quote): number {
+/**
+ * Accurate vertical footprint of the totals + terms block, used by the
+ * page-break gate in generateQuotePdf to decide whether they fit under the
+ * last product row or must move to a fresh page.
+ *
+ * Previously this returned a flat WORST-CASE estimate — always four subtotal
+ * rows, always the savings callout, a flat 90pt for terms — and the gate then
+ * padded it with another 60pt of slack. The sum (~336pt) ejected the totals to
+ * their own page whenever the last product left less than a third of a page
+ * free, even though the real block is often ~200pt and would have fit in the
+ * whitespace. That produced the "totals always stranded alone on the last
+ * page" the dealer reported. We now mirror drawTotals/drawTerms line-for-line —
+ * only the rows that actually render are counted — so the gate ejects ONLY
+ * when the block genuinely doesn't fit.
+ */
+export function estimateTotalsHeight(
+  quote: Quote,
+  totals: Totals,
+  lines: QuoteLine[],
+  currency: string,
+  rates: { DOP?: number } | null | undefined,
+): number {
+  // Subtotal stack — exactly the rows drawTotals emits (subtotal + itbis are
+  // always present; discount + shipping only when set).
+  let rows = 2;
+  if (quote.discountPct) rows += 1;
+  if (quote.shipping) rows += 1;
+
   let h = 22;                 // top spacing before the sub-rows
-  h += SUB_ROW_LH * 4;        // up to four subtotal rows (subtotal / discount / itbis / shipping)
+  h += SUB_ROW_LH * rows;     // the subtotal stack
   h += 12;                    // breathing before the band
   h += BAND_H;                // the grand-total band
-  h += 18;                    // "Ahorras $X" callout (when any discount is set)
-  h += 18;                    // FX shadow
-  h += 10;                    // trailing breathing
-  if (quote.terms) h += 90;
+  h += 14;                    // gap below the band
+  h += 16;                    // "FLETE Y AGENCIAMIENTO INCLUIDO" note (always drawn)
+  if (quoteSavings(lines || [], totals) > 0) h += 18;   // "Ahorras $X" callout
+  // FX shadow line (USD quotes with a live DOP rate) vs. the smaller gap when
+  // there's none — matches drawTotals' y -= 20 / y -= 6 branch.
+  const dopRate = Number(rates?.DOP) || 0;
+  h += (dopRate && currency === 'USD') ? 20 : 6;
+  // Terms: heading + spacing + the ACTUAL wrapped line count (was a flat 90).
+  if (quote.terms) {
+    const termLines = wrapText(quote.terms, 95);
+    h += 8 + 14 + termLines.length * 12 + 6;
+  }
   return h;
 }
 
