@@ -43,7 +43,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
     return (
       <>
         <span className={PILL}>
-          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-ink-900 pl-3 pr-2.5 flex-1 sm:flex-none justify-start`}>
+          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-ink-900 pl-3 pr-2.5`}>
             <DraftingCompass size={12} />
             Asignar profesional
           </button>
@@ -72,9 +72,9 @@ export default function ProfessionalChip({ quote, professional, professionals, p
       >
         {/* Professional — icon + name, opens the picker. No chevron: it's a
             picker, not a link, and the team knows the chip opens. */}
-        <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0 flex-1 sm:flex-none`}>
+        <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
           <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
-          <span className="font-medium text-ink-900 truncate max-w-none sm:max-w-[170px] lg:max-w-[210px]">
+          <span className="font-medium text-ink-900 truncate max-w-[110px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
         </button>
@@ -138,15 +138,15 @@ function DecoratorBillingChip({ quote, onUpdateQuote }) {
           : 'Comisión: se factura al cliente (precio completo) y se paga la comisión al decorador.'
       }
     >
-      <span className="select-none flex-shrink-0">Facturación</span>
+      <span className="select-none text-ink-500">Facturación</span>
       <select
         value={mode}
         onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
-        className="bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 cursor-pointer flex-1 sm:flex-none min-w-0"
+        className="bg-transparent border-0 p-0 text-xs font-medium focus:outline-none focus:ring-0 cursor-pointer"
         aria-label="Modalidad de facturación con el decorador"
       >
-        <option value="commission">Comisión al decorador</option>
-        <option value="trade_discount">Trade discount · facturar al decorador</option>
+        <option value="commission">Comisión</option>
+        <option value="trade_discount">Trade discount</option>
       </select>
     </label>
   );

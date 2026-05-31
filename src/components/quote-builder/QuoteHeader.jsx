@@ -106,7 +106,7 @@ export default function QuoteHeader({
             drop onto their own line when they can't fit beside it. On phones
             the column layout stacks them; the SaveIndicator rides inline with
             the eyebrow as the number's status line and truncates if cramped. */}
-        <div className="flex flex-col gap-x-4 gap-y-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div>
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="eyebrow shrink-0">Cotización</div>
@@ -142,7 +142,7 @@ export default function QuoteHeader({
             child, so a pill never splits across the wrap. The order pill moved
             up to the breadcrumb row, out of this strip. */}
         <div
-          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+          className="flex flex-wrap items-center gap-2"
           role="group"
           aria-label="Datos de la cotización"
         >

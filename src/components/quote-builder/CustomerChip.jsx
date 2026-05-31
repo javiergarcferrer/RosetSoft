@@ -35,7 +35,7 @@ export default function CustomerChip({ customer, onOpen }) {
       title={[customer.name, customer.company, customer.email, customer.phone].filter(Boolean).join(' · ')}
     >
       <UserIcon size={12} className="text-brand-600 flex-shrink-0" />
-      <span className="min-w-0 inline-flex items-baseline gap-1.5 max-w-none sm:max-w-[180px] lg:max-w-[220px]">
+      <span className="min-w-0 inline-flex items-baseline gap-1.5 max-w-[110px] sm:max-w-[180px] lg:max-w-[220px]">
         <span className="font-medium text-ink-900 truncate">{customer.name}</span>
         {customer.company ? (
           <span className="text-ink-500 truncate hidden md:inline">{customer.company}</span>
