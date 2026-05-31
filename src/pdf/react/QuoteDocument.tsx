@@ -12,7 +12,7 @@ import type {
   CurrencyCode, QuoteGroup,
 } from '../../types/domain.ts';
 import type { CatalogFamily } from '../../lib/catalog.ts';
-import { materialCells } from './materialCells.js';
+import { materialCells, swatchSrcFor } from './materialCells.js';
 import type { MoCell } from './materialCells.js';
 import { coverKey, swatchKey } from './imageKeys.js';
 import type { ImageMap } from './imageKeys.js';
@@ -121,8 +121,11 @@ function LineRow({
   const cover = imgFor(images, coverKey(line.id));
   const cells = materialCells({ mo: line.materialOptions, reference: line.reference, baseSwatchImageId: line.swatchImageId, families, currency, rates });
   // Standalone swatch only when there's no options grid (the grid leads with
-  // the same material) — mirrors ClientPreview / the pdf-lib renderer.
-  const showSwatch = !cells.length && !!line.swatchImageId;
+  // the same material). Mirrors ClientPreview: the uploaded swatch if any, else
+  // the catalog color derived from the subtype — so a picked fabric still shows
+  // a swatch even without an uploaded image.
+  const swatchSrc = swatchSrcFor(line.swatchImageId, line.subtype);
+  const showSwatch = !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
 
   const caption: { text: string; color: string } | null = (() => {
     if (optional && !inGroup && !inSet) return { text: 'Opcional · no incluido en el total', color: C.inkMid };
@@ -149,7 +152,7 @@ function LineRow({
               {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
             </View>
           )}
-          {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={{ imageId: line.swatchImageId }} images={images} size={40} /></View>}
+          {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
           <MaterialGrid cells={cells} images={images} />
           {compound && Array.isArray(line.components) && line.components.map((c, i) => (
             <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
@@ -169,12 +172,13 @@ function ComponentRow({
   c: LineComponent; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
 }) {
   const cells = materialCells({ mo: c.materialOptions, reference: c.reference, baseSwatchImageId: c.swatchImageId, families, currency, rates });
-  const showSwatch = !cells.length && !!c.swatchImageId;
+  const swatchSrc = swatchSrcFor(c.swatchImageId, c.subtype);
+  const showSwatch = !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
   return (
     <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
-          {showSwatch && <Swatch src={{ imageId: c.swatchImageId }} images={images} size={26} />}
+          {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 9, color: C.inkHigh }}>{c.name || c.reference || '—'}</Text>
             {c.subtype && <Text style={{ fontSize: 7.5, color: C.inkMid, marginTop: 1 }}>{c.subtype}</Text>}

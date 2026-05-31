@@ -70,3 +70,18 @@ export function materialCells({
   }
   return cells;
 }
+
+/**
+ * Standalone swatch source for a line/component: the uploaded swatch image if
+ * present, else the catalog color's CORS-proxied swatch derived from the
+ * subtype. Mirrors ClientPreview's ClearSwatch fallback so the PDF shows a
+ * fabric swatch even when the dealer picked a catalog color (no uploaded
+ * image). Shared by the renderer (QuoteDocument) and the image resolver
+ * (images.ts) so they agree on the swatch key.
+ */
+export function swatchSrcFor(
+  swatchImageId: string | null | undefined,
+  subtype: string | null | undefined,
+): { imageId: string | null; url: string | null } {
+  return { imageId: swatchImageId ?? null, url: swatchProxyUrl(colorCodeFromSubtype(subtype)) };
+}

@@ -46,7 +46,7 @@ const lines: any[] = [
     },
     description: 'Sofá de tres plazas con chaise longue reversible. Estructura de haya maciza, espuma HR de alta densidad.',
   }),
-  item({ id: 'l2', name: 'Mesa de centro EXEDRA', family: 'EXEDRA', reference: 'EXD-CT', unitPrice: 1850 }),
+  item({ id: 'l2', name: 'Mesa de centro EXEDRA', family: 'EXEDRA', reference: 'EXD-CT', unitPrice: 1850, subtype: 'Roble · Natural (#137)', swatchImageId: 'sw-exedra' }),
   item({
     id: 'l3', name: 'Puff PUMPKIN', family: 'PUMPKIN', reference: 'PMP-1', qty: 2,
     unitPrice: 600, isOptional: true, description: 'Complemento opcional, no incluido en el total.',
@@ -71,6 +71,7 @@ const images: ImageMap = new Map([
   ['logo', png],
   ['rateLogo', png],
   [swatchKey({ imageId: 'sw-kobold' })!, png],
+  [swatchKey({ imageId: 'sw-exedra' })!, png],
   ...lines.filter((l) => l.kind !== 'section').map((l) => [coverKey(l.id), png] as [string, string]),
 ]);
 

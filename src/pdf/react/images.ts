@@ -1,7 +1,7 @@
 import { downloadImageBytes, db } from '../../db/database.js';
 import { publicImageUrl } from '../../db/supabaseClient.js';
 import { isCompoundLine } from '../../lib/pricing.js';
-import { materialCells } from './materialCells.js';
+import { materialCells, swatchSrcFor } from './materialCells.js';
 import { coverKey, swatchKey } from './imageKeys.js';
 import type { ImageMap } from './imageKeys.js';
 import type { QuoteLine, Settings, CurrencyCode } from '../../types/domain.ts';
@@ -56,11 +56,12 @@ export async function resolveQuoteImages({
 
   for (const line of lines) {
     addId(coverKey(line.id), line.imageId);
-    if (line.swatchImageId) addSwatch({ imageId: line.swatchImageId });
+    // Uploaded swatch OR the catalog color derived from the subtype (proxy URL).
+    addSwatch(swatchSrcFor(line.swatchImageId, line.subtype));
     addOptionSwatches(line.materialOptions, line.reference, line.swatchImageId);
     if (isCompoundLine(line) && Array.isArray(line.components)) {
       for (const c of line.components) {
-        if (c.swatchImageId) addSwatch({ imageId: c.swatchImageId });
+        addSwatch(swatchSrcFor(c.swatchImageId, c.subtype));
         addOptionSwatches(c.materialOptions, c.reference, c.swatchImageId);
       }
     }
