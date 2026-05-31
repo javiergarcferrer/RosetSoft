@@ -4,7 +4,10 @@ import fontkit from '@pdf-lib/fontkit';
 import {
   PAGE_W, PAGE_H, MARGIN_L, MARGIN_T, MARGIN_B,
 } from './constants.js';
-import { displayRatesFor, resolveQuoteView } from '../core/quote/index.js';
+import {
+  displayRatesFor, resolveQuoteView,
+  isCompoundLine, lineTotal, lineHasRange, lineTotalRange,
+} from '../core/quote/index.js';
 import { embedImageById } from './embed.js';
 import { drawHeader, drawCustomerBlock } from './header.js';
 import {
@@ -192,10 +195,21 @@ export async function generateQuotePdf({
         // never lands orphaned at a page bottom away from its first block.
         const firstItem = group.items[0] || null;
         const firstGrouped = !!(firstItem && (firstItem.setGroup || firstItem.alternativeGroup));
+        // The first item opens a zone when it's a set/alternative member OR a
+        // standalone compound (now framed as a card) — reserve its header band.
+        const firstZone = firstItem
+          ? (firstItem.setGroup
+              ? groupZoneFor('set')
+              : firstItem.alternativeGroup
+                ? groupZoneFor('alternative')
+                : isCompoundLine(firstItem)
+                  ? groupZoneFor('compound')
+                  : null)
+          : null;
         const firstRowH = firstItem
-          ? measureLineRowHeight(ctx, firstItem, firstGrouped)
+          ? measureLineRowHeight(ctx, firstItem, firstZone)
           : 0;
-        const firstBand = firstGrouped ? measureGroupHeaderHeight() : 0;
+        const firstBand = firstZone ? measureGroupHeaderHeight() : 0;
         // Section header now consumes ~34pt (11pt eyebrow + terracotta
         // rule + spacing); reserve that plus the first block.
         const reserve = 34 + firstBand + firstRowH;
@@ -216,18 +230,34 @@ export async function generateQuotePdf({
         const members = run.lineIds
           .map((id) => byId.get(id))
           .filter((l): l is QuoteLine => !!l);
+        // A standalone compound (a 'single' run whose one line has components)
+        // is FRAMED like a Conjunto for consistency — same rounded header/footer
+        // bands, so "a product made of N pieces" reads as the same kind of
+        // bundle as "a set of N products". This is a PDF-presentation choice
+        // (the shared run tree stays 'single'); the band's footer carries the
+        // TOTAL COMPUESTO, and the compound suppresses its own inner total.
+        const soloCompound = run.type === 'single'
+          && members.length === 1
+          && isCompoundLine(members[0]);
         const isGrouped = run.type === 'set' || run.type === 'alternative';
         // A grouped run renders as a bounded, shaded ZONE: an opening header
         // band, per-member tint + left rail, and a closing footer band — so
         // two runs back-to-back read as distinct containers separated by a
         // white gutter, and a split run still reads as one zone across pages.
-        const zone = isGrouped ? groupZoneFor(run.type as 'set' | 'alternative') : null;
-        // Footer DATA comes resolved on the run (from the shared ViewModel).
-        // Conjunto → "TOTAL DEL CONJUNTO" (+ "· NO INCLUIDO" when the whole set
-        // is an optional add-on); Alternativa → "TOTAL". Presentation only — the
-        // grand total in totals.ts is untouched.
+        // A framed compound reuses the same machinery with the neutral
+        // 'compound' palette.
+        const zone = isGrouped
+          ? groupZoneFor(run.type as 'set' | 'alternative')
+          : soloCompound
+            ? groupZoneFor('compound')
+            : null;
+        // Footer DATA comes resolved on the run (from the shared ViewModel) for
+        // groups. Conjunto → "TOTAL DEL CONJUNTO" (+ "· NO INCLUIDO" when the
+        // whole set is an optional add-on); Alternativa → "TOTAL". A framed
+        // compound's footer is derived here from the line total (the compound's
+        // own roll-up, which its inner block would otherwise have drawn).
         const groupOptional = run.footer?.optional ?? false;
-        const footer = run.footer
+        let footer = run.footer
           ? {
               label: run.footer.kind === 'set'
                 ? (run.footer.optional ? 'TOTAL DEL CONJUNTO · NO INCLUIDO' : 'TOTAL DEL CONJUNTO')
@@ -236,6 +266,11 @@ export async function generateQuotePdf({
               amountRange: run.footer.amountRange,
             }
           : null;
+        if (soloCompound) {
+          const c = members[0];
+          const cr = lineHasRange(c) ? lineTotalRange(c) : null;
+          footer = { label: 'TOTAL COMPUESTO', amount: lineTotal(c), amountRange: cr };
+        }
 
         for (let m = 0; m < members.length; m++) {
           const line = members[m];
@@ -247,7 +282,7 @@ export async function generateQuotePdf({
           const isFirstInRun = m === 0;
           const isLastInRun = m === members.length - 1;
 
-          const rowH = measureLineRowHeight(ctx, line, !!zone);
+          const rowH = measureLineRowHeight(ctx, line, zone);
           // First member of a zone carries the opening header band; reserve it
           // so the band + first row never split. Last member carries the
           // closing footer band; reserve it so the roll-up never lands orphaned
@@ -261,9 +296,12 @@ export async function generateQuotePdf({
             cursor = { x: MARGIN_L, y: PAGE_H - MARGIN_T };
           }
           // Opening header band — drawn ONCE, only at the run's true start
-          // (never repeated on a continuation page).
+          // (never repeated on a continuation page). The header's count is the
+          // member count for a group, or the COMPONENT count for a framed
+          // compound (so it reads "COMPOSICIÓN · N PIEZAS").
+          const bandCount = soloCompound ? (line.components?.length || 1) : members.length;
           if (isFirstInRun && zone) {
-            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, members.length, groupOptional);
+            cursor = drawGroupHeaderBand(page, ctx, cursor, zone, bandCount, groupOptional);
           }
           cursor = await drawLineRow(page, ctx, cursor, line, groupInfo, zone);
           if (isLastInRun && footer && zone) {

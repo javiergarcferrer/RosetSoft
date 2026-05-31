@@ -626,8 +626,9 @@ function numericHeight(line: QuoteLine): number {
  * into the detail column, and each component contributes its own
  * sub-block (name + meta + inline equation). See compoundRowHeight().
  */
-export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
-  if (isCompoundLine(line)) return compoundRowHeight(ctx, line, inZone);
+export function measureLineRowHeight(ctx: PdfCtx, line: QuoteLine, zone: GroupZone | null = null): number {
+  const inZone = !!zone;
+  if (isCompoundLine(line)) return compoundRowHeight(ctx, line, zone);
   const cols = lineColumns(inZone ? ZONE_PAD : 0);
   const detailH = measureDetailHeight(ctx, line, cols.detail.w);
   const inner = Math.max(IMAGE_SIZE, detailH, numericHeight(line));
@@ -1019,7 +1020,8 @@ function drawCompSegs(page: PDFPage, ctx: PdfCtx, segs: CompoundSegment[], x: nu
   return sy;
 }
 
-function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false): number {
+function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, zone: GroupZone | null = null): number {
+  const inZone = !!zone;
   const cols = compoundColumns(inZone ? ZONE_PAD : 0);
   // Parent identity (family + name) block.
   let textH = 0;
@@ -1048,13 +1050,19 @@ function compoundRowHeight(ctx: PdfCtx, line: QuoteLine, inZone: boolean = false
     textH += COMP_BLOCK_GAP;
   }
 
-  // Compound total block.
-  textH += COMP_TOTAL_GAP + T.compTotalLabel.lh + T.compTotalValue.lh;
-  // If a line-level discount is set, the footer mirrors the article
-  // numeric column's discount stack: struck-through subtotal +
-  // "Descuento –Y%" caption above the grand total. Two extra lh.
-  if (Number(line.lineDiscountPct) || 0) {
-    textH += T.numStrike.lh + T.numDiscount.lh;
+  // Compound total block — its OWN "TOTAL COMPUESTO" roll-up. Suppressed when
+  // the compound is framed as a card (a 'compound' zone), because the card's
+  // footer band carries that total instead — see drawCompoundLineRow. Keeping
+  // this in lockstep with the draw pass is what stops the page-break maths from
+  // drifting.
+  if (!isFramedCompoundZone(zone)) {
+    textH += COMP_TOTAL_GAP + T.compTotalLabel.lh + T.compTotalValue.lh;
+    // If a line-level discount is set, the footer mirrors the article numeric
+    // column's discount stack: struck-through subtotal + "Descuento –Y%"
+    // caption above the grand total. Two extra lh.
+    if (Number(line.lineDiscountPct) || 0) {
+      textH += T.numStrike.lh + T.numDiscount.lh;
+    }
   }
 
   const inner = Math.max(IMAGE_SIZE, textH);
@@ -1187,17 +1195,20 @@ const GROUP_FOOTER_H = GROUP_FOOTER_TOP_PAD
  *   label       eyebrow / band-label colour
  */
 export interface GroupZone {
-  type: 'set' | 'alternative';
+  type: 'set' | 'alternative' | 'compound';
   memberFill: RGB;
   bandFill: RGB;
   rail: RGB;
   label: RGB;
 }
 
-// The two zone palettes. Conjunto → neutral ink (no purple), matching the
-// preview's neutral set card; Alternativa → brand. The rail is the strongest
-// tone so the bracket reads; fills are whisper-light so text stays legible.
-const GROUP_ZONES: { set: GroupZone; alternative: GroupZone } = {
+// The zone palettes. Conjunto → neutral ink (no purple), matching the preview's
+// neutral set card; Alternativa → brand. Compound (a standalone composition
+// framed like a Conjunto for consistency) reuses the neutral-ink set palette,
+// so a "product made of N components" and a "set of N products" read as the
+// same kind of bundle. The rail is the strongest tone so the bracket reads;
+// fills are whisper-light so text stays legible.
+const GROUP_ZONES: { set: GroupZone; alternative: GroupZone; compound: GroupZone } = {
   set: {
     type: 'set',
     memberFill: BG_GROUP_SET,
@@ -1212,11 +1223,29 @@ const GROUP_ZONES: { set: GroupZone; alternative: GroupZone } = {
     rail: ACCENT,          // brand-500
     label: BRAND_700,
   },
+  compound: {
+    type: 'compound',
+    memberFill: BG_GROUP_SET,
+    bandFill: BAND_GROUP_SET,
+    rail: INK_HIGH,
+    label: INK_MID,
+  },
 };
 
 /** Resolve the zone palette for a run type. */
-export function groupZoneFor(type: 'set' | 'alternative'): GroupZone {
-  return type === 'set' ? GROUP_ZONES.set : GROUP_ZONES.alternative;
+export function groupZoneFor(type: 'set' | 'alternative' | 'compound'): GroupZone {
+  return GROUP_ZONES[type];
+}
+
+/**
+ * Whether a zone is the synthetic "framed compound" card (a standalone
+ * compound wrapped in header/footer bands for consistency with Conjuntos).
+ * When true, the compound's OWN internal "TOTAL COMPUESTO" roll-up is
+ * suppressed — the card's footer band carries that total instead — so the
+ * measure + draw passes both skip it and stay in lockstep.
+ */
+function isFramedCompoundZone(zone: GroupZone | null | undefined): boolean {
+  return zone?.type === 'compound';
 }
 
 /**
@@ -1301,10 +1330,15 @@ export function drawGroupHeaderBand(
   });
 
   // Eyebrow: bold tracked label + a quieter descriptor. Only a Conjunto can
-  // be optional; an Alternativa always uses one option.
+  // be optional; an Alternativa always uses one option. A framed compound
+  // names itself a "COMPOSICIÓN" with its component count (memberCount carries
+  // the component count for a compound card).
+  const piezas = `${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`;
   const label = zone.type === 'set'
-    ? `CONJUNTO${optional ? ' OPCIONAL' : ''} · ${memberCount} ${memberCount === 1 ? 'PIEZA' : 'PIEZAS'}`
-    : 'ALTERNATIVAS · ELIGE UNA';
+    ? `CONJUNTO${optional ? ' OPCIONAL' : ''} · ${piezas}`
+    : zone.type === 'compound'
+      ? `COMPOSICIÓN · ${piezas}`
+      : 'ALTERNATIVAS · ELIGE UNA';
   page.drawText(label, {
     x: MARGIN_L + GROUP_RAIL_W + 8,
     y: bottom + GROUP_HEADER_PAD_B,
@@ -1414,7 +1448,7 @@ export async function drawLineRow(
   const inZone = !!zone;
   const cols = lineColumns(inZone ? ZONE_PAD : 0);
   const rowY = cursor.y;
-  const rowH = measureLineRowHeight(ctx, line, inZone);
+  const rowH = measureLineRowHeight(ctx, line, zone ?? null);
 
   // ---- Group-zone backdrop — tint fill + continuous left rail, drawn
   //      UNDER everything so a grouped run reads as one shaded container
@@ -1579,7 +1613,7 @@ async function drawCompoundLineRow(
   const inZone = !!zone;
   const cols = compoundColumns(inZone ? ZONE_PAD : 0);
   const rowY = cursor.y;
-  const rowH = measureLineRowHeight(ctx, line, inZone);
+  const rowH = measureLineRowHeight(ctx, line, zone ?? null);
 
   // Group-zone backdrop — tint fill + continuous left rail under everything.
   if (zone) drawGroupMemberZone(page, zone, rowY, rowH);
@@ -1676,56 +1710,63 @@ async function drawCompoundLineRow(
   // pair. Sharing the vocabulary keeps the design system honest — a
   // customer reading the quote sees the same discount treatment on a
   // single article and on a compound bundle.
-  sy -= COMP_TOTAL_GAP;
-  const subtotal = compoundSubtotal(line);
-  const discount = Number(line.lineDiscountPct) || 0;
-  const grandTotal = lineTotal(line);
-  const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
-  // Material-less components make the compound a RANGE — "min – max" anchor,
-  // same as a standalone range line; the discount strike is skipped then.
-  const ranged = lineHasRange(line);
-  const tr = ranged ? lineTotalRange(line) : null;
+  //
+  // SUPPRESSED when this compound is framed as a card (a 'compound' zone): the
+  // card's footer band carries the "TOTAL COMPUESTO" total, so drawing it here
+  // too would duplicate it. measureLineRowHeight skips the same block, so the
+  // page-break maths stays exact.
+  if (!isFramedCompoundZone(zone)) {
+    sy -= COMP_TOTAL_GAP;
+    const subtotal = compoundSubtotal(line);
+    const discount = Number(line.lineDiscountPct) || 0;
+    const grandTotal = lineTotal(line);
+    const fmt = (v: number): string => formatMoney(v, ctx.currency, ctx.rates);
+    // Material-less components make the compound a RANGE — "min – max" anchor,
+    // same as a standalone range line; the discount strike is skipped then.
+    const ranged = lineHasRange(line);
+    const tr = ranged ? lineTotalRange(line) : null;
 
-  if (!ranged && discount !== 0) {
-    // Struck-through subtotal — same treatment as the article line's
-    // "antes" strike under UNITARIO. pdf-lib has no text-decoration,
-    // so we draw a 0.6pt rule across the price string at the x-height.
-    const listText = fmt(subtotal);
-    const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
-    const listY = sy - T.numStrike.size;
-    drawRightAt(
-      page, listText, cols.detail.rightX, listY,
-      T.numStrike.size, fontRegular, T.numStrike.color,
-    );
-    const strikeY = listY + T.numStrike.size * 0.32;
-    page.drawLine({
-      start: { x: cols.detail.rightX - listW, y: strikeY },
-      end:   { x: cols.detail.rightX,         y: strikeY },
-      thickness: 0.6, color: T.numStrike.color,
-    });
-    sy -= T.numStrike.lh;
+    if (!ranged && discount !== 0) {
+      // Struck-through subtotal — same treatment as the article line's
+      // "antes" strike under UNITARIO. pdf-lib has no text-decoration,
+      // so we draw a 0.6pt rule across the price string at the x-height.
+      const listText = fmt(subtotal);
+      const listW = fontRegular.widthOfTextAtSize(listText, T.numStrike.size);
+      const listY = sy - T.numStrike.size;
+      drawRightAt(
+        page, listText, cols.detail.rightX, listY,
+        T.numStrike.size, fontRegular, T.numStrike.color,
+      );
+      const strikeY = listY + T.numStrike.size * 0.32;
+      page.drawLine({
+        start: { x: cols.detail.rightX - listW, y: strikeY },
+        end:   { x: cols.detail.rightX,         y: strikeY },
+        thickness: 0.6, color: T.numStrike.color,
+      });
+      sy -= T.numStrike.lh;
 
-    const discText = `Descuento –${discount}%`;
-    const discY = sy - T.numDiscount.size;
+      const discText = `Descuento –${discount}%`;
+      const discY = sy - T.numDiscount.size;
+      drawRightAt(
+        page, discText, cols.detail.rightX, discY,
+        T.numDiscount.size, fontBold, T.numDiscount.color,
+      );
+      sy -= T.numDiscount.lh;
+    }
+    const totalLblY = sy - T.compTotalLabel.size;
     drawRightAt(
-      page, discText, cols.detail.rightX, discY,
-      T.numDiscount.size, fontBold, T.numDiscount.color,
+      page, 'TOTAL COMPUESTO', cols.detail.rightX, totalLblY,
+      T.compTotalLabel.size, fontBold, T.compTotalLabel.color, T.compTotalLabel.cs,
     );
-    sy -= T.numDiscount.lh;
+    sy -= T.compTotalLabel.lh;
+    const compValText = tr ? `${fmt(tr.min)} – ${fmt(tr.max)}` : fmt(grandTotal);
+    const compValSize = tr ? T.compTotalValue.size * 0.8 : T.compTotalValue.size;
+    const totalValY = sy - compValSize;
+    drawRightAt(
+      page, compValText, cols.detail.rightX, totalValY,
+      compValSize, fontBold, T.compTotalValue.color,
+    );
   }
-  const totalLblY = sy - T.compTotalLabel.size;
-  drawRightAt(
-    page, 'TOTAL COMPUESTO', cols.detail.rightX, totalLblY,
-    T.compTotalLabel.size, fontBold, T.compTotalLabel.color, T.compTotalLabel.cs,
-  );
-  sy -= T.compTotalLabel.lh;
-  const compValText = tr ? `${fmt(tr.min)} – ${fmt(tr.max)}` : fmt(grandTotal);
-  const compValSize = tr ? T.compTotalValue.size * 0.8 : T.compTotalValue.size;
-  const totalValY = sy - compValSize;
-  drawRightAt(
-    page, compValText, cols.detail.rightX, totalValY,
-    compValSize, fontBold, T.compTotalValue.color,
-  );
 
   // ---- Option / alternative treatment ----------------------------------
   // Same finish as the article row — wash first; the per-row accent + caption
