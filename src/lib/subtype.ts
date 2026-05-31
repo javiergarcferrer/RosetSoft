@@ -158,3 +158,53 @@ export function composeFabricLabel(
   if (!colorBit) return name;
   return name ? `${name} · ${colorBit}` : colorBit;
 }
+
+/* ------------------------------------------------------------------------- *
+ * Material identity — "do two pieces wear the same material?"
+ *
+ * A compound article (a sectional, a modular sofa) is one parent line holding
+ * several components, and dealers/clients almost always dress every component
+ * in the SAME fabric — so re-picking it per component is busywork. These two
+ * pure helpers back the "pick once, apply to all" shortcut the editor and the
+ * client preview both surface: `materialIdentity` is the key two pieces compare
+ * equal on, and `canPropagateMaterial` is the SMART-visibility predicate. They
+ * live in the Model so the editor and the preview can never disagree on what
+ * "the same material" means.
+ * ------------------------------------------------------------------------- */
+
+/** The fields a line OR a component exposes for material identity. */
+export interface MaterialBearing {
+  id?: string;
+  subtype?: string | null;
+  swatchImageId?: string | null;
+}
+
+/**
+ * Stable key for a piece's chosen material: its grade+fabric (the `subtype`)
+ * plus the specific colour swatch. Two pieces wear the same material iff their
+ * keys are equal. JSON-encoding the pair keeps it collision-free — a fabric
+ * name can't be confused with the swatch id no matter what it contains.
+ */
+export function materialIdentity(entity: MaterialBearing | null | undefined): string {
+  return JSON.stringify([(entity?.subtype || '').trim(), entity?.swatchImageId || '']);
+}
+
+/**
+ * Whether to offer "apply this material to every sibling" for `entity` within
+ * `siblings` (the full peer list, INCLUDING entity). True only when there is
+ * redundancy worth removing: at least two pieces, `entity` carries an actual
+ * material (a grade or a fabric — not a blank sub-piece), and at least one other
+ * sibling differs from it. It flips back to false the moment everything already
+ * matches, so the affordance disappears once it would be a no-op — the "smart"
+ * part of the request.
+ */
+export function canPropagateMaterial(
+  entity: MaterialBearing | null | undefined,
+  siblings: ReadonlyArray<MaterialBearing> | null | undefined,
+): boolean {
+  if (!entity || !Array.isArray(siblings) || siblings.length < 2) return false;
+  const { grade, fabric } = parseSubtype(entity.subtype);
+  if (!grade && !fabric) return false; // nothing worth applying yet
+  const key = materialIdentity(entity);
+  return siblings.some((s) => s && s.id !== entity.id && materialIdentity(s) !== key);
+}

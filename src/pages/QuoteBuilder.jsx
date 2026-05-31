@@ -322,6 +322,30 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
   }, [lines, editorMaterialPatch, updateLine]);
 
+  // Apply-to-all twin: dress many components (a materialPick map of id → sel) in
+  // one pass, batching every target that shares a line into a single updateLine
+  // so a compound's pieces re-price together as one undo step. Mirrors
+  // pickMaterialInEditor's per-piece repricing (editorMaterialPatch).
+  const pickMaterialManyInEditor = useCallback((selsById) => {
+    const selById = new Map(Object.entries(selsById || {}));
+    if (!selById.size) return;
+    for (const l of lines) {
+      const comps = l.components;
+      if (!Array.isArray(comps)) continue;
+      let touched = false;
+      const newComps = comps.map((c) => {
+        const sel = selById.get(c.id);
+        const grade = String(sel?.grade ?? '').trim();
+        if (!sel || !grade) return c;
+        const patch = editorMaterialPatch(c, sel, grade);
+        if (!patch) return c;
+        touched = true;
+        return { ...c, ...patch };
+      });
+      if (touched) updateLine(l.id, { components: newComps });
+    }
+  }, [lines, editorMaterialPatch, updateLine]);
+
   // PDF export + share-link logic lives in its own hook so the export UI
   // (TotalsDock, the banners below) stays thin. It persists the share token
   // through updateQuote — the single quote writer from the controller above.
@@ -468,6 +492,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           modelFabrics={modelFabrics}
           gradePricesFor={editorGradePricesFor}
           onPickMaterial={pickMaterialInEditor}
+          onPickMaterialMany={pickMaterialManyInEditor}
         />
       ) : (
         // Single full-width column: the totals live in the persistent bottom

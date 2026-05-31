@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Copy } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
@@ -7,7 +7,7 @@ import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
-import { parseSubtype, composeFabricLabel } from '../../lib/subtype.js';
+import { parseSubtype, composeFabricLabel, canPropagateMaterial } from '../../lib/subtype.js';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
@@ -60,7 +60,7 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onToggleOptional, onSelectAlternative }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -73,8 +73,12 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // are both wired. The per-line price source differs by surface but the picker
   // is identical: the share link carries baked `gradePrices` on each line; the
   // in-app editor preview derives them live from the catalog via `gradePricesFor`.
+  // `onPickMany` powers the "apply this fabric to every component" shortcut: one
+  // action carrying the chosen fabric for every sibling id, replayed by the same
+  // reducer (materialPick is a map) so the optimistic + server paths stay in
+  // parity. Absent ⇒ the shortcut button simply never renders.
   const picker = onPickMaterial && materials?.length
-    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: onPickMaterial }
+    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: onPickMaterial, onPickMany: onPickMaterialMany }
     : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
@@ -708,6 +712,21 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker }) {
   );
 }
 
+// Dress every OTHER component in the compound in `source`'s fabric, in ONE
+// action. We build a materialPick map (sibling id → the source's chosen
+// { grade, fabric, swatchImageId }) and hand it to picker.onPickMany; the
+// reducer (and its server twin) iterate the map and reprice each sibling at the
+// shared grade from its OWN model's gradePrices — and silently skip any piece
+// whose model doesn't offer that grade, so a mixed compound stays safe.
+function applyMaterialToSiblings(source, components, picker) {
+  if (!picker?.onPickMany || !source) return;
+  const { grade, fabric } = parseSubtype(source.subtype);
+  const sel = { grade, fabric, swatchImageId: source.swatchImageId ?? null };
+  const map = {};
+  for (const c of components || []) if (c && c.id !== source.id) map[c.id] = sel;
+  if (Object.keys(map).length) picker.onPickMany(map);
+}
+
 // Compound line — one family + one image header, then a stacked list of
 // component rows underneath. Each row has its own name / ref / dim /
 // subtype + its own qty × unit = subtotal. The whole block resolves into
@@ -846,6 +865,8 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
                 onSelectMaterial={onSelectMaterial}
                 onToggleOptional={onToggleOptional}
                 onSelectAlternative={onSelectAlternative}
+                canApplyToAll={!!picker?.onPickMany && canPropagateMaterial(c, line.components)}
+                onApplyToAll={() => applyMaterialToSiblings(c, line.components, picker)}
               />
             ))}
           </ul>
@@ -884,7 +905,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -973,9 +994,24 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
           />
           {(() => {
             const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference));
-            return gp ? (
-              <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} />
-            ) : null;
+            if (!gp) return null;
+            return (
+              <>
+                <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} />
+                {/* Pick once, apply everywhere — only while a sibling still
+                    differs (canApplyToAll), so it vanishes once they all match. */}
+                {canApplyToAll && onApplyToAll && (
+                  <button
+                    type="button"
+                    onClick={onApplyToAll}
+                    className="relative z-[2] mt-2 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+                    title="Usar esta misma tela en todos los componentes de este producto"
+                  >
+                    <Copy size={13} aria-hidden /> Aplicar esta tela a todos
+                  </button>
+                )}
+              </>
+            );
           })()}
           {component.description && (
             <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">

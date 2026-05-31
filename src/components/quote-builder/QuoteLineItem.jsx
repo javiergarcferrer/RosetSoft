@@ -83,6 +83,10 @@ export default function QuoteLineItem({
   // plain-data projection, rate-agnostic) via the `fmt` closure below.
   const vm = useMemo(() => resolveLineItem(line), [line]);
   const compound = vm.isCompound;
+  // Catalog families (keyed by SKU root) — used by applyComponentMaterialToAll
+  // to re-price a material-less RANGE sibling at the propagated grade, exactly
+  // as GradeFabricRow.commit does for a single pick.
+  const families = useContext(FamiliesContext);
   // The product line's Ligne Roset link governs its material picker(s). A SIMPLE
   // line is keyed by its model root (so the link persists per model across every
   // quote); a COMPOUND is keyed by the line id, so one link applies to EVERY
@@ -129,6 +133,33 @@ export default function QuoteLineItem({
   function reorderComponents(orderedIds) {
     const byId = new Map((line.components || []).map((c) => [c.id, c]));
     const components = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    onChange({ components });
+  }
+  // "Apply this component's material to all the others" — the pick-once shortcut.
+  // Copies the source's grade + fabric (subtype) and colour swatch onto every
+  // sibling, mirroring GradeFabricRow.commit per piece: a material-less RANGE
+  // sibling gets its price pinned to ITS OWN model at the grade (and its range
+  // dropped); an already-priced sibling keeps its own per-model price — only its
+  // fabric/swatch change, since each component is a distinct SKU.
+  function applyComponentMaterialToAll(sourceId) {
+    const comps = Array.isArray(line.components) ? line.components : [];
+    const src = comps.find((c) => c.id === sourceId);
+    if (!src) return;
+    const { grade, fabric } = parseSubtype(src.subtype);
+    const subtype = composeSubtype(grade, fabric);
+    const swatchImageId = src.swatchImageId ?? null;
+    const components = comps.map((c) => {
+      if (c.id === sourceId) return c;
+      const patch = { subtype, swatchImageId };
+      if ((c.priceMin != null || c.priceMax != null) && grade) {
+        const fam = families?.get(splitSkuGrade(c.reference).root) || null;
+        const p = fam ? productForGrade(fam, grade) : null;
+        if (p) patch.unitPrice = Number(p.priceUsd) || 0;
+        patch.priceMin = null;
+        patch.priceMax = null;
+      }
+      return { ...c, ...patch };
+    });
     onChange({ components });
   }
   // Component-level ALTERNATIVE (pick-one among sub-pieces) — the compound twin
@@ -318,6 +349,7 @@ export default function QuoteLineItem({
           onReorder={reorderComponents}
           onAddAlternative={addComponentAlternative}
           onSelectAlternative={selectComponentAlternative}
+          onApplyToAll={applyComponentMaterialToAll}
         />
       )}
 
@@ -1411,7 +1443,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1487,6 +1519,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                 onRemove={() => onRemove(c.id)}
                 onAddAlternative={() => onAddAlternative?.(c.id)}
                 onSelectAlternative={() => onSelectAlternative?.(c.id)}
+                onApplyToAll={() => onApplyToAll?.(c.id)}
                 dragHandleProps={dragHandleProps}
               />
             </div>
@@ -1507,12 +1540,13 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
-  // the "Opción N de M" position, and the range swap (a material-less sub-piece
-  // shows a range like the standalone line, one level down).
-  const { total, optional, inGroup, isSelected, dimmed, groupInfo } = vm;
+  // the "Opción N de M" position, the range swap (a material-less sub-piece
+  // shows a range like the standalone line), and whether copying this piece's
+  // material to its siblings would change anything (canApplyToAll).
+  const { total, optional, inGroup, isSelected, dimmed, groupInfo, canApplyToAll } = vm;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
@@ -1678,6 +1712,20 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           currency={currency}
           rates={rates}
         />
+        {/* Pick-once shortcut — only shown when this component has a material AND
+            some sibling still differs (canApplyToAll), so it disappears the
+            moment everything matches. Copies grade + fabric + swatch to the rest. */}
+        {canApplyToAll && onApplyToAll && (
+          <button
+            type="button"
+            onClick={onApplyToAll}
+            className="relative z-[2] mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 coarse:min-h-9 text-[11px] font-medium text-brand-700 hover:text-brand-800 hover:underline transition-colors"
+            title="Usar esta misma tela en todos los componentes de este producto"
+          >
+            <Copy size={11} className="opacity-80" aria-hidden />
+            Aplicar tela a todos
+          </button>
+        )}
       </div>
 
       {/* Pricing — a range band (qty + "min – max" + a pick-a-fabric hint)

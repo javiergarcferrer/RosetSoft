@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtype, composeSubtype } from '../src/lib/subtype.js';
+import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial } from '../src/lib/subtype.js';
 
 test('parse — canonical "Grade X — FABRIC"', () => {
   assert.deepEqual(parseSubtype('Grade C — PAMPA'), { grade: 'C', fabric: 'PAMPA' });
@@ -86,6 +86,45 @@ test('parse — legacy "Cuir" / "Leather" round-trip (no longer in picker)', () 
   // render a hidden legacy <option> and not lose the dealer's data.
   assert.deepEqual(parseSubtype('Cuir — Tea'), { grade: 'Cuir', fabric: 'Tea' });
   assert.deepEqual(parseSubtype('Leather — black'), { grade: 'Leather', fabric: 'black' });
+});
+
+test('materialIdentity — equal subtype + swatch ⇒ equal keys; either differing ⇒ not', () => {
+  const a = { subtype: 'Grade C — PAMPA', swatchImageId: 'img1' };
+  assert.equal(materialIdentity(a), materialIdentity({ subtype: 'Grade C — PAMPA', swatchImageId: 'img1' }));
+  // trims subtype so trailing whitespace doesn't fork identity
+  assert.equal(materialIdentity(a), materialIdentity({ subtype: 'Grade C — PAMPA ', swatchImageId: 'img1' }));
+  assert.notEqual(materialIdentity(a), materialIdentity({ subtype: 'Grade C — PAMPA', swatchImageId: 'img2' }));
+  assert.notEqual(materialIdentity(a), materialIdentity({ subtype: 'Grade D — PAMPA', swatchImageId: 'img1' }));
+  // null/undefined collapse to the empty-material key, never throw
+  assert.equal(materialIdentity(null), materialIdentity({ subtype: '', swatchImageId: null }));
+});
+
+test('materialIdentity — a fabric name can never collide with a swatch id', () => {
+  // Encoding the pair (rather than concatenating) means a fabric whose text
+  // happens to look like "<other>][<id>" can't masquerade as another pairing.
+  assert.notEqual(
+    materialIdentity({ subtype: 'A', swatchImageId: 'B' }),
+    materialIdentity({ subtype: 'A","B', swatchImageId: '' }),
+  );
+});
+
+test('canPropagateMaterial — offered only when there is redundancy to remove', () => {
+  const mk = (id, subtype, swatch) => ({ id, subtype, swatchImageId: swatch });
+  const src = mk('1', 'Grade C — PAMPA', 'img1');
+
+  // A lone piece has no siblings to apply to.
+  assert.equal(canPropagateMaterial(src, [src]), false);
+  // A blank source carries no material worth applying.
+  assert.equal(canPropagateMaterial(mk('1', '', null), [mk('1', '', null), mk('2', 'Grade C — PAMPA', 'img1')]), false);
+  // A differing sibling (here: still blank) ⇒ offer it.
+  assert.equal(canPropagateMaterial(src, [src, mk('2', '', null)]), true);
+  // A sibling in the same fabric but a different colour swatch still differs.
+  assert.equal(canPropagateMaterial(src, [src, mk('2', 'Grade C — PAMPA', 'img2')]), true);
+  // Everything already matches ⇒ hide it (would be a no-op).
+  assert.equal(canPropagateMaterial(src, [src, mk('2', 'Grade C — PAMPA', 'img1')]), false);
+  // Guards: missing/short sibling lists never throw.
+  assert.equal(canPropagateMaterial(src, null), false);
+  assert.equal(canPropagateMaterial(src, []), false);
 });
 
 test('compose ∘ parse is identity for every canonical shape', () => {

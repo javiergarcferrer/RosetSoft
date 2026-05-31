@@ -22,6 +22,7 @@ import {
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
   componentAlternativeGroupInfo,
 } from '../../../lib/pricing.js';
+import { canPropagateMaterial } from '../../../lib/subtype.js';
 
 // Per-component display projection for a compound's sub-pieces — the pure
 // derivation ComponentRow used to compute inline (total, the optional/
@@ -51,6 +52,10 @@ function resolveComponents(components) {
       dimmed: inGroup && !isSelected,
       // "Opción N de M" position ({ index, total }) or undefined when ungrouped.
       groupInfo: altInfo.get(c.id),
+      // Offer "apply this material to every component" only when it would
+      // actually change a sibling — the SMART affordance that kills the busywork
+      // of re-picking the same fabric across a compound's pieces.
+      canApplyToAll: canPropagateMaterial(c, list),
     };
   });
 }

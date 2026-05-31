@@ -104,6 +104,10 @@ export default function PublicQuoteView() {
   const pickMaterial = (id, grade) => applyPick({ materials: { [id]: grade } });
   // The FULL catalog picker — `sel` is { grade, fabric, swatchImageId }.
   const pickMaterialFree = (id, sel) => applyPick({ materialPick: { [id]: sel } });
+  // Apply-to-all: ONE action that dresses many components in the same fabric.
+  // `selsById` is already a materialPick map ({ id: sel }), so the reducer +
+  // Edge Function reprice each piece at its own model's price in a single write.
+  const pickMaterialFreeMany = (selsById) => applyPick({ materialPick: selsById });
 
   if (state.status === 'loading') {
     return (
@@ -146,6 +150,7 @@ export default function PublicQuoteView() {
           modelFabrics={bundle.modelFabrics || {}}
           onSelectMaterial={pickMaterial}
           onPickMaterial={pickMaterialFree}
+          onPickMaterialMany={pickMaterialFreeMany}
           onToggleOptional={toggleOptional}
           onSelectAlternative={pickAlternative}
         />
