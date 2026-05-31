@@ -142,7 +142,7 @@ export default function QuoteHeader({
             child, so a pill never splits across the wrap. The order pill moved
             up to the breadcrumb row, out of this strip. */}
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
           role="group"
           aria-label="Datos de la cotización"
         >
