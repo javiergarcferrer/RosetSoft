@@ -74,7 +74,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             picker, not a link, and the team knows the chip opens. */}
         <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
           <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
-          <span className="font-medium text-ink-900 truncate max-w-[110px] sm:max-w-[170px] lg:max-w-[210px]">
+          <span className="font-medium text-ink-900 truncate max-w-[88px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
         </button>
@@ -127,7 +127,7 @@ function DecoratorBillingChip({ quote, onUpdateQuote }) {
   const trade = mode === 'trade_discount';
   return (
     <label
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-xs transition-colors ${
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-xs transition-colors ${
         trade
           ? 'border-amber-300 bg-amber-50 text-amber-800'
           : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400'
@@ -154,7 +154,7 @@ function DecoratorBillingChip({ quote, onUpdateQuote }) {
 
 /* The outer pill: one rounded-full segmented container shared by both states. */
 const PILL =
-  'inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
+  'inline-flex shrink-0 items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
   'transition-colors max-w-full min-w-0 text-xs overflow-hidden';
 
 /* A segment: full-height flex cell with consistent touch height + feedback. */

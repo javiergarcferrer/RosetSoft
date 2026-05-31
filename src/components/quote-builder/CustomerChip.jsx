@@ -15,7 +15,7 @@ export default function CustomerChip({ customer, onOpen }) {
       <button
         type="button"
         onClick={onOpen}
-        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-ink-500 hover:text-ink-900 transition-colors"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-ink-500 hover:text-ink-900 transition-colors"
       >
         <UserIcon size={12} />
         Asignar cliente
@@ -31,11 +31,11 @@ export default function CustomerChip({ customer, onOpen }) {
     <button
       type="button"
       onClick={onOpen}
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs hover:border-ink-400 hover:bg-ink-50 transition-colors max-w-full min-w-0"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs hover:border-ink-400 hover:bg-ink-50 transition-colors max-w-full min-w-0"
       title={[customer.name, customer.company, customer.email, customer.phone].filter(Boolean).join(' · ')}
     >
       <UserIcon size={12} className="text-brand-600 flex-shrink-0" />
-      <span className="min-w-0 inline-flex items-baseline gap-1.5 max-w-[110px] sm:max-w-[180px] lg:max-w-[220px]">
+      <span className="min-w-0 inline-flex items-baseline gap-1.5 max-w-[120px] sm:max-w-[180px] lg:max-w-[220px]">
         <span className="font-medium text-ink-900 truncate">{customer.name}</span>
         {customer.company ? (
           <span className="text-ink-500 truncate hidden md:inline">{customer.company}</span>

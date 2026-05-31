@@ -141,8 +141,11 @@ export default function QuoteHeader({
             chips don't all fit on a single line; each chip is a single flex
             child, so a pill never splits across the wrap. The order pill moved
             up to the breadcrumb row, out of this strip. */}
+        {/* One row on mobile: the chips don't all fit a phone width, so the
+            strip scrolls horizontally (scrollbar hidden) instead of wrapping
+            onto extra lines. Wraps normally from sm up. */}
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="flex items-center gap-2 overflow-x-auto flex-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible"
           role="group"
           aria-label="Datos de la cotización"
         >
