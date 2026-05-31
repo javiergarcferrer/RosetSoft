@@ -9,7 +9,8 @@ import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState,
 } from '../core/quote/index.js';
-import { groupFamilies } from '../lib/catalog.js';
+import { groupFamilies, productForGrade, splitSkuGrade } from '../lib/catalog.js';
+import { composeSubtype } from '../lib/subtype.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
@@ -225,6 +226,25 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     return map;
   }, [products]);
 
+  // The fabric catalog + per-model offered-fabric allowlists, so the in-app
+  // "Vista cliente" preview drives the SAME full picker the public link does
+  // (the dealer can configure fabrics from the client view too).
+  const materials = useLiveQuery(
+    () => (profileId ? db.materials.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId],
+    [],
+  );
+  const modelFabricRows = useLiveQuery(
+    () => (profileId ? db.modelFabrics.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId],
+    [],
+  );
+  const modelFabrics = useMemo(() => {
+    const out = {};
+    for (const r of modelFabricRows || []) if (r?.id && r.patternNames?.length) out[r.id] = r.patternNames;
+    return out;
+  }, [modelFabricRows]);
+
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
   }, [materialize]);
@@ -241,6 +261,66 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     toggleOptional, addAlternative, selectAlternative, separateFromSet,
     toggleGroupOptional, joinSet, ungroupLine, removeLine, reorderLines,
   } = useQuoteController({ quoteId, quote, lines, groups, settings, ensurePersisted });
+
+  // Editor-side full fabric picker (the "Vista cliente" preview drives it too).
+  // Derive a model's per-grade catalog price for a line — feeds the picker's
+  // price column + in-grade list — and commit a chosen fabric back to the real
+  // quote line, repricing by grade exactly like the public link, through
+  // updateLine so it joins undo/redo + autosave.
+  const editorGradePricesFor = useCallback((reference) => {
+    const root = splitSkuGrade(reference || '').root;
+    const fam = root ? families.get(root) : null;
+    if (!fam || !fam.graded) return null;
+    const out = {};
+    for (const g of fam.grades) { const p = fam.byGrade.get(g); if (p?.priceUsd != null) out[g] = Number(p.priceUsd) || 0; }
+    return Object.keys(out).length ? out : null;
+  }, [families]);
+
+  const editorMaterialPatch = useCallback((entity, sel, grade) => {
+    const root = splitSkuGrade(entity.reference || '').root;
+    const fam = root ? families.get(root) : null;
+    const p = fam ? productForGrade(fam, grade) : null;
+    if (!p || p.priceUsd == null) return null; // grade has no catalog SKU → reject
+    const fabric = String(sel?.fabric ?? '').slice(0, 200);
+    const patch = {
+      reference: root ? root + grade.toUpperCase() : entity.reference,
+      subtype: composeSubtype(grade, fabric),
+      swatchImageId: sel?.swatchImageId == null ? null : sel.swatchImageId,
+      unitPrice: Number(p.priceUsd) || 0,
+      unitCost: p.cost == null ? null : Number(p.cost),
+      priceMin: null,
+      priceMax: null,
+    };
+    const mo = entity.materialOptions;
+    if (mo && Array.isArray(mo.options) && mo.options.length) {
+      patch.materialOptions = { ...mo, baseGrade: grade.toUpperCase(), baseLabel: fabric };
+    }
+    return patch;
+  }, [families]);
+
+  const pickMaterialInEditor = useCallback((id, sel) => {
+    const grade = String(sel?.grade ?? '').trim();
+    if (!grade) return;
+    const line = lines.find((l) => l.id === id);
+    if (line) {
+      const patch = editorMaterialPatch(line, sel, grade);
+      if (patch) updateLine(id, patch);
+      return;
+    }
+    for (const l of lines) {
+      const comps = l.components;
+      if (!Array.isArray(comps)) continue;
+      const idx = comps.findIndex((c) => c.id === id);
+      if (idx < 0) continue;
+      const patch = editorMaterialPatch(comps[idx], sel, grade);
+      if (patch) {
+        const newComps = comps.slice();
+        newComps[idx] = { ...comps[idx], ...patch };
+        updateLine(l.id, { components: newComps });
+      }
+      break;
+    }
+  }, [lines, editorMaterialPatch, updateLine]);
 
   // PDF export + share-link logic lives in its own hook so the export UI
   // (TotalsDock, the banners below) stays thin. It persists the share token
@@ -384,6 +464,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           professional={professional}
           seller={seller}
           families={families}
+          materials={materials}
+          modelFabrics={modelFabrics}
+          gradePricesFor={editorGradePricesFor}
+          onPickMaterial={pickMaterialInEditor}
         />
       ) : (
         // Single full-width column: the totals live in the persistent bottom

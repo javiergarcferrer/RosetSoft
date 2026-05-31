@@ -59,7 +59,7 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, materialSelections, onSelectMaterial, onPickMaterial, onToggleOptional, onSelectAlternative }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -69,10 +69,11 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // recipient knows they can configure the quote right here.
   const interactive = !!(onSelectMaterial || onPickMaterial || onSelectAlternative || onToggleOptional);
   // The full fabric picker is available only when its catalog + commit handler
-  // are both wired (the public share link). Bundled once and threaded down so
-  // every upholstered line/component opens the SAME modal the editor uses.
+  // are both wired. The per-line price source differs by surface but the picker
+  // is identical: the share link carries baked `gradePrices` on each line; the
+  // in-app editor preview derives them live from the catalog via `gradePricesFor`.
   const picker = onPickMaterial && materials?.length
-    ? { materials, modelFabrics: modelFabrics || {}, onPick: onPickMaterial }
+    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: onPickMaterial }
     : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
@@ -555,15 +556,12 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               selectedGrade={materialSelections?.[line.id] ?? line.materialOptions?.baseGrade}
               onSelect={onSelectMaterial ? (g) => onSelectMaterial(line.id, g) : undefined}
             />
-            {picker && line.gradePrices && (
-              <FabricPicker
-                id={line.id}
-                subtype={line.subtype}
-                reference={line.reference}
-                gradePrices={line.gradePrices}
-                picker={picker}
-              />
-            )}
+            {(() => {
+              const gp = picker && (line.gradePrices || picker.gradePricesFor?.(line.reference));
+              return gp ? (
+                <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} />
+              ) : null;
+            })()}
             {line.description && (
               <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
                 {line.description}
@@ -977,15 +975,12 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
             onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
           />
-          {picker && component.gradePrices && (
-            <FabricPicker
-              id={component.id}
-              subtype={component.subtype}
-              reference={component.reference}
-              gradePrices={component.gradePrices}
-              picker={picker}
-            />
-          )}
+          {(() => {
+            const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference));
+            return gp ? (
+              <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} />
+            ) : null;
+          })()}
           {component.description && (
             <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
               {component.description}
