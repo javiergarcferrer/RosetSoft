@@ -82,6 +82,22 @@ export default function QuoteLineItem({
   // plain-data projection, rate-agnostic) via the `fmt` closure below.
   const vm = useMemo(() => resolveLineItem(line), [line]);
   const compound = vm.isCompound;
+  // The product line's Ligne Roset link governs its material picker(s). A SIMPLE
+  // line is keyed by its model root (so the link persists per model across every
+  // quote); a COMPOUND is keyed by the line id, so one link applies to EVERY
+  // component within. Resolved here so the IdentityBand and the ComponentsPanel
+  // share the same record.
+  const modelKey = compound ? line.id : splitSkuGrade(line.reference).root;
+  const modelRec = useLiveQuery(
+    () => (modelKey ? db.modelFabrics.get(modelKey) : Promise.resolve(null)),
+    [modelKey],
+    null,
+  );
+  const modelNameFilter = useMemo(
+    () => (modelRec?.patternNames?.length ? new Set(modelRec.patternNames) : undefined),
+    [modelRec],
+  );
+  const modelSourceUrl = modelRec?.sourceUrl || null;
   const unit = vm.unitNet;
   const rowTotal = vm.subtotal;
   // Material-less RANGE line — priced cheapest→priciest grade until a fabric is
