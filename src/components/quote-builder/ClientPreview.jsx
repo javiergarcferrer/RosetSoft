@@ -754,7 +754,7 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, className =
   const { grade, fabric } = parseSubtype(subtype);
   return (
     <div className={`relative z-[2] ${className}`}>
-      <MaterialPickerButton onClick={() => setOpen(true)} />
+      <MaterialPickerButton onClick={() => setOpen(true)} label="Elegir tela" />
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
           <MaterialColorPicker

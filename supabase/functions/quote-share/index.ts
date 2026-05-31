@@ -134,6 +134,10 @@ function clientLine(
     dimensions: row.dimensions,
     description: row.description,
     imageId: row.image_id,
+    // Extra product photos beyond the cover — the client link renders the same
+    // zoomable gallery the editor preview does ([imageId, ...extraImageIds]).
+    // Without copying it here the public view only ever showed the cover.
+    extraImageIds: Array.isArray(row.extra_image_ids) ? row.extra_image_ids : null,
     swatchImageId: row.swatch_image_id,
     qty: row.qty,
     // Margin baked in; the margin field is zeroed so the viewer reproduces the

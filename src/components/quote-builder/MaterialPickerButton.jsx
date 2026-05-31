@@ -1,12 +1,28 @@
 import { Palette } from 'lucide-react';
 
-// The single material-picker icon button. Every surface that opens a
-// fabric/material picker renders THIS — the dealer's line editor
-// (QuoteLineItem) and the client-facing preview / share link (ClientPreview's
-// FabricPicker). Keeping the trigger in one place is why it looks identical
-// everywhere and can't drift: a caller just hands an onClick that opens its own
-// picker modal; the glyph, sizing, and hover/touch states live here.
-export default function MaterialPickerButton({ onClick, className = '' }) {
+// The material-picker trigger. Two faces share ONE component so the dealer's
+// editor and the client link can't drift:
+//   - icon-only (no `label`) — the dealer's dense line editor (QuoteLineItem),
+//     where a labelled button would crowd the row's other controls.
+//   - labelled (`label` given) — the client-facing preview / share link, where
+//     a bare glyph went unnoticed; a customer on a phone gets a full, obviously
+//     tappable button instead.
+// A caller just hands an onClick that opens its own picker modal; the glyph,
+// sizing, and hover/touch states live here.
+export default function MaterialPickerButton({ onClick, label, className = '' }) {
+  if (label) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 min-h-9 coarse:min-h-11 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 hover:border-brand-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 ${className}`}
+        title="Elegir del catálogo de materiales"
+      >
+        <Palette size={15} aria-hidden />
+        {label}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
