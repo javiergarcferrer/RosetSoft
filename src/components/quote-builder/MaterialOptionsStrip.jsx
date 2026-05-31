@@ -26,10 +26,17 @@ import ImageView from '../ImageView.jsx';
  * option's own `delta` (baked in by the quote-share function for the public
  * view) is used, and failing that the row shows label-only. The component
  * degrades in layers so the customer never sees a broken strip.
+ *
+ * `marginFactor` scales the CATALOG-derived deltas (the `families` path) by the
+ * same per-line margin the public-link bundle bakes into its option deltas, so
+ * the dealer's in-app preview shows the same +/- the client link does. The
+ * already-baked option `delta`s (the public bundle) are left untouched — they
+ * carry their margin already — and the default of 1 keeps every other surface
+ * (e.g. the read-only editor compose strip) on raw list deltas.
  */
 export default function MaterialOptionsStrip({
   materialOptions, reference, families, currency, rates, baseSwatchImageId,
-  selectedGrade, onSelect,
+  selectedGrade, onSelect, marginFactor = 1,
 }) {
   const rawOptions = materialOptions?.options;
   if (!Array.isArray(rawOptions) || rawOptions.length === 0) return null;
@@ -47,7 +54,10 @@ export default function MaterialOptionsStrip({
     if (!family) return null;
     try {
       const rows = materialOptionDeltas(materialOptions, family);
-      return Array.isArray(rows) ? rows : null;
+      if (!Array.isArray(rows)) return null;
+      // Bake the per-line margin so the chip deltas match the public link (which
+      // carries them baked); marginFactor === 1 leaves the raw list deltas as-is.
+      return marginFactor === 1 ? rows : rows.map((r) => ({ ...r, delta: r.delta * marginFactor }));
     } catch {
       return null;
     }

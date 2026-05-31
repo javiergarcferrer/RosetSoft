@@ -61,6 +61,16 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
+// Per-line margin factor — the SAME factor the public-link bundle bakes into
+// every price (quote margin × line margin; the discount is deliberately
+// excluded — the link bakes margin only). The editor feeds RAW prices + the real
+// margin fields, so the in-app preview applies this factor itself to show the
+// picker grade prices + option-chip deltas the link already carries baked. On the
+// link both margin fields are zeroed (margin already baked) so the factor is 1.
+function marginFactor(quoteMarginPct, lineMarginPct) {
+  return (1 + (Number(quoteMarginPct) || 0) / 100) * (1 + (Number(lineMarginPct) || 0) / 100);
+}
+
 export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
@@ -209,6 +219,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                       <ClientLine
                         key={l.id}
                         line={l}
+                        quoteMarginPct={quote.marginPct}
                         currency={currency}
                         rates={rates}
                         fmt={fmt}
@@ -244,6 +255,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                         <ClientLine
                           key={l.id}
                           line={l}
+                          quoteMarginPct={quote.marginPct}
                           currency={currency}
                           rates={rates}
                           fmt={fmt}
@@ -358,7 +370,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   );
 }
 
-function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -367,6 +379,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
     return (
       <CompoundClientLine
         line={line}
+        quoteMarginPct={quoteMarginPct}
         currency={currency}
         rates={rates}
         fmt={fmt}
@@ -382,6 +395,10 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
       />
     );
   }
+  // The per-line margin factor the picker grade prices + option-chip deltas bake
+  // (so the editor preview matches the margin-baked public link; factor 1 on the
+  // link, where the margin fields are already zeroed).
+  const mf = marginFactor(quoteMarginPct, line.lineMarginPct);
   // All line math routes through lib/pricing so the customer preview can
   // never diverge from the editor / PDF / totals — and so the line-discount
   // clamp (0–100) is applied here too (a stray out-of-range pct can't invert
@@ -556,6 +573,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               materialOptions={line.materialOptions}
               reference={line.reference}
               families={families}
+              marginFactor={mf}
               currency={currency}
               rates={rates}
               baseSwatchImageId={line.swatchImageId}
@@ -563,7 +581,7 @@ function ClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, 
               onSelect={onSelectMaterial ? (g) => onSelectMaterial(line.id, g) : undefined}
             />
             {(() => {
-              const gp = picker && (line.gradePrices || picker.gradePricesFor?.(line.reference));
+              const gp = picker && (line.gradePrices || picker.gradePricesFor?.(line.reference, mf));
               return gp ? (
                 <FabricPicker id={line.id} subtype={line.subtype} reference={line.reference} gradePrices={gp} picker={picker} />
               ) : null;
@@ -738,7 +756,11 @@ function applyMaterialToSiblings(source, components, picker) {
 // single-item discount to a bundle discount reads the same vocabulary in
 // the same position — the shared compact-cell shape is the design system,
 // not a one-off composition.
-function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+  // Components inherit the PARENT line's margin factor (the bundle bakes ONE
+  // per-line factor into the line AND its components — there is no component-level
+  // margin), so resolve it once here and pass it down to every component row.
+  const mf = marginFactor(quoteMarginPct, line.lineMarginPct);
   const subtotal = compoundSubtotal(line);
   const grandTotal = lineTotal(line);
   // Material-less components make the whole compound a RANGE — "min – max"
@@ -856,6 +878,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
               <CompoundComponentRow
                 key={c.id || i}
                 component={c}
+                marginFactor={mf}
                 currency={currency}
                 rates={rates}
                 fmt={fmt}
@@ -906,7 +929,7 @@ function CompoundClientLine({ line, currency, rates, fmt, families, groupInfo, s
   );
 }
 
-function CompoundComponentRow({ component, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
+function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
   const qty = Number(component.qty) || 0;
   const unit = Number(component.unitPrice) || 0;
   const subtotal = componentSubtotal(component);
@@ -929,7 +952,7 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
   // The full fabric picker + its "apply to all" twin, as a compact vertical icon
   // stack. It rides to the RIGHT of the standalone swatch when one shows; with a
   // material-options grid instead, it renders beneath that grid (below).
-  const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference));
+  const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference, mf));
   const showSwatch = !component.materialOptions?.options?.length
     && !!(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype)));
   const pickerStack = gp ? (
@@ -1000,6 +1023,7 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             materialOptions={component.materialOptions}
             reference={component.reference}
             families={families}
+            marginFactor={mf}
             currency={currency}
             rates={rates}
             baseSwatchImageId={component.swatchImageId}

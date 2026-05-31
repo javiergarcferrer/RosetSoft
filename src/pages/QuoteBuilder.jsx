@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 // Derivations, the rate state, and predicates all come from the quote Model.
 import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
-  effectiveRates, quoteRateState,
+  effectiveRates, quoteRateState, applyAction, reanchorMaterial,
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade } from '../lib/catalog.js';
 import { composeSubtype } from '../lib/subtype.js';
@@ -267,12 +267,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // price column + in-grade list — and commit a chosen fabric back to the real
   // quote line, repricing by grade exactly like the public link, through
   // updateLine so it joins undo/redo + autosave.
-  const editorGradePricesFor = useCallback((reference) => {
+  // `marginFactor` bakes the line's margin (quote × line) into the per-grade
+  // price, mirroring the public link's gradePricesFor (the bundle bakes the same
+  // factor) — so the fabric picker shows the SAME numbers on both surfaces. The
+  // caller (ClientPreview) supplies the per-line factor; default 1 = raw list.
+  const editorGradePricesFor = useCallback((reference, marginFactor = 1) => {
     const root = splitSkuGrade(reference || '').root;
     const fam = root ? families.get(root) : null;
     if (!fam || !fam.graded) return null;
     const out = {};
-    for (const g of fam.grades) { const p = fam.byGrade.get(g); if (p?.priceUsd != null) out[g] = Number(p.priceUsd) || 0; }
+    for (const g of fam.grades) { const p = fam.byGrade.get(g); if (p?.priceUsd != null) out[g] = (Number(p.priceUsd) || 0) * marginFactor; }
     return Object.keys(out).length ? out : null;
   }, [families]);
 
@@ -345,6 +349,77 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       if (touched) updateLine(l.id, { components: newComps });
     }
   }, [lines, editorMaterialPatch, updateLine]);
+
+  // -- "Vista cliente" interactive picks: the SAME four the public link wires --
+  // The preview pane lets the dealer configure the quote exactly as the client
+  // would on the share link. Optionals + alternatives are pure flag flips (no
+  // repricing), so we replay them through the link's OWN optimistic reducer
+  // (applyAction) over the live lines and persist whatever it touched via
+  // updateLine — guaranteeing the preview applies a pick byte-for-byte like the
+  // link. A line-level flip writes one field; a component-level flip writes the
+  // line's components array.
+  const applyEditorPick = useCallback((pick) => {
+    const next = applyAction({ lines }, pick).lines;
+    if (next === lines) return;            // invalid / no-op pick → nothing to write
+    for (let i = 0; i < lines.length; i++) {
+      if (next[i] === lines[i]) continue;
+      const patch = {};
+      if (next[i].isOptional !== lines[i].isOptional) patch.isOptional = next[i].isOptional;
+      if (next[i].isSelectedAlternative !== lines[i].isSelectedAlternative) patch.isSelectedAlternative = next[i].isSelectedAlternative;
+      if (next[i].components !== lines[i].components) patch.components = next[i].components;
+      if (Object.keys(patch).length) updateLine(lines[i].id, patch);
+    }
+  }, [lines, updateLine]);
+
+  // Grade-chip pick (the link's `materials` action / server lineMaterialPatch):
+  // re-anchor the offered grades so the picked one becomes the base (the Model's
+  // parity-tested reanchor — old base demoted into the options, swatch + subtype
+  // recomposed) and reprice from the catalog in RAW USD; resolveQuoteView applies
+  // the margin downstream exactly as the bundle bakes it server-side. Distinct from
+  // the FULL picker (editorMaterialPatch / onPickMaterial), which sets an ARBITRARY
+  // fabric and only re-bases baseGrade/baseLabel. Returns null when the grade isn't
+  // offered (mirrors the server's reject).
+  const editorGradeReanchorPatch = useCallback((entity, grade) => {
+    const g = String(grade ?? '').trim();
+    if (!g) return null;
+    const r = reanchorMaterial(entity.materialOptions, g, entity.swatchImageId);
+    if (!r) return null;
+    const root = splitSkuGrade(entity.reference || '').root;
+    const fam = root ? families.get(root) : null;
+    const p = fam ? productForGrade(fam, g) : null;
+    const patch = {
+      materialOptions: r.newMo,
+      swatchImageId: r.newSwatchId,
+      subtype: composeSubtype(g, r.label),
+      priceMin: null,
+      priceMax: null,
+    };
+    if (root) patch.reference = root + g.toUpperCase();
+    if (p && p.priceUsd != null) { patch.unitPrice = Number(p.priceUsd) || 0; patch.unitCost = p.cost == null ? null : Number(p.cost); }
+    return patch;
+  }, [families]);
+
+  const selectMaterialInEditor = useCallback((id, grade) => {
+    const line = lines.find((l) => l.id === id);
+    if (line) {
+      const patch = editorGradeReanchorPatch(line, grade);
+      if (patch) updateLine(id, patch);
+      return;
+    }
+    for (const l of lines) {
+      const comps = l.components;
+      if (!Array.isArray(comps)) continue;
+      const idx = comps.findIndex((c) => c.id === id);
+      if (idx < 0) continue;
+      const patch = editorGradeReanchorPatch(comps[idx], grade);
+      if (patch) {
+        const newComps = comps.slice();
+        newComps[idx] = { ...comps[idx], ...patch };
+        updateLine(l.id, { components: newComps });
+      }
+      break;
+    }
+  }, [lines, editorGradeReanchorPatch, updateLine]);
 
   // PDF export + share-link logic lives in its own hook so the export UI
   // (TotalsDock, the banners below) stays thin. It persists the share token
@@ -491,8 +566,15 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           materials={materials}
           modelFabrics={modelFabrics}
           gradePricesFor={editorGradePricesFor}
-          onPickMaterial={pickMaterialInEditor}
-          onPickMaterialMany={pickMaterialManyInEditor}
+          // The picks the public link wires, so the preview is live too. hx joins
+          // each into undo/redo + autosave (one snapshot per gesture), matching the
+          // editor's other actions (QuoteActionsContext). onPickMaterialMany batches
+          // its updateLines, so its one snapshot still undoes the whole apply-to-all.
+          onSelectMaterial={hx(selectMaterialInEditor)}
+          onPickMaterial={hx(pickMaterialInEditor)}
+          onPickMaterialMany={hx(pickMaterialManyInEditor)}
+          onToggleOptional={hx((id, on) => applyEditorPick({ optionals: { [id]: on } }))}
+          onSelectAlternative={hx((group, lineId) => applyEditorPick({ alternatives: { [group]: lineId } }))}
         />
       ) : (
         // Single full-width column: the totals live in the persistent bottom

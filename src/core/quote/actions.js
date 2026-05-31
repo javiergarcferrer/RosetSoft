@@ -50,7 +50,7 @@ function offeredGrades(mo) {
  * `delta` is the picked option's per-unit price change vs the current base —
  * the caller adds it to the unit price.
  */
-function reanchorMaterial(mo, pickedGrade, currentSwatchId) {
+export function reanchorMaterial(mo, pickedGrade, currentSwatchId) {
   if (!mo) return null;
   const options = Array.isArray(mo.options) ? mo.options : [];
   const picked = String(pickedGrade);

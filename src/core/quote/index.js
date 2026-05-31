@@ -32,7 +32,9 @@ export {
 } from '../../lib/exchangeRate.js';
 
 // ---- the one mutation reducer (optimistic client + authoritative server share it)
-export { applyAction, applyClientPick } from './actions.js';
+//      reanchorMaterial is the grade-switch re-anchor rule (subtype/swatch/options
+//      re-base) the editor preview reuses to mirror the link's `materials` pick.
+export { applyAction, applyClientPick, reanchorMaterial } from './actions.js';
 
 // ---- ViewModels (per-view projections off the Model)
 export { resolveQuoteView } from './views/quoteView.js';
