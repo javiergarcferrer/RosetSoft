@@ -1,8 +1,8 @@
 /**
  * Parser for the Ligne Roset price-list CSV (the supplier's
- * "LigneRosetPriceList_Profits" export). Pure + dependency-free so it can be
- * unit-tested and run client-side when the dealer uploads the file in the
- * Catálogo admin page.
+ * "LigneRosetPriceList_Profits" export). Pure (only a SKU-splitting helper
+ * import) so it can be unit-tested and run client-side when the dealer uploads
+ * the file in the Catálogo admin page.
  *
  * Header (case-insensitive, matched by name so column order can shift):
  *   SKU, Description 1, Description 2, Sales Code, Sales Code Description,
@@ -12,6 +12,7 @@
  * divisor). Description 2 holds the finish plus an H()/D()/S()/W() dimension
  * tail we split apart.
  */
+import { splitSkuGrade } from './catalog.js';
 
 export interface ParsedProduct {
   reference: string;
@@ -183,4 +184,86 @@ export function dedupeBySku(products: ParsedProduct[]): ParsedProduct[] {
     out.push(group.find((p) => p.priceUsd === bestPrice) as ParsedProduct);
   }
   return out;
+}
+
+/** Longest common leading run of space-delimited words shared by every name. */
+function commonPrefixWords(names: string[]): string {
+  if (names.length === 0) return '';
+  const parts = names.map((n) => n.split(' '));
+  const first = parts[0];
+  let i = 0;
+  while (i < first.length && parts.every((p) => p[i] === first[i])) i++;
+  return first.slice(0, i).join(' ');
+}
+
+/** Most frequent value; ties broken alphabetically so the result is stable. */
+function mostCommon(values: string[]): string {
+  const freq = new Map<string, number>();
+  for (const v of values) freq.set(v, (freq.get(v) || 0) + 1);
+  let best = '';
+  let bestN = -1;
+  for (const [v, n] of [...freq].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (n > bestN) { best = v; bestN = n; }
+  }
+  return best;
+}
+
+/**
+ * One name for a split root: the shared COLLECTION (longest common leading
+ * words of its parent names) + the accessory DESCRIPTOR (its most-common
+ * Description 2 / subtype). Either part may be empty; returns '' only when both
+ * are, so the caller then leaves the names as they were.
+ */
+function unifiedName(names: string[], subtypes: string[]): string {
+  const collection = commonPrefixWords(names).trim();
+  const descriptor = mostCommon(subtypes.filter(Boolean)).trim();
+  const parts: string[] = [];
+  if (collection) parts.push(collection);
+  if (descriptor && !collection.includes(descriptor)) parts.push(descriptor);
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Heal the per-grade NAME drift on accessory SKUs. Ligne Roset stamps a graded
+ * add-on (bolster / cushion / base — ~48 SKU roots in the May-2026 list) with
+ * whichever PARENT model each grade row was listed against, so one root's grade
+ * rows carry several different "Description 1" names — e.g. PRADO's "S/2
+ * BOLSTERS" (root 11370022) spreads its 23 grades across PRADO SOFA / SQUARE
+ * SETTEE / MEDIUM SOFA. Catalog grouping is by SKU root, so the grades still
+ * merge into one model, but `searchProducts` matches on name: a "PRADO SOFA"
+ * search surfaces only the 5 rows named that, making the model look like it has
+ * 5 grades instead of 23 — and the merged model inherits an arbitrary parent
+ * name.
+ *
+ * Give every grade row of such a root ONE derived name (collection + accessory
+ * descriptor) so the model stays whole under any name search and reads as the
+ * add-on it is. Roots whose grade rows already agree on a name — every normal
+ * upholstered model — are untouched. Pure; meant to run after `dedupeBySku`.
+ */
+export function unifySplitNames(products: ParsedProduct[]): ParsedProduct[] {
+  // Bucket graded SKUs by root (ungraded SKUs are their own root and can't split).
+  const byRoot = new Map<string, ParsedProduct[]>();
+  for (const p of products) {
+    const { root, grade } = splitSkuGrade(p.reference);
+    if (!grade) continue;
+    const g = byRoot.get(root);
+    if (g) g.push(p);
+    else byRoot.set(root, [p]);
+  }
+
+  // A root needs healing only when its grade rows disagree on the name.
+  const rename = new Map<string, string>();
+  for (const [root, rows] of byRoot) {
+    const names = [...new Set(rows.map((r) => r.name).filter(Boolean))];
+    if (names.length <= 1) continue;
+    const unified = unifiedName(names, rows.map((r) => r.subtype));
+    if (unified) rename.set(root, unified);
+  }
+  if (rename.size === 0) return products;
+
+  return products.map((p) => {
+    const { root, grade } = splitSkuGrade(p.reference);
+    const name = grade ? rename.get(root) : undefined;
+    return name ? { ...p, name } : p;
+  });
 }

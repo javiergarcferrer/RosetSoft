@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseCsv, splitDimensions, parsePriceList, dedupeBySku } from '../src/lib/priceListCsv.js';
+import { parseCsv, splitDimensions, parsePriceList, dedupeBySku, unifySplitNames } from '../src/lib/priceListCsv.js';
 
 const HEADER = 'SKU,Description 1,Description 2,Sales Code,Sales Code Description,Sales Code Divisor,Retail,Cost,Category Code,Category Description,Item Style Code,Item Style Code Description';
 
@@ -137,4 +137,41 @@ test('keeps the row matching the chosen price, so cost/name stay consistent', ()
 test('drops rows without a reference', () => {
   const out = dedupeBySku([mk('', 100), mk('OK', 200)]);
   assert.deepEqual(out.map((p) => p.reference), ['OK']);
+});
+
+/* ------------------------------ unifySplitNames ------------------------------ */
+
+const gr = (reference, name, subtype = 'S/2 BOLSTERS') => ({
+  reference, name, subtype, dimensions: '', family: 'SEATS',
+  familyCode: '1A7', category: 'SEATS', priceUsd: 100, cost: 36,
+});
+
+test('heals a split accessory root to collection + descriptor (PRADO bolster case)', () => {
+  // Root 11370022's 23 grades carry 4 parent names; every row should end up as
+  // the one accessory name so a name search returns the whole model.
+  const out = unifySplitNames([
+    gr('11370022C', 'PRADO SOFA'),
+    gr('11370022D', 'PRADO SQUARE SETTEE'),
+    gr('11370022A', 'PRADO MEDIUM SOFA - D 39¼"'),
+    gr('11370022I', 'PRADO MEDIUM SOFA - D 47¼"'),
+  ]);
+  assert.deepEqual(new Set(out.map((p) => p.name)), new Set(['PRADO S/2 BOLSTERS']));
+});
+
+test('leaves a root whose grade rows already agree on the name untouched', () => {
+  const out = unifySplitNames([gr('11370013A', 'PRADO SOFA', 'COVER'), gr('11370013B', 'PRADO SOFA', 'COVER')]);
+  assert.deepEqual(out.map((p) => p.name), ['PRADO SOFA', 'PRADO SOFA']);
+});
+
+test('never touches ungraded SKUs (no grade letter → each is its own root)', () => {
+  const out = unifySplitNames([gr('11378010', 'PRADO COVER A', 'X'), gr('11378020', 'PRADO COVER B', 'X')]);
+  assert.deepEqual(out.map((p) => p.name), ['PRADO COVER A', 'PRADO COVER B']);
+});
+
+test('falls back to the descriptor alone when names share no collection prefix', () => {
+  const out = unifySplitNames([
+    gr('11440320A', 'EXCLUSIF 2 SOFA', 'S/2 BACK CUSHIONS'),
+    gr('11440320B', 'MARSALA SOFA', 'S/2 BACK CUSHIONS'),
+  ]);
+  assert.deepEqual(new Set(out.map((p) => p.name)), new Set(['S/2 BACK CUSHIONS']));
 });

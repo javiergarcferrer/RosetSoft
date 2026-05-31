@@ -8,7 +8,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatMoney } from '../../lib/format.js';
-import { parsePriceList, dedupeBySku } from '../../lib/priceListCsv.js';
+import { parsePriceList, dedupeBySku, unifySplitNames } from '../../lib/priceListCsv.js';
 import { groupFamilies } from '../../lib/catalog.js';
 
 /**
@@ -83,8 +83,10 @@ export default function Catalog() {
       const text = await file.text();
       // dedupeBySku collapses the list's repeated SKUs (required: a single
       // upsert batch can't touch the same primary key twice) and resolves
-      // stale-price duplicates to the canonical current price.
-      const parsed = dedupeBySku(parsePriceList(text));
+      // stale-price duplicates to the canonical current price. unifySplitNames
+      // then heals accessory SKUs whose grade rows carry different parent-model
+      // names, so each stays one searchable model (e.g. PRADO "S/2 BOLSTERS").
+      const parsed = unifySplitNames(dedupeBySku(parsePriceList(text)));
       if (parsed.length === 0) {
         setError('No se reconocieron productos. ¿Es el CSV de la lista de precios de Roset?');
         return;
