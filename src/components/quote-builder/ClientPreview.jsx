@@ -667,7 +667,7 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 // fabric shows. On pick we hand back the SAME { grade, fabric, swatchImageId }
 // shape the dealer's SwatchPicker produces — the optimistic reducer + the Edge
 // Function reprice from it. `z-[2]` lifts the trigger above any dimming veil.
-function FabricPicker({ id, subtype, reference, gradePrices, picker }) {
+function FabricPicker({ id, subtype, reference, gradePrices, picker, className = 'mt-2.5' }) {
   const [open, setOpen] = useState(false);
   // A CatalogFamily-shaped shim so MaterialColorPicker shows the MODEL price (the
   // margin-baked `gradePrices`) per grade — never the material's own per-yard
@@ -686,7 +686,7 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker }) {
   }, [reference, picker.modelFabrics]);
   const { grade, fabric } = parseSubtype(subtype);
   return (
-    <div className="relative z-[2] mt-2.5">
+    <div className={`relative z-[2] ${className}`}>
       <MaterialPickerButton onClick={() => setOpen(true)} />
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
@@ -926,6 +926,18 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
   // level down. Only on the interactive link (onToggleOptional present).
   const offered = !!onToggleOptional && !!component.optionalOffered;
   const included = !optional;
+  // The full fabric picker + its "apply to all" twin, as a compact vertical icon
+  // stack. It rides to the RIGHT of the standalone swatch when one shows; with a
+  // material-options grid instead, it renders beneath that grid (below).
+  const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference));
+  const showSwatch = !component.materialOptions?.options?.length
+    && !!(component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype)));
+  const pickerStack = gp ? (
+    <div className="flex flex-col items-start gap-1.5">
+      <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} className="" />
+      {canApplyToAll && onApplyToAll && <ApplyMaterialToAllButton onClick={onApplyToAll} />}
+    </div>
+  ) : null;
   return (
     <li className={`py-2 ${
       optional ? 'relative pl-3 border-l-2 border-dashed border-ink-300' : ''
@@ -971,16 +983,17 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             </div>
           )}
           {/* Fabric swatch — suppressed when the material-options grid renders
-              (it already leads with this same material), mirroring the
-              standalone line. */}
-          {!component.materialOptions?.options?.length && (component.swatchImageId || swatchUrl(colorCodeFromSubtype(component.subtype))) && (
-            <div className="mt-2">
+              (it already leads with this same material), mirroring the standalone
+              line. The picker controls sit to the RIGHT of the swatch. */}
+          {showSwatch && (
+            <div className="mt-2 flex items-start gap-3">
               <ImageZoom
                 id={component.swatchImageId}
                 fallbackUrl={swatchUrl(colorCodeFromSubtype(component.subtype))}
                 alt="Muestra de tela"
                 className="relative z-[2] w-16 h-16 object-cover rounded border border-ink-200 bg-white"
               />
+              {pickerStack}
             </div>
           )}
           <MaterialOptionsStrip
@@ -993,22 +1006,9 @@ function CompoundComponentRow({ component, currency, rates, fmt, families, group
             selectedGrade={materialSelections?.[component.id] ?? component.materialOptions?.baseGrade}
             onSelect={onSelectMaterial ? (g) => onSelectMaterial(component.id, g) : undefined}
           />
-          {(() => {
-            const gp = picker && (component.gradePrices || picker.gradePricesFor?.(component.reference));
-            if (!gp) return null;
-            return (
-              <>
-                <FabricPicker id={component.id} subtype={component.subtype} reference={component.reference} gradePrices={gp} picker={picker} />
-                {/* Pick once, apply everywhere — the quiet icon twin of the
-                    picker, stacked right beneath it. Icon-only (the explanation
-                    is on hover) so a multi-piece list stays calm, and shown only
-                    while a sibling still differs, so it self-hides once all match. */}
-                {canApplyToAll && onApplyToAll && (
-                  <ApplyMaterialToAllButton onClick={onApplyToAll} className="mt-1.5" />
-                )}
-              </>
-            );
-          })()}
+          {/* No standalone swatch (a material-options grid showed instead) → the
+              picker controls render here, beneath that grid. */}
+          {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
           {component.description && (
             <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
               {component.description}
