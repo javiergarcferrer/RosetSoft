@@ -39,9 +39,30 @@ export default defineConfig(({ mode }) => {
     },
   };
 
+  // Absolute origin for the link-preview (og:image) tags in index.html.
+  // WhatsApp/Facebook reject a relative og:image, so we bake a full URL at
+  // build time. On Vercel, VERCEL_PROJECT_PRODUCTION_URL is the stable
+  // production host (no scheme); an explicit VITE_PUBLIC_ORIGIN overrides it,
+  // and we fall back to the known production domain so a preview never points
+  // at nothing. Plain string substitution into the %VITE_PUBLIC_ORIGIN%
+  // placeholders — Vite doesn't expand arbitrary %TOKENS% on its own.
+  const publicOrigin =
+    env.VITE_PUBLIC_ORIGIN ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : '') ||
+    'https://www.alcover.do';
+
+  const injectOgOrigin = {
+    name: 'inject-og-origin',
+    transformIndexHtml(html) {
+      return html.split('%VITE_PUBLIC_ORIGIN%').join(publicOrigin);
+    },
+  };
+
   return {
     base,
-    plugins: [react(), emitVersion],
+    plugins: [react(), emitVersion, injectOgOrigin],
     resolve: {
       // The codebase imports with explicit `.js` / `.jsx` extensions
       // (`from '../lib/format.js'`) — an ESM-purist discipline that
