@@ -33,6 +33,20 @@ export function formatMoney(
   }
 }
 
+/**
+ * Format an amount ALREADY expressed in DOP — no rate conversion. The ledger
+ * and financial statements are booked in the fiscal/functional currency (DOP),
+ * unlike `formatMoney`, which converts a USD base by the live rate. Two
+ * decimals (cents), "RD$ 1,234.56".
+ */
+export function formatDop(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `RD$ ${value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function formatDate(ts: number | null | undefined): string {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString(undefined, {

@@ -702,3 +702,93 @@ export interface Totals {
   grandTotal: number;
   taxPct: number;
 }
+
+/* ------------------------------ accounting ------------------------------ */
+
+/**
+ * A chart-of-accounts node's normal balance side. Classes 1/5/6 are
+ * debit-natured, 2/3/4 credit-natured (see `lib/accounting/chart`).
+ */
+export type AccountNature = 'debit' | 'credit';
+
+/**
+ * What business event produced a journal entry. 'manual' is hand-keyed; every
+ * other value is emitted by the module that owns that event, so each operation
+ * books itself (a sale at delivery, a purchase, an expense, a customs import…).
+ */
+export type JournalSource =
+  | 'manual' | 'opening' | 'sale' | 'purchase' | 'expense' | 'payment'
+  | 'import' | 'payroll' | 'depreciation' | 'fx' | 'tax' | 'gateway' | 'adjustment';
+
+/**
+ * One node of the chart of accounts (catálogo de cuentas). `code` is the
+ * business key (`1-01-001-01-00-00`); only LEAF accounts (`isPostable`) take
+ * postings — title accounts only aggregate their children. Seeded from the
+ * advisor's DGII IR-2-aligned plan (migration 20260610120000).
+ */
+export interface Account {
+  code: string;
+  profileId: string;
+  name: string;
+  /** 1 Activos · 2 Pasivos · 3 Patrimonio · 4 Ingresos · 5 Costos · 6 Gastos. */
+  class: number;
+  nature: AccountNature;
+  parentCode?: string | null;
+  /** 1 = class root; deeper = more specific. Drives report indent. */
+  level: number;
+  /** Only leaf accounts receive journal lines. */
+  isPostable: boolean;
+  /** Optional DGII form box mapping (IR-2 / IT-1 …), set with the advisor. */
+  dgiiBox?: string | null;
+  sortOrder?: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * A balanced double-entry asiento (header). The app guarantees Σ debit =
+ * Σ credit across its lines (`lib/accounting/ledger`). Posted entries are never
+ * edited or deleted — they're reversed by a mirror entry (`reversesId` /
+ * `reversedById`), for audit.
+ */
+export interface JournalEntry {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  /** Effective accounting date (JS ms). */
+  postedAt: number;
+  memo?: string;
+  source: JournalSource;
+  /** Link back to the operational row that generated the entry, e.g.
+   *  `('quotes', <id>)` for a sale booked at delivery. */
+  refTable?: string | null;
+  refId?: string | null;
+  reversesId?: string | null;
+  reversedById?: string | null;
+  createdByUserId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * One line of a journal entry: a single account debited OR credited. Amounts
+ * are in DOP (the fiscal/functional currency); `usd` + `rate` keep the original
+ * USD figure for traceability (operations are priced in USD, booked in DOP).
+ * Exactly one of `debit`/`credit` is non-zero on a well-formed line.
+ */
+export interface JournalLine {
+  id: string;
+  profileId: string;
+  entryId: string;
+  accountCode: string;
+  debit: number;
+  credit: number;
+  usd?: number | null;
+  rate?: number | null;
+  memo?: string;
+  thirdPartyType?: string | null;
+  thirdPartyId?: string | null;
+  ncf?: string | null;
+  sortOrder?: number;
+  createdAt?: number;
+}

@@ -12,6 +12,9 @@ import {
   Calculator,
   Layers,
   PackageSearch,
+  BookOpen,
+  Scale,
+  BookText,
   Menu,
   X,
 } from 'lucide-react';
@@ -63,16 +66,27 @@ const adminNavGroup = {
 // rolls cotizaciones aceptadas + comisiones por pagar + Odoo CSV
 // exports into one table-first view. No sub-pages, no /quotes,
 // /orders, /customers, or admin links — they aren't a sales role.
-const accountingNavGroups = [
-  { items: [{ to: '/accounting', label: 'Contabilidad', icon: Calculator, end: true }] },
+// The accounting surfaces, shared by the accounting-only nav and the admin
+// entry below: the original sales/commissions workspace plus the general-ledger
+// pages (libro contable, estados financieros, catálogo de cuentas).
+const accountingItems = [
+  { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
+  { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
+  { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },
+  { to: '/accounting/chart', label: 'Catálogo de cuentas', icon: BookText },
 ];
 
-// Admin's read-only entry into the same accounting workspace — one
-// link spliced into the full sidebar between Administración and
-// Configuración so the admin can see what Contabilidad sees without
-// switching accounts.
-const adminAccountingNavItem = {
-  items: [{ to: '/accounting', label: 'Contabilidad', icon: Calculator, end: true }],
+const accountingNavGroups = [
+  { items: [accountingItems[0]] },
+  { label: 'Contabilidad general', items: accountingItems.slice(1) },
+];
+
+// Admin's read-only entry into the same accounting surfaces — spliced into the
+// full sidebar between Administración and Configuración so the admin can see
+// what Contabilidad sees without switching accounts.
+const adminAccountingNavGroup = {
+  label: 'Contabilidad',
+  items: accountingItems,
 };
 
 export default function Layout() {
@@ -90,7 +104,7 @@ export default function Layout() {
       ? [
           ...baseNavGroups.slice(0, -1),
           adminNavGroup,
-          adminAccountingNavItem,
+          adminAccountingNavGroup,
           baseNavGroups[baseNavGroups.length - 1],
         ]
       : baseNavGroups.slice(0, -1);

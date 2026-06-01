@@ -1,0 +1,164 @@
+import { useMemo, useState } from 'react';
+import { Shield, Scale, TrendingUp } from 'lucide-react';
+import { useLiveQueryStatus } from '../../db/hooks.js';
+import { db } from '../../db/database.js';
+import { useApp } from '../../context/AppContext.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
+import EmptyState from '../../components/EmptyState.jsx';
+import ListLoading from '../../components/ListLoading.jsx';
+import { formatDop } from '../../lib/format.js';
+import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
+import { resolveBalanceSheet, resolveIncomeStatement } from '../../core/accounting/index.js';
+
+/**
+ * Estados financieros — Balance General (Estado de Situación) + Estado de
+ * Resultados, both pure projections of the general ledger (core/accounting).
+ * The Balance folds the period result into equity so it balances before the
+ * closing entry. Self-gates on the accounting/admin role.
+ */
+function TreeRows({ node, depth = 0 }) {
+  if (!node) return null;
+  return (
+    <>
+      <div className="flex items-center justify-between py-1 gap-4" style={{ paddingLeft: `${depth * 16}px` }}>
+        <span className={node.isPostable ? 'text-sm text-ink-700 min-w-0' : 'text-sm font-semibold text-ink-900 min-w-0'}>
+          <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>
+          {node.name}
+        </span>
+        <span className={`text-sm tabular-nums whitespace-nowrap ${node.isPostable ? 'text-ink-600' : 'font-semibold'}`}>
+          {formatDop(node.amount)}
+        </span>
+      </div>
+      {node.children.map((c) => <TreeRows key={c.code} node={c} depth={depth + 1} />)}
+    </>
+  );
+}
+
+function SectionTotal({ label, value, strong }) {
+  return (
+    <div className={`flex items-center justify-between py-2 mt-1 border-t ${strong ? 'border-ink-300' : 'border-ink-100'}`}>
+      <span className={strong ? 'text-sm font-bold' : 'text-sm font-semibold text-ink-700'}>{label}</span>
+      <span className={`tabular-nums whitespace-nowrap ${strong ? 'text-base font-bold' : 'text-sm font-semibold'}`}>
+        {formatDop(value)}
+      </span>
+    </div>
+  );
+}
+
+export default function Statements() {
+  const { profileId, currentProfile } = useApp();
+  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+
+  const [tab, setTab] = useState('balance'); // 'balance' | 'income'
+  const today = useMemo(() => new Date(), []);
+  const [asOf, setAsOf] = useState(() => isoDate(today.getTime()));
+  const [start, setStart] = useState(() => isoDate(new Date(today.getFullYear(), 0, 1).getTime()));
+  const [end, setEnd] = useState(() => isoDate(today.getTime()));
+
+  const accountsQ = useLiveQueryStatus(
+    () => db.accounts.where('profileId').equals(profileId || 'team').toArray(), [profileId], [],
+  );
+  const entriesQ = useLiveQueryStatus(
+    () => db.journalEntries.where('profileId').equals(profileId || 'team').toArray(), [profileId], [],
+  );
+  const linesQ = useLiveQueryStatus(
+    () => db.journalLines.where('profileId').equals(profileId || 'team').toArray(), [profileId], [],
+  );
+  const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded;
+
+  const balance = useMemo(() => resolveBalanceSheet({
+    accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data,
+    asOf: parseISODate(asOf, true),
+  }), [accountsQ.data, entriesQ.data, linesQ.data, asOf]);
+
+  const income = useMemo(() => resolveIncomeStatement({
+    accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data,
+    start: parseISODate(start), end: parseISODate(end, true),
+  }), [accountsQ.data, entriesQ.data, linesQ.data, start, end]);
+
+  if (!allowed) {
+    return (
+      <>
+        <PageHeader title="Estados financieros" subtitle=" " />
+        <EmptyState icon={Shield} title="Acceso restringido"
+          description="Sólo el equipo de Contabilidad puede ver esta página." />
+      </>
+    );
+  }
+
+  const dateInput = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300';
+
+  return (
+    <>
+      <PageHeader title="Estados financieros" subtitle="Proyecciones del libro mayor — valores en RD$" />
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button type="button" onClick={() => setTab('balance')}
+          className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'balance' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          <Scale size={15} /> Balance General
+        </button>
+        <button type="button" onClick={() => setTab('income')}
+          className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'income' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          <TrendingUp size={15} /> Estado de Resultados
+        </button>
+      </div>
+
+      {!loaded ? <ListLoading /> : tab === 'balance' ? (
+        <>
+          <div className="flex items-center gap-2 mb-4 text-sm">
+            <label className="text-ink-500">Al</label>
+            <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={dateInput} />
+            <span className={`ml-auto text-xs px-2 py-1 rounded ${balance.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+              {balance.balanced ? 'Cuadrado' : `Descuadre: ${formatDop(balance.difference)}`}
+            </span>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="card p-4">
+              <h2 className="eyebrow font-semibold text-ink-600 mb-2">Activos</h2>
+              <TreeRows node={balance.assets} />
+              <SectionTotal label="Total activos" value={balance.totalAssets} strong />
+            </div>
+            <div className="card p-4">
+              <h2 className="eyebrow font-semibold text-ink-600 mb-2">Pasivos y patrimonio</h2>
+              <TreeRows node={balance.liabilities} />
+              <SectionTotal label="Total pasivos" value={balance.totalLiabilities} />
+              <div className="mt-3">
+                <TreeRows node={balance.equity} />
+                <div className="flex items-center justify-between py-1 gap-4">
+                  <span className="text-sm text-ink-700">Resultado del ejercicio</span>
+                  <span className="text-sm tabular-nums text-ink-600">{formatDop(balance.netIncome)}</span>
+                </div>
+                <SectionTotal label="Total patrimonio" value={balance.totalEquity} />
+              </div>
+              <SectionTotal label="Total pasivos + patrimonio" value={balance.totalLiabEquity} strong />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-4 text-sm">
+            <label className="text-ink-500">Desde</label>
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={dateInput} />
+            <label className="text-ink-500">Hasta</label>
+            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={dateInput} />
+          </div>
+          <div className="card p-4 max-w-2xl">
+            <h2 className="eyebrow font-semibold text-ink-600 mb-2">Ingresos</h2>
+            <TreeRows node={income.income} />
+            <SectionTotal label="Total ingresos" value={income.totalIncome} />
+
+            <h2 className="eyebrow font-semibold text-ink-600 mb-2 mt-4">Costos</h2>
+            <TreeRows node={income.costs} />
+            <SectionTotal label="Utilidad bruta" value={income.grossProfit} />
+
+            <h2 className="eyebrow font-semibold text-ink-600 mb-2 mt-4">Gastos</h2>
+            <TreeRows node={income.expenses} />
+            <SectionTotal label="Total gastos" value={income.totalExpenses} />
+
+            <SectionTotal label="Utilidad neta del período" value={income.netIncome} strong />
+          </div>
+        </>
+      )}
+    </>
+  );
+}
