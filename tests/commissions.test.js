@@ -14,7 +14,6 @@ import {
   SPECIAL_COMMISSION_PCT,
   clampCommissionPct,
   baseCommissionPct,
-  effectiveCommissionPct,
   commissionAmount,
   grossCommissionAmount,
   commissionBreakdown,
@@ -66,42 +65,6 @@ test('base rate defaults to the floor rate (15%) when orderType is unset', () =>
   assert.equal(baseCommissionPct({}), 15);
   assert.equal(baseCommissionPct(null), 15);
   assert.equal(baseCommissionPct(undefined), 15);
-});
-
-/* ----------------------------- effectiveCommissionPct ------------------ */
-
-test('floor order with no override earns the 15% base rate', () => {
-  assert.equal(effectiveCommissionPct({ orderType: 'floor' }), 15);
-});
-
-test('special order with no override earns the 20% base rate', () => {
-  assert.equal(effectiveCommissionPct({ orderType: 'special' }), 20);
-});
-
-test('a quote with no orderType defaults to the floor rate', () => {
-  assert.equal(effectiveCommissionPct({}), 15);
-});
-
-test('an explicit commissionPct overrides the order-type base rate', () => {
-  assert.equal(effectiveCommissionPct({ orderType: 'special', commissionPct: 12 }), 12);
-});
-
-test('override of 0 is treated as a real override (disable commission)', () => {
-  // Zero out a single deal without changing its type or removing the
-  // professional link — 0 must count as set, not "fall through to base".
-  const quote = { orderType: 'special', commissionPct: 0 };
-  assert.equal(effectiveCommissionPct(quote), 0);
-});
-
-test('empty-string override is treated as unset and falls through to base', () => {
-  // The input field passes "" while empty; we treat that as "no override"
-  // so the order-type base rate applies.
-  assert.equal(effectiveCommissionPct({ orderType: 'special', commissionPct: '' }), 20);
-  assert.equal(effectiveCommissionPct({ orderType: 'floor', commissionPct: null }), 15);
-});
-
-test('out-of-range override is clamped to the 20% cap', () => {
-  assert.equal(effectiveCommissionPct({ commissionPct: 99 }), 20);
 });
 
 /* ----------------------------- commissionAmount ----------------------- */

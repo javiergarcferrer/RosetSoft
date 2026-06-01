@@ -22,7 +22,7 @@ import {
   cycleEnding, isoDate, parseISODate, formatCycle, clampPct,
 } from '../../lib/commissionCycle.js';
 import {
-  effectiveCommissionPct, commissionAmount, commissionBreakdown, decoratorBilling,
+  commissionAmount, commissionBreakdown, decoratorBilling,
   commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
 import { resolveSales } from '../../core/accounting/sales.js';

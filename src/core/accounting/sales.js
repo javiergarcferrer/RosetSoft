@@ -9,7 +9,7 @@
 import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { clampPct } from '../../lib/commissionCycle.js';
 import {
-  effectiveCommissionPct, commissionAmount, decoratorBilling,
+  baseCommissionPct, commissionAmount, decoratorBilling,
   commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
 
@@ -55,7 +55,7 @@ export function resolveSales({ quotes, cycle, customerById, profileById, profess
     // ── Professional (decorator/architect) settlement ─────────────────
     const mode = professional ? decoratorBilling(q) : null;
     const trade = mode === 'trade_discount';
-    const proPct = professional ? effectiveCommissionPct(q) : 0;
+    const proPct = professional ? baseCommissionPct(q) : 0;
     const proAmount = professional ? commissionAmount(t, proPct) : 0;
     // Frozen at payout (commissionPaidAmount) so a later order_type toggle /
     // base-rate change can't restate a paid commission; unpaid stays live.

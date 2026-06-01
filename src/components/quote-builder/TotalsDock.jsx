@@ -7,7 +7,7 @@ import {
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
 import { formatMoney } from '../../lib/format.js';
-import { effectiveCommissionPct, commissionBreakdown, decoratorBilling } from '../../lib/commissions.js';
+import { baseCommissionPct, commissionBreakdown, decoratorBilling } from '../../lib/commissions.js';
 import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 
 /**
@@ -82,7 +82,8 @@ export default function TotalsDock({
   const showMarginMeter = totals.marginAmt !== 0;
 
   // Internal commission readout — only meaningful with a professional assigned.
-  const commissionPct = effectiveCommissionPct(quote);
+  // The rate is the order-type tier (floor 15% / special 20%); no override.
+  const commissionPct = baseCommissionPct(quote);
   // Gross / net both come from the one lib breakdown so this readout and
   // Contabilidad's commission line can't drift from the payout math.
   const { gross: grossCommission, net: netCommission } = commissionBreakdown(totals, commissionPct);

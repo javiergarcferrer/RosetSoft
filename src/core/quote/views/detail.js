@@ -17,7 +17,7 @@ import {
 } from '../../../lib/orderStages.js';
 import { QUOTE_STATUS_ACCEPTED } from '../../../lib/constants.js';
 import {
-  effectiveCommissionPct, commissionAmount, isTradeDiscount, reportedCommission,
+  baseCommissionPct, commissionAmount, isTradeDiscount, reportedCommission,
 } from '../../../lib/commissions.js';
 
 // id → row, the small index every detail page builds to label its quotes.
@@ -198,7 +198,7 @@ export function resolveProfessionalDetail({ pro, quotes, lines, customers }) {
       // components, sections are stripped, and `unitPrice` → `basePrice` is
       // mapped for computeTotals.
       const totals = quoteTotals(q, linesByQuote.get(q.id) || []);
-      const pct = effectiveCommissionPct(q);
+      const pct = baseCommissionPct(q);
       // Same rate, two AR directions. The $ amount is computed off the base
       // imponible (pre-ITBIS, pre-shipping) with any client discount drawn
       // out of it; whether it lands as a commission WE pay or a trade

@@ -4,13 +4,11 @@
  *
  * The rule the dealer wants:
  *
- *   • The sale's TYPE sets the base rate: a floor order ("venta de piso")
- *     pays 15%; a special order pays 20%. The quote carries an explicit
+ *   • The sale's TYPE sets the rate: a floor order ("venta de piso") pays
+ *     15%; a special order pays 20%. The quote carries an explicit
  *     `orderType` toggle ('floor' | 'special'), independent of whether the
- *     quote is attached to an order record.
- *
- *   • A per-quote `commissionPct` can still override the base rate for a
- *     one-off deal (0 is a legitimate "earns nothing" override).
+ *     quote is attached to an order record. That tier IS the rate — there is
+ *     no per-quote override.
  *
  *   • Any DISCOUNT given to the client comes out of the professional's
  *     commission, not the dealer's margin: the client pays less and the
@@ -88,27 +86,6 @@ export function baseCommissionPct(
   quote: Pick<Quote, 'orderType'> | null | undefined,
 ): number {
   return quote?.orderType === 'special' ? SPECIAL_COMMISSION_PCT : FLOOR_COMMISSION_PCT;
-}
-
-/**
- * The effective % the quote earns. Resolution order:
- *
- *   1. An explicit per-quote `commissionPct` (any number, including 0)
- *      overrides — the dealer can fix or zero a single deal's rate without
- *      removing the professional link.
- *
- *   2. Else the base rate for the order type (floor 15% / special 20%).
- *
- * Returns the clamped value so callers never have to worry about a
- * pre-clamp value sneaking through.
- */
-export function effectiveCommissionPct(
-  quote: Pick<Quote, 'commissionPct' | 'orderType'> | null | undefined,
-): number {
-  if (quote?.commissionPct != null && (quote.commissionPct as unknown) !== '') {
-    return clampCommissionPct(quote.commissionPct);
-  }
-  return clampCommissionPct(baseCommissionPct(quote));
 }
 
 /**
