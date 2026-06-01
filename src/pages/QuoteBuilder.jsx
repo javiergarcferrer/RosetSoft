@@ -9,7 +9,7 @@ import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
 } from '../core/quote/index.js';
-import { groupFamilies, productForGrade, splitSkuGrade } from '../lib/catalog.js';
+import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { composeSubtype } from '../lib/subtype.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
@@ -309,22 +309,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // can't span a range. The reference is left as-is (still root-resolvable).
   const editorClearPatch = useCallback((entity) => {
     const root = splitSkuGrade(entity.reference || '').root;
-    const fam = root ? families.get(root) : null;
-    if (!fam || !fam.graded || fam.grades.length < 2) return null;
-    const lo = productForGrade(fam, fam.grades[0]);
-    const hi = productForGrade(fam, fam.grades[fam.grades.length - 1]);
-    if (!lo || !hi || lo.priceUsd == null || hi.priceUsd == null) return null;
-    const min = Number(lo.priceUsd) || 0;
-    const max = Number(hi.priceUsd) || 0;
-    if (!(max > min)) return null;
-    return {
-      subtype: '',
-      swatchImageId: null,
-      unitPrice: min,
-      unitCost: lo.cost == null ? null : Number(lo.cost),
-      priceMin: min,
-      priceMax: max,
-    };
+    return materiallessRangePatch(root ? families.get(root) : null);
   }, [families]);
 
   const pickMaterialInEditor = useCallback((id, sel) => {
@@ -365,16 +350,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       let touched = false;
       const newComps = comps.map((c) => {
         const sel = selById.get(c.id);
+        if (!sel) return c;
+        // An empty grade is a CLEAR (the zone / whole-piece × routes through
+        // onPickMany) → revert to the range; otherwise reprice to the picked
+        // grade. Mirrors pickMaterialInEditor's single-target branch; without the
+        // clear arm a grouped/uniform compound's × was a silent no-op.
         const grade = String(sel?.grade ?? '').trim();
-        if (!sel || !grade) return c;
-        const patch = editorMaterialPatch(c, sel, grade);
+        const patch = grade ? editorMaterialPatch(c, sel, grade) : editorClearPatch(c);
         if (!patch) return c;
         touched = true;
         return { ...c, ...patch };
       });
       if (touched) updateLine(l.id, { components: newComps });
     }
-  }, [lines, editorMaterialPatch, updateLine]);
+  }, [lines, editorMaterialPatch, editorClearPatch, updateLine]);
 
   // -- "Vista cliente" interactive picks: the SAME four the public link wires --
   // The preview pane lets the dealer configure the quote exactly as the client
