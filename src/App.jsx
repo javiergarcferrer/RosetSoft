@@ -24,6 +24,7 @@ import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import StyleStudio from './pages/StyleStudio.jsx';
 import Atelier from './pages/Atelier.jsx';
+import StudioQuote from './pages/StudioQuote.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -245,6 +246,7 @@ export default function App() {
             proposed "Warm Instrument" direction to judge by eye. */}
         <Route path="/style-studio" element={<StyleStudio />} />
         <Route path="/atelier" element={<Atelier />} />
+        <Route path="/studio-quote" element={<StudioQuote />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>
