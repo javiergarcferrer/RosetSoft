@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, FileText, Loader2, Check, Download } from 'lucide-react';
+import { Shield, FileText, Loader2, Check, Download, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -15,6 +15,7 @@ import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
   resolveAccountingConfig, round2,
 } from '../../core/accounting/index.js';
+import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 
 function ymd(ts) {
   const d = new Date(ts);
@@ -85,9 +86,27 @@ export default function Facturacion() {
   const itbis = useMemo(() => resolveItbisLiquidation({ salesPostings: postingsQ.data, expenses: expensesQ.data, ...win }),
     [postingsQ.data, expensesQ.data, win]);
 
-  const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, ncfType }
+  const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, ncfType, rnc, msg }
   const [posting, setPosting] = useState(null);
+  const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
+
+  const setDraft = (id, patch) => setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
+
+  async function lookupFor(quote) {
+    const customer = quote.customerId ? customersById.get(quote.customerId) : null;
+    const cur = drafts[quote.id]?.rnc ?? customer?.rnc ?? '';
+    setLookingId(quote.id);
+    try {
+      const r = await lookupRnc(cur);
+      if (r.found) setDraft(quote.id, { rnc: r.rnc, msg: `✓ ${r.name}` });
+      else setDraft(quote.id, { msg: r.message || 'No encontrado.' });
+    } catch (e) {
+      setDraft(quote.id, { msg: e?.message || 'Error consultando.' });
+    } finally {
+      setLookingId(null);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -109,6 +128,7 @@ export default function Facturacion() {
       const id = newId();
       const postedAt = quote.deliveredAt || Date.now();
       const customer = quote.customerId ? customersById.get(quote.customerId) : null;
+      const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
       const built = buildSaleEntry({
         newId, config, postedAt,
         sale: {
@@ -126,12 +146,16 @@ export default function Facturacion() {
         table: 'salesPostings', profileId: scope, start: 1,
         build: (n) => ({
           id, profileId: scope, number: n, quoteId: quote.id, customerId: quote.customerId,
-          postedAt, ncf: draft.ncf || '', ncfType: draft.ncfType || '', rnc: customer?.rnc || '',
+          postedAt, ncf: draft.ncf || '', ncfType: draft.ncfType || '', rnc,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
           journalEntryId: built.entry.id,
         }),
       });
+      // Persist the RNC back onto the customer so it's reused next time.
+      if (customer && rnc && rnc !== cleanRnc(customer.rnc)) {
+        await db.customers.update(customer.id, { rnc });
+      }
       setDrafts((d) => { const n = { ...d }; delete n[quote.id]; return n; });
     } catch (e) {
       setErr(e?.message || String(e));
@@ -187,13 +211,24 @@ export default function Facturacion() {
                     {book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex gap-1">
+                      <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
+                        onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
+                        className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-36" />
+                      <button type="button" onClick={() => lookupFor(q)}
+                        disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
+                        className="btn-ghost text-sm inline-flex items-center px-2.5 disabled:opacity-40" title="Buscar nombre en el registro DGII">
+                        {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      </button>
+                    </div>
                     <input value={draft.ncf || ''} placeholder="NCF / e-NCF"
-                      onChange={(e) => setDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], ncf: e.target.value } }))}
+                      onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
                       className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-44" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
                       className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
                     </button>
+                    {draft.msg && <span className="text-xs text-ink-500">{draft.msg}</span>}
                   </div>
                 </div>
               );
