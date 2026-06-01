@@ -45,6 +45,10 @@ export {
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
 
+// ── cobros / pagos + cuentas por cobrar / pagar
+export { resolveReceivables, resolvePayables, resolvePartyStatement } from './receivables.js';
+export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,

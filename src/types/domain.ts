@@ -298,6 +298,35 @@ export interface ECFSequence {
   updatedAt?: number;
 }
 
+export type PaymentDirection = 'in' | 'out';
+
+/**
+ * A cobro (in, from a customer) or pago (out, to a supplier). Posts a balanced
+ * asiento (source='payment'). Card collections carry the gateway deductions
+ * (commission + its ITBIS, retained ITBIS/ISR) — the bank gets the net, CxC
+ * clears at the gross. Amounts are DOP.
+ */
+export interface Payment {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  direction: PaymentDirection;
+  partyType: 'customer' | 'supplier';
+  partyId?: string | null;
+  paidAt: number;
+  amount: number;
+  method: PaymentMethod;
+  reference?: string;
+  commission: number;
+  commissionItbis: number;
+  itbisRetained: number;
+  isrRetained: number;
+  notes?: string;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 /**
  * A stock item. `qtyOnHand` + `avgCost` are caches maintained from the kardex
  * movements (the source of truth — see `lib/accounting/inventory`).
