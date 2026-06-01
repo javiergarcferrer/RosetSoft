@@ -175,20 +175,46 @@ export default function Settings() {
         <OrdersCard local={local} set={set} />
 
         {/* Public storefront */}
-        <StoreCard local={local} set={set} customers={customers} />
+        <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
       </div>
     </>
   );
 }
 
 // Public storefront ("Tienda") config: pick the house-account customer whose
-// quotes stock the store, and surface the shareable public link. The customer
-// choice persists with the page's main "Guardar" (it rides `local`).
-function StoreCard({ local, set, customers }) {
+// quotes stock the store, and surface the shareable public link.
+//
+// The customer choice AUTO-SAVES the instant it changes — it does NOT ride the
+// page-level "Guardar". It used to live in the shared `local` form state, which
+// the parent resets from `settings` on every refresh (the realtime settings
+// channel, the rate pull, …), so a pick made before pressing Guardar got wiped
+// and "couldn't be saved". Persisting on change, like the rate card does, fixes
+// that and gives immediate feedback. Self-contained: reads the saved value off
+// `settings`, writes through `saveSettings`.
+function StoreCard({ settings, saveSettings, customers }) {
   const url = storeLinkUrl();
   const [copied, setCopied] = useState(false);
+  const [value, setValue] = useState(settings?.storeCustomerId || '');
+  const [status, setStatus] = useState('idle'); // idle | saving | saved | error
+  // Re-sync to the persisted value when it changes elsewhere / after a save.
+  useEffect(() => { setValue(settings?.storeCustomerId || ''); }, [settings?.storeCustomerId]);
+
   const sorted = [...(customers || [])].sort((a, b) =>
     (a.company || a.name || '').localeCompare(b.company || b.name || ''));
+
+  async function pick(e) {
+    const next = e.target.value || null;
+    setValue(next || '');       // optimistic — the select reflects the choice now
+    setStatus('saving');
+    try {
+      await saveSettings({ storeCustomerId: next });
+      setStatus('saved');
+      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (err) {
+      console.error('store customer save failed', err);
+      setStatus('error');
+    }
+  }
 
   async function copy() {
     try {
@@ -208,11 +234,16 @@ function StoreCard({ local, set, customers }) {
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <div className="label">Cliente de la casa</div>
+          <div className="label inline-flex items-center gap-2">
+            Cliente de la casa
+            {status === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
+            {status === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+            {status === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+          </div>
           <select
             className="input"
-            value={local.storeCustomerId || ''}
-            onChange={(e) => set('storeCustomerId', e.target.value || null)}
+            value={value}
+            onChange={pick}
           >
             <option value="">— Selecciona un cliente —</option>
             {sorted.map((c) => (
@@ -223,7 +254,7 @@ function StoreCard({ local, set, customers }) {
             ))}
           </select>
           <p className="text-[11px] text-ink-500 mt-1.5">
-            Sus cotizaciones (excepto rechazadas y archivadas) surten la tienda.
+            Se guarda automáticamente. Sus cotizaciones (excepto rechazadas y archivadas) surten la tienda.
           </p>
         </div>
         <div>
@@ -243,7 +274,7 @@ function StoreCard({ local, set, customers }) {
             </a>
           </div>
           <p className="text-[11px] text-ink-500 mt-1.5">
-            Recuerda guardar después de elegir el cliente.
+            Compártelo con tus clientes — no requiere iniciar sesión.
           </p>
         </div>
       </div>
