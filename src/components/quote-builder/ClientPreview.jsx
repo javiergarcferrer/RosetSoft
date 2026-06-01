@@ -884,20 +884,25 @@ function rangeable(gradePrices) {
 // rides the materialPick channel with an EMPTY grade; `applyAction` + the
 // quote-share Edge Function both read that as "drop the fabric, restore the
 // range". Only offered when the picker is wired AND the model can span a range.
-function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker }) {
-  const canClear = !!(picker?.onPick && gradePrices && rangeable(gradePrices));
+// Chosen-fabric swatch with a hover × to clear it back to "no material" (a price
+// range). A single piece clears via picker.onPick; pass `onClear` to clear a
+// whole zone at once (the grouped header clears every piece in its run). The
+// swatch size is overridable so the compact group header can shrink it.
+function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker, onClear, swatchClassName = 'w-16 h-16' }) {
+  const canClear = !!(picker && gradePrices && rangeable(gradePrices) && (onClear || picker.onPick));
+  const clear = onClear || (() => picker.onPick(id, { grade: '', fabric: '', swatchImageId: null }));
   return (
-    <span className="group/swatch relative z-[2] inline-flex">
+    <span className="group/swatch relative z-[2] inline-flex flex-shrink-0">
       <ImageZoom
         id={swatchImageId}
         fallbackUrl={swatchUrl(colorCodeFromSubtype(subtype))}
         alt="Muestra de tela"
-        className="w-16 h-16 object-cover rounded border border-ink-200 bg-white"
+        className={`${swatchClassName} object-cover rounded border border-ink-200 bg-white`}
       />
       {canClear && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); picker.onPick(id, { grade: '', fabric: '', swatchImageId: null }); }}
+          onClick={(e) => { e.stopPropagation(); clear(); }}
           title="Quitar la tela — volver a cotizar sin material (rango de precio)"
           aria-label="Quitar la tela seleccionada"
           className="absolute -top-2 -right-2 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm opacity-0 transition-all hover:scale-110 hover:border-red-300 hover:bg-red-50 hover:text-red-600 group-hover/swatch:opacity-100 focus:opacity-100 coarse:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
@@ -913,31 +918,47 @@ function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker }) {
 // pieces that share a fabric, so the swatch isn't stamped on every row below.
 // Serves BOTH the uniform compound (every piece, one header) and a single
 // material run (the frame pieces, or the cushions) when a compound mixes
-// fabrics. On the interactive link the swatch is a FabricPicker that re-dresses
-// EVERY piece in `components` at once (onPickMany) — re-upholstering the whole
-// zone in one gesture; read-only surfaces show a plain swatch. The fabric code
-// "(#…)" is stripped for the client. Mirrors the PDF's UpholsteryHero.
-function UpholsteryHero({ subtype, swatchImageId, components, mf, picker, modelKey }) {
+// fabrics. Because the rows collapse under it, this header CARRIES the per-row
+// edit controls for the whole zone — the clear-× (remove the fabric → range),
+// the FabricPicker (re-dress the zone in a new fabric), and "apply to all"
+// (push this zone's fabric onto every piece in the compound). All run over
+// onPickMany so one action redraws the zone / piece; read-only surfaces (picker
+// is null) show a plain swatch + label. `siblings` is the FULL compound for the
+// apply-to-all reach; `modelKey` filters the picker's fabrics to the parent
+// model. Mirrors the PDF's UpholsteryHero (which is read-only).
+function UpholsteryHero({ subtype, swatchImageId, components, siblings, mf, picker, modelKey }) {
   const label = fabricDisplay(subtype);
   // A pick uses the FIRST bearing piece's model for grade prices and dresses
   // every piece in the zone at once (onPickMany).
   const list = components || [];
+  const all = siblings || list;
   const lead = list.find((c) => {
     const { grade, fabric } = parseSubtype(c.subtype);
     return !!(grade || fabric);
   }) || list[0];
   const gp = picker && lead && (lead.gradePrices || picker.gradePricesFor?.(lead.reference, mf));
   const canPick = !!(picker?.onPickMany && gp && lead);
+  // Clear the WHOLE zone's fabric in one action (every piece in the run → range).
+  const clearZone = picker?.onPickMany
+    ? () => {
+        const map = {};
+        for (const c of list) map[c.id] = { grade: '', fabric: '', swatchImageId: null };
+        picker.onPickMany(map);
+      }
+    : undefined;
+  // "Apply this zone's fabric to the entire piece" — only when a sibling OUTSIDE
+  // the zone still wears a different material (i.e. a mixed compound).
+  const canApplyAll = !!(picker?.onPickMany && lead && canPropagateMaterial(lead, all));
   return (
     <div className="mt-2 mb-1 flex items-start gap-3 rounded-lg border border-ink-100 bg-ink-50/50 p-2.5">
-      <span className="relative z-[2] inline-flex flex-shrink-0">
-        <ImageZoom
-          id={swatchImageId}
-          fallbackUrl={swatchUrl(colorCodeFromSubtype(subtype))}
-          alt="Muestra de tela"
-          className="w-14 h-14 object-cover rounded border border-ink-200 bg-white"
-        />
-      </span>
+      <ClearSwatch
+        subtype={subtype}
+        swatchImageId={swatchImageId}
+        gradePrices={gp}
+        picker={picker}
+        onClear={clearZone}
+        swatchClassName="w-14 h-14"
+      />
       <div className="min-w-0 flex-1">
         <div className="eyebrow-xs tracking-widest text-ink-500">Tapizado</div>
         {label && <div className="text-sm font-medium text-ink-800 mt-0.5">{label}</div>}
@@ -960,6 +981,11 @@ function UpholsteryHero({ subtype, swatchImageId, components, mf, picker, modelK
               } }}
               className=""
             />
+          </div>
+        )}
+        {canApplyAll && (
+          <div className="mt-1.5">
+            <ApplyMaterialToAllButton onClick={() => applyMaterialToSiblings(lead, all, picker)} />
           </div>
         )}
       </div>
@@ -1163,6 +1189,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               subtype={upholstery.subtype}
               swatchImageId={upholstery.swatchImageId}
               components={line.components}
+              siblings={line.components}
               mf={mf}
               picker={picker}
               modelKey={line.id}
@@ -1182,6 +1209,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                       subtype={run.subtype}
                       swatchImageId={run.swatchImageId}
                       components={run.components}
+                      siblings={line.components}
                       mf={mf}
                       picker={picker}
                       modelKey={line.id}
