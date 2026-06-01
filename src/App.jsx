@@ -31,6 +31,7 @@ import AccountingFacturacion from './pages/accounting/Facturacion.jsx';
 import AccountingCompras from './pages/accounting/Compras.jsx';
 import AccountingInventario from './pages/accounting/Inventario.jsx';
 import AccountingImportaciones from './pages/accounting/Importaciones.jsx';
+import AccountingECFSequences from './pages/accounting/ECFSequences.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -234,6 +235,7 @@ function ProtectedApp() {
             <Route path="accounting/compras" element={<AccountingCompras />} />
             <Route path="accounting/inventario" element={<AccountingInventario />} />
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />
+            <Route path="accounting/ecf" element={<AccountingECFSequences />} />
             <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />

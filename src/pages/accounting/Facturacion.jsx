@@ -16,6 +16,8 @@ import {
   resolveAccountingConfig, round2,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
+import { assignNextENcf } from '../../lib/ecfSequence.js';
+import { saleEcfType } from '../../core/accounting/index.js';
 
 function ymd(ts) {
   const d = new Date(ts);
@@ -133,12 +135,19 @@ export default function Facturacion() {
       const postedAt = quote.deliveredAt || Date.now();
       const customer = quote.customerId ? customersById.get(quote.customerId) : null;
       const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
+      // e-CF: 31 (crédito fiscal) when the buyer has a fiscal id, else 32
+      // (consumo). Auto-assign the next e-NCF from the active sequence; if none
+      // is configured, fall back to the manually-typed NCF.
+      const ecfType = saleEcfType(!!rnc);
+      const assigned = await assignNextENcf(scope, ecfType);
+      const ncf = assigned ? assigned.eNcf : (draft.ncf || '');
+      const ecfStatus = assigned ? 'pending' : '';
       const built = buildSaleEntry({
         newId, config, postedAt,
         sale: {
           id, quoteId: quote.id, customerId: quote.customerId,
           base: book.base, itbis: book.itbis, deposit: book.deposit,
-          ncf: draft.ncf || null, memo: `Venta #${quote.number ?? ''}`.trim(),
+          ncf: ncf || null, memo: `Venta #${quote.number ?? ''}`.trim(),
         },
       });
       await assignSequenceNumber({
@@ -150,7 +159,8 @@ export default function Facturacion() {
         table: 'salesPostings', profileId: scope, start: 1,
         build: (n) => ({
           id, profileId: scope, number: n, quoteId: quote.id, customerId: quote.customerId,
-          postedAt, ncf: draft.ncf || '', ncfType: draft.ncfType || '', rnc,
+          postedAt, ncf, ncfType: draft.ncfType || '', rnc,
+          ecfType, ecfStatus,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
           journalEntryId: built.entry.id,
@@ -225,9 +235,9 @@ export default function Facturacion() {
                         {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                       </button>
                     </div>
-                    <input value={draft.ncf || ''} placeholder="NCF / e-NCF"
+                    <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
                       onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
-                      className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-44" />
+                      className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-52" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
                       className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar

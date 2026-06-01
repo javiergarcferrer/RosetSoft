@@ -38,6 +38,13 @@ export {
   buildImportEntry, computeImportTaxes, landedCost, landedUnitCost,
 } from '../../lib/accounting/importLiquidation.js';
 
+// ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
+export {
+  ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType,
+  sequenceState, pickSequence, padSeq,
+} from '../../lib/accounting/ecf.js';
+export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,

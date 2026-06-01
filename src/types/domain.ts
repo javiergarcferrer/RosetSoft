@@ -263,7 +263,31 @@ export interface SalePosting {
   depositApplied: number;
   rate?: number | null;
   usdTotal?: number | null;
+  /* e-CF (comprobante fiscal electrónico) lifecycle. */
+  ecfType?: string;
+  ecfStatus?: string;
+  trackId?: string;
+  securityCode?: string;
   journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * An authorized e-NCF range for one e-CF type (DGII). `nextSeq` advances as
+ * e-NCF are issued; `expiresAt` is the FechaVencimientoSecuencia carried on the
+ * e-CF. See `lib/accounting/ecf`.
+ */
+export interface ECFSequence {
+  id: string;
+  profileId: string;
+  /** '31','32','33','34','41','43','44','45','46','47'. */
+  ecfType: string;
+  seqFrom: number;
+  seqTo: number;
+  nextSeq: number;
+  expiresAt?: number | null;
+  active?: boolean;
   createdAt?: number;
   updatedAt?: number;
 }

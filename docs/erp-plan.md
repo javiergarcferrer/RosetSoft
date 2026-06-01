@@ -39,8 +39,11 @@ Estado: **en implementación.** Fases 1, 2a y 2b construidas y verificadas
 - **✅ Búsqueda de RNC/cédula (DGII)** — Edge Function `rnc-lookup` + autocompletar
   el nombre fiscal en proveedores y en Facturación (607). 3 tests.
 - **⏳ Fase 6 — IR-2 anual** (el Balance General + Estado de Resultados ya están).
-- **⏳ Track eNCF — emisión e-CF directa con la DGII** (requiere el certificado
-  digital del cliente; ver §eNCF).
+- **🟡 Track eNCF — en progreso.** ✅ Secuencias e-NCF (rangos autorizados por
+  tipo, asignación del próximo al facturar, página de gestión) + ✅ constructor
+  del payload e-CF (JSON 1.0 para tipos 31/32, listo para `json2xml`). ⏳ Falta
+  firmar + transmitir a la DGII (Edge Function con la lib `dgii-ecf`), que
+  **requiere el certificado digital .p12 del cliente** (ver §eNCF). 10 tests.
 - **⏳ Costo de venta automático por venta** (hoy la salida de inventario se
   registra manualmente; atar cada venta a sus SKU es un paso deliberado posterior).
 

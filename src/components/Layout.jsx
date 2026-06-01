@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   Boxes,
   Ship,
+  Hash,
   Menu,
   X,
 } from 'lucide-react';
@@ -78,6 +79,7 @@ const adminNavGroup = {
 const accountingItems = [
   { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
   { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
+  { to: '/accounting/ecf', label: 'Secuencias e-NCF', icon: Hash },
   { to: '/accounting/compras', label: 'Compras', icon: ShoppingCart },
   { to: '/accounting/importaciones', label: 'Importaciones', icon: Ship },
   { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
