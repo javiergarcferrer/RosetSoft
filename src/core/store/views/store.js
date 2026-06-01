@@ -169,6 +169,13 @@ function buildProducts({ quotes, lines, orders }) {
       for (const l of g.lines) { const id = lineCoverImageId(l); if (id) { imageId = id; break; } }
     }
 
+    // Fabric swatch chip for the card — the line's chosen swatch, falling back
+    // to any sibling line in the group that carries one.
+    let swatchImageId = rep.swatchImageId || null;
+    if (!swatchImageId) {
+      for (const l of g.lines) { if (l.swatchImageId) { swatchImageId = l.swatchImageId; break; } }
+    }
+
     const family = (rep.family || '').trim();
     if (family) families.add(family);
 
@@ -180,6 +187,7 @@ function buildProducts({ quotes, lines, orders }) {
       subtype: (rep.subtype || '').trim(),
       reference: (rep.reference || '').trim(),
       imageId,
+      swatchImageId,
       price: articlePriceUsd(rep),
       availability: {
         bucket,

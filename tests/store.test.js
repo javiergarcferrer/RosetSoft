@@ -29,7 +29,7 @@ function fixture() {
   ];
   const lines = [
     // SOFA-1 quoted on BOTH o1 (in_transit) and o2 (received) → one deduped card.
-    { id: 'l1', quoteId: 'q1', kind: 'item', reference: 'SOFA-1', name: 'Prado', family: 'Prado', unitPrice: 1000, qty: 2, imageId: 'img1' },
+    { id: 'l1', quoteId: 'q1', kind: 'item', reference: 'SOFA-1', name: 'Prado', family: 'Prado', unitPrice: 1000, qty: 2, imageId: 'img1', swatchImageId: 'sw1' },
     { id: 'l2', quoteId: 'q2', kind: 'item', reference: 'SOFA-1', name: 'Prado', family: 'Prado', unitPrice: 1000, qty: 3 },
     // Excluded: a section divider and a parked optional add-on.
     { id: 'l3', quoteId: 'q1', kind: 'section', name: 'Sala' },
@@ -70,8 +70,10 @@ test('the same article on two quotes dedupes into one card with the best availab
   // o2 (received) outranks o1 (in_transit) → reads as in-stock.
   assert.equal(sofa.availability.bucket, 'available');
   assert.equal(sofa.availability.label, 'Recibido');
-  // Representative line (o2) had no photo → falls back to o1's imageId.
+  // Representative line (o2) had neither photo nor swatch → both fall back to
+  // o1's, which carries them.
   assert.equal(sofa.imageId, 'img1');
+  assert.equal(sofa.swatchImageId, 'sw1');
 });
 
 test('an in-transit order reads as "En camino"; price is a compound point value', () => {

@@ -37,7 +37,6 @@ export default function PublicStore() {
   }, []);
 
   const bundle = state.bundle;
-  const rates = bundle?.rates || { USD: 1, DOP: 60 };
 
   const { items, resultCount, tabs, filterDefs, sortOptions } = useMemo(
     () => resolveStore({
@@ -139,7 +138,7 @@ export default function PublicStore() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {items.map((c) => <ProductCard key={c.key} c={c} rates={rates} />)}
+                {items.map((c) => <ProductCard key={c.key} c={c} />)}
               </div>
             )}
           </>
@@ -149,14 +148,14 @@ export default function PublicStore() {
   );
 }
 
-// Format a store price (point value or min–max range) in DOP.
-function priceLabel(price, rates) {
+// Format a store price (point value or min–max range) in USD.
+function priceLabel(price) {
   if (!price) return '—';
-  if (price.value != null) return formatMoney(price.value, 'DOP', rates);
-  return `${formatMoney(price.min, 'DOP', rates)} – ${formatMoney(price.max, 'DOP', rates)}`;
+  if (price.value != null) return formatMoney(price.value, 'USD');
+  return `${formatMoney(price.min, 'USD')} – ${formatMoney(price.max, 'USD')}`;
 }
 
-function ProductCard({ c, rates }) {
+function ProductCard({ c }) {
   const meta = [c.family, c.subtype].filter(Boolean).join(' · ');
   return (
     <div className="card overflow-hidden flex flex-col bg-white">
@@ -170,11 +169,25 @@ function ProductCard({ c, rates }) {
         <div className="absolute top-2 left-2">
           <StatusPill cls={c.availability.pillCls} label={c.availability.label} />
         </div>
+        {/* Fabric swatch chip — the material this piece is shown in. */}
+        {c.swatchImageId && (
+          <div
+            className="absolute bottom-2 right-2 h-9 w-9 overflow-hidden rounded-md border-2 border-white bg-white shadow-md"
+            title="Tela"
+          >
+            <ImageView
+              id={c.swatchImageId}
+              alt=""
+              className="h-full w-full object-cover"
+              placeholderClassName="h-full w-full"
+            />
+          </div>
+        )}
       </div>
       <div className="p-3 flex flex-col gap-1 flex-1">
         <div className="text-sm font-semibold leading-tight line-clamp-2" title={c.name}>{c.name}</div>
         {meta && <div className="text-xs text-ink-500 truncate" title={meta}>{meta}</div>}
-        <div className="mt-auto pt-1 text-sm font-medium text-ink-900">{priceLabel(c.price, rates)}</div>
+        <div className="mt-auto pt-1 text-sm font-medium text-ink-900">{priceLabel(c.price)}</div>
       </div>
     </div>
   );
