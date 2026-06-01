@@ -15,7 +15,7 @@ import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
-import Store from './pages/Store.jsx';
+import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
@@ -198,7 +198,6 @@ function ProtectedApp() {
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />
-            <Route path="store" element={<Store />} />
             {/* Legacy redirects */}
             <Route path="containers" element={<Navigate to="/orders" replace />} />
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
@@ -243,6 +242,10 @@ export default function App() {
             bare `/q/:token` form (older links) still resolves. */}
         <Route path="/q/:token" element={<PublicQuoteView />} />
         <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
+        {/* Public, logged-out storefront ("Tienda"). Like the quote link it
+            lives OUTSIDE RequireAuth so a customer never hits the login wall;
+            the `store` Edge Function serves a public-safe, margin-free catalog. */}
+        <Route path="/tienda" element={<PublicStore />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>

@@ -59,3 +59,11 @@ verify_jwt = false
 # would be rejected before the function runs.
 [functions.lr-catalog]
 verify_jwt = false
+
+# store backs the public, no-login storefront ("Tienda"). Used logged-out, so
+# the gateway must not require a JWT; it runs with the service role and returns
+# only public-safe catalog data (product names, photos, retail prices) for the
+# house-account quotes the dealer designates in Settings. Margin is baked into
+# the prices; no cost/margin leaves the server.
+[functions.store]
+verify_jwt = false

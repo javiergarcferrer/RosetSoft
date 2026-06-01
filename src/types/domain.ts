@@ -154,6 +154,14 @@ export interface Settings {
   adminEmails?: string[];
   /** Minimum USD value before an order's first container can dispatch. */
   dispatchThreshold?: number;
+  /**
+   * The "house account" customer whose quotes stock the public storefront
+   * (`/#/tienda`). Alcover quotes itself for store inventory; those quotes'
+   * line items become the store's products. Chosen once in Settings; null ⇒ the
+   * storefront is unconfigured and shows nothing. FK → customers (set null on
+   * delete). See `supabase/functions/store` + `core/store`.
+   */
+  storeCustomerId?: string | null;
 }
 
 export interface Customer {

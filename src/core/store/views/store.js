@@ -1,38 +1,28 @@
-// ViewModel for the Tienda (showroom / ecommerce browse) page — src/pages/Store.jsx.
+// ViewModel for the public storefront ("Tienda") — src/pages/PublicStore.jsx.
 //
-// MVVM: the Store page is ONE browsable surface with a two-way segment
-// (Mercancía / Materiales) plus the shared list header (search / tab / filter /
-// sort). It owns that interactive state in React and renders THIS projection —
-// it derives nothing itself. `resolveStore` is pure: hand it the raw rows plus
-// the resolved UI state and it returns the card list for the active segment, the
-// facet chrome (segment counts, status/category tabs, filter options, sort
-// options) and the per-card lookups the view reads straight through.
+// MVVM: the storefront is ONE browsable grid with the shared list header
+// (search / status tabs / family filter / sort). The page owns that interactive
+// state and renders THIS projection — it derives nothing itself. `resolveStore`
+// is pure: hand it the rows the public `store` Edge Function served plus the
+// resolved UI state, and it returns the product cards, the facet chrome (tabs /
+// filter options / sort options) and the result count.
 //
-// Two product sources, deliberately the two entities that actually carry BOTH an
-// image and a price in this app (the imported price-list `products` table has
-// neither — it's bare SKUs):
+// Products come from the line items of the quotes it's given — for the live
+// storefront those are the quotes of the dealer's "house account" (Alcover
+// quoting itself for store stock), pre-filtered server-side; the VM just
+// projects whatever quotes it receives. The same article quoted across several
+// of those quotes is deduped into one card, and its availability is read from
+// the attached order's stage (received → Disponible, in transit/customs → En
+// camino, everything earlier or no order → Bajo pedido / Pedido).
 //
-//   • Mercancía — the priced line items of quotes ATTACHED TO AN ORDER (an
-//     "Alcover order uploaded to the module"): a real product photo, a USD price,
-//     and — through the order's containers — a live shipment to track. Deduped by
-//     article so the same sofa quoted across several orders shows once, with its
-//     quantity, order count and best availability aggregated. Availability folds
-//     the six order stages into three sellable buckets (Disponible / En camino /
-//     Pedido) so "incoming merchandise" is a first-class filter.
-//
-//   • Materiales — the fabric / leather / outdoor catalog: a swatch, a per-yard
-//     (or per-m²) price, grade and wear rating. The "available material search".
-//
-// Money is returned in USD (a point value or a min–max range); the view formats
-// it to DOP through formatMoney + the live rate, exactly like every other
-// surface — the VM stays a plain-data projection independent of the exchange
-// rate. Live container ETAs come from the hl-track edge function via the
-// useContainerTracking hook in the view; here we only attach each card's
-// trackable containers so the view can render <ShipmentTracking> for it.
+// Money is returned in USD (a point value or a min–max range); the page formats
+// it to DOP through formatMoney + the rate the Edge Function supplies. The
+// server bakes margin into the prices and never sends cost/margin, so the VM is
+// a plain projection that can't leak markup.
 //
 // Pure: no React, no db, no I/O. Reuses the pricing primitives (never
-// re-implements them), the order-stage model and resolveTrackableContainers so
-// the figures and the shipment list can't drift from the rest of the app.
+// re-implements them), the order-stage model and the status-pill map so the
+// figures and badges agree with the rest of the app.
 import { isPricedLine } from '../../../lib/constants.js';
 import {
   isCompoundLine, lineBasePrice, compoundSubtotal, compoundSubtotalRange,
@@ -40,28 +30,20 @@ import {
 } from '../../../lib/pricing.js';
 import { currentOrderStage, orderStageIndex } from '../../../lib/orderStages.js';
 import { orderStatusPill } from '../../../lib/statusPill.js';
-// Import the pure predicate straight from its module, NOT the core/tracking
-// barrel — the barrel also re-exports the useContainerTracking hook, which would
-// drag React + db into this otherwise-pure, node-testable ViewModel.
-import { resolveTrackableContainers } from '../../tracking/containers.js';
-
-/* --------------------------------- segments --------------------------------- */
-
-export const STORE_VIEW_MERCHANDISE = 'merchandise';
-export const STORE_VIEW_MATERIALS = 'materials';
 
 /* ------------------------------- availability ------------------------------- */
 
-// The three availability buckets the merchandise tabs collapse the six order
-// stages into. `weight` orders them for the default sort — in-stock first, since
-// it's the most sellable. Higher order-stage index maps monotonically to a
-// better-or-equal bucket (received → available, customs/transit → incoming,
-// everything earlier → on_order), so a product's BEST stage gives its bucket.
+// The three availability buckets the six order stages collapse into. `weight`
+// orders them for the default sort — in-stock first, the most sellable.
 const AVAILABILITY = {
   available: { key: 'available', label: 'Disponible', weight: 0 },
   incoming: { key: 'incoming', label: 'En camino', weight: 1 },
   on_order: { key: 'on_order', label: 'Pedido', weight: 2 },
 };
+
+// Stage key by its stepper index (0..5), the inverse of orderStageIndex, so a
+// group's max stage index resolves back to a stage key for its pill + bucket.
+const STAGE_BY_INDEX = ['draft', 'placed', 'confirmed', 'in_transit', 'in_customs', 'received'];
 
 function bucketForStage(stage) {
   if (stage === 'received') return 'available';
@@ -69,9 +51,8 @@ function bucketForStage(stage) {
   return 'on_order'; // draft / placed / confirmed
 }
 
-// Latest known logistics timestamp on an order — used as a coarse "incoming
-// since / arrived on" hint for sorting + the card caption. The precise live ETA
-// comes from container tracking in the view, not from here.
+// Latest known logistics timestamp on an order — a coarse "moved on" hint used
+// only as a sort tiebreak within an availability bucket.
 function orderLogisticsAt(order) {
   return Math.max(
     0,
@@ -85,9 +66,9 @@ function orderLogisticsAt(order) {
 
 /* ----------------------------------- price ---------------------------------- */
 
-// Per-article USD price for a merchandise card: a point value, or a min–max
-// range for a material-less line/compound quoted across a grade span. Reuses the
-// pricing primitives so it can never disagree with the quote totals.
+// Per-article USD price for a card: a point value, or a min–max range for a
+// material-less line/compound quoted across a grade span. Reuses the pricing
+// primitives so it can't disagree with the quote totals.
 function articlePriceUsd(line) {
   if (isCompoundLine(line)) {
     if (lineHasRange(line)) {
@@ -112,8 +93,8 @@ function priceSortValue(price) {
 
 /* -------------------------------- identity ---------------------------------- */
 
-// Group key that folds the same article quoted on different orders into one card:
-// the catalog reference when present, else a normalized family|name|subtype.
+// Group key that folds the same article quoted on different quotes into one
+// card: the catalog reference when present, else a normalized family|name|subtype.
 function productKey(line) {
   const ref = (line.reference || '').trim().toUpperCase();
   if (ref) return `ref:${ref}`;
@@ -133,88 +114,66 @@ function norm(s) {
   return (s == null ? '' : String(s)).toLowerCase();
 }
 
-/* ------------------------------- merchandise -------------------------------- */
+/* -------------------------------- products ---------------------------------- */
 
-// Build the deduped merchandise cards (pre-search) from the order-attached quote
+// Build the deduped product cards (pre-search) from the given quotes' priced
 // lines, plus the distinct family list for the filter dropdown.
-function buildMerchandise({ quotes, lines, orders, containers }) {
+function buildProducts({ quotes, lines, orders }) {
   const orderById = new Map();
   for (const o of orders || []) orderById.set(o.id, o);
 
-  // quoteId → its order (only quotes attached to a live, non-cancelled order
-  // count as "uploaded merchandise"; a declined/archived quote never does).
+  // quoteId → its order (if any). Only lines belonging to the GIVEN quotes
+  // count, so a stray line can never leak into the storefront.
   const orderByQuoteId = new Map();
+  const quoteIds = new Set();
   for (const q of quotes || []) {
-    if (!q.orderId) continue;
-    if (q.status === 'declined' || q.status === 'archived') continue;
-    const order = orderById.get(q.orderId);
-    if (!order || currentOrderStage(order) === 'cancelled') continue;
-    orderByQuoteId.set(q.id, order);
-  }
-
-  // orderId → its trackable (valid ISO 6346) containers, computed once.
-  const trackableByOrderId = new Map();
-  for (const c of resolveTrackableContainers(containers || [])) {
-    if (!c.orderId) continue;
-    if (!trackableByOrderId.has(c.orderId)) trackableByOrderId.set(c.orderId, []);
-    trackableByOrderId.get(c.orderId).push(c);
+    quoteIds.add(q.id);
+    if (q.orderId && orderById.has(q.orderId)) orderByQuoteId.set(q.id, orderById.get(q.orderId));
   }
 
   const groups = new Map();
   for (const line of lines || []) {
+    if (!quoteIds.has(line.quoteId)) continue;
     if (!isPricedLine(line)) continue; // drops sections, parked optionals, unpicked alts
-    const order = orderByQuoteId.get(line.quoteId);
-    if (!order) continue;
 
     const key = productKey(line);
     let g = groups.get(key);
-    if (!g) {
-      g = { key, lines: [], orderIds: new Set(), qty: 0, bestIdx: -2, rep: line, repIdx: -2 };
-      groups.set(key, g);
-    }
+    if (!g) { g = { key, lines: [], bestIdx: -1, rep: line, repIdx: -1, lastMovedAt: null }; groups.set(key, g); }
     g.lines.push(line);
-    g.orderIds.add(order.id);
-    g.qty += isCompoundLine(line) ? 1 : (Number(line.qty) || 0);
 
-    const stageIdx = orderStageIndex(currentOrderStage(order));
-    // The representative line (drives photo / name / price) is the one from the
-    // most-advanced order, so the card reads as "where this article is now".
+    const order = orderByQuoteId.get(line.quoteId) || null;
+    const stageIdx = order ? orderStageIndex(currentOrderStage(order)) : -1;
+    // The representative line (photo / name / price) is the one whose order is
+    // furthest along, so the card reads as "where this article is now".
     if (stageIdx > g.repIdx) { g.rep = line; g.repIdx = stageIdx; }
     if (stageIdx > g.bestIdx) g.bestIdx = stageIdx;
+    if (order) {
+      const at = orderLogisticsAt(order);
+      if (at && (!g.lastMovedAt || at > g.lastMovedAt)) g.lastMovedAt = at;
+    }
   }
 
   const families = new Set();
   const cards = [];
   for (const g of groups.values()) {
     const rep = g.rep;
-    // The card's status = the most-advanced order across the whole group
-    // (bestIdx), mapped back to a stage key for its bucket + pill.
-    const stageKey = STAGE_BY_INDEX[g.bestIdx] || 'draft';
-    const bucket = bucketForStage(stageKey);
-    const pill = orderStatusPill(stageKey);
+    const hasOrder = g.bestIdx >= 0;
+    const stageKey = hasOrder ? (STAGE_BY_INDEX[g.bestIdx] || 'draft') : null;
+    const bucket = hasOrder ? bucketForStage(stageKey) : 'on_order';
+    // An order-backed card borrows the precise stage pill (Recibido / En ruta /
+    // …); an order-less one reads as made-to-order with a neutral pill.
+    const pill = hasOrder ? orderStatusPill(stageKey) : { cls: 'status-pill-draft', label: 'Bajo pedido' };
 
-    // Cover photo: prefer the representative line, else any line in the group.
     let imageId = lineCoverImageId(rep);
     if (!imageId) {
       for (const l of g.lines) { const id = lineCoverImageId(l); if (id) { imageId = id; break; } }
-    }
-
-    // Union the trackable containers across every order this article sits on,
-    // and note its most recent logistics movement (a sort tiebreak — the precise
-    // live ETA comes from container tracking in the view, not from here).
-    const trackable = [];
-    let lastMovedAt = null;
-    for (const oid of g.orderIds) {
-      for (const c of trackableByOrderId.get(oid) || []) trackable.push(c);
-      const at = orderLogisticsAt(orderById.get(oid) || {});
-      if (at && (!lastMovedAt || at > lastMovedAt)) lastMovedAt = at;
     }
 
     const family = (rep.family || '').trim();
     if (family) families.add(family);
 
     cards.push({
-      kind: 'merchandise',
+      kind: 'product',
       key: g.key,
       name: (rep.name || rep.family || rep.reference || 'Artículo').trim(),
       family,
@@ -222,8 +181,6 @@ function buildMerchandise({ quotes, lines, orders, containers }) {
       reference: (rep.reference || '').trim(),
       imageId,
       price: articlePriceUsd(rep),
-      qty: g.qty,
-      orderCount: g.orderIds.size,
       availability: {
         bucket,
         stage: stageKey,
@@ -231,22 +188,16 @@ function buildMerchandise({ quotes, lines, orders, containers }) {
         pillCls: pill.cls,
         weight: AVAILABILITY[bucket].weight,
       },
-      lastMovedAt,
-      trackable,
-      orderIds: [...g.orderIds],
+      lastMovedAt: g.lastMovedAt,
     });
   }
 
   return { cards, families: [...families].sort((a, b) => a.localeCompare(b)) };
 }
 
-// Stage key by its stepper index (0..5) — the inverse of orderStageIndex, so a
-// group's max stage index resolves back to a stage key for its pill + bucket.
-const STAGE_BY_INDEX = ['draft', 'placed', 'confirmed', 'in_transit', 'in_customs', 'received'];
-
-// Apply the live search / tab / filter / sort over the merchandise cards and
-// return the page-ready chrome alongside the result list.
-function applyMerchandise(cards, families, { q, tab, filters, sort }) {
+// Apply the live search / tab / filter / sort over the product cards and return
+// the page-ready chrome alongside the result list.
+function applyProducts(cards, families, { q, tab, filters, sort }) {
   const counts = { all: cards.length, available: 0, incoming: 0, on_order: 0 };
   for (const c of cards) counts[c.availability.bucket] += 1;
   const tabs = [
@@ -266,7 +217,6 @@ function applyMerchandise(cards, families, { q, tab, filters, sort }) {
     { key: 'availability', label: 'Disponibilidad' },
     { key: 'price', label: 'Precio' },
     { key: 'name', label: 'Nombre' },
-    { key: 'qty', label: 'Cantidad' },
   ];
 
   const needle = norm(q).trim();
@@ -288,7 +238,6 @@ function applyMerchandise(cards, families, { q, tab, filters, sort }) {
   const items = [...matched].sort((a, b) => {
     if (key === 'price') return (priceSortValue(a.price) - priceSortValue(b.price)) * mul;
     if (key === 'name') return a.name.localeCompare(b.name) * mul;
-    if (key === 'qty') return (a.qty - b.qty) * mul;
     // availability: bucket weight, then most-recently-moved, then name.
     if (a.availability.weight !== b.availability.weight) {
       return (a.availability.weight - b.availability.weight) * mul;
@@ -302,143 +251,33 @@ function applyMerchandise(cards, families, { q, tab, filters, sort }) {
   return { items, tabs, filterDefs, sortOptions, resultCount: items.length };
 }
 
-/* -------------------------------- materials --------------------------------- */
-
-const MATERIAL_CATEGORY_LABEL = { fabric: 'Telas', leather: 'Pieles', outdoor: 'Exterior' };
-
-function materialHeroImageId(material) {
-  const colors = Array.isArray(material.colors) ? material.colors : [];
-  const withImage = colors.find((c) => c && c.imageId);
-  return withImage ? withImage.imageId : null;
-}
-
-// Build the material cards (pre-search). "Available" excludes discontinued
-// materials by default — the dealer is searching what they can actually offer.
-function buildMaterials({ materials }) {
-  const grades = new Set();
-  const cards = [];
-  for (const m of materials || []) {
-    if (m.discontinuedAt) continue;
-    const colors = Array.isArray(m.colors) ? m.colors : [];
-    const grade = (m.grade || '').trim();
-    if (grade) grades.add(grade);
-    cards.push({
-      kind: 'material',
-      id: m.id,
-      name: (m.name || '').trim() || 'Material',
-      category: m.category,
-      categoryLabel: MATERIAL_CATEGORY_LABEL[m.category] || m.category || '',
-      grade,
-      wearRating: (m.wearRating || '').trim(),
-      composition: (m.composition || '').trim(),
-      colorCount: colors.length,
-      // Pre-lowercased "name code name code …" blob so a search like "4479" or
-      // "antracita" lands the material that offers that color.
-      colorText: colors.map((c) => `${c?.name || ''} ${c?.code || ''}`).join(' ').toLowerCase(),
-      imageId: materialHeroImageId(m),
-      heroColorCode: colors[0]?.code || null,
-      price: m.price != null ? { value: Number(m.price) || 0, unit: m.priceUnit || null } : null,
-    });
-  }
-  return {
-    cards,
-    grades: [...grades].sort((a, b) => a.localeCompare(b)),
-  };
-}
-
-function applyMaterials(cards, grades, { q, tab, filters, sort }) {
-  const counts = { all: cards.length, fabric: 0, leather: 0, outdoor: 0 };
-  for (const c of cards) if (counts[c.category] != null) counts[c.category] += 1;
-  const tabs = [
-    { key: 'all', label: 'Todos', count: counts.all },
-    { key: 'fabric', label: 'Telas', count: counts.fabric },
-    { key: 'leather', label: 'Pieles', count: counts.leather },
-    { key: 'outdoor', label: 'Exterior', count: counts.outdoor },
-  ];
-  const filterDefs = [{
-    key: 'grade',
-    label: 'Grado',
-    type: 'select',
-    placeholder: 'Todos',
-    options: grades.map((g) => ({ value: g, label: g })),
-  }];
-  const sortOptions = [
-    { key: 'name', label: 'Nombre' },
-    { key: 'price', label: 'Precio' },
-    { key: 'grade', label: 'Grado' },
-    { key: 'colors', label: 'Colores' },
-  ];
-
-  const needle = norm(q).trim();
-  const grade = filters?.grade || null;
-  const matched = cards.filter((c) => {
-    if (tab && tab !== 'all' && c.category !== tab) return false;
-    if (grade && c.grade !== grade) return false;
-    if (!needle) return true;
-    // Match by material name / grade / composition, OR by any color it offers
-    // (name or LR code) — "available material search" reaches the swatch level.
-    return (
-      norm(c.name).includes(needle) ||
-      norm(c.grade).includes(needle) ||
-      norm(c.composition).includes(needle) ||
-      c.colorText.includes(needle)
-    );
-  });
-
-  const mul = sort?.dir === 'asc' ? 1 : -1;
-  const key = sort?.key || 'name';
-  const items = [...matched].sort((a, b) => {
-    if (key === 'price') return ((a.price?.value ?? 0) - (b.price?.value ?? 0)) * mul;
-    if (key === 'grade') return (a.grade || '').localeCompare(b.grade || '') * mul;
-    if (key === 'colors') return (a.colorCount - b.colorCount) * mul;
-    return a.name.localeCompare(b.name) * mul;
-  });
-
-  return { items, tabs, filterDefs, sortOptions, resultCount: items.length };
-}
-
 /* -------------------------------- top level --------------------------------- */
 
 /**
- * Project the store rows + the resolved UI state into exactly what the Tienda
- * page renders for the active segment.
+ * Project the storefront rows + the resolved UI state into exactly what the
+ * Tienda page renders.
  *
  * @param {object}   p
- * @param {object[]} p.quotes       team quotes (need id, orderId, status)
- * @param {object[]} p.lines        every quote line (sourced via quoteId)
- * @param {object[]} p.orders       team orders (stage + stage timestamps)
- * @param {object[]} p.containers   team containers (code → ISO 6346 tracking)
- * @param {object[]} p.materials    team materials (catalog)
- * @param {'merchandise'|'materials'} p.view   active segment
- * @param {string}   p.q            search needle
- * @param {string}   p.tab          active primary tab (availability or category)
- * @param {object}   p.filters      active secondary filters ({ family } | { grade })
- * @param {{key,dir}} p.sort        sort state
+ * @param {object[]} p.quotes   the quotes whose line items stock the store
+ *                              (house-account quotes; need id + orderId)
+ * @param {object[]} p.lines    those quotes' line items (margin baked server-side)
+ * @param {object[]} p.orders   the attached orders (stage + stage timestamps),
+ *                              for availability
+ * @param {string}   p.q        search needle
+ * @param {string}   p.tab      active availability tab ('all'|'available'|'incoming'|'on_order')
+ * @param {object}   p.filters  active secondary filters ({ family })
+ * @param {{key,dir}} p.sort    sort state
  * @returns {{
- *   view: string,
- *   items: object[],          // cards for the active segment, filtered + sorted
+ *   items: object[],        // product cards, filtered + sorted
  *   resultCount: number,
- *   tabs: object[],           // primary dimension for ListSearchHeader
- *   filterDefs: object[],     // secondary filters for ListSearchHeader
- *   sortOptions: object[],    // sort menu for ListSearchHeader
- *   segments: object[],       // [{key,label,count}] for the Mercancía/Materiales toggle
+ *   tabs: object[],         // availability dimension for ListSearchHeader
+ *   filterDefs: object[],   // secondary filters for ListSearchHeader
+ *   sortOptions: object[],  // sort menu for ListSearchHeader
  * }}
  */
 export function resolveStore({
-  quotes, lines, orders, containers, materials,
-  view = STORE_VIEW_MERCHANDISE, q = '', tab = 'all', filters = {}, sort,
+  quotes, lines, orders, q = '', tab = 'all', filters = {}, sort,
 }) {
-  const merch = buildMerchandise({ quotes, lines, orders, containers });
-  const mats = buildMaterials({ materials });
-
-  const segments = [
-    { key: STORE_VIEW_MERCHANDISE, label: 'Mercancía', count: merch.cards.length },
-    { key: STORE_VIEW_MATERIALS, label: 'Materiales', count: mats.cards.length },
-  ];
-
-  const active = view === STORE_VIEW_MATERIALS
-    ? applyMaterials(mats.cards, mats.grades, { q, tab, filters, sort })
-    : applyMerchandise(merch.cards, merch.families, { q, tab, filters, sort });
-
-  return { view, segments, ...active };
+  const { cards, families } = buildProducts({ quotes, lines, orders });
+  return applyProducts(cards, families, { q, tab, filters, sort });
 }

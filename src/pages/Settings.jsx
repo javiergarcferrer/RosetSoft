@@ -10,10 +10,16 @@ import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
+import { useLiveQuery } from '../db/hooks.js';
+import { storeLinkUrl } from '../lib/storefront.js';
 import { useExchangeRatePull } from '../lib/useExchangeRatePull.js';
 
 export default function Settings() {
   const { profileId, settings, saveSettings, isAdmin } = useApp();
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
   const [local, setLocal] = useState(settings || {});
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [saveError, setSaveError] = useState(null);
@@ -167,8 +173,81 @@ export default function Settings() {
 
         {/* Orders */}
         <OrdersCard local={local} set={set} />
+
+        {/* Public storefront */}
+        <StoreCard local={local} set={set} customers={customers} />
       </div>
     </>
+  );
+}
+
+// Public storefront ("Tienda") config: pick the house-account customer whose
+// quotes stock the store, and surface the shareable public link. The customer
+// choice persists with the page's main "Guardar" (it rides `local`).
+function StoreCard({ local, set, customers }) {
+  const url = storeLinkUrl();
+  const [copied, setCopied] = useState(false);
+  const sorted = [...(customers || [])].sort((a, b) =>
+    (a.company || a.name || '').localeCompare(b.company || b.name || ''));
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked — the field is selectable as a fallback */ }
+  }
+
+  return (
+    <div className="card card-pad">
+      <h2 className="font-semibold mb-1">Tienda pública</h2>
+      <p className="text-xs text-ink-500 mb-4">
+        La tienda muestra los productos de las cotizaciones cuyo cliente sea la
+        cuenta de la casa (Alcover). Elige ese cliente y comparte el enlace —
+        cualquiera puede verlo sin iniciar sesión.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div className="label">Cliente de la casa</div>
+          <select
+            className="input"
+            value={local.storeCustomerId || ''}
+            onChange={(e) => set('storeCustomerId', e.target.value || null)}
+          >
+            <option value="">— Selecciona un cliente —</option>
+            {sorted.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.company || c.name}
+                {c.company && c.name && c.company !== c.name ? ` · ${c.name}` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Sus cotizaciones (excepto rechazadas y archivadas) surten la tienda.
+          </p>
+        </div>
+        <div>
+          <div className="label">Enlace público</div>
+          <div className="flex items-center gap-2">
+            <input
+              className="input flex-1 font-mono text-xs"
+              readOnly
+              value={url}
+              onFocus={(e) => e.target.select()}
+            />
+            <button type="button" onClick={copy} className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
+              {copied ? 'Copiado' : 'Copiar'}
+            </button>
+            <a href={url} target="_blank" rel="noreferrer" className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
+              Abrir
+            </a>
+          </div>
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Recuerda guardar después de elegir el cliente.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

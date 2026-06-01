@@ -6,7 +6,6 @@ import {
   UserSquare2,
   FileText,
   Package,
-  Store,
   Settings as SettingsIcon,
   Shield,
   Calculator,
@@ -40,7 +39,6 @@ const baseNavGroups = [
     items: [
       { to: '/quotes', label: 'Cotizaciones', icon: FileText },
       { to: '/orders', label: 'Pedidos', icon: Package },
-      { to: '/store', label: 'Tienda', icon: Store },
     ],
   },
   { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] },
