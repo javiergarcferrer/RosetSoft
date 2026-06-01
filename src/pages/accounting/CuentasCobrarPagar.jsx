@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, ArrowLeftRight, Plus, Loader2, Check, X, FileText } from 'lucide-react';
+import { Shield, ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import {
   resolveReceivables, resolvePayables, resolvePartyStatement,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
@@ -42,6 +43,7 @@ export default function CuentasCobrarPagar() {
   const [tab, setTab] = useState('cxc'); // 'cxc' | 'cxp'
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null); // { type, id }
+  const [printingSt, setPrintingSt] = useState(false);
 
   const statement = useMemo(() => {
     if (!selected) return null;
@@ -60,6 +62,24 @@ export default function CuentasCobrarPagar() {
       .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: p.reference || '' }));
     return { name: suppliersById.get(selected.id)?.name || 'Proveedor', ...resolvePartyStatement({ charges, payments }) };
   }, [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById]);
+
+  async function printStatement() {
+    if (!statement || !selected) return;
+    setPrintingSt(true);
+    try {
+      const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
+      const { generateStatementPdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
+      const blob = await generateStatementPdf({
+        emisor: { name: settings?.companyName || '', rnc: (settings?.companyRnc || '').replace(/\D/g, '') },
+        party: { name: statement.name, rnc: party?.rnc },
+        title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
+        rows: statement.rows, balance: statement.balance, asOf: Date.now(),
+      });
+      await downloadBlob(blob, `Estado ${statement.name}.pdf`);
+    } finally {
+      setPrintingSt(false);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -149,7 +169,13 @@ export default function CuentasCobrarPagar() {
         <div className="card p-4 mt-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Estado de cuenta — {statement.name}</h3>
-            <button type="button" onClick={() => setSelected(null)} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={printStatement} disabled={printingSt}
+                className="text-sm text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40">
+                {printingSt ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Imprimir
+              </button>
+              <button type="button" onClick={() => setSelected(null)} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+            </div>
           </div>
           <table className="w-full text-sm">
             <thead className="text-ink-500 text-xs uppercase tracking-wide">

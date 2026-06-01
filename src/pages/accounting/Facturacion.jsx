@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, FileText, Loader2, Check, Download, Search, Send } from 'lucide-react';
+import { Shield, FileText, Loader2, Check, Download, Search, Send, Printer } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -13,10 +13,11 @@ import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
-  resolveAccountingConfig, round2, buildEcfPayload, saleEcfType,
+  resolveAccountingConfig, round2, buildEcfPayload, saleEcfType, ecfQrUrl, formatEcfDate,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { supabase } from '../../db/supabaseClient.js';
 
 function ymd(ts) {
@@ -57,6 +58,40 @@ export default function Facturacion() {
   const postedQuoteIds = useMemo(() => new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
   const [transmitting, setTransmitting] = useState(null);
+  const [printing, setPrinting] = useState(null);
+
+  async function printInvoice(rowId) {
+    const p = postingById.get(rowId);
+    if (!p || !p.ncf) return;
+    setErr('');
+    setPrinting(rowId);
+    try {
+      const customer = p.customerId ? customersById.get(p.customerId) : null;
+      const isEcf = /^E\d{2}/.test(p.ncf);
+      const qrUrl = (isEcf && p.securityCode) ? ecfQrUrl({
+        environment: settings?.ecfEnvironment || 'cert', ecfType: p.ecfType || '31',
+        rncEmisor: cleanRnc(settings?.companyRnc), rncComprador: p.rnc, eNcf: p.ncf,
+        total: p.total, fechaEmision: formatEcfDate(p.postedAt), securityCode: p.securityCode,
+      }) : '';
+      const { generateInvoicePdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
+      const blob = await generateInvoicePdf({
+        emisor: {
+          name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc),
+          address: settings?.companyAddress, phone: settings?.companyPhone, email: settings?.companyEmail,
+        },
+        comprador: { name: customer?.name, rnc: p.rnc },
+        ecfType: p.ecfType || '31', eNcf: p.ncf, fechaEmision: p.postedAt,
+        items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
+        gravado: p.base, itbis: p.itbis, total: p.total, itbisRate: config.itbisRate,
+        securityCode: p.securityCode, qrUrl,
+      });
+      await downloadBlob(blob, `Factura ${p.ncf}.pdf`);
+    } catch (e) {
+      setErr(e?.message || 'No se pudo generar la factura.');
+    } finally {
+      setPrinting(null);
+    }
+  }
 
   async function transmit(rowId) {
     const p = postingById.get(rowId);
@@ -323,18 +358,24 @@ export default function Facturacion() {
                       <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.itbis)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.total)}</td>
                       <td className="py-1.5 px-3">
-                        {status === 'sent' || status === 'accepted' ? (
-                          <span className="text-xs text-emerald-700">Transmitido</span>
-                        ) : status === 'rejected' ? (
-                          <span className="text-xs text-rose-600">Rechazado</span>
-                        ) : !isEcf ? (
-                          <span className="text-xs text-ink-400">—</span>
-                        ) : (
-                          <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-                            className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40">
-                            {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+                        <div className="flex items-center gap-3">
+                          {status === 'sent' || status === 'accepted' ? (
+                            <span className="text-xs text-emerald-700">Transmitido</span>
+                          ) : status === 'rejected' ? (
+                            <span className="text-xs text-rose-600">Rechazado</span>
+                          ) : !isEcf ? (
+                            <span className="text-xs text-ink-400">—</span>
+                          ) : (
+                            <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+                              className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40">
+                              {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+                            </button>
+                          )}
+                          <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
+                            title="Imprimir factura" className="text-ink-400 hover:text-ink-900 disabled:opacity-40">
+                            {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                     );

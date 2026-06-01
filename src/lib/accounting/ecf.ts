@@ -88,3 +88,34 @@ export function pickSequence(sequences: ECFSequence[] | null | undefined, ecfTyp
     .filter((s) => s.ecfType === ecfType && sequenceState(s, now).nextENcf != null)
     .sort((a, b) => Number(a.nextSeq) - Number(b.nextSeq))[0] || null;
 }
+
+const ECF_QR_BASE: Record<string, string> = {
+  prod: 'https://ecf.dgii.gov.do/ecf',
+  cert: 'https://ecf.dgii.gov.do/certecf',
+  dev: 'https://ecf.dgii.gov.do/testecf',
+};
+
+/**
+ * The DGII "consulta timbre" URL encoded in the e-CF QR. Type 32 (consumo) uses
+ * the RFCE path (`consultatimbrefc`). The exact field set is validated against
+ * DGII; this builds the standard query.
+ */
+export function ecfQrUrl({
+  environment = 'cert', ecfType = '31', rncEmisor, rncComprador, eNcf,
+  total, fechaEmision, fechaFirma, securityCode,
+}: {
+  environment?: string; ecfType?: string; rncEmisor?: string; rncComprador?: string;
+  eNcf?: string; total?: number; fechaEmision?: string; fechaFirma?: string; securityCode?: string;
+}): string {
+  const base = ECF_QR_BASE[environment] || ECF_QR_BASE.cert;
+  const path = ecfType === '32' ? 'consultatimbrefc' : 'consultatimbre';
+  const p = new URLSearchParams();
+  if (rncEmisor) p.set('rncemisor', rncEmisor);
+  if (rncComprador) p.set('rnccomprador', rncComprador);
+  if (eNcf) p.set('encf', eNcf);
+  if (fechaEmision) p.set('fechaemision', fechaEmision);
+  if (total != null) p.set('montototal', String(total));
+  if (fechaFirma) p.set('fechafirma', fechaFirma);
+  if (securityCode) p.set('codigoseguridad', securityCode);
+  return `${base}/${path}?${p.toString()}`;
+}

@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, sequenceState, pickSequence, ecfTypeLabel,
+  padSeq, formatENcf, parseENcf, saleEcfType, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -34,6 +34,16 @@ test('saleEcfType: 31 with a fiscal id, 32 without', () => {
 test('ecfTypeLabel resolves known types', () => {
   assert.equal(ecfTypeLabel('31'), 'Factura de Crédito Fiscal');
   assert.equal(ecfTypeLabel('32'), 'Factura de Consumo');
+});
+
+test('ecfQrUrl builds the DGII timbre URL (31 vs 32 path)', () => {
+  const u31 = ecfQrUrl({ environment: 'cert', ecfType: '31', rncEmisor: '131996035', eNcf: 'E310000000001', total: 11800, fechaEmision: '01-06-2026', securityCode: 'abc123' });
+  assert.match(u31, /certecf\/consultatimbre\?/);
+  assert.match(u31, /rncemisor=131996035/);
+  assert.match(u31, /encf=E310000000001/);
+  assert.match(u31, /codigoseguridad=abc123/);
+  const u32 = ecfQrUrl({ environment: 'prod', ecfType: '32', eNcf: 'E320000000001' });
+  assert.match(u32, /\/ecf\/consultatimbrefc\?/);
 });
 
 /* ----------------------------- sequences -------------------------------- */
