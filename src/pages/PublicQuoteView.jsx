@@ -7,6 +7,7 @@ import ContainerTracking from '../components/ContainerTracking.jsx';
 import { computeTotals, lineForTotals, isPricedLine, applyAction } from '../core/quote/index.js';
 import { normalizeContainerNo, resolveTrackableContainers } from '../core/tracking/index.js';
 import { fetchSharedQuote, applyClientPick } from '../lib/quoteShare.js';
+import { quoteDisplayName } from '../lib/quoteNaming.js';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
 
 /**
@@ -59,6 +60,16 @@ export default function PublicQuoteView() {
   const bundle = state.bundle;
   const quote = bundle?.quote || null;
   const lines = useMemo(() => bundle?.lines || [], [bundle]);
+
+  // Title the tab with the SAME "client - Cotizacion N" label as the PDF and
+  // the link slug, so a bookmarked / re-shared tab reads identically. Restored
+  // on unmount so the dealer app's title isn't left overwritten.
+  useEffect(() => {
+    if (!quote) return undefined;
+    const prev = document.title;
+    document.title = quoteDisplayName(quote, bundle?.customer || null);
+    return () => { document.title = prev; };
+  }, [quote, bundle]);
   // The attached order's trackable containers (from the share bundle), so the
   // client can follow their shipment from the same link they used to configure
   // the quote. Validated here; each renders its own keyless tracking panel.

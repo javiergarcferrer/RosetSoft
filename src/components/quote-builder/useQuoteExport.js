@@ -3,6 +3,7 @@ import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
+import { quoteSlug } from '../../lib/quoteNaming.js';
 
 /**
  * PDF export + share-link logic for the quote editor, lifted out of the
@@ -68,7 +69,12 @@ export function useQuoteExport({
         token = token || newShareToken();
         await updateQuote({ shareToken: token, shareEnabled: true });
       }
-      const url = shareLinkUrl(token);
+      // Slug the SAME "client - Cotizacion N" label the PDF uses into the URL,
+      // so the link the dealer copies reads like the file it matches.
+      const customer = quote.customerId
+        ? customers.find((c) => c.id === quote.customerId)
+        : null;
+      const url = shareLinkUrl(token, quoteSlug(quote, customer));
       try {
         await navigator.clipboard.writeText(url);
         setShareMsg(`Enlace copiado · ${url}`);

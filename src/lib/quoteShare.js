@@ -9,11 +9,22 @@ const VITE_ENV =
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 
-/** The shareable URL a dealer hands a client. HashRouter, so `/#/q/<token>`. */
-export function shareLinkUrl(token) {
+/**
+ * The shareable URL a dealer hands a client. HashRouter, so `/#/q/<token>`.
+ *
+ * An optional `slug` (the "client-name-cotizacion-N" string from
+ * lib/quoteNaming) is inserted BEFORE the token so the link a dealer sends
+ * reads like the PDF it matches — `/#/q/eduardo-garcia-cotizacion-1042/<token>`
+ * — instead of an opaque token alone. The token stays the real key (the route
+ * ignores the slug), so links minted before this, or with no slug, still work.
+ */
+export function shareLinkUrl(token, slug) {
   if (!token) return '';
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/#/q/${encodeURIComponent(token)}`;
+  const path = slug
+    ? `${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
+    : encodeURIComponent(token);
+  return `${origin}/#/q/${path}`;
 }
 
 // The function endpoint, with the public anon key as a query param (not a

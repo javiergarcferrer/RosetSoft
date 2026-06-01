@@ -1,16 +1,17 @@
 import { shouldUseWebShare } from '../shareTarget.js';
+import { quoteDisplayName } from '../../lib/quoteNaming.js';
 import type { Quote, Customer } from '../../types/domain.ts';
 
 /**
- * Download name / document title for an exported quote: client name +
- * quote number, sanitised for the filesystem. Used both as the download
- * filename AND (via Document title) as the PDF's embedded title.
+ * Download name / document title for an exported quote: client name + quote
+ * number (the shared `quoteDisplayName` convention), sanitised for the
+ * filesystem. Used both as the download filename AND (via Document title) as
+ * the PDF's embedded title. The public share link slugs the SAME convention
+ * into its URL, so the file and the link always read the same.
  */
 export function quoteFileName(quote: Quote, customer: Customer | null): string {
-  const num = quote?.number != null ? `Cotizacion ${quote.number}` : 'Cotizacion (borrador)';
-  const client = (customer?.name || customer?.company || '').trim();
-  const base = client ? `${client} - ${num}` : num;
-  return base.replace(/[/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return quoteDisplayName(quote, customer)
+    .replace(/[/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /**

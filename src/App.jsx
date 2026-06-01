@@ -232,8 +232,13 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
         {/* Public, logged-out interactive quote view. Lives OUTSIDE
-            RequireAuth so a client with the link never hits the login wall. */}
+            RequireAuth so a client with the link never hits the login wall.
+            The optional `:slug` segment carries the human label
+            ("eduardo-garcia-cotizacion-1042") so the sent URL reads like the
+            PDF — it's purely cosmetic; the token is the real key, and the
+            bare `/q/:token` form (older links) still resolves. */}
         <Route path="/q/:token" element={<PublicQuoteView />} />
+        <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>
