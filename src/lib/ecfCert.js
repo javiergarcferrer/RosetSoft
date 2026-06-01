@@ -17,22 +17,18 @@ export async function fileToBase64(file) {
 }
 
 /**
- * Save the signing certificate. `upsert` WITHOUT `.select()` ⇒ PostgREST
- * return=minimal ⇒ no SELECT needed (which the write-only RLS denies).
+ * Save the signing certificate via a SECURITY DEFINER RPC, so the browser never
+ * needs write access to the (RLS-locked, unreadable) ecf_credentials table.
  */
 export async function saveEcfCredentials({ profileId = TEAM_PROFILE_ID, file, password, environment = 'cert' }) {
   if (!file) throw new Error('Selecciona el archivo .p12.');
   if (!password) throw new Error('Ingresa la clave del certificado.');
   const p12Base64 = await fileToBase64(file);
-  const nowIso = new Date().toISOString();
-  const { error } = await supabase.from('ecf_credentials').upsert({
-    profile_id: profileId,
-    p12_base64: p12Base64,
-    password,
-    environment,
-    uploaded_at: nowIso,
-    updated_at: nowIso,
-  }, { onConflict: 'profile_id' });
+  const { error } = await supabase.rpc('save_ecf_credentials', {
+    p_p12: p12Base64,
+    p_password: password,
+    p_environment: environment,
+  });
   if (error) throw new Error(error.message || 'No se pudo guardar el certificado.');
   // Non-sensitive status for the UI.
   await updateSettings(profileId, { ecfCertUploadedAt: Date.now(), ecfEnvironment: environment });
