@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, FileText, Loader2, Check, Download, Search } from 'lucide-react';
+import { Shield, FileText, Loader2, Check, Download, Search, Send } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -13,11 +13,11 @@ import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
-  resolveAccountingConfig, round2,
+  resolveAccountingConfig, round2, buildEcfPayload, saleEcfType,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
-import { saleEcfType } from '../../core/accounting/index.js';
+import { supabase } from '../../db/supabaseClient.js';
 
 function ymd(ts) {
   const d = new Date(ts);
@@ -55,6 +55,41 @@ export default function Facturacion() {
     return m;
   }, [linesQ.data]);
   const postedQuoteIds = useMemo(() => new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
+  const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
+  const [transmitting, setTransmitting] = useState(null);
+
+  async function transmit(rowId) {
+    const p = postingById.get(rowId);
+    if (!p || !p.ncf) return;
+    setErr('');
+    setTransmitting(rowId);
+    try {
+      const customer = p.customerId ? customersById.get(p.customerId) : null;
+      const payload = buildEcfPayload({
+        ecfType: p.ecfType || saleEcfType(!!p.rnc),
+        eNcf: p.ncf,
+        emisor: {
+          rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
+          address: settings?.companyAddress || '',
+        },
+        comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
+        items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
+        gravado: p.base, itbis: p.itbis, total: p.total,
+        itbisRate: config.itbisRate, fechaEmision: p.postedAt,
+      });
+      const { data, error } = await supabase.functions.invoke('ecf-send', {
+        body: { payload, eNcf: p.ncf, profileId: scope },
+      });
+      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error transmitiendo el e-CF.');
+      await db.salesPostings.update(p.id, {
+        trackId: data.trackId || '', securityCode: data.securityCode || '', ecfStatus: data.status || 'sent',
+      });
+    } catch (e) {
+      setErr(e?.message || 'Error transmitiendo el e-CF.');
+    } finally {
+      setTransmitting(null);
+    }
+  }
 
   // USD totals + DOP conversion for a quote.
   function bookFor(quote) {
@@ -270,10 +305,15 @@ export default function Facturacion() {
                     <th className="text-right py-2 px-3">Base</th>
                     <th className="text-right py-2 px-3">ITBIS</th>
                     <th className="text-right py-2 px-3">Total</th>
+                    <th className="text-left py-2 px-3">e-CF</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sales607.rows.map((r) => (
+                  {sales607.rows.map((r) => {
+                    const p = postingById.get(r.id);
+                    const status = p?.ecfStatus || '';
+                    const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
+                    return (
                     <tr key={r.id} className="border-t border-ink-50">
                       <td className="py-1.5 px-3 tabular-nums">{r.rnc || '—'}</td>
                       <td className="py-1.5 px-3">{r.name || '—'}</td>
@@ -282,8 +322,23 @@ export default function Facturacion() {
                       <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.base)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.itbis)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.total)}</td>
+                      <td className="py-1.5 px-3">
+                        {status === 'sent' || status === 'accepted' ? (
+                          <span className="text-xs text-emerald-700">Transmitido</span>
+                        ) : status === 'rejected' ? (
+                          <span className="text-xs text-rose-600">Rechazado</span>
+                        ) : !isEcf ? (
+                          <span className="text-xs text-ink-400">—</span>
+                        ) : (
+                          <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+                            className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40">
+                            {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+                          </button>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-ink-200 font-semibold">
@@ -291,6 +346,7 @@ export default function Facturacion() {
                     <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.base)}</td>
                     <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.itbis)}</td>
                     <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.total)}</td>
+                    <td className="py-2 px-3"></td>
                   </tr>
                 </tfoot>
               </table>

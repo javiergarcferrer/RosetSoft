@@ -168,6 +168,12 @@ export interface Settings {
    * delete). See `supabase/functions/store` + `core/store`.
    */
   storeCustomerId?: string | null;
+  /** Issuer (emisor) RNC for e-CF / 607. */
+  companyRnc?: string;
+  /** Non-sensitive e-CF cert status (the .p12 itself lives in ecf_credentials). */
+  ecfCertUploadedAt?: number | null;
+  /** 'dev' (TesteCF) | 'cert' (CerteCF) | 'prod' (eCF). */
+  ecfEnvironment?: string;
 }
 
 /**

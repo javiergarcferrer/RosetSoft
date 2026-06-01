@@ -75,3 +75,9 @@ verify_jwt = false
 # the prices; no cost/margin leaves the server.
 [functions.store]
 verify_jwt = false
+
+# ecf-send signs an e-CF and transmits it to the DGII (dgii-ecf). It reads the
+# team's .p12 from the write-only ecf_credentials table via the service role.
+# verify_jwt stays TRUE (default) — only a signed-in team member may issue.
+[functions.ecf-send]
+verify_jwt = true
