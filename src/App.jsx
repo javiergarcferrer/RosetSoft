@@ -22,6 +22,7 @@ import AdminMaterials from './pages/admin/Materials.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
+import StyleStudio from './pages/StyleStudio.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -239,6 +240,9 @@ export default function App() {
             bare `/q/:token` form (older links) still resolves. */}
         <Route path="/q/:token" element={<PublicQuoteView />} />
         <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
+        {/* Public design-system prototype (no auth, no data) — a render of the
+            proposed "Warm Instrument" direction to judge by eye. */}
+        <Route path="/style-studio" element={<StyleStudio />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>
