@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -40,8 +41,9 @@ export default function CuentasCobrarPagar() {
   const payables = useMemo(() => resolvePayables({ purchases: purchasesQ.data, expenses: expensesQ.data, payments: paymentsQ.data, suppliersById }),
     [purchasesQ.data, expensesQ.data, paymentsQ.data, suppliersById]);
 
-  const [tab, setTab] = useState('cxc'); // 'cxc' | 'cxp'
-  const [showForm, setShowForm] = useState(false);
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
+  const [showForm, setShowForm] = useState(!!params.get('new'));
   const [selected, setSelected] = useState(null); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
 

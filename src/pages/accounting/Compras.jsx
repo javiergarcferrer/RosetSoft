@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, ShoppingCart, Plus, Loader2, Check, X } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -33,7 +34,8 @@ export default function Compras() {
   const loaded = purchasesQ.loaded && suppliersQ.loaded && accountsQ.loaded && itemsQ.loaded;
 
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
-  const [showForm, setShowForm] = useState(false);
+  const [params] = useSearchParams();
+  const [showForm, setShowForm] = useState(!!params.get('new'));
 
   if (!allowed) {
     return (

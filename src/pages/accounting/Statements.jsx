@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Shield, Scale, TrendingUp, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -64,7 +64,8 @@ export default function Statements() {
   const { profileId, currentProfile } = useApp();
   const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
 
-  const [tab, setTab] = useState('balance'); // 'balance' | 'income'
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') === 'income' ? 'income' : 'balance'); // 'balance' | 'income'
   const today = useMemo(() => new Date(), []);
   const [asOf, setAsOf] = useState(() => isoDate(today.getTime()));
   const [start, setStart] = useState(() => isoDate(new Date(today.getFullYear(), 0, 1).getTime()));

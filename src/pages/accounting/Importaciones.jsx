@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, Ship, Plus, Loader2, Check, X } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -32,7 +33,8 @@ export default function Importaciones() {
 
   const list = useMemo(() => resolveImportsList({ imports: importsQ.data, suppliers: suppliersQ.data, items: itemsQ.data }),
     [importsQ.data, suppliersQ.data, itemsQ.data]);
-  const [showForm, setShowForm] = useState(false);
+  const [params] = useSearchParams();
+  const [showForm, setShowForm] = useState(!!params.get('new'));
 
   if (!allowed) {
     return (

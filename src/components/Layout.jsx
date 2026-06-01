@@ -18,6 +18,7 @@ import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
+import QuickCreate from './QuickCreate.jsx';
 import { accountingSectionNav } from '../lib/accountingSections.js';
 
 // Sidebar groups. The two single-item groups at the ends (Inicio and
@@ -198,6 +199,10 @@ export default function Layout() {
             <X size={20} />
           </button>
         </div>
+
+        {/* QuickBooks-style "+ Nuevo" quick-create — only where accounting
+            create flows are reachable (accounting users + admins). */}
+        {(isAccounting || isAdmin) && <QuickCreate />}
 
         {/* Admin-only "Ver como" preview — sits right under the brand mark so
             it's discreet but always at hand. Renders nothing for non-admins

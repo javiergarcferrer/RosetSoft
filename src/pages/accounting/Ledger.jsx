@@ -149,6 +149,9 @@ export default function Ledger() {
   useEffect(() => {
     const c = params.get('cuenta');
     if (c) { setTab('mayor'); setMayorCode(c); }
+    const t = params.get('tab');
+    if (t === 'diario' || t === 'mayor' || t === 'balanza') setTab(t);
+    if (params.get('new')) setShowForm(true);
   }, [params]);
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);

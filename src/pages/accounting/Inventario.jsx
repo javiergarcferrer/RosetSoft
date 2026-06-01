@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, Boxes, Plus, Loader2, Check, X, ArrowDownToLine } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -37,7 +38,8 @@ export default function Inventario() {
   );
   const selectedItem = useMemo(() => itemsQ.data.find((i) => i.id === selectedId) || null, [itemsQ.data, selectedId]);
 
-  const [showItem, setShowItem] = useState(false);
+  const [params] = useSearchParams();
+  const [showItem, setShowItem] = useState(!!params.get('new'));
   const [itemForm, setItemForm] = useState({ sku: '', name: '', unit: 'unidad' });
   const [savingItem, setSavingItem] = useState(false);
 

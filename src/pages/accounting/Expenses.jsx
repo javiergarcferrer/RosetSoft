@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, Receipt, Plus, Loader2, Check, X, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -44,10 +45,11 @@ export default function Expenses() {
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
 
   const today = useMemo(() => new Date(), []);
-  const [tab, setTab] = useState('list'); // 'list' | '606'
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') === '606' ? '606' : 'list'); // 'list' | '606'
   const [start, setStart] = useState(() => isoDate(new Date(today.getFullYear(), today.getMonth(), 1).getTime()));
   const [end, setEnd] = useState(() => isoDate(today.getTime()));
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(!!params.get('new'));
 
   const win = { start: parseISODate(start), end: parseISODate(end, true) };
   const list = useMemo(() => resolveExpensesList({ expenses: expensesQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, ...win }),

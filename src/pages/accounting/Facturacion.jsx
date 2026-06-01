@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, FileText, Loader2, Check, Download, Search, Send, Printer } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -149,7 +150,8 @@ export default function Facturacion() {
   }, [quotesQ.data, postedQuoteIds, loaded]);
 
   const today = useMemo(() => new Date(), []);
-  const [tab, setTab] = useState('pending'); // 'pending' | '607' | 'it1'
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(['607', 'it1'].includes(params.get('tab')) ? params.get('tab') : 'pending'); // 'pending' | '607' | 'it1'
   const win = useMemo(() => ({
     start: new Date(today.getFullYear(), today.getMonth(), 1).getTime(),
     end: today.getTime(),

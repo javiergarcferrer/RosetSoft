@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Shield, UserSquare2, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -17,7 +18,8 @@ export default function Empleados() {
   const scope = profileId || 'team';
 
   const empQ = useLiveQueryStatus(() => db.employees.where('profileId').equals(scope).toArray(), [scope], []);
-  const [editing, setEditing] = useState(null);
+  const [params] = useSearchParams();
+  const [editing, setEditing] = useState(params.get('new') ? 'new' : null);
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
 
