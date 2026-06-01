@@ -260,6 +260,73 @@ export interface SalePosting {
   updatedAt?: number;
 }
 
+/**
+ * A stock item. `qtyOnHand` + `avgCost` are caches maintained from the kardex
+ * movements (the source of truth — see `lib/accounting/inventory`).
+ */
+export interface InventoryItem {
+  id: string;
+  profileId: string;
+  sku?: string;
+  name: string;
+  unit?: string;
+  qtyOnHand: number;
+  avgCost: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export type InventoryMovementType = 'in' | 'out' | 'adjust';
+
+/** One kardex movement. `in` from a purchase/import, `out` for cost of sale. */
+export interface InventoryMovement {
+  id: string;
+  profileId: string;
+  itemId: string;
+  type: InventoryMovementType;
+  qty: number;
+  unitCost: number;
+  movedAt: number;
+  refTable?: string | null;
+  refId?: string | null;
+  memo?: string;
+  journalEntryId?: string | null;
+  createdAt?: number;
+}
+
+/** Goods capitalize to inventory; asset/service hit a chart account directly. */
+export type PurchaseKind = 'goods' | 'asset' | 'service';
+
+/**
+ * A purchase (Compra). Posts a balanced asiento (source='purchase'); a goods
+ * purchase also creates an inventory IN movement. Amounts are DOP.
+ */
+export interface Purchase {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  supplierId?: string | null;
+  purchaseAt: number;
+  ncf?: string;
+  ncfType?: string;
+  kind: PurchaseKind;
+  /** For asset/service kind: the account debited. Goods use the inventory account. */
+  accountCode?: string | null;
+  /** For goods: the inventory item received + qty (drives the kardex IN). */
+  itemId?: string | null;
+  qty: number;
+  base: number;
+  itbis: number;
+  itbisCreditable?: boolean;
+  retentionIsr: number;
+  retentionItbis: number;
+  paymentMethod: PaymentMethod;
+  paidAt?: number | null;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Customer {
   id: string;
   profileId: string;

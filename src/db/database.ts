@@ -20,6 +20,9 @@ import type {
   Supplier,
   Expense,
   SalePosting,
+  InventoryItem,
+  InventoryMovement,
+  Purchase,
 } from '../types/domain.ts';
 
 /**
@@ -73,6 +76,9 @@ const TABLES = {
   suppliers:     { db: 'suppliers',       pk: 'id' },
   expenses:      { db: 'expenses',        pk: 'id' },
   salesPostings: { db: 'sales_postings',  pk: 'id' },
+  inventoryItems:     { db: 'inventory_items',     pk: 'id' },
+  inventoryMovements: { db: 'inventory_movements', pk: 'id' },
+  purchases:          { db: 'purchases',           pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -102,6 +108,9 @@ export interface TableRowMap {
   suppliers: Supplier;
   expenses: Expense;
   salesPostings: SalePosting;
+  inventoryItems: InventoryItem;
+  inventoryMovements: InventoryMovement;
+  purchases: Purchase;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

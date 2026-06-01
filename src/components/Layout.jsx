@@ -18,6 +18,8 @@ import {
   SlidersHorizontal,
   Receipt,
   Truck,
+  ShoppingCart,
+  Boxes,
   Menu,
   X,
 } from 'lucide-react';
@@ -75,7 +77,9 @@ const adminNavGroup = {
 const accountingItems = [
   { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
   { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
+  { to: '/accounting/compras', label: 'Compras', icon: ShoppingCart },
   { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
+  { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
   { to: '/accounting/suppliers', label: 'Proveedores', icon: Truck },
   { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
   { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },

@@ -34,6 +34,7 @@ export default function Expenses() {
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
+  const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = expensesQ.loaded && suppliersQ.loaded && accountsQ.loaded;
 
   const expenseAccounts = useMemo(
@@ -51,8 +52,8 @@ export default function Expenses() {
   const win = { start: parseISODate(start), end: parseISODate(end, true) };
   const list = useMemo(() => resolveExpensesList({ expenses: expensesQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, ...win }),
     [expensesQ.data, suppliersQ.data, accountsQ.data, start, end]);
-  const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, suppliers: suppliersQ.data, ...win }),
-    [expensesQ.data, suppliersQ.data, start, end]);
+  const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, purchases: purchasesQ.data, suppliers: suppliersQ.data, ...win }),
+    [expensesQ.data, purchasesQ.data, suppliersQ.data, start, end]);
 
   if (!allowed) {
     return (

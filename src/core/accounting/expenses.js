@@ -38,33 +38,34 @@ export function resolveExpensesList({ expenses, suppliers, accounts, start, end 
   return { rows, totals, count: rows.length };
 }
 
+function row606(doc, dateField, suppliersById) {
+  const s = doc.supplierId ? suppliersById.get(doc.supplierId) : null;
+  return {
+    id: doc.id,
+    rnc: s?.rnc || '',
+    name: s?.name || '',
+    kind: s?.kind || '',
+    ncf: doc.ncf || '',
+    ncfType: doc.ncfType || '',
+    date: doc[dateField],
+    base: round2(doc.base || 0),
+    itbis: round2(doc.itbis || 0),
+    retIsr: round2(doc.retentionIsr || 0),
+    retItbis: round2(doc.retentionItbis || 0),
+    total: round2((doc.base || 0) + (doc.itbis || 0)),
+  };
+}
+
 /**
- * Formato 606 — compras de bienes y servicios. One row per expense with an NCF
- * in the window (purchases will fold in here too once that module lands). The
- * RNC + NCF + tax columns are exactly what the DGII 606 layout needs.
+ * Formato 606 — compras de bienes y servicios. One row per expense AND purchase
+ * with an NCF in the window. The RNC + NCF + tax columns match the DGII layout.
  */
-export function resolve606({ expenses, suppliers, start, end } = {}) {
+export function resolve606({ expenses, purchases, suppliers, start, end } = {}) {
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
-  const rows = (expenses || [])
-    .filter((e) => inWindow(e.expenseAt, start, end))
-    .map((e) => {
-      const s = e.supplierId ? supById.get(e.supplierId) : null;
-      return {
-        id: e.id,
-        rnc: s?.rnc || '',
-        name: s?.name || '',
-        kind: s?.kind || '',
-        ncf: e.ncf || '',
-        ncfType: e.ncfType || '',
-        date: e.expenseAt,
-        base: round2(e.base || 0),
-        itbis: round2(e.itbis || 0),
-        retIsr: round2(e.retentionIsr || 0),
-        retItbis: round2(e.retentionItbis || 0),
-        total: round2((e.base || 0) + (e.itbis || 0)),
-      };
-    })
-    .sort((a, b) => (a.date || 0) - (b.date || 0));
+  const rows = [
+    ...(expenses || []).filter((e) => inWindow(e.expenseAt, start, end)).map((e) => row606(e, 'expenseAt', supById)),
+    ...(purchases || []).filter((p) => inWindow(p.purchaseAt, start, end)).map((p) => row606(p, 'purchaseAt', supById)),
+  ].sort((a, b) => (a.date || 0) - (b.date || 0));
 
   const totals = rows.reduce((acc, r) => ({
     base: acc.base + r.base,

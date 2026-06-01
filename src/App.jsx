@@ -28,6 +28,8 @@ import AccountingSettings from './pages/accounting/AccountingSettings.jsx';
 import AccountingExpenses from './pages/accounting/Expenses.jsx';
 import AccountingSuppliers from './pages/accounting/Suppliers.jsx';
 import AccountingFacturacion from './pages/accounting/Facturacion.jsx';
+import AccountingCompras from './pages/accounting/Compras.jsx';
+import AccountingInventario from './pages/accounting/Inventario.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import StyleStudio from './pages/StyleStudio.jsx';
 import NotFound from './pages/NotFound.jsx';
@@ -230,6 +232,8 @@ function ProtectedApp() {
             <Route path="accounting/expenses" element={<AccountingExpenses />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
+            <Route path="accounting/compras" element={<AccountingCompras />} />
+            <Route path="accounting/inventario" element={<AccountingInventario />} />
             <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />

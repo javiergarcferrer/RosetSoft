@@ -27,6 +27,11 @@ export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/exp
 export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
 export { buildSaleEntry, depositApplied } from '../../lib/accounting/sale.js';
 
+// ── compras (Purchases) + inventario (kardex, weighted-average costing)
+export { resolveInventory, resolveItemKardex } from './inventory.js';
+export { buildPurchaseEntry, buildCogsEntry } from '../../lib/accounting/purchase.js';
+export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/inventory.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,
