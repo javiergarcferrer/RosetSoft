@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Shield, BookText, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -37,11 +38,14 @@ function AccountNode({ node, index, depth }) {
       >
         <span className="text-ink-400 w-3 text-xs">{hasChildren ? (open ? '▾' : '▸') : ''}</span>
         <code className="text-xs text-ink-500 tabular-nums">{node.code}</code>
-        <span className={node.isPostable ? 'text-sm text-ink-800' : 'text-sm font-semibold text-ink-900'}>
-          {node.name}
-        </span>
+        {node.isPostable ? (
+          <Link to={`/accounting/ledger?cuenta=${node.code}`} onClick={(e) => e.stopPropagation()}
+            className="text-sm text-ink-800 hover:underline">{node.name}</Link>
+        ) : (
+          <span className="text-sm font-semibold text-ink-900">{node.name}</span>
+        )}
         {node.isPostable && (
-          <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">imputable</span>
+          <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">ver mayor</span>
         )}
       </div>
       {open && hasChildren && children.map((c) => (
@@ -117,8 +121,12 @@ export default function ChartOfAccounts() {
                 {ACCOUNT_CLASS_NAMES[a.class] || a.class}
               </span>
               <code className="text-xs text-ink-500 tabular-nums">{a.code}</code>
-              <span className={a.isPostable ? 'text-sm text-ink-800' : 'text-sm font-semibold'}>{a.name}</span>
-              {a.isPostable && <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">imputable</span>}
+              {a.isPostable ? (
+                <Link to={`/accounting/ledger?cuenta=${a.code}`} className="text-sm text-ink-800 hover:underline">{a.name}</Link>
+              ) : (
+                <span className="text-sm font-semibold">{a.name}</span>
+              )}
+              {a.isPostable && <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">ver mayor</span>}
             </div>
           ))}
         </div>

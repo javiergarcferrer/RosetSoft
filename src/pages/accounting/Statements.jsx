@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Scale, TrendingUp } from 'lucide-react';
+import { Shield, Scale, TrendingUp, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -9,7 +9,16 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
+import { downloadCsv } from '../../lib/csv.js';
 import { resolveBalanceSheet, resolveIncomeStatement } from '../../core/accounting/index.js';
+
+/** Flatten a statement tree into CSV rows [code, name, amount]. */
+function flattenTree(node, rows = [], depth = 0) {
+  if (!node) return rows;
+  rows.push([node.code, `${'  '.repeat(depth)}${node.name}`, node.amount]);
+  for (const c of node.children || []) flattenTree(c, rows, depth + 1);
+  return rows;
+}
 
 /**
  * Estados financieros — Balance General (Estado de Situación) + Estado de
@@ -82,6 +91,26 @@ export default function Statements() {
     start: parseISODate(start), end: parseISODate(end, true),
   }), [accountsQ.data, entriesQ.data, linesQ.data, start, end]);
 
+  function exportActive() {
+    if (tab === 'balance') {
+      downloadCsv(`balance_${asOf}.csv`, [
+        ['Cuenta', 'Nombre', 'Monto'],
+        ...flattenTree(balance.assets), ['', 'TOTAL ACTIVOS', balance.totalAssets],
+        ...flattenTree(balance.liabilities), ['', 'TOTAL PASIVOS', balance.totalLiabilities],
+        ...flattenTree(balance.equity), ['', 'Resultado del ejercicio', balance.netIncome],
+        ['', 'TOTAL PATRIMONIO', balance.totalEquity], ['', 'TOTAL PASIVOS + PATRIMONIO', balance.totalLiabEquity],
+      ]);
+    } else {
+      downloadCsv(`resultados_${start}_${end}.csv`, [
+        ['Cuenta', 'Nombre', 'Monto'],
+        ...flattenTree(income.income), ['', 'TOTAL INGRESOS', income.totalIncome],
+        ...flattenTree(income.costs), ['', 'UTILIDAD BRUTA', income.grossProfit],
+        ...flattenTree(income.expenses), ['', 'TOTAL GASTOS', income.totalExpenses],
+        ['', 'UTILIDAD NETA DEL PERIODO', income.netIncome],
+      ]);
+    }
+  }
+
   if (!allowed) {
     return (
       <>
@@ -98,7 +127,7 @@ export default function Statements() {
     <>
       <PageHeader title="Estados financieros" subtitle="Proyecciones del libro mayor — valores en RD$" />
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button type="button" onClick={() => setTab('balance')}
           className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'balance' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
           <Scale size={15} /> Balance General
@@ -107,6 +136,8 @@ export default function Statements() {
           className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'income' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
           <TrendingUp size={15} /> Estado de Resultados
         </button>
+        <button type="button" onClick={exportActive}
+          className="ml-auto btn-ghost text-sm inline-flex items-center gap-1.5"><Download size={14} /> Exportar</button>
       </div>
 
       {!loaded ? <ListLoading /> : tab === 'balance' ? (

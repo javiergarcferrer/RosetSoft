@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw } from 'lucide-react';
+import { Shield, BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
+import { downloadCsv } from '../../lib/csv.js';
 import {
   resolveJournal, resolveTrialBalance, resolveAccountLedger,
   postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
@@ -209,6 +210,27 @@ export default function Ledger() {
     </button>
   );
 
+  const isoDay = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
+  function exportActive() {
+    if (tab === 'balanza') {
+      downloadCsv('balanza.csv', [
+        ['Cuenta', 'Nombre', 'Debito', 'Credito', 'Saldo'],
+        ...trial.rows.map((r) => [r.code, r.name, r.debit, r.credit, r.balance]),
+        ['', 'TOTALES', trial.totalDebit, trial.totalCredit, ''],
+      ]);
+    } else if (tab === 'mayor' && mayor) {
+      downloadCsv(`mayor_${mayorCode}.csv`, [
+        ['Fecha', 'Asiento', 'Concepto', 'Debito', 'Credito', 'Saldo'],
+        ...mayor.rows.map(({ line, balance }) => [isoDay(line.postedAt), line.entryNumber ?? '', line.entryMemo || '', line.debit, line.credit, balance]),
+      ]);
+    } else if (tab === 'diario') {
+      downloadCsv('diario.csv', [
+        ['Asiento', 'Fecha', 'Origen', 'Cuenta', 'Nombre', 'Debito', 'Credito', 'Concepto'],
+        ...journal.flatMap(({ entry, lines }) => lines.map((l) => [entry.number ?? '', isoDay(entry.postedAt), entry.source, l.accountCode, nameByCode.get(l.accountCode) || '', l.debit, l.credit, entry.memo || ''])),
+      ]);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -222,10 +244,12 @@ export default function Ledger() {
         }
       />
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         {tabBtn('diario', 'Diario')}
         {tabBtn('mayor', 'Mayor')}
         {tabBtn('balanza', 'Balanza')}
+        <button type="button" onClick={exportActive}
+          className="ml-auto btn-ghost text-sm inline-flex items-center gap-1.5"><Download size={14} /> Exportar</button>
       </div>
 
       {showForm && accountsQ.loaded && (
