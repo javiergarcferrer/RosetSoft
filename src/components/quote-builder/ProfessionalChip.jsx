@@ -1,27 +1,24 @@
 import { useState } from 'react';
 import { DraftingCompass } from 'lucide-react';
 import ProfessionalPicker from './ProfessionalPicker.jsx';
-import { DebouncedInput } from '../DebouncedInput.jsx';
-import { clampCommissionPct, baseCommissionPct } from '../../lib/commissions.js';
 
 /**
  * The professional (architect / decorator earning a commission on this sale)
- * and the controls that define that commission, fused into ONE segmented pill.
+ * and the order type that sets their commission tier, fused into ONE segmented
+ * pill.
  *
  * Visual model:
  *
- *   assigned:    [ 📐 Pilar Ferrer │ Piso · Especial │ 15.0 % ]
+ *   assigned:    [ 📐 Pilar Ferrer │ Piso · Especial ]
  *   unassigned:  [ 📐 Asignar profesional │ Piso · Especial ]
  *
- * Why everything in one pill: the order type (Piso 15% / Especial 20%) is the
- * professional's base commission rate, and the % segment is the per-quote
- * override of that same rate. They're three views of one decision — who earns,
- * at what tier, with what override — so they live in one inseparable control
- * that wraps as a unit instead of three chips that drift onto different rows.
+ * Why one pill: the order type (Piso 15% / Especial 20%) IS the professional's
+ * commission rate, so "who earns" and "at what tier" read as one decision in
+ * one control that wraps as a unit, not chips that drift onto separate rows.
  *
- * Reductive on purpose: the tier segments no longer repeat "15% / 20%" inline,
- * because the % segment right beside them already shows the live rate (the
- * tier's base as a placeholder, or the typed override). One number, one place.
+ * The resulting rate isn't shown in the pill (the tier tooltip names it, and
+ * the totals dock's commission card spells out the amount) — the pill stays a
+ * clean identity + tier selector.
  */
 export default function ProfessionalChip({ quote, professional, professionals, profileId, onUpdateQuote }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -55,15 +52,6 @@ export default function ProfessionalChip({ quote, professional, professionals, p
     );
   }
 
-  // Override semantics:
-  //   • `commissionPct` numeric (including 0) → explicit per-sale override
-  //   • `commissionPct` null/'' → inherit the order-type base rate
-  // The input shows the override when present, otherwise an empty field with
-  // the inherited base as a placeholder ("what happens if I do nothing").
-  const overrideRaw = quote.commissionPct;
-  const hasOverride = overrideRaw != null && overrideRaw !== '';
-  const inheritedDefault = baseCommissionPct(quote);
-
   return (
     <>
       <span
@@ -81,30 +69,6 @@ export default function ProfessionalChip({ quote, professional, professionals, p
 
         <Seam />
         <TierSegments quote={quote} onUpdateQuote={onUpdateQuote} />
-        <Seam />
-
-        {/* Commission % — editable override of the tier's base rate. */}
-        <label className={`${SEG} pl-1.5 pr-2 cursor-text`}>
-          <DebouncedInput
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max="20"
-            step="0.5"
-            value={hasOverride ? overrideRaw : ''}
-            onCommit={(v) => {
-              if (v == null || v === '') {
-                onUpdateQuote({ commissionPct: null });
-              } else {
-                onUpdateQuote({ commissionPct: clampCommissionPct(v) });
-              }
-            }}
-            placeholder={String(inheritedDefault)}
-            aria-label="Comisión (%)"
-            className="w-7 text-right tabular-nums bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder:text-ink-400"
-          />
-          <span className="text-ink-500 select-none" aria-hidden>%</span>
-        </label>
       </span>
 
       {picker}
