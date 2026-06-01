@@ -43,6 +43,9 @@ export const POSTING_ROLES: PostingRole[] = [
   { key: 'itbisWithheld', label: 'ITBIS retenido (por pagar)', defaultCode: '2-01-003-02-00-00', group: 'Pasivos' },
   { key: 'isrWithheld', label: 'Retención ISR (IR-17 por pagar)', defaultCode: '2-01-003-07-00-00', group: 'Pasivos' },
   { key: 'customerDeposits', label: 'Cobros anticipados (depósitos)', defaultCode: '2-01-005-00-00-00', group: 'Pasivos' },
+  { key: 'payrollPayable', label: 'Nóminas por pagar', defaultCode: '2-01-004-01-00-00', group: 'Pasivos' },
+  { key: 'tssPayable', label: 'TSS por pagar', defaultCode: '2-01-003-04-00-00', group: 'Pasivos' },
+  { key: 'infotepPayable', label: 'INFOTEP por pagar', defaultCode: '2-01-003-05-00-00', group: 'Pasivos' },
   // Ingresos
   { key: 'salesLocal', label: 'Ventas locales', defaultCode: '4-01-001-01-00-00', group: 'Ingresos' },
   { key: 'salesDiscount', label: 'Descuentos sobre ventas', defaultCode: '4-01-004-00-00-00', group: 'Ingresos' },
@@ -53,6 +56,9 @@ export const POSTING_ROLES: PostingRole[] = [
   { key: 'bankFees', label: 'Cargos y comisiones bancarias', defaultCode: '6-07-010-01-00-00', group: 'Gastos' },
   { key: 'cardCommissions', label: 'Comisiones de tarjetas (pasarela)', defaultCode: '6-07-010-02-01-00', group: 'Gastos' },
   { key: 'fxLoss', label: 'Diferencia cambiaria (pérdida)', defaultCode: '6-08-005-00-00-00', group: 'Gastos' },
+  { key: 'salaries', label: 'Salarios y comisiones', defaultCode: '6-01-001-01-00-00', group: 'Gastos' },
+  { key: 'employerSS', label: 'Aportes patronales a la seguridad social', defaultCode: '6-01-005-00-00-00', group: 'Gastos' },
+  { key: 'employerInfotep', label: 'Aporte patronal al INFOTEP', defaultCode: '6-01-006-00-00-00', group: 'Gastos' },
 ];
 
 /** Tax-rate defaults (percentages). Owner-confirmed where noted. */

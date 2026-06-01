@@ -24,6 +24,7 @@ import {
   ArrowLeftRight,
   Gauge,
   Lock,
+  Wallet,
   Menu,
   X,
 } from 'lucide-react';
@@ -89,6 +90,8 @@ const accountingItems = [
   { to: '/accounting/importaciones', label: 'Importaciones', icon: Ship },
   { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
   { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
+  { to: '/accounting/nomina', label: 'Nómina', icon: Wallet },
+  { to: '/accounting/empleados', label: 'Empleados', icon: UserSquare2 },
   { to: '/accounting/suppliers', label: 'Proveedores', icon: Truck },
   { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
   { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },

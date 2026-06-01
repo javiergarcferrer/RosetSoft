@@ -341,6 +341,57 @@ export interface FiscalPeriod {
   updatedAt?: number;
 }
 
+/** An employee on the payroll. */
+export interface Employee {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  name: string;
+  cedula?: string;
+  position?: string;
+  monthlySalary: number;
+  hireAt?: number | null;
+  active?: boolean;
+  notes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** One employee's line within a payroll run (DOP). */
+export interface PayrollItem {
+  employeeId: string;
+  name: string;
+  gross: number;
+  sfsEmp: number;
+  afpEmp: number;
+  isr: number;
+  net: number;
+  sfsPat: number;
+  afpPat: number;
+  infotepPat: number;
+}
+
+/** A monthly payroll run; posting it books one balanced asiento. */
+export interface PayrollRun {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  periodYear: number;
+  periodMonth: number;
+  paidAt: number;
+  items: PayrollItem[];
+  gross: number;
+  tssEmp: number;
+  isr: number;
+  net: number;
+  employerSs: number;
+  employerInfotep: number;
+  status?: string;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 /**
  * A stock item. `qtyOnHand` + `avgCost` are caches maintained from the kardex
  * movements (the source of truth — see `lib/accounting/inventory`).

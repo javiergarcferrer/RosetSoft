@@ -52,6 +52,11 @@ export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';
 
+// ── nómina (payroll)
+export {
+  DR_PAYROLL, annualIsr, monthlyIsr, computePayrollItem, payrollTotals, buildPayrollEntry,
+} from '../../lib/accounting/payroll.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,

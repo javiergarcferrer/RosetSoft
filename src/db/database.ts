@@ -27,6 +27,8 @@ import type {
   ECFSequence,
   Payment,
   FiscalPeriod,
+  Employee,
+  PayrollRun,
 } from '../types/domain.ts';
 
 /**
@@ -87,6 +89,8 @@ const TABLES = {
   ecfSequences:       { db: 'ecf_sequences',       pk: 'id' },
   payments:           { db: 'payments',            pk: 'id' },
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
+  employees:          { db: 'employees',           pk: 'id' },
+  payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -123,6 +127,8 @@ export interface TableRowMap {
   ecfSequences: ECFSequence;
   payments: Payment;
   fiscalPeriods: FiscalPeriod;
+  employees: Employee;
+  payrollRuns: PayrollRun;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in
