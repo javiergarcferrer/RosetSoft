@@ -60,7 +60,12 @@ export default function StyleStudio() {
   const [mode, setMode] = useState('light');
   const other = mode === 'light' ? 'studio' : 'light';
   return (
-    <div className="min-h-full" style={{ ...vars(mode), background: 'var(--bg)', color: 'var(--text)' }}>
+    <div className="h-full overflow-y-auto overscroll-contain" style={{ ...vars(mode), background: 'var(--bg)', color: 'var(--text)' }}>
+      {/* prototype cross-nav */}
+      <div className="sticky top-0 z-20 flex justify-center gap-1 py-2 text-[11px]" style={{ background: 'var(--bg)', borderBottom: '1px solid var(--line)', fontFamily: 'Sohne' }}>
+        <span className="px-3 py-1 rounded-full" style={{ background: 'var(--text)', color: 'var(--surface)' }}>Warm Instrument</span>
+        <a href="#/atelier" className="px-3 py-1 rounded-full" style={{ color: 'var(--text-mid)' }}>Atelier →</a>
+      </div>
       <div className="mx-auto max-w-5xl px-5 sm:px-8 py-10 space-y-12">
 
         {/* ── Masthead ───────────────────────────────────────────── */}
