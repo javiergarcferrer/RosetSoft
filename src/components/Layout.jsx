@@ -144,7 +144,7 @@ export default function Layout() {
               placeholderClassName="h-6 w-24"
             />
           ) : (
-            <div className="text-sm font-semibold truncate leading-tight" title={company}>{company}</div>
+            <div className="font-wordmark text-base truncate leading-tight" title={company}>{company}</div>
           )}
           <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
         </div>
@@ -185,7 +185,7 @@ export default function Layout() {
                 placeholderClassName="h-9 w-32"
               />
             ) : (
-              <div className="text-base font-semibold leading-tight truncate" title={company}>
+              <div className="font-wordmark text-lg leading-tight truncate" title={company}>
                 {company}
               </div>
             )}

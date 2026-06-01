@@ -1,3 +1,55 @@
+/* ── Alcover brand typography ─────────────────────────────────────────────
+   Three faces, each with one job (per the brand sheet):
+     • Lausanne   — body / UI type (the default sans, Tailwind `font-sans`).
+                    The only family we ship multiple weights of (400–700).
+     • Söhne      — headers (Tailwind `font-display`). Ships ONE weight
+                    (Halbfett ≈ 600), so every heading renders at that weight.
+     • Rauschen B — the company wordmark only (Tailwind `font-wordmark`),
+                    a single Semibold cut.
+   woff2 only (every target browser supports it); font-display: swap so text
+   paints immediately in the fallback and re-renders when the face arrives —
+   no invisible-text flash on a cold load. Italic is Lausanne-only (the app's
+   sole italic need); Söhne/Rauschen synthesise if ever asked, which they
+   aren't. */
+@font-face {
+  font-family: 'Lausanne';
+  src: url('/fonts/Lausanne-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Lausanne';
+  src: url('/fonts/Lausanne-400Italic.woff2') format('woff2');
+  font-weight: 400; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: 'Lausanne';
+  src: url('/fonts/Lausanne-500.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Lausanne';
+  src: url('/fonts/Lausanne-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Lausanne';
+  src: url('/fonts/Lausanne-700.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+/* Söhne — one weight, mapped across 500–700 so any `font-medium`/`-semibold`/
+   `-bold` heading resolves to it instead of synthesising or falling back. */
+@font-face {
+  font-family: 'Sohne';
+  src: url('/fonts/Sohne-Halbfett.woff2') format('woff2');
+  font-weight: 400 700; font-style: normal; font-display: swap;
+}
+/* Rauschen B — the wordmark cut. */
+@font-face {
+  font-family: 'Rauschen B';
+  src: url('/fonts/RauschenB-Semibold.woff2') format('woff2');
+  font-weight: 400 700; font-style: normal; font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -198,6 +250,17 @@
 }
 
 @layer base {
+  /* Headers → Söhne (the brand header face). Applied to every semantic
+     heading so titles across the whole UI pick it up without per-component
+     edits; the eyebrow/label primitives below opt in too. Söhne ships one
+     weight, so headings render at that single weight regardless of the
+     font-medium/semibold utility they also carry. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: theme('fontFamily.display');
+  }
+}
+
+@layer base {
   /* Vercel/Linear style keyboard focus ring — invisible until tabbed. */
   *:focus { outline: none; }
   :where(a, button, [role="button"], input, select, textarea):focus-visible {
@@ -233,7 +296,7 @@
   .input {
     @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 transition-shadow focus:border-ink-900 focus:outline-none focus:shadow-focus;
   }
-  .label { @apply block text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
+  .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
   .card  { @apply rounded-xl bg-white border border-ink-100 shadow-soft; }
   .card-pad { @apply p-5; }
   .kbd   { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
@@ -288,8 +351,8 @@
      11px contextual/section label; `.eyebrow-xs` is the denser 10px
      in-component label (pricing-cell captions, popover headers); add
      `text-brand-700` to either for the terracotta variant. */
-  .eyebrow { @apply text-[11px] font-medium uppercase tracking-wider text-ink-500; }
-  .eyebrow-xs { @apply text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500; }
+  .eyebrow { @apply font-display text-[11px] font-medium uppercase tracking-wider text-ink-500; }
+  .eyebrow-xs { @apply font-display text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-500; }
 
   /* Section header inside a card — used 12+ times across
      Dashboard, OrderDetail, ProfessionalDetail, Settings,

@@ -14,14 +14,14 @@ import path from 'node:path';
 import React from 'react'; // this script is outside tsconfig's include → classic JSX
 import ReactPDF from '@react-pdf/renderer';
 import { QuoteDocument } from '../src/pdf/react/QuoteDocument.js';
-import { registerInterFonts } from '../src/pdf/react/theme.js';
+import { registerBrandFonts } from '../src/pdf/react/theme.js';
 import { coverKey, swatchKey } from '../src/pdf/react/imageKeys.js';
 import type { ImageMap } from '../src/pdf/react/imageKeys.js';
 import { computeTotals, lineForTotals } from '../src/lib/pricing.js';
 import { isPricedLine } from '../src/lib/constants.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-registerInterFonts(path.join(root, 'public/fonts'));
+registerBrandFonts(path.join(root, 'public/fonts'));
 
 // A real PNG stands in for product photos / logo / swatch so image layout is
 // verifiable in Node (production resolves these from Supabase in the browser).

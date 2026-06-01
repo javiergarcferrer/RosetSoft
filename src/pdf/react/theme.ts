@@ -48,20 +48,30 @@ export const FS = {
 } as const;
 
 /**
- * Register Inter (the app typeface) with react-pdf. `base` is where the
- * three weights live: the web path `/fonts` in the browser, or an
- * absolute filesystem path when rendering in Node (verification script).
- * Idempotent — re-registering the same family just overwrites.
+ * Register the Alcover brand faces with react-pdf, mirroring the web (one job
+ * each): Lausanne = body/UI, Söhne = headers, Rauschen B = the wordmark. `base`
+ * is where the files live — the web path `/fonts` in the browser, or an absolute
+ * filesystem path when rendering in Node (verification script). react-pdf
+ * embeds via fontkit, which reads .ttf (Lausanne) and .otf (Söhne/Rauschen)
+ * alike. Idempotent — re-registering a family just overwrites.
+ *
+ * Lausanne carries the real weight range (400–700) + an italic; Söhne and
+ * Rauschen each ship ONE weight, registered without a fontWeight so every
+ * weight request resolves to that single cut (no synthesis, no fallback).
  */
-export function registerInterFonts(base = '/fonts'): void {
+export function registerBrandFonts(base = '/fonts'): void {
   Font.register({
-    family: 'Inter',
+    family: 'Lausanne',
     fonts: [
-      { src: `${base}/Inter-Regular.ttf`, fontWeight: 'normal' },
-      { src: `${base}/Inter-Bold.ttf`, fontWeight: 'bold' },
-      { src: `${base}/Inter-Italic.ttf`, fontStyle: 'italic' },
+      { src: `${base}/Lausanne-400.ttf`, fontWeight: 'normal' },
+      { src: `${base}/Lausanne-400Italic.ttf`, fontStyle: 'italic' },
+      { src: `${base}/Lausanne-500.ttf`, fontWeight: 'medium' },
+      { src: `${base}/Lausanne-600.ttf`, fontWeight: 'semibold' },
+      { src: `${base}/Lausanne-700.ttf`, fontWeight: 'bold' },
     ],
   });
+  Font.register({ family: 'Sohne', fonts: [{ src: `${base}/Sohne-Halbfett.otf` }] });
+  Font.register({ family: 'Rauschen B', fonts: [{ src: `${base}/RauschenB-Semibold.otf` }] });
   // The app never hyphenates product names mid-line; neither should the
   // PDF. Returning the word whole disables react-pdf's default hyphenation.
   Font.registerHyphenationCallback((word) => [word]);
@@ -69,7 +79,7 @@ export function registerInterFonts(base = '/fonts'): void {
 
 export const s = StyleSheet.create({
   page: {
-    fontFamily: 'Inter',
+    fontFamily: 'Lausanne', // body / UI face
     fontSize: FS.body,
     color: C.ink,
     paddingTop: MARGIN,
@@ -79,10 +89,11 @@ export const s = StyleSheet.create({
 
   // ---- Header ----
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  company: { fontSize: FS.display, fontWeight: 'bold', color: C.ink },
+  // The company wordmark — Rauschen B (the logo face), shown when no logo image.
+  company: { fontFamily: 'Rauschen B', fontSize: FS.display, color: C.ink },
   companyMeta: { fontSize: 9, color: C.inkMid, marginTop: 2 },
   headerRight: { alignItems: 'flex-end' },
-  eyebrow: { fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase' },
+  eyebrow: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase' },
   quoteNumber: { fontSize: FS.number, fontWeight: 'bold', color: C.ink, marginTop: 6 },
   quoteDate: { fontSize: 10, color: C.inkMid, marginTop: 4 },
   rule: { borderBottomWidth: 0.5, borderBottomColor: C.inkLine, marginTop: 12, marginBottom: 18 },
@@ -99,7 +110,7 @@ export const s = StyleSheet.create({
   // ---- Section header ----
   section: { marginTop: 14 },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-  sectionLabel: { fontSize: FS.eyebrow, fontWeight: 'bold', color: C.brand700, letterSpacing: 1.3, textTransform: 'uppercase' },
+  sectionLabel: { fontFamily: 'Sohne', fontSize: FS.eyebrow, color: C.brand700, letterSpacing: 1.3, textTransform: 'uppercase' },
   sectionTick: { height: 2, width: 36, backgroundColor: C.brand700, borderRadius: 1, marginTop: 5 },
   sectionSubtotal: { fontSize: FS.body, fontWeight: 'bold', color: C.inkHigh },
 
@@ -113,13 +124,13 @@ export const s = StyleSheet.create({
   imgPlaceholder: { fontSize: 7, color: C.inkSoft, letterSpacing: 1 },
   lineBody: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   lineMain: { flex: 1 },
-  familyEyebrow: { fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
+  familyEyebrow: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
   lineName: { fontSize: FS.title, fontWeight: 'bold', color: C.ink },
   lineSub: { fontSize: FS.meta, color: C.inkMid, marginTop: 2 },
   lineRefRow: { flexDirection: 'row', gap: 8, marginTop: 1 },
   lineRef: { fontSize: 7.5, color: C.inkMid },
   lineDesc: { fontSize: 8.5, color: C.inkHigh, marginTop: 4, maxWidth: 280, lineHeight: 1.35 },
-  groupCaption: { fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4, fontWeight: 'bold' },
+  groupCaption: { fontFamily: 'Sohne', fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
 
   // money cell
   priceCell: { minWidth: 120, alignItems: 'flex-end' },
@@ -131,7 +142,7 @@ export const s = StyleSheet.create({
 
   // ---- Group zones ----
   zoneBand: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
-  zoneBandLabel: { fontSize: FS.eyebrowSm, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase' },
+  zoneBandLabel: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, letterSpacing: 1.2, textTransform: 'uppercase' },
   zoneMember: { paddingLeft: 8, borderLeftWidth: 2 },
 
   // ---- Totals ----
@@ -142,7 +153,7 @@ export const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: C.bandInk, height: 46, paddingHorizontal: 16, marginTop: 12,
   },
-  bandLabel: { fontSize: FS.eyebrowSm, fontWeight: 'bold', color: C.bandCream, letterSpacing: 2 },
+  bandLabel: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.bandCream, letterSpacing: 2 },
   bandValue: { fontSize: FS.totalBig, fontWeight: 'bold', color: C.white },
   bandValueRange: { fontSize: 15, fontWeight: 'bold', color: C.white },
   flete: { fontSize: FS.meta, fontWeight: 'bold', color: C.emerald700, textAlign: 'right', textTransform: 'uppercase', marginTop: 10, letterSpacing: 0.5 },
@@ -150,7 +161,7 @@ export const s = StyleSheet.create({
   fx: { fontSize: FS.meta, color: C.inkMid, textAlign: 'right', marginTop: 6 },
 
   // ---- Terms ----
-  termsHead: { fontSize: 7.5, fontWeight: 'bold', color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 18, marginBottom: 6 },
+  termsHead: { fontFamily: 'Sohne', fontSize: 7.5, color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 18, marginBottom: 6 },
   termsBody: { fontSize: 9, color: C.inkHigh, lineHeight: 1.4 },
 
   // ---- Footer (fixed, every page) ----

@@ -1,7 +1,7 @@
 import { pdf } from '@react-pdf/renderer';
 import { QuoteDocument } from './QuoteDocument.js';
 import type { QuoteDocumentProps } from './QuoteDocument.js';
-import { registerInterFonts } from './theme.js';
+import { registerBrandFonts } from './theme.js';
 import { resolveQuoteImages } from './images.js';
 import type { CurrencyCode } from '../../types/domain.ts';
 
@@ -14,7 +14,7 @@ import type { CurrencyCode } from '../../types/domain.ts';
 export async function generateQuotePdf(
   { publicImages = false, ...props }: QuoteDocumentProps & { publicImages?: boolean },
 ): Promise<Blob> {
-  registerInterFonts('/fonts');
+  registerBrandFonts('/fonts');
   const images = await resolveQuoteImages({
     settings: props.settings,
     lines: props.lines,

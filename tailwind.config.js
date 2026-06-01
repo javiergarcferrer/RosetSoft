@@ -10,7 +10,12 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        // Alcover brand type. Body/UI is Lausanne (the default `font-sans`);
+        // headers use `font-display` (Söhne); the company wordmark uses
+        // `font-wordmark` (Rauschen B). Faces are declared in src/index.css.
+        sans: ['Lausanne', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Sohne', 'Lausanne', 'system-ui', 'sans-serif'],
+        wordmark: ['"Rauschen B"', 'Sohne', 'Lausanne', 'serif'],
       },
       // Safe-area inset tokens, usable via Tailwind's spacing utilities:
       //   pt-safe-t, pb-safe-b, pl-safe-l, pr-safe-r, etc.

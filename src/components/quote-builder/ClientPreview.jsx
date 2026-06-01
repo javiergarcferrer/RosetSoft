@@ -189,7 +189,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
               className="h-12 max-w-[200px] object-contain object-left mb-3"
             />
           ) : (
-            <div className="text-xl font-semibold text-ink-900">{settings?.companyName || 'Tu empresa'}</div>
+            <div className="font-wordmark text-2xl text-ink-900">{settings?.companyName || 'Tu empresa'}</div>
           )}
           <div className="text-[11px] text-ink-500 leading-relaxed whitespace-pre-line max-w-xs">
             {[settings?.companyAddress, settings?.companyPhone, settings?.companyEmail].filter(Boolean).join('\n')}
