@@ -74,6 +74,7 @@ const adminNavGroup = {
 // pages (libro contable, estados financieros, catálogo de cuentas).
 const accountingItems = [
   { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
+  { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
   { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
   { to: '/accounting/suppliers', label: 'Proveedores', icon: Truck },
   { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },

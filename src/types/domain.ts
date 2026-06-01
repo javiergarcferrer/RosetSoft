@@ -233,10 +233,39 @@ export interface Expense {
   updatedAt?: number;
 }
 
+/**
+ * A recognized sale (Facturación) — posted at delivery. Snapshots the booked
+ * DOP figures + NCF and links to the asiento it generated. The 607 and the
+ * ITBIS liquidation (IT-1) project off these. One per quote.
+ */
+export interface SalePosting {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  quoteId?: string | null;
+  customerId?: string | null;
+  postedAt: number;
+  ncf?: string;
+  ncfType?: string;
+  /** Fiscal id snapshot at posting (stable for the 607). */
+  rnc?: string;
+  base: number;
+  itbis: number;
+  total: number;
+  depositApplied: number;
+  rate?: number | null;
+  usdTotal?: number | null;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Customer {
   id: string;
   profileId: string;
   name: string;
+  /** Fiscal id (RNC / cédula) for the 607. Optional — consumidor final has none. */
+  rnc?: string;
   company?: string;
   email?: string;
   phone?: string;

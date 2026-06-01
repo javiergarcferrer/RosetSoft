@@ -19,6 +19,7 @@ import type {
   JournalLine,
   Supplier,
   Expense,
+  SalePosting,
 } from '../types/domain.ts';
 
 /**
@@ -71,6 +72,7 @@ const TABLES = {
   journalLines:  { db: 'journal_lines',   pk: 'id' },
   suppliers:     { db: 'suppliers',       pk: 'id' },
   expenses:      { db: 'expenses',        pk: 'id' },
+  salesPostings: { db: 'sales_postings',  pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -99,6 +101,7 @@ export interface TableRowMap {
   journalLines: JournalLine;
   suppliers: Supplier;
   expenses: Expense;
+  salesPostings: SalePosting;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

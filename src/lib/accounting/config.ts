@@ -110,3 +110,13 @@ export function accountFor(
 export function itbisOn(base: number, config: ResolvedAccountingConfig): number {
   return Math.round(((Number(base) || 0) * config.itbisRate) / 100 * 100) / 100;
 }
+
+/** Resolve a posting role to a code, or throw — a missing mapping mis-books. */
+export function requireAccount(
+  config: AccountingConfig | ResolvedAccountingConfig | null | undefined,
+  role: string,
+): string {
+  const code = accountFor(config, role);
+  if (!code) throw new Error(`Cuenta no configurada para el rol "${role}".`);
+  return code;
+}

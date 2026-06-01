@@ -23,6 +23,10 @@ export {
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
 
+// ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation
+export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
+export { buildSaleEntry, depositApplied } from '../../lib/accounting/sale.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,
