@@ -63,7 +63,7 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 - Per-page VMs: `views/{editor:resolveLineList, lineItem:resolveLineItem,
   dashboard:resolveDashboard, lists:resolveQuotesList+resolveOrdersList,
   detail:resolveOrderDetail+resolveCustomerDetail+resolveProfessionalDetail}`;
-  `accounting/sales.js: resolveSales + resolveCommissionPayout`.
+  `accounting/sales.js: resolveSales`.
 
 ## Data layer
 Supabase Postgres + Storage, one shared `'team'` profile (`TEAM_PROFILE_ID`) + RLS.
