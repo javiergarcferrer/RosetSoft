@@ -85,6 +85,23 @@ test('resolveReceivables: balance + FIFO aging per customer', () => {
   assert.equal(row.buckets.d0_30, 5000);
 });
 
+test('resolveReceivables honors explicit allocations, FIFO for the rest', () => {
+  const now = 100 * DAY;
+  const customersById = new Map([['c1', { id: 'c1', name: 'A' }]]);
+  const salesPostings = [
+    { id: 'a', customerId: 'c1', postedAt: 100 * DAY - 80 * DAY, total: 10000, depositApplied: 0 }, // old
+    { id: 'b', customerId: 'c1', postedAt: 100 * DAY - 10 * DAY, total: 5000, depositApplied: 0 },   // new
+  ];
+  // 4000 explicitly applied to the NEWER invoice b → b open 1000 (0-30), a fully open (61-90).
+  const payments = [{ direction: 'in', partyType: 'customer', partyId: 'c1', paidAt: 100 * DAY, amount: 4000, allocations: [{ docId: 'b', amount: 4000 }] }];
+  const r = resolveReceivables({ salesPostings, payments, customersById, asOf: now });
+  const row = r.rows[0];
+  assert.equal(row.buckets.d0_30, 1000);
+  assert.equal(row.buckets.d61_90, 10000);
+  assert.equal(row.balance, 11000);
+  assert.equal(row.docs.find((d) => d.docId === 'b').open, 1000);
+});
+
 test('resolvePayables: only credit docs, balance per supplier', () => {
   const suppliersById = new Map([['s1', { id: 's1', name: 'LR' }]]);
   const purchases = [{ supplierId: 's1', purchaseAt: 1, paymentMethod: 'credit', base: 50000, itbis: 9000, retentionIsr: 0, retentionItbis: 0 }];

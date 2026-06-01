@@ -321,6 +321,8 @@ export interface Payment {
   commissionItbis: number;
   itbisRetained: number;
   isrRetained: number;
+  /** Invoice-level allocation: which documents this payment settles. */
+  allocations?: { docId: string; docType?: string; amount: number }[];
   notes?: string;
   journalEntryId?: string | null;
   createdAt?: number;

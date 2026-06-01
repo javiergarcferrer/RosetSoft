@@ -11,41 +11,63 @@ function ageBucket(days) {
 }
 
 /**
- * Per-party balance + FIFO aging. `charges` and `payments` are
- * `[{ partyId, date, amount }]`; payments are applied to the oldest charges
- * first so the open remainder ages correctly.
+ * Per-party balance + aging. Explicit invoice allocations are applied first
+ * (a payment that names a doc settles that doc); the unallocated remainder of
+ * each payment is then applied FIFO to the oldest open docs. With no
+ * allocations this is pure FIFO. `charges` = `[{ partyId, docId, date, label,
+ * amount }]`; `payments` = `[{ partyId, amount, allocations:[{docId,amount}] }]`.
+ * Returns per-party `{ invoiced, paid, balance, buckets, docs:[{...,open}] }`.
  */
 function ageParties(charges, payments, asOf) {
   const now = asOf || Date.now();
   const byParty = new Map();
   const ensure = (id) => {
-    if (!byParty.has(id)) byParty.set(id, { charges: [], paid: 0 });
+    if (!byParty.has(id)) byParty.set(id, { charges: [], payments: [] });
     return byParty.get(id);
   };
-  for (const c of charges) { if (c.partyId) ensure(c.partyId).charges.push({ date: c.date, amount: round2(c.amount) }); }
-  for (const p of payments) { if (p.partyId) ensure(p.partyId).paid += round2(p.amount); }
+  for (const c of charges) { if (c.partyId) ensure(c.partyId).charges.push({ docId: c.docId, date: c.date, label: c.label, amount: round2(c.amount) }); }
+  for (const p of payments) { if (p.partyId) ensure(p.partyId).payments.push({ amount: round2(p.amount), allocations: p.allocations || [] }); }
 
   const out = new Map();
-  for (const [partyId, { charges: chs, paid }] of byParty) {
-    const sorted = chs.slice().sort((a, b) => (a.date || 0) - (b.date || 0));
-    let remaining = round2(paid);
+  for (const [partyId, { charges: chs, payments: pays }] of byParty) {
+    const docs = chs.slice().sort((a, b) => (a.date || 0) - (b.date || 0)).map((c) => ({ ...c, open: c.amount }));
+    const byDoc = new Map(docs.map((d) => [d.docId, d]));
+
+    // 1) explicit allocations to specific docs; track each payment's leftover.
+    let unallocated = 0;
+    let paid = 0;
+    for (const p of pays) {
+      paid = round2(paid + p.amount);
+      let allocSum = 0;
+      for (const a of (p.allocations || [])) {
+        const amt = round2(a.amount);
+        allocSum = round2(allocSum + amt);
+        const d = byDoc.get(a.docId);
+        if (d) d.open = round2(Math.max(0, d.open - amt));
+      }
+      unallocated = round2(unallocated + Math.max(0, round2(p.amount - allocSum)));
+    }
+
+    // 2) unallocated remainder → FIFO over the oldest still-open docs.
+    let remaining = unallocated;
+    for (const d of docs) {
+      if (remaining <= 0) break;
+      const applied = Math.min(d.open, remaining);
+      d.open = round2(d.open - applied);
+      remaining = round2(remaining - applied);
+    }
+
     const buckets = { d0_30: 0, d31_60: 0, d61_90: 0, d90: 0 };
     let invoiced = 0;
-    for (const ch of sorted) {
-      invoiced = round2(invoiced + ch.amount);
-      let open = ch.amount;
-      if (remaining > 0) {
-        const applied = Math.min(open, remaining);
-        open = round2(open - applied);
-        remaining = round2(remaining - applied);
-      }
-      if (open > 0.001) {
-        const days = Math.floor((now - (ch.date || 0)) / 86_400_000);
+    for (const d of docs) {
+      invoiced = round2(invoiced + d.amount);
+      if (d.open > 0.001) {
+        const days = Math.floor((now - (d.date || 0)) / 86_400_000);
         const k = ageBucket(days);
-        buckets[k] = round2(buckets[k] + open);
+        buckets[k] = round2(buckets[k] + d.open);
       }
     }
-    out.set(partyId, { invoiced, paid: round2(paid), balance: round2(invoiced - paid), buckets });
+    out.set(partyId, { invoiced, paid, balance: round2(invoiced - paid), buckets, docs });
   }
   return out;
 }
@@ -63,11 +85,11 @@ function rollup(rows) {
 /** Cuentas por cobrar — open balance + aging per customer. */
 export function resolveReceivables({ salesPostings, payments, customersById, asOf } = {}) {
   const charges = (salesPostings || [])
-    .map((s) => ({ partyId: s.customerId, date: s.postedAt, amount: round2((s.total || 0) - (s.depositApplied || 0)) }))
+    .map((s) => ({ partyId: s.customerId, docId: s.id, date: s.postedAt, label: s.ncf || 'Factura', amount: round2((s.total || 0) - (s.depositApplied || 0)) }))
     .filter((c) => c.amount > 0.001);
   const pays = (payments || [])
     .filter((p) => p.direction === 'in' && p.partyType === 'customer')
-    .map((p) => ({ partyId: p.partyId, date: p.paidAt, amount: p.amount }));
+    .map((p) => ({ partyId: p.partyId, date: p.paidAt, amount: p.amount, allocations: p.allocations || [] }));
   const aged = ageParties(charges, pays, asOf);
   const rows = [...aged.entries()]
     .map(([id, v]) => ({ partyId: id, party: (customersById && customersById.get(id)) || null, ...v }))
@@ -81,13 +103,13 @@ export function resolvePayables({ purchases, expenses, payments, suppliersById, 
   const credit = (arr, dateField) => (arr || [])
     .filter((d) => d.paymentMethod === 'credit')
     .map((d) => ({
-      partyId: d.supplierId, date: d[dateField],
+      partyId: d.supplierId, docId: d.id, date: d[dateField], label: d.ncf || (dateField === 'purchaseAt' ? 'Compra' : 'Gasto'),
       amount: round2((d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0)),
     }));
   const charges = [...credit(purchases, 'purchaseAt'), ...credit(expenses, 'expenseAt')].filter((c) => c.amount > 0.001);
   const pays = (payments || [])
     .filter((p) => p.direction === 'out' && p.partyType === 'supplier')
-    .map((p) => ({ partyId: p.partyId, date: p.paidAt, amount: p.amount }));
+    .map((p) => ({ partyId: p.partyId, date: p.paidAt, amount: p.amount, allocations: p.allocations || [] }));
   const aged = ageParties(charges, pays, asOf);
   const rows = [...aged.entries()]
     .map(([id, v]) => ({ partyId: id, party: (suppliersById && suppliersById.get(id)) || null, ...v }))

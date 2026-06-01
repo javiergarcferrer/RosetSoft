@@ -93,6 +93,7 @@ export default function CuentasCobrarPagar() {
 
   const view = tab === 'cxc' ? receivables : payables;
   const partyLabel = tab === 'cxc' ? 'Cliente' : 'Proveedor';
+  const docsByParty = new Map(view.rows.map((r) => [r.partyId, r.docs || []]));
 
   return (
     <>
@@ -114,6 +115,7 @@ export default function CuentasCobrarPagar() {
         <PaymentForm
           direction={tab === 'cxc' ? 'in' : 'out'} scope={scope} config={config}
           parties={tab === 'cxc' ? customersQ.data : suppliersQ.data}
+          docsByParty={docsByParty}
           onClose={() => setShowForm(false)} />
       )}
 
@@ -200,14 +202,27 @@ export default function CuentasCobrarPagar() {
   );
 }
 
-function PaymentForm({ direction, scope, config, parties, onClose }) {
+function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }) {
   const [form, setForm] = useState({
     partyId: '', date: new Date().toISOString().slice(0, 10), amount: '', method: 'bank', reference: '',
     commission: '', commissionItbis: '', itbisRetained: '', isrRetained: '',
   });
+  const [alloc, setAlloc] = useState({}); // docId -> amount string
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const isCard = form.method === 'card' && direction === 'in';
+  const openDocs = (docsByParty && docsByParty.get(form.partyId)) || [];
+
+  function autoFill() {
+    let remaining = Number(form.amount) || 0;
+    const next = {};
+    for (const d of openDocs) {
+      if (remaining <= 0) break;
+      const applied = Math.min(d.open, remaining);
+      if (applied > 0) { next[d.docId] = String(Math.round(applied * 100) / 100); remaining = Math.round((remaining - applied) * 100) / 100; }
+    }
+    setAlloc(next);
+  }
 
   const net = paymentNet({
     amount: Number(form.amount) || 0, commission: Number(form.commission) || 0,
@@ -235,6 +250,9 @@ function PaymentForm({ direction, scope, config, parties, onClose }) {
       });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
+      const allocations = openDocs
+        .map((d) => ({ docId: d.docId, amount: Number(alloc[d.docId]) || 0 }))
+        .filter((a) => a.amount > 0);
       await assignSequenceNumber({
         table: 'payments', profileId: scope, start: 1,
         build: (n) => ({
@@ -242,7 +260,7 @@ function PaymentForm({ direction, scope, config, parties, onClose }) {
           partyId: form.partyId, paidAt: postedAt, amount, method: form.method, reference: form.reference,
           commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
           itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
-          journalEntryId: built.entry.id,
+          allocations, journalEntryId: built.entry.id,
         }),
       });
       onClose();
@@ -263,7 +281,7 @@ function PaymentForm({ direction, scope, config, parties, onClose }) {
       </div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">{direction === 'in' ? 'Cliente' : 'Proveedor'}<br />
-          <select value={form.partyId} onChange={(e) => setForm((f) => ({ ...f, partyId: e.target.value }))} className={`${field} min-w-[200px]`}>
+          <select value={form.partyId} onChange={(e) => { setForm((f) => ({ ...f, partyId: e.target.value })); setAlloc({}); }} className={`${field} min-w-[200px]`}>
             <option value="">—</option>
             {parties.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -286,6 +304,26 @@ function PaymentForm({ direction, scope, config, parties, onClose }) {
           <label className="text-sm">ITBIS comisión<br /><input type="number" step="0.01" min="0" value={form.commissionItbis} onChange={(e) => setForm((f) => ({ ...f, commissionItbis: e.target.value }))} className={numField} /></label>
           <label className="text-sm">ITBIS retenido<br /><input type="number" step="0.01" min="0" value={form.itbisRetained} onChange={(e) => setForm((f) => ({ ...f, itbisRetained: e.target.value }))} className={numField} /></label>
           <label className="text-sm">ISR retenido<br /><input type="number" step="0.01" min="0" value={form.isrRetained} onChange={(e) => setForm((f) => ({ ...f, isrRetained: e.target.value }))} className={numField} /></label>
+        </div>
+      )}
+
+      {form.partyId && openDocs.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-ink-100">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-ink-500">Aplicar a facturas (opcional)</span>
+            <button type="button" onClick={autoFill} className="text-xs text-ink-600 hover:text-ink-900">Auto (FIFO)</button>
+          </div>
+          <div className="space-y-1">
+            {openDocs.map((d) => (
+              <div key={d.docId} className="flex items-center gap-2 text-sm">
+                <span className="text-ink-500 w-24">{formatDate(d.date)}</span>
+                <span className="flex-1 truncate">{d.label} · pendiente {formatDop(d.open)}</span>
+                <input type="number" step="0.01" min="0" value={alloc[d.docId] || ''}
+                  onChange={(e) => setAlloc((a) => ({ ...a, [d.docId]: e.target.value }))}
+                  className="w-28 rounded-lg border border-ink-200 px-2 py-1 text-sm text-right tabular-nums" />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
