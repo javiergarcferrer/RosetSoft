@@ -154,6 +154,26 @@ export interface Settings {
   adminEmails?: string[];
   /** Minimum USD value before an order's first container can dispatch. */
   dispatchThreshold?: number;
+  /**
+   * Accounting tax parameters + posting-account overrides (the role→code map).
+   * Defaults live in `lib/accounting/config`; this holds only what the
+   * accountant changed. See `resolveAccountingConfig`.
+   */
+  accountingConfig?: AccountingConfig;
+}
+
+/**
+ * Saved accounting configuration (overrides only — `resolveAccountingConfig`
+ * fills the gaps from code defaults). `postingMap` maps a well-known posting
+ * role (`salesLocal`, `itbisPayable`, `accountsPayable`…) to a chart account
+ * code; the rates are percentages.
+ */
+export interface AccountingConfig {
+  itbisRate?: number;
+  dutyRate?: number;
+  retentionIsrServicesRate?: number;
+  retentionItbisRate?: number;
+  postingMap?: Record<string, string>;
 }
 
 export interface Customer {

@@ -15,6 +15,7 @@ import {
   BookOpen,
   Scale,
   BookText,
+  SlidersHorizontal,
   Menu,
   X,
 } from 'lucide-react';
@@ -74,6 +75,7 @@ const accountingItems = [
   { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
   { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },
   { to: '/accounting/chart', label: 'Catálogo de cuentas', icon: BookText },
+  { to: '/accounting/settings', label: 'Configuración contable', icon: SlidersHorizontal },
 ];
 
 const accountingNavGroups = [

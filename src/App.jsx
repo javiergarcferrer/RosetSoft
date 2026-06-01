@@ -24,6 +24,7 @@ import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import AccountingLedger from './pages/accounting/Ledger.jsx';
 import AccountingStatements from './pages/accounting/Statements.jsx';
 import ChartOfAccounts from './pages/accounting/ChartOfAccounts.jsx';
+import AccountingSettings from './pages/accounting/AccountingSettings.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import StyleStudio from './pages/StyleStudio.jsx';
 import NotFound from './pages/NotFound.jsx';
@@ -222,6 +223,7 @@ function ProtectedApp() {
             <Route path="accounting/ledger" element={<AccountingLedger />} />
             <Route path="accounting/statements" element={<AccountingStatements />} />
             <Route path="accounting/chart" element={<ChartOfAccounts />} />
+            <Route path="accounting/settings" element={<AccountingSettings />} />
             <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />

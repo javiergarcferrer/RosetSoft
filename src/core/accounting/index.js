@@ -31,6 +31,15 @@ export {
   postableAccounts,
 } from '../../lib/accounting/chart.js';
 
+// ── accounting configuration (tax params + posting-account map)
+export {
+  POSTING_ROLES,
+  TAX_DEFAULTS,
+  resolveAccountingConfig,
+  accountFor,
+  itbisOn,
+} from '../../lib/accounting/config.js';
+
 // ── posting Model (double-entry rules)
 export {
   LEDGER_EPSILON,
