@@ -281,3 +281,82 @@ export function compoundFabric(
     swatchImageId: bearing[0]?.swatchImageId ?? null,
   };
 }
+
+/* ------------------------------------------------------------------------- *
+ * Compound material GROUPS — "frame in one fabric, cushions in another".
+ *
+ * The sibling of compoundFabric, one rung out. When a compound's pieces DON'T
+ * all share one fabric, the common case isn't noise — it's a handful of
+ * material ZONES (every frame element in fabric A, the cushions in fabric B).
+ * Stamping the same swatch on every row is the very redundancy compoundFabric
+ * removes for the uniform case, so this partitions the pieces into contiguous
+ * runs of equal materialIdentity. Each client surface (screen, link, PDF) can
+ * then hoist ONE material header per run and collapse its rows to clean
+ * name+price — but only when it earns its keep: 2+ DISTINCT materials among the
+ * bearing pieces (a single material is compoundFabric's uniform hero; zero is a
+ * plain list, so both report `grouped:false`).
+ *
+ * Order is PRESERVED, never rearranged — a run is a maximal block of ADJACENT
+ * pieces sharing a material. So a dealer's intentional ordering stands, and a
+ * pick-one alternative block (whose members are entered adjacently) is never
+ * split across two headers. Non-bearing pieces (a metal base, a glass top) form
+ * their own header-less runs; they carry no fabric to hoist.
+ * ------------------------------------------------------------------------- */
+
+/** One contiguous run of compound pieces sharing a material. */
+export interface MaterialRun<T extends MaterialBearing = MaterialBearing> {
+  /** materialIdentity shared by the run's pieces — the partition key. */
+  key: string;
+  /** The run's upholstery, ready for a header; '' on a non-bearing run. */
+  subtype: string;
+  swatchImageId: string | null;
+  /** Whether the run carries a fabric — gate the per-run material header on it. */
+  bearing: boolean;
+  /** The run's pieces, in their original order. */
+  components: T[];
+}
+
+export interface ComponentGrouping<T extends MaterialBearing = MaterialBearing> {
+  /** True ⇒ the compound mixes 2+ materials; render per-run headers. */
+  grouped: boolean;
+  runs: Array<MaterialRun<T>>;
+}
+
+/**
+ * Partition a compound's components into contiguous same-material runs — see
+ * the block comment above. Returns `grouped:false` (and no runs) unless the
+ * bearing pieces span 2+ distinct materials, so callers fall straight through
+ * to their existing flat / uniform-hero render in every other case.
+ */
+export function groupComponentsByMaterial<T extends MaterialBearing>(
+  components: ReadonlyArray<T> | null | undefined,
+): ComponentGrouping<T> {
+  const list = Array.isArray(components) ? components : [];
+  // Worth grouping only when the bearing pieces span 2+ distinct materials.
+  const distinct = new Set<string>();
+  for (const c of list) {
+    const { grade, fabric } = parseSubtype(c?.subtype);
+    if (grade || fabric) distinct.add(materialIdentity(c));
+  }
+  if (distinct.size < 2) return { grouped: false, runs: [] };
+
+  const runs: Array<MaterialRun<T>> = [];
+  for (const c of list) {
+    const { grade, fabric } = parseSubtype(c?.subtype);
+    const bearing = !!(grade || fabric);
+    const key = materialIdentity(c);
+    const last = runs[runs.length - 1];
+    if (last && last.key === key) {
+      last.components.push(c);
+    } else {
+      runs.push({
+        key,
+        subtype: bearing ? (c?.subtype || '').trim() : '',
+        swatchImageId: bearing ? (c?.swatchImageId ?? null) : null,
+        bearing,
+        components: [c],
+      });
+    }
+  }
+  return { grouped: true, runs };
+}

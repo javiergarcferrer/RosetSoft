@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial, compoundFabric, fabricDisplay } from '../src/lib/subtype.js';
+import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial, compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../src/lib/subtype.js';
 
 test('parse — canonical "Grade X — FABRIC"', () => {
   assert.deepEqual(parseSubtype('Grade C — PAMPA'), { grade: 'C', fabric: 'PAMPA' });
@@ -222,4 +222,68 @@ test('compose ∘ parse is identity for every canonical shape', () => {
     const reparsed = parseSubtype(recomposed);
     assert.deepEqual(reparsed, { grade, fabric }, `round-trip drift for ${JSON.stringify(input)}`);
   }
+});
+
+/* ---- groupComponentsByMaterial — frame fabric vs cushion fabric ---------- */
+
+test('group — 2 materials split into contiguous runs (frame, then cushions)', () => {
+  const g = groupComponentsByMaterial([
+    { id: 's1', subtype: 'Grade C — PAMPA' },
+    { id: 's2', subtype: 'Grade C — PAMPA' },
+    { id: 'c1', subtype: 'Grade A — VELVET' },
+    { id: 'c2', subtype: 'Grade A — VELVET' },
+  ]);
+  assert.equal(g.grouped, true);
+  assert.equal(g.runs.length, 2);
+  assert.deepEqual(g.runs.map((r) => r.components.map((c) => c.id)), [['s1', 's2'], ['c1', 'c2']]);
+  assert.deepEqual(g.runs.map((r) => r.bearing), [true, true]);
+  assert.deepEqual(g.runs.map((r) => r.subtype), ['Grade C — PAMPA', 'Grade A — VELVET']);
+});
+
+test('group — uniform compound does NOT group (one hero handles it)', () => {
+  const g = groupComponentsByMaterial([
+    { id: 'a', subtype: 'Grade C — PAMPA' },
+    { id: 'b', subtype: 'Grade C — PAMPA' },
+  ]);
+  assert.equal(g.grouped, false);
+  assert.deepEqual(g.runs, []);
+});
+
+test('group — no material-bearing pieces does NOT group', () => {
+  const g = groupComponentsByMaterial([
+    { id: 'm', subtype: '' },
+    { id: 'n', subtype: '' },
+  ]);
+  assert.equal(g.grouped, false);
+});
+
+test('group — same swatchImageId distinguishes an otherwise-equal subtype', () => {
+  const g = groupComponentsByMaterial([
+    { id: 'a', subtype: 'Grade C — PAMPA', swatchImageId: 'beige' },
+    { id: 'b', subtype: 'Grade C — PAMPA', swatchImageId: 'grey' },
+  ]);
+  assert.equal(g.grouped, true);
+  assert.equal(g.runs.length, 2);
+});
+
+test('group — non-bearing piece forms its own header-less run between materials', () => {
+  const g = groupComponentsByMaterial([
+    { id: 's', subtype: 'Grade C — PAMPA' },
+    { id: 'base', subtype: '' },          // metal base: no fabric
+    { id: 'c', subtype: 'Grade A — VELVET' },
+  ]);
+  assert.equal(g.grouped, true);
+  assert.deepEqual(g.runs.map((r) => r.bearing), [true, false, true]);
+  assert.equal(g.runs[1].subtype, '');     // header-less
+});
+
+test('group — order is preserved, never reordered (interleaved stays interleaved)', () => {
+  const g = groupComponentsByMaterial([
+    { id: 'a1', subtype: 'Grade C — PAMPA' },
+    { id: 'b1', subtype: 'Grade A — VELVET' },
+    { id: 'a2', subtype: 'Grade C — PAMPA' },
+  ]);
+  assert.equal(g.grouped, true);
+  assert.equal(g.runs.length, 3); // A | B | A — not clustered to 2
+  assert.deepEqual(g.runs.map((r) => r.components[0].id), ['a1', 'b1', 'a2']);
 });

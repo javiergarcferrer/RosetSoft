@@ -8,7 +8,7 @@ import MaterialColorPicker from './MaterialColorPicker.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
 import ApplyMaterialToAllButton from './ApplyMaterialToAllButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
-import { parseSubtype, composeFabricLabel, canPropagateMaterial, compoundFabric, fabricDisplay } from '../../lib/subtype.js';
+import { parseSubtype, composeFabricLabel, canPropagateMaterial, compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
 import {
   ITBIS_PCT, isCompoundLine, componentSubtotal, compoundSubtotal, lineTotal,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
@@ -905,22 +905,23 @@ function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker }) {
   );
 }
 
-// Uniform-compound upholstery hero — ONE swatch + "Tapizado · <fabric>" shown
-// at the compound header when every piece shares a fabric, so the swatch isn't
-// stamped on every component row below. On the interactive link the swatch is a
-// whole-compound FabricPicker (re-dresses the entire piece in one pick, via the
-// apply-to-all channel); read-only surfaces show a plain swatch. The fabric code
+// Upholstery hero — ONE swatch + "Tapizado · <fabric>" hoisted above a set of
+// pieces that share a fabric, so the swatch isn't stamped on every row below.
+// Serves BOTH the uniform compound (every piece, one header) and a single
+// material run (the frame pieces, or the cushions) when a compound mixes
+// fabrics. On the interactive link the swatch is a FabricPicker that re-dresses
+// EVERY piece in `components` at once (onPickMany) — re-upholstering the whole
+// zone in one gesture; read-only surfaces show a plain swatch. The fabric code
 // "(#…)" is stripped for the client. Mirrors the PDF's UpholsteryHero.
-function UpholsteryHero({ line, mf, picker }) {
-  const { subtype, swatchImageId } = compoundFabric(line.components);
+function UpholsteryHero({ subtype, swatchImageId, components, mf, picker }) {
   const label = fabricDisplay(subtype);
-  // A whole-compound pick uses the FIRST bearing component's model for grade
-  // prices and dresses every sibling at once (onPickMany), so picking the hero
-  // re-upholsters the entire piece — the natural gesture for one-fabric pieces.
-  const lead = (line.components || []).find((c) => {
+  // A pick uses the FIRST bearing piece's model for grade prices and dresses
+  // every piece in the zone at once (onPickMany).
+  const list = components || [];
+  const lead = list.find((c) => {
     const { grade, fabric } = parseSubtype(c.subtype);
     return !!(grade || fabric);
-  }) || (line.components || [])[0];
+  }) || list[0];
   const gp = picker && lead && (lead.gradePrices || picker.gradePricesFor?.(lead.reference, mf));
   const canPick = !!(picker?.onPickMany && gp && lead);
   return (
@@ -943,10 +944,10 @@ function UpholsteryHero({ line, mf, picker }) {
               subtype={lead.subtype}
               reference={lead.reference}
               gradePrices={gp}
-              // Wrap onPick so a hero pick dresses EVERY component at once.
+              // Wrap onPick so a hero pick dresses every piece in the zone at once.
               picker={{ ...picker, onPick: (_id, sel) => {
                 const map = {};
-                for (const c of line.components || []) map[c.id] = sel;
+                for (const c of list) map[c.id] = sel;
                 picker.onPickMany(map);
               } }}
               className=""
@@ -1003,6 +1004,11 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   // same-fabric alternative seats still shows one hero, with its radios intact.
   const upholstery = compoundFabric(line.components);
   const hideSwatch = upholstery.uniform;
+  // Mixed upholstery → group the pieces into contiguous same-material runs and
+  // give each a header (frame fabric, then cushion fabric), instead of stamping
+  // a swatch on every row. Only fires with 2+ materials; uniform stays the one
+  // hero above. Same Model rule the PDF uses, so screen + paper agree.
+  const grouping = groupComponentsByMaterial(line.components);
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -1026,6 +1032,29 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   // Interactive radio on the public link (same as the simple line).
   const selectable = inGroup && !!onSelectAlternative;
   const showSelectedFlag = insideGroupCard && inGroup && isSelected && !selectable;
+  // One row, rendered the same whether the compound is flat or grouped — only
+  // `hide` (collapse the redundant swatch under a header) and `allowApplyAll`
+  // (offer per-row "apply to every sibling") differ between the two layouts.
+  const renderComponentRow = (c, i, hide, allowApplyAll) => (
+    <CompoundComponentRow
+      key={c.id || i}
+      component={c}
+      marginFactor={mf}
+      currency={currency}
+      rates={rates}
+      fmt={fmt}
+      families={families}
+      groupInfo={compAltInfo.get(c.id)}
+      materialSelections={materialSelections}
+      picker={picker}
+      hideSwatch={hide}
+      onSelectMaterial={onSelectMaterial}
+      onToggleOptional={onToggleOptional}
+      onSelectAlternative={onSelectAlternative}
+      canApplyToAll={allowApplyAll && !!picker?.onPickMany && canPropagateMaterial(c, line.components)}
+      onApplyToAll={() => applyMaterialToSiblings(c, line.components, picker)}
+    />
+  );
   return (
     <li className={`px-4 sm:px-5 py-4 border-b border-ink-100 last:border-b-0 ${
       optional ? 'bg-ink-50/30 border-l-2 border-dashed border-ink-300' : ''
@@ -1120,29 +1149,44 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
           {/* Uniform compound → state the shared fabric ONCE here (swatch +
               "Tapizado · …"), instead of repeating it on every row below. In
               edit mode the hero swatch is itself a whole-compound picker. */}
-          {upholstery.uniform && <UpholsteryHero line={line} mf={mf} picker={picker} />}
-          <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
-            {(line.components || []).map((c, i) => (
-              <CompoundComponentRow
-                key={c.id || i}
-                component={c}
-                marginFactor={mf}
-                currency={currency}
-                rates={rates}
-                fmt={fmt}
-                families={families}
-                groupInfo={compAltInfo.get(c.id)}
-                materialSelections={materialSelections}
-                picker={picker}
-                hideSwatch={hideSwatch}
-                onSelectMaterial={onSelectMaterial}
-                onToggleOptional={onToggleOptional}
-                onSelectAlternative={onSelectAlternative}
-                canApplyToAll={!hideSwatch && !!picker?.onPickMany && canPropagateMaterial(c, line.components)}
-                onApplyToAll={() => applyMaterialToSiblings(c, line.components, picker)}
-              />
-            ))}
-          </ul>
+          {upholstery.uniform && (
+            <UpholsteryHero
+              subtype={upholstery.subtype}
+              swatchImageId={upholstery.swatchImageId}
+              components={line.components}
+              mf={mf}
+              picker={picker}
+            />
+          )}
+          {grouping.grouped ? (
+            // Mixed compound → a material header per contiguous run, its rows
+            // collapsed to clean name+price (the run's header carries the
+            // fabric). Per-row "apply to all" is off here — the header swatch
+            // IS the per-zone picker; applying one piece across the whole
+            // compound would flatten the very grouping the dealer set up.
+            <div className="mt-2 border-t border-ink-100">
+              {grouping.runs.map((run, ri) => (
+                <div key={run.key + ri}>
+                  {run.bearing && (
+                    <UpholsteryHero
+                      subtype={run.subtype}
+                      swatchImageId={run.swatchImageId}
+                      components={run.components}
+                      mf={mf}
+                      picker={picker}
+                    />
+                  )}
+                  <ul className="divide-y divide-ink-100">
+                    {run.components.map((c, i) => renderComponentRow(c, i, run.bearing, false))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
+              {(line.components || []).map((c, i) => renderComponentRow(c, i, hideSwatch, !hideSwatch))}
+            </ul>
+          )}
           {/* Compound roll-up — a neutral "Total compuesto" caption +
               bold total anchor, matching the redesigned PDF footer. The
               optional struck list price / −Y% sit above when discounted. */}

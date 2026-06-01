@@ -7,7 +7,7 @@ import {
   ITBIS_PCT, lineQty, lineTotal, lineListUnit, lineHasRange, lineTotalRange,
   isCompoundLine, componentSubtotal, computeTotalsRange, quoteSavings,
 } from '../../lib/pricing.js';
-import { compoundFabric, fabricDisplay } from '../../lib/subtype.js';
+import { compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
 import type {
   Quote, QuoteLine, LineComponent, Customer, Professional, Profile, Settings, Totals,
   CurrencyCode, QuoteGroup,
@@ -149,6 +149,10 @@ function LineRow({
   // swatches (they're now informative). Resolved by the Model so screen + paper
   // agree on when to collapse.
   const upholstery = compound ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
+  // Mixed compound → group pieces into contiguous same-material runs, each under
+  // one fabric header (frame, then cushions); uniform stays the single hero
+  // above. Same Model rule as the on-screen preview, so paper + screen agree.
+  const grouping = compound ? groupComponentsByMaterial(line.components) : { grouped: false as const, runs: [] };
   // Standalone swatch only for a SIMPLE line with no options grid (the grid
   // leads with the same material). A compound's parent carries a stale seed
   // subtype the editor hides — never draw it; its fabric is the hero (uniform)
@@ -186,9 +190,25 @@ function LineRow({
           {compound && upholstery.uniform && (
             <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
           )}
-          {compound && Array.isArray(line.components) && line.components.map((c, i) => (
-            <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={upholstery.uniform} />
-          ))}
+          {compound && grouping.grouped ? (
+            // A fabric header per contiguous run, its rows collapsed to clean
+            // name+price (the run header states the fabric). Non-bearing runs
+            // (metal base, glass) render header-less.
+            grouping.runs.map((run, ri) => (
+              <View key={run.key + ri}>
+                {run.bearing && (
+                  <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
+                )}
+                {run.components.map((c, i) => (
+                  <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={run.bearing} />
+                ))}
+              </View>
+            ))
+          ) : (
+            compound && Array.isArray(line.components) && line.components.map((c, i) => (
+              <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={upholstery.uniform} />
+            ))
+          )}
           {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
         <MoneyCell line={line} fmt={fmt} />
