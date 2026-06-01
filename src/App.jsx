@@ -34,6 +34,7 @@ import AccountingInventario from './pages/accounting/Inventario.jsx';
 import AccountingImportaciones from './pages/accounting/Importaciones.jsx';
 import AccountingECFSequences from './pages/accounting/ECFSequences.jsx';
 import AccountingCuentas from './pages/accounting/CuentasCobrarPagar.jsx';
+import AccountingConciliacion from './pages/accounting/Conciliacion.jsx';
 import AccountingPeriodos from './pages/accounting/Periodos.jsx';
 import AccountingNomina from './pages/accounting/Nomina.jsx';
 import AccountingEmpleados from './pages/accounting/Empleados.jsx';
@@ -243,6 +244,7 @@ function ProtectedApp() {
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />
             <Route path="accounting/ecf" element={<AccountingECFSequences />} />
             <Route path="accounting/cuentas" element={<AccountingCuentas />} />
+            <Route path="accounting/conciliacion" element={<AccountingConciliacion />} />
             <Route path="accounting/periodos" element={<AccountingPeriodos />} />
             <Route path="accounting/nomina" element={<AccountingNomina />} />
             <Route path="accounting/empleados" element={<AccountingEmpleados />} />

@@ -25,6 +25,7 @@ import {
   Gauge,
   Lock,
   Wallet,
+  Landmark,
   Menu,
   X,
 } from 'lucide-react';
@@ -86,6 +87,7 @@ const accountingItems = [
   { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
   { to: '/accounting/ecf', label: 'Secuencias e-NCF', icon: Hash },
   { to: '/accounting/cuentas', label: 'Cobros y pagos', icon: ArrowLeftRight },
+  { to: '/accounting/conciliacion', label: 'Conciliación', icon: Landmark },
   { to: '/accounting/compras', label: 'Compras', icon: ShoppingCart },
   { to: '/accounting/importaciones', label: 'Importaciones', icon: Ship },
   { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },

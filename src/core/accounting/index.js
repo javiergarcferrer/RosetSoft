@@ -52,6 +52,9 @@ export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';
 
+// ── conciliación bancaria
+export { resolveReconciliation } from './reconciliation.js';
+
 // ── nómina (payroll)
 export {
   DR_PAYROLL, annualIsr, monthlyIsr, computePayrollItem, payrollTotals, buildPayrollEntry,

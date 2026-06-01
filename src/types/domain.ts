@@ -1122,5 +1122,7 @@ export interface JournalLine {
   thirdPartyId?: string | null;
   ncf?: string | null;
   sortOrder?: number;
+  /** Set when the line was reconciled against the bank statement (else null). */
+  reconciledAt?: number | null;
   createdAt?: number;
 }
