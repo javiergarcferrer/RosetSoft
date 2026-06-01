@@ -35,16 +35,29 @@ export const C = {
   white: '#ffffff',
 } as const;
 
-// Type scale — same ~6 roles as constants.ts.
+/**
+ * Global PDF type scale. The brand body face (Lausanne, x-height ≈0.52) sits
+ * well below Inter (≈0.73), which the PDF used to render — so the same point
+ * size reads ~29% shorter. react-pdf has no document-level zoom, so this one
+ * multiplier re-inflates every size at once: the FS roles below AND the inline
+ * literals in QuoteDocument both go through `fs()`. Turn this single number to
+ * make the whole PDF bigger/smaller; everything stays in proportion.
+ */
+export const TYPE_SCALE = 1.12;
+
+/** Apply the global type scale to a point size (rounded to 0.1pt). */
+export const fs = (pt: number): number => Math.round(pt * TYPE_SCALE * 10) / 10;
+
+// Type scale — same ~6 roles as constants.ts, each lifted by TYPE_SCALE.
 export const FS = {
-  display: 22,
-  number: 15,
-  totalBig: 24,
-  title: 13,
-  eyebrow: 11,
-  body: 9.5,
-  meta: 8.5,
-  eyebrowSm: 8,
+  display: fs(22),
+  number: fs(15),
+  totalBig: fs(24),
+  title: fs(13),
+  eyebrow: fs(11),
+  body: fs(9.5),
+  meta: fs(8.5),
+  eyebrowSm: fs(8),
 } as const;
 
 /**
@@ -91,21 +104,21 @@ export const s = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   // The company wordmark — Rauschen B (the logo face), shown when no logo image.
   company: { fontFamily: 'Rauschen B', fontSize: FS.display, color: C.ink },
-  companyMeta: { fontSize: 9, color: C.inkMid, marginTop: 2 },
+  companyMeta: { fontSize: fs(9), color: C.inkMid, marginTop: 2 },
   headerRight: { alignItems: 'flex-end' },
   eyebrow: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase' },
   quoteNumber: { fontSize: FS.number, fontWeight: 'bold', color: C.ink, marginTop: 6 },
-  quoteDate: { fontSize: 10, color: C.inkMid, marginTop: 4 },
+  quoteDate: { fontSize: fs(10), color: C.inkMid, marginTop: 4 },
   rule: { borderBottomWidth: 0.5, borderBottomColor: C.inkLine, marginTop: 12, marginBottom: 18 },
 
   // ---- Customer block ----
   blockRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   custName: { fontSize: FS.number, fontWeight: 'bold', color: C.ink, marginTop: 6 },
-  custCompany: { fontSize: 10, color: C.inkHigh, marginTop: 2 },
-  custMeta: { fontSize: 9, color: C.inkMid, marginTop: 2 },
+  custCompany: { fontSize: fs(10), color: C.inkHigh, marginTop: 2 },
+  custMeta: { fontSize: fs(9), color: C.inkMid, marginTop: 2 },
   rightEntry: { alignItems: 'flex-end', marginBottom: 8 },
-  rightName: { fontSize: 11, fontWeight: 'bold', color: C.ink, marginTop: 2 },
-  rightSub: { fontSize: 9, color: C.inkMid, marginTop: 1 },
+  rightName: { fontSize: fs(11), fontWeight: 'bold', color: C.ink, marginTop: 2 },
+  rightSub: { fontSize: fs(9), color: C.inkMid, marginTop: 1 },
 
   // ---- Section header ----
   section: { marginTop: 14 },
@@ -121,24 +134,24 @@ export const s = StyleSheet.create({
     borderWidth: 0.5, borderColor: C.inkLine2, borderRadius: 4,
     alignItems: 'center', justifyContent: 'center',
   },
-  imgPlaceholder: { fontSize: 7, color: C.inkSoft, letterSpacing: 1 },
+  imgPlaceholder: { fontSize: fs(7), color: C.inkSoft, letterSpacing: 1 },
   lineBody: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   lineMain: { flex: 1 },
   familyEyebrow: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.inkMid, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
   lineName: { fontSize: FS.title, fontWeight: 'bold', color: C.ink },
   lineSub: { fontSize: FS.meta, color: C.inkMid, marginTop: 2 },
   lineRefRow: { flexDirection: 'row', gap: 8, marginTop: 1 },
-  lineRef: { fontSize: 7.5, color: C.inkMid },
-  lineDesc: { fontSize: 8.5, color: C.inkHigh, marginTop: 4, maxWidth: 280, lineHeight: 1.35 },
-  groupCaption: { fontFamily: 'Sohne', fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
+  lineRef: { fontSize: fs(7.5), color: C.inkMid },
+  lineDesc: { fontSize: fs(8.5), color: C.inkHigh, marginTop: 4, maxWidth: 280, lineHeight: 1.35 },
+  groupCaption: { fontFamily: 'Sohne', fontSize: fs(7.5), letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
 
   // money cell
   priceCell: { minWidth: 120, alignItems: 'flex-end' },
-  priceQty: { fontSize: 9, color: C.inkMid },
-  priceStrike: { fontSize: 9, color: C.inkSoft, textDecoration: 'line-through' },
-  priceDisc: { fontSize: 8, fontWeight: 'bold', color: C.brand700, marginTop: 1 },
-  priceTotal: { fontSize: 13, fontWeight: 'bold', color: C.ink, marginTop: 2 },
-  priceNote: { fontSize: 7.5, color: C.inkMid, marginTop: 1 },
+  priceQty: { fontSize: fs(9), color: C.inkMid },
+  priceStrike: { fontSize: fs(9), color: C.inkSoft, textDecoration: 'line-through' },
+  priceDisc: { fontSize: fs(8), fontWeight: 'bold', color: C.brand700, marginTop: 1 },
+  priceTotal: { fontSize: fs(13), fontWeight: 'bold', color: C.ink, marginTop: 2 },
+  priceNote: { fontSize: fs(7.5), color: C.inkMid, marginTop: 1 },
 
   // ---- Group zones ----
   zoneBand: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
@@ -155,14 +168,14 @@ export const s = StyleSheet.create({
   },
   bandLabel: { fontFamily: 'Sohne', fontSize: FS.eyebrowSm, color: C.bandCream, letterSpacing: 2 },
   bandValue: { fontSize: FS.totalBig, fontWeight: 'bold', color: C.white },
-  bandValueRange: { fontSize: 15, fontWeight: 'bold', color: C.white },
+  bandValueRange: { fontSize: fs(15), fontWeight: 'bold', color: C.white },
   flete: { fontSize: FS.meta, fontWeight: 'bold', color: C.emerald700, textAlign: 'right', textTransform: 'uppercase', marginTop: 10, letterSpacing: 0.5 },
   savings: { fontSize: FS.body, fontWeight: 'bold', color: C.brand700, textAlign: 'right', marginTop: 6 },
   fx: { fontSize: FS.meta, color: C.inkMid, textAlign: 'right', marginTop: 6 },
 
   // ---- Terms ----
-  termsHead: { fontFamily: 'Sohne', fontSize: 7.5, color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 18, marginBottom: 6 },
-  termsBody: { fontSize: 9, color: C.inkHigh, lineHeight: 1.4 },
+  termsHead: { fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 18, marginBottom: 6 },
+  termsBody: { fontSize: fs(9), color: C.inkHigh, lineHeight: 1.4 },
 
   // ---- Footer (fixed, every page) ----
   footer: {
@@ -170,5 +183,5 @@ export const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     borderTopWidth: 0.4, borderTopColor: C.inkLine, paddingTop: 6,
   },
-  footerText: { fontSize: 8, color: C.inkMid },
+  footerText: { fontSize: fs(8), color: C.inkMid },
 });

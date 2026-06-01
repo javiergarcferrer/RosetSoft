@@ -10,44 +10,51 @@
    paints immediately in the fallback and re-renders when the face arrives —
    no invisible-text flash on a cold load. Italic is Lausanne-only (the app's
    sole italic need); Söhne/Rauschen synthesise if ever asked, which they
-   aren't. */
+   aren't.
+
+   size-adjust: 106% — Lausanne's x-height (≈0.52) sits a touch below the
+   system font the app rendered before it loaded, so the same px read slightly
+   small. size-adjust scales the glyphs up ~6% WITHOUT changing the px scale or
+   any rem-based spacing, so text gets bigger but layout density doesn't shift.
+   Söhne/Rauschen carry the same factor so the type hierarchy stays in step.
+   Dial this one number if text still reads small/large. */
 @font-face {
   font-family: 'Lausanne';
   src: url('/fonts/Lausanne-400.woff2') format('woff2');
-  font-weight: 400; font-style: normal; font-display: swap;
+  font-weight: 400; font-style: normal; font-display: swap; size-adjust: 106%;
 }
 @font-face {
   font-family: 'Lausanne';
   src: url('/fonts/Lausanne-400Italic.woff2') format('woff2');
-  font-weight: 400; font-style: italic; font-display: swap;
+  font-weight: 400; font-style: italic; font-display: swap; size-adjust: 106%;
 }
 @font-face {
   font-family: 'Lausanne';
   src: url('/fonts/Lausanne-500.woff2') format('woff2');
-  font-weight: 500; font-style: normal; font-display: swap;
+  font-weight: 500; font-style: normal; font-display: swap; size-adjust: 106%;
 }
 @font-face {
   font-family: 'Lausanne';
   src: url('/fonts/Lausanne-600.woff2') format('woff2');
-  font-weight: 600; font-style: normal; font-display: swap;
+  font-weight: 600; font-style: normal; font-display: swap; size-adjust: 106%;
 }
 @font-face {
   font-family: 'Lausanne';
   src: url('/fonts/Lausanne-700.woff2') format('woff2');
-  font-weight: 700; font-style: normal; font-display: swap;
+  font-weight: 700; font-style: normal; font-display: swap; size-adjust: 106%;
 }
-/* Söhne — one weight, mapped across 500–700 so any `font-medium`/`-semibold`/
+/* Söhne — one weight, mapped across 400–700 so any `font-medium`/`-semibold`/
    `-bold` heading resolves to it instead of synthesising or falling back. */
 @font-face {
   font-family: 'Sohne';
   src: url('/fonts/Sohne-Halbfett.woff2') format('woff2');
-  font-weight: 400 700; font-style: normal; font-display: swap;
+  font-weight: 400 700; font-style: normal; font-display: swap; size-adjust: 106%;
 }
 /* Rauschen B — the wordmark cut. */
 @font-face {
   font-family: 'Rauschen B';
   src: url('/fonts/RauschenB-Semibold.woff2') format('woff2');
-  font-weight: 400 700; font-style: normal; font-display: swap;
+  font-weight: 400 700; font-style: normal; font-display: swap; size-adjust: 106%;
 }
 
 @tailwind base;

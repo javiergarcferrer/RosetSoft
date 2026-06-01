@@ -17,7 +17,7 @@ import { materialCells, swatchSrcFor } from './materialCells.js';
 import type { MoCell } from './materialCells.js';
 import { coverKey, swatchKey } from './imageKeys.js';
 import type { ImageMap } from './imageKeys.js';
-import { s, C } from './theme.js';
+import { s, C, fs } from './theme.js';
 
 export interface QuoteDocumentProps {
   quote: Quote;
@@ -65,8 +65,8 @@ function UpholsteryHero({ subtype, swatchImageId, images }: { subtype: string; s
     <View style={{ marginTop: 7, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
       <Swatch src={src} images={images} size={40} />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 7.5, color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase' }}>Tapizado</Text>
-        {label ? <Text style={{ fontSize: 9.5, color: C.inkHigh, marginTop: 1.5 }}>{label}</Text> : null}
+        <Text style={{ fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase' }}>Tapizado</Text>
+        {label ? <Text style={{ fontSize: fs(9.5), color: C.inkHigh, marginTop: 1.5 }}>{label}</Text> : null}
       </View>
     </View>
   );
@@ -81,8 +81,8 @@ function MaterialGrid({ cells, images }: { cells: MoCell[]; images?: ImageMap })
         <View key={i} style={{ width: '48%', marginBottom: 8, flexDirection: 'row', gap: 6 }}>
           <Swatch src={cell.swatch} images={images} size={36} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 8, color: C.inkHigh }}>{cell.label}</Text>
-            {cell.note && <Text style={{ fontSize: 7.5, color: cell.noteColor, marginTop: 1 }}>{cell.note}</Text>}
+            <Text style={{ fontSize: fs(8), color: C.inkHigh }}>{cell.label}</Text>
+            {cell.note && <Text style={{ fontSize: fs(7.5), color: cell.noteColor, marginTop: 1 }}>{cell.note}</Text>}
           </View>
         </View>
       ))}
@@ -215,11 +215,11 @@ function ComponentRow({
         <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
           {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 9, color: C.inkHigh }}>{c.name || c.reference || '—'}</Text>
-            {!hideSwatch && c.subtype && <Text style={{ fontSize: 7.5, color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
+            <Text style={{ fontSize: fs(9), color: C.inkHigh }}>{c.name || c.reference || '—'}</Text>
+            {!hideSwatch && c.subtype && <Text style={{ fontSize: fs(7.5), color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
           </View>
         </View>
-        <Text style={{ fontSize: 9, color: C.inkMid }}>{fmt(componentSubtotal(c))}</Text>
+        <Text style={{ fontSize: fs(9), color: C.inkMid }}>{fmt(componentSubtotal(c))}</Text>
       </View>
       {!hideSwatch && <MaterialGrid cells={cells} images={images} />}
     </View>
@@ -259,7 +259,7 @@ function GroupZone({
       <View wrap={false}>
         <View style={[s.zoneBand, { backgroundColor: bandBg }]}>
           <Text style={[s.zoneBandLabel, { color: labelColor }]}>{title}</Text>
-          <Text style={{ fontSize: 7.5, color: C.inkMid, textTransform: 'uppercase', letterSpacing: 1 }}>{sub}</Text>
+          <Text style={{ fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, textTransform: 'uppercase', letterSpacing: 1 }}>{sub}</Text>
         </View>
         {members[0] && <Member m={members[0]} />}
       </View>
@@ -267,7 +267,7 @@ function GroupZone({
       {footer && (
         <View style={[s.zoneBand, { backgroundColor: bandBg }]} wrap={false}>
           <Text style={[s.zoneBandLabel, { color: labelColor }]}>{footerLabel}</Text>
-          <Text style={{ fontSize: 11, fontWeight: 'bold', color: C.ink }}>
+          <Text style={{ fontSize: fs(11), fontWeight: 'bold', color: C.ink }}>
             {footer.amountRange ? `${fmt(footer.amountRange.min)} – ${fmt(footer.amountRange.max)}` : fmt(footer.amount)}
           </Text>
         </View>
@@ -417,7 +417,7 @@ function TotalsBlock({
       {dopRate > 0 && currency === 'USD' && (
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 6 }}>
           {rateLogo && <Image src={rateLogo} style={{ height: 10, width: 10, objectFit: 'contain' }} />}
-          <Text style={{ fontSize: 8.5, color: C.inkMid }}>
+          <Text style={{ fontSize: fs(8.5), color: C.inkMid }}>
             {hasRange
               ? `≈ ${plain(range.min * dopRate)} – ${plain(range.max * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`
               : `≈ ${plain(totals.grandTotal * dopRate)} a ${dopRate.toFixed(2)} DOP/USD`}
@@ -455,7 +455,7 @@ export function QuoteDocument({
         <Header settings={settings} quote={quote} images={images} />
         <CustomerBlock customer={customer} professional={professional} seller={seller} />
         {priced.length === 0 && view.sections.length === 0 ? (
-          <Text style={{ fontSize: 11, color: C.inkSoft, fontStyle: 'italic', marginTop: 20 }}>
+          <Text style={{ fontSize: fs(11), color: C.inkSoft, fontStyle: 'italic', marginTop: 20 }}>
             Esta cotización aún no tiene líneas.
           </Text>
         ) : (
