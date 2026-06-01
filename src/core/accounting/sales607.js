@@ -49,13 +49,20 @@ export function resolveSales607({ salesPostings, customersById, start, end } = {
  * positivo ⇒ a pagar; negativo ⇒ a favor (arrastra). Las compras se suman desde
  * los gastos (y, cuando exista, el módulo de compras).
  */
-export function resolveItbisLiquidation({ salesPostings, expenses, start, end } = {}) {
+export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, start, end } = {}) {
   const debitoFiscal = round2((salesPostings || [])
     .filter((p) => inWindow(p.postedAt, start, end))
     .reduce((s, p) => s + (Number(p.itbis) || 0), 0));
-  const creditoFiscal = round2((expenses || [])
+  const expCredit = (expenses || [])
     .filter((e) => inWindow(e.expenseAt, start, end) && e.itbisCreditable !== false)
-    .reduce((s, e) => s + (Number(e.itbis) || 0), 0));
+    .reduce((s, e) => s + (Number(e.itbis) || 0), 0);
+  const purCredit = (purchases || [])
+    .filter((p) => inWindow(p.purchaseAt, start, end) && p.itbisCreditable !== false)
+    .reduce((s, p) => s + (Number(p.itbis) || 0), 0);
+  const impCredit = (imports || [])
+    .filter((l) => inWindow(l.liquidatedAt, start, end))
+    .reduce((s, l) => s + (Number(l.importItbis) || 0), 0);
+  const creditoFiscal = round2(expCredit + purCredit + impCredit);
   const saldo = round2(debitoFiscal - creditoFiscal);
   return {
     debitoFiscal,

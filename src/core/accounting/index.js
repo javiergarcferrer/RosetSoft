@@ -32,6 +32,12 @@ export { resolveInventory, resolveItemKardex } from './inventory.js';
 export { buildPurchaseEntry, buildCogsEntry } from '../../lib/accounting/purchase.js';
 export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/inventory.js';
 
+// ── importación / liquidación DGA (landed cost)
+export { resolveImportsList } from './imports.js';
+export {
+  buildImportEntry, computeImportTaxes, landedCost, landedUnitCost,
+} from '../../lib/accounting/importLiquidation.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,

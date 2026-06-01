@@ -39,6 +39,8 @@ export default function Facturacion() {
   const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(scope).toArray(), [scope], []);
   const postingsQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
+  const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
+  const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
@@ -83,8 +85,10 @@ export default function Facturacion() {
 
   const sales607 = useMemo(() => resolveSales607({ salesPostings: postingsQ.data, customersById, ...win }),
     [postingsQ.data, customersById, win]);
-  const itbis = useMemo(() => resolveItbisLiquidation({ salesPostings: postingsQ.data, expenses: expensesQ.data, ...win }),
-    [postingsQ.data, expensesQ.data, win]);
+  const itbis = useMemo(() => resolveItbisLiquidation({
+    salesPostings: postingsQ.data, expenses: expensesQ.data,
+    purchases: purchasesQ.data, imports: importsQ.data, ...win,
+  }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, win]);
 
   const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, ncfType, rnc, msg }
   const [posting, setPosting] = useState(null);

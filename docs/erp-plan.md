@@ -27,12 +27,22 @@ Estado: **en implementación.** Fases 1, 2a y 2b construidas y verificadas
 - **✅ Fase 2b — Gastos + Proveedores + 606.** Captura de gasto que se asienta
   solo (gasto + ITBIS adelantado / banco-caja-suplidores / retenciones), CRUD de
   proveedores con banderas de retención, reporte 606 con export CSV. 9 tests.
-- **⏳ Fase 3 — Ventas @ entrega + NCF/eNCF + 607 + IT-1** (siguiente).
-- **⏳ Fase 4 — Compras + Inventario + costeo + Costo de venta.**
-- **⏳ Fase 5 — Importación / liquidación DGA (landed cost, gravamen 20%).**
-- **⏳ Fase 6 — Estados financieros formales + IR-2.**
-- **⏳ Track eNCF — integración e-CF con la DGII** (requiere certificado digital
-  del cliente; ver §eNCF).
+- **✅ Fase 3 — Facturación @ entrega + 607 + IT-1.** Postea la venta al entregar
+  (aplica el depósito, reconoce CxC + ventas + ITBIS), 607 con export CSV, y la
+  liquidación de ITBIS (débito ventas − crédito compras/gastos/importación). 8 tests.
+- **✅ Fase 4 — Compras + Inventario + costeo.** Compra (mercancía→inventario,
+  activo/servicio→cuenta) que se asienta sola y alimenta el 606; inventario con
+  kardex de promedio ponderado; salida que postea Costo de venta. 8 tests.
+- **✅ Fase 5 — Importación / liquidación DGA.** CIF + gravamen (20%) + despacho →
+  costo en destino capitalizado; ITBIS de importación como crédito; entrada al
+  inventario al costo unitario en destino. 5 tests.
+- **✅ Búsqueda de RNC/cédula (DGII)** — Edge Function `rnc-lookup` + autocompletar
+  el nombre fiscal en proveedores y en Facturación (607). 3 tests.
+- **⏳ Fase 6 — IR-2 anual** (el Balance General + Estado de Resultados ya están).
+- **⏳ Track eNCF — emisión e-CF directa con la DGII** (requiere el certificado
+  digital del cliente; ver §eNCF).
+- **⏳ Costo de venta automático por venta** (hoy la salida de inventario se
+  registra manualmente; atar cada venta a sus SKU es un paso deliberado posterior).
 
 **Audiencia doble:**
 - **Asesor financiero / contador** → revisa el §4 (asientos), §6 (formularios

@@ -327,6 +327,33 @@ export interface Purchase {
   updatedAt?: number;
 }
 
+/**
+ * A customs/import liquidation (liquidación aduanal / DGA). Lands imported goods
+ * at their real RD cost: CIF + duty + clearance capitalize into landed cost; the
+ * import ITBIS is input credit. Posts an asiento (source='import') + a kardex IN
+ * at the landed unit cost. Amounts are DOP.
+ */
+export interface ImportLiquidation {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  orderId?: string | null;
+  supplierId?: string | null;
+  itemId?: string | null;
+  liquidatedAt: number;
+  customsRef?: string;
+  qty: number;
+  cif: number;
+  duty: number;
+  importItbis: number;
+  clearanceFees: number;
+  otherCosts: number;
+  paymentMethod: PaymentMethod;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Customer {
   id: string;
   profileId: string;
