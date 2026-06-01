@@ -18,7 +18,6 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Store from './pages/Store.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
-import AdminCommissions from './pages/admin/Commissions.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
@@ -208,7 +207,6 @@ function ProtectedApp() {
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/commissions" element={<AdminCommissions />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
             <Route path="admin/catalog" element={<AdminCatalog />} />
             {/* Accounting surface — a single workspace page that
@@ -220,6 +218,10 @@ function ProtectedApp() {
             <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />
+            {/* The standalone admin commissions report folded into the
+                accounting workspace (comisiones por pagar). Redirect old
+                bookmarks there instead of 404'ing. */}
+            <Route path="admin/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
