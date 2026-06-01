@@ -8,24 +8,8 @@ import {
   Package,
   Settings as SettingsIcon,
   Shield,
-  Calculator,
   Layers,
   PackageSearch,
-  BookOpen,
-  Scale,
-  BookText,
-  SlidersHorizontal,
-  Receipt,
-  Truck,
-  ShoppingCart,
-  Boxes,
-  Ship,
-  Hash,
-  ArrowLeftRight,
-  Gauge,
-  Lock,
-  Wallet,
-  Landmark,
   Menu,
   X,
 } from 'lucide-react';
@@ -33,6 +17,8 @@ import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
+import AccountingSubnav from './AccountingSubnav.jsx';
+import { accountingSectionNav } from '../lib/accountingSections.js';
 
 // Sidebar groups. The two single-item groups at the ends (Inicio and
 // Configuración) sit on their own so the visual rhythm of the nav
@@ -73,46 +59,19 @@ const adminNavGroup = {
   ],
 };
 
-// Accounting-only nav. Contabilidad users don't see the sales surfaces
-// at all — they get a single Contabilidad workspace at /accounting that
-// rolls cotizaciones aceptadas + comisiones por pagar + Odoo CSV
-// exports into one table-first view. No sub-pages, no /quotes,
-// /orders, /customers, or admin links — they aren't a sales role.
-// The accounting surfaces, shared by the accounting-only nav and the admin
-// entry below: the original sales/commissions workspace plus the general-ledger
-// pages (libro contable, estados financieros, catálogo de cuentas).
-const accountingItems = [
-  { to: '/accounting/dashboard', label: 'Resumen', icon: Gauge, end: true },
-  { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
-  { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
-  { to: '/accounting/ecf', label: 'Secuencias e-NCF', icon: Hash },
-  { to: '/accounting/cuentas', label: 'Cobros y pagos', icon: ArrowLeftRight },
-  { to: '/accounting/conciliacion', label: 'Conciliación', icon: Landmark },
-  { to: '/accounting/compras', label: 'Compras', icon: ShoppingCart },
-  { to: '/accounting/importaciones', label: 'Importaciones', icon: Ship },
-  { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
-  { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
-  { to: '/accounting/nomina', label: 'Nómina', icon: Wallet },
-  { to: '/accounting/empleados', label: 'Empleados', icon: UserSquare2 },
-  { to: '/accounting/suppliers', label: 'Proveedores', icon: Truck },
-  { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
-  { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },
-  { to: '/accounting/chart', label: 'Catálogo de cuentas', icon: BookText },
-  { to: '/accounting/periodos', label: 'Períodos', icon: Lock },
-  { to: '/accounting/settings', label: 'Configuración contable', icon: SlidersHorizontal },
-];
-
+// Accounting nav — QuickBooks-style: a short set of top-level SECTIONS (Resumen,
+// Ventas, Gastos y compras, Banco, Inventario, Nómina, Contabilidad, Reportes,
+// Configuración). Each section's own sub-pages render as a horizontal tab strip
+// inside the page (AccountingSubnav), so the sidebar stays short. A section
+// highlights when the route is any of its tabs (`match`). Shared by the
+// accounting-only sidebar and the admin's read-only Contabilidad group.
 const accountingNavGroups = [
-  { items: [accountingItems[0]] },
-  { label: 'Contabilidad general', items: accountingItems.slice(1) },
+  { items: accountingSectionNav },
 ];
 
-// Admin's read-only entry into the same accounting surfaces — spliced into the
-// full sidebar between Administración and Configuración so the admin can see
-// what Contabilidad sees without switching accounts.
 const adminAccountingNavGroup = {
   label: 'Contabilidad',
-  items: accountingItems,
+  items: accountingSectionNav,
 };
 
 export default function Layout() {
@@ -258,23 +217,27 @@ export default function Layout() {
                   {group.label}
                 </div>
               )}
-              {group.items.map(({ to, label, icon: Icon, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
-                      isActive
-                        ? 'bg-ink-700 text-white'
-                        : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
-                    }`
-                  }
-                >
-                  <Icon size={16} />
-                  {label}
-                </NavLink>
-              ))}
+              {group.items.map(({ to, label, icon: Icon, end, match }) => {
+                // Section links highlight on ANY of their tab routes (`match`);
+                // plain links fall back to NavLink's own active state.
+                const sectionActive = match ? match.includes(location.pathname) : null;
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => {
+                      const on = sectionActive != null ? sectionActive : isActive;
+                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
+                        on ? 'bg-ink-700 text-white' : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
+                      }`;
+                    }}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </NavLink>
+                );
+              })}
             </div>
           ))}
         </nav>
@@ -303,6 +266,7 @@ function MainContent() {
   return (
     <div className="px-4 py-4 md:px-8 md:py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
       <div className="max-w-[1400px] mx-auto">
+        <AccountingSubnav />
         <Outlet key={location.pathname} />
       </div>
     </div>

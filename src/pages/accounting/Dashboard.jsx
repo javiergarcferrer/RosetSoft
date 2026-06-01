@@ -26,6 +26,15 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   return to ? <Link to={to} className="block transition hover:shadow-pop">{body}</Link> : body;
 }
 
+function Bar({ value, max, tone }) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden">
+      <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
 /**
  * Resumen contable — the accounting home. KPI cards (cash, CxC, CxP, month
  * result, ITBIS), alerts, top debtors/creditors and recent asientos, each
@@ -80,6 +89,41 @@ export default function AccountingDashboard() {
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4">
+          {/* QBO-style widgets: P&L of the month + receivables status. */}
+          <div className="grid lg:grid-cols-2 gap-3">
+            <div className="card p-4">
+              <h2 className="eyebrow font-semibold text-ink-600 mb-3">Ganancia y pérdida · {monthLabel}</h2>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium">{formatDop(d.ingresosMonth)}</span></div>
+                  <Bar value={d.ingresosMonth} max={Math.max(d.ingresosMonth, d.egresosMonth, 1)} tone="bg-emerald-500" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium">{formatDop(d.egresosMonth)}</span></div>
+                  <Bar value={d.egresosMonth} max={Math.max(d.ingresosMonth, d.egresosMonth, 1)} tone="bg-rose-400" />
+                </div>
+              </div>
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-ink-100">
+                <span className="text-sm font-semibold">Utilidad neta</span>
+                <span className={`text-lg font-bold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatDop(d.utilidadMonth)}</span>
+              </div>
+            </div>
+
+            <div className="card p-4">
+              <h2 className="eyebrow font-semibold text-ink-600 mb-3">Cuentas por cobrar</h2>
+              <div className="text-2xl font-semibold tabular-nums mb-3">{formatDop(d.cxcBalance)}</div>
+              <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
+                <div className="bg-ink-400 h-full" style={{ width: d.cxcBalance > 0 ? `${(Math.max(0, d.cxcBalance - d.overdue) / d.cxcBalance) * 100}%` : '0%' }} />
+                <div className="bg-rose-500 h-full" style={{ width: d.cxcBalance > 0 ? `${(d.overdue / d.cxcBalance) * 100}%` : '0%' }} />
+              </div>
+              <div className="flex justify-between text-xs mt-2">
+                <span className="text-ink-500">Al día {formatDop(Math.max(0, d.cxcBalance - d.overdue))}</span>
+                <span className="text-rose-600">Vencido +90 {formatDop(d.overdue)}</span>
+              </div>
+              <Link to="/accounting/cuentas" className="text-xs text-ink-500 hover:text-ink-800 mt-2 inline-block">Ver cuentas →</Link>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
             <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
