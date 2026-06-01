@@ -444,7 +444,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         under the transient SaveToast (z-50) so a "Guardando…" confirmation
         still reads over it. */}
     {interactive && (
-      <div className="fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-4 print:hidden pointer-events-none">
+      <div className="fixed left-0 right-0 md:left-60 bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))] z-40 flex justify-center px-4 print:hidden pointer-events-none">
         <div className="pointer-events-auto">
           <ModeToggle mode={mode} onChange={setMode} floating />
         </div>
