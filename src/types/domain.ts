@@ -176,6 +176,63 @@ export interface AccountingConfig {
   postingMap?: Record<string, string>;
 }
 
+/** Supplier tax personhood — drives which retentions/606 columns apply. */
+export type SupplierKind = 'fisica' | 'juridica' | 'exterior';
+
+/**
+ * A supplier (proveedor) for purchases and expenses. We act as withholding
+ * agent for this supplier only when `retainIsr` / `retainItbis` are set
+ * (owner's rule: retain when the supplier requires it).
+ */
+export interface Supplier {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  name: string;
+  rnc?: string;
+  kind: SupplierKind;
+  retainIsr?: boolean;
+  retainItbis?: boolean;
+  /** Pre-fills the gasto form's expense account. */
+  defaultAccountCode?: string | null;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** How an expense was/will be settled. */
+export type PaymentMethod = 'cash' | 'bank' | 'card' | 'credit';
+
+/**
+ * An operating expense (Gasto, class 6). Saving one posts a balanced asiento
+ * (source='expense') and links it via `journalEntryId`; the 606 is a projection
+ * of these rows. Amounts are DOP.
+ */
+export interface Expense {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  supplierId?: string | null;
+  expenseAt: number;
+  ncf?: string;
+  ncfType?: string;
+  /** The class-6 account this gasto hits. */
+  accountCode?: string | null;
+  description?: string;
+  base: number;
+  itbis: number;
+  itbisCreditable?: boolean;
+  retentionIsr: number;
+  retentionItbis: number;
+  paymentMethod: PaymentMethod;
+  paidAt?: number | null;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Customer {
   id: string;
   profileId: string;

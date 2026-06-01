@@ -16,6 +16,8 @@ import {
   Scale,
   BookText,
   SlidersHorizontal,
+  Receipt,
+  Truck,
   Menu,
   X,
 } from 'lucide-react';
@@ -72,6 +74,8 @@ const adminNavGroup = {
 // pages (libro contable, estados financieros, catálogo de cuentas).
 const accountingItems = [
   { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
+  { to: '/accounting/expenses', label: 'Gastos', icon: Receipt },
+  { to: '/accounting/suppliers', label: 'Proveedores', icon: Truck },
   { to: '/accounting/ledger', label: 'Libro contable', icon: BookOpen },
   { to: '/accounting/statements', label: 'Estados financieros', icon: Scale },
   { to: '/accounting/chart', label: 'Catálogo de cuentas', icon: BookText },

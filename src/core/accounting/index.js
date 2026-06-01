@@ -19,6 +19,10 @@ export {
   resolveAccountLedger,
 } from './ledger.js';
 
+// ── expenses (Gastos) ViewModels + the DGII 606 projection
+export { resolveExpensesList, resolve606 } from './expenses.js';
+export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,
