@@ -15,6 +15,7 @@ import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
+import Store from './pages/Store.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminCommissions from './pages/admin/Commissions.jsx';
@@ -198,6 +199,7 @@ function ProtectedApp() {
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />
+            <Route path="store" element={<Store />} />
             {/* Legacy redirects */}
             <Route path="containers" element={<Navigate to="/orders" replace />} />
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
