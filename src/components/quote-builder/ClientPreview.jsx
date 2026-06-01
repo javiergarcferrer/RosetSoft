@@ -563,7 +563,7 @@ function componentPriced(component) {
 // `mf` is the per-line margin factor the picker grade prices + option-chip
 // deltas bake; `canApplyToAll`/`onApplyToAll` are only passed for compound
 // components (a standalone line has no siblings to copy a material to).
-function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideSwatch, materialSelections, picker, onSelectMaterial, canApplyToAll, onApplyToAll }) {
+function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideSwatch, materialSelections, picker, onSelectMaterial, canApplyToAll, onApplyToAll, modelKey }) {
   const gp = picker && (entity.gradePrices || picker.gradePricesFor?.(entity.reference, mf));
   // A standalone swatch shows only when there's NO material-options grid (the
   // grid already leads with this same material) AND we're not collapsing it into
@@ -577,7 +577,7 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
   // state (an excluded optional, a non-selected alternative).
   const pickerStack = gp ? (
     <div className="relative z-[2] flex flex-col items-start gap-1.5">
-      <FabricPicker id={entity.id} subtype={entity.subtype} reference={entity.reference} gradePrices={gp} picker={picker} className="" />
+      <FabricPicker id={entity.id} subtype={entity.subtype} reference={entity.reference} gradePrices={gp} picker={picker} modelKey={modelKey} className="" />
       {canApplyToAll && onApplyToAll && <ApplyMaterialToAllButton onClick={onApplyToAll} />}
     </div>
   ) : null;
@@ -821,7 +821,7 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 // fabric shows. On pick we hand back the SAME { grade, fabric, swatchImageId }
 // shape the dealer's SwatchPicker produces — the optimistic reducer + the Edge
 // Function reprice from it. `z-[2]` lifts the trigger above any dimming veil.
-function FabricPicker({ id, subtype, reference, gradePrices, picker, className = 'mt-2.5' }) {
+function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, className = 'mt-2.5' }) {
   const [open, setOpen] = useState(false);
   // A CatalogFamily-shaped shim so MaterialColorPicker shows the MODEL price (the
   // margin-baked `gradePrices`) per grade — never the material's own per-yard
@@ -833,11 +833,15 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, className =
     return { root: splitSkuGrade(reference || '').root, name: '', family: '', graded: byGrade.size >= 2, byGrade, grades: [...byGrade.keys()] };
   }, [gradePrices, reference]);
   const gradeFilter = useMemo(() => Object.keys(gradePrices || {}), [gradePrices]);
+  // The model-link allowlist key: a COMPOUND governs its components by one link
+  // keyed on the parent line id (`modelKey`); a simple line keys on its
+  // reference's family root. Mirrors the editor's `modelKey` and the bundle's
+  // keying in quote-share — the bundle ships the allowlist under that same key.
   const nameFilter = useMemo(() => {
-    const root = splitSkuGrade(reference || '').root;
-    const allow = root ? picker.modelFabrics?.[root] : null;
+    const key = modelKey ?? splitSkuGrade(reference || '').root;
+    const allow = key ? picker.modelFabrics?.[key] : null;
     return allow?.length ? new Set(allow) : undefined;
-  }, [reference, picker.modelFabrics]);
+  }, [modelKey, reference, picker.modelFabrics]);
   const { grade, fabric } = parseSubtype(subtype);
   return (
     <div className={`relative z-[2] ${className}`}>
@@ -913,7 +917,7 @@ function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker }) {
 // EVERY piece in `components` at once (onPickMany) — re-upholstering the whole
 // zone in one gesture; read-only surfaces show a plain swatch. The fabric code
 // "(#…)" is stripped for the client. Mirrors the PDF's UpholsteryHero.
-function UpholsteryHero({ subtype, swatchImageId, components, mf, picker }) {
+function UpholsteryHero({ subtype, swatchImageId, components, mf, picker, modelKey }) {
   const label = fabricDisplay(subtype);
   // A pick uses the FIRST bearing piece's model for grade prices and dresses
   // every piece in the zone at once (onPickMany).
@@ -944,6 +948,10 @@ function UpholsteryHero({ subtype, swatchImageId, components, mf, picker }) {
               subtype={lead.subtype}
               reference={lead.reference}
               gradePrices={gp}
+              // The hero shares the compound's single link (keyed on the parent
+              // line id), threaded down as `modelKey` — the same key every row in
+              // the zone uses.
+              modelKey={modelKey}
               // Wrap onPick so a hero pick dresses every piece in the zone at once.
               picker={{ ...picker, onPick: (_id, sel) => {
                 const map = {};
@@ -1053,6 +1061,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
       onSelectAlternative={onSelectAlternative}
       canApplyToAll={allowApplyAll && !!picker?.onPickMany && canPropagateMaterial(c, line.components)}
       onApplyToAll={() => applyMaterialToSiblings(c, line.components, picker)}
+      modelKey={line.id}
     />
   );
   return (
@@ -1156,6 +1165,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               components={line.components}
               mf={mf}
               picker={picker}
+              modelKey={line.id}
             />
           )}
           {grouping.grouped ? (
@@ -1174,6 +1184,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                       components={run.components}
                       mf={mf}
                       picker={picker}
+                      modelKey={line.id}
                     />
                   )}
                   <ul className="divide-y divide-ink-100">
@@ -1222,7 +1233,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   );
 }
 
-function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, hideSwatch, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
+function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, hideSwatch, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll, modelKey }) {
   const optional = !!component.isOptional;
   // Component-level alternative (pick-one). The interactive link gives each
   // option a radio; read-only surfaces flag the chosen one and dim the rest.
@@ -1279,6 +1290,7 @@ function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fm
         onSelectMaterial={onSelectMaterial}
         canApplyToAll={canApplyToAll}
         onApplyToAll={onApplyToAll}
+        modelKey={modelKey}
       />
       {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(component.id, on)} />}
     </li>

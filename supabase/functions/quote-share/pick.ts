@@ -58,6 +58,20 @@ export function rootOf(ref: unknown): string | null {
 const ALPHA_GRADES = new Set(
   'A B C D E F G H I J K L M N O P Q R S U V W X'.split(' '),
 );
+
+// The model-link storage key for a SIMPLE line's reference — mirrors the client's
+// splitSkuGrade(...).root (src/lib/catalog.ts): an "8-digit + grade letter" SKU
+// collapses to its 8-digit family root; anything else (a non-graded or custom
+// reference) stays whole. Distinct from rootOf (numeric-only, for catalog price
+// lookups): a model link can sit on a non-graded reference too, and quoteShare
+// must read the allowlist under the SAME key the editor stored it. Pinned to
+// splitSkuGrade by tests/quotePickParity.test.js.
+export function familyRootOf(ref: unknown): string {
+  const s = String(ref || '').trim();
+  const m = /^(\d{8})([A-Za-z])$/.exec(s);
+  return m && ALPHA_GRADES.has(m[2].toUpperCase()) ? m[1] : s;
+}
+
 function composeSubtype(grade: string, fabric: string): string {
   const g = (grade || '').trim();
   const f = (fabric || '').trim();
