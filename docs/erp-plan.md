@@ -1,8 +1,38 @@
 # Plan: convertir RosetSoft en ERP contable (RD)
 
-Estado: **planificado, sin implementar.** Documento para validar con el asesor
-financiero ANTES de escribir código.
-Rama: `claude/intelligent-planck-A1SbE`.
+Estado: **en implementación.** Fases 1, 2a y 2b construidas y verificadas
+(typecheck + build + tests). Rama: `claude/intelligent-planck-A1SbE`.
+
+## Decisiones confirmadas por el dueño (parámetros bloqueados)
+- **Sin operaciones exentas** → el ITBIS de compras/gastos es 100% crédito (sin
+  proporcionalidad).
+- **ITBIS 18%**; **gravamen arancelario 20%** en mercancía (99% de los casos).
+- **Se factura al ENTREGAR el mobiliario** → ingreso/NCF se reconocen en la entrega.
+- **Agente de retención por proveedor**: se retiene sólo cuando el proveedor lo
+  requiere (banderas `retainIsr`/`retainItbis` por proveedor).
+- **Depósitos de cliente** financian la compra de mercancía → pasivo (cobros
+  anticipados) hasta la entrega.
+- **Pasarelas de pago** (CardNet/VisaNet/Azul…): comisión + sus particularidades.
+- **eNCF: integración directa con la DGII** (e-CF) — ver §6/§eNCF.
+
+## Estado de implementación
+- **✅ Fase 1 — Cimientos (libro mayor + catálogo).** Tablas `accounts` (251
+  cuentas sembradas), `journal_entries`, `journal_lines`. Motor de partida doble
+  (`assertBalanced`, `buildJournalEntry`). Vistas: Libro contable (Diario con
+  alta de asientos, Mayor, Balanza), Estados financieros (Balance General +
+  Estado de Resultados), Catálogo de cuentas. 21 tests.
+- **✅ Fase 2a — Configuración fiscal.** Parámetros (ITBIS 18, gravamen 20,
+  retenciones) + mapa de cuentas (rol→código) con defaults reales del catálogo.
+  Página Configuración contable. 5 tests.
+- **✅ Fase 2b — Gastos + Proveedores + 606.** Captura de gasto que se asienta
+  solo (gasto + ITBIS adelantado / banco-caja-suplidores / retenciones), CRUD de
+  proveedores con banderas de retención, reporte 606 con export CSV. 9 tests.
+- **⏳ Fase 3 — Ventas @ entrega + NCF/eNCF + 607 + IT-1** (siguiente).
+- **⏳ Fase 4 — Compras + Inventario + costeo + Costo de venta.**
+- **⏳ Fase 5 — Importación / liquidación DGA (landed cost, gravamen 20%).**
+- **⏳ Fase 6 — Estados financieros formales + IR-2.**
+- **⏳ Track eNCF — integración e-CF con la DGII** (requiere certificado digital
+  del cliente; ver §eNCF).
 
 **Audiencia doble:**
 - **Asesor financiero / contador** → revisa el §4 (asientos), §6 (formularios
@@ -377,6 +407,29 @@ manual** para el usuario.
   no lo exigen aún.
 
 ---
+
+## §eNCF — integración e-CF con la DGII (track propio)
+
+El dueño quiere **emisión directa de e-CF**. Lo que el código construye y lo que
+es dependencia externa inevitable:
+
+**Construible en la app (sin pasos manuales de despliegue):**
+- Secuencias de eNCF por tipo (31 crédito fiscal, 32 consumo, 34 nota de crédito…)
+  con control de rango y vencimiento.
+- Generación del XML del e-CF según el estándar DGII, a partir de la venta/asiento.
+- Firma + envío vía Edge Function (Deno) a los web services de la DGII (ambiente
+  de certificación `Cert-eCF` y producción), y registro del **acuse/aprobación**
+  (track number, estado) en la venta.
+- Representación impresa (RFCE) con su código QR.
+
+**Dependencia externa inevitable (no la elimina ningún código):**
+- **Certificado digital** vigente de una entidad autorizada (p. ej. Avansi/Camara
+  de Comercio) + **inscripción como emisor electrónico** en la DGII. El cliente
+  lo **sube una vez en Configuración** (acción de app, NO un paso de despliegue);
+  a partir de ahí, todo es automático. Sin ese certificado no se puede firmar/
+  transmitir, y construir el XML "a ciegas" sin la WSDL/certificado de prueba
+  produciría comprobantes no conformes — por eso este track se hace contra el
+  ambiente de certificación con el certificado real.
 
 ## Do NOT (para la sesión de implementación)
 
