@@ -365,16 +365,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       let touched = false;
       const newComps = comps.map((c) => {
         const sel = selById.get(c.id);
+        if (!sel) return c;
+        // An empty grade is a CLEAR (the zone / whole-piece × routes through
+        // onPickMany) → revert to the range; otherwise reprice to the picked
+        // grade. Mirrors pickMaterialInEditor's single-target branch; without the
+        // clear arm a grouped/uniform compound's × was a silent no-op.
         const grade = String(sel?.grade ?? '').trim();
-        if (!sel || !grade) return c;
-        const patch = editorMaterialPatch(c, sel, grade);
+        const patch = grade ? editorMaterialPatch(c, sel, grade) : editorClearPatch(c);
         if (!patch) return c;
         touched = true;
         return { ...c, ...patch };
       });
       if (touched) updateLine(l.id, { components: newComps });
     }
-  }, [lines, editorMaterialPatch, updateLine]);
+  }, [lines, editorMaterialPatch, editorClearPatch, updateLine]);
 
   // -- "Vista cliente" interactive picks: the SAME four the public link wires --
   // The preview pane lets the dealer configure the quote exactly as the client
