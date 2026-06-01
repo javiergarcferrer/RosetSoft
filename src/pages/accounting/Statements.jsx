@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Shield, Scale, TrendingUp } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -21,10 +22,15 @@ function TreeRows({ node, depth = 0 }) {
   return (
     <>
       <div className="flex items-center justify-between py-1 gap-4" style={{ paddingLeft: `${depth * 16}px` }}>
-        <span className={node.isPostable ? 'text-sm text-ink-700 min-w-0' : 'text-sm font-semibold text-ink-900 min-w-0'}>
-          <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>
-          {node.name}
-        </span>
+        {node.isPostable ? (
+          <Link to={`/accounting/ledger?cuenta=${node.code}`} className="text-sm text-ink-700 min-w-0 hover:text-ink-900 hover:underline">
+            <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>{node.name}
+          </Link>
+        ) : (
+          <span className="text-sm font-semibold text-ink-900 min-w-0">
+            <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>{node.name}
+          </span>
+        )}
         <span className={`text-sm tabular-nums whitespace-nowrap ${node.isPostable ? 'text-ink-600' : 'font-semibold'}`}>
           {formatDop(node.amount)}
         </span>

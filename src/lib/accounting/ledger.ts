@@ -161,3 +161,43 @@ export function buildJournalEntry({
   }));
   return { entry, lines: builtLines };
 }
+
+/**
+ * Build the mirror entry that reverses a posted one: every debit becomes a
+ * credit and vice-versa. The new entry points back via `reversesId`; the caller
+ * stamps `reversedById` on the original. Posted entries are never edited or
+ * deleted — they're reversed, for audit.
+ */
+export function buildReversalEntry({
+  newId,
+  original,
+  originalLines,
+  postedAt,
+}: {
+  newId: () => string;
+  original: JournalEntry;
+  originalLines: JournalLine[];
+  postedAt?: number;
+}): { entry: JournalEntry; lines: JournalLine[] } {
+  const lines: DraftLine[] = (originalLines || []).map((l) => ({
+    accountCode: l.accountCode,
+    debit: round2(l.credit || 0),
+    credit: round2(l.debit || 0),
+    memo: l.memo || '',
+    thirdPartyType: l.thirdPartyType ?? null,
+    thirdPartyId: l.thirdPartyId ?? null,
+    ncf: l.ncf ?? null,
+  }));
+  const built = buildJournalEntry({
+    newId,
+    profileId: original.profileId,
+    postedAt: postedAt ?? original.postedAt,
+    source: 'adjustment',
+    memo: `Reversión ${original.number ? `#${original.number}` : ''}`.trim(),
+    refTable: original.refTable ?? null,
+    refId: original.refId ?? null,
+    lines,
+  });
+  built.entry.reversesId = original.id;
+  return built;
+}

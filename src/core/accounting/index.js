@@ -84,4 +84,5 @@ export {
   assertBalanced,
   naturalBalance,
   buildJournalEntry,
+  buildReversalEntry,
 } from '../../lib/accounting/ledger.js';

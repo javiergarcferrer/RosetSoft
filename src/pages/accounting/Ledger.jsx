@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Shield, BookOpen, Plus, Trash2, Loader2, Check, X } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Shield, BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -10,7 +11,7 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import {
   resolveJournal, resolveTrialBalance, resolveAccountLedger,
-  postableAccounts, assertBalanced, buildJournalEntry, debitTotal, creditTotal,
+  postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
 } from '../../core/accounting/index.js';
 
 /**
@@ -140,6 +141,14 @@ export default function Ledger() {
   const [tab, setTab] = useState('diario'); // 'diario' | 'mayor' | 'balanza'
   const [showForm, setShowForm] = useState(false);
   const [mayorCode, setMayorCode] = useState('');
+  const [reversing, setReversing] = useState(null);
+  // Deep-link: /accounting/ledger?cuenta=<code> opens the Mayor for that account
+  // (account drill-down from the Balanza and the financial statements).
+  const [params] = useSearchParams();
+  useEffect(() => {
+    const c = params.get('cuenta');
+    if (c) { setTab('mayor'); setMayorCode(c); }
+  }, [params]);
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope], []);
@@ -168,6 +177,20 @@ export default function Ledger() {
     () => postableAccounts(accountsQ.data).sort((a, b) => a.code.localeCompare(b.code)),
     [accountsQ.data],
   );
+
+  async function reverse(entry, lines) {
+    if (typeof window !== 'undefined'
+      && !window.confirm(`¿Reversar el asiento #${entry.number ?? ''}? Se creará un asiento espejo.`)) return;
+    setReversing(entry.id);
+    try {
+      const built = buildReversalEntry({ newId, original: entry, originalLines: lines });
+      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+      await db.journalLines.bulkPut(built.lines);
+      await db.journalEntries.update(entry.id, { reversedById: built.entry.id });
+    } finally {
+      setReversing(null);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -226,6 +249,16 @@ export default function Ledger() {
                   </span>
                   <span className="text-sm font-medium text-ink-800">{entry.memo || '—'}</span>
                   <span className="ml-auto text-sm font-semibold tabular-nums">{formatDop(debit)}</span>
+                  {entry.reversedById ? (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Reversado</span>
+                  ) : entry.reversesId ? (
+                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Reversión</span>
+                  ) : (
+                    <button type="button" onClick={() => reverse(entry, lines)} disabled={reversing === entry.id}
+                      className="text-ink-400 hover:text-rose-600 disabled:opacity-40" title="Reversar asiento">
+                      {reversing === entry.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                    </button>
+                  )}
                 </div>
                 <table className="w-full text-sm">
                   <tbody>
@@ -307,7 +340,8 @@ export default function Ledger() {
               </thead>
               <tbody>
                 {trial.rows.map((r) => (
-                  <tr key={r.code} className="border-t border-ink-50">
+                  <tr key={r.code} onClick={() => { setTab('mayor'); setMayorCode(r.code); }}
+                    className="border-t border-ink-50 cursor-pointer hover:bg-ink-50" title="Ver mayor">
                     <td className="py-1.5 px-3"><code className="text-[11px] text-ink-400 mr-2 tabular-nums">{r.code}</code>{r.name}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.debit)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.credit)}</td>

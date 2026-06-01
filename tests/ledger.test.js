@@ -16,7 +16,7 @@ import {
 } from '../src/lib/accounting/chart.js';
 import {
   round2, debitTotal, creditTotal, entryImbalance, isBalanced, assertBalanced,
-  naturalBalance, buildJournalEntry,
+  naturalBalance, buildJournalEntry, buildReversalEntry,
 } from '../src/lib/accounting/ledger.js';
 import {
   resolveTrialBalance, resolveBalanceSheet, resolveIncomeStatement,
@@ -189,6 +189,22 @@ test('buildJournalEntry refuses to build an unbalanced entry', () => {
   assert.throws(() => buildJournalEntry({
     newId, lines: [{ accountCode: 'a', debit: 100 }, { accountCode: 'b', credit: 50 }],
   }), /no cuadra/);
+});
+
+test('buildReversalEntry swaps debits/credits and links back', () => {
+  const newId = idFactory();
+  const original = { id: 'orig1', profileId: 'team', number: 7, postedAt: 100, source: 'sale', refTable: 'sales_postings', refId: 'sp1' };
+  const originalLines = [
+    { accountCode: '1-1', debit: 1180, credit: 0 },
+    { accountCode: '4-1', debit: 0, credit: 1000 },
+    { accountCode: '2-1', debit: 0, credit: 180 },
+  ];
+  const { entry, lines } = buildReversalEntry({ newId, original, originalLines });
+  assert.equal(entry.reversesId, 'orig1');
+  assert.equal(entry.source, 'adjustment');
+  assert.equal(debitTotal(lines), creditTotal(lines)); // still balances
+  assert.equal(lines.find((l) => l.accountCode === '1-1').credit, 1180); // debit→credit
+  assert.equal(lines.find((l) => l.accountCode === '4-1').debit, 1000);  // credit→debit
 });
 
 /* ------------------------------ ViewModels ------------------------------ */
