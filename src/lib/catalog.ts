@@ -104,6 +104,45 @@ export function productForGrade(
   return family.byGrade.get((grade || '').toUpperCase()) || null;
 }
 
+/** The line/component patch that reverts a piece to its material-less RANGE. */
+export interface MateriallessRangePatch {
+  subtype: '';
+  swatchImageId: null;
+  unitPrice: number;
+  unitCost: number | null;
+  priceMin: number;
+  priceMax: number;
+}
+
+/**
+ * Patch that strips a chosen material off a line/component and reverts it to the
+ * model's cheapest→priciest RANGE (priceMin..priceMax) — the exact shape a "sin
+ * material" line is added in. Returns null when the family can't form a range
+ * (ungraded, fewer than two grades, or no valid lo/hi price): there's nothing to
+ * revert to, so the caller leaves the piece as-is. The single source for every
+ * editor clear path (the raw line row AND the client-preview swatch ×), so they
+ * can't drift; mirrors the public link's clearMaterial / the server clear branch.
+ */
+export function materiallessRangePatch(
+  family: CatalogFamily | null | undefined,
+): MateriallessRangePatch | null {
+  if (!family || !family.graded || family.grades.length < 2) return null;
+  const lo = productForGrade(family, family.grades[0]);
+  const hi = productForGrade(family, family.grades[family.grades.length - 1]);
+  if (!lo || !hi || lo.priceUsd == null || hi.priceUsd == null) return null;
+  const min = Number(lo.priceUsd) || 0;
+  const max = Number(hi.priceUsd) || 0;
+  if (!(max > min)) return null;
+  return {
+    subtype: '',
+    swatchImageId: null,
+    unitPrice: min,
+    unitCost: lo.cost == null ? null : Number(lo.cost),
+    priceMin: min,
+    priceMax: max,
+  };
+}
+
 /**
  * Fields the catalog flow rewrites on a line when its product changes.
  * `unitCost` is widened to allow null (the DB column is nullable and we clear

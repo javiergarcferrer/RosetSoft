@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -169,4 +169,25 @@ test('switching to a non-graded model drops every material and takes its subtype
 
 test('returns null for a missing family (no-op guard)', () => {
   assert.equal(switchLineProduct({ subtype: 'Grade A' }, null), null);
+});
+
+/* --------------------------- materiallessRangePatch --------------------------- */
+
+test('reverts to the model cheapest→priciest range (subtype/swatch cleared)', () => {
+  // TOGO grades by price: A 3420 (lo) … M 5140 (hi).
+  const patch = materiallessRangePatch(togoFamily());
+  assert.deepEqual(patch, {
+    subtype: '',
+    swatchImageId: null,
+    unitPrice: 3420,
+    unitCost: 1243.64,
+    priceMin: 3420,
+    priceMax: 5140,
+  });
+});
+
+test('no range to revert to → null (ungraded model, missing family)', () => {
+  const vik = groupFamilies(TOGO).find((f) => f.root === '10261152'); // single SKU
+  assert.equal(materiallessRangePatch(vik), null);
+  assert.equal(materiallessRangePatch(null), null);
 });

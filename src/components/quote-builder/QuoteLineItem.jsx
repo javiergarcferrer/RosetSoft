@@ -18,7 +18,7 @@ import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -905,6 +905,12 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
     onChange(patch);
   };
   const swatchImageId = line.swatchImageId || null;
+  // "Sin material" — strip the chosen fabric and revert the line to the model's
+  // cheapest→priciest price RANGE. Offered only when the family forms a range
+  // (else there's nothing to revert to); the same Model rule the client-preview
+  // swatch × uses (materiallessRangePatch), so the two clears can't drift.
+  const rangePatch = materiallessRangePatch(family);
+  const clearMaterial = () => { if (rangePatch) onChange(rangePatch); };
   const [swatchOpen, setSwatchOpen] = useState(false);
   // Index of the alternative option whose color we're re-picking (null = none).
   // Drives a dedicated SwatchPicker that drills into that option's material.
@@ -1068,6 +1074,21 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
               code. Selecting writes back grade + fabric (and the swatch) in
               one shot; the input above still works for freeform overrides. */}
           <MaterialPickerButton onClick={() => setSwatchOpen(true)} />
+          {/* Remove the chosen material → revert to the model's price RANGE.
+              Shown only when a material is set AND the family can form a range
+              (rangePatch non-null). Distinct from the swatch's corner ×, which
+              clears only the colour image. */}
+          {(grade || fabric) && rangePatch && (
+            <button
+              type="button"
+              onClick={clearMaterial}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-red-600 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-red-50 transition-colors flex-shrink-0"
+              title="Quitar la tela y volver a cotizar sin material (rango de precio)"
+            >
+              <X size={12} className="opacity-80" aria-hidden />
+              Sin material
+            </button>
+          )}
           {/* Quick jump to this model's Ligne Roset page when it's been linked
               in the catalog — lets the dealer (or designer) open the exact
               product to confirm the offered fabrics. */}

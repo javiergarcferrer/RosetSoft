@@ -1043,6 +1043,13 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   // a swatch on every row. Only fires with 2+ materials; uniform stays the one
   // hero above. Same Model rule the PDF uses, so screen + paper agree.
   const grouping = groupComponentsByMaterial(line.components);
+  // Editing (the interactive link / the dealer's edit-mode preview) wires
+  // onPickMany. It gates whether a grouped run COLLAPSES: read-only surfaces
+  // drop the repeated per-piece swatch under the zone header (clean), but in
+  // edit mode the rows stay expanded so each piece keeps its OWN picker + × —
+  // the only way to make one piece differ from its zone-mates. The header still
+  // carries the zone-level bulk controls (clear zone, re-dress zone, apply-to-all).
+  const editing = !!picker?.onPickMany;
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -1196,11 +1203,12 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
             />
           )}
           {grouping.grouped ? (
-            // Mixed compound → a material header per contiguous run, its rows
-            // collapsed to clean name+price (the run's header carries the
-            // fabric). Per-row "apply to all" is off here — the header swatch
-            // IS the per-zone picker; applying one piece across the whole
-            // compound would flatten the very grouping the dealer set up.
+            // Mixed compound → a material header per contiguous run. The header
+            // carries the zone's bulk controls (clear / re-dress / apply-to-all).
+            // Read-only: rows collapse to clean name+price under it. Editing:
+            // rows stay expanded with their own swatch + picker + × so a single
+            // piece can be re-dressed independently of its zone-mates. Per-row
+            // apply-to-all stays off (the header owns that bulk gesture).
             <div className="mt-2 border-t border-ink-100">
               {grouping.runs.map((run, ri) => (
                 <div key={run.key + ri}>
@@ -1216,7 +1224,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                     />
                   )}
                   <ul className="divide-y divide-ink-100">
-                    {run.components.map((c, i) => renderComponentRow(c, i, run.bearing, false))}
+                    {run.components.map((c, i) => renderComponentRow(c, i, run.bearing && !editing, false))}
                   </ul>
                 </div>
               ))}
