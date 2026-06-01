@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Store as StoreIcon, PackageSearch, Layers } from 'lucide-react';
+import { Store as StoreIcon, PackageSearch, Layers, SearchX } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
@@ -162,14 +162,11 @@ export default function Store() {
       {!loaded ? (
         <SkeletonGrid />
       ) : items.length === 0 ? (
-        <EmptyState
-          icon={StoreIcon}
-          title={view === STORE_VIEW_MATERIALS ? 'Sin materiales' : 'Sin mercancía'}
-          description={
-            view === STORE_VIEW_MATERIALS
-              ? 'No hay materiales que coincidan con tu búsqueda.'
-              : 'Aquí aparece la mercancía de tus pedidos. Adjunta una cotización a un pedido y sus artículos se listan aquí, con su disponibilidad y seguimiento de contenedor.'
-          }
+        <StoreEmptyState
+          view={view}
+          // The segment's FULL (pre-filter) count tells "no data yet" apart from
+          // "your search / filters hid everything", so the copy never misleads.
+          hasData={(segments.find((s) => s.key === view)?.count || 0) > 0}
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -271,6 +268,36 @@ function MaterialCard({ c, rates }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Distinguish "nothing here yet" (empty table → explain how it fills) from "your
+// search / filters hid everything" (data exists → tell them to loosen up).
+function StoreEmptyState({ view, hasData }) {
+  const isMaterials = view === STORE_VIEW_MATERIALS;
+  if (hasData) {
+    return (
+      <EmptyState
+        icon={SearchX}
+        title="Sin resultados"
+        description={
+          isMaterials
+            ? 'Ningún material coincide con tu búsqueda o filtros.'
+            : 'Ningún artículo coincide con tu búsqueda o filtros.'
+        }
+      />
+    );
+  }
+  return (
+    <EmptyState
+      icon={isMaterials ? Layers : StoreIcon}
+      title={isMaterials ? 'Sin materiales' : 'Sin mercancía'}
+      description={
+        isMaterials
+          ? 'Aún no hay materiales en el catálogo.'
+          : 'Aquí aparece la mercancía de tus pedidos. Adjunta una cotización a un pedido y sus artículos se listan aquí, con su disponibilidad y seguimiento de contenedor.'
+      }
+    />
   );
 }
 
