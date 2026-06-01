@@ -26,6 +26,7 @@ import type {
   ImportLiquidation,
   ECFSequence,
   Payment,
+  FiscalPeriod,
 } from '../types/domain.ts';
 
 /**
@@ -85,6 +86,7 @@ const TABLES = {
   importLiquidations: { db: 'import_liquidations', pk: 'id' },
   ecfSequences:       { db: 'ecf_sequences',       pk: 'id' },
   payments:           { db: 'payments',            pk: 'id' },
+  fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -120,6 +122,7 @@ export interface TableRowMap {
   importLiquidations: ImportLiquidation;
   ecfSequences: ECFSequence;
   payments: Payment;
+  fiscalPeriods: FiscalPeriod;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

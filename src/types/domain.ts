@@ -328,6 +328,20 @@ export interface Payment {
 }
 
 /**
+ * A fiscal month. A row with `status='closed'` locks that month — a DB trigger
+ * rejects any asiento posted into it (cierre contable). No row ⇒ open.
+ */
+export interface FiscalPeriod {
+  id: string;
+  profileId: string;
+  year: number;
+  month: number;
+  status: 'open' | 'closed';
+  closedAt?: number | null;
+  updatedAt?: number;
+}
+
+/**
  * A stock item. `qtyOnHand` + `avgCost` are caches maintained from the kardex
  * movements (the source of truth — see `lib/accounting/inventory`).
  */
