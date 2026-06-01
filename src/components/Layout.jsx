@@ -8,7 +8,6 @@ import {
   Package,
   Settings as SettingsIcon,
   Shield,
-  Wallet,
   Calculator,
   Layers,
   PackageSearch,
@@ -54,16 +53,17 @@ const baseNavGroups = [
   { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] },
 ];
 
-// Admin-only cluster — Users management + monthly commissions report.
+// Admin-only cluster — Users management + catalog/materials tools.
 // Spliced into the nav just before "Configuración" so admins read the
 // list as: work surfaces first, admin tools, then their own settings.
+// (Commissions live in the Contabilidad workspace now, reachable via the
+// admin's read-only Contabilidad link below.)
 const adminNavGroup = {
   label: 'Administración',
   items: [
-    { to: '/admin/users',       label: 'Usuarios',   icon: Shield },
-    { to: '/admin/commissions', label: 'Comisiones', icon: Wallet },
-    { to: '/admin/materials',   label: 'Materiales', icon: Layers },
-    { to: '/admin/catalog',     label: 'Catálogo',   icon: PackageSearch },
+    { to: '/admin/users',     label: 'Usuarios',   icon: Shield },
+    { to: '/admin/materials', label: 'Materiales', icon: Layers },
+    { to: '/admin/catalog',   label: 'Catálogo',   icon: PackageSearch },
   ],
 };
 

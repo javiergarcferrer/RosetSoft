@@ -10,10 +10,16 @@ import { formatDateTime } from '../lib/format.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
+import { useLiveQuery } from '../db/hooks.js';
+import { storeLinkUrl } from '../lib/storefront.js';
 import { useExchangeRatePull } from '../lib/useExchangeRatePull.js';
 
 export default function Settings() {
   const { profileId, settings, saveSettings, isAdmin } = useApp();
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
   const [local, setLocal] = useState(settings || {});
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [saveError, setSaveError] = useState(null);
@@ -167,8 +173,112 @@ export default function Settings() {
 
         {/* Orders */}
         <OrdersCard local={local} set={set} />
+
+        {/* Public storefront */}
+        <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
       </div>
     </>
+  );
+}
+
+// Public storefront ("Tienda") config: pick the house-account customer whose
+// quotes stock the store, and surface the shareable public link.
+//
+// The customer choice AUTO-SAVES the instant it changes — it does NOT ride the
+// page-level "Guardar". It used to live in the shared `local` form state, which
+// the parent resets from `settings` on every refresh (the realtime settings
+// channel, the rate pull, …), so a pick made before pressing Guardar got wiped
+// and "couldn't be saved". Persisting on change, like the rate card does, fixes
+// that and gives immediate feedback. Self-contained: reads the saved value off
+// `settings`, writes through `saveSettings`.
+function StoreCard({ settings, saveSettings, customers }) {
+  const url = storeLinkUrl();
+  const [copied, setCopied] = useState(false);
+  const [value, setValue] = useState(settings?.storeCustomerId || '');
+  const [status, setStatus] = useState('idle'); // idle | saving | saved | error
+  // Re-sync to the persisted value when it changes elsewhere / after a save.
+  useEffect(() => { setValue(settings?.storeCustomerId || ''); }, [settings?.storeCustomerId]);
+
+  const sorted = [...(customers || [])].sort((a, b) =>
+    (a.company || a.name || '').localeCompare(b.company || b.name || ''));
+
+  async function pick(e) {
+    const next = e.target.value || null;
+    setValue(next || '');       // optimistic — the select reflects the choice now
+    setStatus('saving');
+    try {
+      await saveSettings({ storeCustomerId: next });
+      setStatus('saved');
+      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (err) {
+      console.error('store customer save failed', err);
+      setStatus('error');
+    }
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard blocked — the field is selectable as a fallback */ }
+  }
+
+  return (
+    <div className="card card-pad">
+      <h2 className="font-semibold mb-1">Tienda pública</h2>
+      <p className="text-xs text-ink-500 mb-4">
+        La tienda muestra los productos de las cotizaciones cuyo cliente sea la
+        cuenta de la casa (Alcover). Elige ese cliente y comparte el enlace —
+        cualquiera puede verlo sin iniciar sesión.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div className="label inline-flex items-center gap-2">
+            Cliente de la casa
+            {status === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
+            {status === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+            {status === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+          </div>
+          <select
+            className="input"
+            value={value}
+            onChange={pick}
+          >
+            <option value="">— Selecciona un cliente —</option>
+            {sorted.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.company || c.name}
+                {c.company && c.name && c.company !== c.name ? ` · ${c.name}` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Se guarda automáticamente. Sus cotizaciones (excepto rechazadas y archivadas) surten la tienda.
+          </p>
+        </div>
+        <div>
+          <div className="label">Enlace público</div>
+          <div className="flex items-center gap-2">
+            <input
+              className="input flex-1 font-mono text-xs"
+              readOnly
+              value={url}
+              onFocus={(e) => e.target.select()}
+            />
+            <button type="button" onClick={copy} className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
+              {copied ? 'Copiado' : 'Copiar'}
+            </button>
+            <a href={url} target="_blank" rel="noreferrer" className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
+              Abrir
+            </a>
+          </div>
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Compártelo con tus clientes — no requiere iniciar sesión.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

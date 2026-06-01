@@ -1558,6 +1558,8 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                 currency={currency}
                 rates={rates}
                 fmt={fmt}
+                nameFilter={nameFilter}
+                sourceUrl={sourceUrl}
                 onChange={(patch) => onUpdate(c.id, patch)}
                 onRemove={() => onRemove(c.id)}
                 onAddAlternative={() => onAddAlternative?.(c.id)}
@@ -1754,6 +1756,8 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           onChange={(patch) => onChange(patch)}
           currency={currency}
           rates={rates}
+          nameFilter={nameFilter}
+          sourceUrl={sourceUrl}
         />
         {/* Pick-once shortcut — only shown when this component has a material AND
             some sibling still differs (canApplyToAll), so it disappears the

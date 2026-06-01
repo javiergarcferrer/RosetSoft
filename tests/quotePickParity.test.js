@@ -25,7 +25,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyClientPick } from '../src/lib/clientPick.js';
-import { applyPicks } from '../supabase/functions/quote-share/pick.ts';
+import { applyPicks, familyRootOf } from '../supabase/functions/quote-share/pick.ts';
+import { splitSkuGrade } from '../src/lib/catalog.js';
 
 // ── Parallel fixtures: the SAME quote, in each layer's shape ─────────────────
 
@@ -296,4 +297,26 @@ test('parity — composed picks (alt + optional + material) agree across the wal
   assert.equal(cl(client, 'm').unitPrice, sl(server, 'm').unit_price);
   assert.equal(ccomp(client, 'cmp', 'c2').isOptional, scomp(server, 'cmp', 'c2').isOptional);
   assert.equal(ccomp(client, 'cmp', 'c1').unitPrice, scomp(server, 'cmp', 'c1').unitPrice);
+});
+
+// ── Model-link key parity ────────────────────────────────────────────────────
+// The offered-fabric allowlist is stored (editor) and read (quote-share bundle)
+// under a per-model key. A SIMPLE line keys on its reference's family root — the
+// editor via splitSkuGrade(reference).root, the server via familyRootOf. They
+// can't share code (Deno↔Vite wall), so this pins them to the same decision: if
+// one's root rule drifts, the public link silently stops filtering that line.
+test('parity — familyRootOf equals the client splitSkuGrade root for every reference', () => {
+  const refs = [
+    '15420000G',      // 8-digit + valid grade → 8-digit root both
+    '15420000A',
+    '15420000',       // 8-digit, no grade letter → whole string both
+    '15420000Z',      // Z is NOT a grade → whole string both (no strip)
+    '1542000G',       // 7-digit → not a graded SKU → whole string
+    'TOGO-CUSTOM',    // hand-typed reference → whole string
+    '  15420000G  ',  // surrounding whitespace is trimmed identically
+    '',               // empty → empty both
+  ];
+  for (const ref of refs) {
+    assert.equal(familyRootOf(ref), splitSkuGrade(ref).root, `mismatch for ${JSON.stringify(ref)}`);
+  }
 });

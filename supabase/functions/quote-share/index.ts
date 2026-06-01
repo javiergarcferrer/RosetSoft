@@ -23,7 +23,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 // This file is the imperative SHELL: auth, I/O, the catalog price fetch,
 // persistence, and the client-bundle projection. Parity of the two layers is
 // pinned by tests/quotePickParity.test.js.
-import { num, rootOf, applyPicks, rootsForMaterialPicks } from './pick.ts';
+import { num, rootOf, familyRootOf, applyPicks, rootsForMaterialPicks } from './pick.ts';
 import type { GradeInfo } from './pick.ts';
 
 type Admin = ReturnType<typeof createClient>;
@@ -220,21 +220,22 @@ async function pickableMaterials(
     }));
 }
 
-// Per-model offered-fabric allowlists (model_fabrics.pattern_names), keyed by
-// family root — so the picker restricts to in-grade AND offered, exactly like
-// the editor's SwatchPicker. Only the roots in play are read.
-async function modelFabricsForRoots(
+// Per-model offered-fabric allowlists (model_fabrics.pattern_names), keyed by the
+// editor's model-link key (a simple line's family root OR a compound's line id)
+// — so the picker restricts to in-grade AND offered, exactly like the editor's
+// SwatchPicker. Only the keys in play are read.
+async function modelFabricsForKeys(
   admin: Admin,
   profileId: unknown,
-  roots: Set<string>,
+  keys: Set<string>,
 ): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {};
-  if (!roots.size) return out;
+  if (!keys.size) return out;
   const { data } = await admin
     .from('model_fabrics')
     .select('id, pattern_names')
     .eq('profile_id', profileId)
-    .in('id', [...roots]);
+    .in('id', [...keys]);
   for (const r of (data || []) as Row[]) {
     const names = Array.isArray(r.pattern_names) ? r.pattern_names as string[] : [];
     if (names.length) out[String(r.id)] = names;
@@ -270,10 +271,18 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
   // `gradePrices` (the full picker reprices to any grade), so we collect EVERY
   // resolvable root, not just those carrying material options.
   const roots = new Set<string>();
+  // Model-link keys mirror the editor's storage scheme (modelKey): a COMPOUND is
+  // keyed by its line id (one link governs every component); a SIMPLE line by its
+  // reference's family root. Distinct from the numeric pricing roots above — a
+  // link can sit on a non-graded reference, and a compound carries no single
+  // reference at all — so the allowlist ships under the key the client reads.
+  const modelKeys = new Set<string>();
   for (const row of (lineRows || []) as Row[]) {
     const r = rootOf(row.reference); if (r) roots.add(r);
     const comps = Array.isArray(row.components) ? row.components as Row[] : [];
     for (const c of comps) { const cr = rootOf(c.reference); if (cr) roots.add(cr); }
+    if (comps.length) modelKeys.add(String(row.id));
+    else { const k = familyRootOf(row.reference); if (k) modelKeys.add(k); }
   }
   const priceByRootGrade = priceOnly(await priceMapForRoots(admin, quote.profile_id, roots));
 
@@ -283,7 +292,7 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
   for (const grades of priceByRootGrade.values()) for (const g of grades.keys()) gradesInPlay.add(g);
   const [materials, modelFabrics] = await Promise.all([
     pickableMaterials(admin, quote.profile_id, gradesInPlay),
-    modelFabricsForRoots(admin, quote.profile_id, roots),
+    modelFabricsForKeys(admin, quote.profile_id, modelKeys),
   ]);
 
   const lines = ((lineRows || []) as Row[]).map((row) =>

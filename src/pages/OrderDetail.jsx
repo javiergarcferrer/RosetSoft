@@ -308,6 +308,7 @@ export default function OrderDetail() {
                     key={q.id}
                     quote={q}
                     order={order}
+                    settings={settings}
                     creator={q.createdByUserId ? profiles.find((p) => p.id === q.createdByUserId) : null}
                     total={totalByQuote.get(q.id) || 0}
                     onDetach={() => detachQuote(q.id)}
@@ -470,7 +471,7 @@ function ContainerNoHint({ validation, carrier }) {
 // before then the customer's pieces are still on a boat (or not yet
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
-function QuoteRow({ quote, order, creator, total, onDetach }) {
+function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
   // Three commerce milestones live on the quote (not the order):
   //
   //   1. depositReceivedAt — the act of receiving the deposit IS what

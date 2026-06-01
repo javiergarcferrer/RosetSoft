@@ -15,9 +15,9 @@ import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
+import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
-import AdminCommissions from './pages/admin/Commissions.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
@@ -32,7 +32,6 @@ import AccountingCompras from './pages/accounting/Compras.jsx';
 import AccountingInventario from './pages/accounting/Inventario.jsx';
 import AccountingImportaciones from './pages/accounting/Importaciones.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
-import StyleStudio from './pages/StyleStudio.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 /**
@@ -217,7 +216,6 @@ function ProtectedApp() {
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/commissions" element={<AdminCommissions />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
             <Route path="admin/catalog" element={<AdminCatalog />} />
             {/* Accounting surface — a single workspace page that
@@ -239,6 +237,10 @@ function ProtectedApp() {
             <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />
+            {/* The standalone admin commissions report folded into the
+                accounting workspace (comisiones por pagar). Redirect old
+                bookmarks there instead of 404'ing. */}
+            <Route path="admin/commissions" element={<Navigate to="/accounting" replace />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
@@ -260,9 +262,10 @@ export default function App() {
             bare `/q/:token` form (older links) still resolves. */}
         <Route path="/q/:token" element={<PublicQuoteView />} />
         <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
-        {/* Public design-system prototype (no auth, no data) — a render of the
-            proposed "Warm Instrument" direction to judge by eye. */}
-        <Route path="/style-studio" element={<StyleStudio />} />
+        {/* Public, logged-out storefront ("Tienda"). Like the quote link it
+            lives OUTSIDE RequireAuth so a customer never hits the login wall;
+            the `store` Edge Function serves a public-safe, margin-free catalog. */}
+        <Route path="/tienda" element={<PublicStore />} />
         <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
       </Routes>
     </AuthProvider>
