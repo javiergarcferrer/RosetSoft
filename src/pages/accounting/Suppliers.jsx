@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, Truck, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
+import { Shield, Truck, Plus, Loader2, Check, X, Pencil, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { classOf, postableAccounts } from '../../core/accounting/index.js';
+import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 
 const KIND_LABEL = { fisica: 'Persona física', juridica: 'Persona jurídica', exterior: 'Exterior' };
 
@@ -34,6 +35,26 @@ export default function Suppliers() {
   const [editing, setEditing] = useState(null); // null | 'new' | <id>
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
+  const [looking, setLooking] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState('');
+
+  async function doLookup() {
+    setLookupMsg('');
+    setLooking(true);
+    try {
+      const r = await lookupRnc(form.rnc);
+      if (r.found) {
+        setForm((f) => ({ ...f, name: r.name || f.name, kind: r.kind || f.kind }));
+        setLookupMsg(`✓ ${r.name}${r.status ? ` · ${r.status}` : ''}${r.eInvoicer ? ' · e-CF' : ''}`);
+      } else {
+        setLookupMsg(r.message || 'No encontrado.');
+      }
+    } catch (e) {
+      setLookupMsg(e?.message || 'Error consultando el RNC.');
+    } finally {
+      setLooking(false);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -45,8 +66,9 @@ export default function Suppliers() {
     );
   }
 
-  function openNew() { setForm(blank()); setEditing('new'); }
+  function openNew() { setForm(blank()); setLookupMsg(''); setEditing('new'); }
   function openEdit(s) {
+    setLookupMsg('');
     setForm({
       name: s.name || '', rnc: s.rnc || '', kind: s.kind || 'juridica',
       retainIsr: !!s.retainIsr, retainItbis: !!s.retainItbis,
@@ -96,7 +118,13 @@ export default function Suppliers() {
           </div>
           <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
             <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre / razón social" className={field} />
-            <input value={form.rnc} onChange={(e) => setForm((f) => ({ ...f, rnc: e.target.value }))} placeholder="RNC / Cédula" className={field} />
+            <div className="flex gap-2">
+              <input value={form.rnc} onChange={(e) => setForm((f) => ({ ...f, rnc: e.target.value }))} placeholder="RNC / Cédula" className={`${field} flex-1`} />
+              <button type="button" onClick={doLookup} disabled={looking || !cleanRnc(form.rnc)}
+                className="btn-ghost text-sm inline-flex items-center gap-1 px-2.5 disabled:opacity-40" title="Buscar nombre en el registro DGII">
+                {looking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+              </button>
+            </div>
             <select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))} className={field}>
               <option value="juridica">Persona jurídica</option>
               <option value="fisica">Persona física</option>
@@ -109,6 +137,7 @@ export default function Suppliers() {
             <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email (opcional)" className={field} />
             <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" className={field} />
           </div>
+          {lookupMsg && <p className="text-sm text-ink-500 mt-2">{lookupMsg}</p>}
           <div className="flex flex-wrap items-center gap-5 mt-3">
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.retainIsr} onChange={(e) => setForm((f) => ({ ...f, retainIsr: e.target.checked }))} />

@@ -59,3 +59,11 @@ verify_jwt = false
 # would be rejected before the function runs.
 [functions.lr-catalog]
 verify_jwt = false
+
+# rnc-lookup resolves a taxpayer's fiscal name from their RNC/cédula against the
+# public DGII-mirror registry (rnc.megaplus.com.do) so the app can auto-fill
+# suppliers/customers for clean 606/607 reporting. Read-only, locked to that one
+# endpoint + a sanitized numeric input (no SSRF). No auth needed; verify_jwt
+# must be false so the browser's CORS preflight isn't rejected.
+[functions.rnc-lookup]
+verify_jwt = false
