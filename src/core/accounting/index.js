@@ -49,6 +49,9 @@ export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.
 export { resolveReceivables, resolvePayables, resolvePartyStatement } from './receivables.js';
 export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 
+// ── dashboard KPIs
+export { resolveAccountingDashboard } from './dashboard.js';
+
 // ── chart-of-accounts Model helpers (structure)
 export {
   ACCOUNT_CLASS_NAMES,

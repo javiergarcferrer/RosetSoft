@@ -22,6 +22,7 @@ import {
   Ship,
   Hash,
   ArrowLeftRight,
+  Gauge,
   Menu,
   X,
 } from 'lucide-react';
@@ -78,6 +79,7 @@ const adminNavGroup = {
 // entry below: the original sales/commissions workspace plus the general-ledger
 // pages (libro contable, estados financieros, catálogo de cuentas).
 const accountingItems = [
+  { to: '/accounting/dashboard', label: 'Resumen', icon: Gauge, end: true },
   { to: '/accounting', label: 'Ventas y comisiones', icon: Calculator, end: true },
   { to: '/accounting/facturacion', label: 'Facturación', icon: FileText },
   { to: '/accounting/ecf', label: 'Secuencias e-NCF', icon: Hash },

@@ -21,6 +21,7 @@ import AdminUsers from './pages/admin/Users.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
+import AccountingDashboard from './pages/accounting/Dashboard.jsx';
 import AccountingLedger from './pages/accounting/Ledger.jsx';
 import AccountingStatements from './pages/accounting/Statements.jsx';
 import ChartOfAccounts from './pages/accounting/ChartOfAccounts.jsx';
@@ -189,7 +190,7 @@ function Gate({ children }) {
 function RoleHome() {
   const { currentProfile } = useApp();
   if (currentProfile?.role === 'accounting') {
-    return <Navigate to="/accounting" replace />;
+    return <Navigate to="/accounting/dashboard" replace />;
   }
   return <Dashboard />;
 }
@@ -226,6 +227,7 @@ function ProtectedApp() {
                 three legacy sub-paths redirect here so old bookmarks
                 still work. Self-gates on the accounting/admin role. */}
             <Route path="accounting" element={<AccountingWorkspace />} />
+            <Route path="accounting/dashboard" element={<AccountingDashboard />} />
             <Route path="accounting/ledger" element={<AccountingLedger />} />
             <Route path="accounting/statements" element={<AccountingStatements />} />
             <Route path="accounting/chart" element={<ChartOfAccounts />} />
