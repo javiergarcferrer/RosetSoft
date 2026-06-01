@@ -123,10 +123,7 @@ export default function QuoteHeader({
           </div>
 
           {/* Buttons wrap among themselves on the narrowest phones; the whole
-              cluster drops below the title when the row is too tight. The
-              Edición/Cliente ViewToggle was lifted out to a floating pinned
-              pill (QuoteBuilder) so it stays on screen while scrolling a long
-              quote — especially the client preview. */}
+              cluster drops below the title when the row is too tight. */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <UndoRedo
               onUndo={onUndo}
@@ -134,6 +131,8 @@ export default function QuoteHeader({
               canUndo={canUndo}
               canRedo={canRedo}
             />
+
+            <ViewToggle view={view} onChange={onViewChange} />
           </div>
         </div>
 
@@ -245,9 +244,9 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
   );
 }
 
-export function ViewToggle({ view, onChange, className = '' }) {
+function ViewToggle({ view, onChange }) {
   return (
-    <div className={`inline-flex rounded-md border border-ink-200 overflow-hidden bg-white ${className}`}>
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
       <button
         type="button"
         onClick={() => onChange('compose')}

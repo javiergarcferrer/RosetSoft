@@ -15,7 +15,7 @@ import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
-import QuoteHeader, { ViewToggle } from '../components/quote-builder/QuoteHeader.jsx';
+import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
@@ -541,20 +541,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         savedAt={savedAt}
         saving={saving}
       />
-
-      {/* Floating Edición/Cliente toggle — pinned so it never scrolls off,
-          which matters most in the client preview where the dealer scrolls a
-          long quote and otherwise loses the way back to editing. Top-anchored
-          (the bottom is owned by the upward-expanding TotalsDock); offset clears
-          the mobile topbar (z-30) and the desktop has no topbar. A faint
-          backdrop-blur surface keeps it legible over any content beneath. */}
-      <div className="fixed right-3 z-40 top-[max(3.75rem,calc(env(safe-area-inset-top)+3.25rem))] md:top-4 md:right-8 print:hidden">
-        <ViewToggle
-          view={view}
-          onChange={setView}
-          className="shadow-pop bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80"
-        />
-      </div>
 
       {/* Surface PDF export failures inline. The export button used to
           fail silently in iOS-PWA standalone — now if anything throws

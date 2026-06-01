@@ -67,13 +67,19 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
 // the clean read-only proposal a client lands on; Personalizar reveals every
 // control. The amber dot on Personalizar quietly advertises that there's more to
 // do without shouting, so a client discovers they can configure their own fabric.
-function ModeToggle({ mode, onChange }) {
+function ModeToggle({ mode, onChange, floating }) {
   const opts = [
     { value: 'view', label: 'Ver', Icon: Eye },
     { value: 'edit', label: 'Personalizar', Icon: SlidersHorizontal },
   ];
+  // Floating: carries its own dark surface + pop shadow (it no longer sits on
+  // the dark banner). Inline keeps the translucent fill it had on the banner.
   return (
-    <span className="inline-flex items-stretch rounded-full bg-white/10 p-0.5" role="group" aria-label="Modo de la cotización">
+    <span
+      className={`inline-flex items-stretch rounded-full p-0.5 ${floating ? 'bg-ink-900 shadow-pop ring-1 ring-white/10' : 'bg-white/10'}`}
+      role="group"
+      aria-label="Modo de la cotización"
+    >
       {opts.map(({ value, label, Icon }) => {
         const active = mode === value;
         return (
@@ -165,15 +171,17 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // overflow:hidden ancestor would trap the sticky product image in
   // CompoundClientLine and stop it following the page scroll.
   return (
+    <>
     <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
-      {/* Banner. On the interactive link it carries the Ver / Personalizar mode
-          toggle; read-only surfaces just show the preview label + date. */}
+      {/* Banner. On the interactive link the Ver / Personalizar mode toggle is
+          a floating pill pinned to the screen (rendered after this card) so it
+          never scrolls away — the banner just states the mode + date here. */}
       <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between gap-3">
-        {interactive ? (
-          <ModeToggle mode={mode} onChange={setMode} />
-        ) : (
-          <span>Vista previa del cliente · de solo lectura</span>
-        )}
+        <span>
+          {interactive
+            ? (mode === 'edit' ? 'Personaliza tu cotización · elige opciones y telas' : 'Tu propuesta · pulsa Personalizar para configurar')
+            : 'Vista previa del cliente · de solo lectura'}
+        </span>
         <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
       </div>
 
@@ -428,6 +436,21 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         </div>
       )}
     </div>
+
+    {/* Floating Ver / Personalizar toggle — interactive link only. Pinned to
+        the screen so a client scrolling a long quote can always switch into
+        Personalizar (or back) without hunting for the top. Bottom-centred (the
+        thumb zone on a phone) and lifted above the home indicator; z-40 sits
+        under the transient SaveToast (z-50) so a "Guardando…" confirmation
+        still reads over it. */}
+    {interactive && (
+      <div className="fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-4 print:hidden pointer-events-none">
+        <div className="pointer-events-auto">
+          <ModeToggle mode={mode} onChange={setMode} floating />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
