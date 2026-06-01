@@ -60,6 +60,26 @@ const lines: any[] = [
       { id: 'c2', name: 'Base de acero lacado', reference: 'PLM-BASE', unitPrice: 900, qty: 1 },
     ],
   }),
+
+  // ---- compound upholstery cases (mirrors the real-world screenshot) ----
+  sec('Sala de estar'),
+  // UNIFORM: every piece in the same fabric → ONE "Tapizado" hero, clean rows.
+  item({
+    id: 'l10', kind: 'compound', name: 'Ottoman w/ Cushion', family: 'PRADO',
+    components: [
+      { id: 'u1', name: 'LARGE SQUARE OTTOMAN', reference: 'PRD-OTT', unitPrice: 3935, qty: 1, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'sw-trama' },
+      { id: 'u2', name: 'BACK CUSHION', reference: 'PRD-CUSH', unitPrice: 1380, qty: 1, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'sw-trama' },
+    ],
+  }),
+  // MIXED: sofas in TRAMA, bolsters in SCAN → no hero, per-piece swatches kept.
+  item({
+    id: 'l11', kind: 'compound', name: 'MODULAR EN L', family: 'PRADO',
+    components: [
+      { id: 'm1', name: 'PRADO SOFA', reference: 'PRD-S1', unitPrice: 13810, qty: 1, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'sw-trama' },
+      { id: 'm2', name: 'PRADO SOFA', reference: 'PRD-S2', unitPrice: 7410, qty: 1, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'sw-trama' },
+      { id: 'm3', name: 'PRADO S/2 BOLSTERS', reference: 'PRD-BOL', unitPrice: 1260, qty: 1, subtype: 'Grade D — SCAN · BEIGE (#1116)', swatchImageId: 'sw-scan' },
+    ],
+  }),
   item({ id: 'l5', name: 'Silla TOGO (cuero)', family: 'TOGO', reference: 'TGO-L', qty: 6, unitPrice: 320, alternativeGroup: 'alt1', isSelectedAlternative: true }),
   item({ id: 'l6', name: 'Silla TOGO (tela)', family: 'TOGO', reference: 'TGO-F', qty: 6, unitPrice: 280, alternativeGroup: 'alt1', isSelectedAlternative: false }),
   item({ id: 'l7', name: 'Aparador NABUCCO', family: 'NABUCCO', reference: 'NBC-AP', unitPrice: 2100, setGroup: 'set1' }),
@@ -72,6 +92,8 @@ const images: ImageMap = new Map([
   ['rateLogo', png],
   [swatchKey({ imageId: 'sw-kobold' })!, png],
   [swatchKey({ imageId: 'sw-exedra' })!, png],
+  [swatchKey({ imageId: 'sw-trama' })!, png],
+  [swatchKey({ imageId: 'sw-scan' })!, png],
   ...lines.filter((l) => l.kind !== 'section').map((l) => [coverKey(l.id), png] as [string, string]),
 ]);
 

@@ -7,6 +7,7 @@ import {
   ITBIS_PCT, lineQty, lineTotal, lineListUnit, lineHasRange, lineTotalRange,
   isCompoundLine, componentSubtotal, computeTotalsRange, quoteSavings,
 } from '../../lib/pricing.js';
+import { compoundFabric, fabricDisplay } from '../../lib/subtype.js';
 import type {
   Quote, QuoteLine, LineComponent, Customer, Professional, Profile, Settings, Totals,
   CurrencyCode, QuoteGroup,
@@ -44,6 +45,29 @@ function Swatch({ src, images, size = 40 }: { src: { imageId?: string | null; ur
   return (
     <View style={{ width: size, height: size, backgroundColor: C.bgSoft, borderWidth: 0.5, borderColor: C.inkLine2, borderRadius: 3 }}>
       {uri && <Image src={uri} style={{ width: size, height: size, objectFit: 'contain' }} />}
+    </View>
+  );
+}
+
+// ---- uniform-compound upholstery hero ----------------------------------
+// One swatch + "Tapizado · <fabric>" shown ONCE at a compound's header when
+// every piece wears the same fabric — replacing the per-component swatch
+// repetition (and the old stale parent-seed swatch). The fabric code "(#…)" is
+// stripped for the client. Mirrored on screen by ClientPreview.
+function UpholsteryHero({ subtype, swatchImageId, images }: { subtype: string; swatchImageId: string | null; images?: ImageMap }) {
+  const src = swatchSrcFor(swatchImageId, subtype);
+  const label = fabricDisplay(subtype);
+  // compoundFabric only reports uniform with a real bearing piece, so there's
+  // always a label here; the swatch tile degrades to an empty frame when no
+  // image/code resolves (never drop the fabric name).
+  if (!src.imageId && !src.url && !label) return null;
+  return (
+    <View style={{ marginTop: 7, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Swatch src={src} images={images} size={40} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 7.5, color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase' }}>Tapizado</Text>
+        {label ? <Text style={{ fontSize: 9.5, color: C.inkHigh, marginTop: 1.5 }}>{label}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -120,12 +144,17 @@ function LineRow({
   const compound = isCompoundLine(line);
   const cover = imgFor(images, coverKey(line.id));
   const cells = materialCells({ mo: line.materialOptions, reference: line.reference, baseSwatchImageId: line.swatchImageId, families, currency, rates });
-  // Standalone swatch only when there's no options grid (the grid leads with
-  // the same material). Mirrors ClientPreview: the uploaded swatch if any, else
-  // the catalog color derived from the subtype — so a picked fabric still shows
-  // a swatch even without an uploaded image.
+  // Uniform compound → hoist the shared fabric to ONE hero swatch at the header
+  // and drop every per-piece swatch below. A mixed compound keeps per-piece
+  // swatches (they're now informative). Resolved by the Model so screen + paper
+  // agree on when to collapse.
+  const upholstery = compound ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
+  // Standalone swatch only for a SIMPLE line with no options grid (the grid
+  // leads with the same material). A compound's parent carries a stale seed
+  // subtype the editor hides — never draw it; its fabric is the hero (uniform)
+  // or each piece's own swatch (mixed). Mirrors ClientPreview.
   const swatchSrc = swatchSrcFor(line.swatchImageId, line.subtype);
-  const showSwatch = !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
+  const showSwatch = !compound && !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
 
   const caption: { text: string; color: string } | null = (() => {
     if (optional && !inGroup && !inSet) return { text: 'Opcional · no incluido en el total', color: C.inkMid };
@@ -145,7 +174,7 @@ function LineRow({
           {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
           {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
           <Text style={s.lineName}>{line.name || '—'}</Text>
-          {line.subtype && <Text style={s.lineSub}>{line.subtype}</Text>}
+          {line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
           {(line.reference || line.dimensions) && (
             <View style={s.lineRefRow}>
               {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
@@ -154,8 +183,11 @@ function LineRow({
           )}
           {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
           <MaterialGrid cells={cells} images={images} />
+          {compound && upholstery.uniform && (
+            <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
+          )}
           {compound && Array.isArray(line.components) && line.components.map((c, i) => (
-            <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+            <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={upholstery.uniform} />
           ))}
           {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
@@ -165,15 +197,18 @@ function LineRow({
   );
 }
 
-// compound component: swatch + name/ref over its subtotal, plus its own grid
+// compound component: swatch + name/ref over its subtotal, plus its own grid.
+// `hideSwatch` (uniform compound) collapses the row to a clean name + price —
+// the shared fabric is stated once in the header hero, so the per-piece swatch
+// and its now-redundant subtype line drop out.
 function ComponentRow({
-  c, fmt, families, currency, rates, images,
+  c, fmt, families, currency, rates, images, hideSwatch,
 }: {
-  c: LineComponent; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
+  c: LineComponent; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap; hideSwatch?: boolean;
 }) {
   const cells = materialCells({ mo: c.materialOptions, reference: c.reference, baseSwatchImageId: c.swatchImageId, families, currency, rates });
   const swatchSrc = swatchSrcFor(c.swatchImageId, c.subtype);
-  const showSwatch = !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
+  const showSwatch = !hideSwatch && !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
   return (
     <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
@@ -181,12 +216,12 @@ function ComponentRow({
           {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 9, color: C.inkHigh }}>{c.name || c.reference || '—'}</Text>
-            {c.subtype && <Text style={{ fontSize: 7.5, color: C.inkMid, marginTop: 1 }}>{c.subtype}</Text>}
+            {!hideSwatch && c.subtype && <Text style={{ fontSize: 7.5, color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
           </View>
         </View>
         <Text style={{ fontSize: 9, color: C.inkMid }}>{fmt(componentSubtotal(c))}</Text>
       </View>
-      <MaterialGrid cells={cells} images={images} />
+      {!hideSwatch && <MaterialGrid cells={cells} images={images} />}
     </View>
   );
 }

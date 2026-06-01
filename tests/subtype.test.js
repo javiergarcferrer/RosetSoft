@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial } from '../src/lib/subtype.js';
+import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial, compoundFabric, fabricDisplay } from '../src/lib/subtype.js';
 
 test('parse — canonical "Grade X — FABRIC"', () => {
   assert.deepEqual(parseSubtype('Grade C — PAMPA'), { grade: 'C', fabric: 'PAMPA' });
@@ -125,6 +125,75 @@ test('canPropagateMaterial — offered only when there is redundancy to remove',
   // Guards: missing/short sibling lists never throw.
   assert.equal(canPropagateMaterial(src, null), false);
   assert.equal(canPropagateMaterial(src, []), false);
+});
+
+test('fabricDisplay — strips the embedded (#code) for client-facing copy', () => {
+  assert.equal(fabricDisplay('Grade C — TRAMA · ECRU (#3075)'), 'Grade C — TRAMA · ECRU');
+  assert.equal(fabricDisplay('Grade D — SCAN · BEIGE (#1116)'), 'Grade D — SCAN · BEIGE');
+  // No code ⇒ unchanged; blank/null ⇒ empty string.
+  assert.equal(fabricDisplay('Grade C — PAMPA'), 'Grade C — PAMPA');
+  assert.equal(fabricDisplay(''), '');
+  assert.equal(fabricDisplay(null), '');
+});
+
+test('compoundFabric — uniform when every bearing piece shares one material', () => {
+  const mk = (id, subtype, swatch) => ({ id, subtype, swatchImageId: swatch });
+  // A sectional whose pieces are all Grade C — TRAMA · Ecru (same swatch).
+  const comps = [
+    mk('1', 'Grade C — TRAMA · ECRU (#3075)', 'img-ecru'),
+    mk('2', 'Grade C — TRAMA · ECRU (#3075)', 'img-ecru'),
+  ];
+  assert.deepEqual(compoundFabric(comps), {
+    uniform: true, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'img-ecru',
+  });
+});
+
+test('compoundFabric — NOT uniform when a piece differs (fabric or swatch)', () => {
+  const mk = (id, subtype, swatch) => ({ id, subtype, swatchImageId: swatch });
+  // Different fabric on one piece (the MODULAR EN L case: sofas TRAMA, bolsters SCAN).
+  assert.equal(compoundFabric([
+    mk('1', 'Grade C — TRAMA · ECRU (#3075)', 'img-ecru'),
+    mk('2', 'Grade D — SCAN · BEIGE (#1116)', 'img-beige'),
+  ]).uniform, false);
+  // Same fabric label, different colour swatch ⇒ still differs.
+  assert.equal(compoundFabric([
+    mk('1', 'Grade C — TRAMA', 'img-a'),
+    mk('2', 'Grade C — TRAMA', 'img-b'),
+  ]).uniform, false);
+});
+
+test('compoundFabric — non-bearing pieces (no fabric) do not break uniformity', () => {
+  const mk = (id, subtype, swatch) => ({ id, subtype, swatchImageId: swatch });
+  // A glass top / metal base carries no grade or fabric — ignored, not a mismatch.
+  assert.deepEqual(compoundFabric([
+    mk('1', 'Grade C — TRAMA · ECRU (#3075)', 'img-ecru'),
+    mk('2', 'Walnut base', null),  // a fabric-less finish counts as bearing (has fabric text)
+  ]).uniform, false);
+  // Truly blank sub-piece (no grade, no fabric) is skipped.
+  assert.deepEqual(compoundFabric([
+    mk('1', 'Grade C — TRAMA · ECRU (#3075)', 'img-ecru'),
+    mk('2', '', null),
+  ]), { uniform: true, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'img-ecru' });
+});
+
+test('compoundFabric — per-piece configuration disqualifies collapsing', () => {
+  const mk = (props) => ({ id: 'x', subtype: 'Grade C — TRAMA', swatchImageId: 'img', ...props });
+  const base = mk({});
+  // A pick-one alternative, a client optional, or an own options grid each mean
+  // the piece is meant to be read individually — never collapse the swatch.
+  assert.equal(compoundFabric([base, mk({ id: '2', alternativeGroup: 'g1' })]).uniform, false);
+  assert.equal(compoundFabric([base, mk({ id: '2', isOptional: true })]).uniform, false);
+  assert.equal(compoundFabric([base, mk({ id: '2', optionalOffered: true })]).uniform, false);
+  assert.equal(compoundFabric([base, mk({ id: '2', materialOptions: { options: [{ label: 'B' }] } })]).uniform, false);
+  // An empty options array is not a grid ⇒ still collapses.
+  assert.equal(compoundFabric([base, mk({ id: '2', materialOptions: { options: [] } })]).uniform, true);
+});
+
+test('compoundFabric — guards: empty / null / no bearing piece', () => {
+  assert.deepEqual(compoundFabric(null), { uniform: false, subtype: '', swatchImageId: null });
+  assert.deepEqual(compoundFabric([]), { uniform: false, subtype: '', swatchImageId: null });
+  // All pieces blank ⇒ nothing to hoist.
+  assert.equal(compoundFabric([{ id: '1', subtype: '' }, { id: '2', subtype: '' }]).uniform, false);
 });
 
 test('compose ∘ parse is identity for every canonical shape', () => {

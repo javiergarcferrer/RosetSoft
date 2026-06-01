@@ -121,6 +121,18 @@ export function composeSubtype(
   return f ? `${gradeStr} — ${f}` : gradeStr;
 }
 
+/**
+ * A subtype as shown to a CLIENT — the stored string minus the embedded catalog
+ * colour code. We persist "Grade C — TRAMA · ECRU (#3075)" so swatchMatch can
+ * locate the colour again, but the "(#3075)" is a technical token that has no
+ * business on a customer's quote. Strips every "(#…)" group:
+ *   "Grade C — TRAMA · ECRU (#3075)" → "Grade C — TRAMA · ECRU"
+ * Display-only — never write this back to the row (it would lose the code).
+ */
+export function fabricDisplay(subtype: string | null | undefined): string {
+  return String(subtype ?? '').replace(/\s*\(#[^)]*\)/g, '').trim();
+}
+
 /** A catalog material the picker can compose a fabric label from. */
 export interface MaterialLike {
   name?: string | null;
@@ -207,4 +219,75 @@ export function canPropagateMaterial(
   if (!grade && !fabric) return false; // nothing worth applying yet
   const key = materialIdentity(entity);
   return siblings.some((s) => s && s.id !== entity.id && materialIdentity(s) !== key);
+}
+
+/* ------------------------------------------------------------------------- *
+ * Compound upholstery — "is this whole piece dressed in ONE fabric?"
+ *
+ * A sectional or modular sofa is one parent line holding several components,
+ * and the NORM is that every component wears the same fabric. Rendered naively
+ * that stamps the identical swatch on every row (and a stale parent swatch on
+ * top) — visual noise that reads like a data dump, not a proposal. This pure
+ * derivation lets every client-facing surface (the screen preview, the public
+ * link, the PDF) answer once: do the pieces share a single upholstery? When
+ * they do, the surfaces hoist it to ONE "Tapizado" swatch + label at the
+ * compound header and render the pieces as a clean name + price list; when they
+ * genuinely differ, the per-piece swatches stay (they're now informative). One
+ * Model rule ⇒ screen and paper can't disagree on when to collapse.
+ * ------------------------------------------------------------------------- */
+
+/** A compound component as this derivation reads it (material + per-piece config). */
+export interface CompoundComponentLike extends MaterialBearing {
+  isOptional?: boolean | null;
+  optionalOffered?: boolean | null;
+  alternativeGroup?: string | null;
+  materialOptions?: { options?: unknown[] | null } | null;
+}
+
+/** The shared upholstery of a compound — `uniform:false` when the pieces differ. */
+export interface CompoundFabric {
+  uniform: boolean;
+  subtype: string;
+  swatchImageId: string | null;
+}
+
+/**
+ * Reduce a compound's components to their shared upholstery, or report that
+ * they differ. Uniform iff every MATERIAL-BEARING piece (one carrying a grade
+ * or fabric) shares the same `materialIdentity`. Returns `uniform:false` when:
+ *   • any piece offers per-piece configuration — a pick-one alternative, a
+ *     client-toggleable optional, or its own material-options grid — because
+ *     those are meant to be read/configured individually, never collapsed; or
+ *   • no piece carries a material at all (nothing to hoist).
+ * Non-bearing pieces (a metal base, a glass top) don't break uniformity — they
+ * simply have no fabric to compare — so a sofa whose upholstered parts all match
+ * still collapses cleanly around them.
+ */
+export function compoundFabric(
+  components: ReadonlyArray<CompoundComponentLike> | null | undefined,
+): CompoundFabric {
+  const NONE: CompoundFabric = { uniform: false, subtype: '', swatchImageId: null };
+  if (!Array.isArray(components) || components.length === 0) return NONE;
+
+  // Any per-piece configuration ⇒ the pieces stand on their own, never collapse.
+  const hasPerPieceConfig = components.some((c) => !!c && (
+    c.isOptional || c.optionalOffered || c.alternativeGroup ||
+    (Array.isArray(c.materialOptions?.options) && (c.materialOptions!.options!.length > 0))
+  ));
+  if (hasPerPieceConfig) return NONE;
+
+  // The pieces that actually carry a material (a grade or a fabric name).
+  const bearing = components.filter((c) => {
+    const { grade, fabric } = parseSubtype(c?.subtype);
+    return !!(grade || fabric);
+  });
+  if (bearing.length === 0) return NONE;
+
+  const key = materialIdentity(bearing[0]);
+  if (!bearing.every((c) => materialIdentity(c) === key)) return NONE;
+  return {
+    uniform: true,
+    subtype: (bearing[0]?.subtype || '').trim(),
+    swatchImageId: bearing[0]?.swatchImageId ?? null,
+  };
 }
