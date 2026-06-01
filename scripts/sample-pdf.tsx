@@ -80,6 +80,20 @@ const lines: any[] = [
       { id: 'm3', name: 'PRADO S/2 BOLSTERS', reference: 'PRD-BOL', unitPrice: 1260, qty: 1, subtype: 'Grade D — SCAN · BEIGE (#1116)', swatchImageId: 'sw-scan' },
     ],
   }),
+  // UNIFORM DESPITE ALTERNATIVES (the EXCLUSIF screenshot): every piece is the
+  // same CRAQUELIN, but several pieces are component-level alternatives. The
+  // earlier guard bailed here and stamped the swatch on every row; now it hoists
+  // ONE hero and keeps the rows clean.
+  item({
+    id: 'l12', kind: 'compound', name: 'EXCLUSIF MODULAR', family: 'SEATS',
+    components: [
+      { id: 'e1', name: 'EXCLUSIF RIGHT-ARM LOVESEAT', reference: '100029530', unitPrice: 5200, qty: 1, subtype: 'Grade D — CRAQUELIN · AUBERGINE (#9921)', swatchImageId: 'sw-craq' },
+      { id: 'e2', name: 'EXCLUSIF CORNER SEAT 45°', reference: '172206000', unitPrice: 4100, qty: 1, subtype: 'Grade D — CRAQUELIN · AUBERGINE (#9921)', swatchImageId: 'sw-craq' },
+      { id: 'e3', name: 'EXCLUSIF LOVESEAT W/O ARMS', reference: '100029500', unitPrice: 4600, qty: 1, subtype: 'Grade D — CRAQUELIN · AUBERGINE (#9921)', swatchImageId: 'sw-craq' },
+      { id: 'e4', name: 'EXCLUSIF MINI LOUNGE LEFT', reference: '100039720', unitPrice: 3900, qty: 1, subtype: 'Grade D — CRAQUELIN · AUBERGINE (#9921)', swatchImageId: 'sw-craq', alternativeGroup: 'g-lounge', isSelectedAlternative: true },
+      { id: 'e5', name: 'EXCLUSIF ASYMMETRICAL MINI LOUNGE LEFT', reference: '100039780', unitPrice: 4250, qty: 1, subtype: 'Grade D — CRAQUELIN · AUBERGINE (#9921)', swatchImageId: 'sw-craq', alternativeGroup: 'g-lounge', isSelectedAlternative: false },
+    ],
+  }),
   item({ id: 'l5', name: 'Silla TOGO (cuero)', family: 'TOGO', reference: 'TGO-L', qty: 6, unitPrice: 320, alternativeGroup: 'alt1', isSelectedAlternative: true }),
   item({ id: 'l6', name: 'Silla TOGO (tela)', family: 'TOGO', reference: 'TGO-F', qty: 6, unitPrice: 280, alternativeGroup: 'alt1', isSelectedAlternative: false }),
   item({ id: 'l7', name: 'Aparador NABUCCO', family: 'NABUCCO', reference: 'NBC-AP', unitPrice: 2100, setGroup: 'set1' }),
@@ -94,6 +108,7 @@ const images: ImageMap = new Map([
   [swatchKey({ imageId: 'sw-exedra' })!, png],
   [swatchKey({ imageId: 'sw-trama' })!, png],
   [swatchKey({ imageId: 'sw-scan' })!, png],
+  [swatchKey({ imageId: 'sw-craq' })!, png],
   ...lines.filter((l) => l.kind !== 'section').map((l) => [coverKey(l.id), png] as [string, string]),
 ]);
 

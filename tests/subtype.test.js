@@ -176,17 +176,20 @@ test('compoundFabric — non-bearing pieces (no fabric) do not break uniformity'
   ]), { uniform: true, subtype: 'Grade C — TRAMA · ECRU (#3075)', swatchImageId: 'img-ecru' });
 });
 
-test('compoundFabric — per-piece configuration disqualifies collapsing', () => {
+test('compoundFabric — per-piece configuration does NOT block uniformity', () => {
+  // Whether a piece is independently choosable (a pick-one alternative, a
+  // client-optional, its own options grid) is SEPARATE from whether its swatch
+  // is redundant. A sectional of four same-CRAQUELIN alternative seats is still
+  // uniform — we hoist ONE hero swatch and keep the per-piece radios. (This is
+  // the bug the earlier guard caused: such quotes showed the swatch N times.)
   const mk = (props) => ({ id: 'x', subtype: 'Grade C — TRAMA', swatchImageId: 'img', ...props });
   const base = mk({});
-  // A pick-one alternative, a client optional, or an own options grid each mean
-  // the piece is meant to be read individually — never collapse the swatch.
-  assert.equal(compoundFabric([base, mk({ id: '2', alternativeGroup: 'g1' })]).uniform, false);
-  assert.equal(compoundFabric([base, mk({ id: '2', isOptional: true })]).uniform, false);
-  assert.equal(compoundFabric([base, mk({ id: '2', optionalOffered: true })]).uniform, false);
-  assert.equal(compoundFabric([base, mk({ id: '2', materialOptions: { options: [{ label: 'B' }] } })]).uniform, false);
-  // An empty options array is not a grid ⇒ still collapses.
-  assert.equal(compoundFabric([base, mk({ id: '2', materialOptions: { options: [] } })]).uniform, true);
+  assert.equal(compoundFabric([base, mk({ id: '2', alternativeGroup: 'g1' })]).uniform, true);
+  assert.equal(compoundFabric([base, mk({ id: '2', isOptional: true })]).uniform, true);
+  assert.equal(compoundFabric([base, mk({ id: '2', optionalOffered: true })]).uniform, true);
+  assert.equal(compoundFabric([base, mk({ id: '2', materialOptions: { options: [{ label: 'B' }] } })]).uniform, true);
+  // But a piece in a genuinely DIFFERENT fabric still breaks uniformity.
+  assert.equal(compoundFabric([base, mk({ id: '2', subtype: 'Grade D — SCAN', swatchImageId: 'img2' })]).uniform, false);
 });
 
 test('compoundFabric — guards: empty / null / no bearing piece', () => {

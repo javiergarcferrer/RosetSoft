@@ -236,14 +236,6 @@ export function canPropagateMaterial(
  * Model rule ⇒ screen and paper can't disagree on when to collapse.
  * ------------------------------------------------------------------------- */
 
-/** A compound component as this derivation reads it (material + per-piece config). */
-export interface CompoundComponentLike extends MaterialBearing {
-  isOptional?: boolean | null;
-  optionalOffered?: boolean | null;
-  alternativeGroup?: string | null;
-  materialOptions?: { options?: unknown[] | null } | null;
-}
-
 /** The shared upholstery of a compound — `uniform:false` when the pieces differ. */
 export interface CompoundFabric {
   uniform: boolean;
@@ -254,27 +246,25 @@ export interface CompoundFabric {
 /**
  * Reduce a compound's components to their shared upholstery, or report that
  * they differ. Uniform iff every MATERIAL-BEARING piece (one carrying a grade
- * or fabric) shares the same `materialIdentity`. Returns `uniform:false` when:
- *   • any piece offers per-piece configuration — a pick-one alternative, a
- *     client-toggleable optional, or its own material-options grid — because
- *     those are meant to be read/configured individually, never collapsed; or
- *   • no piece carries a material at all (nothing to hoist).
- * Non-bearing pieces (a metal base, a glass top) don't break uniformity — they
- * simply have no fabric to compare — so a sofa whose upholstered parts all match
- * still collapses cleanly around them.
+ * or fabric) shares the same `materialIdentity`; returns `uniform:false` when no
+ * piece carries a material (nothing to hoist) or the pieces don't all match.
+ *
+ * Deliberately ignores per-piece CONFIGURATION (a piece being a pick-one
+ * alternative, a client-optional, or carrying its own options grid). Whether a
+ * piece is independently *choosable* is a SEPARATE question from whether the
+ * swatch is *redundant* — a sectional whose four alternative seats are all the
+ * same CRAQUELIN still wants ONE hero swatch, with the per-piece radios kept.
+ * Conflating the two is what left such quotes showing the same swatch N times.
+ *
+ * Non-bearing pieces (a metal base, a glass top) carry no fabric to compare, so
+ * they don't break uniformity — a sofa whose upholstered parts all match still
+ * collapses cleanly around them.
  */
 export function compoundFabric(
-  components: ReadonlyArray<CompoundComponentLike> | null | undefined,
+  components: ReadonlyArray<MaterialBearing> | null | undefined,
 ): CompoundFabric {
   const NONE: CompoundFabric = { uniform: false, subtype: '', swatchImageId: null };
   if (!Array.isArray(components) || components.length === 0) return NONE;
-
-  // Any per-piece configuration ⇒ the pieces stand on their own, never collapse.
-  const hasPerPieceConfig = components.some((c) => !!c && (
-    c.isOptional || c.optionalOffered || c.alternativeGroup ||
-    (Array.isArray(c.materialOptions?.options) && (c.materialOptions!.options!.length > 0))
-  ));
-  if (hasPerPieceConfig) return NONE;
 
   // The pieces that actually carry a material (a grade or a fabric name).
   const bearing = components.filter((c) => {

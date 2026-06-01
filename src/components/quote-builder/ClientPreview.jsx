@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, SlidersHorizontal } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, SlidersHorizontal, Eye } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
@@ -61,6 +61,44 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
   );
 }
 
+// The Ver / Personalizar mode switch on the interactive link. A segmented
+// control (NOT a floating action button — this flips a MODE, and a FAB reads as
+// a primary action; a segment pair states "you are here, tap to switch"). Ver is
+// the clean read-only proposal a client lands on; Personalizar reveals every
+// control. The amber dot on Personalizar quietly advertises that there's more to
+// do without shouting, so a client discovers they can configure their own fabric.
+function ModeToggle({ mode, onChange }) {
+  const opts = [
+    { value: 'view', label: 'Ver', Icon: Eye },
+    { value: 'edit', label: 'Personalizar', Icon: SlidersHorizontal },
+  ];
+  return (
+    <span className="inline-flex items-stretch rounded-full bg-white/10 p-0.5" role="group" aria-label="Modo de la cotización">
+      {opts.map(({ value, label, Icon }) => {
+        const active = mode === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            aria-pressed={active}
+            className={`relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              active ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-50/80 hover:text-white'
+            }`}
+          >
+            <Icon size={12} aria-hidden />
+            {label}
+            {/* Quiet "there's more here" hint on the inactive Personalizar tab. */}
+            {value === 'edit' && !active && (
+              <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden />
+            )}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
 // Per-line margin factor — the SAME factor the public-link bundle bakes into
 // every price (quote margin × line margin; the discount is deliberately
 // excluded — the link bakes margin only). The editor feeds RAW prices + the real
@@ -80,6 +118,15 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // (the dealer's in-editor "Vista cliente"). Drives the banner copy so the
   // recipient knows they can configure the quote right here.
   const interactive = !!(onSelectMaterial || onPickMaterial || onSelectAlternative || onToggleOptional);
+  // Two modes on the interactive link: a clean read-only PROPOSAL (default) and
+  // a PERSONALIZAR mode that reveals every control (radios, fabric pickers,
+  // optional toggles, per-piece swatches). The default sells; the toggle invites
+  // configuration without cluttering the first impression. Read-only surfaces
+  // (the dealer's preview, the PDF) have no toggle — they're always 'view'.
+  // `editable` is THE single gate threaded down: in view mode the interactive
+  // surface renders byte-identical to the read-only one.
+  const [mode, setMode] = useState('view'); // 'view' | 'edit'
+  const editable = interactive && mode === 'edit';
   // The full fabric picker is available only when its catalog + commit handler
   // are both wired. The per-line price source differs by surface but the picker
   // is identical: the share link carries baked `gradePrices` on each line; the
@@ -88,8 +135,17 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // action carrying the chosen fabric for every sibling id, replayed by the same
   // reducer (materialPick is a map) so the optimistic + server paths stay in
   // parity. Absent ⇒ the shortcut button simply never renders.
-  const picker = onPickMaterial && materials?.length
-    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: onPickMaterial, onPickMany: onPickMaterialMany }
+  // Every interactive affordance flows through ONE gate: in view mode the
+  // handlers are withheld (undefined), so the same `!!handler` checks the
+  // renderers already make collapse them to read-only — no parallel "is this
+  // editable?" plumbing. The PDF and the dealer's read-only preview hit the same
+  // path because `editable` is false there too.
+  const pickMaterialIf = editable ? onPickMaterial : undefined;
+  const selectMaterialIf = editable ? onSelectMaterial : undefined;
+  const toggleOptionalIf = editable ? onToggleOptional : undefined;
+  const selectAlternativeIf = editable ? onSelectAlternative : undefined;
+  const picker = pickMaterialIf && materials?.length
+    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: pickMaterialIf, onPickMany: editable ? onPickMaterialMany : undefined }
     : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
@@ -110,10 +166,15 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // CompoundClientLine and stop it following the page scroll.
   return (
     <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
-      {/* Banner so the dealer knows this is a preview, not the live editor */}
-      <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between">
-        <span>{interactive ? 'Personaliza tu cotización · elige opciones y telas' : 'Vista previa del cliente · de solo lectura'}</span>
-        <span className="opacity-60">{formatDate(quote.updatedAt)}</span>
+      {/* Banner. On the interactive link it carries the Ver / Personalizar mode
+          toggle; read-only surfaces just show the preview label + date. */}
+      <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between gap-3">
+        {interactive ? (
+          <ModeToggle mode={mode} onChange={setMode} />
+        ) : (
+          <span>Vista previa del cliente · de solo lectura</span>
+        )}
+        <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
       </div>
 
       {/* Header — stacks on mobile (logo block, then quote#) and promotes
@@ -229,8 +290,8 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                         insideGroupCard={false}
                         materialSelections={materialSelections}
                         picker={picker}
-                        onSelectMaterial={onSelectMaterial}
-                        onToggleOptional={onToggleOptional}
+                        onSelectMaterial={selectMaterialIf}
+                        onToggleOptional={toggleOptionalIf}
                       />
                     );
                   }
@@ -265,9 +326,9 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                           insideGroupCard
                           materialSelections={materialSelections}
                           picker={picker}
-                          onSelectMaterial={onSelectMaterial}
-                          onToggleOptional={onToggleOptional}
-                          onSelectAlternative={onSelectAlternative}
+                          onSelectMaterial={selectMaterialIf}
+                          onToggleOptional={toggleOptionalIf}
+                          onSelectAlternative={selectAlternativeIf}
                         />
                       ))}
                     </ClientGroupCard>
@@ -479,12 +540,14 @@ function componentPriced(component) {
 // `mf` is the per-line margin factor the picker grade prices + option-chip
 // deltas bake; `canApplyToAll`/`onApplyToAll` are only passed for compound
 // components (a standalone line has no siblings to copy a material to).
-function LineContent({ entity, mf, priced, families, currency, rates, fmt, materialSelections, picker, onSelectMaterial, canApplyToAll, onApplyToAll }) {
+function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideSwatch, materialSelections, picker, onSelectMaterial, canApplyToAll, onApplyToAll }) {
   const gp = picker && (entity.gradePrices || picker.gradePricesFor?.(entity.reference, mf));
   // A standalone swatch shows only when there's NO material-options grid (the
-  // grid already leads with this same material). The picker controls ride to the
-  // swatch's RIGHT; with a grid instead they render beneath it.
-  const showSwatch = !entity.materialOptions?.options?.length
+  // grid already leads with this same material) AND we're not collapsing it into
+  // a compound's shared "Tapizado" hero (`hideSwatch`) — a uniform compound
+  // states the fabric once up top, so the per-piece tile would just repeat it.
+  const showSwatch = !hideSwatch
+    && !entity.materialOptions?.options?.length
     && !!(entity.swatchImageId || swatchUrl(colorCodeFromSubtype(entity.subtype)));
   // FabricPicker (+ the "apply to all" twin for compound components). z-[2] keeps
   // both controls above any dimming veil so the material stays pickable in every
@@ -499,9 +562,10 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, mater
     <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
       <div className="min-w-0 sm:flex-1">
         <LineIdentity family={entity.family} name={entity.name} />
-        {(entity.subtype || entity.reference || entity.dimensions) && (
+        {((entity.subtype && !hideSwatch) || entity.reference || entity.dimensions) && (
           <div className="min-w-0 mt-1">
-            {entity.subtype && <div className="text-xs text-ink-500 sm:text-[11px]">{fabricDisplay(entity.subtype)}</div>}
+            {/* Fabric line — suppressed when the compound hero already names it. */}
+            {entity.subtype && !hideSwatch && <div className="text-xs text-ink-500 sm:text-[11px]">{fabricDisplay(entity.subtype)}</div>}
             {(entity.reference || entity.dimensions) && (
               <div className="text-[11px] text-ink-500 sm:text-[10px] mt-0.5 flex flex-wrap gap-x-2">
                 {entity.reference && <span className="font-mono">REF. {entity.reference}</span>}
@@ -909,16 +973,13 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   const tr = ranged ? lineTotalRange(line) : null;
   // "Opción N de M" positions for any component-level alternatives.
   const compAltInfo = componentAlternativeGroupInfo(line.components);
-  // Uniform upholstery → hoist the shared fabric to ONE hero at the header and
-  // collapse the per-piece swatches to a clean name + price list. Resolved by
-  // the Model so the screen + PDF agree on when to collapse.
+  // Uniform upholstery → hoist the shared fabric to ONE "Tapizado" hero at the
+  // header and drop every per-piece swatch (they'd just repeat it). Resolved by
+  // the Model so screen + PDF agree on when to collapse. This is INDEPENDENT of
+  // edit/view mode and of whether pieces are alternatives — a sectional of
+  // same-fabric alternative seats still shows one hero, with its radios intact.
   const upholstery = compoundFabric(line.components);
-  // On the interactive link the customer can still re-pick fabric per piece —
-  // tucked behind a quiet "Personalizar por pieza" expander so the default
-  // (collapsed) view stays clean. Read-only surfaces never offer it.
-  const canPerPiece = upholstery.uniform && !!picker?.onPick;
-  const [perPiece, setPerPiece] = useState(false);
-  const collapsed = upholstery.uniform && !perPiece;
+  const hideSwatch = upholstery.uniform;
   // Extra product photos beyond the cover — a small zoomable strip under it.
   const extras = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
   // Clamp the displayed discount % the same way the lib does (0–100) so the
@@ -1015,9 +1076,27 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <LineIdentity family={line.family} name={line.name} />
+          {/* Mobile sticky identity bar — pins a slim thumbnail + name as the
+              client scrolls a LONG component list, so the product they're
+              configuring stays on screen without scrolling back up to the hero
+              (a full-bleed sticky hero would instead cover the list). sm+ keeps
+              the sticky image column + the full LineIdentity below. `top-2` sits
+              just under the public link's scroll-container top (that surface has
+              no app topbar); it tucks beneath the editor's mobile topbar, which
+              is the rarely-used preview-on-phone case. */}
+          <div className="sm:hidden sticky top-2 z-[3] -mx-4 mb-2 flex items-center gap-2.5 border-b border-ink-100 bg-white/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+            {line.imageId && (
+              <ImageView id={line.imageId} alt="" className="h-9 w-9 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-contain" />
+            )}
+            <div className="min-w-0">
+              {line.family && <div className="eyebrow-xs tracking-widest text-ink-500 leading-none">{line.family}</div>}
+              <div className="truncate text-sm font-semibold text-ink-900 leading-tight">{line.name || '—'}</div>
+            </div>
+          </div>
+          <div className="hidden sm:block"><LineIdentity family={line.family} name={line.name} /></div>
           {/* Uniform compound → state the shared fabric ONCE here (swatch +
-              "Tapizado · …"), instead of repeating it on every row below. */}
+              "Tapizado · …"), instead of repeating it on every row below. In
+              edit mode the hero swatch is itself a whole-compound picker. */}
           {upholstery.uniform && <UpholsteryHero line={line} mf={mf} picker={picker} />}
           <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
             {(line.components || []).map((c, i) => (
@@ -1032,28 +1111,15 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                 groupInfo={compAltInfo.get(c.id)}
                 materialSelections={materialSelections}
                 picker={picker}
-                collapsed={collapsed}
+                hideSwatch={hideSwatch}
                 onSelectMaterial={onSelectMaterial}
                 onToggleOptional={onToggleOptional}
                 onSelectAlternative={onSelectAlternative}
-                canApplyToAll={!collapsed && !!picker?.onPickMany && canPropagateMaterial(c, line.components)}
+                canApplyToAll={!hideSwatch && !!picker?.onPickMany && canPropagateMaterial(c, line.components)}
                 onApplyToAll={() => applyMaterialToSiblings(c, line.components, picker)}
               />
             ))}
           </ul>
-          {/* Interactive link only: let the customer override fabric per piece
-              without cluttering the clean default. Toggles the collapsed rows
-              back to full per-piece pickers. */}
-          {canPerPiece && (
-            <button
-              type="button"
-              onClick={() => setPerPiece((v) => !v)}
-              className="relative z-[2] mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-500 hover:text-brand-700 transition-colors"
-            >
-              <SlidersHorizontal size={12} aria-hidden />
-              {perPiece ? 'Usar una sola tela' : 'Personalizar por pieza'}
-            </button>
-          )}
           {/* Compound roll-up — a neutral "Total compuesto" caption +
               bold total anchor, matching the redesigned PDF footer. The
               optional struck list price / −Y% sit above when discounted. */}
@@ -1089,25 +1155,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   );
 }
 
-function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, collapsed, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
-  // Collapsed (uniform compound): the header hero already states the shared
-  // fabric, so a piece reads as a clean name + price — no repeated swatch,
-  // picker, or fabric line. compoundFabric guarantees no per-piece config in
-  // this branch (no optionals / alternatives / option grids), so it's safe to
-  // drop all that chrome.
-  if (collapsed) {
-    return (
-      <li className="py-2 flex items-baseline justify-between gap-3">
-        <div className="min-w-0">
-          <span className="text-sm font-medium text-ink-900">{component.name || component.reference || '—'}</span>
-          {component.dimensions && <span className="ml-2 text-[10px] text-ink-500">DIM. {component.dimensions}</span>}
-        </div>
-        <span className="text-sm font-semibold text-ink-900 tabular-nums whitespace-nowrap flex-shrink-0">
-          {fmt(componentSubtotal(component))}
-        </span>
-      </li>
-    );
-  }
+function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fmt, families, groupInfo, materialSelections, picker, hideSwatch, onSelectMaterial, onToggleOptional, onSelectAlternative, canApplyToAll, onApplyToAll }) {
   const optional = !!component.isOptional;
   // Component-level alternative (pick-one). The interactive link gives each
   // option a radio; read-only surfaces flag the chosen one and dim the rest.
@@ -1158,6 +1206,7 @@ function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fm
         currency={currency}
         rates={rates}
         fmt={fmt}
+        hideSwatch={hideSwatch}
         materialSelections={materialSelections}
         picker={picker}
         onSelectMaterial={onSelectMaterial}
