@@ -63,3 +63,36 @@ export async function clearModelFabrics(root) {
   if (!root) return;
   await db.modelFabrics.delete(root);
 }
+
+/**
+ * Carry a model's fabric link from one storage key to another when a line
+ * changes shape. A SIMPLE line keys its link by the SKU family root (so it
+ * persists per model across quotes); a COMPOUND keys it by the line id (so one
+ * link governs every component). Toggling between the two (Convertir a / Disolver
+ * compuesto) would otherwise orphan the link under the now-unused key and
+ * silently drop the material picker's offered-fabric restriction.
+ *
+ * Copies the source link onto `toKey`, but only when `toKey` has no link yet, so
+ * an existing per-model (cross-quote) link is never clobbered by a stale carry.
+ * The source is left intact — on convert that's the per-model link other quotes
+ * still rely on; callers that want it gone (dissolve) clear it explicitly.
+ * Best-effort and non-throwing: a transient failure must never break the
+ * shape toggle itself, which has already been applied to the line.
+ */
+export async function carryModelLink(fromKey, toKey) {
+  if (!fromKey || !toKey || fromKey === toKey) return;
+  try {
+    const src = await db.modelFabrics.get(fromKey);
+    if (!src || (!src.patternNames?.length && !src.sourceUrl)) return;
+    const dst = await db.modelFabrics.get(toKey);
+    if (dst && (dst.patternNames?.length || dst.sourceUrl)) return; // keep the target's own link
+    await db.modelFabrics.put({
+      ...src,
+      id: toKey,
+      profileId: src.profileId || 'team',
+      fetchedAt: src.fetchedAt ?? Date.now(),
+    });
+  } catch (e) {
+    console.error('[lrModelFabrics] carryModelLink failed', e);
+  }
+}
