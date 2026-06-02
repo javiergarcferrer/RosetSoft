@@ -35,7 +35,7 @@ export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/i
 // ── importación / liquidación DGA (landed cost)
 export { resolveImportsList } from './imports.js';
 export {
-  buildImportEntry, computeImportTaxes, landedCost, landedUnitCost,
+  buildImportEntry, computeImportTaxes, landedCost, landedUnitCost, allocateShipment,
 } from '../../lib/accounting/importLiquidation.js';
 
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
