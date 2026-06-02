@@ -155,15 +155,20 @@ test('breakdown normalizes a negative/missing discount to 0', () => {
   assert.deepEqual(commissionBreakdown({ taxableBase: 1000 }, 10), { gross: 100, discount: 0, net: 100 });
 });
 
-test('breakdown: Friends & Family courtesy never reduces the commission', () => {
+test('breakdown: Friends & Family courtesy is drawn from the commission like any discount', () => {
   // Special order (20%). A $100 regular discount AND a $45 courtesy bring the
-  // taxableBase to 855. The courtesy is added BACK into the commission base and
-  // is NOT drawn out of the net, so the designer earns exactly what the same
-  // sale without the courtesy ($900 base, same $100 discount) pays.
-  const withCourtesy = commissionBreakdown({ taxableBase: 855, discountAmt: 100, courtesyDiscountAmt: 45 }, 20);
-  const withoutCourtesy = commissionBreakdown({ taxableBase: 900, discountAmt: 100 }, 20);
-  assert.deepEqual(withCourtesy, { gross: 200, discount: 100, net: 100 });
-  assert.equal(withCourtesy.net, withoutCourtesy.net);
+  // taxableBase to 855 (preDiscountBase 855+100+45 = 1,000). Both discounts come
+  // out of the cut: gross 200, drawn 145, net 55 — the courtesy adjusted the
+  // designer's payout down by its full $45.
+  const b = commissionBreakdown({ taxableBase: 855, discountAmt: 100, courtesyDiscountAmt: 45 }, 20);
+  assert.deepEqual(b, { gross: 200, discount: 145, net: 55 });
+  assert.equal(b.gross - b.discount, b.net);
+});
+
+test('breakdown: courtesy alone is drawn from the commission', () => {
+  // No regular discount, $50 courtesy on a $1,000 base, 20%: gross 200, net 150.
+  const b = commissionBreakdown({ taxableBase: 950, discountAmt: 0, courtesyDiscountAmt: 50 }, 20);
+  assert.deepEqual(b, { gross: 200, discount: 50, net: 150 });
 });
 
 test('breakdown normalizes a negative/missing courtesy to 0', () => {

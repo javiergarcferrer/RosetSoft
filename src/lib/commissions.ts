@@ -182,17 +182,15 @@ export function reportedCommission(
  * the post-discount base by the rate yet printed the net).
  *
  * The dealer's rule: commission is paid on the base imponible (BEFORE ITBIS
- * and BEFORE shipping), and the regular discount given to the client is funded
- * by the professional's cut, not the dealer's margin:
+ * and BEFORE shipping), and EVERY discount given to the client is funded by
+ * the professional's cut, not the dealer's margin. Both quote-level discounts
+ * — the regular `discountAmt` and the Friends & Family `courtesyDiscountAmt` —
+ * are drawn out of the commission the same way:
  *
  *   preDiscountBase = taxableBase + discountAmt + courtesyDiscountAmt  (base before any discount)
- *   gross           = preDiscountBase × pct/100    (full commission)
- *   net             = max(0, gross − discountAmt)  (only the regular discount comes out of it)
- *
- * The Friends & Family `courtesyDiscountAmt` is ADDED BACK into the commission
- * base and is NOT subtracted from the net: it's a courtesy the DEALER absorbs,
- * so the designer's payout is exactly what it would have been without it. Only
- * the commission-funded `discountAmt` reduces the net.
+ *   gross           = preDiscountBase × pct/100         (full commission on the base)
+ *   drawn           = discountAmt + courtesyDiscountAmt (every client discount)
+ *   net             = max(0, gross − drawn)             (discounts come out of the cut)
  *
  * Worked example — special order (20%), $1,000 base, 10% client discount:
  *   discountAmt = 100, taxableBase = 900, preDiscountBase = 1,000
@@ -203,10 +201,11 @@ export function reportedCommission(
  * Worked example — add a 5% Friends & Family courtesy on top of the above:
  *   courtesyDiscountAmt = 45 (5% of the 900 after the regular discount),
  *   taxableBase = 855, preDiscountBase = 855 + 100 + 45 = 1,000.
- *   gross = 200, net = max(0, 200 − 100) = 100 — UNCHANGED. The $45 courtesy
- *   came entirely out of the dealer's net, not the designer's commission.
+ *   gross = 200, drawn = 145, net = max(0, 200 − 145) = 55. The courtesy is
+ *   funded by the commission like any other discount — the designer's payout
+ *   is adjusted down by the $45 too.
  *
- * If the discount exceeds the commission the net floors at 0 (the dealer
+ * If the discounts exceed the commission the net floors at 0 (the dealer
  * absorbs the excess). Pass the totals object from computeTotals(); a bare
  * number with no discount degrades gracefully via the nullish reads. A
  * non-finite base yields all-zeros rather than NaN.
@@ -214,9 +213,9 @@ export function reportedCommission(
  * Multiplication only, no rounding policy — the formatter decides display.
  */
 export interface CommissionBreakdown {
-  /** Full commission before the client discount is drawn out. */
+  /** Full commission before any client discount is drawn out. */
   gross: number;
-  /** Client discount funded by the commission (>= 0). */
+  /** Total client discount funded by the commission (regular + courtesy, >= 0). */
   discount: number;
   /** What the professional actually earns: max(0, gross − discount). */
   net: number;
@@ -232,12 +231,13 @@ export function commissionBreakdown(
   const discount = Number.isFinite(rawDiscount) ? Math.max(0, rawDiscount) : 0;
   const rawCourtesy = Number(totals?.courtesyDiscountAmt);
   const courtesy = Number.isFinite(rawCourtesy) ? Math.max(0, rawCourtesy) : 0;
-  // Add the courtesy back: the commission is computed on the base BEFORE both
-  // discounts, but only the regular discount is drawn out of the net — the
-  // dealer absorbs the Friends & Family courtesy.
+  // Commission is computed on the base BEFORE any discount; both the regular
+  // discount and the Friends & Family courtesy are then drawn out of the
+  // professional's cut — every client discount is funded by the commission.
   const preDiscountBase = taxable + discount + courtesy;
+  const drawn = discount + courtesy;
   const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
-  return { gross, discount, net: Math.max(0, gross - discount) };
+  return { gross, discount: drawn, net: Math.max(0, gross - drawn) };
 }
 
 /**

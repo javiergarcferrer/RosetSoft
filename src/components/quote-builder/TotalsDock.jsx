@@ -124,6 +124,7 @@ export default function TotalsDock({
           commissionPct={commissionPct}
           grossCommission={grossCommission}
           discountAmt={totals.discountAmt}
+          courtesyAmt={totals.courtesyDiscountAmt}
           netCommission={netCommission}
           fmt={fmt}
           quote={quote}
@@ -179,8 +180,8 @@ export default function TotalsDock({
             />
           </div>
         </div>
-        {/* Friends & Family — a fixed 5% courtesy the DEALER absorbs. Unlike the
-            discount above, it never comes out of the professional's commission. */}
+        {/* Friends & Family — a fixed 5% courtesy for the client. Like the
+            discount above, it comes out of the professional's commission. */}
         <label
           className={`flex items-start gap-2.5 rounded-lg border p-3 max-w-md ${
             financiallyLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-ink-50'
@@ -199,7 +200,7 @@ export default function TotalsDock({
           <div className="min-w-0">
             <div className="text-sm font-medium">Descuento amigos y familia ({COURTESY_PCT}%)</div>
             <p className="text-[10px] text-ink-500 mt-0.5">
-              Cortesía que asume la empresa. Reduce el precio al cliente pero no afecta la comisión del profesional.
+              Cortesía del {COURTESY_PCT}% para el cliente. Sale de la comisión del profesional, igual que cualquier descuento.
             </p>
           </div>
         </label>
@@ -371,9 +372,11 @@ export default function TotalsDock({
  * professional's cut, so the dealer sees exactly what the decorator earns
  * after a discount. Never shown to the client.
  */
-function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommission, fmt, quote, onUpdateQuote }) {
+function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyAmt, netCommission, fmt, quote, onUpdateQuote }) {
   const hasDiscount = discountAmt > 0;
-  const fullyAbsorbed = hasDiscount && netCommission <= 0;
+  const hasCourtesy = courtesyAmt > 0;
+  const anyDeduction = hasDiscount || hasCourtesy;
+  const fullyAbsorbed = anyDeduction && netCommission <= 0;
   const mode = decoratorBilling(quote);
   const trade = mode === 'trade_discount';
   return (
@@ -384,17 +387,18 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
       </div>
       <Row label={`Comisión (${commissionPct}%)`} value={fmt(grossCommission)} />
       {hasDiscount && <Row label="– Descuento al cliente" value={`–${fmt(discountAmt)}`} muted />}
-      {hasDiscount && (
+      {hasCourtesy && <Row label="– Cortesía amigos y familia" value={`–${fmt(courtesyAmt)}`} muted />}
+      {anyDeduction && (
         <div className="border-t border-ink-100 pt-2 mt-2">
           <Row label="Comisión neta" value={fmt(Math.max(0, netCommission))} bold />
         </div>
       )}
       <p className="text-[10px] text-ink-500">
-        {hasDiscount
+        {anyDeduction
           ? (fullyAbsorbed
-              ? 'El descuento supera la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
-              : 'El descuento al cliente sale de la comisión del profesional. El descuento amigos y familia no la afecta — lo asume la empresa.')
-          : 'El descuento al cliente saldrá de esta comisión. El descuento amigos y familia no la afecta — lo asume la empresa.'}
+              ? 'Los descuentos superan la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
+              : 'Los descuentos al cliente (incluida la cortesía amigos y familia) salen de la comisión del profesional.')
+          : 'Cualquier descuento al cliente saldrá de esta comisión.'}
       </p>
       {/* Facturación mode — moved here from the header (internal accounting,
           dealer-only, never on the client PDF). */}
