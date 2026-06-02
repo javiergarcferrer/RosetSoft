@@ -11,7 +11,7 @@
 //   • admin      — org administration + configuración
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
-  Shield, Layers, PackageSearch, Settings as SettingsIcon,
+  Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -39,7 +39,8 @@ const ADMIN_GROUP = {
   items: [
     { to: '/admin/users', label: 'Usuarios', icon: Shield },
     { to: '/admin/materials', label: 'Materiales', icon: Layers },
-    { to: '/admin/catalog', label: 'Catálogo', icon: PackageSearch },
+    { to: '/admin/catalog', label: 'Catálogo Roset', icon: PackageSearch },
+    { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
   ],
 };
 

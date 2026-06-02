@@ -68,7 +68,7 @@ export default function Catalog() {
   if (!isAdmin) {
     return (
       <>
-        <PageHeader title="Catálogo" subtitle=" " />
+        <PageHeader title="Catálogo Roset" subtitle=" " />
         <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo de productos." />
       </>
     );
@@ -124,7 +124,7 @@ export default function Catalog() {
   return (
     <>
       <PageHeader
-        title="Catálogo"
+        title="Catálogo Roset"
         subtitle={total > 0 ? `${total} producto(s)` : ' '}
         actions={(
           <button
