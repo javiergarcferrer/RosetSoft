@@ -182,14 +182,14 @@ function PickerBrowse({ profileId, onPick }) {
   if (!loaded) {
     return (
       <div className="px-3 py-10 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
-        <Loader2 size={15} className="animate-spin" /> Cargando catálogo…
+        <Loader2 size={15} className="animate-spin" /> Cargando inventario…
       </div>
     );
   }
   if (error || sorted.length === 0) {
     return (
       <div className="px-3 py-10 text-center text-sm text-ink-500">
-        Catálogo vacío. Impórtalo en <b>Administración › Catálogo</b>.
+        Inventario vacío. Impórtalo en <b>Administración › Catálogo</b>.
       </div>
     );
   }

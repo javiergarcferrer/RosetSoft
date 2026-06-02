@@ -115,11 +115,11 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
         </div>
         <div className="text-sm font-medium text-ink-900">Empieza tu cotización</div>
         <div className="text-xs text-ink-500 mt-1 max-w-sm mx-auto">
-          Elige un producto del <b>catálogo</b> para empezar.
+          Elige un producto del <b>inventario</b> para empezar.
         </div>
         <div className="mt-4 flex items-center justify-center gap-2">
           <button type="button" onClick={onOpenCatalog} className="btn-primary">
-            <PackageSearch size={18} /> Catálogo
+            <PackageSearch size={18} /> Inventario
           </button>
           <button type="button" onClick={onAddSection} className="btn-ghost">
             <Hash size={14} /> Sección

@@ -23,7 +23,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * Two states:
  *   • Collapsed bar — the grand total + live DOP conversion (USD and DOP on a
  *     single line at every width) and the Share + Export PDF actions, pinned at
- *     every width (Catálogo rides along on mobile, where the header hides it).
+ *     every width (Inventario rides along on mobile, where the header hides it).
  *     Always visible.
  *   • Open panel — tapping the total slides up the full step-by-step total
  *     (subtotal → margin → discount → ITBIS → shipping), margin gauge,
@@ -325,14 +325,14 @@ export default function TotalsDock({
                 Ajustes moved into the drop-up panel (tap the total), which frees
                 the width here to keep USD + DOP inline on one line. */}
             <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-              {/* Catálogo — phone/tablet only; the header and items card carry it
+              {/* Inventario — phone/tablet only; the header and items card carry it
                   on desktop. */}
               <DockAction
                 icon={PackageSearch}
                 label="Añadir"
                 onClick={onOpenCatalog}
-                ariaLabel="Agregar desde catálogo"
-                title="Agregar desde catálogo"
+                ariaLabel="Agregar desde inventario"
+                title="Agregar desde inventario"
                 className="md:hidden"
               />
 

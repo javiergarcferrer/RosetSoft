@@ -702,7 +702,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           </button>
           {/* Quiet companion to the catalog CTA — adds a BLANK line to fill by
               hand (no picker), for when the dealer is typing from a paper price
-              list. Small, gray icon so the Catálogo button stays the headline. */}
+              list. Small, gray icon so the Inventario button stays the headline. */}
           <button
             type="button"
             onClick={onAddLine}
@@ -718,9 +718,9 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
             type="button"
             onClick={onOpenCatalog}
             className="btn-primary transition-all hover:shadow-md"
-            title={`Elegir un producto del catálogo (${shortcutLabel('mod+enter')})`}
+            title={`Elegir un producto del inventario (${shortcutLabel('mod+enter')})`}
           >
-            <PackageSearch size={18} /> Catálogo
+            <PackageSearch size={18} /> Inventario
           </button>
         </div>
       </header>
@@ -741,7 +741,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
               <Hash size={12} /> Sección
             </button>
             <button type="button" onClick={onOpenCatalog} className="btn-secondary text-xs">
-              <PackageSearch size={16} /> Catálogo
+              <PackageSearch size={16} /> Inventario
             </button>
           </div>
         </div>
