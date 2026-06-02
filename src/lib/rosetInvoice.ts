@@ -68,6 +68,8 @@ function money(s: string): number {
 }
 
 const ORIGIN_RE = /^[A-Z]{2}(\/[A-Z]{2})?$/; // EU/FR, IN, CH, VN, ID …
+// Repeating column-header rows (FR/DE/EN/ES/IT) at the top of every page.
+const HEADER_RE = /Désignation|Bezeichnung|Descrizione|Descripcion|Code NDP|Prix unitaire|Stückpreis|Precio unitario|Prezzo|Bestell|Ord\. No|Articolo/i;
 
 /** Group text items into rows (same page, y within tolerance). */
 function toRows(items: readonly PdfTextItem[]): PdfTextItem[][] {
@@ -98,9 +100,13 @@ export function parseRosetInvoice(items: readonly PdfTextItem[]): ParsedInvoice 
   const lines: RosetInvoiceLine[] = [];
   let order = { orderNo: '', hsCode: '' };
   let last: RosetInvoiceLine | null = null;
+  let curPage = -1;
 
   for (const row of toRows(items)) {
     const its = row.slice().sort((a, b) => a.x - b.x);
+    const page = its[0]?.page ?? 0;
+    if (page !== curPage) { last = null; curPage = page; } // no continuation across a page break
+    if (HEADER_RE.test(its.map((i) => i.str).join(' '))) continue; // skip repeating column headers
     const band = (lo: number, hi: number) => its.filter((i) => i.x >= lo && i.x < hi);
 
     const ordCell = band(10, 35).find((i) => /^\d{5,6}$/.test(i.str));

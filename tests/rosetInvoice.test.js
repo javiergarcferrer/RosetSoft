@@ -88,3 +88,18 @@ test('Mini Togo fabric = ALCANTARA GOYA RED Y396', () => {
   assert.equal(mini.fabric, 'ALCANTARA GOYA RED Y396');
   assert.equal(mini.unitCostUsd, 567.29);
 });
+
+test('page-break: repeating column headers are skipped, never bleed into a piece', () => {
+  const P = (x, y, str, page) => ({ x, y, str, page });
+  const items = [
+    // page 0 — the last article on the page
+    P(19.4, 700, '149569', 0), P(112.9, 700, 'Cmq', 0), P(138.7, 700, 'EXPO', 0), P(414.8, 700, '94018000', 0), P(519.4, 700, '567,29', 0),
+    P(83.6, 716, '1', 0), P(94.4, 716, '14100100', 0), P(138.7, 716, 'MINI', 0), P(239.5, 716, 'TOGO', 0), P(268.3, 716, 'BOHEMIAN', 0), P(359.5, 716, 'Y786', 0), P(463.4, 716, '567,29', 0),
+    // page 1 — starts with the repeating FR/DE column-header block
+    P(19, 19.6, 'N° Cde', 1), P(54.3, 19.6, 'Quantité', 1), P(141.4, 19.6, 'Désignation', 1), P(452.1, 19.6, 'Prix unitaire', 1),
+    P(141.4, 27, 'Bezeichnung', 1),
+  ];
+  const { furniture } = parseRosetInvoice(items);
+  const mini = furniture.find((l) => l.reference === '14100100');
+  assert.equal(mini.description, 'MINI TOGO BOHEMIAN Y786'); // not polluted by the page-2 header
+});
