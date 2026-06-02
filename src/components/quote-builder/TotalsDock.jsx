@@ -89,10 +89,14 @@ export default function TotalsDock({
   const { gross: grossCommission, net: netCommission } = commissionBreakdown(totals, commissionPct);
 
   const discountPct = Number(quote.discountPct) || 0;
+  const courtesyPct = Number(quote.courtesyDiscountPct) || 0;
   const shipping = Number(quote.shipping) || 0;
-  // An adjustment is "active" when the dealer has set a discount or shipping —
-  // surfaced as a dot on the collapsed button so it reads even while folded.
-  const hasAdjustment = discountPct > 0 || shipping > 0;
+  // An adjustment is "active" when the dealer has set a discount, a courtesy or
+  // shipping — surfaced as a dot on the collapsed button so it reads even while
+  // folded.
+  const hasAdjustment = discountPct > 0 || courtesyPct > 0 || shipping > 0;
+  // The Friends & Family courtesy is a fixed 5% the dealer absorbs.
+  const COURTESY_PCT = 5;
 
   const toggle = (name) => setPanel((p) => (p === name ? 'closed' : name));
   const breakdownOpen = panel === 'breakdown';
@@ -108,6 +112,7 @@ export default function TotalsDock({
       <Row label="Subtotal" value={fmt(totals.subtotal)} />
       {totals.marginAmt !== 0 && <Row label="Margen aplicado" value={fmt(totals.marginAmt)} muted />}
       {discountPct ? <Row label={`Descuento (${discountPct}%)`} value={`–${fmt(totals.discountAmt)}`} muted /> : null}
+      {courtesyPct ? <Row label={`Cortesía amigos y familia (${courtesyPct}%)`} value={`–${fmt(totals.courtesyDiscountAmt)}`} muted /> : null}
       <Row label={`ITBIS (${ITBIS_PCT}%)`} value={`+${fmt(totals.taxAmt)}`} muted />
       {shipping ? <Row label="Envío" value={`+${fmt(totals.shipping)}`} muted /> : null}
       <div className="border-t border-ink-100 pt-2 mt-2">
@@ -174,8 +179,32 @@ export default function TotalsDock({
             />
           </div>
         </div>
+        {/* Friends & Family — a fixed 5% courtesy the DEALER absorbs. Unlike the
+            discount above, it never comes out of the professional's commission. */}
+        <label
+          className={`flex items-start gap-2.5 rounded-lg border p-3 max-w-md ${
+            financiallyLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-ink-50'
+          } ${courtesyPct > 0 ? 'border-emerald-300 bg-emerald-50/50' : 'border-ink-200'}`}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            disabled={financiallyLocked}
+            checked={courtesyPct > 0}
+            onChange={(e) => {
+              if (financiallyLocked) return;
+              onUpdateQuote({ courtesyDiscountPct: e.target.checked ? COURTESY_PCT : 0 });
+            }}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Descuento amigos y familia ({COURTESY_PCT}%)</div>
+            <p className="text-[10px] text-ink-500 mt-0.5">
+              Cortesía que asume la empresa. Reduce el precio al cliente pero no afecta la comisión del profesional.
+            </p>
+          </div>
+        </label>
         <div className="text-[10px] text-ink-500 space-y-1.5">
-          <p>ITBIS fijo en {ITBIS_PCT}%. El descuento se aplica sobre el subtotal antes de impuestos.</p>
+          <p>ITBIS fijo en {ITBIS_PCT}%. Los descuentos se aplican sobre el subtotal antes de impuestos.</p>
           <div className="flex items-center gap-2 flex-wrap">
             <span>
               {rateLocked
@@ -364,8 +393,8 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, netCommis
         {hasDiscount
           ? (fullyAbsorbed
               ? 'El descuento supera la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
-              : 'El descuento al cliente sale de la comisión del profesional.')
-          : 'Cualquier descuento al cliente saldrá de esta comisión.'}
+              : 'El descuento al cliente sale de la comisión del profesional. El descuento amigos y familia no la afecta — lo asume la empresa.')
+          : 'El descuento al cliente saldrá de esta comisión. El descuento amigos y familia no la afecta — lo asume la empresa.'}
       </p>
       {/* Facturación mode — moved here from the header (internal accounting,
           dealer-only, never on the client PDF). */}
@@ -479,6 +508,7 @@ function BreakdownExplainer({ quote, totals, fmt }) {
   lines.push(['Suma de líneas', fmt(totals.subtotal)]);
   if (totals.marginAmt !== 0) lines.push(['+ Margen', fmt(totals.marginAmt)]);
   if (quote.discountPct) lines.push([`– Descuento ${quote.discountPct}%`, `–${fmt(totals.discountAmt)}`]);
+  if (quote.courtesyDiscountPct) lines.push([`– Cortesía amigos y familia ${quote.courtesyDiscountPct}%`, `–${fmt(totals.courtesyDiscountAmt)}`]);
   lines.push(['= Base imponible', fmt(totals.taxableBase)]);
   lines.push([`+ ITBIS ${ITBIS_PCT}%`, fmt(totals.taxAmt)]);
   if (totals.shipping) lines.push(['+ Envío', fmt(totals.shipping)]);

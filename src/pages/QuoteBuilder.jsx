@@ -500,7 +500,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
-  const totalsQuote = { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping };
+  const totalsQuote = { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping };
   const totals = computeTotals(lines.filter(isPricedLine).map(lineForTotals), totalsQuote);
   // Range twin of the grand total — widens to "min … max" while any priced
   // line is quoted by range (material-less). Collapses to a point (and the UI

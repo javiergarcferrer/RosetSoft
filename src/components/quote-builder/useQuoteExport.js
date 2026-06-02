@@ -106,7 +106,7 @@ export function useQuoteExport({
       // path stays self-contained — the dealer pays the cost only on export.
       const totals = computeTotals(
         lines.filter(isPricedLine).map(lineForTotals),
-        { marginPct: quote.marginPct, discountPct: quote.discountPct, shipping: quote.shipping },
+        { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },
       );
       const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
         () => import('../../pdf/react/index.js'),

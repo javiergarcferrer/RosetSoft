@@ -48,7 +48,8 @@ export function resolveQuoteView({ quote, lines, settings, quoteGroups }) {
 
   const totals = computeTotals(ls.filter(isPricedLine).map(lineForTotals), q);
   const totalsRange = computeTotalsRange(ls, {
-    marginPct: q.marginPct, discountPct: q.discountPct, shipping: q.shipping,
+    marginPct: q.marginPct, discountPct: q.discountPct,
+    courtesyDiscountPct: q.courtesyDiscountPct, shipping: q.shipping,
   });
 
   // Section → group-run structure (the card boundaries), resolved once. Each

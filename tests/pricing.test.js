@@ -152,6 +152,31 @@ test('computeTotals: order of ops is margin → discount → tax → shipping', 
   assert.equal(Math.round(t.grandTotal * 100) / 100, 121.82);
 });
 
+test('computeTotals: Friends & Family courtesy stacks after the regular discount, before tax', () => {
+  // 1000 subtotal, no margin.
+  // discount 10% → 100 → afterDiscount 900
+  // courtesy 5% of 900 = 45 → taxableBase 855
+  // ITBIS 18% of 855 = 153.9 → grand 855 + 153.9 = 1008.9
+  const t = computeTotals(
+    [{ qty: 1, basePrice: 1000, lineMarginPct: 0, lineDiscountPct: 0 }],
+    { discountPct: 10, courtesyDiscountPct: 5 },
+  );
+  assert.equal(t.discountAmt, 100);
+  assert.equal(t.courtesyDiscountAmt, 45);
+  assert.equal(t.taxableBase, 855);
+  assert.equal(Math.round(t.taxAmt * 100) / 100, 153.9);
+  assert.equal(Math.round(t.grandTotal * 100) / 100, 1008.9);
+});
+
+test('computeTotals: courtesy defaults to 0 and clamps to [0,100]', () => {
+  const none = computeTotals([{ qty: 1, basePrice: 100 }], {});
+  assert.equal(none.courtesyDiscountAmt, 0);
+  // >100% clamps to 100 → the whole base is courtesy, taxable base floors at 0.
+  const over = computeTotals([{ qty: 1, basePrice: 100 }], { courtesyDiscountPct: 150 });
+  assert.equal(over.courtesyDiscountAmt, 100);
+  assert.equal(over.taxableBase, 0);
+});
+
 test('computeTotals: line-level adjustments compose with quote-level', () => {
   // line: 100 × 1, line margin 20%, line discount 0 → unit 120 → line total 120
   // quote: margin 0, discount 10%, shipping 0

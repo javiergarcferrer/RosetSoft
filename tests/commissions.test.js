@@ -155,6 +155,21 @@ test('breakdown normalizes a negative/missing discount to 0', () => {
   assert.deepEqual(commissionBreakdown({ taxableBase: 1000 }, 10), { gross: 100, discount: 0, net: 100 });
 });
 
+test('breakdown: Friends & Family courtesy never reduces the commission', () => {
+  // Special order (20%). A $100 regular discount AND a $45 courtesy bring the
+  // taxableBase to 855. The courtesy is added BACK into the commission base and
+  // is NOT drawn out of the net, so the designer earns exactly what the same
+  // sale without the courtesy ($900 base, same $100 discount) pays.
+  const withCourtesy = commissionBreakdown({ taxableBase: 855, discountAmt: 100, courtesyDiscountAmt: 45 }, 20);
+  const withoutCourtesy = commissionBreakdown({ taxableBase: 900, discountAmt: 100 }, 20);
+  assert.deepEqual(withCourtesy, { gross: 200, discount: 100, net: 100 });
+  assert.equal(withCourtesy.net, withoutCourtesy.net);
+});
+
+test('breakdown normalizes a negative/missing courtesy to 0', () => {
+  assert.deepEqual(commissionBreakdown({ taxableBase: 1000, courtesyDiscountAmt: -50 }, 10), { gross: 100, discount: 0, net: 100 });
+});
+
 /* ----------------------------- decoratorBilling ----------------------- */
 
 test('decoratorBilling defaults to commission when unset/null/missing', () => {

@@ -835,6 +835,14 @@ export interface Quote {
   rates?: RatesMap;
   marginPct?: number;
   discountPct?: number;
+  /**
+   * Friends & Family courtesy discount (%) — a SECOND quote-level discount,
+   * independent of `discountPct`. The dealer absorbs it: it lowers the client's
+   * price and the dealer's net but NEVER reduces the assigned professional's
+   * commission (see lib/commissions:commissionBreakdown). Applied after
+   * `discountPct`, before ITBIS. Clamped to [0, 100]; default 0.
+   */
+  courtesyDiscountPct?: number;
   shipping?: number;
 
   terms?: string;
@@ -1037,6 +1045,8 @@ export interface PricingLine {
 export interface PricingQuote {
   marginPct?: number;
   discountPct?: number;
+  /** Friends & Family courtesy discount (%) — see Quote.courtesyDiscountPct. */
+  courtesyDiscountPct?: number;
   shipping?: number;
 }
 
@@ -1044,6 +1054,9 @@ export interface Totals {
   subtotal: number;
   marginAmt: number;
   discountAmt: number;
+  /** Friends & Family courtesy discount $ — dealer-absorbed, never drawn from
+   *  the professional's commission. See lib/pricing:computeTotals. */
+  courtesyDiscountAmt: number;
   taxableBase: number;
   taxAmt: number;
   shipping: number;

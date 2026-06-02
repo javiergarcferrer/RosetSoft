@@ -406,7 +406,7 @@ function TotalsBlock({
 }: {
   quote: Quote; totals: Totals; lines: QuoteLine[]; fmt: Fmt; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
 }) {
-  const range = computeTotalsRange(lines, quote as { marginPct?: number; discountPct?: number; shipping?: number });
+  const range = computeTotalsRange(lines, quote as { marginPct?: number; discountPct?: number; courtesyDiscountPct?: number; shipping?: number });
   const hasRange = range.max > range.min;
   const savings = quoteSavings(lines, totals);
   const dopRate = Number(rates?.DOP) || 0;
@@ -415,6 +415,7 @@ function TotalsBlock({
 
   const subRows: Array<[string, number, string, boolean]> = [['Subtotal', totals.subtotal, C.inkHigh, false]];
   if (quote.discountPct) subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, C.brand700, true]);
+  if (quote.courtesyDiscountPct) subRows.push([`Cortesía amigos y familia (${quote.courtesyDiscountPct}%)`, -totals.courtesyDiscountAmt, C.brand700, true]);
   subRows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, C.inkMid, false]);
   if (quote.shipping) subRows.push(['Envío', totals.shipping, C.inkMid, false]);
 

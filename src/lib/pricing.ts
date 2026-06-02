@@ -81,22 +81,31 @@ export function clampPct(v: unknown, max = 100): number {
  *
  *   lineUnit      = applyLineAdjustments(basePrice, lineMarginPct, lineDiscountPct)
  *   subtotal      = Σ( lineUnit × qty )
- *   afterMargin   = subtotal × (1 + marginPct/100)        // margin lifts the bill
- *   afterDiscount = afterMargin × (1 − discountPct/100)   // discount eats into the lifted total
- *   taxAmt        = afterDiscount × (ITBIS/100)
- *   grandTotal    = afterDiscount + taxAmt + shipping
+ *   afterMargin   = subtotal × (1 + marginPct/100)            // margin lifts the bill
+ *   afterDiscount = afterMargin × (1 − discountPct/100)       // discount eats into the lifted total
+ *   afterCourtesy = afterDiscount × (1 − courtesyDiscountPct/100)  // friends & family, on top
+ *   taxAmt        = afterCourtesy × (ITBIS/100)
+ *   grandTotal    = afterCourtesy + taxAmt + shipping
+ *
+ * The TWO discounts are independent and stack, but settle differently:
+ *   - `discountPct` is funded by the professional's commission (the client
+ *     pays less, the designer earns less — see lib/commissions).
+ *   - `courtesyDiscountPct` (Friends & Family) is absorbed by the DEALER and
+ *     never touches the designer's commission. commissionBreakdown adds it back
+ *     to the commission base so the payout is unchanged.
  *
  * Constraints (defense in depth — inputs are also clamped at the UI layer):
- *   - marginPct:   free range (negative = loss-leader / clearance is legitimate)
- *   - discountPct: clamped to [0, 100]
- *   - line pcts:   same rules as quote-level pcts
- *   - shipping:    clamped to [0, ∞)
+ *   - marginPct:           free range (negative = loss-leader / clearance is legitimate)
+ *   - discountPct:         clamped to [0, 100]
+ *   - courtesyDiscountPct: clamped to [0, 100]
+ *   - line pcts:           same rules as quote-level pcts
+ *   - shipping:            clamped to [0, ∞)
  *   - non-finite numeric inputs are treated as 0 (never NaN-out a quote)
  *
  * @param {Array} lines  resolved line items: { qty, basePrice, lineMarginPct, lineDiscountPct }
- * @param {Object} quote { marginPct, discountPct, shipping }
+ * @param {Object} quote { marginPct, discountPct, courtesyDiscountPct, shipping }
  *                       (taxPct is intentionally ignored — ITBIS is fixed)
- * @returns {Object} { subtotal, marginAmt, discountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct }
+ * @returns {Object} { subtotal, marginAmt, discountAmt, courtesyDiscountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct }
  */
 export function computeTotals(
   lines: readonly PricingLine[] | null | undefined,
@@ -109,11 +118,14 @@ export function computeTotals(
 
   const marginPct = safeNum(quote.marginPct, 0);
   const discountPct = clampPct(quote.discountPct);
+  const courtesyPct = clampPct(quote.courtesyDiscountPct);
 
   const marginAmt = subtotal * (marginPct / 100);
   const afterMargin = subtotal + marginAmt;
   const discountAmt = afterMargin * (discountPct / 100);
-  const taxableBase = afterMargin - discountAmt;
+  const afterDiscount = afterMargin - discountAmt;
+  const courtesyDiscountAmt = afterDiscount * (courtesyPct / 100);
+  const taxableBase = afterDiscount - courtesyDiscountAmt;
   const taxAmt = taxableBase * (ITBIS_PCT / 100);
   const shipping = Math.max(0, safeNum(quote.shipping, 0));
   const grandTotal = taxableBase + taxAmt + shipping;
@@ -122,6 +134,7 @@ export function computeTotals(
     subtotal: safeNum(subtotal),
     marginAmt: safeNum(marginAmt),
     discountAmt: safeNum(discountAmt),
+    courtesyDiscountAmt: safeNum(courtesyDiscountAmt),
     taxableBase: safeNum(taxableBase),
     taxAmt: safeNum(taxAmt),
     shipping,
@@ -234,7 +247,11 @@ export function lineListUnit(line: QuoteLine | null | undefined): number {
  * "Ahorras $X en esta cotización" callout under the totals block.
  *
  *   line savings = Σ ( lineListUnit(line) − unitAfterDiscount ) × qty
- *   quote savings = totals.discountAmt
+ *   quote savings = totals.discountAmt + totals.courtesyDiscountAmt
+ *
+ * Both quote-level discounts count toward what the client perceives they
+ * saved — the commission-funded `discountAmt` and the dealer-funded Friends
+ * & Family `courtesyDiscountAmt` look identical on the client's bill.
  *
  * Returns a non-negative number (savings are never negative — a
  * negative margin is a markdown the customer doesn't perceive as a
@@ -242,7 +259,7 @@ export function lineListUnit(line: QuoteLine | null | undefined): number {
  */
 export function quoteSavings(
   lines: readonly QuoteLine[] | null | undefined,
-  totals: Pick<Totals, 'discountAmt'> | null | undefined,
+  totals: Pick<Totals, 'discountAmt' | 'courtesyDiscountAmt'> | null | undefined,
 ): number {
   let lineSavings = 0;
   for (const l of lines || []) {
@@ -253,7 +270,7 @@ export function quoteSavings(
     const after = listUnit * (1 - discount / 100);
     lineSavings += (listUnit - after) * lineQty(l);
   }
-  const quoteDiscount = safeNum(totals?.discountAmt, 0);
+  const quoteDiscount = safeNum(totals?.discountAmt, 0) + safeNum(totals?.courtesyDiscountAmt, 0);
   const total = lineSavings + quoteDiscount;
   return total > 0 ? total : 0;
 }
@@ -685,10 +702,12 @@ export function computeTotalsRange(
   }
   const marginPct = safeNum(quote.marginPct, 0);
   const discountPct = clampPct(quote.discountPct);
+  const courtesyPct = clampPct(quote.courtesyDiscountPct);
   const shipping = Math.max(0, safeNum(quote.shipping, 0));
   const grand = (subtotal: number): number => {
     const afterMargin = subtotal * (1 + marginPct / 100);
-    const taxable = afterMargin * (1 - discountPct / 100);
+    const afterDiscount = afterMargin * (1 - discountPct / 100);
+    const taxable = afterDiscount * (1 - courtesyPct / 100);
     return taxable + taxable * (ITBIS_PCT / 100) + shipping;
   };
   return { min: safeNum(grand(subMin)), max: safeNum(grand(subMax)) };

@@ -380,6 +380,13 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                 accent
               />
             ) : null}
+            {quote.courtesyDiscountPct ? (
+              <TotalRow
+                label={`Cortesía amigos y familia (${quote.courtesyDiscountPct}%)`}
+                value={`–${fmt(totals.courtesyDiscountAmt)}`}
+                accent
+              />
+            ) : null}
             <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted />
             {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
           </div>
