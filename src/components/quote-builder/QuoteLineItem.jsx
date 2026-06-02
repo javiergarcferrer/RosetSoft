@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, Combine, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -20,6 +20,7 @@ import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
+import { kitForReference, gradeOf, explodeComponentInList, recomposeKitGroupInList } from '../../lib/elementKits.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -199,6 +200,66 @@ export default function QuoteLineItem({
       ),
     });
   }
+  // ----- element kits: split a complete modular element into its part SKUs and
+  // fold it back (see lib/elementKits). Pure list transforms over the catalog —
+  // each part is priced at the piece's CURRENT grade via its family — so the
+  // compound subtotal re-sums on its own and the small separation gap (parts
+  // cost a touch more than the complete element) just appears in the total.
+  const resolvePart = useMemo(
+    () => (root, grade) => {
+      const fam = families?.get(root);
+      return fam ? productForGrade(fam, grade) : null;
+    },
+    [families],
+  );
+  function explodeComponent(componentId) {
+    const next = explodeComponentInList(line.components, componentId, resolvePart, newId);
+    if (next) onChange({ components: next });
+  }
+  function recomposeKit(kitGroup) {
+    const next = recomposeKitGroupInList(line.components, kitGroup, resolvePart, newId);
+    if (next) onChange({ components: next });
+  }
+  // Per-component kit affordances, keyed by id: whether a complete element can
+  // be split here (it has a kit AND every part prices out at its current grade),
+  // and — on the FIRST part of an exploded group — the "+$X vs completo" gap to
+  // surface next to the Recomponer action.
+  const kitInfoById = useMemo(() => {
+    const comps = line.components || [];
+    const groups = new Map();
+    for (const c of comps) {
+      if (!c?.kitGroup) continue;
+      if (!groups.has(c.kitGroup)) groups.set(c.kitGroup, []);
+      groups.get(c.kitGroup).push(c);
+    }
+    const map = new Map();
+    for (const c of comps) {
+      if (!c) continue;
+      if (c.kitGroup) {
+        const members = groups.get(c.kitGroup) || [];
+        const isFirstOfGroup = members[0]?.id === c.id;
+        let deltaUsd = null;
+        if (isFirstOfGroup) {
+          const complete = resolvePart(c.kitCompleteRoot, gradeOf(c));
+          if (complete) {
+            const partsTotal = members.reduce(
+              (s, m) => s + (Number(m.unitPrice) || 0) * (Number(m.qty ?? 1) || 0),
+              0,
+            );
+            deltaUsd = partsTotal - (Number(complete.priceUsd) || 0);
+          }
+        }
+        map.set(c.id, { isPart: true, isFirstOfGroup, kitGroup: c.kitGroup, deltaUsd });
+      } else if (!c.alternativeGroup && !c.isOptional) {
+        const kit = kitForReference(c.reference);
+        const grade = gradeOf(c);
+        if (kit && grade && kit.partRoots.every((r) => resolvePart(r, grade))) {
+          map.set(c.id, { canExplode: true });
+        }
+      }
+    }
+    return map;
+  }, [line.components, resolvePart]);
   function convertToCompound() {
     // Promote the current line's own ref/subtype/dimensions/description/
     // qty/unitPrice into the first component, then clear those columns
@@ -368,6 +429,9 @@ export default function QuoteLineItem({
           onAddAlternative={addComponentAlternative}
           onSelectAlternative={selectComponentAlternative}
           onApplyToAll={applyComponentMaterialToAll}
+          onExplode={explodeComponent}
+          onRecompose={recomposeKit}
+          kitInfoById={kitInfoById}
         />
       )}
 
@@ -1525,7 +1589,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onExplode, onRecompose, kitInfoById }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1604,6 +1668,9 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                 onAddAlternative={() => onAddAlternative?.(c.id)}
                 onSelectAlternative={() => onSelectAlternative?.(c.id)}
                 onApplyToAll={() => onApplyToAll?.(c.id)}
+                kitInfo={kitInfoById?.get(c.id)}
+                onExplode={() => onExplode?.(c.id)}
+                onRecompose={(kg) => onRecompose?.(kg)}
                 dragHandleProps={dragHandleProps}
               />
             </div>
@@ -1624,7 +1691,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, kitInfo, onExplode, onRecompose, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, the range swap (a material-less sub-piece
@@ -1737,6 +1804,46 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             <GitFork size={10} className="opacity-80" aria-hidden />
             Alternativa
           </button>
+        )}
+        {/* Desglosar — split a complete modular element into its part SKUs
+            (structure + cushions) so one part can be customized; the compound
+            total absorbs the small separation gap on its own. */}
+        {kitInfo?.canExplode && onExplode && (
+          <button
+            type="button"
+            onClick={onExplode}
+            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            title="Separar este elemento completo en sus piezas (estructura + cojines) para personalizar una pieza"
+          >
+            <Split size={10} className="opacity-80" aria-hidden />
+            Desglosar en piezas
+          </button>
+        )}
+        {/* On the first part of an exploded element: the gap vs the complete
+            element + a Recomponer action to fold the pieces back together. */}
+        {kitInfo?.isPart && kitInfo.isFirstOfGroup && (
+          <>
+            {kitInfo.deltaUsd != null && (
+              <span
+                className="chip normal-case text-ink-500 bg-ink-50 border border-ink-200"
+                title="Diferencia frente al elemento completo — separar en piezas cuesta un poco más"
+              >
+                {kitInfo.deltaUsd > 0 ? '+' : kitInfo.deltaUsd < 0 ? '−' : ''}
+                {fmt(Math.abs(kitInfo.deltaUsd))} vs completo
+              </span>
+            )}
+            {onRecompose && (
+              <button
+                type="button"
+                onClick={() => onRecompose(kitInfo.kitGroup)}
+                className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+                title="Volver a unir las piezas en el elemento completo"
+              >
+                <Combine size={10} className="opacity-80" aria-hidden />
+                Recomponer
+              </button>
+            )}
+          </>
         )}
         <div className="flex-1" />
         <button
