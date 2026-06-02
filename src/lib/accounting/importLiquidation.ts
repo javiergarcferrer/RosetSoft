@@ -97,3 +97,71 @@ export function buildImportEntry({
     lines,
   });
 }
+
+/* ---- Batch liquidation: spread one shipment's import costs over its pieces ---- */
+
+export interface ShipmentExtras {
+  /** Gravamen (duty) for the whole shipment. */
+  duty?: number;
+  clearanceFees?: number;
+  otherCosts?: number;
+  /** Recoverable import ITBIS (input credit — NOT capitalized into cost). */
+  importItbis?: number;
+}
+
+export interface AllocatedPiece<T> {
+  line: T;
+  /** CIP value of this piece = unitCostUsd × quantity. */
+  cipValue: number;
+  /** Share of (duty + clearance + other) assigned to this piece, by CIP weight. */
+  allocatedExtras: number;
+  /** cipValue + allocatedExtras. */
+  landedTotal: number;
+  /** landedTotal / quantity — the kardex IN unit cost. */
+  landedUnitCost: number;
+}
+
+export interface ShipmentAllocation<T> {
+  pieces: AllocatedPiece<T>[];
+  totalCip: number;
+  duty: number;
+  clearanceFees: number;
+  otherCosts: number;
+  importItbis: number;
+  /** totalCip + duty + clearance + other (excludes recoverable ITBIS). */
+  landedTotal: number;
+}
+
+/**
+ * Allocate one shipment's capitalizable import costs (duty + clearance + other)
+ * across its pieces in proportion to each piece's CIP value, yielding a landed
+ * unit cost per piece for the kardex. Rounding drift is absorbed by the last
+ * piece so Σ allocatedExtras === the extras total and Σ landedTotal === landed.
+ * The recoverable import ITBIS is carried through (input credit), not spread.
+ * Pieces with no quantity or no unit cost are dropped. Pure.
+ */
+export function allocateShipment<T extends { quantity: number; unitCostUsd: number }>(
+  lines: readonly T[],
+  extras: ShipmentExtras = {},
+): ShipmentAllocation<T> {
+  const valid = (lines || []).filter((l) => (Number(l.quantity) || 0) > 0 && (Number(l.unitCostUsd) || 0) > 0);
+  const totalCip = round2(valid.reduce((s, l) => s + l.unitCostUsd * l.quantity, 0));
+  const duty = round2(extras.duty || 0);
+  const clearanceFees = round2(extras.clearanceFees || 0);
+  const otherCosts = round2(extras.otherCosts || 0);
+  const importItbis = round2(extras.importItbis || 0);
+  const spread = round2(duty + clearanceFees + otherCosts);
+
+  let assigned = 0;
+  const pieces: AllocatedPiece<T>[] = valid.map((line, i) => {
+    const cipValue = round2(line.unitCostUsd * line.quantity);
+    let allocatedExtras = totalCip > 0 ? round2((spread * cipValue) / totalCip) : 0;
+    if (i === valid.length - 1) allocatedExtras = round2(spread - assigned); // drift → last
+    assigned = round2(assigned + allocatedExtras);
+    const landedTotal = round2(cipValue + allocatedExtras);
+    const landedUnitCost = Math.round((landedTotal / line.quantity) * 10000) / 10000;
+    return { line, cipValue, allocatedExtras, landedTotal, landedUnitCost };
+  });
+
+  return { pieces, totalCip, duty, clearanceFees, otherCosts, importItbis, landedTotal: round2(totalCip + spread) };
+}
