@@ -837,12 +837,13 @@ export interface Quote {
   discountPct?: number;
   /**
    * Friends & Family courtesy discount (%) — a SECOND quote-level discount,
-   * independent of `discountPct`. Like the regular discount, it's funded by the
-   * assigned professional's commission (the client pays less, the designer
-   * earns less — see lib/commissions:commissionBreakdown); it exists as its own
-   * field only so it reads as a separate "Friends & Family" line on the
-   * client's bill. Applied after `discountPct`, before ITBIS. Clamped to
-   * [0, 100]; default 0.
+   * independent of `discountPct`. Unlike the regular discount (which is drawn
+   * out of the professional's commission dollar-for-dollar), the courtesy is
+   * NOT drawn out: it lowers the base the commission is computed on, so the
+   * designer earns the same % on the post-courtesy amount — a proportional
+   * reduction, not a full one (see lib/commissions:commissionBreakdown). Shows
+   * as a separate "Friends & Family" line on the client's bill. Applied after
+   * `discountPct`, before ITBIS. Clamped to [0, 100]; default 0.
    */
   courtesyDiscountPct?: number;
   shipping?: number;

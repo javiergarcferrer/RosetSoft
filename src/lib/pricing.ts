@@ -87,11 +87,12 @@ export function clampPct(v: unknown, max = 100): number {
  *   taxAmt        = afterCourtesy × (ITBIS/100)
  *   grandTotal    = afterCourtesy + taxAmt + shipping
  *
- * The TWO discounts are independent and stack, and BOTH settle the same way:
- * each is funded by the professional's commission (the client pays less, the
- * designer earns less — see lib/commissions:commissionBreakdown). They differ
- * only in how they read on the client's bill: `courtesyDiscountPct` (Friends &
- * Family) shows as its own line, separate from the regular `discountPct`.
+ * The TWO discounts are independent and stack, but settle DIFFERENTLY against
+ * the professional's commission (see lib/commissions:commissionBreakdown):
+ *   - `discountPct` is drawn out of the commission dollar-for-dollar.
+ *   - `courtesyDiscountPct` (Friends & Family) is NOT drawn out; it just lowers
+ *     `taxableBase`, so the commission is the same % on the post-courtesy base
+ *     (a proportional reduction). It shows as its own line on the client's bill.
  *
  * Constraints (defense in depth — inputs are also clamped at the UI layer):
  *   - marginPct:           free range (negative = loss-leader / clearance is legitimate)

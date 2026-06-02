@@ -181,16 +181,19 @@ export function reportedCommission(
  * always reconciles (the bug it replaces: a detail string that multiplied
  * the post-discount base by the rate yet printed the net).
  *
- * The dealer's rule: commission is paid on the base imponible (BEFORE ITBIS
- * and BEFORE shipping), and EVERY discount given to the client is funded by
- * the professional's cut, not the dealer's margin. Both quote-level discounts
- * — the regular `discountAmt` and the Friends & Family `courtesyDiscountAmt` —
- * are drawn out of the commission the same way:
+ * The dealer's rule treats the two client discounts DIFFERENTLY:
  *
- *   preDiscountBase = taxableBase + discountAmt + courtesyDiscountAmt  (base before any discount)
- *   gross           = preDiscountBase × pct/100         (full commission on the base)
- *   drawn           = discountAmt + courtesyDiscountAmt (every client discount)
- *   net             = max(0, gross − drawn)             (discounts come out of the cut)
+ *   • Regular `discountAmt` — funded by the professional's cut, dollar-for-
+ *     dollar. The commission % is applied to the base WITH the regular discount
+ *     added back, then the full discount $ is drawn out of the net.
+ *   • Friends & Family `courtesyDiscountAmt` — NOT drawn out of the net.
+ *     Instead it lowers the base the commission is computed on (already removed
+ *     from `taxableBase` by computeTotals), so the professional earns the same
+ *     % on the post-courtesy amount — a proportional reduction, not a full one.
+ *
+ *   preDiscountBase = taxableBase + discountAmt   (courtesy already removed from taxableBase)
+ *   gross           = preDiscountBase × pct/100   (commission on the post-courtesy base)
+ *   net             = max(0, gross − discountAmt) (only the regular discount is drawn out)
  *
  * Worked example — special order (20%), $1,000 base, 10% client discount:
  *   discountAmt = 100, taxableBase = 900, preDiscountBase = 1,000
@@ -200,12 +203,12 @@ export function reportedCommission(
  *
  * Worked example — add a 5% Friends & Family courtesy on top of the above:
  *   courtesyDiscountAmt = 45 (5% of the 900 after the regular discount),
- *   taxableBase = 855, preDiscountBase = 855 + 100 + 45 = 1,000.
- *   gross = 200, drawn = 145, net = max(0, 200 − 145) = 55. The courtesy is
- *   funded by the commission like any other discount — the designer's payout
- *   is adjusted down by the $45 too.
+ *   taxableBase = 855, preDiscountBase = 855 + 100 = 955.
+ *   gross = 191, net = max(0, 191 − 100) = 91. The courtesy didn't get drawn
+ *   out; it just shrank the base, so the designer's cut fell by 20% of $45 = $9
+ *   (200 → 191), not by the full $45.
  *
- * If the discounts exceed the commission the net floors at 0 (the dealer
+ * If the discount exceeds the commission the net floors at 0 (the dealer
  * absorbs the excess). Pass the totals object from computeTotals(); a bare
  * number with no discount degrades gracefully via the nullish reads. A
  * non-finite base yields all-zeros rather than NaN.
@@ -213,31 +216,29 @@ export function reportedCommission(
  * Multiplication only, no rounding policy — the formatter decides display.
  */
 export interface CommissionBreakdown {
-  /** Full commission before any client discount is drawn out. */
+  /** Full commission on the post-courtesy base, before the regular discount is drawn out. */
   gross: number;
-  /** Total client discount funded by the commission (regular + courtesy, >= 0). */
+  /** Regular client discount funded by the commission (>= 0). */
   discount: number;
   /** What the professional actually earns: max(0, gross − discount). */
   net: number;
 }
 
 export function commissionBreakdown(
-  totals: Pick<Totals, 'taxableBase' | 'discountAmt' | 'courtesyDiscountAmt'> | null | undefined,
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
   pct: unknown,
 ): CommissionBreakdown {
   const taxable = Number(totals?.taxableBase);
   if (!Number.isFinite(taxable)) return { gross: 0, discount: 0, net: 0 };
   const rawDiscount = Number(totals?.discountAmt);
   const discount = Number.isFinite(rawDiscount) ? Math.max(0, rawDiscount) : 0;
-  const rawCourtesy = Number(totals?.courtesyDiscountAmt);
-  const courtesy = Number.isFinite(rawCourtesy) ? Math.max(0, rawCourtesy) : 0;
-  // Commission is computed on the base BEFORE any discount; both the regular
-  // discount and the Friends & Family courtesy are then drawn out of the
-  // professional's cut — every client discount is funded by the commission.
-  const preDiscountBase = taxable + discount + courtesy;
-  const drawn = discount + courtesy;
+  // taxableBase already has the Friends & Family courtesy removed (computeTotals),
+  // so the commission is computed on the post-courtesy base — the courtesy is
+  // NOT added back and NOT drawn out. Only the regular discount is added back
+  // (preDiscountBase) and then drawn out of the net dollar-for-dollar.
+  const preDiscountBase = taxable + discount;
   const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
-  return { gross, discount: drawn, net: Math.max(0, gross - drawn) };
+  return { gross, discount, net: Math.max(0, gross - discount) };
 }
 
 /**
@@ -246,7 +247,7 @@ export function commissionBreakdown(
  * line shows above the discount deduction.
  */
 export function grossCommissionAmount(
-  totals: Pick<Totals, 'taxableBase' | 'discountAmt' | 'courtesyDiscountAmt'> | null | undefined,
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
   pct: unknown,
 ): number {
   return commissionBreakdown(totals, pct).gross;
@@ -254,7 +255,7 @@ export function grossCommissionAmount(
 
 /** The NET commission the professional earns after the discount is drawn out. */
 export function commissionAmount(
-  totals: Pick<Totals, 'taxableBase' | 'discountAmt' | 'courtesyDiscountAmt'> | null | undefined,
+  totals: Pick<Totals, 'taxableBase' | 'discountAmt'> | null | undefined,
   pct: unknown,
 ): number {
   return commissionBreakdown(totals, pct).net;

@@ -180,8 +180,9 @@ export default function TotalsDock({
             />
           </div>
         </div>
-        {/* Friends & Family — a fixed 5% courtesy for the client. Like the
-            discount above, it comes out of the professional's commission. */}
+        {/* Friends & Family — a fixed 5% courtesy for the client. It is NOT
+            drawn out of the commission like the discount above; instead it
+            lowers the base the commission is computed on. */}
         <label
           className={`flex items-start gap-2.5 rounded-lg border p-3 max-w-md ${
             financiallyLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-ink-50'
@@ -200,7 +201,7 @@ export default function TotalsDock({
           <div className="min-w-0">
             <div className="text-sm font-medium">Descuento amigos y familia ({COURTESY_PCT}%)</div>
             <p className="text-[10px] text-ink-500 mt-0.5">
-              Cortesía del {COURTESY_PCT}% para el cliente. Sale de la comisión del profesional, igual que cualquier descuento.
+              Cortesía del {COURTESY_PCT}% para el cliente. No se descuenta de la comisión: esta se calcula sobre la base ya rebajada con la cortesía.
             </p>
           </div>
         </label>
@@ -368,15 +369,15 @@ export default function TotalsDock({
 
 /**
  * Internal (dealer-only) readout of the assigned professional's commission.
- * Makes the rule visible: the client discount is subtracted from the
- * professional's cut, so the dealer sees exactly what the decorator earns
- * after a discount. Never shown to the client.
+ * Makes the rule visible: the regular client discount is subtracted from the
+ * professional's cut, while the Friends & Family courtesy is baked into the
+ * commission base (the % is computed on the post-courtesy amount). Never shown
+ * to the client.
  */
 function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyAmt, netCommission, fmt, quote, onUpdateQuote }) {
   const hasDiscount = discountAmt > 0;
   const hasCourtesy = courtesyAmt > 0;
-  const anyDeduction = hasDiscount || hasCourtesy;
-  const fullyAbsorbed = anyDeduction && netCommission <= 0;
+  const fullyAbsorbed = hasDiscount && netCommission <= 0;
   const mode = decoratorBilling(quote);
   const trade = mode === 'trade_discount';
   return (
@@ -385,21 +386,28 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
         <h3 className="font-semibold text-sm">Comisión profesional</h3>
         <span className="text-[10px] text-ink-400 uppercase tracking-wide">Interno</span>
       </div>
+      {/* Gross is the % on the post-courtesy base — the courtesy already shrank
+          it, so it's never shown as a separate deduction. Only the regular
+          discount is drawn out dollar-for-dollar below. */}
       <Row label={`Comisión (${commissionPct}%)`} value={fmt(grossCommission)} />
       {hasDiscount && <Row label="– Descuento al cliente" value={`–${fmt(discountAmt)}`} muted />}
-      {hasCourtesy && <Row label="– Cortesía amigos y familia" value={`–${fmt(courtesyAmt)}`} muted />}
-      {anyDeduction && (
+      {hasDiscount && (
         <div className="border-t border-ink-100 pt-2 mt-2">
           <Row label="Comisión neta" value={fmt(Math.max(0, netCommission))} bold />
         </div>
       )}
       <p className="text-[10px] text-ink-500">
-        {anyDeduction
+        {hasDiscount
           ? (fullyAbsorbed
-              ? 'Los descuentos superan la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
-              : 'Los descuentos al cliente (incluida la cortesía amigos y familia) salen de la comisión del profesional.')
-          : 'Cualquier descuento al cliente saldrá de esta comisión.'}
+              ? 'El descuento supera la comisión: el profesional no cobra y la diferencia la absorbe la empresa.'
+              : 'El descuento al cliente sale de la comisión del profesional.')
+          : 'El descuento al cliente saldrá de esta comisión.'}
       </p>
+      {hasCourtesy && (
+        <p className="text-[10px] text-ink-500">
+          La cortesía amigos y familia (–{fmt(courtesyAmt)}) no se descuenta de la comisión: esta se calcula al {commissionPct}% sobre la base ya rebajada con la cortesía.
+        </p>
+      )}
       {/* Facturación mode — moved here from the header (internal accounting,
           dealer-only, never on the client PDF). */}
       <div className="border-t border-ink-100 pt-2 mt-2 flex items-center justify-between gap-2">
