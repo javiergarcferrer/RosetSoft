@@ -15,6 +15,7 @@ import {
   isRangeLine, lineTotalRange,
   isRangeComponent, componentSubtotalRange, lineHasRange, componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
+import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
 import { resolveQuoteView } from '../../core/quote/views/quoteView.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
@@ -1038,13 +1039,16 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   // the Model so screen + PDF agree on when to collapse. This is INDEPENDENT of
   // edit/view mode and of whether pieces are alternatives — a sectional of
   // same-fabric alternative seats still shows one hero, with its radios intact.
-  const upholstery = compoundFabric(line.components);
+  // A MODULAR compound is grouped by MODULE (component product), not by fabric.
+  // Resolved by the Model (lib/modules) so screen + paper agree.
+  const modular = isModularLine(line);
+  const upholstery = modular ? { uniform: false, subtype: '', swatchImageId: null } : compoundFabric(line.components);
   const hideSwatch = upholstery.uniform;
   // Mixed upholstery → group the pieces into contiguous same-material runs and
   // give each a header (frame fabric, then cushion fabric), instead of stamping
   // a swatch on every row. Only fires with 2+ materials; uniform stays the one
   // hero above. Same Model rule the PDF uses, so screen + paper agree.
-  const grouping = groupComponentsByMaterial(line.components);
+  const grouping = modular ? { grouped: false, runs: [] } : groupComponentsByMaterial(line.components);
   // Editing (the interactive link / the dealer's edit-mode preview) wires
   // onPickMany. It gates whether a grouped run COLLAPSES: read-only surfaces
   // drop the repeated per-piece swatch under the zone header (clean), but in
@@ -1204,7 +1208,26 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               modelKey={line.id}
             />
           )}
-          {grouping.grouped ? (
+          {modular ? (
+            // Modular → group by module (component product): each module under
+            // its own header with a per-module subtotal; ungrouped elements
+            // stand alone. One image for the whole modular, above.
+            <div className="mt-2 border-t border-ink-100">
+              {modulesOf(line.components).map((m, mi) => (
+                <div key={m.moduleGroup || mi}>
+                  {m.moduleGroup && (
+                    <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
+                      <span className="text-xs tabular-nums text-ink-500">{fmt(moduleSubtotal(m.components) * mf)}</span>
+                    </div>
+                  )}
+                  <ul className={`divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`}>
+                    {m.components.map((c, i) => renderComponentRow(c, i, false, false))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : grouping.grouped ? (
             // Mixed compound → a material header per contiguous run. The header
             // carries the zone's bulk controls (clear / re-dress / apply-to-all).
             // Read-only: rows collapse to clean name+price under it. Editing:

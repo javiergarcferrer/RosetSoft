@@ -145,6 +145,11 @@ export const s = StyleSheet.create({
   lineDesc: { fontSize: fs(8.5), color: C.inkHigh, marginTop: 4, maxWidth: 280, lineHeight: 1.35 },
   groupCaption: { fontFamily: 'Sohne', fontSize: fs(7.5), letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
 
+  // ---- Modular modules (a component product inside a modular line) ----
+  moduleHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 6, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine },
+  moduleName: { fontFamily: 'Sohne', fontSize: fs(8.5), fontWeight: 'bold', color: C.inkHigh },
+  moduleAmount: { fontSize: fs(8.5), color: C.inkMid },
+
   // money cell
   priceCell: { minWidth: 120, alignItems: 'flex-end' },
   priceQty: { fontSize: fs(9), color: C.inkMid },

@@ -1,8 +1,10 @@
 # Handoff: modular products — a catalog-agnostic Element → Component product → Modular hierarchy
 
-Status: **planned, not implemented.** Resume here in a fresh session.
-Branch: `claude/adoring-curie-z0pFL` (rides on the multi-add + element-kit work
-already on this branch — see "What changes on this branch" below).
+Status: **implemented** on `claude/adoring-curie-z0pFL`. The hardcoded EXCLUSIF
+kit map is gone; modular grouping is now a catalog-agnostic, dealer-authored
+abstraction (`src/lib/modules.ts`). This doc is the design of record.
+Branch: `claude/adoring-curie-z0pFL` (rides on the multi-add work already on this
+branch — see "What changes on this branch" below).
 
 ## Goal
 Give the quote builder a first-class, **catalog-agnostic** composition hierarchy

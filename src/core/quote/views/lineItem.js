@@ -22,7 +22,39 @@ import {
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
   componentAlternativeGroupInfo,
 } from '../../../lib/pricing.js';
+import { isModularLine, modulesOf, moduleSubtotal } from '../../../lib/modules.js';
 import { canPropagateMaterial } from '../../../lib/subtype.js';
+
+// Per-module projection for a MODULAR compound (group-by-module presentation):
+// each module (a component product) carries its display name, the ids of its
+// element components and its rolled-up subtotal (Σ priced elements — the same
+// math as the compound total, one module deep, so per-module figures always sum
+// back to the line total). Range-aware so a module with a material-less element
+// shows a band like the line does.
+function resolveModules(components) {
+  return modulesOf(components).map((m) => {
+    const priced = m.components.filter((c) => !c.isOptional && !(c.alternativeGroup && !c.isSelectedAlternative));
+    const hasRange = priced.some((c) => isRangeComponent(c));
+    const range = hasRange
+      ? priced.reduce(
+          (acc, c) => {
+            const r = componentSubtotalRange(c);
+            return { min: acc.min + r.min, max: acc.max + r.max };
+          },
+          { min: 0, max: 0 },
+        )
+      : null;
+    return {
+      moduleGroup: m.moduleGroup,
+      name: m.name,
+      componentIds: m.components.map((c) => c.id),
+      count: m.components.length,
+      subtotal: moduleSubtotal(m.components),
+      hasRange,
+      range,
+    };
+  });
+}
 
 // Per-component display projection for a compound's sub-pieces — the pure
 // derivation ComponentRow used to compute inline (total, the optional/
@@ -113,8 +145,14 @@ export function resolveLineItem(line) {
     range: compoundRanged ? lineTotalRange(l) : null,
   };
 
+  // Modular roll-up — a compound made of several component products, grouped
+  // into named modules (lib/modules). Only a modular gets the grouped `modules`
+  // projection; a plain component product keeps the flat component list.
+  const isModular = isCompound && isModularLine(l);
+
   return {
     isCompound,
+    isModular,
     isRange,
     dimmed,
     unitNet,
@@ -124,6 +162,7 @@ export function resolveLineItem(line) {
     margin,
     discount,
     compound,
+    modules: isModular ? resolveModules(l.components) : [],
     components: isCompound ? resolveComponents(l.components) : [],
   };
 }
