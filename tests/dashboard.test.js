@@ -39,3 +39,37 @@ test('resolveAccountingDashboard rolls up cash, CxC, month income and e-CF pendi
   assert.equal(d.ecfPending, 1);        // one un-transmitted e-NCF
   assert.equal(d.cxcTop.length, 1);
 });
+
+test('resolveAccountingDashboard builds the Business-overview series + breakdowns', () => {
+  const d = resolveAccountingDashboard({
+    accounts: ACCOUNTS, entries: ENTRIES, lines: LINES,
+    salesPostings: [{ customerId: 'c1', postedAt: MONTH + 1, total: 11800, depositApplied: 0, ncf: 'E310000000001', ecfStatus: 'pending' }],
+    purchases: [], expenses: [], payments: [], imports: [],
+    customersById: new Map([['c1', { id: 'c1', name: 'Cliente A' }]]),
+    suppliersById: new Map(),
+    monthStart: MONTH, monthEnd: MONTH + 1_000_000,
+  });
+
+  // Per-account cash balances → the "Bank accounts" card.
+  assert.equal(d.bankAccounts.length, 1);
+  assert.equal(d.bankAccounts[0].code, '1-01-001-02-00-00');
+  assert.equal(d.bankAccounts[0].balance, 10000);
+
+  // 6-month series; the operative month (the fixture's only entry) carries the
+  // income, the cash inflow and the sale, with nothing flowing out.
+  assert.equal(d.monthsSeries.length, 6);
+  const cur = d.monthsSeries[d.monthsSeries.length - 1];
+  assert.equal(cur.ingresos, 10000);
+  assert.equal(cur.cashIn, 10000);
+  assert.equal(cur.cashOut, 0);
+  assert.equal(cur.sales, 11800);
+  assert.equal(cur.utilidad, 10000);
+
+  // No clase-6 accounts in the fixture → an empty gastos donut.
+  assert.equal(d.expenseDonut.total, 0);
+  assert.equal(d.expenseDonut.segments.length, 0);
+
+  // The whole receivable is unpaid; nothing collected (no payments).
+  assert.equal(d.ar.unpaid, 11800);
+  assert.equal(d.collected30, 0);
+});

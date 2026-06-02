@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Shield, Wallet, ArrowDownCircle, ArrowUpCircle, TrendingUp, TrendingDown,
-  Receipt, FileWarning, AlertTriangle, BookOpen,
+  Shield, Wallet, ArrowDownCircle, ArrowUpCircle,
+  Receipt, FileWarning, AlertTriangle, BookOpen, Landmark,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -10,8 +10,48 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import { Donut, BarPairs, AreaChart, Legend } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveAccountingDashboard } from '../../core/accounting/index.js';
+
+// Chart palette — drawn from the app's warm tokens (ink/brand) + a few accents.
+// Centralized here so the incoming design system can retune the dashboard hues
+// in one spot.
+const C = {
+  in: '#059669',       // entradas de caja (emerald-600)
+  out: '#e8a76d',      // salidas de caja (brand-300)
+  income: '#059669',
+  expense: '#fb7185',  // rose-400
+  sales: '#c96a2a',    // brand-500
+  overdue: '#f43f5e',  // rose-500
+  current: '#aba79a',  // ink-300
+};
+// Donut slice ramp (gastos por categoría).
+const DONUT = ['#c96a2a', '#e8a76d', '#059669', '#878374', '#f59e0b', '#cfccc4'];
+
+const SOURCE = {
+  manual: 'Manual', sale: 'Venta', expense: 'Gasto', purchase: 'Compra',
+  payment: 'Pago', import: 'Importación', opening: 'Apertura', payroll: 'Nómina',
+  adjustment: 'Ajuste', depreciation: 'Depreciación', fx: 'Cambio', tax: 'Impuestos', gateway: 'Pasarela',
+};
+
+/**
+ * Card chrome — title row with an optional right-aligned element. `to` renders
+ * a navigation link (label `action`); `note` is a plain period label. They're
+ * separate so a period like "junio 2026" never becomes a misleading link.
+ */
+function CardHead({ title, note, to, action }) {
+  return (
+    <div className="flex items-center justify-between gap-2 mb-3">
+      <h2 className="eyebrow font-semibold text-ink-600">{title}</h2>
+      {to ? (
+        <Link to={to} className="text-xs text-ink-400 hover:text-ink-800">{action || 'Ver →'}</Link>
+      ) : note ? (
+        <span className="text-[10px] uppercase tracking-wide text-ink-400">{note}</span>
+      ) : null}
+    </div>
+  );
+}
 
 function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   const body = (
@@ -26,6 +66,7 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   return to ? <Link to={to} className="block transition hover:shadow-pop">{body}</Link> : body;
 }
 
+/** Simple proportional progress bar (P&L rows). */
 function Bar({ value, max, tone }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
@@ -36,9 +77,11 @@ function Bar({ value, max, tone }) {
 }
 
 /**
- * Resumen contable — the accounting home. KPI cards (cash, CxC, CxP, month
- * result, ITBIS), alerts, top debtors/creditors and recent asientos, each
- * linking into its detail surface. Self-gates on accounting/admin.
+ * Resumen del negocio — the accounting home, in the QuickBooks "Business
+ * overview" shape: a grid of live financial widgets (flujo de caja, gastos,
+ * ganancia y pérdida, cobros, ventas, bancos) over the ledger, each linking
+ * into its detail surface, then KPIs, alerts and recent asientos. Self-gates
+ * on accounting/admin.
  */
 export default function AccountingDashboard() {
   const { profileId, currentProfile } = useApp();
@@ -73,7 +116,7 @@ export default function AccountingDashboard() {
   if (!allowed) {
     return (
       <>
-        <PageHeader title="Resumen contable" subtitle=" " />
+        <PageHeader title="Resumen del negocio" subtitle=" " />
         <EmptyState icon={Shield} title="Acceso restringido"
           description="Sólo el equipo de Contabilidad puede ver esta página." />
       </>
@@ -81,68 +124,17 @@ export default function AccountingDashboard() {
   }
 
   const monthLabel = today.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
-  const SOURCE = { manual: 'Manual', sale: 'Venta', expense: 'Gasto', purchase: 'Compra', payment: 'Pago', import: 'Importación', opening: 'Apertura', adjustment: 'Ajuste' };
+  const monthSales = d.monthsSeries.length ? d.monthsSeries[d.monthsSeries.length - 1].sales : 0;
+  const pnlMax = Math.max(d.ingresosMonth, d.egresosMonth, 1);
+  const arTotal = Math.max(d.ar.unpaid, 1);
 
   return (
     <>
-      <PageHeader title="Resumen contable" subtitle={`Posición al ${formatDate(today.getTime())} · resultados de ${monthLabel}`} />
+      <PageHeader title="Resumen del negocio" subtitle={`Posición al ${formatDate(today.getTime())} · ${monthLabel}`} />
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4">
-          {/* QBO-style widgets: P&L of the month + receivables status. */}
-          <div className="grid lg:grid-cols-2 gap-3">
-            <div className="card p-4">
-              <h2 className="eyebrow font-semibold text-ink-600 mb-3">Ganancia y pérdida · {monthLabel}</h2>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium">{formatDop(d.ingresosMonth)}</span></div>
-                  <Bar value={d.ingresosMonth} max={Math.max(d.ingresosMonth, d.egresosMonth, 1)} tone="bg-emerald-500" />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium">{formatDop(d.egresosMonth)}</span></div>
-                  <Bar value={d.egresosMonth} max={Math.max(d.ingresosMonth, d.egresosMonth, 1)} tone="bg-rose-400" />
-                </div>
-              </div>
-              <div className="flex justify-between items-center mt-3 pt-3 border-t border-ink-100">
-                <span className="text-sm font-semibold">Utilidad neta</span>
-                <span className={`text-lg font-bold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatDop(d.utilidadMonth)}</span>
-              </div>
-            </div>
-
-            <div className="card p-4">
-              <h2 className="eyebrow font-semibold text-ink-600 mb-3">Cuentas por cobrar</h2>
-              <div className="text-2xl font-semibold tabular-nums mb-3">{formatDop(d.cxcBalance)}</div>
-              <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
-                <div className="bg-ink-400 h-full" style={{ width: d.cxcBalance > 0 ? `${(Math.max(0, d.cxcBalance - d.overdue) / d.cxcBalance) * 100}%` : '0%' }} />
-                <div className="bg-rose-500 h-full" style={{ width: d.cxcBalance > 0 ? `${(d.overdue / d.cxcBalance) * 100}%` : '0%' }} />
-              </div>
-              <div className="flex justify-between text-xs mt-2">
-                <span className="text-ink-500">Al día {formatDop(Math.max(0, d.cxcBalance - d.overdue))}</span>
-                <span className="text-rose-600">Vencido +90 {formatDop(d.overdue)}</span>
-              </div>
-              <Link to="/accounting/cuentas" className="text-xs text-ink-500 hover:text-ink-800 mt-2 inline-block">Ver cuentas →</Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
-            <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
-              sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
-            <Kpi icon={ArrowUpCircle} label="Por pagar" value={formatDop(d.cxpBalance)} to="/accounting/cuentas" />
-            <Kpi icon={d.utilidadMonth >= 0 ? TrendingUp : TrendingDown} label={`Utilidad ${monthLabel}`}
-              value={formatDop(d.utilidadMonth)} tone={d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'} to="/accounting/statements" />
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Kpi label="Ingresos del mes" value={formatDop(d.ingresosMonth)} to="/accounting/statements" />
-            <Kpi label="Egresos del mes" value={formatDop(d.egresosMonth)} to="/accounting/statements" />
-            <Kpi icon={Receipt} label="ITBIS del mes"
-              value={formatDop(d.itbis.aPagar > 0 ? d.itbis.aPagar : d.itbis.aFavor)}
-              sub={d.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion" />
-            <Kpi icon={FileWarning} label="e-CF por transmitir" value={d.ecfPending}
-              tone={d.ecfPending > 0 ? 'text-amber-700' : ''} to="/accounting/facturacion" />
-          </div>
-
+          {/* Urgent flags float to the top. */}
           {(d.ecfPending > 0 || d.overdue > 0) && (
             <div className="flex flex-wrap gap-2">
               {d.ecfPending > 0 && (
@@ -158,12 +150,138 @@ export default function AccountingDashboard() {
             </div>
           )}
 
+          {/* Business-overview widgets — row 1: flujo · gastos · P&L. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Flujo de caja */}
+            <div className="card p-4 flex flex-col">
+              <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
+              <div className="text-2xl font-semibold tabular-nums">{formatDop(d.cash)}</div>
+              <div className="text-xs text-ink-400 mb-3">Saldo en caja y bancos</div>
+              <div className="mt-auto">
+                <BarPairs
+                  data={d.monthsSeries.map((m) => ({ label: m.label, a: m.cashIn, b: m.cashOut }))}
+                  colors={[C.in, C.out]} format={formatDop}
+                />
+                <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }]} />
+              </div>
+            </div>
+
+            {/* Gastos (donut por categoría) */}
+            <div className="card p-4">
+              <CardHead title="Gastos" note={monthLabel} />
+              {d.expenseDonut.total <= 0 ? (
+                <div className="flex items-center justify-center h-[148px] text-sm text-ink-400">Sin gastos este mes.</div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <Donut size={132} thickness={16}
+                    segments={d.expenseDonut.segments.map((s, i) => ({ value: s.amount, color: DONUT[i % DONUT.length] }))}>
+                    <div className="text-[10px] uppercase tracking-wide text-ink-400">Total</div>
+                    <div className="text-sm font-semibold tabular-nums">{formatDop(d.expenseDonut.total)}</div>
+                  </Donut>
+                  <ul className="flex-1 min-w-0 space-y-1.5">
+                    {d.expenseDonut.segments.map((s, i) => (
+                      <li key={s.code} className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT[i % DONUT.length] }} />
+                        <span className="truncate text-ink-600 flex-1">{s.name}</span>
+                        <span className="tabular-nums font-medium text-ink-700">{formatDop(s.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Ganancia y pérdida */}
+            <div className="card p-4 flex flex-col">
+              <CardHead title="Ganancia y pérdida" note={monthLabel} />
+              <div className={`text-2xl font-semibold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {formatDop(d.utilidadMonth)}
+              </div>
+              <div className="text-xs text-ink-400 mb-3">Utilidad neta de {monthLabel}</div>
+              <div className="space-y-3 mt-auto">
+                <div>
+                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium">{formatDop(d.ingresosMonth)}</span></div>
+                  <Bar value={d.ingresosMonth} max={pnlMax} tone="bg-emerald-500" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium">{formatDop(d.egresosMonth)}</span></div>
+                  <Bar value={d.egresosMonth} max={pnlMax} tone="bg-rose-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: cobros · ventas · bancos. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Cuentas por cobrar */}
+            <div className="card p-4 flex flex-col">
+              <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
+              <div className="text-2xl font-semibold tabular-nums">{formatDop(d.ar.unpaid)}</div>
+              <div className="text-xs text-ink-400 mb-3">Sin cobrar</div>
+              <div className="mt-auto">
+                <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
+                  <div className="h-full" style={{ width: `${(d.ar.overdue / arTotal) * 100}%`, backgroundColor: C.overdue }} />
+                  <div className="h-full" style={{ width: `${(d.ar.notDue / arTotal) * 100}%`, backgroundColor: C.current }} />
+                </div>
+                <div className="flex justify-between text-xs mt-2">
+                  <span className="text-rose-600">Vencido {formatDop(d.ar.overdue)}</span>
+                  <span className="text-ink-500">Por vencer {formatDop(d.ar.notDue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
+                  <span className="text-ink-500">Cobrado (30 días)</span>
+                  <span className="tabular-nums font-medium text-emerald-700">{formatDop(d.collected30)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ventas */}
+            <div className="card p-4 flex flex-col">
+              <CardHead title="Ventas" note="6 meses" />
+              <div className="text-2xl font-semibold tabular-nums">{formatDop(monthSales)}</div>
+              <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
+              <div className="mt-auto">
+                <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />
+              </div>
+            </div>
+
+            {/* Cuentas de banco */}
+            <div className="card p-4 flex flex-col">
+              <CardHead title="Cuentas de banco" to="/accounting/ledger" action="Ver mayor →" />
+              {d.bankAccounts.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-sm text-ink-400 py-6">Sin movimientos de efectivo aún.</div>
+              ) : (
+                <ul className="space-y-2.5">
+                  {d.bankAccounts.slice(0, 5).map((b) => (
+                    <li key={b.code} className="flex items-center gap-2.5">
+                      <span className="w-8 h-8 rounded-lg bg-ink-50 flex items-center justify-center text-ink-400 shrink-0"><Landmark size={15} /></span>
+                      <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
+                      <span className="tabular-nums font-medium text-sm">{formatDop(b.balance)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
+                <span className="text-ink-500 font-medium">Total</span>
+                <span className="tabular-nums font-semibold">{formatDop(d.cash)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact KPI strip. */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
+            <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
+              sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
+            <Kpi icon={ArrowUpCircle} label="Por pagar" value={formatDop(d.cxpBalance)} to="/accounting/cuentas" />
+            <Kpi icon={Receipt} label="ITBIS del mes"
+              value={formatDop(d.itbis.aPagar > 0 ? d.itbis.aPagar : d.itbis.aFavor)}
+              sub={d.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion" />
+          </div>
+
+          {/* Top debtors / creditors. */}
           <div className="grid lg:grid-cols-2 gap-4">
             <div className="card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="eyebrow font-semibold text-ink-600">Mayores deudores</h2>
-                <Link to="/accounting/cuentas" className="text-xs text-ink-500 hover:text-ink-800">Ver todo →</Link>
-              </div>
+              <CardHead title="Mayores deudores" to="/accounting/cuentas" action="Ver todo →" />
               {d.cxcTop.length === 0 ? <p className="text-sm text-ink-400 py-3">Nada por cobrar.</p> : d.cxcTop.map((r) => (
                 <div key={r.partyId} className="flex items-center justify-between py-1.5 border-b border-ink-50 text-sm">
                   <span className="truncate">{r.party?.name || '—'}</span>
@@ -172,10 +290,7 @@ export default function AccountingDashboard() {
               ))}
             </div>
             <div className="card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="eyebrow font-semibold text-ink-600">Mayores acreedores</h2>
-                <Link to="/accounting/cuentas" className="text-xs text-ink-500 hover:text-ink-800">Ver todo →</Link>
-              </div>
+              <CardHead title="Mayores acreedores" to="/accounting/cuentas" action="Ver todo →" />
               {d.cxpTop.length === 0 ? <p className="text-sm text-ink-400 py-3">Nada por pagar.</p> : d.cxpTop.map((r) => (
                 <div key={r.partyId} className="flex items-center justify-between py-1.5 border-b border-ink-50 text-sm">
                   <span className="truncate">{r.party?.name || '—'}</span>
@@ -185,11 +300,9 @@ export default function AccountingDashboard() {
             </div>
           </div>
 
+          {/* Recent asientos. */}
           <div className="card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="eyebrow font-semibold text-ink-600 inline-flex items-center gap-1.5"><BookOpen size={14} /> Asientos recientes</h2>
-              <Link to="/accounting/ledger" className="text-xs text-ink-500 hover:text-ink-800">Ir al diario →</Link>
-            </div>
+            <CardHead title={<span className="inline-flex items-center gap-1.5"><BookOpen size={14} /> Asientos recientes</span>} to="/accounting/ledger" action="Ir al diario →" />
             {d.recent.length === 0 ? <p className="text-sm text-ink-400 py-3">Aún no hay asientos.</p> : (
               <table className="w-full text-sm">
                 <tbody>

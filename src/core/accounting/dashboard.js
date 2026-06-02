@@ -1,10 +1,32 @@
-// Contabilidad dashboard ViewModel — the KPIs + roll-ups for the accounting
-// home, composed from the other resolvers. Pure: no React, no db.
+// Contabilidad dashboard ViewModel — the KPIs, time-series and roll-ups for the
+// accounting home (QuickBooks-style "Business overview"), composed from the
+// other resolvers. Pure: no React, no db.
 import { resolveReceivables, resolvePayables } from './receivables.js';
 import { resolveItbisLiquidation } from './sales607.js';
 import { resolveIncomeStatement, accountRawBalances, resolveJournal } from './ledger.js';
-import { buildChartIndex, leafCodesUnder } from '../../lib/accounting/chart.js';
+import { buildChartIndex, leafCodesUnder, chartRoots } from '../../lib/accounting/chart.js';
 import { naturalBalance, round2 } from '../../lib/accounting/ledger.js';
+
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const CASH_ROOT = '1-01-001-00-00-00'; // Cajas y Bancos, in the seeded catálogo.
+const DAY = 86_400_000;
+
+/** A month-bucket key that orders correctly across years. */
+function monthKey(ts) {
+  const d = new Date(ts || 0);
+  return d.getFullYear() * 12 + d.getMonth();
+}
+
+/** The last `count` months ending in the month of `endTs`, oldest first. */
+function lastMonths(endTs, count) {
+  const end = new Date(endTs || Date.now());
+  const out = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(end.getFullYear(), end.getMonth() - i, 1);
+    out.push({ key: d.getFullYear() * 12 + d.getMonth(), label: MONTHS_ES[d.getMonth()] });
+  }
+  return out;
+}
 
 /** Sum the natural balance of every postable leaf under a chart node. */
 function subtreeBalance(index, raw, code) {
@@ -18,23 +40,95 @@ function subtreeBalance(index, raw, code) {
 }
 
 /**
- * @returns KPIs: cash (Cajas y Bancos), CxC/CxP balances, the month's
- *   ingresos/gastos/utilidad + ITBIS liquidation, e-CF pending count, overdue
- *   (+90) receivables, top debtors/creditors, and recent journal entries.
+ * @returns KPIs + widgets: cash (Cajas y Bancos), CxC/CxP balances + aging, the
+ *   month's ingresos/gastos/utilidad + ITBIS liquidation, e-CF pending count,
+ *   top debtors/creditors, recent journal entries, AND the "Business overview"
+ *   series: `monthsSeries` (6-month ingresos/egresos/ventas/flujo), `expenseDonut`
+ *   (gastos by category this month), `bankAccounts` (per-account cash balances),
+ *   `ar` (cobros aging split) and `collected30` (cobrado últimos 30 días).
  */
 export function resolveAccountingDashboard({
   accounts, entries, lines, salesPostings, purchases, expenses, payments, imports,
   customersById, suppliersById, monthStart, monthEnd,
 } = {}) {
+  const end = monthEnd ?? Date.now();
   const cxc = resolveReceivables({ salesPostings, payments, customersById });
   const cxp = resolvePayables({ purchases, expenses, payments, suppliersById });
-  const itbis = resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, start: monthStart, end: monthEnd });
-  const income = resolveIncomeStatement({ accounts, lines, entries, start: monthStart, end: monthEnd });
+  const itbis = resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, start: monthStart, end });
+  const income = resolveIncomeStatement({ accounts, lines, entries, start: monthStart, end });
 
   const index = buildChartIndex(accounts);
   const raw = accountRawBalances(lines);
-  // 1-01-001 = Cajas y Bancos in the seeded catálogo.
-  const cash = subtreeBalance(index, raw, '1-01-001-00-00-00');
+  const cashLeaves = new Set(leafCodesUnder(index, CASH_ROOT));
+  const cash = subtreeBalance(index, raw, CASH_ROOT);
+
+  // Per-account cash balances → the "Bank accounts" card.
+  const bankAccounts = [];
+  for (const code of cashLeaves) {
+    const node = index.byCode.get(code);
+    if (!node) continue;
+    const r = raw.get(code);
+    const bal = r ? round2(naturalBalance((r.debit || 0) - (r.credit || 0), node.nature)) : 0;
+    if (Math.abs(bal) > 0.001) bankAccounts.push({ code, name: node.name, balance: bal });
+  }
+  bankAccounts.sort((a, b) => b.balance - a.balance);
+
+  // 6-month series: ingresos/egresos/utilidad (clases 4 vs 5+6), cash in/out
+  // (movements on Cajas y Bancos), and ventas (salesPostings.total) per month.
+  const months = lastMonths(end, 6);
+  const idxByKey = new Map(months.map((m, i) => [m.key, i]));
+  const entryDate = new Map((entries || []).map((e) => [e.id, e.postedAt || 0]));
+  const series = months.map((m) => ({ label: m.label, ingresos: 0, egresos: 0, sales: 0, cashIn: 0, cashOut: 0 }));
+  for (const l of lines || []) {
+    const i = idxByKey.get(monthKey(entryDate.get(l.entryId) || 0));
+    if (i == null) continue;
+    const node = index.byCode.get(l.accountCode);
+    if (!node) continue;
+    const debit = Number(l.debit) || 0;
+    const credit = Number(l.credit) || 0;
+    if (node.class === 4) series[i].ingresos += naturalBalance(debit - credit, node.nature);
+    else if (node.class === 5 || node.class === 6) series[i].egresos += naturalBalance(debit - credit, node.nature);
+    if (cashLeaves.has(l.accountCode)) { series[i].cashIn += debit; series[i].cashOut += credit; }
+  }
+  for (const sp of salesPostings || []) {
+    const i = idxByKey.get(monthKey(sp.postedAt || 0));
+    if (i != null) series[i].sales = round2(series[i].sales + (Number(sp.total) || 0));
+  }
+  for (const s of series) {
+    s.ingresos = round2(s.ingresos);
+    s.egresos = round2(s.egresos);
+    s.cashIn = round2(s.cashIn);
+    s.cashOut = round2(s.cashOut);
+    s.utilidad = round2(s.ingresos - s.egresos);
+  }
+
+  // Gastos (clase 6) by top-level category, this month → the donut.
+  const rawMonth = accountRawBalances(lines, { entries, start: monthStart, end });
+  const class6 = chartRoots(index).find((r) => r.class === 6);
+  let cats = [];
+  if (class6) {
+    for (const cat of index.childrenByParent.get(class6.code) || []) {
+      const amount = subtreeBalance(index, rawMonth, cat.code);
+      if (amount > 0.001) cats.push({ code: cat.code, name: cat.name, amount });
+    }
+    cats.sort((a, b) => b.amount - a.amount);
+  }
+  let donutSegments = cats;
+  if (cats.length > 5) {
+    const rest = round2(cats.slice(5).reduce((s, c) => s + c.amount, 0));
+    donutSegments = rest > 0 ? [...cats.slice(0, 5), { code: 'otros', name: 'Otros gastos', amount: rest }] : cats.slice(0, 5);
+  }
+  const expenseDonut = { segments: donutSegments, total: round2(donutSegments.reduce((s, c) => s + c.amount, 0)) };
+
+  // Cobros aging split + last-30-day collections → the "Invoices" card.
+  const ar = {
+    unpaid: cxc.totals.balance,
+    notDue: cxc.totals.d0_30,
+    overdue: round2(cxc.totals.d31_60 + cxc.totals.d61_90 + cxc.totals.d90),
+  };
+  const collected30 = round2((payments || [])
+    .filter((p) => p.direction === 'in' && p.partyType === 'customer' && (p.paidAt || 0) >= end - 30 * DAY)
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0));
 
   const ecfPending = (salesPostings || [])
     .filter((s) => /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
@@ -43,14 +137,19 @@ export function resolveAccountingDashboard({
 
   return {
     cash,
+    bankAccounts,
     cxcBalance: cxc.totals.balance,
     cxpBalance: cxp.totals.balance,
     overdue: cxc.totals.d90,
+    ar,
+    collected30,
     ingresosMonth: income.totalIncome,
     egresosMonth: round2(income.totalCosts + income.totalExpenses),
     utilidadMonth: income.netIncome,
     itbis,
     ecfPending,
+    monthsSeries: series,
+    expenseDonut,
     cxcTop: cxc.rows.slice(0, 5),
     cxpTop: cxp.rows.slice(0, 5),
     recent,
