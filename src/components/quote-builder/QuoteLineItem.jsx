@@ -13,6 +13,7 @@ import SwatchPicker from './SwatchPicker.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
+import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
@@ -204,6 +205,12 @@ export default function QuoteLineItem({
     // on the parent — keeps the dealer's work intact through the
     // toggle. Family + image + name stay on the parent because they're
     // the shared identity of the compound.
+    // Captured BEFORE onChange clears `reference`: where a simple-line model
+    // link is stored (its SKU family root). The compound will key its link by
+    // line.id instead, so carry the link across the shape change — otherwise
+    // the just-linked model's offered-fabric restriction is orphaned and every
+    // component's picker silently shows all in-grade fabrics again.
+    const priorRoot = splitSkuGrade(line.reference).root;
     const seed = makeBlankComponent({
       name: '',
       reference: line.reference || '',
@@ -222,21 +229,32 @@ export default function QuoteLineItem({
       qty: 1,
       unitPrice: 0,
     });
+    // Copy (don't move) the SKU-root link onto the line id: the root link still
+    // serves other quotes' simple lines of this model. Fire-and-forget; the
+    // live query repaints the ModelLinkBar + re-filters the pickers when it lands.
+    carryModelLink(priorRoot, line.id);
   }
   function dissolveCompound() {
     // Promote the first component back onto the parent line and drop
     // the rest. The dealer can re-add them as separate lines if they
     // want — silently discarding multi-component work would be worse.
     const first = (line.components || [])[0];
+    const restoredRef = first?.reference || line.reference || '';
     onChange({
       components: [],
-      reference: first?.reference || line.reference || '',
+      reference: restoredRef,
       subtype: first?.subtype || line.subtype || '',
       dimensions: first?.dimensions || line.dimensions || '',
       description: first?.description || line.description || '',
       qty: first?.qty ?? line.qty ?? 1,
       unitPrice: first?.unitPrice ?? line.unitPrice ?? 0,
     });
+    // The link's key flips back from line.id to the restored SKU root: carry it
+    // onto the root (unless the root already carries its own per-model link),
+    // then drop the now-unreachable line-id record so a later re-convert starts
+    // from the authoritative root link rather than a stale snapshot.
+    const restoredRoot = splitSkuGrade(restoredRef).root;
+    carryModelLink(line.id, restoredRoot).then(() => clearModelFabrics(line.id));
   }
 
   // Deactivated (optional) or non-selected alternative: the row reads as
