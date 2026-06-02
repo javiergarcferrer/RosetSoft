@@ -406,6 +406,13 @@ export interface InventoryItem {
   unit?: string;
   qtyOnHand: number;
   avgCost: number;
+  /** Permanent retail price set on the Alcover purchase order (store stock). */
+  sellingPrice?: number | null;
+  /** Photo uploaded at receiving (→ images.id). NOT a quote image. */
+  imageId?: string | null;
+  /** Linked Shopify product gid + last sync time (the catalog mirror). */
+  shopifyProductId?: string | null;
+  shopifySyncedAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
 }
