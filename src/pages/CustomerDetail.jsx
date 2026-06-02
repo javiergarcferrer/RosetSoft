@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Mail, Phone, MapPin, Pencil, ExternalLink, FileText, Package,
+  ArrowLeft, Mail, Phone, MapPin, Pencil, ExternalLink, FileText, Package, User,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
@@ -280,11 +280,17 @@ function ContactCard({ customer }) {
     customer.country,
   ].filter(Boolean).join(' · ');
 
-  if (!customer.email && !customer.phone && !addr && !customer.notes) {
+  if (!customer.contactName && !customer.email && !customer.phone && !addr && !customer.notes) {
     return null;
   }
   return (
     <div className="card card-pad mb-5 text-sm space-y-1.5">
+      {customer.contactName && (
+        <div className="flex items-center gap-2">
+          <User size={14} className="text-ink-400 flex-shrink-0" />
+          <div className="text-ink-700">{customer.contactName}</div>
+        </div>
+      )}
       {customer.email && (
         <div className="flex items-center gap-2">
           <Mail size={14} className="text-ink-400 flex-shrink-0" />

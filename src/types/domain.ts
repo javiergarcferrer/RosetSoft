@@ -494,7 +494,10 @@ export interface Customer {
   name: string;
   /** Fiscal id (RNC / cédula) for the 607. Optional — consumidor final has none. */
   rnc?: string;
+  /** Nombre comercial (the razón social goes in `name`). */
   company?: string;
+  /** Person dealt with at the company — distinct from the razón social. */
+  contactName?: string;
   email?: string;
   phone?: string;
   address?: string;

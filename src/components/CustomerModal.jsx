@@ -49,6 +49,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
       name: customer?.name || '',
       rnc: customer?.rnc || '',
       company: customer?.company || '',
+      contactName: customer?.contactName || '',
       email: customer?.email || '',
       phone: customer?.phone || '',
       address: customer?.address || '',
@@ -92,6 +93,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
       name: data.name.trim(),
       rnc: cleanRnc(data.rnc),
       company: data.company.trim(),
+      contactName: data.contactName.trim(),
       email: data.email.trim(),
       phone: data.phone.trim(),
       address: data.address.trim(),
@@ -161,6 +163,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
             className="input"
             value={data.name}
             onChange={(e) => set('name', e.target.value)}
+            placeholder="Razón social"
             autoComplete="name"
             autoCapitalize="words"
             enterKeyHint="next"
@@ -172,7 +175,20 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
             className="input"
             value={data.company}
             onChange={(e) => set('company', e.target.value)}
+            placeholder="Nombre comercial"
             autoComplete="organization"
+            autoCapitalize="words"
+            enterKeyHint="next"
+          />
+        </div>
+        <div>
+          <div className="label">Nombre de contacto</div>
+          <input
+            className="input"
+            value={data.contactName}
+            onChange={(e) => set('contactName', e.target.value)}
+            placeholder="Persona de contacto"
+            autoComplete="off"
             autoCapitalize="words"
             enterKeyHint="next"
           />
