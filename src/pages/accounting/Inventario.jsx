@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, Boxes, Plus, Loader2, Check, X, ArrowDownToLine } from 'lucide-react';
+import { Shield, Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { syncShopify } from '../../lib/shopifySync.js';
 import {
   resolveInventory, resolveItemKardex, buildCogsEntry, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
@@ -46,6 +48,7 @@ export default function Inventario() {
   const [outQty, setOutQty] = useState('');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   if (!allowed) {
     return (
@@ -96,11 +99,26 @@ export default function Inventario() {
         });
       }
       await db.inventoryItems.update(selectedItem.id, { qtyOnHand: (kardex?.qty || 0) - qty, avgCost: avg });
+      // Stock changed → reflect it in the Shopify catalog (sold out → removed).
+      syncShopify([selectedItem.id]).catch(() => {});
       setOutQty('');
     } catch (e) {
       setErr(e?.message || String(e));
     } finally {
       setPosting(false);
+    }
+  }
+
+  async function syncAll() {
+    setSyncing(true);
+    setErr('');
+    try {
+      const res = await syncShopify();
+      if (res?.configured === false) setErr('Conecta Shopify en Configuración para publicar el inventario.');
+    } catch (e) {
+      setErr(e?.message || 'No se pudo sincronizar con Shopify.');
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -110,7 +128,14 @@ export default function Inventario() {
     <>
       <PageHeader title="Inventario"
         subtitle={loaded ? `${inv.count} artículos · valor ${formatDop(inv.totalValue)}` : ' '}
-        actions={<button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nuevo artículo</button>} />
+        actions={(
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+              {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar Shopify
+            </button>
+            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nuevo artículo</button>
+          </div>
+        )} />
 
       {showItem && (
         <div className="card p-4 mb-4 border-ink-300">
@@ -171,6 +196,8 @@ export default function Inventario() {
                 <h3 className="font-semibold mb-1">{selectedItem.name}</h3>
                 <p className="text-sm text-ink-500 mb-3">{kardex.qty} {selectedItem.unit} · costo prom. {formatDop(kardex.avgCost)} · valor {formatDop(kardex.value)}</p>
 
+                <CatalogBlock item={selectedItem} key={selectedItem.id} />
+
                 <div className="flex flex-wrap items-end gap-2 mb-3 pb-3 border-b border-ink-100">
                   <label className="text-sm">Salida (costo de venta)<br />
                     <input type="number" min="0" step="1" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="w-32 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
@@ -207,5 +234,60 @@ export default function Inventario() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Catalog (Shopify) block on a selected inventory item — set the PERMANENT
+ * selling price (from the Alcover purchase order) and the receiving photo, then
+ * publish. Keyed by item id so the local state resets when the selection
+ * changes. The photo is uploaded here at receiving — never pulled from a quote.
+ */
+function CatalogBlock({ item }) {
+  const [price, setPrice] = useState(item.sellingPrice ?? '');
+  const [imageId, setImageId] = useState(item.imageId ?? null);
+  const [status, setStatus] = useState('idle'); // idle | saving | saved | error
+  const [msg, setMsg] = useState('');
+
+  async function save() {
+    setStatus('saving');
+    setMsg('');
+    try {
+      await db.inventoryItems.update(item.id, {
+        sellingPrice: price === '' ? null : Number(price),
+        imageId: imageId || null,
+      });
+      const res = await syncShopify([item.id]);
+      setStatus('saved');
+      setMsg(res?.configured === false
+        ? 'Guardado. Conecta Shopify en Configuración para publicarlo.'
+        : 'Guardado y publicado en Shopify.');
+      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2500);
+    } catch (e) {
+      setStatus('error');
+      setMsg(e?.message || 'No se pudo guardar.');
+    }
+  }
+
+  return (
+    <div className="mb-3 pb-3 border-b border-ink-100">
+      <div className="label mb-2">Catálogo (Shopify)</div>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm">Precio de venta (USD)<br />
+          <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)}
+            placeholder="0.00" className="w-36 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+        </label>
+        <div className="w-40">
+          <ImageDrop imageId={imageId} onChange={setImageId} kind="inventory-item" ownerId={item.id}
+            label="Foto" imgClassName="h-24 w-full object-cover rounded-md" allowUrl={false} />
+        </div>
+        <button type="button" onClick={save} disabled={status === 'saving'}
+          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+          {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar y publicar
+        </button>
+      </div>
+      {msg && <p className={`text-xs mt-1.5 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
+      <p className="text-[11px] text-ink-400 mt-1">Se publica cuando hay existencia y precio. Al agotarse, sale del catálogo.</p>
+    </div>
   );
 }

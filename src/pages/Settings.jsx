@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Check, AlertTriangle, Shield } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Shield, Loader2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
+import { saveShopifyConfig, syncShopify } from '../lib/shopifySync.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
@@ -176,6 +177,9 @@ export default function Settings() {
 
         {/* Public storefront */}
         <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
+
+        {/* Shopify catalog sync */}
+        <ShopifyCard settings={settings} />
       </div>
     </>
   );
@@ -487,6 +491,84 @@ function RateCard({ local, set, saveSettings }) {
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Catálogo Shopify — connect the store and run a full sync. The Admin token is
+ * saved through a write-only RPC (never read back); only the domain + a
+ * "connected" timestamp surface here. "Sincronizar todo" reconciles the whole
+ * catalog with current inventory (publish in-stock, archive sold-out).
+ */
+function ShopifyCard({ settings }) {
+  const [domain, setDomain] = useState(settings?.shopifyDomain || '');
+  const [token, setToken] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | saving | saved | error
+  const [msg, setMsg] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const connectedAt = settings?.shopifyConnectedAt;
+
+  useEffect(() => { setDomain(settings?.shopifyDomain || ''); }, [settings?.shopifyDomain]);
+
+  async function save() {
+    setStatus('saving');
+    setMsg('');
+    try {
+      await saveShopifyConfig({ domain, token });
+      setToken('');
+      setStatus('saved');
+      setMsg('Conexión guardada.');
+      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (e) {
+      setStatus('error');
+      setMsg(e?.message || 'No se pudo guardar.');
+    }
+  }
+
+  async function syncAll() {
+    setSyncing(true);
+    setMsg('');
+    try {
+      const res = await syncShopify();
+      setMsg(res?.configured === false
+        ? 'Conecta Shopify primero (guarda el token).'
+        : `Sincronizado: ${res?.synced ?? 0} publicado(s), ${res?.archived ?? 0} retirado(s).`);
+    } catch (e) {
+      setMsg(e?.message || 'No se pudo sincronizar.');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="card card-pad">
+      <h2 className="font-semibold mb-1">Catálogo Shopify</h2>
+      <p className="text-xs text-ink-500 mb-4">
+        Cada artículo en inventario con precio y foto se publica automáticamente en tu tienda Shopify;
+        al agotarse, se retira. Pega el token de tu app personalizada de Shopify para conectar.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label className="label">Dominio
+          <input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="alcover.myshopify.com"
+            className="mt-1 w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+        </label>
+        <label className="label">Admin API token
+          <input type="password" value={token} onChange={(e) => setToken(e.target.value)}
+            placeholder={connectedAt ? '•••••••• (guardado)' : 'shpat_…'}
+            className="mt-1 w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+          {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
+        </button>
+        <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+          {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar todo
+        </button>
+        {connectedAt ? <span className="text-[11px] text-ink-400">Conectado · {formatDateTime(connectedAt)}</span> : null}
+      </div>
+      {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
     </div>
   );
 }

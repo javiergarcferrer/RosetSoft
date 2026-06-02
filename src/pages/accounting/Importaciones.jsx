@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { syncShopify } from '../../lib/shopifySync.js';
 import {
   resolveImportsList, buildImportEntry, computeImportTaxes, landedCost, landedUnitCost,
   weightedAverageIn, resolveAccountingConfig,
@@ -165,6 +166,8 @@ function NewImportForm({ scope, config, suppliers, items, orders, onClose }) {
           await db.inventoryItems.update(form.itemId, { qtyOnHand: (item.qtyOnHand || 0) + qty, avgCost: newAvg });
         }
       }
+      // Goods just landed in inventory → publish/refresh the item in Shopify.
+      if (form.itemId) syncShopify([form.itemId]).catch(() => {});
       onClose();
     } catch (e) {
       setErr(e?.message || String(e));

@@ -81,3 +81,11 @@ verify_jwt = false
 # verify_jwt stays TRUE (default) — only a signed-in team member may issue.
 [functions.ecf-send]
 verify_jwt = true
+
+# shopify-sync mirrors in-stock inventory into the Shopify catalog. Called by a
+# signed-in team member (after a liquidation lands stock, a sale empties it, or a
+# manual "Sincronizar"), so verify_jwt stays TRUE. It reads the Admin token from
+# the write-only shopify_config table via the service role; the token never
+# reaches the browser.
+[functions.shopify-sync]
+verify_jwt = true
