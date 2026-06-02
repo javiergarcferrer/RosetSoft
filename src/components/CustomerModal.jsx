@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Search, Loader2 } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { db, newId } from '../db/database.js';
+import { lookupRnc, cleanRnc } from '../lib/rncLookup.js';
 
 /**
  * Customer create/edit modal. Used in two places (symmetric with
@@ -37,12 +38,16 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
   const open = !!customer;
   const isNew = !customer?.id;
   const [data, setData] = useState(null);
+  const [looking, setLooking] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState('');
 
   // Reset when opening
   if (open && data?.__id !== (customer?.id || 'new')) {
+    setLookupMsg('');
     setData({
       __id: customer?.id || 'new',
       name: customer?.name || '',
+      rnc: customer?.rnc || '',
       company: customer?.company || '',
       email: customer?.email || '',
       phone: customer?.phone || '',
@@ -58,6 +63,26 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
 
   function set(k, v) { setData((d) => ({ ...d, [k]: v })); }
 
+  // DGII registry lookup — resolves the fiscal name (razón social) + nombre
+  // comercial from the RNC/cédula, the same lookup used on suppliers.
+  async function doLookup() {
+    setLookupMsg('');
+    setLooking(true);
+    try {
+      const r = await lookupRnc(data.rnc);
+      if (r.found) {
+        setData((d) => ({ ...d, name: r.name || d.name, company: r.commercialName || d.company }));
+        setLookupMsg(`✓ ${r.name}${r.status ? ` · ${r.status}` : ''}`);
+      } else {
+        setLookupMsg(r.message || 'No encontrado.');
+      }
+    } catch (e) {
+      setLookupMsg(e?.message || 'Error consultando el RNC.');
+    } finally {
+      setLooking(false);
+    }
+  }
+
   async function save() {
     if (!data.name.trim()) return;
     const id = customer?.id || newId();
@@ -65,6 +90,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
       id,
       profileId,
       name: data.name.trim(),
+      rnc: cleanRnc(data.rnc),
       company: data.company.trim(),
       email: data.email.trim(),
       phone: data.phone.trim(),
@@ -104,6 +130,31 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
           suggestion for each field. autoCapitalize on the email/phone keeps
           Safari from upper-casing the first letter, which is the default. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <div className="label">RNC / Cédula</div>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={data.rnc}
+              onChange={(e) => set('rnc', e.target.value)}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="RNC (9 dígitos) o cédula (11)"
+              enterKeyHint="search"
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } }}
+            />
+            <button
+              type="button"
+              onClick={doLookup}
+              disabled={looking || !cleanRnc(data.rnc)}
+              className="btn-ghost inline-flex items-center gap-1 disabled:opacity-40 whitespace-nowrap"
+              title="Buscar el nombre en el registro de la DGII"
+            >
+              {looking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Buscar
+            </button>
+          </div>
+          {lookupMsg && <p className="text-xs text-ink-500 mt-1">{lookupMsg}</p>}
+        </div>
         <div className="sm:col-span-2">
           <div className="label">Nombre *</div>
           <input
