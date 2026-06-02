@@ -8,6 +8,7 @@ import {
   isCompoundLine, componentSubtotal, computeTotalsRange,
 } from '../../lib/pricing.js';
 import { compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
+import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
 import type {
   Quote, QuoteLine, LineComponent, Customer, Professional, Profile, Settings, Totals,
   CurrencyCode, QuoteGroup,
@@ -148,11 +149,15 @@ function LineRow({
   // and drop every per-piece swatch below. A mixed compound keeps per-piece
   // swatches (they're now informative). Resolved by the Model so screen + paper
   // agree on when to collapse.
-  const upholstery = compound ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
-  // Mixed compound → group pieces into contiguous same-material runs, each under
-  // one fabric header (frame, then cushions); uniform stays the single hero
-  // above. Same Model rule as the on-screen preview, so paper + screen agree.
-  const grouping = compound ? groupComponentsByMaterial(line.components) : { grouped: false as const, runs: [] };
+  // A MODULAR compound is grouped by MODULE (component product), not by fabric —
+  // each module under its own header with a per-module subtotal, one image for
+  // the whole line. Resolved by the Model (lib/modules) so screen + paper agree.
+  const modular = compound ? isModularLine(line) : false;
+  const upholstery = compound && !modular ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
+  // Mixed (non-modular) compound → group pieces into contiguous same-material
+  // runs, each under one fabric header (frame, then cushions); uniform stays the
+  // single hero above. Same Model rule as the on-screen preview.
+  const grouping = compound && !modular ? groupComponentsByMaterial(line.components) : { grouped: false as const, runs: [] };
   // Standalone swatch only for a SIMPLE line with no options grid (the grid
   // leads with the same material). A compound's parent carries a stale seed
   // subtype the editor hides — never draw it; its fabric is the hero (uniform)
@@ -190,7 +195,23 @@ function LineRow({
           {compound && upholstery.uniform && (
             <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
           )}
-          {compound && grouping.grouped ? (
+          {modular ? (
+            // Group by module: each component product under its own header with
+            // a per-module subtotal; the whole modular keeps one image above.
+            modulesOf(line.components).map((m, mi) => (
+              <View key={m.moduleGroup || mi}>
+                {m.moduleGroup && (
+                  <View style={s.moduleHead}>
+                    <Text style={s.moduleName}>{m.name || '—'}</Text>
+                    <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>
+                  </View>
+                )}
+                {m.components.map((c, i) => (
+                  <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+                ))}
+              </View>
+            ))
+          ) : compound && grouping.grouped ? (
             // A fabric header per contiguous run, its rows collapsed to clean
             // name+price (the run header states the fabric). Non-bearing runs
             // (metal base, glass) render header-less.

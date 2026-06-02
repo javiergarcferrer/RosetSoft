@@ -601,15 +601,17 @@ export interface LineComponent {
   /** Alternative-material options with price deltas (see MaterialOptions). */
   materialOptions?: MaterialOptions | null;
   /**
-   * Element-kit bookkeeping — set on the part components produced by exploding a
-   * complete modular element (see lib/elementKits). `kitGroup` links the parts
-   * of one exploded element so "Recomponer" can collapse them back; the run
-   * carries `kitCompleteRoot` so recompose knows which complete SKU to restore.
-   * Both live on the JSONB component shape — no DB column. Absent on a plain
-   * component and on a recomposed complete element.
+   * Module grouping — the catalog-agnostic link that turns a flat component list
+   * into a MODULAR product (see lib/modules). Components sharing a `moduleGroup`
+   * are the elements of ONE *component product* ("complete element" in Ligne
+   * Roset terms) inside the modular; `moduleName` is that module's display label.
+   * Authored by the dealer at assembly time (NOT derived from the catalog — the
+   * price list carries no composition), so it works for every model. Both live
+   * inline on the JSONB component shape — no DB column. Absent on a plain,
+   * ungrouped component (which renders as its own single-element module).
    */
-  kitGroup?: string | null;
-  kitCompleteRoot?: string | null;
+  moduleGroup?: string | null;
+  moduleName?: string | null;
 }
 
 /**
@@ -693,6 +695,16 @@ export interface QuoteLine {
 
   /* Compound article — non-empty array makes this line compound. */
   components?: LineComponent[];
+  /**
+   * Composition tier of a compound line (see lib/modules). A `'componentProduct'`
+   * — Ligne Roset's "complete element" — is one product made of elements (the
+   * default, and how every existing compound reads when this is absent). A
+   * `'modular'` is made of several component products, so its components are
+   * grouped into named modules (`LineComponent.moduleGroup`) and the surfaces
+   * render it grouped-by-module under one image. Only meaningful when
+   * `components` is non-empty; ignored on a normal line.
+   */
+  compoundKind?: 'componentProduct' | 'modular';
 
   /* Product options + alternatives.
    *   isOptional               line currently EXCLUDED from the quote

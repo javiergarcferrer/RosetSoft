@@ -21,7 +21,7 @@ import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
-import { kitForReference, gradeOf, explodeComponentInList, recomposeKitGroupInList } from '../../lib/elementKits.js';
+import { groupComponents, ungroupModule, renameModule, isModularLine } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -124,11 +124,15 @@ export default function QuoteLineItem({
     onChange({ components });
   }
   // Bulk-add from the multi-add picker — each catalog seed becomes a component
-  // (priced at the chosen grade, or a price RANGE when no grade was picked).
-  // The fast path for assembling a composition from its complete elements.
+  // (priced at the chosen grade, or a price RANGE when no grade was picked). On
+  // a MODULAR line the run is stamped as ONE module (a component product) so the
+  // dealer assembles a modular module-by-module; on a plain component product it
+  // just appends the elements flat. Either way the compound subtotal re-sums.
   function addComponentsFromSeeds(seeds) {
     if (!seeds?.length) return;
     const existing = Array.isArray(line.components) ? line.components : [];
+    const moduleGroup = isModular ? newId() : null;
+    const moduleName = isModular ? (seeds.find((s) => s.name)?.name || '') : null;
     const additions = seeds.map((s) => makeBlankComponent({
       name: s.name || '',
       reference: s.reference || '',
@@ -139,6 +143,7 @@ export default function QuoteLineItem({
       swatchImageId: s.swatchImageId ?? null,
       priceMin: s.priceMin ?? null,
       priceMax: s.priceMax ?? null,
+      ...(moduleGroup ? { moduleGroup, moduleName } : {}),
     }));
     onChange({ components: [...existing, ...additions] });
   }
@@ -220,66 +225,25 @@ export default function QuoteLineItem({
       ),
     });
   }
-  // ----- element kits: split a complete modular element into its part SKUs and
-  // fold it back (see lib/elementKits). Pure list transforms over the catalog —
-  // each part is priced at the piece's CURRENT grade via its family — so the
-  // compound subtotal re-sums on its own and the small separation gap (parts
-  // cost a touch more than the complete element) just appears in the total.
-  const resolvePart = useMemo(
-    () => (root, grade) => {
-      const fam = families?.get(root);
-      return fam ? productForGrade(fam, grade) : null;
-    },
-    [families],
-  );
-  function explodeComponent(componentId) {
-    const next = explodeComponentInList(line.components, componentId, resolvePart, newId);
-    if (next) onChange({ components: next });
+  // ----- modules: the catalog-agnostic grouping that makes a compound line a
+  // MODULAR product (see lib/modules). Purely structural over the components
+  // array — no catalog lookup, no model-specific data — so the compound subtotal
+  // re-sums on its own and each module's roll-up always folds back into it.
+  const isModular = isModularLine(line);
+  function setModular(on) {
+    onChange({ compoundKind: on ? 'modular' : 'componentProduct' });
   }
-  function recomposeKit(kitGroup) {
-    const next = recomposeKitGroupInList(line.components, kitGroup, resolvePart, newId);
-    if (next) onChange({ components: next });
+  // Group the given component ids into one named module (a component product).
+  function groupIntoModule(ids, name) {
+    const next = groupComponents(line.components, ids, name, newId);
+    if (next) onChange({ components: next, compoundKind: 'modular' });
   }
-  // Per-component kit affordances, keyed by id: whether a complete element can
-  // be split here (it has a kit AND every part prices out at its current grade),
-  // and — on the FIRST part of an exploded group — the "+$X vs completo" gap to
-  // surface next to the Recomponer action.
-  const kitInfoById = useMemo(() => {
-    const comps = line.components || [];
-    const groups = new Map();
-    for (const c of comps) {
-      if (!c?.kitGroup) continue;
-      if (!groups.has(c.kitGroup)) groups.set(c.kitGroup, []);
-      groups.get(c.kitGroup).push(c);
-    }
-    const map = new Map();
-    for (const c of comps) {
-      if (!c) continue;
-      if (c.kitGroup) {
-        const members = groups.get(c.kitGroup) || [];
-        const isFirstOfGroup = members[0]?.id === c.id;
-        let deltaUsd = null;
-        if (isFirstOfGroup) {
-          const complete = resolvePart(c.kitCompleteRoot, gradeOf(c));
-          if (complete) {
-            const partsTotal = members.reduce(
-              (s, m) => s + (Number(m.unitPrice) || 0) * (Number(m.qty ?? 1) || 0),
-              0,
-            );
-            deltaUsd = partsTotal - (Number(complete.priceUsd) || 0);
-          }
-        }
-        map.set(c.id, { isPart: true, isFirstOfGroup, kitGroup: c.kitGroup, deltaUsd });
-      } else if (!c.alternativeGroup && !c.isOptional) {
-        const kit = kitForReference(c.reference);
-        const grade = gradeOf(c);
-        if (kit && grade && kit.partRoots.every((r) => resolvePart(r, grade))) {
-          map.set(c.id, { canExplode: true });
-        }
-      }
-    }
-    return map;
-  }, [line.components, resolvePart]);
+  function ungroupModuleById(moduleGroup) {
+    onChange({ components: ungroupModule(line.components, moduleGroup) });
+  }
+  function renameModuleById(moduleGroup, name) {
+    onChange({ components: renameModule(line.components, moduleGroup, name) });
+  }
   function convertToCompound() {
     // Promote the current line's own ref/subtype/dimensions/description/
     // qty/unitPrice into the first component, then clear those columns
@@ -449,9 +413,12 @@ export default function QuoteLineItem({
           onAddAlternative={addComponentAlternative}
           onSelectAlternative={selectComponentAlternative}
           onApplyToAll={applyComponentMaterialToAll}
-          onExplode={explodeComponent}
-          onRecompose={recomposeKit}
-          kitInfoById={kitInfoById}
+          isModular={isModular}
+          modules={vm.modules}
+          onSetModular={setModular}
+          onGroupModule={groupIntoModule}
+          onUngroupModule={ungroupModuleById}
+          onRenameModule={renameModuleById}
           onAddMany={addComponentsFromSeeds}
         />
       )}
@@ -1610,7 +1577,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onExplode, onRecompose, kitInfoById, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1620,6 +1587,20 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [multiOpen, setMultiOpen] = useState(false);
+  // Selection for manual "Agrupar en módulo" — only used on a modular line.
+  const [selected, setSelected] = useState(() => new Set());
+  function toggleSelected(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function groupSelected() {
+    if (selected.size === 0) return;
+    onGroupModule?.([...selected], '');
+    setSelected(new Set());
+  }
 
   function onDragStart(e, id) {
     setDraggingId(id);
@@ -1651,63 +1632,150 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
     onReorder(next.map((c) => c.id));
   }
 
+  // One component row + its drag wrapper and (on a modular line) its grouping
+  // checkbox. Shared by the flat layout and the grouped-by-module layout so the
+  // editing affordances never diverge between the two.
+  function renderRow(c) {
+    const i = components.findIndex((x) => x.id === c.id);
+    const isDragging = draggingId === c.id;
+    const isDropTarget = dropTargetId === c.id && draggingId !== c.id;
+    const dragHandleProps = {
+      draggable: true,
+      onDragStart: (e) => onDragStart(e, c.id),
+      onDragEnd,
+    };
+    return (
+      <div
+        key={c.id || i}
+        onDragOver={(e) => onDragOver(e, c.id)}
+        onDrop={(e) => onDrop(e, c.id)}
+        className={`relative flex items-stretch ${isDragging ? 'opacity-40' : ''}`}
+      >
+        {isDropTarget && (
+          <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
+        )}
+        {isModular && (
+          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Seleccionar para agrupar en un módulo">
+            <input
+              type="checkbox"
+              checked={selected.has(c.id)}
+              onChange={() => toggleSelected(c.id)}
+              className="accent-brand-600"
+            />
+          </label>
+        )}
+        <div className="min-w-0 flex-1">
+          <ComponentRow
+            index={i}
+            component={c}
+            vm={vmById.get(c.id)}
+            currency={currency}
+            rates={rates}
+            fmt={fmt}
+            nameFilter={nameFilter}
+            sourceUrl={sourceUrl}
+            onChange={(patch) => onUpdate(c.id, patch)}
+            onRemove={() => onRemove(c.id)}
+            onAddAlternative={() => onAddAlternative?.(c.id)}
+            onSelectAlternative={() => onSelectAlternative?.(c.id)}
+            onApplyToAll={() => onApplyToAll?.(c.id)}
+            dragHandleProps={dragHandleProps}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const byId = new Map(components.map((c) => [c.id, c]));
+
   return (
-    <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 divide-y divide-ink-100 overflow-hidden">
+    <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 overflow-hidden">
+      {/* Composition controls: toggle modular, and group the current selection. */}
+      <div className="px-3 py-2 bg-white border-b border-ink-100 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-medium text-ink-500">
+          {isModular ? 'Producto modular' : 'Producto compuesto'}
+        </span>
+        {onSetModular && (
+          <button
+            type="button"
+            onClick={() => onSetModular(!isModular)}
+            className="btn-ghost text-xs"
+            title={isModular
+              ? 'Volver a un producto compuesto (una sola lista de elementos)'
+              : 'Convertir en modular: agrupa los elementos en módulos (productos completos), una sola imagen'}
+          >
+            <Boxes size={12} /> {isModular ? 'Quitar modular' : 'Convertir en modular'}
+          </button>
+        )}
+        {isModular && selected.size > 0 && (
+          <button
+            type="button"
+            onClick={groupSelected}
+            className="btn-ghost text-xs text-brand-700"
+            title="Agrupar los elementos seleccionados en un módulo (un producto completo)"
+          >
+            <Combine size={12} /> Agrupar {selected.size} en módulo
+          </button>
+        )}
+      </div>
+
       {components.length === 0 ? (
         <div className="px-4 py-5 text-center text-xs text-ink-500">
           Sin componentes todavía. Agrega el primero para empezar.
         </div>
-      ) : (
-        components.map((c, i) => {
-          const isDragging = draggingId === c.id;
-          const isDropTarget = dropTargetId === c.id && draggingId !== c.id;
-          const dragHandleProps = {
-            draggable: true,
-            onDragStart: (e) => onDragStart(e, c.id),
-            onDragEnd,
-          };
-          return (
-            <div
-              key={c.id || i}
-              onDragOver={(e) => onDragOver(e, c.id)}
-              onDrop={(e) => onDrop(e, c.id)}
-              className={`relative ${isDragging ? 'opacity-40' : ''}`}
-            >
-              {isDropTarget && (
-                <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
-              )}
-              <ComponentRow
-                index={i}
-                component={c}
-                vm={vmById.get(c.id)}
-                currency={currency}
-                rates={rates}
-                fmt={fmt}
-                nameFilter={nameFilter}
-                sourceUrl={sourceUrl}
-                onChange={(patch) => onUpdate(c.id, patch)}
-                onRemove={() => onRemove(c.id)}
-                onAddAlternative={() => onAddAlternative?.(c.id)}
-                onSelectAlternative={() => onSelectAlternative?.(c.id)}
-                onApplyToAll={() => onApplyToAll?.(c.id)}
-                kitInfo={kitInfoById?.get(c.id)}
-                onExplode={() => onExplode?.(c.id)}
-                onRecompose={(kg) => onRecompose?.(kg)}
-                dragHandleProps={dragHandleProps}
-              />
+      ) : isModular ? (
+        // Grouped-by-module: each module (a component product) under its own
+        // header with a per-module subtotal; ungrouped elements stand alone.
+        <div className="divide-y divide-ink-100">
+          {(modules || []).map((m) => (
+            <div key={m.moduleGroup || m.componentIds[0]}>
+              {m.moduleGroup ? (
+                <div className="px-3 py-1.5 bg-ink-100/60 flex items-center gap-2">
+                  <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
+                  <DebouncedInput
+                    value={m.name}
+                    onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
+                    className="input min-h-8 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
+                    placeholder="Nombre del módulo"
+                  />
+                  <span className="text-[11px] tabular-nums text-ink-500 whitespace-nowrap">
+                    {m.hasRange && m.range
+                      ? `${fmt(m.range.min)} – ${fmt(m.range.max)}`
+                      : fmt(m.subtotal)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUngroupModule?.(m.moduleGroup)}
+                    className="text-ink-400 hover:text-brand-700 p-1"
+                    title="Desagrupar este módulo"
+                  >
+                    <Split size={12} />
+                  </button>
+                </div>
+              ) : null}
+              <div className={m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}>
+                {m.componentIds.map((id) => byId.get(id)).filter(Boolean).map((c) => renderRow(c))}
+              </div>
             </div>
-          );
-        })
+          ))}
+        </div>
+      ) : (
+        <div className="divide-y divide-ink-100">
+          {components.map((c) => renderRow(c))}
+        </div>
       )}
-      <div className="px-3 py-2 bg-white flex items-center justify-end gap-1.5">
+
+      <div className="px-3 py-2 bg-white border-t border-ink-100 flex items-center justify-end gap-1.5">
         {onAddMany && (
           <button
             type="button"
             onClick={() => setMultiOpen(true)}
             className="btn-ghost text-xs"
-            title="Buscar y agregar varios elementos del catálogo de una vez, al mismo grado"
+            title={isModular
+              ? 'Buscar y agregar los elementos de un módulo (producto completo) de una vez, al mismo grado'
+              : 'Buscar y agregar varios elementos del catálogo de una vez, al mismo grado'}
           >
-            <Boxes size={12} /> Agregar varios
+            <Boxes size={12} /> {isModular ? 'Agregar módulo' : 'Agregar varios'}
           </button>
         )}
         <button
@@ -1730,7 +1798,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, kitInfo, onExplode, onRecompose, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, the range swap (a material-less sub-piece
@@ -1843,46 +1911,6 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             <GitFork size={10} className="opacity-80" aria-hidden />
             Alternativa
           </button>
-        )}
-        {/* Desglosar — split a complete modular element into its part SKUs
-            (structure + cushions) so one part can be customized; the compound
-            total absorbs the small separation gap on its own. */}
-        {kitInfo?.canExplode && onExplode && (
-          <button
-            type="button"
-            onClick={onExplode}
-            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-            title="Separar este elemento completo en sus piezas (estructura + cojines) para personalizar una pieza"
-          >
-            <Split size={10} className="opacity-80" aria-hidden />
-            Desglosar en piezas
-          </button>
-        )}
-        {/* On the first part of an exploded element: the gap vs the complete
-            element + a Recomponer action to fold the pieces back together. */}
-        {kitInfo?.isPart && kitInfo.isFirstOfGroup && (
-          <>
-            {kitInfo.deltaUsd != null && (
-              <span
-                className="chip normal-case text-ink-500 bg-ink-50 border border-ink-200"
-                title="Diferencia frente al elemento completo — separar en piezas cuesta un poco más"
-              >
-                {kitInfo.deltaUsd > 0 ? '+' : kitInfo.deltaUsd < 0 ? '−' : ''}
-                {fmt(Math.abs(kitInfo.deltaUsd))} vs completo
-              </span>
-            )}
-            {onRecompose && (
-              <button
-                type="button"
-                onClick={() => onRecompose(kitInfo.kitGroup)}
-                className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-                title="Volver a unir las piezas en el elemento completo"
-              >
-                <Combine size={10} className="opacity-80" aria-hidden />
-                Recomponer
-              </button>
-            )}
-          </>
         )}
         <div className="flex-1" />
         <button
