@@ -25,6 +25,11 @@ export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/exp
 
 // ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation
 export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
+
+// ── Ligne Roset supplier sell-through report (monthly floor sales)
+export {
+  resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
+} from './lrSales.js';
 export { buildSaleEntry, depositApplied } from '../../lib/accounting/sale.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)

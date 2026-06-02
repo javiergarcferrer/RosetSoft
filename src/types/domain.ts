@@ -178,6 +178,9 @@ export interface Settings {
   ecfCertUploadedAt?: number | null;
   /** 'dev' (TesteCF) | 'cert' (CerteCF) | 'prod' (eCF). */
   ecfEnvironment?: string;
+  /** Recipient for the monthly Ligne Roset sales report (the supplier's email).
+   *  Prefills the "send to Ligne Roset" draft; null ⇒ draft opens with no To. */
+  lrReportEmail?: string | null;
 }
 
 /**

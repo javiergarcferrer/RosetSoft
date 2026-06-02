@@ -143,6 +143,22 @@ export default function Settings() {
                 <div className="label">Dirección</div>
                 <textarea className="input min-h-[60px]" value={local.companyAddress || ''} onChange={(e) => set('companyAddress', e.target.value)} placeholder="Calle, ciudad, provincia, R.D." />
               </div>
+              <div className="col-span-2">
+                <div className="label">Correo de Ligne Roset (reporte de ventas)</div>
+                <input
+                  className="input"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={local.lrReportEmail || ''}
+                  onChange={(e) => set('lrReportEmail', e.target.value)}
+                  placeholder="ventas@ligne-roset.com"
+                />
+                <p className="text-xs text-ink-500 mt-1">Destinatario del reporte mensual de ventas de piso (Ventas → Ventas Ligne Roset).</p>
+              </div>
             </div>
           </div>
 

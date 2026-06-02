@@ -18,6 +18,7 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'ventas', label: 'Ventas', icon: FileText, tabs: [
     { to: '/accounting/facturacion', label: 'Facturación' },
     { to: '/accounting/ecf', label: 'Comprobantes e-NCF' },
+    { to: '/accounting/ligne-roset', label: 'Ventas Ligne Roset' },
     { to: '/accounting', label: 'Ventas y comisiones', end: true },
   ] },
   { key: 'gastos', label: 'Gastos', icon: Receipt, tabs: [

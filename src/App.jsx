@@ -30,6 +30,7 @@ import AccountingSettings from './pages/accounting/AccountingSettings.jsx';
 import AccountingExpenses from './pages/accounting/Expenses.jsx';
 import AccountingSuppliers from './pages/accounting/Suppliers.jsx';
 import AccountingFacturacion from './pages/accounting/Facturacion.jsx';
+import AccountingLigneRoset from './pages/accounting/LigneRosetSales.jsx';
 import AccountingCompras from './pages/accounting/Compras.jsx';
 import AccountingInventario from './pages/accounting/Inventario.jsx';
 import AccountingImportaciones from './pages/accounting/Importaciones.jsx';
@@ -244,6 +245,7 @@ function ProtectedApp() {
             <Route path="accounting/expenses" element={<AccountingExpenses />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
+            <Route path="accounting/ligne-roset" element={<AccountingLigneRoset />} />
             <Route path="accounting/compras" element={<AccountingCompras />} />
             <Route path="accounting/inventario" element={<AccountingInventario />} />
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />

@@ -22,6 +22,7 @@ const GROUPS = [
   ] },
   { title: 'Ventas y clientes', items: [
     { label: '607 — Ventas', desc: 'Comprobantes de ventas del mes', to: '/accounting/facturacion?tab=607' },
+    { label: 'Ventas Ligne Roset', desc: 'Ventas de piso del mes para el proveedor', to: '/accounting/ligne-roset' },
     { label: 'Cuentas por cobrar', desc: 'Antigüedad y estados de cuenta', to: '/accounting/cuentas' },
   ] },
   { title: 'Gastos y proveedores', items: [
