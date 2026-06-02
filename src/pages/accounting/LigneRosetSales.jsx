@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
 import { linesByQuoteId } from '../../core/quote/totals.js';
+import { quoteFloorSaleRows } from '../../core/bridge/index.js';
 import {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from '../../core/accounting/index.js';
@@ -45,12 +46,19 @@ export default function LigneRosetSales() {
   const label = monthLabel(year, monthIndex);
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
-  const linesByQuote = useMemo(() => linesByQuoteId(linesQ.data), [linesQ.data]);
+  // CRM lines → priced floor-sale rows across the bridge; the accounting report
+  // VM (resolveLrSales) only filters + aggregates these, never prices a line.
+  const floorRowsByQuote = useMemo(() => {
+    const byQuote = linesByQuoteId(linesQ.data);
+    const out = new Map();
+    for (const [quoteId, lines] of byQuote) out.set(quoteId, quoteFloorSaleRows({ lines }));
+    return out;
+  }, [linesQ.data]);
 
   const report = useMemo(() => {
     const { start, end } = monthRange(year, monthIndex);
-    return resolveLrSales({ quotes: quotesQ.data, linesByQuote, customersById, start, end });
-  }, [quotesQ.data, linesByQuote, customersById, year, monthIndex]);
+    return resolveLrSales({ quotes: quotesQ.data, floorRowsByQuote, customersById, start, end });
+  }, [quotesQ.data, floorRowsByQuote, customersById, year, monthIndex]);
 
   const recipient = settings?.lrReportEmail || '';
 

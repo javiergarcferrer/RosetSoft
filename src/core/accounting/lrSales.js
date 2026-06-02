@@ -8,9 +8,7 @@
 // product sold: each priced quote line, with a compound article rolling up to a
 // single row at its line total. Amounts are USD — the currency of the Ligne
 // Roset relationship.
-import { QUOTE_STATUS_ACCEPTED, isPricedLine } from '../../lib/constants.js';
-import { isCompoundLine, lineTotal, applyLineAdjustments } from '../../lib/pricing.js';
-import { fabricDisplay } from '../../lib/subtype.js';
+import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { round2 } from '../../lib/accounting/ledger.js';
 
 const MONTHS_ES = [
@@ -51,43 +49,39 @@ function isReportableFloorSale(q, start, end) {
 
 /**
  * ONE row per product sold across every reportable floor sale in the window.
+ * The per-line USD pricing is the bridge's job: the View hands us the already
+ * priced product rows (core/bridge:quoteFloorSaleRows) keyed by quote, so this
+ * accounting VM only applies the inclusion rule, stamps each row with the sale's
+ * date / number / customer, and aggregates — it never touches a quote's pricing
+ * Model.
  *
- * @param quotes        all team quotes.
- * @param linesByQuote  Map<quoteId, QuoteLine[]> (see core/quote/totals:linesByQuoteId).
- * @param customersById Map<customerId, Customer>.
- * @param start, end    inclusive ms window (a calendar month).
+ * @param quotes           all team quotes.
+ * @param floorRowsByQuote Map<quoteId, FloorSaleRow[]> from core/bridge:quoteFloorSaleRows.
+ * @param customersById    Map<customerId, Customer>.
+ * @param start, end       inclusive ms window (a calendar month).
  * @returns {{ rows: object[], totals: {qty, usd}, salesCount: number, lineCount: number }}
  */
-export function resolveLrSales({ quotes, linesByQuote, customersById, start, end } = {}) {
+export function resolveLrSales({ quotes, floorRowsByQuote, customersById, start, end } = {}) {
   const custById = customersById || new Map();
-  const byQuote = linesByQuote || new Map();
+  const byQuote = floorRowsByQuote || new Map();
   const rows = [];
   const saleIds = new Set();
 
   for (const q of quotes || []) {
     if (!isReportableFloorSale(q, start, end)) continue;
     const customer = q.customerId ? custById.get(q.customerId) : null;
-    const lines = (byQuote.get(q.id) || []).filter(isPricedLine);
-    for (const line of lines) {
-      const compound = isCompoundLine(line);
-      const total = lineTotal(line);
-      // A compound is one article (qty 1, priced at its rolled-up total); a
-      // normal line keeps its qty and per-unit price after line adjustments.
-      const qty = compound ? 1 : (Number(line.qty) || 0);
-      const unit = compound
-        ? total
-        : applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
+    for (const pr of byQuote.get(q.id) || []) {
       rows.push({
-        id: `${q.id}:${line.id}`,
+        id: `${q.id}:${pr.lineId}`,
         date: q.depositReceivedAt,
         quoteNumber: q.number ?? null,
         customer: customer?.name || '',
-        reference: line.reference || '',
-        product: line.name || line.family || '',
-        fabric: compound ? '' : fabricDisplay(line.subtype),
-        qty,
-        unitUsd: round2(unit),
-        totalUsd: round2(total),
+        reference: pr.reference,
+        product: pr.product,
+        fabric: pr.fabric,
+        qty: pr.qty,
+        unitUsd: pr.unitUsd,
+        totalUsd: pr.totalUsd,
       });
       saleIds.add(q.id);
     }

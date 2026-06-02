@@ -1,7 +1,7 @@
 // Quote Model — the canonical MUTATION reducer for a quote bundle.
 //
 // MVVM: this is the Model's single "apply an action" function. Both the
-// optimistic client path (PublicQuoteView, via lib/clientPick re-export) and
+// optimistic client path (PublicQuoteView) and
 // the authoritative server path (the quote-share Edge Function mirrors the same
 // semantics) resolve a pick the same way, so a recipient's choice can never be
 // applied two different ways. Pure: it takes a bundle + an action and returns a

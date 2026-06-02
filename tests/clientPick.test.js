@@ -1,10 +1,11 @@
-// Tests for src/lib/clientPick.js — the optimistic, client-side replay of a
+// Tests for applyClientPick (src/core/quote/actions.js) — the optimistic,
+// client-side replay of a
 // public-quote pick. Must mirror the quote-share Edge Function so the
 // instant preview matches the server's reconciled bundle.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClientPick } from '../src/lib/clientPick.js';
+import { applyClientPick } from '../src/core/quote/actions.js';
 
 function bundle() {
   return {

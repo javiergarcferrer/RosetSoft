@@ -9,8 +9,11 @@
 // Keeping every cross-core translation in this one module is what makes the
 // boundary auditable: to see everything that passes between sales and the
 // books, you read this file.
-import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import {
+  computeTotals, lineForTotals, isCompoundLine, lineTotal, applyLineAdjustments,
+} from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
+import { fabricDisplay } from '../../lib/subtype.js';
 import { round2 } from '../../lib/accounting/ledger.js';
 import { saleEcfType } from '../../lib/accounting/ecf.js';
 
@@ -42,6 +45,36 @@ export function quoteToSale({ quote, lines, rate, hasFiscalId }) {
     ecfType: saleEcfType(!!hasFiscalId),
     items,
   };
+}
+
+/**
+ * PROCESS — Ventas de piso: a CRM quote's priced lines → the per-product rows
+ * the Ligne Roset sell-through report books, in USD. A compound article rolls
+ * up to ONE row at its line total (qty 1); a normal line keeps its qty and
+ * per-unit price after line adjustments. Pure — the accounting LR report VM
+ * (core/accounting/lrSales:resolveLrSales) consumes these and never prices a
+ * quote line itself.
+ *
+ * @returns {Array<{ lineId, reference, product, fabric, qty, unitUsd, totalUsd }>}
+ */
+export function quoteFloorSaleRows({ lines } = {}) {
+  return (lines || []).filter(isPricedLine).map((line) => {
+    const compound = isCompoundLine(line);
+    const total = lineTotal(line);
+    const qty = compound ? 1 : (Number(line.qty) || 0);
+    const unit = compound
+      ? total
+      : applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
+    return {
+      lineId: line.id,
+      reference: line.reference || '',
+      product: line.name || line.family || '',
+      fabric: compound ? '' : fabricDisplay(line.subtype),
+      qty,
+      unitUsd: round2(unit),
+      totalUsd: round2(total),
+    };
+  });
 }
 
 // PROCESS — Comisión: the seller/professional commission owed on a CRM sale is

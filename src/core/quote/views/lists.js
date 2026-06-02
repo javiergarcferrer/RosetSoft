@@ -8,7 +8,7 @@
 // figures agree to the cent with the dashboard and the detail pages.
 import { linesByQuoteId, quoteGrandTotal } from '../totals.js';
 import { resolveTrackableContainers } from '../../tracking/index.js';
-import { SCOPE_TEAM } from '../../../components/ScopeToggle.jsx';
+import { SCOPE_TEAM } from '../../../lib/constants.js';
 import { currentQuoteStage } from '../../../lib/quoteStages.js';
 import { quoteStagePill } from '../../../lib/statusPill.js';
 

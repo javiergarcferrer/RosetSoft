@@ -24,7 +24,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyClientPick } from '../src/lib/clientPick.js';
+import { applyClientPick } from '../src/core/quote/actions.js';
 import { applyPicks, familyRootOf } from '../supabase/functions/quote-share/pick.ts';
 import { splitSkuGrade } from '../src/lib/catalog.js';
 

@@ -33,6 +33,12 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
   `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype}.test.js`.
   Don't add tests for presentational/getters/label maps — write obviously-correct
   code instead. "N/N passed" on an unrelated change is noise, not verification.
+- **Architecture is ENFORCED**: `tests/architecture.test.js` is a fitness function
+  (not a money test) — it statically scans every import and FAILS on a layering or
+  barrier breach: Model↛View, core↛View, lib↛core, CRM-core↔accounting-core,
+  accounting↛`lib/pricing`/`subtype`, and the Deno↔Vite wall. It runs in
+  `npm run test`. A red here means **re-route through the bridge / a barrel**, not
+  relax the rule (sanctioned exceptions are listed at the top of the test).
 
 ## Architecture = MVVM (Model → ViewModel → View; the View derives NOTHING)
 - **Model** — pure logic+data, no React/Supabase/pdf-lib. `src/lib/*` (pricing,

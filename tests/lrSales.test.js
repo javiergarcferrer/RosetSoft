@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import {
   resolveLrSales, lrSalesCsv, monthRange, previousMonth, monthLabel,
 } from '../src/core/accounting/lrSales.js';
+import { quoteFloorSaleRows } from '../src/core/bridge/index.js';
 
 const may = monthRange(2026, 4); // mayo 2026 → { start, end }
 const midMay = Date.parse('2026-05-15T12:00:00-04:00');
@@ -22,9 +23,15 @@ const midApril = Date.parse('2026-04-15T12:00:00-04:00');
 const customers = new Map([['c1', { id: 'c1', name: 'Cliente Uno' }]]);
 
 function run(quotes, linesByQuote) {
+  // Price each quote's lines through the bridge (the View's job), then hand the
+  // accounting VM the per-product rows it now consumes.
+  const floorRowsByQuote = new Map();
+  for (const [quoteId, lines] of Object.entries(linesByQuote || {})) {
+    floorRowsByQuote.set(quoteId, quoteFloorSaleRows({ lines }));
+  }
   return resolveLrSales({
     quotes,
-    linesByQuote: new Map(Object.entries(linesByQuote || {})),
+    floorRowsByQuote,
     customersById: customers,
     start: may.start,
     end: may.end,

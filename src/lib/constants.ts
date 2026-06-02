@@ -28,6 +28,16 @@ import type {
 export const LINE_KIND_ITEM:    LineKind = 'item';
 export const LINE_KIND_SECTION: LineKind = 'section';
 
+/* --------------------------------- quote-list scope ----------------------------- */
+
+/**
+ * Quote-list scope filter — the "Mías / Equipo" segmented toggle. Lives in the
+ * Model so the list ViewModel (core/quote/views/lists) and the ScopeToggle view
+ * compare against the SAME values without the VM importing a component.
+ */
+export const SCOPE_MINE = 'mias';
+export const SCOPE_TEAM = 'equipo';
+
 /* ---------------------------------- feature flags --------------------------------- */
 
 /**

@@ -7,8 +7,11 @@
  * known (no meId → nothing to scope to).
  */
 
-export const SCOPE_MINE = 'mias';
-export const SCOPE_TEAM = 'equipo';
+// Scope values live in the Model (lib/constants) so the list ViewModel and this
+// view share them without a VM→component import. Re-exported here to keep the
+// `import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM }` call sites unchanged.
+import { SCOPE_MINE, SCOPE_TEAM } from '../lib/constants.js';
+export { SCOPE_MINE, SCOPE_TEAM };
 
 export default function ScopeToggle({ scope, onChange }) {
   const cls = (active) =>

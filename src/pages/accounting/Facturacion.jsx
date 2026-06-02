@@ -9,12 +9,12 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
-import { computeTotals, lineForTotals } from '../../lib/pricing.js';
-import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
+import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
+import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
-  resolveAccountingConfig, round2, buildEcfPayload, saleEcfType, ecfQrUrl, formatEcfDate,
+  resolveAccountingConfig, buildEcfPayload, saleEcfType, ecfQrUrl, formatEcfDate,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -148,19 +148,14 @@ export default function Facturacion() {
     }
   }
 
-  // USD totals + DOP conversion for a quote.
+  // USD totals + DOP conversion for a quote — the CRM→accounting money
+  // translation is the bridge's job (quoteToSale); the page only supplies the
+  // locked rate and reads back the DOP figures it posts.
   function bookFor(quote) {
-    const rows = (linesByQuote.get(quote.id) || []).filter(isPricedLine).map(lineForTotals);
-    const t = computeTotals(rows, quote);
+    const lines = linesByQuote.get(quote.id) || [];
     const rate = displayRatesFor(quote, settings)?.DOP || 0;
-    return {
-      rate,
-      usdTotal: t.grandTotal,
-      base: round2(t.taxableBase * rate),
-      itbis: round2(t.taxAmt * rate),
-      total: round2(t.grandTotal * rate),
-      deposit: round2((quote.depositAmount || 0) * rate),
-    };
+    const { usdTotal, base, itbis, total, deposit } = quoteToSale({ quote, lines, rate, hasFiscalId: false });
+    return { rate, usdTotal, base, itbis, total, deposit };
   }
 
   const deliverables = useMemo(() => {
