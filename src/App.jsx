@@ -15,6 +15,7 @@ import Quotes from './pages/Quotes.jsx';
 import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
+import Comisiones from './pages/Comisiones.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
@@ -217,6 +218,8 @@ function ProtectedApp() {
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />
+            {/* Commissions — the CRM↔Accounting bridge surface (role-adaptive). */}
+            <Route path="comisiones" element={<Comisiones />} />
             {/* Legacy redirects */}
             <Route path="containers" element={<Navigate to="/orders" replace />} />
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
@@ -258,7 +261,7 @@ function ProtectedApp() {
             {/* The standalone admin commissions report folded into the
                 accounting workspace (comisiones por pagar). Redirect old
                 bookmarks there instead of 404'ing. */}
-            <Route path="admin/commissions" element={<Navigate to="/accounting" replace />} />
+            <Route path="admin/commissions" element={<Navigate to="/comisiones" replace />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

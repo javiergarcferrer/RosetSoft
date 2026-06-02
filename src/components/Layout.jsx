@@ -1,99 +1,21 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Users,
-  UserSquare2,
-  FileText,
-  Package,
-  Settings as SettingsIcon,
-  Shield,
-  Layers,
-  PackageSearch,
-  Menu,
-  X,
-} from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
 import QuickCreate from './QuickCreate.jsx';
-import { accountingSectionNav } from '../lib/accountingSections.js';
+import { navForRole } from '../lib/access.js';
 
-// Sidebar groups. The two single-item groups at the ends (Inicio and
-// Configuración) sit on their own so the visual rhythm of the nav
-// reads as: home → contacts → sales → (admin tools if applicable) →
-// settings. Configuración is admin-only (the dealer doesn't want
-// employees seeing currency rates, company info, etc.), so we slice
-// it off for non-admins below.
-const baseNavGroups = [
-  { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] },
-  {
-    label: 'Contactos',
-    items: [
-      { to: '/customers', label: 'Clientes', icon: Users },
-      { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
-    ],
-  },
-  {
-    label: 'Ventas',
-    items: [
-      { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-      { to: '/orders', label: 'Pedidos', icon: Package },
-    ],
-  },
-  { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] },
-];
-
-// Admin-only cluster — Users management + catalog/materials tools.
-// Spliced into the nav just before "Configuración" so admins read the
-// list as: work surfaces first, admin tools, then their own settings.
-// (Commissions live in the Contabilidad workspace now, reachable via the
-// admin's read-only Contabilidad link below.)
-const adminNavGroup = {
-  label: 'Administración',
-  items: [
-    { to: '/admin/users',     label: 'Usuarios',   icon: Shield },
-    { to: '/admin/materials', label: 'Materiales', icon: Layers },
-    { to: '/admin/catalog',   label: 'Catálogo',   icon: PackageSearch },
-  ],
-};
-
-// Accounting nav — QuickBooks-style: a short set of top-level SECTIONS (Resumen,
-// Ventas, Gastos y compras, Banco, Inventario, Nómina, Contabilidad, Reportes,
-// Configuración). Each section's own sub-pages render as a horizontal tab strip
-// inside the page (AccountingSubnav), so the sidebar stays short. A section
-// highlights when the route is any of its tabs (`match`). Shared by the
-// accounting-only sidebar and the admin's read-only Contabilidad group.
-const accountingNavGroups = [
-  { items: accountingSectionNav },
-];
-
-const adminAccountingNavGroup = {
-  label: 'Contabilidad',
-  items: accountingSectionNav,
-};
+// The unified, role-gated sidebar — ONE system across both cores — is defined
+// by the "limbic" access layer (lib/access.js: navForRole). The role reveals
+// its slice; admins see both cores in one place.
 
 export default function Layout() {
-  const { settings, isAdmin, isAccounting } = useApp();
-  // Three nav shapes:
-  //   • Accounting users → a single Contabilidad workspace. No sales
-  //     pages, no admin tools — this is a parallel surface.
-  //   • Admins → base groups up to "Ventas", then the admin cluster,
-  //     then the Contabilidad workspace link, then "Configuración".
-  //   • Employees → base groups minus "Configuración" — they don't
-  //     even see the route exist.
-  const navGroups = isAccounting
-    ? accountingNavGroups
-    : isAdmin
-      ? [
-          ...baseNavGroups.slice(0, -1),
-          adminNavGroup,
-          adminAccountingNavGroup,
-          baseNavGroups[baseNavGroups.length - 1],
-        ]
-      : baseNavGroups.slice(0, -1);
+  const { settings, currentProfile, isAdmin, isAccounting } = useApp();
+  const navGroups = navForRole(currentProfile?.role);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const isMobile = !useMediaQuery('(min-width: 768px)');
