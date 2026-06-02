@@ -2,14 +2,14 @@
 //
 // MVVM: the client preview (the editor "Vista cliente" pane + the public link,
 // both `ClientPreview`) AND the PDF generator render THIS one tree. It resolves
-// the CONTENT — the rate, the totals + ranges, the savings, the section →
+// the CONTENT — the rate, the totals + ranges, the section →
 // group-run structure with each run's footer DATA, and the "N de M" position
 // maps — but never presentation: footer values are numbers/ranges and footer
 // kinds are semantic (`set` / `alternative`), so each renderer formats + labels
 // + lays out for its medium (HTML vs pdf-lib). One tree ⇒ screen and paper can
 // never show different content.
 import {
-  computeTotals, computeTotalsRange, lineForTotals, quoteSavings,
+  computeTotals, computeTotalsRange, lineForTotals,
   groupBySection, groupRuns, sectionSubtotal,
   setSubtotal, setSubtotalRange, alternativeSubtotal, selectedAlternative,
   lineHasRange, lineTotalRange, alternativeGroupInfo, setGroupInfo,
@@ -72,7 +72,6 @@ export function resolveQuoteView({ quote, lines, settings, quoteGroups }) {
     totals,
     totalsRange,
     hasRange: totalsRange.max > totalsRange.min,
-    savings: quoteSavings(ls, totals),
     // "Alternativa / Conjunto N de M" position lookups, keyed by line id.
     groupInfo: alternativeGroupInfo(ls),
     setInfo: setGroupInfo(ls),

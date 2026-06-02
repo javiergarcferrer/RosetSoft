@@ -241,40 +241,6 @@ export function lineListUnit(line: QuoteLine | null | undefined): number {
   return base * (1 + margin / 100);
 }
 
-/**
- * Total cash the customer is saving on this quote across both
- * line-level discounts AND the quote-level discount. Used by the
- * "Ahorras $X en esta cotización" callout under the totals block.
- *
- *   line savings = Σ ( lineListUnit(line) − unitAfterDiscount ) × qty
- *   quote savings = totals.discountAmt + totals.courtesyDiscountAmt
- *
- * Both quote-level discounts count toward what the client perceives they
- * saved — the commission-funded `discountAmt` and the dealer-funded Friends
- * & Family `courtesyDiscountAmt` look identical on the client's bill.
- *
- * Returns a non-negative number (savings are never negative — a
- * negative margin is a markdown the customer doesn't perceive as a
- * discount and is excluded from the figure).
- */
-export function quoteSavings(
-  lines: readonly QuoteLine[] | null | undefined,
-  totals: Pick<Totals, 'discountAmt' | 'courtesyDiscountAmt'> | null | undefined,
-): number {
-  let lineSavings = 0;
-  for (const l of lines || []) {
-    if (!isPricedLine(l)) continue;
-    const discount = clampPct(l?.lineDiscountPct);
-    if (discount <= 0) continue;
-    const listUnit = lineListUnit(l);
-    const after = listUnit * (1 - discount / 100);
-    lineSavings += (listUnit - after) * lineQty(l);
-  }
-  const quoteDiscount = safeNum(totals?.discountAmt, 0) + safeNum(totals?.courtesyDiscountAmt, 0);
-  const total = lineSavings + quoteDiscount;
-  return total > 0 ? total : 0;
-}
-
 /* ------------------------------ sections ------------------------------ */
 
 /**

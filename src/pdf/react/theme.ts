@@ -170,7 +170,6 @@ export const s = StyleSheet.create({
   bandValue: { fontSize: FS.totalBig, fontWeight: 'bold', color: C.white },
   bandValueRange: { fontSize: fs(15), fontWeight: 'bold', color: C.white },
   flete: { fontSize: FS.meta, fontWeight: 'bold', color: C.emerald700, textAlign: 'right', textTransform: 'uppercase', marginTop: 10, letterSpacing: 0.5 },
-  savings: { fontSize: FS.body, fontWeight: 'bold', color: C.brand700, textAlign: 'right', marginTop: 6 },
   fx: { fontSize: FS.meta, color: C.inkMid, textAlign: 'right', marginTop: 6 },
 
   // ---- Terms ----

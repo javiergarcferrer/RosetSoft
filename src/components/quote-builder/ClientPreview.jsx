@@ -155,14 +155,14 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
     : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
-  // data, savings, the grand-total range, the "Alternativa/Conjunto N de M"
+  // data, the grand-total range, the "Alternativa/Conjunto N de M"
   // position maps). Computed by the quote Model (core/quote/views/quoteView);
   // the PDF renders the same tree. This view derives nothing itself.
   const view = useMemo(
     () => resolveQuoteView({ quote, lines, settings, quoteGroups }),
     [quote, lines, settings, quoteGroups],
   );
-  const { savings, totalsRange, hasRange, groupInfo, setInfo, sections } = view;
+  const { totalsRange, hasRange, groupInfo, setInfo, sections } = view;
   // id → line, for resolving a run's `lineIds` back to its line objects.
   const byId = useMemo(() => new Map(lines.map((l) => [l.id, l])), [lines]);
 
@@ -363,8 +363,8 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
 
       {/* Totals — the grand total is anchored in a solid ink-900 band,
           the visual climax. Sub-rows above stay right-aligned body text
-          (Descuento in brand); the savings line + FX shadow sit below the
-          band. Mirrors the redesigned PDF. */}
+          (Descuento in brand); the FX shadow sits below the band.
+          Mirrors the redesigned PDF. */}
       <div className="px-6 sm:px-10 py-7 border-t border-ink-100">
         <div className="w-full sm:ml-auto sm:max-w-sm tabular-nums">
           <div className="space-y-1.5">
@@ -404,11 +404,6 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             <Truck size={13} className="flex-shrink-0" aria-hidden />
             Flete y agenciamiento incluido
           </div>
-          {savings > 0 && (
-            <div className="mt-2 text-right text-xs font-medium text-brand-700">
-              Ahorras {fmt(savings)} en esta cotización
-            </div>
-          )}
           {dopRate && currency === 'USD' && (
             <div className="flex items-center justify-end gap-1.5 text-[11px] text-ink-500 pt-0.5">
               {settings?.rateLogoImageId && (

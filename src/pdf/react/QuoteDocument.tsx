@@ -5,7 +5,7 @@ import { formatMoney, formatDate } from '../../lib/format.js';
 import { isPricedLine } from '../../lib/constants.js';
 import {
   ITBIS_PCT, lineQty, lineTotal, lineListUnit, lineHasRange, lineTotalRange,
-  isCompoundLine, componentSubtotal, computeTotalsRange, quoteSavings,
+  isCompoundLine, componentSubtotal, computeTotalsRange,
 } from '../../lib/pricing.js';
 import { compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
 import type {
@@ -408,7 +408,6 @@ function TotalsBlock({
 }) {
   const range = computeTotalsRange(lines, quote as { marginPct?: number; discountPct?: number; courtesyDiscountPct?: number; shipping?: number });
   const hasRange = range.max > range.min;
-  const savings = quoteSavings(lines, totals);
   const dopRate = Number(rates?.DOP) || 0;
   const rateLogo = imgFor(images, 'rateLogo');
   const plain = (v: number) => `RD$ ${Math.round(v).toLocaleString('en-US')}`;
@@ -434,7 +433,6 @@ function TotalsBlock({
           : <Text style={s.bandValue}>{fmt(totals.grandTotal)}</Text>}
       </View>
       <Text style={s.flete}>Flete y agenciamiento incluido</Text>
-      {savings > 0 && <Text style={s.savings}>Ahorras {fmt(savings)} en esta cotización</Text>}
       {dopRate > 0 && currency === 'USD' && (
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 6 }}>
           {rateLogo && <Image src={rateLogo} style={{ height: 10, width: 10, objectFit: 'contain' }} />}
