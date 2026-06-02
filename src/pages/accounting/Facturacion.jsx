@@ -26,6 +26,27 @@ function ymd(ts) {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// A floor sale ("venta de piso") isn't tied to an import order — it's sold off
+// the floor, so there's no delivery cycle: the moment money changes hands (the
+// deposit) it's ready to bill.
+function isFloorSale(q) {
+  return !q.orderId;
+}
+
+// Ready to invoice = accepted, and either delivered (any order type) or — for a
+// floor sale — its deposit has been received. (Special/import orders still wait
+// for delivery.)
+function readyToInvoice(q) {
+  if (q.status !== QUOTE_STATUS_ACCEPTED) return false;
+  if (q.deliveredAt) return true;
+  return isFloorSale(q) && !!q.depositReceivedAt;
+}
+
+// The effective invoice date — delivery if known, else the deposit, else accept.
+function invoiceReadyAt(q) {
+  return q.deliveredAt || q.depositReceivedAt || q.acceptedAt || Date.now();
+}
+
 /**
  * Facturación — recognize sales at delivery, the 607 (ventas) and the monthly
  * ITBIS liquidation (IT-1). "Por facturar" lists accepted quotes already
@@ -145,8 +166,8 @@ export default function Facturacion() {
   const deliverables = useMemo(() => {
     if (!loaded) return [];
     return quotesQ.data
-      .filter((q) => q.status === QUOTE_STATUS_ACCEPTED && q.deliveredAt && !postedQuoteIds.has(q.id))
-      .sort((a, b) => (a.deliveredAt || 0) - (b.deliveredAt || 0));
+      .filter((q) => readyToInvoice(q) && !postedQuoteIds.has(q.id))
+      .sort((a, b) => invoiceReadyAt(a) - invoiceReadyAt(b));
   }, [quotesQ.data, postedQuoteIds, loaded]);
 
   const today = useMemo(() => new Date(), []);
@@ -204,7 +225,7 @@ export default function Facturacion() {
     setPosting(quote.id);
     try {
       const id = newId();
-      const postedAt = quote.deliveredAt || Date.now();
+      const postedAt = invoiceReadyAt(quote);
       const customer = quote.customerId ? customersById.get(quote.customerId) : null;
       const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
       // e-CF: 31 (crédito fiscal) when the buyer has a fiscal id, else 32
@@ -277,7 +298,7 @@ export default function Facturacion() {
       {!loaded ? <ListLoading /> : tab === 'pending' ? (
         deliverables.length === 0 ? (
           <EmptyState icon={FileText} title="Nada por facturar"
-            description="Las cotizaciones aceptadas y entregadas aparecen aquí para facturarse." />
+            description="Las ventas listas para facturar —entregadas, o de piso con depósito recibido— aparecen aquí." />
         ) : (
           <div className="space-y-3">
             {deliverables.map((q) => {
@@ -289,7 +310,9 @@ export default function Facturacion() {
                   <div className="flex flex-wrap items-center gap-3 mb-2">
                     <span className="text-xs text-ink-400 tabular-nums">#{q.number ?? '—'}</span>
                     <span className="font-medium">{customer?.name || 'Cliente'}</span>
-                    <span className="text-sm text-ink-500">Entregado {formatDate(q.deliveredAt)}</span>
+                    <span className="text-sm text-ink-500">
+                      {q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}
+                    </span>
                     <span className="ml-auto text-sm tabular-nums">{formatDop(book.total)} <span className="text-ink-400">({formatMoney(book.usdTotal, 'USD')})</span></span>
                   </div>
                   <div className="text-xs text-ink-500 mb-3 tabular-nums">

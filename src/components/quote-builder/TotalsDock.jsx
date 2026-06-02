@@ -51,17 +51,17 @@ export default function TotalsDock({
 
   const { pull: refreshRate, pulling: refreshingRate, error: rateError } = useExchangeRatePull();
 
-  // Pull today's published rate and apply it. Before accept the quote tracks the
-  // live settings rate, so refreshing settings is enough — the figure follows.
-  // On an ACCEPTED quote the rate is a frozen snapshot (quote.rates); refreshing
-  // writes the new rate straight onto THIS quote, deliberately re-pricing it at
-  // today's number (the one case where a committed figure is allowed to move,
-  // because the dealer asked for it).
+  // The OSMOTIC BARRIER. As a quote crosses from the CRM toward the books it
+  // locks: once ACCEPTED (and certainly once a deposit is received) its total is
+  // COMMITTED — the rate, discount and shipping can no longer change, or the
+  // deposit and the eventual factura/asiento would no longer match. Refresh only
+  // re-pulls the live rate for a STILL-OPEN quote (which follows it); an accepted
+  // quote never re-prices.
+  const financiallyLocked = rateLocked || !!quote.acceptedAt;
+  const depositReceived = !!quote.depositReceivedAt;
   const handleRefreshRate = async () => {
-    const next = await refreshRate();
-    if (rateLocked && next && typeof next === 'object' && next.DOP) {
-      onUpdateQuote({ rates: next });
-    }
+    if (financiallyLocked) return;
+    await refreshRate();
   };
 
   const fmt = (v) => formatMoney(v, currency, rates);
@@ -140,8 +140,13 @@ export default function TotalsDock({
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={13} className="text-ink-500" />
           <h2 className="font-semibold text-sm">Ajustes de la cotización</h2>
-          {hasAdjustment && (
+          {hasAdjustment && !financiallyLocked && (
             <span className="chip bg-amber-50 text-amber-700 border border-amber-200">Aplicado</span>
+          )}
+          {financiallyLocked && (
+            <span className="chip bg-ink-100 text-ink-600 border border-ink-200 inline-flex items-center gap-1">
+              <Lock size={10} /> {depositReceived ? 'Bloqueado · depósito recibido' : 'Bloqueado · aceptada'}
+            </span>
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 max-w-md">
@@ -151,9 +156,10 @@ export default function TotalsDock({
               type="number"
               min="0"
               max="100"
-              className="input"
+              className="input disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={financiallyLocked}
               value={quote.discountPct ?? 0}
-              onCommit={(v) => onUpdateQuote({ discountPct: clampPct(v) })}
+              onCommit={(v) => { if (financiallyLocked) return; onUpdateQuote({ discountPct: clampPct(v) }); }}
             />
           </div>
           <div>
@@ -161,9 +167,10 @@ export default function TotalsDock({
             <DebouncedInput
               type="number"
               min="0"
-              className="input"
+              className="input disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={financiallyLocked}
               value={quote.shipping ?? 0}
-              onCommit={(v) => onUpdateQuote({ shipping: Math.max(0, Number(v) || 0) })}
+              onCommit={(v) => { if (financiallyLocked) return; onUpdateQuote({ shipping: Math.max(0, Number(v) || 0) }); }}
             />
           </div>
         </div>
@@ -178,22 +185,22 @@ export default function TotalsDock({
             <button
               type="button"
               onClick={handleRefreshRate}
-              disabled={refreshingRate}
-              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-wait"
-              title={rateLocked
-                ? 'Trae la tasa USD→DOP de hoy (Banco Popular) y reprecia esta cotización con ella'
+              disabled={refreshingRate || financiallyLocked}
+              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-not-allowed"
+              title={financiallyLocked
+                ? 'La tasa quedó fija al aceptar la cotización — el total ya no puede cambiar'
                 : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
             >
-              <RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} />
-              {refreshingRate
-                ? 'Actualizando…'
-                : rateLocked ? 'Actualizar tasa de hoy' : 'Actualizar tasa'}
+              {financiallyLocked ? (
+                <><Lock size={11} /> Tasa bloqueada</>
+              ) : (
+                <><RefreshCw size={11} className={refreshingRate ? 'animate-spin' : ''} /> {refreshingRate ? 'Actualizando…' : 'Actualizar tasa'}</>
+              )}
             </button>
           </div>
-          {rateLocked && (
+          {financiallyLocked && (
             <p>
-              Al actualizar se reprecia esta cotización con la tasa de hoy. La tasa la gestiona{' '}
-              <Link to="/settings" className="underline">configuración</Link>.
+              La tasa USD→DOP quedó fija al aceptar la cotización{depositReceived ? ' y no puede cambiar tras recibir el depósito' : ''}, para que el total cuadre con la factura y los asientos.
             </p>
           )}
           {rateError && (
