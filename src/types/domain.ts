@@ -604,6 +604,16 @@ export interface LineComponent {
   swatchImageId?: string | null;
   /** Alternative-material options with price deltas (see MaterialOptions). */
   materialOptions?: MaterialOptions | null;
+  /**
+   * Element-kit bookkeeping — set on the part components produced by exploding a
+   * complete modular element (see lib/elementKits). `kitGroup` links the parts
+   * of one exploded element so "Recomponer" can collapse them back; the run
+   * carries `kitCompleteRoot` so recompose knows which complete SKU to restore.
+   * Both live on the JSONB component shape — no DB column. Absent on a plain
+   * component and on a recomposed complete element.
+   */
+  kitGroup?: string | null;
+  kitCompleteRoot?: string | null;
 }
 
 /**
