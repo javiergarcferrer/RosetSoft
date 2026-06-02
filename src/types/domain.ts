@@ -214,7 +214,11 @@ export interface Supplier {
   kind: SupplierKind;
   retainIsr?: boolean;
   retainItbis?: boolean;
-  /** Pre-fills the gasto form's expense account. */
+  /**
+   * Default posting (debit) account when recording a bill from this supplier:
+   * Inventario for merchandise (Ligne Roset…), a Costo/Gasto for services.
+   * Selectable in Proveedores; pre-fills the Gastos form (editable there).
+   */
   defaultAccountCode?: string | null;
   email?: string;
   phone?: string;

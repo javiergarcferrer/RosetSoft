@@ -10,6 +10,10 @@ import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 
 const KIND_LABEL = { fisica: 'Persona física', juridica: 'Persona jurídica', exterior: 'Exterior' };
+// Classes a purchase from a supplier can debit: Activos (Inventario for
+// merchandise like Ligne Roset), Costos, Gastos (services). Pasivos/Ingresos
+// never apply as the default posting account.
+const CLASS_LABEL = { 1: 'Activos', 5: 'Costos', 6: 'Gastos' };
 
 /**
  * Proveedores — supplier master for Gastos/Compras. Carries the RNC, tax
@@ -27,10 +31,20 @@ export default function Suppliers() {
 
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
-  const expenseAccounts = useMemo(
-    () => postableAccounts(accountsQ.data).filter((a) => classOf(a.code) === 6).sort((a, b) => a.code.localeCompare(b.code)),
-    [accountsQ.data],
-  );
+  // Default posting (debit) account for a bill from this supplier — grouped by
+  // class so asset accounts like Inventario (merchandise) are reachable, not
+  // only gastos. Restricted to Activos / Costos / Gastos.
+  const accountGroups = useMemo(() => {
+    const byClass = new Map();
+    for (const a of postableAccounts(accountsQ.data).slice().sort((a, b) => a.code.localeCompare(b.code))) {
+      const c = a.class || classOf(a.code);
+      if (!CLASS_LABEL[c]) continue;
+      if (!byClass.has(c)) byClass.set(c, []);
+      byClass.get(c).push(a);
+    }
+    return [...byClass.entries()].sort((x, y) => x[0] - y[0]).map(([c, accts]) => ({ c, label: CLASS_LABEL[c], accts }));
+  }, [accountsQ.data]);
+  const acctByCode = useMemo(() => new Map((accountsQ.data || []).map((a) => [a.code, a])), [accountsQ.data]);
 
   const [editing, setEditing] = useState(null); // null | 'new' | <id>
   const [form, setForm] = useState(blank());
@@ -131,12 +145,20 @@ export default function Suppliers() {
               <option value="exterior">Exterior</option>
             </select>
             <select value={form.defaultAccountCode} onChange={(e) => setForm((f) => ({ ...f, defaultAccountCode: e.target.value }))} className={field}>
-              <option value="">Cuenta de gasto por defecto (opcional)</option>
-              {expenseAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              <option value="">Cuenta contable por defecto (opcional)</option>
+              {accountGroups.map((g) => (
+                <optgroup key={g.c} label={g.label}>
+                  {g.accts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                </optgroup>
+              ))}
             </select>
             <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email (opcional)" className={field} />
             <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono (opcional)" className={field} />
           </div>
+          <p className="text-xs text-ink-400 mt-2">
+            Cuenta por defecto: mercancía para reventa → <b>Inventario</b> (1‑01‑005) · servicios → una cuenta de gasto.
+            Se usa al registrar la factura/gasto del proveedor; siempre puedes cambiarla en el asiento.
+          </p>
           {lookupMsg && <p className="text-sm text-ink-500 mt-2">{lookupMsg}</p>}
           <div className="flex flex-wrap items-center gap-5 mt-3">
             <label className="inline-flex items-center gap-2 text-sm">
@@ -165,6 +187,7 @@ export default function Suppliers() {
                 <th className="text-left py-2 px-3">Proveedor</th>
                 <th className="text-left py-2 px-3">RNC / Cédula</th>
                 <th className="text-left py-2 px-3">Tipo</th>
+                <th className="text-left py-2 px-3">Cuenta</th>
                 <th className="text-left py-2 px-3">Retención</th>
                 <th className="py-2 px-3"></th>
               </tr>
@@ -175,6 +198,11 @@ export default function Suppliers() {
                   <td className="py-1.5 px-3 font-medium">{s.name}</td>
                   <td className="py-1.5 px-3 tabular-nums text-ink-600">{s.rnc || '—'}</td>
                   <td className="py-1.5 px-3 text-ink-600">{KIND_LABEL[s.kind] || s.kind}</td>
+                  <td className="py-1.5 px-3 text-ink-600">
+                    {s.defaultAccountCode
+                      ? <span title={s.defaultAccountCode}>{acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode}</span>
+                      : '—'}
+                  </td>
                   <td className="py-1.5 px-3 text-ink-600">
                     {[s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'}
                   </td>
