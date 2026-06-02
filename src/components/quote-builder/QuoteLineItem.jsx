@@ -12,6 +12,7 @@ import FamilyPicker from './FamilyPicker.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
 import CatalogPicker from './CatalogPicker.jsx';
+import MultiAddPicker from './MultiAddPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { FamiliesContext } from './FamiliesContext.js';
@@ -121,6 +122,25 @@ export default function QuoteLineItem({
     const components = Array.isArray(line.components) ? [...line.components] : [];
     components.push(makeBlankComponent());
     onChange({ components });
+  }
+  // Bulk-add from the multi-add picker — each catalog seed becomes a component
+  // (priced at the chosen grade, or a price RANGE when no grade was picked).
+  // The fast path for assembling a composition from its complete elements.
+  function addComponentsFromSeeds(seeds) {
+    if (!seeds?.length) return;
+    const existing = Array.isArray(line.components) ? line.components : [];
+    const additions = seeds.map((s) => makeBlankComponent({
+      name: s.name || '',
+      reference: s.reference || '',
+      dimensions: s.dimensions || '',
+      subtype: s.subtype || '',
+      qty: 1,
+      unitPrice: s.unitPrice || 0,
+      swatchImageId: s.swatchImageId ?? null,
+      priceMin: s.priceMin ?? null,
+      priceMax: s.priceMax ?? null,
+    }));
+    onChange({ components: [...existing, ...additions] });
   }
   function updateComponent(id, patch) {
     const components = (line.components || []).map((c) =>
@@ -432,6 +452,7 @@ export default function QuoteLineItem({
           onExplode={explodeComponent}
           onRecompose={recomposeKit}
           kitInfoById={kitInfoById}
+          onAddMany={addComponentsFromSeeds}
         />
       )}
 
@@ -1589,7 +1610,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onExplode, onRecompose, kitInfoById }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onExplode, onRecompose, kitInfoById, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1598,6 +1619,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   const vmById = new Map((componentVMs || []).map((v) => [v.id, v]));
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
+  const [multiOpen, setMultiOpen] = useState(false);
 
   function onDragStart(e, id) {
     setDraggingId(id);
@@ -1677,7 +1699,17 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           );
         })
       )}
-      <div className="px-3 py-2 bg-white flex items-center justify-end">
+      <div className="px-3 py-2 bg-white flex items-center justify-end gap-1.5">
+        {onAddMany && (
+          <button
+            type="button"
+            onClick={() => setMultiOpen(true)}
+            className="btn-ghost text-xs"
+            title="Buscar y agregar varios elementos del catálogo de una vez, al mismo grado"
+          >
+            <Boxes size={12} /> Agregar varios
+          </button>
+        )}
         <button
           type="button"
           onClick={onAdd}
@@ -1687,6 +1719,13 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           <Plus size={12} /> Agregar componente
         </button>
       </div>
+      {onAddMany && (
+        <MultiAddPicker
+          open={multiOpen}
+          onClose={() => setMultiOpen(false)}
+          onAddMany={onAddMany}
+        />
+      )}
     </div>
   );
 }
