@@ -507,7 +507,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         under the transient SaveToast (z-50) so a "Guardando…" confirmation
         still reads over it. */}
     {interactive && (
-      <div className={`fixed z-40 flex justify-center px-4 print:hidden pointer-events-none ${gradePricesFor ? 'left-0 right-0 md:left-60 bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))]' : 'inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))]'}`}>
+      <div className={`fixed z-40 flex justify-center px-4 print:hidden pointer-events-none ${gradePricesFor ? 'left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))]' : 'inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))]'}`}>
         <div className="pointer-events-auto">
           <ModeToggle mode={mode} onChange={setMode} floating />
         </div>

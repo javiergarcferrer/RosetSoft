@@ -15,10 +15,13 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * width, so the running total is never out of view. Replaces the old desktop
  * right-rail + the separate mobile totals bar with one responsive control.
  *
- * Anchored bottom, offset past the static sidebar on desktop (`md:left-60`
- * mirrors the sidebar's `w-60`) and full-bleed on mobile (where the sidebar is
- * an off-canvas drawer). Its inner content lines up with the page's
- * `max-w-[1400px]` container so the figures sit under the columns above.
+ * Anchored bottom, offset past the static sidebar on desktop via the shell's
+ * `--rs-sidebar-offset` CSS variable (Layout publishes the sidebar's live width
+ * — 15rem expanded, 3rem when collapsed — so the dock tracks it instead of
+ * stranding a 15rem gap once the sidebar is hidden) and full-bleed on mobile
+ * (where the sidebar is an off-canvas drawer). Its inner content lines up with
+ * the page's `max-w-[1400px]` container so the figures sit under the columns
+ * above.
  *
  * Two states:
  *   • Collapsed bar — the grand total + live DOP conversion (USD and DOP on a
@@ -247,7 +250,7 @@ export default function TotalsDock({
   /* -------------------------------- render -------------------------------- */
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 md:left-60 z-30 print:hidden">
+    <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
       <div className="border-t border-ink-200 bg-white shadow-[0_-10px_40px_-18px_rgba(0,0,0,0.25)]">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The

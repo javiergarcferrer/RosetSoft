@@ -48,8 +48,18 @@ export default function Layout() {
     return () => { document.body.style.overflow = prev; };
   }, [navOpen, isMobile]);
 
+  // The desktop sidebar's horizontal footprint, published as a CSS variable on
+  // the shell root so position:fixed chrome rendered deep inside the page — the
+  // quote TotalsDock and the client-preview Ver/Personalizar toggle — can offset
+  // past the sidebar AND follow it when collapsed. They're DOM descendants of
+  // this div, so the variable inherits even though they're fixed. Expanded = the
+  // sidebar's w-60 (15rem); collapsed = the md:pl-12 gutter the floating
+  // show-toggle sits in (3rem). Consumed only via md:-gated utilities, so the
+  // mobile drawer layout ignores it.
+  const sidebarOffset = collapsed ? '3rem' : '15rem';
+
   return (
-    <div className="h-full flex flex-col md:flex-row">
+    <div className="h-full flex flex-col md:flex-row" style={{ '--rs-sidebar-offset': sidebarOffset }}>
       {/* Mobile topbar — extends behind the status bar on standalone iOS
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}
