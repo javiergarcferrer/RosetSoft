@@ -1248,7 +1248,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               just under the public link's scroll-container top (that surface has
               no app topbar); it tucks beneath the editor's mobile topbar, which
               is the rarely-used preview-on-phone case. */}
-          <div className="sm:hidden sticky top-2 z-[3] -mx-4 mb-2 flex items-center gap-2.5 border-b border-ink-100 bg-white/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+          <div className="sm:hidden sticky top-2 z-[3] -mx-4 mb-2 flex items-center gap-2.5 border-b border-ink-100 bg-white px-4 py-2 shadow-sm">
             {line.imageId && (
               <ImageView id={line.imageId} alt="" className="h-9 w-9 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-contain" />
             )}
@@ -1292,12 +1292,6 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                     const inModAlt = !!altGroup;
                     const modDimmed = modOptional || (inModAlt && !selected);
                     const altPos = inModAlt ? modAltInfo.get(m.moduleGroup) : null;
-                    // Collapse a module's repeated identical swatch under one
-                    // per-module hero — unless the whole compound is already
-                    // uniform (the single hero above covers every module). Edit
-                    // mode keeps per-row pickers (the hero carries zone controls).
-                    const modFabric = upholstery.uniform ? null : compoundFabric(m.components);
-                    const hideRow = upholstery.uniform || (!!modFabric?.uniform && !editing);
                     return (
                       <div
                         key={m.moduleGroup || mi}
@@ -1340,20 +1334,56 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             )}
                           </div>
                         )}
-                        {modFabric?.uniform && (
-                          <UpholsteryHero
-                            subtype={modFabric.subtype}
-                            swatchImageId={modFabric.swatchImageId}
-                            components={m.components}
-                            siblings={line.components}
-                            mf={mf}
-                            picker={picker}
-                            modelKey={line.id}
-                          />
-                        )}
-                        <ul className={`divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`}>
-                          {m.components.map((c, i) => renderComponentRow(c, i, hideRow, false))}
-                        </ul>
+                        {/* Within a module, group its pieces by material exactly
+                            as a non-modular compound does: one "Tapizado" hero for
+                            a uniform module, or a header per contiguous same-fabric
+                            run for a mixed one (e.g. ERPI seat pieces, then a CLOUD
+                            accent cushion) — so an identical swatch is never stamped
+                            on every row. Modular is read-only here (the pick happens
+                            in the editor), so the heroes are plain swatch + label
+                            (picker null) and rows always collapse beneath them. */}
+                        {(() => {
+                          const ulCls = `divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`;
+                          // Whole compound uniform → the one hero above covers every
+                          // module; just drop each row's repeated swatch.
+                          if (upholstery.uniform) {
+                            return (
+                              <ul className={ulCls}>
+                                {m.components.map((c, i) => renderComponentRow(c, i, true, false))}
+                              </ul>
+                            );
+                          }
+                          const modFabric = compoundFabric(m.components);
+                          if (modFabric.uniform) {
+                            return (
+                              <>
+                                <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} components={m.components} siblings={m.components} mf={mf} picker={null} modelKey={line.id} />
+                                <ul className={ulCls}>
+                                  {m.components.map((c, i) => renderComponentRow(c, i, true, false))}
+                                </ul>
+                              </>
+                            );
+                          }
+                          const modGrouping = groupComponentsByMaterial(m.components);
+                          if (modGrouping.grouped) {
+                            return modGrouping.runs.map((run, ri) => (
+                              <div key={run.key + ri}>
+                                {run.bearing && (
+                                  <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} components={run.components} siblings={m.components} mf={mf} picker={null} modelKey={line.id} />
+                                )}
+                                <ul className={ulCls}>
+                                  {run.components.map((c, i) => renderComponentRow(c, i, run.bearing, false))}
+                                </ul>
+                              </div>
+                            ));
+                          }
+                          // No shared fabric to hoist → plain rows with own swatch.
+                          return (
+                            <ul className={ulCls}>
+                              {m.components.map((c, i) => renderComponentRow(c, i, false, false))}
+                            </ul>
+                          );
+                        })()}
                       </div>
                     );
                   })}

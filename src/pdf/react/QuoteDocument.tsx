@@ -339,10 +339,40 @@ function ModuleBlock({
   wholeUniform?: boolean;
 }) {
   const dimmed = m.optional || (m.inAlt && !m.selected);
-  // A module whose own pieces share one fabric collapses that repeated swatch
-  // under a per-module hero (unless the whole compound is already uniform above).
-  const modFabric = wholeUniform ? null : compoundFabric(m.components);
-  const hideSwatch = wholeUniform || !!modFabric?.uniform;
+  // Group the module's pieces by material — one "Tapizado" hero for a uniform
+  // module, a header per contiguous same-fabric run for a mixed one (ERPI seat
+  // pieces, then a CLOUD accent cushion) — so an identical swatch isn't stamped
+  // on every row. Read-only; mirrors ClientPreview's module block.
+  const renderBody = () => {
+    if (wholeUniform) {
+      return <>{m.components.map((c, i) => (
+        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch />
+      ))}</>;
+    }
+    const modFabric = compoundFabric(m.components);
+    if (modFabric.uniform) {
+      return <>
+        <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} images={images} />
+        {m.components.map((c, i) => (
+          <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch />
+        ))}
+      </>;
+    }
+    const grouping = groupComponentsByMaterial(m.components);
+    if (grouping.grouped) {
+      return <>{grouping.runs.map((run, ri) => (
+        <View key={run.key + ri}>
+          {run.bearing && <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />}
+          {run.components.map((c, i) => (
+            <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={run.bearing} />
+          ))}
+        </View>
+      ))}</>;
+    }
+    return <>{m.components.map((c, i) => (
+      <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+    ))}</>;
+  };
   const caption: { text: string; color: string } | null = m.optional
     ? { text: 'Opcional · no incluido', color: C.inkMid }
     : m.inAlt
@@ -357,12 +387,7 @@ function ModuleBlock({
           {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
         </View>
       )}
-      {modFabric?.uniform && (
-        <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} images={images} />
-      )}
-      {m.components.map((c, i) => (
-        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={hideSwatch} />
-      ))}
+      {renderBody()}
     </View>
   );
 }
