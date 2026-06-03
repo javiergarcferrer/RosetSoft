@@ -2050,9 +2050,9 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             type="button"
             onClick={onMakeProduct}
             className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-            title="Convertir este componente en un producto (un producto completo que agrupa varios componentes)"
+            title="Desglosar este componente en un producto — un producto completo que agrupa varios componentes"
           >
-            <Boxes size={10} className="opacity-80" aria-hidden /> Hacer producto
+            <Boxes size={10} className="opacity-80" aria-hidden /> Desglosar
           </button>
         )}
         <div className="flex-1" />
