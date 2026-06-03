@@ -139,7 +139,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       open={open}
       onClose={onClose}
       size="lg"
-      title={sel ? `${sel.name} · elige la tela` : 'Inventario'}
+      title={sel ? `${sel.name} · elige la tela` : 'Catálogo'}
     >
       {!sel ? (
         <ModelBrowser profileId={profileId} onPick={pickFamily} />

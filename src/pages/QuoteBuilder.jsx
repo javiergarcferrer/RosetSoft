@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, PackageSearch, Share2, Plus } from 'lucide-react';
+import { Hash, AlertCircle, Share2, Plus } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -12,7 +12,7 @@ import {
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { composeSubtype } from '../lib/subtype.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
-import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
 import { DebouncedTextarea } from '../components/DebouncedInput.jsx';
 
 import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
@@ -25,6 +25,8 @@ import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
+import InventoryPicker from '../components/quote-builder/InventoryPicker.jsx';
+import AddSourceButtons from '../components/quote-builder/AddSourceButtons.jsx';
 import { useQuoteController } from '../components/quote-builder/useQuoteController.js';
 import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
 
@@ -480,6 +482,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // happens outside the app.
   const [view, setView] = useState('compose'); // 'compose' | 'client'
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
 
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
@@ -622,6 +625,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             onAddSection: hx(addSection),
             onAddLine: hx(() => addLine({})),
             onOpenCatalog: () => setCatalogOpen(true),
+            onOpenInventory: () => setInventoryOpen(true),
             // Catalog side-effect (not an undoable line edit): remember a
             // material's swatch so the next quote that picks it is pre-filled.
             // Owns the profileId source + persistence so the editor row doesn't.
@@ -662,6 +666,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         professional={professional}
         onUpdateQuote={hx(updateQuote)}
         onOpenCatalog={() => setCatalogOpen(true)}
+        onOpenInventory={() => setInventoryOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
         onShare={shareQuote}
@@ -671,6 +676,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       <CatalogPicker
         open={catalogOpen}
         onClose={() => setCatalogOpen(false)}
+        onInsert={hx((seed) => addLine(seed))}
+      />
+
+      <InventoryPicker
+        open={inventoryOpen}
+        onClose={() => setInventoryOpen(false)}
         onInsert={hx((seed) => addLine(seed))}
       />
 
@@ -686,7 +697,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 function LineItemsCard({ lines, groups, quote, focusLineId }) {
   // The header/footer add buttons use just these two; LineItemList subscribes
   // to the rest of the editor actions from context itself.
-  const { onAddSection, onAddLine, onOpenCatalog } = useQuoteActions();
+  const { onAddSection, onAddLine, onOpenCatalog, onOpenInventory } = useQuoteActions();
   return (
     <div className="card overflow-hidden">
       <header className="card-header">
@@ -700,9 +711,9 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           >
             <Hash size={12} /> Sección
           </button>
-          {/* Quiet companion to the catalog CTA — adds a BLANK line to fill by
-              hand (no picker), for when the dealer is typing from a paper price
-              list. Small, gray icon so the Inventario button stays the headline. */}
+          {/* Quiet companion to the source buttons — adds a BLANK line to fill
+              by hand (no picker), for when the dealer is typing from a paper
+              price list. */}
           <button
             type="button"
             onClick={onAddLine}
@@ -712,16 +723,9 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           >
             <Plus size={18} />
           </button>
-          {/* The catalog fills a line from a real product (ref, name, price,
-              cost, grade/fabric); the blank button beside it is the manual path. */}
-          <button
-            type="button"
-            onClick={onOpenCatalog}
-            className="btn-primary transition-all hover:shadow-md"
-            title={`Elegir un producto del inventario (${shortcutLabel('mod+enter')})`}
-          >
-            <PackageSearch size={18} /> Inventario
-          </button>
+          {/* Two separate sources, icon-only: Catálogo (Ligne Roset supplier
+              catalog) and Inventario (our stock on hand). */}
+          <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} />
         </div>
       </header>
       <LineItemList
@@ -740,9 +744,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
             <button type="button" onClick={onAddSection} className="btn-ghost text-xs">
               <Hash size={12} /> Sección
             </button>
-            <button type="button" onClick={onOpenCatalog} className="btn-secondary text-xs">
-              <PackageSearch size={16} /> Inventario
-            </button>
+            <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} />
           </div>
         </div>
       )}

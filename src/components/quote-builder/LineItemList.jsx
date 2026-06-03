@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
+import AddSourceButtons from './AddSourceButtons.jsx';
 import ImageView from '../ImageView.jsx';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
@@ -55,7 +56,7 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     onChangeLine, onRemoveLine, onDuplicateLine, onReorder,
     onToggleOptional, onAddAlternative, onSelectAlternative,
     onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
-    onAddSection, onOpenCatalog,
+    onAddSection, onOpenCatalog, onOpenInventory,
   } = useQuoteActions();
   // ViewModel — position maps ("Alternativa/Conjunto N de M") + per-section
   // subtotals, all derived by the quote Model (core/quote/views/editor); the
@@ -115,12 +116,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
         </div>
         <div className="text-sm font-medium text-ink-900">Empieza tu cotización</div>
         <div className="text-xs text-ink-500 mt-1 max-w-sm mx-auto">
-          Elige un producto del <b>inventario</b> para empezar.
+          Agrega un producto del <b>catálogo</b> o del <b>inventario</b> para empezar.
         </div>
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button type="button" onClick={onOpenCatalog} className="btn-primary">
-            <PackageSearch size={18} /> Inventario
-          </button>
+          <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} variant="cta" />
           <button type="button" onClick={onAddSection} className="btn-ghost">
             <Hash size={14} /> Sección
           </button>

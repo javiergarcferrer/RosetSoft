@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, Download, Loader2, PackageSearch, Share2,
+  SlidersHorizontal, Download, Loader2, BookOpen, Boxes, Share2,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -37,7 +37,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onOpenCatalog, onExport, exporting, onShare, sharing,
+  onOpenCatalog, onOpenInventory, onExport, exporting, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
@@ -325,14 +325,22 @@ export default function TotalsDock({
                 Ajustes moved into the drop-up panel (tap the total), which frees
                 the width here to keep USD + DOP inline on one line. */}
             <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-              {/* Inventario — phone/tablet only; the header and items card carry it
-                  on desktop. */}
+              {/* Two separate sources — phone/tablet only; the header and items
+                  card carry them on desktop. */}
               <DockAction
-                icon={PackageSearch}
-                label="Añadir"
+                icon={BookOpen}
+                label="Catálogo"
                 onClick={onOpenCatalog}
-                ariaLabel="Agregar desde inventario"
-                title="Agregar desde inventario"
+                ariaLabel="Agregar desde el catálogo Ligne Roset"
+                title="Catálogo Ligne Roset"
+                className="md:hidden"
+              />
+              <DockAction
+                icon={Boxes}
+                label="Inventario"
+                onClick={onOpenInventory}
+                ariaLabel="Agregar desde el inventario"
+                title="Inventario (existencias)"
                 className="md:hidden"
               />
 
