@@ -846,6 +846,20 @@ export interface QuoteGroup {
   updatedAt?: number;
 }
 
+/**
+ * One pinned fabric in a quote's curated material library ("Paleta del
+ * proyecto"). Mirrors the swatch picker's emit shape ({ grade, fabric,
+ * swatchImageId }) plus a stable id for keying/removal, so a pinned entry
+ * applies to a line/component through the exact same path a fresh pick does
+ * (grade reprice included). `fabric` is the composed "MATERIAL · COLOR (#code)".
+ */
+export interface QuoteMaterial {
+  id: string;
+  grade: string;
+  fabric: string;
+  swatchImageId?: string | null;
+}
+
 export interface Quote {
   id: string;
   profileId: string;
@@ -940,6 +954,10 @@ export interface Quote {
   shareToken?: string | null;
   shareEnabled?: boolean;
   clientSelections?: ClientSelections | null;
+
+  /** Curated per-quote material library — the fabrics pinned to this project,
+   *  surfaced first in the material picker. See QuoteMaterial. */
+  materialLibrary?: QuoteMaterial[] | null;
 
   createdAt?: number;
   updatedAt?: number;

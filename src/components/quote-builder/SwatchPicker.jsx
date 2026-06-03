@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import Modal from '../Modal.jsx';
+import ImageView from '../ImageView.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
-import { composeFabricLabel } from '../../lib/subtype.js';
+import { ProjectPaletteContext } from './ProjectPaletteContext.js';
+import { composeFabricLabel, composeSubtype, fabricDisplay } from '../../lib/subtype.js';
+import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
+import { swatchUrl } from '../../lib/swatchImage.js';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -38,8 +42,15 @@ import { useApp } from '../../context/AppContext.jsx';
 export default function SwatchPicker({
   open, onClose, onSelect, onSelectMany, allowMultiSelect = false,
   currentGrade, currentFabric, family = null, nameFilter: nameFilterProp,
+  showPalette = true,
 }) {
   const { profileId } = useApp();
+  // The quote's curated material library — surfaced first as quick-pick chips so
+  // a compound's components get the project's fabrics in one tap. Hidden when
+  // showPalette is false (the palette card uses this picker to BUILD the library,
+  // not apply from it).
+  const { materials: palette } = useContext(ProjectPaletteContext);
+  const paletteList = showPalette && Array.isArray(palette) ? palette : [];
   const materials = useLiveQuery(
     () => (profileId ? db.materials.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId, open],   // re-query on open so a freshly-imported catalog shows up without remounting
@@ -99,18 +110,43 @@ export default function SwatchPicker({
           and remounts on reopen — its step state (and the autoDrill guard)
           reset without an explicit key. */}
       {open && (
-        <MaterialColorPicker
-          materials={materials}
-          family={family}
-          nameFilter={nameFilter}
-          currentGrade={currentGrade}
-          currentFabric={currentFabric}
-          autoDrill
-          allowMultiSelect={allowMultiSelect}
-          onPick={commit}
-          onPickMany={commitMany}
-          onTitleChange={setTitle}
-        />
+        <>
+          {paletteList.length > 0 && (
+            <div className="mb-3 border-b border-ink-100 pb-3">
+              <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Paleta del proyecto</div>
+              <div className="flex flex-wrap gap-1.5">
+                {paletteList.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => { onSelect?.({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null }); onClose(); }}
+                    className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white py-1 pl-1 pr-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
+                    title="Aplicar esta tela"
+                  >
+                    <ImageView
+                      id={m.swatchImageId || null}
+                      fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
+                      className="h-8 w-8 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
+                    />
+                    <span className="text-xs text-ink-700">{fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <MaterialColorPicker
+            materials={materials}
+            family={family}
+            nameFilter={nameFilter}
+            currentGrade={currentGrade}
+            currentFabric={currentFabric}
+            autoDrill
+            allowMultiSelect={allowMultiSelect}
+            onPick={commit}
+            onPickMany={commitMany}
+            onTitleChange={setTitle}
+          />
+        </>
       )}
     </Modal>
   );

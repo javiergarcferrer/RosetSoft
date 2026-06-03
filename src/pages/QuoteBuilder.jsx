@@ -20,6 +20,8 @@ import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.j
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
 import { MaterialsContext } from '../components/quote-builder/MaterialsContext.js';
+import { ProjectPaletteContext } from '../components/quote-builder/ProjectPaletteContext.js';
+import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.jsx';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
@@ -264,6 +266,43 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     toggleOptional, addAlternative, selectAlternative, separateFromSet,
     toggleGroupOptional, joinSet, ungroupLine, removeLine, reorderLines,
   } = useQuoteController({ quoteId, quote, lines, groups, settings, ensurePersisted });
+
+  // Curated per-quote material library ("Paleta del proyecto") — the pinned
+  // fabrics surfaced first in every material picker. `onAdd` takes the picker's
+  // { grade, fabric, swatchImageId } emit, stamps an id and dedupes on
+  // grade+fabric; both writes go through updateQuote (persist + autosave).
+  const projectPalette = useMemo(() => {
+    const lib = Array.isArray(quote.materialLibrary) ? quote.materialLibrary : [];
+    return {
+      materials: lib,
+      onAdd: (pick) => {
+        const grade = pick?.grade || '';
+        const fabric = pick?.fabric || '';
+        if (!grade && !fabric) return;
+        if (lib.some((m) => m.grade === grade && m.fabric === fabric)) return;
+        updateQuote({ materialLibrary: [...lib, { id: newId(), grade, fabric, swatchImageId: pick?.swatchImageId ?? null }] });
+      },
+      // Append a whole multi-select batch in ONE write (dedupe within the batch
+      // and against the current library), so adding several at once doesn't
+      // clobber itself the way repeated single appends off a stale snapshot would.
+      onAddMany: (picks) => {
+        if (!Array.isArray(picks) || !picks.length) return;
+        const next = [...lib];
+        const seen = new Set(lib.map((m) => `${m.grade} ${m.fabric}`));
+        for (const p of picks) {
+          const grade = p?.grade || '';
+          const fabric = p?.fabric || '';
+          if (!grade && !fabric) continue;
+          const key = `${grade} ${fabric}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          next.push({ id: newId(), grade, fabric, swatchImageId: p?.swatchImageId ?? null });
+        }
+        if (next.length !== lib.length) updateQuote({ materialLibrary: next });
+      },
+      onRemove: (id) => updateQuote({ materialLibrary: lib.filter((m) => m.id !== id) }),
+    };
+  }, [quote.materialLibrary, updateQuote]);
 
   // Editor-side full fabric picker (the "Vista cliente" preview drives it too).
   // Derive a model's per-grade catalog price for a line — feeds the picker's
@@ -611,6 +650,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               re-plumb handlers. History-wrapping (hx) stays here at the source
               — note onToggleGroupOptional is intentionally NOT wrapped, as
               before. */}
+          <ProjectPaletteContext.Provider value={projectPalette}>
           <QuoteActionsContext.Provider value={{
             onToggleGroupOptional: toggleGroupOptional,
             onChangeLine: hx(updateLine),
@@ -645,6 +685,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               </MaterialsContext.Provider>
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>
+          <ProjectPaletteCard />
+          </ProjectPaletteContext.Provider>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
