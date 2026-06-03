@@ -625,6 +625,16 @@ export interface LineComponent {
    * JSONB component shape; no DB column. See lib/constants:isPricedComponent.
    */
   moduleOptional?: boolean;
+  /**
+   * Module-level ALTERNATIVE (pick-one among component products) — set on every
+   * element of a module, the module twin of the line-level alternativeGroup.
+   * Modules sharing `moduleAlternativeGroup` are siblings; the one whose members
+   * carry `moduleSelected` is the priced choice (see isPricedComponent). Pick-one
+   * lives at the module/line level — components themselves never carry it. Inline
+   * on the JSONB shape; no DB column.
+   */
+  moduleAlternativeGroup?: string | null;
+  moduleSelected?: boolean;
 }
 
 /**

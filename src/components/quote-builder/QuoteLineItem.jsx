@@ -21,7 +21,7 @@ import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
-import { groupComponents, ungroupModule, renameModule, setModuleOptional, isModularLine } from '../../lib/modules.js';
+import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -249,6 +249,15 @@ export default function QuoteLineItem({
   function toggleModuleOptional(moduleGroup, optional) {
     onChange({ components: setModuleOptional(line.components, moduleGroup, optional) });
   }
+  // Offer a module (component product) as a pick-one ALTERNATIVE, and select among
+  // the siblings — the module twin of the line-level alternative.
+  function addModuleAlternativeById(moduleGroup) {
+    const next = addModuleAlternative(line.components, moduleGroup, newId);
+    if (next) onChange({ components: next });
+  }
+  function selectModuleAlternativeById(moduleGroup) {
+    onChange({ components: selectModuleAlternative(line.components, moduleGroup) });
+  }
   function convertToCompound() {
     // Promote the current line's own ref/subtype/dimensions/description/
     // qty/unitPrice into the first component, then clear those columns
@@ -425,6 +434,8 @@ export default function QuoteLineItem({
           onUngroupModule={ungroupModuleById}
           onRenameModule={renameModuleById}
           onToggleModuleOptional={toggleModuleOptional}
+          onAddModuleAlternative={addModuleAlternativeById}
+          onSelectModuleAlternative={selectModuleAlternativeById}
           onAddMany={addComponentsFromSeeds}
         />
       )}
@@ -1583,7 +1594,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1734,17 +1745,36 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         // header with a per-module subtotal; ungrouped elements stand alone.
         <div className="divide-y divide-ink-100">
           {(modules || []).map((m) => (
-            <div key={m.moduleGroup || m.componentIds[0]} className={m.optional ? 'bg-ink-50/40' : ''}>
+            <div key={m.moduleGroup || m.componentIds[0]} className={(m.optional || (m.altGroup && !m.selected)) ? 'bg-ink-50/40' : ''}>
               {m.moduleGroup ? (
                 <div className="px-3 py-1.5 bg-ink-100/60 flex items-center gap-2 flex-wrap">
-                  <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
+                  {m.altGroup ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectModuleAlternative?.(m.moduleGroup)}
+                      aria-pressed={m.selected}
+                      title={m.selected ? 'Módulo seleccionado' : 'Seleccionar este módulo'}
+                      className="inline-flex items-center gap-1.5 flex-shrink-0"
+                    >
+                      <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                        m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+                      }`}>
+                        {m.selected && <Check size={9} strokeWidth={3} aria-hidden />}
+                      </span>
+                      <span className="eyebrow-xs tracking-wide font-semibold text-brand-700 select-none whitespace-nowrap">
+                        Alternativa {m.altIndex ?? '?'}/{m.altTotal ?? '?'}
+                      </span>
+                    </button>
+                  ) : (
+                    <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
+                  )}
                   <DebouncedInput
                     value={m.name}
                     onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
                     className="input min-h-8 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
                     placeholder="Nombre del módulo"
                   />
-                  {onToggleModuleOptional && (
+                  {onToggleModuleOptional && !m.altGroup && (
                     <button
                       type="button"
                       onClick={() => onToggleModuleOptional(m.moduleGroup, !m.optional)}
@@ -1761,11 +1791,24 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                       <Sparkles size={10} className="opacity-70" aria-hidden /> Opcional
                     </button>
                   )}
+                  {onAddModuleAlternative && !m.optional && (
+                    <button
+                      type="button"
+                      onClick={() => onAddModuleAlternative(m.moduleGroup)}
+                      className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400"
+                      title={m.altGroup
+                        ? 'Agregar otra alternativa de este módulo'
+                        : 'Ofrecer este módulo como alternativa — el cliente elige uno'}
+                    >
+                      <GitFork size={10} className="opacity-80" aria-hidden /> Alternativa
+                    </button>
+                  )}
                   <span className="text-[11px] tabular-nums text-ink-500 whitespace-nowrap">
                     {m.hasRange && m.range
                       ? `${fmt(m.range.min)} – ${fmt(m.range.max)}`
                       : fmt(m.subtotal)}
                     {m.optional && <span className="ml-1 text-ink-400">· no incluido</span>}
+                    {m.altGroup && !m.selected && <span className="ml-1 text-ink-400">· no elegido</span>}
                   </span>
                   <button
                     type="button"
@@ -1777,7 +1820,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                   </button>
                 </div>
               ) : null}
-              <div className={`${m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}${m.optional ? ' opacity-60' : ''}`}>
+              <div className={`${m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}${(m.optional || (m.altGroup && !m.selected)) ? ' opacity-60' : ''}`}>
                 {m.componentIds.map((id) => byId.get(id)).filter(Boolean).map((c) => renderRow(c))}
               </div>
             </div>

@@ -174,3 +174,66 @@ export function setModuleOptional(
     c.moduleGroup === moduleGroup ? { ...c, moduleOptional: !!optional } : c,
   );
 }
+
+/**
+ * Make a module a pick-one ALTERNATIVE — put it in a `moduleAlternativeGroup`
+ * (selecting it if new) and append a COPY of it as a second, non-selected
+ * sibling module the dealer then edits. The module twin of a line's "add
+ * alternative". Returns a NEW array, or null when the group is empty.
+ */
+export function addModuleAlternative(
+  components: readonly LineComponent[] | null | undefined,
+  moduleGroup: string | null | undefined,
+  newId: IdFactory,
+): LineComponent[] | null {
+  const list = (components || []).filter(Boolean) as LineComponent[];
+  if (!moduleGroup) return null;
+  const members = list.filter((c) => c.moduleGroup === moduleGroup);
+  if (members.length === 0) return null;
+  const altGroup = members[0].moduleAlternativeGroup || newId();
+  const dupGroup = newId();
+  const dups = members.map((c) => ({
+    ...c,
+    id: newId(),
+    moduleGroup: dupGroup,
+    moduleAlternativeGroup: altGroup,
+    moduleSelected: false,
+  }));
+  // Index of the source module's LAST element, so the copy lands right after it.
+  let lastIdx = -1;
+  list.forEach((c, i) => { if (c.moduleGroup === moduleGroup) lastIdx = i; });
+  const out: LineComponent[] = [];
+  list.forEach((c, i) => {
+    out.push(
+      c.moduleGroup === moduleGroup
+        ? {
+            ...c,
+            moduleAlternativeGroup: altGroup,
+            // First time grouping → this module becomes the selected option.
+            moduleSelected: c.moduleAlternativeGroup ? !!c.moduleSelected : true,
+          }
+        : c,
+    );
+    if (i === lastIdx) out.push(...dups);
+  });
+  return out;
+}
+
+/**
+ * Select a module within its alternative group — set `moduleSelected` on its
+ * elements, clear it on the sibling modules. Returns a NEW array.
+ */
+export function selectModuleAlternative(
+  components: readonly LineComponent[] | null | undefined,
+  moduleGroup: string | null | undefined,
+): LineComponent[] {
+  const list = (components || []).filter(Boolean) as LineComponent[];
+  const target = list.find((c) => c.moduleGroup === moduleGroup);
+  const altGroup = target?.moduleAlternativeGroup;
+  if (!altGroup) return list;
+  return list.map((c) =>
+    c.moduleAlternativeGroup === altGroup
+      ? { ...c, moduleSelected: c.moduleGroup === moduleGroup }
+      : c,
+  );
+}
