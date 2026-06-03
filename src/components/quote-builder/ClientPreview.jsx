@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, SlidersHorizontal, Eye } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
@@ -114,6 +114,44 @@ function ModeToggle({ mode, onChange, floating }) {
 // link both margin fields are zeroed (margin already baked) so the factor is 1.
 function marginFactor(quoteMarginPct, lineMarginPct) {
   return (1 + (Number(quoteMarginPct) || 0) / 100) * (1 + (Number(lineMarginPct) || 0) / 100);
+}
+
+// Module-level optional / alternative flags live on the module's components (the
+// whole component-product opts in/out, or is one pick-one sibling). modulesOf
+// already grouped them, so we read the flags off the first element — the twin of
+// how a line carries isOptional / alternativeGroup. moduleSelected defaults true
+// for an alternative member that hasn't been flagged, so a single-option group
+// never reads as "not chosen".
+function moduleFlags(module) {
+  const c = module?.components?.[0] || {};
+  const altGroup = c.moduleAlternativeGroup || null;
+  return {
+    optional: !!c.moduleOptional,
+    altGroup,
+    selected: altGroup ? !!c.moduleSelected : true,
+  };
+}
+
+// "Alternativa N de M" positions for a modular's MODULE alternatives, keyed by
+// moduleGroup — the module twin of componentAlternativeGroupInfo (which keys by
+// component id). Counts the modules sharing each moduleAlternativeGroup and
+// numbers them in first-appearance order.
+function moduleAlternativeInfo(modules) {
+  const counts = new Map();
+  for (const m of modules) {
+    const g = moduleFlags(m).altGroup;
+    if (g) counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map();
+  const map = new Map();
+  for (const m of modules) {
+    const g = moduleFlags(m).altGroup;
+    if (!g || !m.moduleGroup) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(m.moduleGroup, { index: idx, total: counts.get(g) });
+  }
+  return map;
 }
 
 export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
@@ -321,25 +359,47 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                       footerLabel={isSet ? 'Total del conjunto' : 'Total'}
                       footerValue={footerValueLabel}
                     >
-                      {members.map((l) => (
-                        <ClientLine
-                          key={l.id}
-                          line={l}
+                      {isSet ? (
+                        // Conjunto members are full product lines that often
+                        // share a fabric — collapse repeated swatches under one
+                        // shared material header (read-only). Alternatives keep
+                        // their own per-row swatch (each option is distinct).
+                        <SetMemberList
+                          members={members}
                           quoteMarginPct={quote.marginPct}
                           currency={currency}
                           rates={rates}
                           fmt={fmt}
                           families={families}
-                          groupInfo={groupInfo.get(l.id)}
-                          setInfo={isSet ? setInfo.get(l.id) : undefined}
-                          insideGroupCard
+                          groupInfo={groupInfo}
+                          setInfo={setInfo}
                           materialSelections={materialSelections}
                           picker={picker}
                           onSelectMaterial={selectMaterialIf}
                           onToggleOptional={toggleOptionalIf}
                           onSelectAlternative={selectAlternativeIf}
                         />
-                      ))}
+                      ) : (
+                        members.map((l) => (
+                          <ClientLine
+                            key={l.id}
+                            line={l}
+                            quoteMarginPct={quote.marginPct}
+                            currency={currency}
+                            rates={rates}
+                            fmt={fmt}
+                            families={families}
+                            groupInfo={groupInfo.get(l.id)}
+                            setInfo={undefined}
+                            insideGroupCard
+                            materialSelections={materialSelections}
+                            picker={picker}
+                            onSelectMaterial={selectMaterialIf}
+                            onToggleOptional={toggleOptionalIf}
+                            onSelectAlternative={selectAlternativeIf}
+                          />
+                        ))
+                      )}
                     </ClientGroupCard>
                   );
                 })}
@@ -633,7 +693,7 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
   );
 }
 
-function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, insideGroupCard, hideSwatch, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
   // A set member may itself be a Compuesto — the group card just nests the
   // compound row cleanly. When the row lives inside a group card the card
   // owns the accent + eyebrow + footer, so the row suppresses its own group
@@ -775,6 +835,7 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
           currency={currency}
           rates={rates}
           fmt={fmt}
+          hideSwatch={hideSwatch}
           materialSelections={materialSelections}
           picker={picker}
           onSelectMaterial={onSelectMaterial}
@@ -1211,22 +1272,74 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
           {modular ? (
             // Modular → group by module (component product): each module under
             // its own header with a per-module subtotal; ungrouped elements
-            // stand alone. One image for the whole modular, above.
-            <div className="mt-2 border-t border-ink-100">
-              {modulesOf(line.components).map((m, mi) => (
-                <div key={m.moduleGroup || mi}>
-                  {m.moduleGroup && (
-                    <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
-                      <span className="text-xs tabular-nums text-ink-500">{fmt(moduleSubtotal(m.components) * mf)}</span>
-                    </div>
-                  )}
-                  <ul className={`divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`}>
-                    {m.components.map((c, i) => renderComponentRow(c, i, false, false))}
-                  </ul>
+            // stand alone. One image for the whole modular, above. A module may
+            // itself be OPTIONAL (an opt-in add-on, excluded from the total) or
+            // one of a pick-one ALTERNATIVE set — rendered with the SAME dim +
+            // caption language a line-level optional / alternative uses, so the
+            // whole-module treatment reads consistently with the per-line one.
+            // Read-only: the modules show which alternative is chosen; the actual
+            // pick happens in the editor / via the share function, not here.
+            (() => {
+              const modules = modulesOf(line.components);
+              const modAltInfo = moduleAlternativeInfo(modules);
+              return (
+                <div className="mt-2 border-t border-ink-100">
+                  {modules.map((m, mi) => {
+                    const { optional: modOptional, altGroup, selected } = moduleFlags(m);
+                    const inModAlt = !!altGroup;
+                    const modDimmed = modOptional || (inModAlt && !selected);
+                    const altPos = inModAlt ? modAltInfo.get(m.moduleGroup) : null;
+                    return (
+                      <div
+                        key={m.moduleGroup || mi}
+                        className={`${modDimmed ? 'relative' : ''} ${
+                          // Mirror the row accents: dashed-ink for an optional
+                          // module, solid-brand for an alternative one.
+                          modOptional
+                            ? 'border-l-2 border-dashed border-ink-300 pl-2'
+                            : inModAlt
+                            ? 'border-l-2 border-solid border-brand-300 pl-2'
+                            : ''
+                        }`}
+                      >
+                        {/* Same white veil a dimmed row uses — the module reads
+                            as present-but-excluded. Captions/headers sit above it. */}
+                        {modDimmed && (
+                          <div className="pointer-events-none absolute inset-0 z-[1] bg-white/45" aria-hidden />
+                        )}
+                        {(modOptional || inModAlt) && (
+                          <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-widest">
+                            {modOptional && (
+                              <span className="text-ink-500">Opcional · no incluido</span>
+                            )}
+                            {inModAlt && (
+                              <span className="text-brand-700 font-semibold">
+                                Alternativa {altPos?.index ?? '?'} de {altPos?.total ?? '?'}
+                                {selected && <span className="ml-1.5 text-emerald-700 normal-case font-medium">· seleccionada</span>}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {m.moduleGroup && (
+                          <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
+                            {/* An excluded module (optional / non-selected) adds
+                                nothing to the total, so it asserts no price — the
+                                same reason an optional line is struck from the sum. */}
+                            {!modDimmed && (
+                              <span className="text-xs tabular-nums text-ink-500">{fmt(moduleSubtotal(m.components) * mf)}</span>
+                            )}
+                          </div>
+                        )}
+                        <ul className={`divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`}>
+                          {m.components.map((c, i) => renderComponentRow(c, i, false, false))}
+                        </ul>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()
           ) : grouping.grouped ? (
             // Mixed compound → a material header per contiguous run. The header
             // carries the zone's bulk controls (clear / re-dress / apply-to-all).
@@ -1356,6 +1469,94 @@ function CompoundComponentRow({ component, marginFactor: mf, currency, rates, fm
       {offered && <OptionalAction included={included} onToggle={(on) => onToggleOptional(component.id, on)} />}
     </li>
   );
+}
+
+// Conjunto member list — the rows inside a set's group card. A Conjunto often
+// gathers several full PRODUCT lines that wear the SAME fabric (e.g. a sofa +
+// loveseat + armchair all in one CRAQUELIN), which would otherwise stamp the
+// identical swatch on every member's row. So this collapses a contiguous run of
+// 2+ same-material members the way a compound collapses its pieces: ONE shared
+// "Tapizado · <fabric>" header (the read-only UpholsteryHero — picker withheld,
+// since set members are independent lines, not components in one onPickMany
+// map) above a clean name/price list, with each member's own swatch hidden.
+//
+// The partition reuses groupComponentsByMaterial (members carry subtype +
+// swatchImageId, so the helper works on them as-is) for the mixed case, plus
+// compoundFabric for the all-uniform case — exactly the two Model rules a mixed
+// vs. uniform compound uses, so a set and a compound collapse identically. Any
+// run of a single member, a non-bearing member (a glass top), or a member that
+// is itself a Compuesto (its fabric lives on its own components) renders exactly
+// as before — only redundant 2+ runs collapse. Selection/optional dimming + the
+// "Conjunto N de M" eyebrow stay on each member row regardless.
+function SetMemberList({ members, quoteMarginPct, currency, rates, fmt, families, groupInfo, setInfo, materialSelections, picker, onSelectMaterial, onToggleOptional, onSelectAlternative }) {
+  // One member row, rendered identically whether or not its run collapsed —
+  // only `hideSwatch` (drop the per-row swatch the shared header now carries)
+  // differs. The member keeps its own setInfo eyebrow, alternative radio, etc.
+  const row = (l, hideSwatch) => (
+    <ClientLine
+      key={l.id}
+      line={l}
+      quoteMarginPct={quoteMarginPct}
+      currency={currency}
+      rates={rates}
+      fmt={fmt}
+      families={families}
+      groupInfo={groupInfo.get(l.id)}
+      setInfo={setInfo.get(l.id)}
+      insideGroupCard
+      hideSwatch={hideSwatch}
+      materialSelections={materialSelections}
+      picker={picker}
+      onSelectMaterial={onSelectMaterial}
+      onToggleOptional={onToggleOptional}
+      onSelectAlternative={onSelectAlternative}
+    />
+  );
+  // ONE shared, read-only material header for a collapsed run — wrapped in an
+  // <li> so it sits naturally in the card's member <ul> alongside the rows.
+  const header = (subtype, swatchImageId, key) => (
+    <li key={`tap-${key}`} className="px-4 sm:px-5 pt-3 list-none">
+      <UpholsteryHero subtype={subtype} swatchImageId={swatchImageId} picker={null} />
+    </li>
+  );
+
+  // Uniform run (every bearing member shares one fabric) → a single hero, the
+  // compound's uniform case. compoundFabric ignores non-bearing members, so a
+  // set mixing upholstered seats with a glass side table still collapses.
+  const uniform = compoundFabric(members);
+  if (uniform.uniform && members.length >= 2) {
+    return (
+      <>
+        {header(uniform.subtype, uniform.swatchImageId, 'all')}
+        {members.map((l) => row(l, true))}
+      </>
+    );
+  }
+
+  // Mixed → per-run headers. groupComponentsByMaterial only reports grouped
+  // when 2+ DISTINCT materials are present; otherwise we fall straight through
+  // to the flat list (rendered exactly as before).
+  const grouping = groupComponentsByMaterial(members);
+  if (grouping.grouped) {
+    return (
+      <>
+        {grouping.runs.map((run, ri) => {
+          // Collapse only a run of 2+ matching, fabric-bearing members; a lone
+          // member (or a non-bearing run) renders with its own swatch as today.
+          const collapse = run.bearing && run.components.length >= 2;
+          return (
+            <Fragment key={run.key + ri}>
+              {collapse && header(run.subtype, run.swatchImageId, run.key + ri)}
+              {run.components.map((l) => row(l, collapse))}
+            </Fragment>
+          );
+        })}
+      </>
+    );
+  }
+
+  // Single material (or none) and/or fewer than 2 members → render as today.
+  return <>{members.map((l) => row(l, false))}</>;
 }
 
 // Container card wrapping a contiguous group run (Conjunto or Alternativa)

@@ -173,11 +173,22 @@ export default function QuoteLineItem({
     const src = comps.find((c) => c.id === sourceId);
     if (!src) return;
     const { grade, fabric } = parseSubtype(src.subtype);
+    applyMaterialToAllComponents({ grade, fabric, swatchImageId: src.swatchImageId ?? null });
+  }
+  // "Apply a CHOSEN material to all components" — the header twin of
+  // applyComponentMaterialToAll, fed by the composition-header SwatchPicker
+  // instead of a source component. Stamps the picked grade + fabric (subtype)
+  // and swatch onto EVERY component, repricing a material-less RANGE piece
+  // against ITS OWN model at the grade (and dropping its range) exactly as
+  // GradeFabricRow.commit does for a single pick — so a component is never left
+  // both ranged AND priced, and the compound subtotal re-sums correctly.
+  function applyMaterialToAllComponents({ grade, fabric, swatchImageId }) {
+    const comps = Array.isArray(line.components) ? line.components : [];
+    if (!comps.length) return;
     const subtype = composeSubtype(grade, fabric);
-    const swatchImageId = src.swatchImageId ?? null;
+    const swatch = swatchImageId ?? null;
     const components = comps.map((c) => {
-      if (c.id === sourceId) return c;
-      const patch = { subtype, swatchImageId };
+      const patch = { subtype, swatchImageId: swatch };
       if ((c.priceMin != null || c.priceMax != null) && grade) {
         const fam = families?.get(splitSkuGrade(c.reference).root) || null;
         const p = fam ? productForGrade(fam, grade) : null;
@@ -427,6 +438,7 @@ export default function QuoteLineItem({
           onAddAlternative={addComponentAlternative}
           onSelectAlternative={selectComponentAlternative}
           onApplyToAll={applyComponentMaterialToAll}
+          onApplyMaterialToAll={applyMaterialToAllComponents}
           isModular={isModular}
           modules={vm.modules}
           onSetModular={setModular}
@@ -1594,7 +1606,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onApplyMaterialToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1604,6 +1616,9 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [multiOpen, setMultiOpen] = useState(false);
+  // "Aplicar material a todo" picker on the composition header — opens the
+  // SwatchPicker, and the chosen material is stamped onto every component.
+  const [applyAllOpen, setApplyAllOpen] = useState(false);
   // Selection for manual "Agrupar en módulo" — only used on a modular line.
   const [selected, setSelected] = useState(() => new Set());
   function toggleSelected(id) {
@@ -1734,6 +1749,22 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             <Combine size={12} /> Agrupar {selected.size} en módulo
           </button>
         )}
+        <div className="flex-1" />
+        {/* Top-level "apply material to all" — one pick stamps the chosen grade +
+            fabric + swatch onto EVERY component (repricing material-less pieces
+            against their own model). The per-component "Aplicar tela a todos"
+            shortcut still copies one piece's material; this header control sets a
+            fresh material for the whole product in one step. */}
+        {onApplyMaterialToAll && components.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setApplyAllOpen(true)}
+            className="btn-ghost text-xs"
+            title="Elegir una tela y aplicarla a todos los componentes de este producto"
+          >
+            <Palette size={12} /> Aplicar material a todo
+          </button>
+        )}
       </div>
 
       {components.length === 0 ? (
@@ -1859,6 +1890,17 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           open={multiOpen}
           onClose={() => setMultiOpen(false)}
           onAddMany={onAddMany}
+        />
+      )}
+      {/* Composition-header material picker. Honors the product line's offered-
+          fabric allowlist (nameFilter); on select, the chosen grade/fabric/swatch
+          is applied to every component via onApplyMaterialToAll. */}
+      {onApplyMaterialToAll && (
+        <SwatchPicker
+          open={applyAllOpen}
+          onClose={() => setApplyAllOpen(false)}
+          onSelect={(picked) => onApplyMaterialToAll(picked)}
+          nameFilter={nameFilter}
         />
       )}
     </div>

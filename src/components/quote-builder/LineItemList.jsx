@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil } from 'lucide-react';
+import { useContext, useState } from 'react';
+import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil, Palette } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import AddSourceButtons from './AddSourceButtons.jsx';
+import SwatchPicker from './SwatchPicker.jsx';
 import ImageView from '../ImageView.jsx';
+import { FamiliesContext } from './FamiliesContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
@@ -13,6 +15,8 @@ import {
 } from '../../lib/pricing.js';
 import { resolveLineList } from '../../core/quote/views/editor.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
+import { composeSubtype } from '../../lib/subtype.js';
+import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -66,6 +70,55 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   const currency = quote?.currencyCode || 'USD';
   const rates = quote?.rates || { USD: 1 };
   const byId = new Map(lines.map((l) => [l.id, l]));
+  // Catalog families (keyed by SKU root) — used by applyMaterialToSet to reprice
+  // a material-less RANGE member against its own model at the chosen grade,
+  // exactly as a single line's GradeFabricRow.commit does. Consumed via context
+  // (the same escape hatch QuoteLineItem uses) so we don't thread it as a prop.
+  const families = useContext(FamiliesContext);
+
+  // "Aplicar material a todo" on a Conjunto header — stamp the chosen grade +
+  // fabric (subtype) and swatch onto EVERY member line of the set, and reprice a
+  // material-less RANGE member against its own model at the grade (dropping its
+  // range) so a member is never left both ranged AND priced and the set total
+  // re-sums correctly. A compound member carries no line-level material, so the
+  // pick is propagated into its components (mirroring applyMaterialToAllComponents)
+  // rather than written on the parent. Each member is written through the
+  // existing onChangeLine action, so the writes join undo/redo + autosave.
+  function applyMaterialToSet(groupId, picked) {
+    if (!groupId || !picked) return;
+    const { grade, fabric, swatchImageId } = picked;
+    const subtype = composeSubtype(grade, fabric);
+    const swatch = swatchImageId ?? null;
+    const members = lines.filter((l) => l.setGroup === groupId && l.kind !== LINE_KIND_SECTION);
+    for (const m of members) {
+      if (isCompoundLine(m)) {
+        // Apply to every component of a compound member (its own material lives
+        // per-component, not on the parent line).
+        const components = (m.components || []).map((c) => {
+          const patch = { subtype, swatchImageId: swatch };
+          if ((c.priceMin != null || c.priceMax != null) && grade) {
+            const fam = families?.get(splitSkuGrade(c.reference).root) || null;
+            const p = fam ? productForGrade(fam, grade) : null;
+            if (p) patch.unitPrice = Number(p.priceUsd) || 0;
+            patch.priceMin = null;
+            patch.priceMax = null;
+          }
+          return { ...c, ...patch };
+        });
+        onChangeLine(m.id, { components });
+        continue;
+      }
+      const patch = { subtype, swatchImageId: swatch };
+      if ((m.priceMin != null || m.priceMax != null) && grade) {
+        const fam = families?.get(splitSkuGrade(m.reference).root) || null;
+        const p = fam ? productForGrade(fam, grade) : null;
+        if (p) patch.unitPrice = Number(p.priceUsd) || 0;
+        patch.priceMin = null;
+        patch.priceMax = null;
+      }
+      onChangeLine(m.id, patch);
+    }
+  }
 
   // -------- drag-reorder --------
   const [draggingId, setDraggingId] = useState(null);
@@ -281,6 +334,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
         onToggleOptional={
           isSet && onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId) : undefined
         }
+        // Conjunto only: apply one chosen material to every member line. An
+        // Alternativa is a pick-one of distinct options, so a bulk material set
+        // wouldn't make sense there.
+        onApplyMaterial={isSet ? (picked) => applyMaterialToSet(run.groupId, picked) : undefined}
         footerLabel={isSet ? 'Total del conjunto' : 'Total'}
         footerValue={footerValueLabel}
       >
@@ -379,8 +436,10 @@ function SetConnector({ onJoin }) {
  * alternative (brand). The card owns the border + footer so the member rows
  * inside don't re-draw their own.
  */
-function GroupCard({ type, accent, memberCount, optional, onToggleOptional, footerLabel, footerValue, children }) {
+function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onApplyMaterial, footerLabel, footerValue, children }) {
   const isSet = type === 'set';
+  // "Aplicar material a todo" picker for a Conjunto header (set only).
+  const [materialOpen, setMaterialOpen] = useState(false);
   // Tailwind needs literal class names — branch rather than interpolate.
   const ring = isSet ? 'border-ink-300' : 'border-brand-300';
   const headBg = isSet ? 'bg-ink-50' : 'bg-brand-50/50';
@@ -400,6 +459,20 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, foot
             {eyebrow}
           </span>
           <span className="inline-flex items-center gap-2">
+            {/* Top-level "apply material to all" — one pick stamps the chosen
+                grade + fabric + swatch onto every member line of the Conjunto
+                (repricing material-less members against their own model). */}
+            {onApplyMaterial && (
+              <button
+                type="button"
+                onClick={() => setMaterialOpen(true)}
+                className="chip font-medium text-ink-400 border border-dashed border-ink-200 hover:text-ink-700 hover:border-ink-400"
+                title="Elegir una tela y aplicarla a todas las piezas del conjunto"
+              >
+                <Palette size={10} className="opacity-70" aria-hidden />
+                Aplicar material a todo
+              </button>
+            )}
             <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
               {memberCount} {isSet ? 'piezas' : 'opciones'}
             </span>
@@ -437,6 +510,16 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, foot
           </span>
         </div>
       </div>
+      {/* Conjunto material picker. A set mixes models, so there's no single
+          offered-fabric allowlist to honor here (nameFilter omitted); the pick
+          is applied to every member via onApplyMaterial. */}
+      {onApplyMaterial && (
+        <SwatchPicker
+          open={materialOpen}
+          onClose={() => setMaterialOpen(false)}
+          onSelect={(picked) => onApplyMaterial(picked)}
+        />
+      )}
     </div>
   );
 }

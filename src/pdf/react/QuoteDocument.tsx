@@ -9,6 +9,7 @@ import {
 } from '../../lib/pricing.js';
 import { compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
 import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
+import type { Module } from '../../lib/modules.ts';
 import type {
   Quote, QuoteLine, LineComponent, Customer, Professional, Profile, Settings, Totals,
   CurrencyCode, QuoteGroup,
@@ -130,10 +131,13 @@ function MoneyCell({ line, fmt }: { line: QuoteLine; fmt: Fmt }) {
 
 // ---- one product line --------------------------------------------------
 function LineRow({
-  line, view, fmt, inZone, families, currency, rates, images,
+  line, view, fmt, inZone, families, currency, rates, images, hideSwatch,
 }: {
   line: QuoteLine; view: View0; fmt: Fmt; inZone: boolean;
   families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
+  // A set member whose run shares ONE material → its standalone swatch is
+  // collapsed into the run's material header (the run names the fabric once).
+  hideSwatch?: boolean;
 }) {
   const optional = !!line.isOptional;
   const inGroup = !!line.alternativeGroup;
@@ -163,7 +167,7 @@ function LineRow({
   // subtype the editor hides — never draw it; its fabric is the hero (uniform)
   // or each piece's own swatch (mixed). Mirrors ClientPreview.
   const swatchSrc = swatchSrcFor(line.swatchImageId, line.subtype);
-  const showSwatch = !compound && !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
+  const showSwatch = !hideSwatch && !compound && !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
 
   const caption: { text: string; color: string } | null = (() => {
     if (optional && !inGroup && !inSet) return { text: 'Opcional · no incluido en el total', color: C.inkMid };
@@ -183,7 +187,7 @@ function LineRow({
           {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
           {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
           <Text style={s.lineName}>{line.name || '—'}</Text>
-          {line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
+          {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
           {(line.reference || line.dimensions) && (
             <View style={s.lineRefRow}>
               {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
@@ -197,19 +201,13 @@ function LineRow({
           )}
           {modular ? (
             // Group by module: each component product under its own header with
-            // a per-module subtotal; the whole modular keeps one image above.
-            modulesOf(line.components).map((m, mi) => (
-              <View key={m.moduleGroup || mi}>
-                {m.moduleGroup && (
-                  <View style={s.moduleHead}>
-                    <Text style={s.moduleName}>{m.name || '—'}</Text>
-                    <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>
-                  </View>
-                )}
-                {m.components.map((c, i) => (
-                  <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-                ))}
-              </View>
+            // a per-module subtotal; the whole modular keeps one image above. A
+            // module may itself be a client-OPTIONAL add-on (excluded from the
+            // total) or a pick-one ALTERNATIVE — rendered read-only, dimmed with
+            // a caption, mirroring the line-level optional/alternative treatment
+            // and the on-screen client link.
+            modulesWithAltPos(line.components).map((m, mi) => (
+              <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
             ))
           ) : compound && grouping.grouped ? (
             // A fabric header per contiguous run, its rows collapsed to clean
@@ -267,6 +265,96 @@ function ComponentRow({
   );
 }
 
+// ---- modular modules (component products) ------------------------------
+// Module-level optional / alternative flags live on the module's components (the
+// whole component-product opts in / out, or is one pick-one sibling). modulesOf
+// already grouped them, so we read the flags off the first element — the twin of
+// how a line carries isOptional / alternativeGroup, and identical to
+// ClientPreview's `moduleFlags` so screen + paper agree. moduleSelected defaults
+// true for an alternative member that hasn't been flagged, so a single-option
+// group never reads as "not chosen".
+function moduleFlags(module: Module): { optional: boolean; altGroup: string | null; selected: boolean } {
+  const c = (module?.components?.[0] || {}) as LineComponent;
+  const altGroup = c.moduleAlternativeGroup || null;
+  return { optional: !!c.moduleOptional, altGroup, selected: altGroup ? !!c.moduleSelected : true };
+}
+
+// "Alternativa N de M" positions for a modular's MODULE alternatives, keyed by
+// moduleGroup (the module twin of the line groupInfo map). Counts the modules
+// sharing each moduleAlternativeGroup and numbers them in first-appearance order.
+// Mirrors ClientPreview.moduleAlternativeInfo.
+function moduleAlternativeInfo(modules: Module[]): Map<string, { index: number; total: number }> {
+  const counts = new Map<string, number>();
+  for (const m of modules) {
+    const g = moduleFlags(m).altGroup;
+    if (g) counts.set(g, (counts.get(g) || 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const map = new Map<string, { index: number; total: number }>();
+  for (const m of modules) {
+    const g = moduleFlags(m).altGroup;
+    if (!g || !m.moduleGroup) continue;
+    const idx = (seen.get(g) || 0) + 1;
+    seen.set(g, idx);
+    map.set(m.moduleGroup, { index: idx, total: counts.get(g) as number });
+  }
+  return map;
+}
+
+/** One module enriched with its optional/alternative flags + alt position. */
+type ModuleVM = Module & {
+  optional: boolean;
+  inAlt: boolean;
+  selected: boolean;
+  altPos: { index: number; total: number } | null;
+};
+
+// Partition a compound's components into modules and annotate each with its
+// optional / alternative state — the single shape ModuleBlock renders from.
+function modulesWithAltPos(components: LineComponent[] | null | undefined): ModuleVM[] {
+  const modules = modulesOf(components);
+  const altInfo = moduleAlternativeInfo(modules);
+  return modules.map((m) => {
+    const { optional, altGroup, selected } = moduleFlags(m);
+    const inAlt = !!altGroup;
+    return { ...m, optional, inAlt, selected, altPos: inAlt && m.moduleGroup ? altInfo.get(m.moduleGroup) ?? null : null };
+  });
+}
+
+// One module of a modular line: its header (name + per-module subtotal) over its
+// element rows. A module may itself be a client-OPTIONAL add-on (excluded from
+// the total) or one of a pick-one ALTERNATIVE set — rendered read-only, dimmed
+// with the SAME caption language a line-level optional / alternative uses, so
+// the whole-module treatment reads consistently with the per-line one and with
+// ClientPreview's module block. An excluded module (optional / non-selected)
+// asserts NO price — same reason an optional line is struck from the sum.
+function ModuleBlock({
+  m, fmt, families, currency, rates, images,
+}: {
+  m: ModuleVM; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
+}) {
+  const dimmed = m.optional || (m.inAlt && !m.selected);
+  const caption: { text: string; color: string } | null = m.optional
+    ? { text: 'Opcional · no incluido', color: C.inkMid }
+    : m.inAlt
+      ? { text: `Alternativa ${m.altPos?.index ?? '?'} de ${m.altPos?.total ?? '?'}${m.selected ? ' · seleccionada' : ''}`, color: C.brand700 }
+      : null;
+  return (
+    <View style={dimmed ? { opacity: 0.45 } : {}}>
+      {caption && <Text style={[s.groupCaption, { color: caption.color, marginTop: 5 }]}>{caption.text}</Text>}
+      {m.moduleGroup && (
+        <View style={s.moduleHead}>
+          <Text style={s.moduleName}>{m.name || '—'}</Text>
+          {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
+        </View>
+      )}
+      {m.components.map((c, i) => (
+        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+      ))}
+    </View>
+  );
+}
+
 // ---- set / alternative grouped zone ------------------------------------
 function GroupZone({
   type, members, footer, view, fmt, families, currency, rates, images,
@@ -287,24 +375,66 @@ function GroupZone({
     ? (footer.optional ? 'Total del conjunto · no incluido' : 'Total del conjunto')
     : 'Total';
 
-  const Member = ({ m }: { m: QuoteLine }) => (
+  // Set members that share ONE fabric → collapse the repeated per-member swatch
+  // into a single material header per run (the same groupComponentsByMaterial
+  // rule a mixed compound uses on its components, here over the member LINES).
+  // Only earns a header on a bearing run of 2+ members; a lone member or a
+  // non-bearing run renders as today. Alternatives never collapse (each option
+  // is meant to be compared swatch-and-all). Mirrors the client treatment.
+  const grouping = isSet ? groupComponentsByMaterial(members) : { grouped: false as const, runs: [] };
+  // Collapse a run only when it earns a header: a bearing run of 2+ SIMPLE
+  // members. A compound member carries a stale parent `subtype` we never render,
+  // so it must not anchor or hide under a fabric header — leave such a run as is.
+  const collapseRun = (run: { bearing: boolean; components: QuoteLine[] }): boolean =>
+    run.bearing && run.components.length >= 2 && run.components.every((m) => !isCompoundLine(m));
+
+  const Member = ({ m, hideSwatch }: { m: QuoteLine; hideSwatch?: boolean }) => (
     <View style={[s.zoneMember, { backgroundColor: memberBg, borderLeftColor: railColor }]}>
-      <LineRow line={m} view={view} fmt={fmt} inZone families={families} currency={currency} rates={rates} images={images} />
+      <LineRow line={m} view={view} fmt={fmt} inZone families={families} currency={currency} rates={rates} images={images} hideSwatch={hideSwatch} />
     </View>
   );
 
+  // A run's material header — one swatch + "Tapizado · <fabric>" hoisted above a
+  // run of same-fabric members (read-only, like UpholsteryHero everywhere else).
+  // Inset to the member rail so it reads as belonging to the members below it.
+  const RunHeader = ({ subtype, swatchImageId }: { subtype: string; swatchImageId: string | null }) => (
+    <View style={[s.zoneMember, { backgroundColor: memberBg, borderLeftColor: railColor }]}>
+      <UpholsteryHero subtype={subtype} swatchImageId={swatchImageId} images={images} />
+    </View>
+  );
+
+  // Flatten the grouped set into an ordered list of header / member nodes so the
+  // zone band can stay bound to the FIRST node (page-break safety) regardless of
+  // whether that node is a run header or a member.
+  type Node = { kind: 'header'; key: string; subtype: string; swatchImageId: string | null }
+            | { kind: 'member'; key: string; m: QuoteLine; hideSwatch: boolean };
+  const nodes: Node[] = [];
+  if (isSet && grouping.grouped) {
+    grouping.runs.forEach((run, ri) => {
+      const collapse = collapseRun(run);
+      if (collapse) nodes.push({ kind: 'header', key: `h-${run.key}-${ri}`, subtype: run.subtype, swatchImageId: run.swatchImageId });
+      run.components.forEach((m) => nodes.push({ kind: 'member', key: m.id, m, hideSwatch: collapse }));
+    });
+  } else {
+    members.forEach((m) => nodes.push({ kind: 'member', key: m.id, m, hideSwatch: false }));
+  }
+  const renderNode = (n: Node) =>
+    n.kind === 'header'
+      ? <RunHeader key={n.key} subtype={n.subtype} swatchImageId={n.swatchImageId} />
+      : <Member key={n.key} m={n.m} hideSwatch={n.hideSwatch} />;
+
   return (
     <View style={{ marginVertical: 4 }}>
-      {/* Bind the header band to its first member so the band never orphans
+      {/* Bind the header band to its first node so the band never orphans
           at a page bottom (minPresenceAhead is unreliable nested this deep). */}
       <View wrap={false}>
         <View style={[s.zoneBand, { backgroundColor: bandBg }]}>
           <Text style={[s.zoneBandLabel, { color: labelColor }]}>{title}</Text>
           <Text style={{ fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, textTransform: 'uppercase', letterSpacing: 1 }}>{sub}</Text>
         </View>
-        {members[0] && <Member m={members[0]} />}
+        {nodes[0] && renderNode(nodes[0])}
       </View>
-      {members.slice(1).map((m) => <Member key={m.id} m={m} />)}
+      {nodes.slice(1).map(renderNode)}
       {footer && (
         <View style={[s.zoneBand, { backgroundColor: bandBg }]} wrap={false}>
           <Text style={[s.zoneBandLabel, { color: labelColor }]}>{footerLabel}</Text>
