@@ -153,11 +153,13 @@ function LineRow({
   // and drop every per-piece swatch below. A mixed compound keeps per-piece
   // swatches (they're now informative). Resolved by the Model so screen + paper
   // agree on when to collapse.
-  // A MODULAR compound is grouped by MODULE (component product), not by fabric —
-  // each module under its own header with a per-module subtotal, one image for
-  // the whole line. Resolved by the Model (lib/modules) so screen + paper agree.
+  // A MODULAR compound is grouped by MODULE (component product) — each module
+  // under its own header with a per-module subtotal, one image for the whole line
+  // — but a uniform fabric still hoists to the one hero above, and a module whose
+  // own pieces share a fabric collapses under a per-module hero (so an identical
+  // swatch is never stamped on every row). Resolved by the Model so screen + paper agree.
   const modular = compound ? isModularLine(line) : false;
-  const upholstery = compound && !modular ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
+  const upholstery = compound ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
   // Mixed (non-modular) compound → group pieces into contiguous same-material
   // runs, each under one fabric header (frame, then cushions); uniform stays the
   // single hero above. Same Model rule as the on-screen preview.
@@ -207,7 +209,7 @@ function LineRow({
             // a caption, mirroring the line-level optional/alternative treatment
             // and the on-screen client link.
             modulesWithAltPos(line.components).map((m, mi) => (
-              <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+              <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
             ))
           ) : compound && grouping.grouped ? (
             // A fabric header per contiguous run, its rows collapsed to clean
@@ -329,11 +331,18 @@ function modulesWithAltPos(components: LineComponent[] | null | undefined): Modu
 // ClientPreview's module block. An excluded module (optional / non-selected)
 // asserts NO price — same reason an optional line is struck from the sum.
 function ModuleBlock({
-  m, fmt, families, currency, rates, images,
+  m, fmt, families, currency, rates, images, wholeUniform,
 }: {
   m: ModuleVM; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap;
+  // True when the whole compound is uniform → one hero already sits above, so
+  // every module hides its per-row swatch and shows no per-module hero.
+  wholeUniform?: boolean;
 }) {
   const dimmed = m.optional || (m.inAlt && !m.selected);
+  // A module whose own pieces share one fabric collapses that repeated swatch
+  // under a per-module hero (unless the whole compound is already uniform above).
+  const modFabric = wholeUniform ? null : compoundFabric(m.components);
+  const hideSwatch = wholeUniform || !!modFabric?.uniform;
   const caption: { text: string; color: string } | null = m.optional
     ? { text: 'Opcional · no incluido', color: C.inkMid }
     : m.inAlt
@@ -348,8 +357,11 @@ function ModuleBlock({
           {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
         </View>
       )}
+      {modFabric?.uniform && (
+        <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} images={images} />
+      )}
       {m.components.map((c, i) => (
-        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={hideSwatch} />
       ))}
     </View>
   );

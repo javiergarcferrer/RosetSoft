@@ -1100,10 +1100,13 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
   // the Model so screen + PDF agree on when to collapse. This is INDEPENDENT of
   // edit/view mode and of whether pieces are alternatives — a sectional of
   // same-fabric alternative seats still shows one hero, with its radios intact.
-  // A MODULAR compound is grouped by MODULE (component product), not by fabric.
-  // Resolved by the Model (lib/modules) so screen + paper agree.
+  // A MODULAR compound is grouped by MODULE (component product); a uniform fabric
+  // is still hoisted to the one "Tapizado" hero above (a sectional all in one
+  // fabric), and a module whose own pieces share a fabric collapses under a
+  // per-module hero below — so an identical swatch is never stamped on every row.
+  // Resolved by the Model (lib/modules + subtype) so screen + paper agree.
   const modular = isModularLine(line);
-  const upholstery = modular ? { uniform: false, subtype: '', swatchImageId: null } : compoundFabric(line.components);
+  const upholstery = compoundFabric(line.components);
   const hideSwatch = upholstery.uniform;
   // Mixed upholstery → group the pieces into contiguous same-material runs and
   // give each a header (frame fabric, then cushion fabric), instead of stamping
@@ -1289,6 +1292,12 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                     const inModAlt = !!altGroup;
                     const modDimmed = modOptional || (inModAlt && !selected);
                     const altPos = inModAlt ? modAltInfo.get(m.moduleGroup) : null;
+                    // Collapse a module's repeated identical swatch under one
+                    // per-module hero — unless the whole compound is already
+                    // uniform (the single hero above covers every module). Edit
+                    // mode keeps per-row pickers (the hero carries zone controls).
+                    const modFabric = upholstery.uniform ? null : compoundFabric(m.components);
+                    const hideRow = upholstery.uniform || (!!modFabric?.uniform && !editing);
                     return (
                       <div
                         key={m.moduleGroup || mi}
@@ -1331,8 +1340,19 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             )}
                           </div>
                         )}
+                        {modFabric?.uniform && (
+                          <UpholsteryHero
+                            subtype={modFabric.subtype}
+                            swatchImageId={modFabric.swatchImageId}
+                            components={m.components}
+                            siblings={line.components}
+                            mf={mf}
+                            picker={picker}
+                            modelKey={line.id}
+                          />
+                        )}
                         <ul className={`divide-y divide-ink-100 ${m.moduleGroup ? 'border-l-2 border-ink-100 pl-2' : ''}`}>
-                          {m.components.map((c, i) => renderComponentRow(c, i, false, false))}
+                          {m.components.map((c, i) => renderComponentRow(c, i, hideRow, false))}
                         </ul>
                       </div>
                     );
