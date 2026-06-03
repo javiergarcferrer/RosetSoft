@@ -20,7 +20,7 @@ import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
@@ -696,6 +696,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
   // family (a chip in the TopStrip), photo, and the composition name.
   // The per-product grade/fabric + spec strip live inside each component.
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const families = useContext(FamiliesContext);
 
   // Pick the line's product from the catalog with the SAME flow as adding a
   // line — model → material + color OR "sin material · cotizar por rango" — so
@@ -750,7 +751,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
         <SpecStrip
           reference={line.reference}
           dimensions={line.dimensions}
-          onChangeReference={(v) => onChange({ reference: v })}
+          onChangeReference={(v) => onChange(skuFillPatch(families, v))}
           onChangeDimensions={(v) => onChange({ dimensions: v })}
           refInputRef={refInputRef}
         />
@@ -1922,6 +1923,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   // material to its siblings would change anything (canApplyToAll).
   const { total, optional, inGroup, isSelected, dimmed, groupInfo, canApplyToAll } = vm;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const families = useContext(FamiliesContext);
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
   // The catalog seed is applied to the component (dropping the line-only family

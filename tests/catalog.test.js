@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -190,4 +190,32 @@ test('no range to revert to → null (ungraded model, missing family)', () => {
   const vik = groupFamilies(TOGO).find((f) => f.root === '10261152'); // single SKU
   assert.equal(materiallessRangePatch(vik), null);
   assert.equal(materiallessRangePatch(null), null);
+});
+
+/* ------------------------------- skuFillPatch ------------------------------- */
+
+const skuFams = () => new Map(groupFamilies([...TOGO, ...TABLE]).map((f) => [f.root, f]));
+
+test('skuFillPatch resolves a pasted graded SKU to its product fields', () => {
+  const patch = skuFillPatch(skuFams(), '15420000G');
+  assert.equal(patch.reference, '15420000G');
+  assert.equal(patch.name, 'TOGO FIRESIDE CHAIR');
+  assert.equal(patch.unitPrice, 4450);
+  assert.equal(patch.unitCost, 1618.18);
+  assert.equal(patch.subtype, composeSubtype('G', '')); // grade pinned, no fabric
+  assert.equal(patch.priceMin, null);
+  assert.equal(patch.materialOptions, null);
+});
+
+test('skuFillPatch resolves a non-graded SKU to its single product', () => {
+  const patch = skuFillPatch(skuFams(), '0050W49N');
+  assert.equal(patch.reference, '0050W49N');
+  assert.equal(patch.name, 'LOW TABLE');
+  assert.equal(patch.unitPrice, 1500);
+  assert.equal(patch.subtype, 'Walnut'); // model's own finish (no grade letter)
+});
+
+test('skuFillPatch leaves an unknown SKU (or null catalog) as just the reference', () => {
+  assert.deepEqual(skuFillPatch(skuFams(), '99999999Z'), { reference: '99999999Z' });
+  assert.deepEqual(skuFillPatch(null, '15420000G'), { reference: '15420000G' });
 });

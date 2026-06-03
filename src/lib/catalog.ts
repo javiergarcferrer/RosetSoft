@@ -266,3 +266,52 @@ export function switchLineProduct(
     materialOptions,
   };
 }
+
+/** Fields filled on a line/component when a SKU is pasted/typed into Ref. */
+export interface SkuFillPatch {
+  family?: string;
+  reference: string;
+  name?: string;
+  dimensions?: string;
+  subtype?: string;
+  unitPrice?: number;
+  unitCost?: number | null;
+  swatchImageId?: null;
+  materialOptions?: null;
+  priceMin?: null;
+  priceMax?: null;
+}
+
+/**
+ * Resolve a pasted/typed SKU to its catalog product and return the line/
+ * component fields to fill — so pasting "10002953E" IMMEDIATELY pulls up the
+ * product (name, dimensions, grade, list price, cost). Keys on root+grade via
+ * `splitSkuGrade` → `productForGrade`. Pins the grade as the subtype (no fabric)
+ * and clears any prior material / range, since a concrete SKU fixes grade +
+ * price. When the SKU isn't in the catalog (or a graded root carries no grade
+ * letter to resolve), returns just `{ reference }` so a free-typed reference is
+ * preserved untouched.
+ */
+export function skuFillPatch(
+  families: ReadonlyMap<string, CatalogFamily> | null | undefined,
+  sku: string | null | undefined,
+): SkuFillPatch {
+  const reference = (sku || '').trim();
+  const { root, grade } = splitSkuGrade(reference);
+  const fam = families ? families.get(root) : null;
+  const p = fam ? productForGrade(fam, grade) : null;
+  if (!p) return { reference };
+  return {
+    family: p.family || fam!.family || '',
+    reference: p.reference,
+    name: p.name || '',
+    dimensions: p.dimensions || '',
+    subtype: grade ? composeSubtype(grade, '') : (p.subtype || ''),
+    unitPrice: numOr0(p.priceUsd),
+    unitCost: p.cost ?? null,
+    swatchImageId: null,
+    materialOptions: null,
+    priceMin: null,
+    priceMax: null,
+  };
+}
