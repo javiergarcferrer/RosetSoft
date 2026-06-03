@@ -6,7 +6,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial, compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../src/lib/subtype.js';
+import { parseSubtype, composeSubtype, materialIdentity, canPropagateMaterial, compoundFabric, groupComponentsByMaterial, fabricDisplay, fabricMaterialName, fabricColorName, groupPaletteByMaterial } from '../src/lib/subtype.js';
 
 test('parse — canonical "Grade X — FABRIC"', () => {
   assert.deepEqual(parseSubtype('Grade C — PAMPA'), { grade: 'C', fabric: 'PAMPA' });
@@ -286,4 +286,29 @@ test('group — order is preserved, never reordered (interleaved stays interleav
   assert.equal(g.grouped, true);
   assert.equal(g.runs.length, 3); // A | B | A — not clustered to 2
   assert.deepEqual(g.runs.map((r) => r.components[0].id), ['a1', 'b1', 'a2']);
+});
+
+test('fabricMaterialName / fabricColorName — split a "MATERIAL · COLOR (#code)" label', () => {
+  assert.equal(fabricMaterialName('ERPI · ARGILE (#973)'), 'ERPI');
+  assert.equal(fabricColorName('ERPI · ARGILE (#973)'), 'ARGILE');
+  // Material-only label: no colour segment.
+  assert.equal(fabricMaterialName('ERPI'), 'ERPI');
+  assert.equal(fabricColorName('ERPI'), '');
+  // Blank / nullish are safe.
+  assert.equal(fabricMaterialName(''), '');
+  assert.equal(fabricColorName(null), '');
+});
+
+test('groupPaletteByMaterial — colours of one material collapse under it, order kept', () => {
+  const groups = groupPaletteByMaterial([
+    { id: '1', grade: 'D', fabric: 'ERPI · ARGILE (#973)' },
+    { id: '2', grade: 'C', fabric: 'VIDAR · 0323 (#5)' },
+    { id: '3', grade: 'D', fabric: 'ERPI · NOIR (#100)' },
+  ]);
+  // ERPI first (first-seen), then VIDAR — not reordered.
+  assert.deepEqual(groups.map((g) => g.material), ['ERPI', 'VIDAR']);
+  // Both ERPI colours land in one group; the group's grade is the first entry's.
+  assert.deepEqual(groups[0].items.map((m) => m.id), ['1', '3']);
+  assert.equal(groups[0].grade, 'D');
+  assert.equal(groups[1].items.length, 1);
 });

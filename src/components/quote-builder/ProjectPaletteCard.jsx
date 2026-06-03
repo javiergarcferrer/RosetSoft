@@ -3,7 +3,7 @@ import { Palette, Plus, X } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import { ProjectPaletteContext } from './ProjectPaletteContext.js';
-import { composeSubtype, fabricDisplay } from '../../lib/subtype.js';
+import { composeSubtype, fabricColorName, fabricDisplay, groupPaletteByMaterial } from '../../lib/subtype.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 
@@ -20,6 +20,7 @@ export default function ProjectPaletteCard() {
   const { materials, onAdd, onAddMany, onRemove } = useContext(ProjectPaletteContext);
   const [addOpen, setAddOpen] = useState(false);
   const list = Array.isArray(materials) ? materials : [];
+  const groups = groupPaletteByMaterial(list);
 
   return (
     <div className="card card-pad">
@@ -43,32 +44,41 @@ export default function ProjectPaletteCard() {
           Aún no hay telas en la paleta. Agrega las que usarás en este proyecto.
         </div>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {list.map((m) => (
-            <div
-              key={m.id}
-              className="flex items-center gap-2 rounded-lg border border-ink-200 bg-white py-1.5 pl-1.5 pr-2"
-            >
-              <ImageView
-                id={m.swatchImageId || null}
-                fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
-                className="h-9 w-9 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
-                hoverPreview
-              />
-              <span className="text-xs text-ink-700">
-                {fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
-              </span>
-              {onRemove && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(m.id)}
-                  className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-300 transition-colors hover:bg-red-50 hover:text-red-600"
-                  title="Quitar de la paleta"
-                  aria-label="Quitar de la paleta"
-                >
-                  <X size={13} />
-                </button>
-              )}
+        <div className="mt-3 space-y-3">
+          {groups.map((g) => (
+            <div key={g.material}>
+              <div className="mb-1.5 text-[11px] font-medium text-ink-500">
+                {g.material}{g.grade ? <span className="text-ink-400"> · Grade {g.grade}</span> : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {g.items.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-2 rounded-lg border border-ink-200 bg-white py-1.5 pl-1.5 pr-2"
+                  >
+                    <ImageView
+                      id={m.swatchImageId || null}
+                      fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
+                      className="h-9 w-9 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
+                      hoverPreview
+                    />
+                    <span className="text-xs text-ink-700">
+                      {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
+                    </span>
+                    {onRemove && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(m.id)}
+                        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-300 transition-colors hover:bg-red-50 hover:text-red-600"
+                        title="Quitar de la paleta"
+                        aria-label="Quitar de la paleta"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

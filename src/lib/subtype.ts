@@ -133,6 +133,57 @@ export function fabricDisplay(subtype: string | null | undefined): string {
   return String(subtype ?? '').replace(/\s*\(#[^)]*\)/g, '').trim();
 }
 
+/**
+ * The MATERIAL name of a fabric label — the segment before the colour — so a
+ * palette's many colours of one fabric collapse under it:
+ *   "ERPI · ARGILE (#973)" → "ERPI"   ·   "ERPI" → "ERPI"
+ * Inverse-ish of composeFabricLabel's "MATERIAL · COLOR" join.
+ */
+export function fabricMaterialName(fabric: string | null | undefined): string {
+  const f = String(fabric ?? '').trim();
+  if (!f) return '';
+  const i = f.indexOf(' · ');
+  return (i === -1 ? f : f.slice(0, i)).trim();
+}
+
+/**
+ * The COLOUR portion of a fabric label (everything after the material), with the
+ * embedded "(#code)" stripped for display:
+ *   "ERPI · ARGILE (#973)" → "ARGILE"   ·   "ERPI" → ""
+ */
+export function fabricColorName(fabric: string | null | undefined): string {
+  const f = String(fabric ?? '').trim();
+  const i = f.indexOf(' · ');
+  return i === -1 ? '' : fabricDisplay(f.slice(i + 3));
+}
+
+/** One material group of a curated palette: the material, its grade, its entries. */
+export interface PaletteGroup<T> {
+  material: string;
+  grade: string;
+  items: T[];
+}
+
+/**
+ * Group a curated palette by MATERIAL (preserving first-seen order), so the
+ * picker + card show "ERPI → its colours, VIDAR → its colours" instead of a flat
+ * run. Generic over any entry carrying { grade, fabric } (the QuoteMaterial
+ * shape); the group's grade is the first entry's.
+ */
+export function groupPaletteByMaterial<T extends { grade?: string | null; fabric?: string | null }>(
+  list: ReadonlyArray<T> | null | undefined,
+): Array<PaletteGroup<T>> {
+  const groups = new Map<string, PaletteGroup<T>>();
+  for (const m of list || []) {
+    const material = fabricMaterialName(m.fabric) || String(m.fabric ?? '').trim() || '—';
+    const key = material.toUpperCase();
+    let g = groups.get(key);
+    if (!g) { g = { material, grade: String(m.grade ?? '').trim(), items: [] }; groups.set(key, g); }
+    g.items.push(m);
+  }
+  return [...groups.values()];
+}
+
 /** A catalog material the picker can compose a fabric label from. */
 export interface MaterialLike {
   name?: string | null;
