@@ -25,11 +25,15 @@ const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
  */
 export default function InventoryPicker({ open, onClose, onInsert }) {
   const { profileId } = useApp();
+  // Match how Contabilidad › Inventario stores + queries stock: the shared
+  // 'team' profile when no per-user profile is set. Querying a different scope
+  // would show an empty picker even with stock on hand.
+  const scope = profileId || 'team';
   const [q, setQ] = useState('');
 
   const items = useLiveQuery(
-    () => (profileId ? db.inventoryItems.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
-    [profileId, open],
+    () => db.inventoryItems.where('profileId').equals(scope).toArray(),
+    [scope, open],
     [],
   );
 
