@@ -52,7 +52,9 @@ export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.
 
 // ── cobros / pagos + cuentas por cobrar / pagar
 export { resolveReceivables, resolvePayables, resolvePartyStatement } from './receivables.js';
-export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
+export {
+  buildPaymentEntry, paymentNet, bookPaymentAmount, isCardGateway, PAYMENT_METHOD_LABELS,
+} from '../../lib/accounting/payment.js';
 
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';

@@ -227,8 +227,13 @@ export interface Supplier {
   updatedAt?: number;
 }
 
-/** How an expense was/will be settled. */
-export type PaymentMethod = 'cash' | 'bank' | 'card' | 'credit';
+/**
+ * How a payment was made or an expense settled. Cobros add the DR card gateways
+ * the dealer collects on — Verifone (POS) and the Banco Popular payment link;
+ * 'credit' is the on-account option used by expenses/purchases.
+ */
+export type PaymentMethod =
+  | 'cash' | 'bank' | 'transfer' | 'card' | 'verifone' | 'payment_link' | 'credit';
 
 /**
  * An operating expense (Gasto, class 6). Saving one posts a balanced asiento
@@ -315,7 +320,8 @@ export type PaymentDirection = 'in' | 'out';
  * A cobro (in, from a customer) or pago (out, to a supplier). Posts a balanced
  * asiento (source='payment'). Card collections carry the gateway deductions
  * (commission + its ITBIS, retained ITBIS/ISR) — the bank gets the net, CxC
- * clears at the gross. Amounts are DOP.
+ * clears at the gross. The ledger is DOP (`amount`); a cobro may be received in
+ * USD or DOP (`currency`/`rate`/`fxAmount`).
  */
 export interface Payment {
   id: string;
@@ -325,8 +331,20 @@ export interface Payment {
   partyType: 'customer' | 'supplier';
   partyId?: string | null;
   paidAt: number;
+  /** The DOP figure booked to the asiento (the ledger is DOP). */
   amount: number;
   method: PaymentMethod;
+  /**
+   * Currency physically received. A USD cobro keeps `amount` as the booked DOP
+   * (= fxAmount × rate); `fxAmount` is the USD received and `rate` the USD→DOP
+   * applied (Banco Popular venta). Legacy rows are DOP (currency/rate/fxAmount
+   * absent ⇒ treat as DOP, fxAmount = amount, rate = 1).
+   */
+  currency?: CurrencyCode;
+  /** USD→DOP rate applied (1 for a DOP payment; absent on legacy rows). */
+  rate?: number | null;
+  /** Amount in `currency` actually received (mirrors `amount` for DOP). */
+  fxAmount?: number | null;
   reference?: string;
   commission: number;
   commissionItbis: number;

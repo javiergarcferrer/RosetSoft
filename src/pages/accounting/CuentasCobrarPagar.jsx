@@ -7,12 +7,23 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
-import { formatDop, formatDate } from '../../lib/format.js';
+import { formatDop, formatMoney, formatDate } from '../../lib/format.js';
+import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import {
   resolveReceivables, resolvePayables, resolvePartyStatement,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
+  bookPaymentAmount, isCardGateway, PAYMENT_METHOD_LABELS,
 } from '../../core/accounting/index.js';
+
+// Estado-de-cuenta ref cell: the bank reference plus, for a USD payment, the
+// received-currency note (the row's amount is the booked DOP).
+function paymentRef(p) {
+  const fx = p.currency === 'USD' && p.fxAmount
+    ? `US$${Number(p.fxAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} @ ${p.rate}`
+    : '';
+  return [p.reference, fx].filter(Boolean).join(' · ');
+}
 
 /**
  * Cuentas por cobrar y pagar — open balances with FIFO aging, register cobros
@@ -24,6 +35,7 @@ export default function CuentasCobrarPagar() {
   const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
+  const liveRate = useMemo(() => effectiveDopRate(settings), [settings]);
 
   const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
   const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(scope).toArray(), [scope], []);
@@ -54,14 +66,14 @@ export default function CuentasCobrarPagar() {
         .map((s) => ({ date: s.postedAt, amount: (s.total || 0) - (s.depositApplied || 0), label: 'Factura', ref: s.ncf || '' }))
         .filter((c) => c.amount > 0.001);
       const payments = paymentsQ.data.filter((p) => p.direction === 'in' && p.partyId === selected.id)
-        .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Cobro', ref: p.reference || '' }));
+        .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Cobro', ref: paymentRef(p) }));
       return { name: customersById.get(selected.id)?.name || 'Cliente', ...resolvePartyStatement({ charges, payments }) };
     }
     const credit = (arr, df) => arr.filter((d) => d.paymentMethod === 'credit' && d.supplierId === selected.id)
       .map((d) => ({ date: d[df], amount: (d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0), label: df === 'purchaseAt' ? 'Compra' : 'Gasto', ref: d.ncf || '' }));
     const charges = [...credit(purchasesQ.data, 'purchaseAt'), ...credit(expensesQ.data, 'expenseAt')];
     const payments = paymentsQ.data.filter((p) => p.direction === 'out' && p.partyId === selected.id)
-      .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: p.reference || '' }));
+      .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: paymentRef(p) }));
     return { name: suppliersById.get(selected.id)?.name || 'Proveedor', ...resolvePartyStatement({ charges, payments }) };
   }, [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById]);
 
@@ -115,7 +127,7 @@ export default function CuentasCobrarPagar() {
 
       {showForm && loaded && (
         <PaymentForm
-          direction={tab === 'cxc' ? 'in' : 'out'} scope={scope} config={config}
+          direction={tab === 'cxc' ? 'in' : 'out'} scope={scope} config={config} liveRate={liveRate}
           parties={tab === 'cxc' ? customersQ.data : suppliersQ.data}
           docsByParty={docsByParty}
           onClose={() => setShowForm(false)} />
@@ -204,19 +216,33 @@ export default function CuentasCobrarPagar() {
   );
 }
 
-function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }) {
+function PaymentForm({ direction, scope, config, liveRate, parties, docsByParty, onClose }) {
+  const isIn = direction === 'in';
   const [form, setForm] = useState({
-    partyId: '', date: new Date().toISOString().slice(0, 10), amount: '', method: 'bank', reference: '',
+    partyId: '', date: new Date().toISOString().slice(0, 10),
+    currency: isIn ? 'USD' : 'DOP', amount: '', rate: String(liveRate || ''),
+    method: isIn ? 'verifone' : 'transfer', reference: '',
     commission: '', commissionItbis: '', itbisRetained: '', isrRetained: '',
   });
-  const [alloc, setAlloc] = useState({}); // docId -> amount string
+  const [alloc, setAlloc] = useState({}); // docId -> amount string (DOP)
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
-  const isCard = form.method === 'card' && direction === 'in';
+  const usd = form.currency === 'USD';
+  const isGateway = isIn && isCardGateway(form.method); // Verifone / link de pago
   const openDocs = (docsByParty && docsByParty.get(form.partyId)) || [];
+  const methodOptions = isIn ? ['verifone', 'payment_link', 'transfer', 'cash'] : ['transfer', 'cash', 'bank'];
+
+  // What posts to the ledger (DOP). A USD cobro converts at the entered rate
+  // (defaulting to today's Banco Popular venta); a DOP cobro passes through.
+  const booked = bookPaymentAmount({
+    received: Number(form.amount) || 0,
+    currency: form.currency,
+    rate: usd ? (Number(form.rate) || liveRate) : 1,
+  });
+  const bookedDop = booked.amount;
 
   function autoFill() {
-    let remaining = Number(form.amount) || 0;
+    let remaining = bookedDop;
     const next = {};
     for (const d of openDocs) {
       if (remaining <= 0) break;
@@ -227,28 +253,31 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
   }
 
   const net = paymentNet({
-    amount: Number(form.amount) || 0, commission: Number(form.commission) || 0,
+    amount: bookedDop, commission: Number(form.commission) || 0,
     commissionItbis: Number(form.commissionItbis) || 0, itbisRetained: Number(form.itbisRetained) || 0,
     isrRetained: Number(form.isrRetained) || 0,
   });
 
   async function save() {
     setErr('');
-    const amount = Number(form.amount) || 0;
-    if (!form.partyId) { setErr('Elige el ' + (direction === 'in' ? 'cliente' : 'proveedor') + '.'); return; }
-    if (amount <= 0) { setErr('El monto debe ser mayor que cero.'); return; }
+    const received = Number(form.amount) || 0;
+    if (!form.partyId) { setErr('Elige el ' + (isIn ? 'cliente' : 'proveedor') + '.'); return; }
+    if (received <= 0) { setErr('El monto debe ser mayor que cero.'); return; }
+    if (usd && !(Number(form.rate) > 0)) { setErr('Indica la tasa USD→DOP.'); return; }
     setSaving(true);
     try {
       const id = newId();
       const postedAt = new Date(form.date).getTime();
+      const partyType = isIn ? 'customer' : 'supplier';
+      // Shared cobro fields: the booked currency/rate/fx audit trail + gateway cuts.
+      const detail = {
+        currency: booked.currency, rate: booked.rate, fxAmount: booked.fxAmount,
+        commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
+        itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
+      };
       const built = buildPaymentEntry({
         newId, config, postedAt,
-        payment: {
-          id, direction, partyType: direction === 'in' ? 'customer' : 'supplier', partyId: form.partyId,
-          amount, method: form.method, reference: form.reference,
-          commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
-          itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
-        },
+        payment: { id, direction, partyType, partyId: form.partyId, amount: bookedDop, method: form.method, reference: form.reference, ...detail },
       });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
@@ -258,11 +287,9 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
       await assignSequenceNumber({
         table: 'payments', profileId: scope, start: 1,
         build: (n) => ({
-          id, profileId: scope, number: n, direction, partyType: direction === 'in' ? 'customer' : 'supplier',
-          partyId: form.partyId, paidAt: postedAt, amount, method: form.method, reference: form.reference,
-          commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
-          itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
-          allocations, journalEntryId: built.entry.id,
+          id, profileId: scope, number: n, direction, partyType,
+          partyId: form.partyId, paidAt: postedAt, amount: bookedDop, method: form.method, reference: form.reference,
+          ...detail, allocations, journalEntryId: built.entry.id,
         }),
       });
       onClose();
@@ -274,34 +301,50 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
 
   const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
   const numField = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+  const ccyBtn = (c) => `text-sm px-3 py-1.5 rounded-lg border ${form.currency === c ? 'bg-ink-900 text-white border-ink-900' : 'bg-white text-ink-600 border-ink-200'}`;
 
   return (
     <div className="card p-4 mb-4 border-ink-300">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold">Registrar {direction === 'in' ? 'cobro' : 'pago'}</h3>
+        <h3 className="font-semibold">Registrar {isIn ? 'cobro' : 'pago'}</h3>
         <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
       </div>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm">{direction === 'in' ? 'Cliente' : 'Proveedor'}<br />
+        <label className="text-sm">{isIn ? 'Cliente' : 'Proveedor'}<br />
           <select value={form.partyId} onChange={(e) => { setForm((f) => ({ ...f, partyId: e.target.value })); setAlloc({}); }} className={`${field} min-w-[200px]`}>
             <option value="">—</option>
             {parties.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
         <label className="text-sm">Fecha<br /><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={field} /></label>
-        <label className="text-sm">Monto<br /><input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={numField} /></label>
+        <div className="text-sm">Divisa<br />
+          <div className="inline-flex gap-1.5 mt-0.5">
+            <button type="button" onClick={() => setForm((f) => ({ ...f, currency: 'USD', rate: f.rate || String(liveRate || '') }))} className={ccyBtn('USD')}>US$</button>
+            <button type="button" onClick={() => setForm((f) => ({ ...f, currency: 'DOP' }))} className={ccyBtn('DOP')}>RD$</button>
+          </div>
+        </div>
+        <label className="text-sm">Monto ({usd ? 'US$' : 'RD$'})<br /><input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={numField} /></label>
+        {usd && (
+          <label className="text-sm">Tasa USD→DOP<br /><input type="number" step="0.01" min="0" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></label>
+        )}
         <label className="text-sm">Método<br />
           <select value={form.method} onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))} className={field}>
-            <option value="bank">Banco</option><option value="cash">Efectivo</option><option value="transfer">Transferencia</option>
-            {direction === 'in' && <option value="card">Tarjeta</option>}
+            {methodOptions.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}
           </select>
         </label>
         <label className="text-sm">Referencia<br /><input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className={field} /></label>
       </div>
 
-      {isCard && (
+      {usd && Number(form.amount) > 0 && (
+        <p className="text-xs text-ink-500 mt-2">
+          Se contabiliza <b className="tabular-nums text-ink-700">{formatDop(bookedDop)}</b>
+          {' '}({formatMoney(booked.fxAmount, 'USD')} × {Number(form.rate) || liveRate})
+        </p>
+      )}
+
+      {isGateway && (
         <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-ink-100">
-          <span className="text-xs text-ink-500 w-full">Deducciones de la pasarela (lo que retiene el procesador):</span>
+          <span className="text-xs text-ink-500 w-full">Deducciones de la pasarela (lo que retiene el procesador, en RD$):</span>
           <label className="text-sm">Comisión<br /><input type="number" step="0.01" min="0" value={form.commission} onChange={(e) => setForm((f) => ({ ...f, commission: e.target.value }))} className={numField} /></label>
           <label className="text-sm">ITBIS comisión<br /><input type="number" step="0.01" min="0" value={form.commissionItbis} onChange={(e) => setForm((f) => ({ ...f, commissionItbis: e.target.value }))} className={numField} /></label>
           <label className="text-sm">ITBIS retenido<br /><input type="number" step="0.01" min="0" value={form.itbisRetained} onChange={(e) => setForm((f) => ({ ...f, itbisRetained: e.target.value }))} className={numField} /></label>
@@ -312,7 +355,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
       {form.partyId && openDocs.length > 0 && (
         <div className="mt-3 pt-3 border-t border-ink-100">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-ink-500">Aplicar a facturas (opcional)</span>
+            <span className="text-xs text-ink-500">Aplicar a facturas (opcional, en RD$)</span>
             <button type="button" onClick={autoFill} className="text-xs text-ink-600 hover:text-ink-900">Auto (FIFO)</button>
           </div>
           <div className="space-y-1">
@@ -330,7 +373,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
       )}
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-100">
-        {isCard ? <div className="text-sm text-ink-600">Neto al banco <b className="tabular-nums">{formatDop(net)}</b></div> : <span />}
+        {isGateway ? <div className="text-sm text-ink-600">Neto al banco <b className="tabular-nums">{formatDop(net)}</b></div> : <span />}
         <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar
         </button>

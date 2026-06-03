@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
-import { buildPaymentEntry, paymentNet } from '../src/lib/accounting/payment.js';
+import { buildPaymentEntry, paymentNet, bookPaymentAmount, isCardGateway } from '../src/lib/accounting/payment.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
 import { resolveReceivables, resolvePayables, resolvePartyStatement } from '../src/core/accounting/receivables.js';
 
@@ -62,6 +62,49 @@ test('buildPaymentEntry rejects a non-positive amount', () => {
   assert.throws(() => buildPaymentEntry({
     newId: ids(), config, payment: { id: 'p4', direction: 'in', partyType: 'customer', amount: 0, method: 'cash' },
   }), /mayor que cero/);
+});
+
+/* --------------------------- multi-currency ----------------------------- */
+
+test('bookPaymentAmount: USD converts at the rate (round2); DOP passes through', () => {
+  assert.deepEqual(
+    bookPaymentAmount({ received: 1000, currency: 'USD', rate: 60.5 }),
+    { currency: 'USD', fxAmount: 1000, rate: 60.5, amount: 60500 },
+  );
+  // round to cents: 33.33 * 60.55 = 2018.1315 -> 2018.13
+  assert.equal(bookPaymentAmount({ received: 33.33, currency: 'USD', rate: 60.55 }).amount, 2018.13);
+  assert.deepEqual(
+    bookPaymentAmount({ received: 5000, currency: 'DOP' }),
+    { currency: 'DOP', fxAmount: 5000, rate: 1, amount: 5000 },
+  );
+  // a USD cobro with no rate books 0 (the form guards this; the Model is total).
+  assert.equal(bookPaymentAmount({ received: 100, currency: 'USD' }).amount, 0);
+});
+
+test('cobro en USD por Verifone: books fxAmount × rate, asiento balances at the DOP, memo notes the FX', () => {
+  const b = bookPaymentAmount({ received: 1000, currency: 'USD', rate: 60.5 });
+  assert.equal(b.amount, 60500);
+  const { lines } = buildPaymentEntry({
+    newId: ids(), config,
+    payment: {
+      id: 'pu', direction: 'in', partyType: 'customer', partyId: 'c1', amount: b.amount,
+      method: 'verifone', currency: 'USD', rate: b.rate, fxAmount: b.fxAmount, reference: 'AUT123',
+    },
+  });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  assert.equal(lines.find((l) => l.accountCode === M.accountsReceivable).credit, 60500);
+  assert.equal(lines.find((l) => l.accountCode === M.bank).debit, 60500); // no gateway cut entered
+  const cashMemo = lines.find((l) => l.accountCode === M.bank).memo;
+  assert.match(cashMemo, /US\$1,000\.00 @ 60\.5/);
+  assert.match(cashMemo, /AUT123/);
+});
+
+test('isCardGateway: verifone / payment_link / card are gateways; cash / transfer are not', () => {
+  assert.ok(isCardGateway('verifone'));
+  assert.ok(isCardGateway('payment_link'));
+  assert.ok(isCardGateway('card'));
+  assert.ok(!isCardGateway('cash'));
+  assert.ok(!isCardGateway('transfer'));
 });
 
 /* --------------------------- receivables -------------------------------- */
