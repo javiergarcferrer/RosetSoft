@@ -100,18 +100,20 @@ export function isPricedLine(
 
 /**
  * Component twin of isPricedLine — within a compound, a sub-piece counts toward
- * the compound subtotal unless it's an excluded optional OR a non-selected
- * alternative. (No section/set cases: a component is never a section, and a
- * Conjunto is a line concept, not a component one.)
+ * the compound subtotal unless it's an excluded optional (its own `isOptional`
+ * or its whole module's `moduleOptional`) OR a non-selected alternative. (No
+ * section/set cases: a component is never a section, and a Conjunto is a line
+ * concept, not a component one.)
  */
 export function isPricedComponent(
   component:
-    | Pick<LineComponent, 'isOptional' | 'alternativeGroup' | 'isSelectedAlternative'>
+    | Pick<LineComponent, 'isOptional' | 'moduleOptional' | 'alternativeGroup' | 'isSelectedAlternative'>
     | null
     | undefined,
 ): boolean {
   if (!component) return true;
   if (component.isOptional) return false;
+  if (component.moduleOptional) return false;
   if (component.alternativeGroup && !component.isSelectedAlternative) return false;
   return true;
 }

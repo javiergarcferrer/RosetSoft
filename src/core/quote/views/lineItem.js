@@ -22,7 +22,7 @@ import {
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
   componentAlternativeGroupInfo,
 } from '../../../lib/pricing.js';
-import { isModularLine, modulesOf, moduleSubtotal } from '../../../lib/modules.js';
+import { isModularLine, modulesOf } from '../../../lib/modules.js';
 import { canPropagateMaterial } from '../../../lib/subtype.js';
 
 // Per-module projection for a MODULAR compound (group-by-module presentation):
@@ -33,6 +33,9 @@ import { canPropagateMaterial } from '../../../lib/subtype.js';
 // shows a band like the line does.
 function resolveModules(components) {
   return modulesOf(components).map((m) => {
+    // "Would-be" priced elements ignore the module's OWN optional flag, so the
+    // header still shows what the module costs even when it's a parked add-on
+    // (the real total excludes an optional module via isPricedComponent).
     const priced = m.components.filter((c) => !c.isOptional && !(c.alternativeGroup && !c.isSelectedAlternative));
     const hasRange = priced.some((c) => isRangeComponent(c));
     const range = hasRange
@@ -44,14 +47,20 @@ function resolveModules(components) {
           { min: 0, max: 0 },
         )
       : null;
+    const subtotal = priced.reduce(
+      (s, c) => s + (Number(c.unitPrice) || 0) * (Number(c.qty) || 0),
+      0,
+    );
     return {
       moduleGroup: m.moduleGroup,
       name: m.name,
       componentIds: m.components.map((c) => c.id),
       count: m.components.length,
-      subtotal: moduleSubtotal(m.components),
+      subtotal,
       hasRange,
       range,
+      // The whole module is an opt-in add-on (every element carries moduleOptional).
+      optional: m.components.length > 0 && m.components.every((c) => !!c.moduleOptional),
     };
   });
 }

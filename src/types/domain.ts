@@ -616,6 +616,15 @@ export interface LineComponent {
    */
   moduleGroup?: string | null;
   moduleName?: string | null;
+  /**
+   * Module-level OPTIONAL — set on every element of a module (a component
+   * product) to offer the WHOLE module as an opt-in add-on, excluded from the
+   * total (the module twin of the line-level isOptional, distinct from a single
+   * element's `isOptional`). Components may be optional add-ons but are never
+   * alternatives — pick-one lives at the module/line level. Lives inline on the
+   * JSONB component shape; no DB column. See lib/constants:isPricedComponent.
+   */
+  moduleOptional?: boolean;
 }
 
 /**

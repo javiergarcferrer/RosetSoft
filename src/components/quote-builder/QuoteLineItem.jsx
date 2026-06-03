@@ -21,7 +21,7 @@ import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch } from '../../lib/catalog.js';
-import { groupComponents, ungroupModule, renameModule, isModularLine } from '../../lib/modules.js';
+import { groupComponents, ungroupModule, renameModule, setModuleOptional, isModularLine } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -244,6 +244,11 @@ export default function QuoteLineItem({
   function renameModuleById(moduleGroup, name) {
     onChange({ components: renameModule(line.components, moduleGroup, name) });
   }
+  // Offer a WHOLE module (a component product) as an optional add-on, or fold it
+  // back in — the module twin of the line/component optional toggle.
+  function toggleModuleOptional(moduleGroup, optional) {
+    onChange({ components: setModuleOptional(line.components, moduleGroup, optional) });
+  }
   function convertToCompound() {
     // Promote the current line's own ref/subtype/dimensions/description/
     // qty/unitPrice into the first component, then clear those columns
@@ -419,6 +424,7 @@ export default function QuoteLineItem({
           onGroupModule={groupIntoModule}
           onUngroupModule={ungroupModuleById}
           onRenameModule={renameModuleById}
+          onToggleModuleOptional={toggleModuleOptional}
           onAddMany={addComponentsFromSeeds}
         />
       )}
@@ -1577,7 +1583,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1728,9 +1734,9 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         // header with a per-module subtotal; ungrouped elements stand alone.
         <div className="divide-y divide-ink-100">
           {(modules || []).map((m) => (
-            <div key={m.moduleGroup || m.componentIds[0]}>
+            <div key={m.moduleGroup || m.componentIds[0]} className={m.optional ? 'bg-ink-50/40' : ''}>
               {m.moduleGroup ? (
-                <div className="px-3 py-1.5 bg-ink-100/60 flex items-center gap-2">
+                <div className="px-3 py-1.5 bg-ink-100/60 flex items-center gap-2 flex-wrap">
                   <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
                   <DebouncedInput
                     value={m.name}
@@ -1738,10 +1744,28 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     className="input min-h-8 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
                     placeholder="Nombre del módulo"
                   />
+                  {onToggleModuleOptional && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleModuleOptional(m.moduleGroup, !m.optional)}
+                      className={`chip font-medium ${
+                        m.optional
+                          ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
+                          : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
+                      }`}
+                      title={m.optional
+                        ? 'Quitar opcional — el módulo vuelve a sumar al total'
+                        : 'Marcar el módulo como opcional — se muestra pero no suma al total'}
+                      aria-pressed={m.optional}
+                    >
+                      <Sparkles size={10} className="opacity-70" aria-hidden /> Opcional
+                    </button>
+                  )}
                   <span className="text-[11px] tabular-nums text-ink-500 whitespace-nowrap">
                     {m.hasRange && m.range
                       ? `${fmt(m.range.min)} – ${fmt(m.range.max)}`
                       : fmt(m.subtotal)}
+                    {m.optional && <span className="ml-1 text-ink-400">· no incluido</span>}
                   </span>
                   <button
                     type="button"
@@ -1753,7 +1777,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                   </button>
                 </div>
               ) : null}
-              <div className={m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}>
+              <div className={`${m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}${m.optional ? ' opacity-60' : ''}`}>
                 {m.componentIds.map((id) => byId.get(id)).filter(Boolean).map((c) => renderRow(c))}
               </div>
             </div>
@@ -1897,19 +1921,6 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           >
             <Sparkles size={10} className="opacity-70" aria-hidden />
             Opcional
-          </button>
-        )}
-        {/* + Alternativa — offer this sub-piece as a pick-one option (or add
-            another to its group); hidden when it's an excluded optional. */}
-        {!optional && onAddAlternative && (
-          <button
-            type="button"
-            onClick={onAddAlternative}
-            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-            title="Agregar una alternativa de este componente — el cliente elige una"
-          >
-            <GitFork size={10} className="opacity-80" aria-hidden />
-            Alternativa
           </button>
         )}
         <div className="flex-1" />

@@ -156,3 +156,21 @@ export function renameModule(
     c.moduleGroup === moduleGroup ? { ...c, moduleName } : c,
   );
 }
+
+/**
+ * Mark a whole module as an optional add-on (or clear it) — stamp
+ * `moduleOptional` on every element of the group so the module drops out of (or
+ * back into) the total via isPricedComponent, the module twin of a line's
+ * isOptional. Returns a NEW array; a falsy group is a no-op.
+ */
+export function setModuleOptional(
+  components: readonly LineComponent[] | null | undefined,
+  moduleGroup: string | null | undefined,
+  optional: boolean,
+): LineComponent[] {
+  const list = (components || []).filter(Boolean) as LineComponent[];
+  if (!moduleGroup) return list;
+  return list.map((c) =>
+    c.moduleGroup === moduleGroup ? { ...c, moduleOptional: !!optional } : c,
+  );
+}
