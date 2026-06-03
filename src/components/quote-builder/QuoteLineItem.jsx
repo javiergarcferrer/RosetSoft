@@ -1595,7 +1595,7 @@ function CompoundCalculatorBand({
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
-            <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight">
+            <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
               {ranged
                 ? <>{fmt(tr.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(tr.max)}</>
                 : fmt(rowTotal)}
