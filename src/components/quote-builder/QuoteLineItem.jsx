@@ -1648,7 +1648,10 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   // "Aplicar material a todo" picker on the composition header — opens the
   // SwatchPicker, and the chosen material is stamped onto every component.
   const [applyAllOpen, setApplyAllOpen] = useState(false);
-  // Selection for manual "Agrupar en producto" — only used on a modular line.
+  // Selection mode for building a component product: clicking "Desglosar" on a
+  // component enters it (that component pre-selected), checkboxes appear so the
+  // dealer ticks the rest, and "Crear producto" groups them into one product.
+  const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -1657,10 +1660,19 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
       return next;
     });
   }
+  function startSelecting(id) {
+    setSelected(new Set([id]));
+    setSelecting(true);
+  }
+  function cancelSelecting() {
+    setSelected(new Set());
+    setSelecting(false);
+  }
   function groupSelected() {
     if (selected.size === 0) return;
     onGroupModule?.([...selected], '');
     setSelected(new Set());
+    setSelecting(false);
   }
 
   function onDragStart(e, id) {
@@ -1715,6 +1727,16 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         {isDropTarget && (
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
         )}
+        {selecting && !c.moduleGroup && (
+          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Incluir este componente en el producto">
+            <input
+              type="checkbox"
+              checked={selected.has(c.id)}
+              onChange={() => toggleSelected(c.id)}
+              className="accent-brand-600"
+            />
+          </label>
+        )}
         <div className="min-w-0 flex-1">
           <ComponentRow
             index={i}
@@ -1730,7 +1752,8 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onAddAlternative={() => onAddAlternative?.(c.id)}
             onSelectAlternative={() => onSelectAlternative?.(c.id)}
             onApplyToAll={() => onApplyToAll?.(c.id)}
-            onMakeProduct={() => onMakeProduct?.(c.id)}
+            onMakeProduct={() => startSelecting(c.id)}
+            selecting={selecting}
             dragHandleProps={dragHandleProps}
           />
         </div>
@@ -1764,6 +1787,21 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           </button>
         )}
       </div>
+      {selecting && (
+        <div className="px-3 py-2 bg-brand-50/60 border-b border-brand-100 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-medium text-brand-700">Selecciona los componentes para el producto</span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={groupSelected}
+            disabled={selected.size === 0}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+          >
+            <Boxes size={12} aria-hidden /> Crear producto{selected.size ? ` (${selected.size})` : ''}
+          </button>
+          <button type="button" onClick={cancelSelecting} className="btn-ghost text-xs">Cancelar</button>
+        </div>
+      )}
 
       {components.length === 0 ? (
         <div className="px-4 py-5 text-center text-xs text-ink-500">
@@ -1915,7 +1953,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, onMakeProduct, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, onMakeProduct, selecting, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, the range swap (a material-less sub-piece
@@ -2019,7 +2057,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         )}
         {/* Make this component its OWN component product (a named producto you
             then fill with componentes). Hidden once it already belongs to one. */}
-        {onMakeProduct && !component.moduleGroup && (
+        {onMakeProduct && !component.moduleGroup && !selecting && (
           <button
             type="button"
             onClick={onMakeProduct}
