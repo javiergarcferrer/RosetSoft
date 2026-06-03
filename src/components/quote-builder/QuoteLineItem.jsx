@@ -730,7 +730,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
     <div className="flex-1 min-w-0 space-y-2.5">
       <div className="flex items-start gap-3">
         <LinePhotos line={line} onChange={onChange} />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 space-y-2.5">
           <HeroInput
             placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
             value={line.name || ''}
@@ -738,6 +738,21 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
             autoCapitalize="words"
             enterKeyHint="next"
           />
+          {/* A compound carries no spec / grade / material strip beside the
+              photo (those live per-component), so its model link + internal note
+              ride UP here next to the name — filling the column the tall photo
+              would otherwise leave blank. A simple line keeps them full-width
+              below, under its spec + material. */}
+          {compound && modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
+          {compound && (
+            <LineNotes
+              showDescription={false}
+              description={line.description || ''}
+              onChangeDescription={(v) => onChange({ description: v })}
+              note={line.notes || ''}
+              onChangeNote={(v) => onChange({ notes: v })}
+            />
+          )}
         </div>
         {/* Product selector — opens the full catalog flow (model → material +
             color OR a price range), the same one the Catálogo button uses, so
@@ -765,21 +780,22 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
         />
       )}
       {/* Ligne Roset link for THIS product line — restricts the material
-          picker(s) to the model's offered fabrics. On a compound it governs
-          every component within (the components inherit this link). */}
-      {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
+          picker(s) to the model's offered fabrics. Simple line only; a compound
+          shows it beside the name above (the components inherit this link). */}
+      {!compound && modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
       {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
           inline icons — the least vertical space — each expanding its field on
-          click. A compound line carries no line-level description (its
-          components do), so only the note icon shows there. */}
-      <LineNotes
-        showDescription={!compound}
-        description={line.description || ''}
-        onChangeDescription={(v) => onChange({ description: v })}
-        note={line.notes || ''}
-        onChangeNote={(v) => onChange({ notes: v })}
-      />
+          click. */}
+      {!compound && (
+        <LineNotes
+          showDescription
+          description={line.description || ''}
+          onChangeDescription={(v) => onChange({ description: v })}
+          note={line.notes || ''}
+          onChangeNote={(v) => onChange({ notes: v })}
+        />
+      )}
       {!compound && (
         <CatalogPicker
           open={productPickerOpen}
