@@ -55,6 +55,11 @@ const COMPONENT_KEYS = [
   'id', 'name', 'reference', 'subtype', 'dimensions', 'description',
   'imageId', 'swatchImageId', 'qty', 'unitPrice', 'isOptional', 'optionalOffered',
   'alternativeGroup', 'isSelectedAlternative', 'materialOptions',
+  // Modular grouping — which component product (módulo) an element belongs to and
+  // that product's optional / pick-one state. Without these the public link
+  // strips the modular structure and renders flat, diverging from the editor's
+  // ClientPreview (which reads the full DB row).
+  'moduleGroup', 'moduleName', 'moduleOptional', 'moduleAlternativeGroup', 'moduleSelected',
 ];
 
 // Enrich a line/component's materialOptions with a per-option `delta`: the
