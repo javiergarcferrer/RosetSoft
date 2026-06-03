@@ -107,6 +107,21 @@ export function fabricKey(name: string | null | undefined): string {
 }
 
 /**
+ * Whether a material is currently OFFERED — eligible to appear in a quote's
+ * material picker. True only when it's on BOTH rosters: present in the price
+ * list (`notInPricelistAt == null`, so it carries a current grade/price) AND
+ * still on the Ligne Roset site (`discontinuedAt == null`). A material flagged
+ * on either is KEPT in the catalog (dealer data + admin review survive, see the
+ * merge above) but hidden from picking, so the dealer can't quote a fabric that
+ * is no longer in the list or on the website.
+ */
+export function isMaterialOffered(
+  m: Pick<Material, 'notInPricelistAt' | 'discontinuedAt'>,
+): boolean {
+  return m.notInPricelistAt == null && m.discontinuedAt == null;
+}
+
+/**
  * Ligne Roset's `remark` is free-text care/usage notes (e.g. "THIS FABRIC IS
  * NOT TB117-2013 APPROVED…", "Treated against stains (TEFLON)") — NOT a grade.
  * Drop the trivial "SWATCH A"/"SWATCH B" markers (the swatch-book letter is

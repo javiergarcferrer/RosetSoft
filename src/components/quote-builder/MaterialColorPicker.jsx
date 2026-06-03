@@ -4,7 +4,7 @@ import ImageView from '../ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { locateColor } from '../../lib/swatchMatch.js';
 import { composeSubtype } from '../../lib/subtype.js';
-import { fabricKey } from '../../lib/lrCatalog.js';
+import { fabricKey, isMaterialOffered } from '../../lib/lrCatalog.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { primaryFiber, compositionGroup, NO_COMPOSITION } from '../../lib/composition.js';
@@ -59,11 +59,19 @@ export default function MaterialColorPicker({
   currentFabric,
   autoDrill = false,
   allowMultiSelect = false,
+  offeredOnly = true,
   onPick,
   onPickMany,
   onTitleChange,
 }) {
-  const list = materials || [];
+  // Hide materials no longer offered — flagged "not in price list" or "not on
+  // site" by the catalog import. They stay in the catalog (admin can review /
+  // restore) but can't be quoted. Every pick surface (line swatch, catalog
+  // insert, client link) routes through here; the admin review list doesn't.
+  const list = useMemo(
+    () => (offeredOnly ? (materials || []).filter(isMaterialOffered) : (materials || [])),
+    [materials, offeredOnly],
+  );
 
   const [q, setQ] = useState('');
   const [category, setCategory] = useState('');
