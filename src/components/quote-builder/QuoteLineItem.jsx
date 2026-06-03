@@ -729,46 +729,40 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
   return (
     <div className="flex-1 min-w-0 space-y-2.5">
       <div className="flex items-start gap-3">
-        <LinePhotos line={line} onChange={onChange} />
+        <CoverPhoto line={line} onChange={onChange} />
         <div className="flex-1 min-w-0 space-y-2.5">
-          <HeroInput
-            placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
-            value={line.name || ''}
-            onCommit={(v) => onChange({ name: v })}
-            autoCapitalize="words"
-            enterKeyHint="next"
-          />
-          {/* A compound carries no spec / grade / material strip beside the
-              photo (those live per-component), so its model link + internal note
-              ride UP here next to the name — filling the column the tall photo
-              would otherwise leave blank. A simple line keeps them full-width
-              below, under its spec + material. */}
-          {compound && modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
-          {compound && (
-            <LineNotes
-              showDescription={false}
-              description={line.description || ''}
-              onChangeDescription={(v) => onChange({ description: v })}
-              note={line.notes || ''}
-              onChangeNote={(v) => onChange({ notes: v })}
-            />
-          )}
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <HeroInput
+                placeholder={compound ? 'Nombre de la composición' : 'Nombre del artículo'}
+                value={line.name || ''}
+                onCommit={(v) => onChange({ name: v })}
+                autoCapitalize="words"
+                enterKeyHint="next"
+              />
+            </div>
+            {/* Product selector — opens the full catalog flow (model → material +
+                color OR a price range), the same one the Catálogo button uses, so
+                picking a product prompts for its material. Simple lines only (a
+                compound's product identity lives per-component, not on the parent). */}
+            {!compound && (
+              <button
+                type="button"
+                onClick={() => setProductPickerOpen(true)}
+                className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+                title="Elegir el producto del catálogo"
+                aria-label="Elegir el producto del catálogo"
+              >
+                <PackageSearch size={15} />
+              </button>
+            )}
+          </div>
+          {/* Extra product angles — a horizontal, responsive strip that flows
+              across the width beside the cover (flex-wrap), so the thumbnails
+              spread out instead of stacking in a narrow column that strands dead
+              space to the right. */}
+          <ExtraPhotos line={line} onChange={onChange} />
         </div>
-        {/* Product selector — opens the full catalog flow (model → material +
-            color OR a price range), the same one the Catálogo button uses, so
-            picking a product prompts for its material. Gated to simple lines (a
-            compound's product identity lives per-component, not on the parent). */}
-        {!compound && (
-          <button
-            type="button"
-            onClick={() => setProductPickerOpen(true)}
-            className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
-            title="Elegir el producto del catálogo"
-            aria-label="Elegir el producto del catálogo"
-          >
-            <PackageSearch size={15} />
-          </button>
-        )}
       </div>
       {!compound && (
         <SpecStrip
@@ -780,22 +774,21 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
         />
       )}
       {/* Ligne Roset link for THIS product line — restricts the material
-          picker(s) to the model's offered fabrics. Simple line only; a compound
-          shows it beside the name above (the components inherit this link). */}
-      {!compound && modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
+          picker(s) to the model's offered fabrics. On a compound it governs
+          every component within (the components inherit this link). */}
+      {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
       {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
           inline icons — the least vertical space — each expanding its field on
-          click. */}
-      {!compound && (
-        <LineNotes
-          showDescription
-          description={line.description || ''}
-          onChangeDescription={(v) => onChange({ description: v })}
-          note={line.notes || ''}
-          onChangeNote={(v) => onChange({ notes: v })}
-        />
-      )}
+          click. A compound carries no line-level description (its components
+          do), so only the note icon shows there. */}
+      <LineNotes
+        showDescription={!compound}
+        description={line.description || ''}
+        onChangeDescription={(v) => onChange({ description: v })}
+        note={line.notes || ''}
+        onChangeNote={(v) => onChange({ notes: v })}
+      />
       {!compound && (
         <CatalogPicker
           open={productPickerOpen}
@@ -812,10 +805,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
 // can attach several angles the client sees on the share link. Extras live in
 // line.extraImageIds; each reuses the same Thumbnail (so drag/drop, paste,
 // validation and delete-on-remove come for free), and a trailing tile appends.
-function LinePhotos({ line, onChange }) {
-  const extra = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
-  // Store null (not []) when empty so the column reads "no extras" cleanly.
-  const setExtra = (next) => onChange({ extraImageIds: next.length ? next : null });
+function CoverPhoto({ line, onChange }) {
   return (
     <div className="flex-shrink-0">
       <Thumbnail
@@ -825,24 +815,36 @@ function LinePhotos({ line, onChange }) {
         ownerId={line.id}
         hoverPreview
       />
-      <div className="mt-1.5 flex w-20 flex-wrap gap-1.5 sm:w-24">
-        {extra.map((id, i) => (
-          <Thumbnail
-            key={id}
-            imageId={id}
-            onChange={(nid) => {
-              const next = extra.slice();
-              if (nid) next[i] = nid; else next.splice(i, 1);
-              setExtra(next);
-            }}
-            kind="quote-line"
-            ownerId={line.id}
-            sizeClass="w-9 h-9"
-            hoverPreview
-          />
-        ))}
-        <AddPhotoTile kind="quote-line" ownerId={line.id} onAdd={(id) => setExtra([...extra, id])} />
-      </div>
+    </div>
+  );
+}
+
+// Additional product angles the client sees on the share link — a horizontal,
+// responsive strip that flows across the available width (flex-wrap) beside the
+// cover, instead of stacking in a narrow column that strands dead space to the
+// right. Extras live in line.extraImageIds; a trailing tile appends a new one.
+function ExtraPhotos({ line, onChange }) {
+  const extra = Array.isArray(line.extraImageIds) ? line.extraImageIds : [];
+  // Store null (not []) when empty so the field reads "no extras" cleanly.
+  const setExtra = (next) => onChange({ extraImageIds: next.length ? next : null });
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {extra.map((id, i) => (
+        <Thumbnail
+          key={id}
+          imageId={id}
+          onChange={(nid) => {
+            const next = extra.slice();
+            if (nid) next[i] = nid; else next.splice(i, 1);
+            setExtra(next);
+          }}
+          kind="quote-line"
+          ownerId={line.id}
+          sizeClass="w-12 h-12"
+          hoverPreview
+        />
+      ))}
+      <AddPhotoTile kind="quote-line" ownerId={line.id} onAdd={(id) => setExtra([...extra, id])} />
     </div>
   );
 }
@@ -871,7 +873,7 @@ function AddPhotoTile({ kind, ownerId, onAdd }) {
         disabled={busy}
         title="Agregar otra foto"
         aria-label="Agregar otra foto al artículo"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md border-2 border-dashed border-ink-300 bg-ink-50 text-ink-400 transition-colors hover:border-ink-500 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-60"
+        className="inline-flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-ink-300 bg-ink-50 text-ink-400 transition-colors hover:border-ink-500 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-60"
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
       </button>
