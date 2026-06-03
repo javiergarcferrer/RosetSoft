@@ -272,7 +272,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // { grade, fabric, swatchImageId } emit, stamps an id and dedupes on
   // grade+fabric; both writes go through updateQuote (persist + autosave).
   const projectPalette = useMemo(() => {
-    const lib = Array.isArray(quote.materialLibrary) ? quote.materialLibrary : [];
+    const lib = Array.isArray(quote?.materialLibrary) ? quote.materialLibrary : [];
     return {
       materials: lib,
       onAdd: (pick) => {
@@ -302,7 +302,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       },
       onRemove: (id) => updateQuote({ materialLibrary: lib.filter((m) => m.id !== id) }),
     };
-  }, [quote.materialLibrary, updateQuote]);
+  }, [quote?.materialLibrary, updateQuote]);
 
   // Editor-side full fabric picker (the "Vista cliente" preview drives it too).
   // Derive a model's per-grade catalog price for a line — feeds the picker's
