@@ -993,13 +993,22 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
   const commit = (next) => {
     const patch = { subtype: composeSubtype(next.grade, next.fabric) };
     if ('swatchImageId' in next) patch.swatchImageId = next.swatchImageId;
-    // Resolving a material-less RANGE line: picking a grade pins the price to
-    // that grade's catalog SKU and drops the range so it bills as a normal line.
-    if ((line.priceMin != null || line.priceMax != null) && next.grade) {
+    // Picking a grade re-snapshots the reference + price from the model's SKU at
+    // that grade, so the reference's grade letter (e.g. …A → …E) and the price
+    // always track the chosen material — for an already-priced line AND a
+    // material-less RANGE line. A range pick also drops the range so it bills as
+    // a normal line. When the family can't resolve the grade (a manual or
+    // non-graded reference), the reference + price are left exactly as typed.
+    if (next.grade) {
       const p = family ? productForGrade(family, next.grade) : null;
-      if (p) patch.unitPrice = Number(p.priceUsd) || 0;
-      patch.priceMin = null;
-      patch.priceMax = null;
+      if (p) {
+        patch.reference = p.reference;
+        patch.unitPrice = Number(p.priceUsd) || 0;
+      }
+      if (line.priceMin != null || line.priceMax != null) {
+        patch.priceMin = null;
+        patch.priceMax = null;
+      }
     }
     onChange(patch);
   };
@@ -1558,7 +1567,7 @@ function CompoundCalculatorBand({
         </div>
         <div className="relative text-right ml-auto">
           <div className="eyebrow-xs tracking-wide mb-0.5">
-            {ranged ? 'Total compuesto · rango' : 'Total compuesto'}
+            {ranged ? 'Total modular · rango' : 'Total modular'}
           </div>
           <button
             type="button"
@@ -1725,7 +1734,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
       {/* Composition controls: toggle modular, and group the current selection. */}
       <div className="px-3 py-2 bg-white border-b border-ink-100 flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-medium text-ink-500">
-          {isModular ? 'Producto modular' : 'Producto compuesto'}
+          Producto modular
         </span>
         {onSetModular && (
           <button
@@ -1733,10 +1742,10 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onClick={() => onSetModular(!isModular)}
             className="btn-ghost text-xs"
             title={isModular
-              ? 'Volver a un producto compuesto (una sola lista de elementos)'
-              : 'Convertir en modular: agrupa los elementos en módulos (productos completos), una sola imagen'}
+              ? 'Quitar la agrupación en módulos — vuelve a una sola lista de elementos'
+              : 'Agrupar los elementos en módulos (productos completos) dentro de este producto'}
           >
-            <Boxes size={12} /> {isModular ? 'Quitar modular' : 'Convertir en modular'}
+            <Boxes size={12} /> {isModular ? 'Quitar agrupación' : 'Agrupar en módulos'}
           </button>
         )}
         {isModular && selected.size > 0 && (
@@ -2000,7 +2009,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
                 : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
             }`}
             title={optional
-              ? 'Quitar el marcador opcional — el componente vuelve a sumar al total compuesto'
+              ? 'Quitar el marcador opcional — el componente vuelve a sumar al total modular'
               : 'Marcar este componente como opcional — se muestra pero no suma al total'}
             aria-pressed={optional}
           >
