@@ -1240,24 +1240,11 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
           )}
         </div>
         <div className="flex-1 min-w-0">
-          {/* Mobile sticky identity bar — pins a slim thumbnail + name as the
-              client scrolls a LONG component list, so the product they're
-              configuring stays on screen without scrolling back up to the hero
-              (a full-bleed sticky hero would instead cover the list). sm+ keeps
-              the sticky image column + the full LineIdentity below. `top-2` sits
-              just under the public link's scroll-container top (that surface has
-              no app topbar); it tucks beneath the editor's mobile topbar, which
-              is the rarely-used preview-on-phone case. */}
-          <div className="sm:hidden sticky top-2 z-[3] -mx-4 mb-2 flex items-center gap-2.5 border-b border-ink-100 bg-white px-4 py-2 shadow-sm">
-            {line.imageId && (
-              <ImageView id={line.imageId} alt="" className="h-9 w-9 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-contain" />
-            )}
-            <div className="min-w-0">
-              {line.family && <div className="eyebrow-xs tracking-widest text-ink-500 leading-none">{line.family}</div>}
-              <div className="truncate text-sm font-semibold text-ink-900 leading-tight">{line.name || '—'}</div>
-            </div>
-          </div>
-          <div className="hidden sm:block"><LineIdentity family={line.family} name={line.name} /></div>
+          {/* Product identity (family eyebrow + name). A static header on every
+              breakpoint — the previous mobile-only STICKY recap bar pinned itself
+              mid-scroll and overlapped the rows beneath it; the per-module headers
+              already carry the structure as the client scrolls a long list. */}
+          <LineIdentity family={line.family} name={line.name} />
           {/* Uniform compound → state the shared fabric ONCE here (swatch +
               "Tapizado · …"), instead of repeating it on every row below. In
               edit mode the hero swatch is itself a whole-compound picker. */}
