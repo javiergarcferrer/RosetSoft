@@ -164,10 +164,9 @@ export default function QuoteLineItem({
   }
   // "Apply this component's material to all the others" — the pick-once shortcut.
   // Copies the source's grade + fabric (subtype) and colour swatch onto every
-  // sibling, mirroring GradeFabricRow.commit per piece: a material-less RANGE
-  // sibling gets its price pinned to ITS OWN model at the grade (and its range
-  // dropped); an already-priced sibling keeps its own per-model price — only its
-  // fabric/swatch change, since each component is a distinct SKU.
+  // sibling, mirroring GradeFabricRow.commit per piece: each sibling is repriced
+  // to ITS OWN model at the grade (reference + price re-snapshotted, any range
+  // dropped) — a grade is a price tier, so the price + SKU letter must follow.
   function applyComponentMaterialToAll(sourceId) {
     const comps = Array.isArray(line.components) ? line.components : [];
     const src = comps.find((c) => c.id === sourceId);
@@ -178,10 +177,12 @@ export default function QuoteLineItem({
   // "Apply a CHOSEN material to all components" — the header twin of
   // applyComponentMaterialToAll, fed by the composition-header SwatchPicker
   // instead of a source component. Stamps the picked grade + fabric (subtype)
-  // and swatch onto EVERY component, repricing a material-less RANGE piece
-  // against ITS OWN model at the grade (and dropping its range) exactly as
-  // GradeFabricRow.commit does for a single pick — so a component is never left
-  // both ranged AND priced, and the compound subtotal re-sums correctly.
+  // and swatch onto EVERY component AND reprices each to ITS OWN model at the
+  // grade (reference + price re-snapshotted, any range dropped) exactly as
+  // GradeFabricRow.commit does for a single pick. A grade is a price tier, so
+  // applying it must move every piece's price + SKU letter — not just the
+  // material-less RANGE pieces — else an already-priced component keeps its old
+  // grade's price/reference while showing the new fabric (the reported bug).
   function applyMaterialToAllComponents({ grade, fabric, swatchImageId }) {
     const comps = Array.isArray(line.components) ? line.components : [];
     if (!comps.length) return;
@@ -189,12 +190,19 @@ export default function QuoteLineItem({
     const swatch = swatchImageId ?? null;
     const components = comps.map((c) => {
       const patch = { subtype, swatchImageId: swatch };
-      if ((c.priceMin != null || c.priceMax != null) && grade) {
+      if (grade) {
         const fam = families?.get(splitSkuGrade(c.reference).root) || null;
         const p = fam ? productForGrade(fam, grade) : null;
-        if (p) patch.unitPrice = Number(p.priceUsd) || 0;
-        patch.priceMin = null;
-        patch.priceMax = null;
+        // Reprice to this component's own SKU at the grade (no-op when the grade
+        // is unchanged; left intact when its model doesn't carry the grade).
+        if (p) {
+          patch.reference = p.reference;
+          patch.unitPrice = Number(p.priceUsd) || 0;
+        }
+        if (c.priceMin != null || c.priceMax != null) {
+          patch.priceMin = null;
+          patch.priceMax = null;
+        }
       }
       return { ...c, ...patch };
     });
