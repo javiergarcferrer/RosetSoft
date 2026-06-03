@@ -249,6 +249,19 @@ export default function QuoteLineItem({
     const next = groupComponents(line.components, ids, name, newId);
     if (next) onChange({ components: next, compoundKind: 'modular' });
   }
+  // Turn ONE component line into its own component product (a named producto of
+  // one) directly from the line — no select-many-then-group dance. The dealer
+  // then fills it with the product's "Agregar componente".
+  function makeComponentProduct(componentId) {
+    groupIntoModule([componentId]);
+  }
+  // Add a blank componente INTO an existing producto (module), the per-product
+  // "Agregar componente", so a component product is built up piece by piece.
+  function addComponentToModule(moduleGroup) {
+    const comps = Array.isArray(line.components) ? line.components : [];
+    const moduleName = comps.find((c) => c.moduleGroup === moduleGroup)?.moduleName || '';
+    onChange({ components: [...comps, makeBlankComponent({ moduleGroup, moduleName })] });
+  }
   function ungroupModuleById(moduleGroup) {
     onChange({ components: ungroupModule(line.components, moduleGroup) });
   }
@@ -448,6 +461,8 @@ export default function QuoteLineItem({
           onToggleModuleOptional={toggleModuleOptional}
           onAddModuleAlternative={addModuleAlternativeById}
           onSelectModuleAlternative={selectModuleAlternativeById}
+          onMakeProduct={makeComponentProduct}
+          onAddToProduct={addComponentToModule}
           onAddMany={addComponentsFromSeeds}
         />
       )}
@@ -1615,7 +1630,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onApplyMaterialToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onApplyMaterialToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onMakeProduct, onAddToProduct, onAddMany }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1720,6 +1735,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onAddAlternative={() => onAddAlternative?.(c.id)}
             onSelectAlternative={() => onSelectAlternative?.(c.id)}
             onApplyToAll={() => onApplyToAll?.(c.id)}
+            onMakeProduct={() => onMakeProduct?.(c.id)}
             dragHandleProps={dragHandleProps}
           />
         </div>
@@ -1850,6 +1866,16 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     {m.optional && <span className="ml-1 text-ink-400">· no incluido</span>}
                     {m.altGroup && !m.selected && <span className="ml-1 text-ink-400">· no elegido</span>}
                   </span>
+                  {onAddToProduct && (
+                    <button
+                      type="button"
+                      onClick={() => onAddToProduct(m.moduleGroup)}
+                      className="text-ink-400 hover:text-brand-700 p-1"
+                      title="Agregar un componente a este producto"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onUngroupModule?.(m.moduleGroup)}
@@ -1916,7 +1942,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, onMakeProduct, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, the range swap (a material-less sub-piece
@@ -2015,6 +2041,18 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           >
             <Sparkles size={10} className="opacity-70" aria-hidden />
             Opcional
+          </button>
+        )}
+        {/* Make this component its OWN component product (a named producto you
+            then fill with componentes). Hidden once it already belongs to one. */}
+        {onMakeProduct && !component.moduleGroup && (
+          <button
+            type="button"
+            onClick={onMakeProduct}
+            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            title="Convertir este componente en un producto (un producto completo que agrupa varios componentes)"
+          >
+            <Boxes size={10} className="opacity-80" aria-hidden /> Hacer producto
           </button>
         )}
         <div className="flex-1" />
