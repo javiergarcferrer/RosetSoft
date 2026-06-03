@@ -28,11 +28,14 @@ function creatorDisplay(creator) {
 // `meId` the signed-in seller (or null); the effective scope is resolved here
 // exactly as the page used to so the whole projection reflects the toggle.
 export function resolveQuotesList({
-  quotes, customers, profiles, orders, containers, lines,
+  quotes, customers, professionals, profiles, orders, containers, lines,
   scope, meId, q, tab, filters, sort,
 }) {
   const customerById = new Map();
   for (const c of customers) customerById.set(c.id, c);
+
+  const professionalById = new Map();
+  for (const p of professionals || []) professionalById.set(p.id, p);
 
   // Profiles include the shared 'team' settings row alongside real
   // users; the lookup is keyed by auth.uid() so we hit only the
@@ -42,6 +45,22 @@ export function resolveQuotesList({
 
   const ordersById = new Map();
   for (const o of orders) ordersById.set(o.id, o);
+
+  // Per-quote CLIENT label for the "Cliente" column: the assigned customer's
+  // name, or — when NO customer is set — the PROFESSIONAL's name (flagged), so a
+  // clientless quote still identifies who the work is for. `isProfessional` lets
+  // the row mark the fallback; null ⇒ neither on file ("Sin cliente"). One map
+  // drives the column, its sort, and the search needle so they never disagree.
+  const clientByQuoteId = new Map();
+  for (const qu of quotes) {
+    const cust = customerById.get(qu.customerId);
+    if (cust) {
+      clientByQuoteId.set(qu.id, { name: cust.name || cust.company || '', isProfessional: false });
+      continue;
+    }
+    const prof = professionalById.get(qu.professionalId);
+    if (prof) clientByQuoteId.set(qu.id, { name: prof.name || prof.company || '', isProfessional: true });
+  }
 
   // orderId → that order's TRACKABLE containers (valid ISO 6346 number), so a
   // quote row offers tracking only when its order has a real shipment to track.
@@ -124,10 +143,14 @@ export function resolveQuotesList({
     .filter((qu) => {
       if (!needle) return true;
       const cust = customerById.get(qu.customerId);
+      // Match the professional too, so searching a clientless quote by the
+      // referrer's name (what the row now shows) finds it.
+      const prof = professionalById.get(qu.professionalId);
       return (
         (qu.number || '').toString().includes(needle) ||
         (cust?.name || '').toLowerCase().includes(needle) ||
-        (cust?.company || '').toLowerCase().includes(needle)
+        (cust?.company || '').toLowerCase().includes(needle) ||
+        (prof?.name || '').toLowerCase().includes(needle)
       );
     });
 
@@ -141,8 +164,9 @@ export function resolveQuotesList({
       return ((totalByQuoteId.get(a.id) || 0) - (totalByQuoteId.get(b.id) || 0)) * mul;
     }
     if (sort.key === 'customer') {
-      const an = (customerById.get(a.customerId)?.name || '').toLowerCase();
-      const bn = (customerById.get(b.customerId)?.name || '').toLowerCase();
+      // Sort by the label actually shown (customer, or professional fallback).
+      const an = (clientByQuoteId.get(a.id)?.name || '').toLowerCase();
+      const bn = (clientByQuoteId.get(b.id)?.name || '').toLowerCase();
       return an.localeCompare(bn) * mul;
     }
     // recent
@@ -200,6 +224,8 @@ export function resolveQuotesList({
     trackingByQuoteId,
     totalByQuoteId,
     customerById,
+    professionalById,
+    clientByQuoteId,
     profileById,
     ordersById,
     trackableByOrderId,

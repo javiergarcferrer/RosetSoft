@@ -36,6 +36,22 @@ function TradeFlag({ quote }) {
   );
 }
 
+/**
+ * Marks the "Cliente" value as the referring PROFESSIONAL — shown when a quote
+ * has no customer assigned, so the row still names who the work is for without
+ * the value being mistaken for an actual client.
+ */
+function ProfessionalTag() {
+  return (
+    <span
+      className="shrink-0 inline-flex items-center rounded-full bg-ink-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-500"
+      title="Profesional · sin cliente asignado"
+    >
+      Profesional
+    </span>
+  );
+}
+
 // Tab keys the list understands. A `?status=` deep-link (e.g. from the
 // dashboard's "Ver aceptadas") is honored only if it names one of these;
 // anything else falls back to "Todas".
@@ -98,6 +114,14 @@ export default function Quotes() {
     [profileId],
     []
   );
+  // Professionals: the row falls back to the referring professional as the
+  // "client" when a quote has no customer assigned, so a clientless quote still
+  // names who the work is for.
+  const professionals = useLiveQuery(
+    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    []
+  );
   const orders = useLiveQuery(
     () => db.orders.where('profileId').equals(profileId || '').toArray(),
     [profileId],
@@ -143,14 +167,14 @@ export default function Quotes() {
   // unchanged.
   const {
     scopedCount, tabs, creatorFilter, rows: filtered, orderGroups,
-    trackingByQuoteId, totalByQuoteId, customerById, profileById,
+    trackingByQuoteId, totalByQuoteId, clientByQuoteId, profileById,
     ordersById, trackableByOrderId,
   } = useMemo(
     () => resolveQuotesList({
-      quotes, customers, profiles, orders, containers, lines: allLines,
+      quotes, customers, professionals, profiles, orders, containers, lines: allLines,
       scope, meId, q, tab, filters, sort,
     }),
-    [quotes, customers, profiles, orders, containers, allLines, scope, meId, q, tab, filters, sort],
+    [quotes, customers, professionals, profiles, orders, containers, allLines, scope, meId, q, tab, filters, sort],
   );
 
   if (!loaded) {
@@ -211,7 +235,7 @@ export default function Quotes() {
           <QuoteCard
             key={qu.id}
             qu={qu}
-            customer={customerById.get(qu.customerId)}
+            client={clientByQuoteId.get(qu.id)}
             creator={profileById.get(qu.createdByUserId)}
             order={ordersById.get(qu.orderId)}
             tracking={trackingByQuoteId.get(qu.id)}
@@ -270,7 +294,7 @@ export default function Quotes() {
                     key={qu.id}
                     qu={qu}
                     grouped
-                    customer={customerById.get(qu.customerId)}
+                    client={clientByQuoteId.get(qu.id)}
                     creator={profileById.get(qu.createdByUserId)}
                     total={totalByQuoteId.get(qu.id) || 0}
                     rates={displayRatesFor(qu, settings)}
@@ -286,7 +310,7 @@ export default function Quotes() {
               <QuoteRow
                 key={u.quote.id}
                 qu={u.quote}
-                customer={customerById.get(u.quote.customerId)}
+                client={clientByQuoteId.get(u.quote.id)}
                 creator={profileById.get(u.quote.createdByUserId)}
                 total={totalByQuoteId.get(u.quote.id) || 0}
                 rates={displayRatesFor(u.quote, settings)}
@@ -317,7 +341,7 @@ function OrderIndicator({ order }) {
   );
 }
 
-function QuoteCard({ qu, customer, creator, order, tracking, total, rates }) {
+function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -327,7 +351,10 @@ function QuoteCard({ qu, customer, creator, order, tracking, total, rates }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="text-sm font-semibold">#{qu.number || '—'}</div>
-            <div className="text-xs text-ink-500 truncate">{customer?.name || 'Sin cliente'}</div>
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-xs text-ink-500 truncate">{client?.name || 'Sin cliente'}</span>
+              {client?.isProfessional && <ProfessionalTag />}
+            </div>
             {creatorLabel && (
               <div className="text-[11px] text-ink-500 truncate">Creada por {creatorLabel}</div>
             )}
@@ -355,14 +382,19 @@ function QuoteCard({ qu, customer, creator, order, tracking, total, rates }) {
   );
 }
 
-function QuoteRow({ qu, customer, creator, total, rates, grouped = false }) {
+function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
   return (
     <tr className={`cursor-pointer ${grouped ? 'bg-ink-50/40' : ''}`} onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
       <td className={`font-medium whitespace-nowrap ${grouped ? 'border-l-2 border-ink-300 pl-5' : ''}`}>#{qu.number || '—'}</td>
-      <td className="text-ink-700 truncate max-w-[160px]" title={customer?.name || ''}>{customer?.name || '—'}</td>
+      <td className="text-ink-700 max-w-[160px]" title={client?.name || ''}>
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="truncate">{client?.name || '—'}</span>
+          {client?.isProfessional && <ProfessionalTag />}
+        </div>
+      </td>
       <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
         {creatorLabel || '—'}
       </td>
