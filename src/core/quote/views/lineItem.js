@@ -32,7 +32,15 @@ import { canPropagateMaterial } from '../../../lib/subtype.js';
 // back to the line total). Range-aware so a module with a material-less element
 // shows a band like the line does.
 function resolveModules(components) {
-  return modulesOf(components).map((m) => {
+  const mods = modulesOf(components);
+  // Position among module-alternative siblings ("Alternativa N de M").
+  const altCounts = new Map();
+  for (const m of mods) {
+    const g = m.components[0]?.moduleAlternativeGroup;
+    if (g) altCounts.set(g, (altCounts.get(g) || 0) + 1);
+  }
+  const altSeen = new Map();
+  return mods.map((m) => {
     // "Would-be" priced elements ignore the module's OWN optional flag, so the
     // header still shows what the module costs even when it's a parked add-on
     // (the real total excludes an optional module via isPricedComponent).
@@ -51,6 +59,14 @@ function resolveModules(components) {
       (s, c) => s + (Number(c.unitPrice) || 0) * (Number(c.qty) || 0),
       0,
     );
+    const altGroup = m.components[0]?.moduleAlternativeGroup || null;
+    let altIndex = null;
+    let altTotal = null;
+    if (altGroup) {
+      altIndex = (altSeen.get(altGroup) || 0) + 1;
+      altSeen.set(altGroup, altIndex);
+      altTotal = altCounts.get(altGroup);
+    }
     return {
       moduleGroup: m.moduleGroup,
       name: m.name,
@@ -61,6 +77,11 @@ function resolveModules(components) {
       range,
       // The whole module is an opt-in add-on (every element carries moduleOptional).
       optional: m.components.length > 0 && m.components.every((c) => !!c.moduleOptional),
+      // Module-level pick-one (component products): group, chosen flag, position.
+      altGroup,
+      selected: !!m.components[0]?.moduleSelected,
+      altIndex,
+      altTotal,
     };
   });
 }

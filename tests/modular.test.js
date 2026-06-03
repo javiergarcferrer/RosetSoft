@@ -15,8 +15,12 @@ import {
   groupComponents,
   ungroupModule,
   renameModule,
+  setModuleOptional,
+  addModuleAlternative,
+  selectModuleAlternative,
 } from '../src/lib/modules.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
+import { isPricedComponent } from '../src/lib/constants.js';
 
 const ids = () => {
   let n = 0;
@@ -31,6 +35,54 @@ const COMPS = [
   { id: 'c', name: 'SCATTER CUSHION', unitPrice: 630, qty: 2 },
   { id: 'd', name: 'OTTOMAN', unitPrice: 2100, qty: 1 },
 ];
+
+/* ---------------------- module optional / alternative ---------------------- */
+
+// A module = components sharing a moduleGroup. Optional/alternative live at the
+// MODULE level (per the structure spec); components never carry an alternative.
+const MOD = [
+  { id: 'a', moduleGroup: 'L', moduleName: 'Loveseat', unitPrice: 6430, qty: 1 },
+  { id: 'b', moduleGroup: 'L', unitPrice: 1235, qty: 1 },
+  { id: 'd', name: 'OTTOMAN', unitPrice: 2100, qty: 1 },
+];
+
+test('setModuleOptional stamps the whole module + drops it from the total', () => {
+  const opt = setModuleOptional(MOD, 'L', true);
+  assert.ok(opt.filter((c) => c.moduleGroup === 'L').every((c) => c.moduleOptional === true));
+  assert.equal(opt.find((c) => c.id === 'd').moduleOptional, undefined); // ottoman untouched
+  // an optional module is excluded from the compound total (only the ottoman left)
+  assert.equal(compoundSubtotal({ components: opt }), 2100);
+  // clearing folds it back in: 6430 + 1235 + 2100
+  assert.equal(compoundSubtotal({ components: setModuleOptional(opt, 'L', false) }), 9765);
+});
+
+test('isPricedComponent excludes an optional or non-selected-alternative module', () => {
+  assert.equal(isPricedComponent({ moduleOptional: true }), false);
+  assert.equal(isPricedComponent({ moduleAlternativeGroup: 'g', moduleSelected: false }), false);
+  assert.equal(isPricedComponent({ moduleAlternativeGroup: 'g', moduleSelected: true }), true);
+  assert.equal(isPricedComponent({ moduleGroup: 'L' }), true); // a plain module element counts
+});
+
+test('addModuleAlternative duplicates the module as a non-selected sibling', () => {
+  const next = addModuleAlternative(MOD, 'L', ids());
+  const src = next.filter((c) => c.moduleGroup === 'L');
+  assert.ok(src.every((c) => c.moduleSelected === true && c.moduleAlternativeGroup));
+  const altGroup = src[0].moduleAlternativeGroup;
+  const dup = next.filter((c) => c.moduleAlternativeGroup === altGroup && c.moduleGroup !== 'L');
+  assert.equal(dup.length, 2);
+  assert.ok(dup.every((c) => c.moduleSelected === false));
+  assert.notEqual(dup[0].moduleGroup, 'L');
+  // only the selected module prices into the total (ottoman + selected loveseat)
+  assert.equal(compoundSubtotal({ components: next }), 6430 + 1235 + 2100);
+});
+
+test('selectModuleAlternative flips the priced module', () => {
+  const next = addModuleAlternative(MOD, 'L', ids());
+  const dupGroup = next.find((c) => c.moduleAlternativeGroup && c.moduleGroup !== 'L').moduleGroup;
+  const picked = selectModuleAlternative(next, dupGroup);
+  assert.ok(picked.filter((c) => c.moduleGroup === dupGroup).every((c) => c.moduleSelected === true));
+  assert.ok(picked.filter((c) => c.moduleGroup === 'L').every((c) => c.moduleSelected === false));
+});
 
 /* ------------------------------ isModularLine ------------------------------ */
 

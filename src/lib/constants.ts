@@ -107,7 +107,7 @@ export function isPricedLine(
  */
 export function isPricedComponent(
   component:
-    | Pick<LineComponent, 'isOptional' | 'moduleOptional' | 'alternativeGroup' | 'isSelectedAlternative'>
+    | Pick<LineComponent, 'isOptional' | 'moduleOptional' | 'alternativeGroup' | 'isSelectedAlternative' | 'moduleAlternativeGroup' | 'moduleSelected'>
     | null
     | undefined,
 ): boolean {
@@ -115,6 +115,7 @@ export function isPricedComponent(
   if (component.isOptional) return false;
   if (component.moduleOptional) return false;
   if (component.alternativeGroup && !component.isSelectedAlternative) return false;
+  if (component.moduleAlternativeGroup && !component.moduleSelected) return false;
   return true;
 }
 
