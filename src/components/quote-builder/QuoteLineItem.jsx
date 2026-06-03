@@ -246,8 +246,12 @@ export default function QuoteLineItem({
   }
   // Group the given component ids into one named module (a component product).
   function groupIntoModule(ids, name) {
+    // Do NOT write compoundKind here — quote_lines has no compound_kind column
+    // (the modular refactor shipped without that migration), so including it
+    // makes the whole patch fail and silently revert. A component's moduleGroup
+    // already makes isModularLine true, which is all the grouped view needs.
     const next = groupComponents(line.components, ids, name, newId);
-    if (next) onChange({ components: next, compoundKind: 'modular' });
+    if (next) onChange({ components: next });
   }
   // Turn ONE component line into its own component product (a named producto of
   // one) directly from the line — no select-many-then-group dance. The dealer
@@ -1710,16 +1714,6 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         {isDropTarget && (
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
         )}
-        {isModular && (
-          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Seleccionar para agrupar en un producto">
-            <input
-              type="checkbox"
-              checked={selected.has(c.id)}
-              onChange={() => toggleSelected(c.id)}
-              className="accent-brand-600"
-            />
-          </label>
-        )}
         <div className="min-w-0 flex-1">
           <ComponentRow
             index={i}
@@ -1752,28 +1746,6 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         <span className="text-[11px] font-medium text-ink-500">
           Modular
         </span>
-        {onSetModular && (
-          <button
-            type="button"
-            onClick={() => onSetModular(!isModular)}
-            className="btn-ghost text-xs"
-            title={isModular
-              ? 'Quitar la agrupación en productos — vuelve a una sola lista de componentes'
-              : 'Agrupar los componentes en productos (productos completos) dentro de este modular'}
-          >
-            <Boxes size={12} /> {isModular ? 'Quitar agrupación' : 'Agrupar en productos'}
-          </button>
-        )}
-        {isModular && selected.size > 0 && (
-          <button
-            type="button"
-            onClick={groupSelected}
-            className="btn-ghost text-xs text-brand-700"
-            title="Agrupar los elementos seleccionados en un producto (un producto completo)"
-          >
-            <Combine size={12} /> Agrupar {selected.size} en producto
-          </button>
-        )}
         <div className="flex-1" />
         {/* Top-level "apply material to all" — one pick stamps the chosen grade +
             fabric + swatch onto EVERY component (repricing material-less pieces
