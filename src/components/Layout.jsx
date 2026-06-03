@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
@@ -8,6 +8,9 @@ import ImageView from './ImageView.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
 import QuickCreate from './QuickCreate.jsx';
 import { navForRole } from '../lib/access.js';
+
+// Persisted preference for the desktop "hide sidebar" toggle (see Layout).
+const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
 
 // The unified, role-gated sidebar — ONE system across both cores — is defined
 // by the "limbic" access layer (lib/access.js: navForRole). The role reveals
@@ -18,8 +21,19 @@ export default function Layout() {
   const navGroups = navForRole(currentProfile?.role);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
+  // Desktop-only: hide the static sidebar to reclaim horizontal space. Persisted
+  // so the choice survives reloads. Every effect of it below is md:-gated, so the
+  // phone layout (which uses the navOpen drawer instead) is never affected.
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  );
   const isMobile = !useMediaQuery('(min-width: 768px)');
   const company = settings?.companyName || 'Roset Soft';
+
+  // Remember the collapse preference across sessions.
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch {}
+  }, [collapsed]);
 
   // Close drawer on navigation
   useEffect(() => {
@@ -90,7 +104,7 @@ export default function Layout() {
       <aside
         className={`bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
-        }`}
+        } ${collapsed ? 'md:hidden' : ''}`}
         aria-label="Navegación principal"
       >
         <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between gap-3">
@@ -113,13 +127,26 @@ export default function Layout() {
             )}
             <div className="eyebrow-xs font-normal tracking-widest text-ink-400">Roset Soft</div>
           </div>
-          <button
-            onClick={() => setNavOpen(false)}
-            className="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 -my-2 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
-            aria-label="Cerrar menú"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center -mr-2 -my-2">
+            {/* Desktop: collapse the sidebar out of the way (it reappears via the
+                floating toggle by the page's top-left corner). */}
+            <button
+              onClick={() => setCollapsed(true)}
+              className="hidden md:inline-flex items-center justify-center w-9 h-9 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+              aria-label="Ocultar menú"
+              title="Ocultar menú"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+            {/* Mobile: close the slide-in drawer. */}
+            <button
+              onClick={() => setNavOpen(false)}
+              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+              aria-label="Cerrar menú"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* QuickBooks-style "+ Nuevo" quick-create — only where accounting
@@ -131,7 +158,7 @@ export default function Layout() {
             and is hidden in the mobile drawer (the component owns both). */}
         <ViewAsToggle />
 
-        <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navGroups.map((group, gi) => (
             <div
               key={gi}
@@ -172,13 +199,31 @@ export default function Layout() {
         <ProfileMenu />
       </aside>
 
+      {/* Desktop "show sidebar" toggle — only rendered while collapsed. Lives in
+          the gutter the collapsed <main> reserves (md:pl-12 below), so it never
+          overlaps the page's back-link or title. Hidden on mobile, which has its
+          own topbar Menu button. */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="hidden md:inline-flex fixed top-3 left-2.5 z-20 items-center justify-center w-9 h-9 rounded-md bg-white text-ink-600 border border-ink-200 shadow-soft hover:bg-ink-50 hover:text-ink-900 transition-colors"
+          aria-label="Mostrar menú"
+          title="Mostrar menú"
+        >
+          <PanelLeft size={18} />
+        </button>
+      )}
+
       {/* Single scroll container for the whole app shell. html/body are
           pinned in index.css so this is where momentum scrolling lives.
           overflow-x-hidden is a hard safety net so no descendant can ever
           cause horizontal scrolling regardless of width. overscroll-contain
           stops a fling from chaining up to the locked body (which on iOS
-          would otherwise show a 1-pixel bounce flicker). */}
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+          would otherwise show a 1-pixel bounce flicker). When the sidebar is
+          collapsed, a small left gutter (md:pl-12) keeps content clear of the
+          floating show-toggle. */}
+      <main className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain ${collapsed ? 'md:pl-12' : ''}`}>
         <MainContent />
       </main>
     </div>
