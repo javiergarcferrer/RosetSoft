@@ -1628,7 +1628,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   // "Aplicar material a todo" picker on the composition header — opens the
   // SwatchPicker, and the chosen material is stamped onto every component.
   const [applyAllOpen, setApplyAllOpen] = useState(false);
-  // Selection for manual "Agrupar en módulo" — only used on a modular line.
+  // Selection for manual "Agrupar en producto" — only used on a modular line.
   const [selected, setSelected] = useState(() => new Set());
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -1696,7 +1696,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
         )}
         {isModular && (
-          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Seleccionar para agrupar en un módulo">
+          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Seleccionar para agrupar en un producto">
             <input
               type="checkbox"
               checked={selected.has(c.id)}
@@ -1734,7 +1734,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
       {/* Composition controls: toggle modular, and group the current selection. */}
       <div className="px-3 py-2 bg-white border-b border-ink-100 flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-medium text-ink-500">
-          Producto modular
+          Modular
         </span>
         {onSetModular && (
           <button
@@ -1742,10 +1742,10 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onClick={() => onSetModular(!isModular)}
             className="btn-ghost text-xs"
             title={isModular
-              ? 'Quitar la agrupación en módulos — vuelve a una sola lista de elementos'
-              : 'Agrupar los elementos en módulos (productos completos) dentro de este producto'}
+              ? 'Quitar la agrupación en productos — vuelve a una sola lista de componentes'
+              : 'Agrupar los componentes en productos (productos completos) dentro de este modular'}
           >
-            <Boxes size={12} /> {isModular ? 'Quitar agrupación' : 'Agrupar en módulos'}
+            <Boxes size={12} /> {isModular ? 'Quitar agrupación' : 'Agrupar en productos'}
           </button>
         )}
         {isModular && selected.size > 0 && (
@@ -1753,9 +1753,9 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             type="button"
             onClick={groupSelected}
             className="btn-ghost text-xs text-brand-700"
-            title="Agrupar los elementos seleccionados en un módulo (un producto completo)"
+            title="Agrupar los elementos seleccionados en un producto (un producto completo)"
           >
-            <Combine size={12} /> Agrupar {selected.size} en módulo
+            <Combine size={12} /> Agrupar {selected.size} en producto
           </button>
         )}
         <div className="flex-1" />
@@ -1793,7 +1793,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                       type="button"
                       onClick={() => onSelectModuleAlternative?.(m.moduleGroup)}
                       aria-pressed={m.selected}
-                      title={m.selected ? 'Módulo seleccionado' : 'Seleccionar este módulo'}
+                      title={m.selected ? 'Producto seleccionado' : 'Seleccionar este producto'}
                       className="inline-flex items-center gap-1.5 flex-shrink-0"
                     >
                       <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
@@ -1812,7 +1812,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     value={m.name}
                     onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
                     className="input min-h-8 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
-                    placeholder="Nombre del módulo"
+                    placeholder="Nombre del producto"
                   />
                   {onToggleModuleOptional && !m.altGroup && (
                     <button
@@ -1824,8 +1824,8 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                           : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
                       }`}
                       title={m.optional
-                        ? 'Quitar opcional — el módulo vuelve a sumar al total'
-                        : 'Marcar el módulo como opcional — se muestra pero no suma al total'}
+                        ? 'Quitar opcional — el producto vuelve a sumar al total'
+                        : 'Marcar el producto como opcional — se muestra pero no suma al total'}
                       aria-pressed={m.optional}
                     >
                       <Sparkles size={10} className="opacity-70" aria-hidden /> Opcional
@@ -1837,8 +1837,8 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                       onClick={() => onAddModuleAlternative(m.moduleGroup)}
                       className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400"
                       title={m.altGroup
-                        ? 'Agregar otra alternativa de este módulo'
-                        : 'Ofrecer este módulo como alternativa — el cliente elige uno'}
+                        ? 'Agregar otra alternativa de este producto'
+                        : 'Ofrecer este producto como alternativa — el cliente elige uno'}
                     >
                       <GitFork size={10} className="opacity-80" aria-hidden /> Alternativa
                     </button>
@@ -1854,7 +1854,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     type="button"
                     onClick={() => onUngroupModule?.(m.moduleGroup)}
                     className="text-ink-400 hover:text-brand-700 p-1"
-                    title="Desagrupar este módulo"
+                    title="Desagrupar este producto"
                   >
                     <Split size={12} />
                   </button>
@@ -1879,10 +1879,10 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onClick={() => setMultiOpen(true)}
             className="btn-ghost text-xs"
             title={isModular
-              ? 'Buscar y agregar los elementos de un módulo (producto completo) de una vez, al mismo grado'
+              ? 'Buscar y agregar los elementos de un producto (producto completo) de una vez, al mismo grado'
               : 'Buscar y agregar varios elementos del catálogo de una vez, al mismo grado'}
           >
-            <Boxes size={12} /> {isModular ? 'Agregar módulo' : 'Agregar varios'}
+            <Boxes size={12} /> {isModular ? 'Agregar producto' : 'Agregar varios'}
           </button>
         )}
         <button
