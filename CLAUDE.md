@@ -30,7 +30,7 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
   - Logic module (`src/lib|db|pdf`) → that module's test if it exists + typecheck.
   - Every `main` push → build MUST pass (Vercel builds with it).
 - Tests cover ONLY money/parsing/data-integrity:
-  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype}.test.js`.
+  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular}.test.js`.
   Don't add tests for presentational/getters/label maps — write obviously-correct
   code instead. "N/N passed" on an unrelated change is noise, not verification.
 - **Architecture is ENFORCED**: `tests/architecture.test.js` is a fitness function
@@ -83,10 +83,17 @@ facts: `supabase/CLAUDE.md` — read it before DB work.**
 Pricing model (the complex part): a `quote_line` may be compound (`components[]`),
 optional (`isOptional`, excluded from total), pick-one (`alternativeGroup` +
 `isSelectedAlternative` — only the selected member priced), or take-all set
-(`setGroup` — every member priced). `isPricedLine`/`isPricedComponent`
-(`lib/constants`) gate the totals; ranges via `priceMin`/`priceMax`. USD→DOP rate
-locks at ACCEPT, single source `quoteRateState` (keyed on `acceptedAt`). Engine =
-`lib/pricing.ts`.
+(`setGroup` — every member priced). A compound can be MODULAR — its components
+grouped into named modules (`moduleGroup`/`moduleName`, `compoundKind:'modular'`);
+Element→Component-product→Modular, `lib/modules.ts`. A module (a component product)
+may itself be optional (`moduleOptional`) or pick-one (`moduleAlternativeGroup` +
+`moduleSelected`), so optional/alternative live at the LINE + MODULE level while a
+leaf component carries material options + optional add-ons (not alternatives).
+`isPricedLine`/`isPricedComponent` (`lib/constants`) gate the totals
+(`isPricedComponent` also drops an optional / non-selected-alternative MODULE);
+ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
+`quoteRateState` (keyed on `acceptedAt`). Engine = `lib/pricing.ts` (+
+`lib/modules.ts` for the per-module roll-ups).
 
 ## Migrations (ordering is load-bearing)
 - `YYYYMMDDHHMMSS_desc.sql`, timestamp **later than every existing** file. **Never
