@@ -19,6 +19,7 @@ import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
+import { MaterialsContext } from '../components/quote-builder/MaterialsContext.js';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
@@ -634,12 +635,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             },
           }}>
             <FamiliesContext.Provider value={families}>
-              <LineItemsCard
-                lines={lines}
-                groups={groups}
-                quote={quote}
-                focusLineId={focusLineId}
-              />
+              <MaterialsContext.Provider value={materials}>
+                <LineItemsCard
+                  lines={lines}
+                  groups={groups}
+                  quote={quote}
+                  focusLineId={focusLineId}
+                />
+              </MaterialsContext.Provider>
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />

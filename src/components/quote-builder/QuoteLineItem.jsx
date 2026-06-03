@@ -16,8 +16,9 @@ import MultiAddPicker from './MultiAddPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { FamiliesContext } from './FamiliesContext.js';
+import { MaterialsContext } from './MaterialsContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
-import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
+import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch } from '../../lib/catalog.js';
@@ -1015,6 +1016,7 @@ function NoteToggle({ icon: Icon, label, content, open, onClick }) {
 function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, sourceUrl }) {
   const { rememberSwatch } = useQuoteActions();
   const families = useContext(FamiliesContext);
+  const materials = useContext(MaterialsContext);
   const { grade, fabric } = parseSubtype(line.subtype);
   // Resolve this line's catalog family from its reference root so the
   // material-option chips can show a list-price delta. A line with no (or a
@@ -1057,6 +1059,16 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
       }
     }
     onChange(patch);
+  };
+  // Committing the fabric field (typed OR pasted). When the value embeds a
+  // catalog color code ("… (#code)"), resolve its material so we adopt the
+  // material's GRADE — pasting a coded fabric must move the price tier, not just
+  // the label + swatch (the swatch already updates via colorCodeFromSubtype).
+  // A hand-typed name with no code resolves nothing, so the grade is unchanged.
+  const commitFabric = (v) => {
+    const located = locateColor(materials, composeSubtype(grade, v));
+    const nextGrade = located?.material?.grade || grade;
+    commit({ grade: nextGrade, fabric: v });
   };
   const swatchImageId = line.swatchImageId || null;
   // "Sin material" — strip the chosen fabric and revert the line to the model's
@@ -1214,7 +1226,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
           ) : null}
           <DebouncedInput
             value={fabric}
-            onCommit={(v) => commit({ grade, fabric: v })}
+            onCommit={commitFabric}
             placeholder="Tela o acabado"
             autoCapitalize="words"
             // Sizes to its content (field-sizing via .qli-grow): only as wide
