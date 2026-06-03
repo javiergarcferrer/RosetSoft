@@ -360,6 +360,9 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
       marginPct: 0,
       discountPct: quote.discount_pct,
       shipping: quote.shipping,
+      // The curated project palette — surfaced first in the client's fabric
+      // picker (read-only quick-pick); the client never edits the library.
+      materialLibrary: quote.material_library ?? [],
     },
     lines,
     customer,

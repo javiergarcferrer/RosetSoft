@@ -5,6 +5,7 @@ import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
+import ProjectPalettePicks from './ProjectPalettePicks.jsx';
 import MaterialPickerButton from './MaterialPickerButton.jsx';
 import ApplyMaterialToAllButton from './ApplyMaterialToAllButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
@@ -190,7 +191,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   const toggleOptionalIf = editable ? onToggleOptional : undefined;
   const selectAlternativeIf = editable ? onSelectAlternative : undefined;
   const picker = pickMaterialIf && materials?.length
-    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: pickMaterialIf, onPickMany: editable ? onPickMaterialMany : undefined }
+    ? { materials, modelFabrics: modelFabrics || {}, gradePricesFor, onPick: pickMaterialIf, onPickMany: editable ? onPickMaterialMany : undefined, palette: quote.materialLibrary || [] }
     : null;
 
   // ViewModel — the SHARED content tree (sections → group-runs with footer
@@ -912,23 +913,29 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, c
       <MaterialPickerButton onClick={() => setOpen(true)} label="Elegir tela" />
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
-          <MaterialColorPicker
-            materials={picker.materials}
-            family={family}
-            gradeFilter={gradeFilter}
-            nameFilter={nameFilter}
-            currentGrade={grade}
-            currentFabric={fabric}
-            autoDrill
-            onPick={(m, c) => {
-              picker.onPick(id, {
-                grade: m.grade || '',
-                fabric: composeFabricLabel(m, c),
-                swatchImageId: (c && c.imageId) || null,
-              });
-              setOpen(false);
-            }}
-          />
+          <>
+            <ProjectPalettePicks
+              palette={picker.palette}
+              onApply={(pick) => { picker.onPick(id, pick); setOpen(false); }}
+            />
+            <MaterialColorPicker
+              materials={picker.materials}
+              family={family}
+              gradeFilter={gradeFilter}
+              nameFilter={nameFilter}
+              currentGrade={grade}
+              currentFabric={fabric}
+              autoDrill
+              onPick={(m, c) => {
+                picker.onPick(id, {
+                  grade: m.grade || '',
+                  fabric: composeFabricLabel(m, c),
+                  swatchImageId: (c && c.imageId) || null,
+                });
+                setOpen(false);
+              }}
+            />
+          </>
         )}
       </Modal>
     </div>
