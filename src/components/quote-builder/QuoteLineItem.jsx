@@ -564,19 +564,19 @@ function TopStrip({
         </button>
       )}
 
-      {/* Read-only status badges. Order: Compuesto → Opcional → Alternativa
-          → Conjunto. Multiple can show concurrently when a compound is in an
-          alternative group; isOptional+alternative is forbidden by the DB so
-          those two are visually mutually exclusive too. These are NON-
-          interactive labels — the matching toggles (convert to compound,
-          mark optional) live in the per-line LineFooter. */}
+      {/* Read-only status badges. Order: Modular → Opcional → Alternativa
+          → Conjunto. Multiple can show concurrently when a modular product is
+          in an alternative group; isOptional+alternative is forbidden by the DB
+          so those two are visually mutually exclusive too. These are NON-
+          interactive labels — the matching toggles (Modular, Opcional) live in
+          the per-line LineFooter. */}
       {compound && (
         <span
           className="chip text-ink-600 bg-ink-100 border border-ink-200"
-          title="Artículo compuesto"
+          title="Producto modular"
         >
           <Layers size={10} className="opacity-80" aria-hidden />
-          Compuesto
+          Modular
         </span>
       )}
 
@@ -1896,7 +1896,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             aria-pressed={optional}
           >
             <Sparkles size={10} className="opacity-70" aria-hidden />
-            {optional ? 'Opcional' : 'Hacer opcional'}
+            Opcional
           </button>
         )}
         {/* + Alternativa — offer this sub-piece as a pick-one option (or add
@@ -2057,7 +2057,7 @@ function AdjustmentChip({ line }) {
 // ---------------------------------------------------------------------------
 // Per-line footer — the ACTION row, the home for everything the old "⋯"
 // overflow menu carried. A quiet hairline-topped strip at the bottom of the
-// card, read left→right: Compuesto · + Alternativa · Opcional · Duplicar ·
+// card, read left→right: Modular · Alternativa · Opcional · Duplicar ·
 // Separar … Eliminar (pushed to the far right, red).
 //
 // Visibility / touch contract: the row is ALWAYS reachable on touch (no
@@ -2067,7 +2067,7 @@ function AdjustmentChip({ line }) {
 // actions are one hover/Tab away. (Judgment call flagged in the report.)
 //
 // The conditional buttons mirror the exact rules the overflow menu used:
-//   • Compuesto    — convert / dissolve, mirroring the old chip+menu labels.
+//   • Modular      — convert / dissolve the modular product (compound).
 //   • + Alternativa — hidden when optional or in a set; label changes to
 //                     "Agregar otra alternativa" once already in a group.
 //   • Opcional     — moved here from the TopStrip; hidden when grouped.
@@ -2087,33 +2087,29 @@ function LineFooter({
   const canAddAlternative = !isOptional && !setGroup;
   return (
     <div className="qli-footer relative z-[2] mt-2.5 pt-2 border-t border-ink-100 flex flex-wrap items-center gap-x-1 gap-y-1">
-      {compound ? (
-        <FooterButton
-          onClick={onDissolveCompound}
-          icon={Layers}
-          title="Convertir el compuesto en un artículo simple"
-        >
-          Disolver compuesto
-        </FooterButton>
-      ) : (
-        <FooterButton
-          onClick={onConvertToCompound}
-          icon={Layers}
-          title="Agrupar varias referencias bajo una misma familia y foto"
-        >
-          Convertir a compuesto
-        </FooterButton>
-      )}
+      <FooterButton
+        onClick={compound ? onDissolveCompound : onConvertToCompound}
+        icon={Layers}
+        active={compound}
+        aria-pressed={compound}
+        title={compound
+          ? 'Producto modular — varias referencias bajo una familia y foto. Clic para volver a un artículo simple.'
+          : 'Convertir en producto modular — agrupar varias referencias bajo una familia y foto'}
+      >
+        Modular
+      </FooterButton>
 
       {canAddAlternative && onAddAlternative && (
         <FooterButton
           onClick={onAddAlternative}
           icon={GitFork}
+          active={!!alternativeGroup}
+          aria-pressed={!!alternativeGroup}
           title={alternativeGroup
             ? 'Agregar otra alternativa al grupo existente'
             : 'Crear un grupo de alternativas con esta línea como la seleccionada por defecto'}
         >
-          {alternativeGroup ? 'Agregar otra alternativa' : 'Agregar alternativa'}
+          Alternativa
         </FooterButton>
       )}
 
@@ -2127,7 +2123,7 @@ function LineFooter({
             ? 'Quitar el marcador opcional — la línea vuelve a sumar al total'
             : 'Marcar como opcional — la línea se muestra pero no suma al total'}
         >
-          {isOptional ? 'Opcional' : 'Hacer opcional'}
+          Opcional
         </FooterButton>
       )}
 
