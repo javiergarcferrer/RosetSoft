@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, Ship, Plus, Loader2, Check, X, Upload } from 'lucide-react';
+import { Shield, Ship, Plus, Loader2, Check, X, Upload, FileText } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -15,6 +15,7 @@ import {
   resolveImportsList, buildImportEntry, computeImportTaxes, landedCost, landedUnitCost,
   weightedAverageIn, resolveAccountingConfig, allocateShipment,
 } from '../../core/accounting/index.js';
+import ExpedienteForm from './ExpedienteForm.jsx';
 
 /**
  * Importaciones — customs liquidation (DGA). Capitalizes CIF + duty (20%) +
@@ -32,6 +33,7 @@ export default function Importaciones() {
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const itemsQ = useLiveQueryStatus(() => db.inventoryItems.where('profileId').equals(scope).toArray(), [scope], []);
   const ordersQ = useLiveQueryStatus(() => db.orders.where('profileId').equals(scope).toArray(), [scope], []);
+  const containersQ = useLiveQueryStatus(() => db.containers.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = importsQ.loaded && suppliersQ.loaded && itemsQ.loaded;
 
   const list = useMemo(() => resolveImportsList({ imports: importsQ.data, suppliers: suppliersQ.data, items: itemsQ.data }),
@@ -39,6 +41,7 @@ export default function Importaciones() {
   const [params] = useSearchParams();
   const [showForm, setShowForm] = useState(!!params.get('new'));
   const [showImport, setShowImport] = useState(false);
+  const [showExpediente, setShowExpediente] = useState(false);
 
   if (!allowed) {
     return (
@@ -55,8 +58,9 @@ export default function Importaciones() {
       <PageHeader title="Importaciones" subtitle="Liquidación aduanal (DGA) → costo en destino al inventario"
         actions={(
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => { setShowImport((v) => !v); setShowForm(false); }} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Upload size={15} /> Importar factura</button>
-            <button type="button" onClick={() => { setShowForm((v) => !v); setShowImport(false); }} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nueva liquidación</button>
+            <button type="button" onClick={() => { setShowImport((v) => !v); setShowForm(false); setShowExpediente(false); }} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Upload size={15} /> Importar factura</button>
+            <button type="button" onClick={() => { setShowForm((v) => !v); setShowImport(false); setShowExpediente(false); }} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Liquidación simple</button>
+            <button type="button" onClick={() => { setShowExpediente((v) => !v); setShowForm(false); setShowImport(false); }} className="btn-primary text-sm inline-flex items-center gap-1.5"><FileText size={15} /> Nuevo expediente</button>
           </div>
         )} />
 
@@ -66,6 +70,10 @@ export default function Importaciones() {
 
       {showImport && loaded && (
         <ImportInvoiceForm scope={scope} config={config} settings={settings} suppliers={suppliersQ.data} items={itemsQ.data} orders={ordersQ.data || []} onClose={() => setShowImport(false)} />
+      )}
+
+      {showExpediente && loaded && (
+        <ExpedienteForm scope={scope} config={config} suppliers={suppliersQ.data} items={itemsQ.data} orders={ordersQ.data || []} containers={containersQ.data || []} onClose={() => setShowExpediente(false)} />
       )}
 
       {!loaded ? <ListLoading /> : list.count === 0 ? (
