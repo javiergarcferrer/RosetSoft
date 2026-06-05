@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil, Palette } from 'lucide-react';
+import { PackageSearch, Hash, Boxes, GitFork, PlusCircle, Sparkles, Check, Pencil, Palette, GripVertical } from 'lucide-react';
 import QuoteLineItem from './QuoteLineItem.jsx';
 import SectionDivider from './SectionDivider.jsx';
 import AddSourceButtons from './AddSourceButtons.jsx';
@@ -121,43 +121,51 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   }
 
   // -------- drag-reorder --------
-  const [draggingId, setDraggingId] = useState(null);
+  // A drag carries a BLOCK of line ids: one for a normal line, the whole member
+  // run for a group card (Conjunto / Alternativa) grabbed by its handle — so a
+  // pick-one Alternativa moves as a unit (e.g. INTO a section) instead of being
+  // un-draggable in its compact pick-pane. The block keeps its order + stays
+  // contiguous, so groupRuns still reads it as one group after the drop.
+  const [dragging, setDragging] = useState(null);   // { ids: string[] } | null
   const [dropTargetId, setDropTargetId] = useState(null);
   // Alternatives render as a compact pick-pane (radio + summary + price) so the
   // group reads like the client quote-pane; the dealer taps "Editar" to expand
   // ONE option to its full editor inline. `expandedAltId` is that option's id.
   const [expandedAltId, setExpandedAltId] = useState(null);
+  const draggingIds = dragging?.ids || null;
+  const isDraggingId = (id) => !!draggingIds && draggingIds.includes(id);
 
-  function onDragStart(e, id) {
-    setDraggingId(id);
-    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); } catch {}
+  function onDragStart(e, ids) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    setDragging({ ids: list });
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', list[0] || ''); } catch {}
   }
   function onDragEnd() {
-    setDraggingId(null);
+    setDragging(null);
     setDropTargetId(null);
   }
   function onDragOver(e, id) {
-    if (!draggingId || draggingId === id) return;
+    if (!draggingIds || isDraggingId(id)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropTargetId(id);
   }
   function onDrop(e, id) {
     e.preventDefault();
-    const srcId = draggingId;
-    setDraggingId(null);
+    const ids = draggingIds;
+    setDragging(null);
     setDropTargetId(null);
-    if (!srcId || srcId === id) return;
-    const srcIdx = lines.findIndex((l) => l.id === srcId);
-    const dstIdx = lines.findIndex((l) => l.id === id);
-    if (srcIdx === -1 || dstIdx === -1) return;
-    // Drop indicator renders ABOVE the target row, so the dragged item lands
-    // just before the target. After removing src, indices above the original
-    // shift down by one — when dragging downward we subtract one from dst.
-    const next = [...lines];
-    const [moved] = next.splice(srcIdx, 1);
-    const insertAt = srcIdx < dstIdx ? dstIdx - 1 : dstIdx;
-    next.splice(insertAt, 0, moved);
+    if (!ids || ids.includes(id)) return;
+    // Pull the moved block out (it keeps its document order, so a group stays a
+    // contiguous run), locate the target in what REMAINS, and splice the block
+    // in just before it — direction-agnostic, since the drop indicator always
+    // sits above the target row.
+    const moveSet = new Set(ids);
+    const moved = lines.filter((l) => moveSet.has(l.id));
+    const remaining = lines.filter((l) => !moveSet.has(l.id));
+    const at = remaining.findIndex((l) => l.id === id);
+    if (at === -1) return;
+    const next = [...remaining.slice(0, at), ...moved, ...remaining.slice(at)];
     onReorder(next.map((l) => l.id));
   }
 
@@ -190,8 +198,8 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   // stays identical inside and outside a card.
   function renderRow(l, { insideGroupCard }) {
     const isSection = l.kind === LINE_KIND_SECTION;
-    const isDragging = draggingId === l.id;
-    const isDropTarget = dropTargetId === l.id && draggingId !== l.id;
+    const isDragging = isDraggingId(l.id);
+    const isDropTarget = dropTargetId === l.id && !isDraggingId(l.id);
     const handleProps = {
       draggable: true,
       onDragStart: (e) => onDragStart(e, l.id),
@@ -324,28 +332,48 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
           );
         });
 
-    return (
-      <GroupCard
-        key={`grp-${run.groupId}-${run.start}`}
-        type={run.type}
-        accent={accent}
-        memberCount={members.length}
-        optional={optional}
-        onToggleOptional={
-          isSet && onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId) : undefined
-        }
-        // Conjunto only: apply one chosen material to every member line. An
-        // Alternativa is a pick-one of distinct options, so a bulk material set
-        // wouldn't make sense there.
-        onApplyMaterial={isSet ? (picked) => applyMaterialToSet(run.groupId, picked) : undefined}
-        footerLabel={isSet ? 'Total del conjunto' : 'Total'}
-        footerValue={footerValueLabel}
-      >
-        <ul className="divide-y divide-ink-100">
-          {memberNodes}
-        </ul>
-      </GroupCard>
-    );
+    const groupKey = `grp-${run.groupId}-${run.start}`;
+    const firstId = run.lineIds[0];
+    const cardProps = {
+      type: run.type,
+      accent,
+      memberCount: members.length,
+      optional,
+      onToggleOptional:
+        isSet && onToggleGroupOptional ? () => onToggleGroupOptional(run.groupId) : undefined,
+      // Conjunto only: apply one chosen material to every member line. An
+      // Alternativa is a pick-one of distinct options, so a bulk material set
+      // wouldn't make sense there.
+      onApplyMaterial: isSet ? (picked) => applyMaterialToSet(run.groupId, picked) : undefined,
+      footerLabel: isSet ? 'Total del conjunto' : 'Total',
+      footerValue: footerValueLabel,
+      // The whole group drags as one unit (all member ids move together).
+      dragHandleProps: { draggable: true, onDragStart: (e) => onDragStart(e, run.lineIds), onDragEnd },
+    };
+    const body = <ul className="divide-y divide-ink-100">{memberNodes}</ul>;
+
+    // An Alternativa's compact options aren't individual drop targets (a
+    // Conjunto's full rows ARE), so the CARD itself must accept a drop — that's
+    // what lets the pick-one block be dragged onto another row, e.g. INTO a
+    // section. A Conjunto needs no wrapper: dropping before its first member row
+    // already lands a block before the group.
+    if (run.type === 'alternative') {
+      const groupDragging = isDraggingId(firstId);
+      return (
+        <div
+          key={groupKey}
+          onDragOver={(e) => onDragOver(e, firstId)}
+          onDrop={(e) => onDrop(e, firstId)}
+          className={`relative ${groupDragging ? 'opacity-40' : ''}`}
+        >
+          {dropTargetId === firstId && !groupDragging && (
+            <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
+          )}
+          <GroupCard {...cardProps}>{body}</GroupCard>
+        </div>
+      );
+    }
+    return <GroupCard key={groupKey} {...cardProps}>{body}</GroupCard>;
   }
 
   return (
@@ -436,7 +464,7 @@ function SetConnector({ onJoin }) {
  * alternative (brand). The card owns the border + footer so the member rows
  * inside don't re-draw their own.
  */
-function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onApplyMaterial, footerLabel, footerValue, children }) {
+function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onApplyMaterial, footerLabel, footerValue, dragHandleProps, children }) {
   const isSet = type === 'set';
   // "Aplicar material a todo" picker for a Conjunto header (set only).
   const [materialOpen, setMaterialOpen] = useState(false);
@@ -454,9 +482,21 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
     <div className="px-3 sm:px-4 py-3">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
-            <Icon size={13} className="opacity-80" aria-hidden />
-            {eyebrow}
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            {dragHandleProps && (
+              <span
+                {...dragHandleProps}
+                className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 -ml-1"
+                title="Arrastra el grupo para reordenarlo"
+                aria-label="Arrastrar el grupo"
+              >
+                <GripVertical size={13} />
+              </span>
+            )}
+            <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
+              <Icon size={13} className="opacity-80" aria-hidden />
+              {eyebrow}
+            </span>
           </span>
           <span className="inline-flex items-center gap-2">
             {/* Top-level "apply material to all" — one pick stamps the chosen
