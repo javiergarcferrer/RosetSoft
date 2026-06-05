@@ -6,6 +6,7 @@ import { isPricedLine } from '../../lib/constants.js';
 import {
   ITBIS_PCT, lineQty, lineTotal, lineListUnit, lineHasRange, lineTotalRange,
   isCompoundLine, componentSubtotal, computeTotalsRange,
+  isRangeComponent, componentSubtotalRange,
 } from '../../lib/pricing.js';
 import { compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
 import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
@@ -250,6 +251,13 @@ function ComponentRow({
   const cells = materialCells({ mo: c.materialOptions, reference: c.reference, baseSwatchImageId: c.swatchImageId, families, currency, rates });
   const swatchSrc = swatchSrcFor(c.swatchImageId, c.subtype);
   const showSwatch = !hideSwatch && !cells.length && (!!swatchSrc.imageId || !!swatchSrc.url);
+  // Each piece's quantity — a module can carry several of one product (2 seats,
+  // a pair of cushions). The screen shows "n × unit"; the PDF dropped it, hiding
+  // how many of each product the price covers. Mirror the line-level money cell.
+  const qty = Number(c.qty) || 0;
+  const unit = Number(c.unitPrice) || 0;
+  const ranged = isRangeComponent(c);
+  const range = ranged ? componentSubtotalRange(c) : null;
   return (
     <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
@@ -260,7 +268,12 @@ function ComponentRow({
             {!hideSwatch && c.subtype && <Text style={{ fontSize: fs(7.5), color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
           </View>
         </View>
-        <Text style={{ fontSize: fs(9), color: C.inkMid }}>{fmt(componentSubtotal(c))}</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: fs(7.5), color: C.inkMid }}>{qty} × {ranged ? 'rango' : fmt(unit)}</Text>
+          <Text style={{ fontSize: fs(9), color: C.inkMid, marginTop: 1 }}>
+            {ranged && range ? `${fmt(range.min)} – ${fmt(range.max)}` : fmt(componentSubtotal(c))}
+          </Text>
+        </View>
       </View>
       {!hideSwatch && <MaterialGrid cells={cells} images={images} />}
     </View>
