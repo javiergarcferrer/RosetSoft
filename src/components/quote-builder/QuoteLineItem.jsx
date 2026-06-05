@@ -869,7 +869,7 @@ function AddPhotoTile({ kind, ownerId, onAdd }) {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
         onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
         disabled={busy}
         title="Agregar otra foto"
