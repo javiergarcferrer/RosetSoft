@@ -24,6 +24,7 @@ import type {
   InventoryMovement,
   Purchase,
   ImportLiquidation,
+  ImportExpediente,
   ECFSequence,
   Payment,
   FiscalPeriod,
@@ -86,6 +87,7 @@ const TABLES = {
   inventoryMovements: { db: 'inventory_movements', pk: 'id' },
   purchases:          { db: 'purchases',           pk: 'id' },
   importLiquidations: { db: 'import_liquidations', pk: 'id' },
+  importExpedientes: { db: 'import_expedientes', pk: 'id' },
   ecfSequences:       { db: 'ecf_sequences',       pk: 'id' },
   payments:           { db: 'payments',            pk: 'id' },
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
@@ -124,6 +126,7 @@ export interface TableRowMap {
   inventoryMovements: InventoryMovement;
   purchases: Purchase;
   importLiquidations: ImportLiquidation;
+  importExpedientes: ImportExpediente;
   ecfSequences: ECFSequence;
   payments: Payment;
   fiscalPeriods: FiscalPeriod;

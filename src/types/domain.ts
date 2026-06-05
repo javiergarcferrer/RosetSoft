@@ -506,6 +506,69 @@ export interface ImportLiquidation {
   updatedAt?: number;
 }
 
+/**
+ * One itemized cost on an import expediente — agenciamiento (FDA), transporte,
+ * puerto/almacenaje (Caucedo), tasa DGA, seguro… The NET (`amount − itbis`)
+ * capitalizes into the goods' landed cost; the `itbis` is recoverable input
+ * credit. A cost with a DR `supplierId` + `ncf` lands in the 606. `paymentMethod`
+ * routes its credit: 'credit' → the supplier's CxP, else paid (bank/cash/card).
+ */
+export interface ImportCost {
+  id: string;
+  /** 'agenciamiento' | 'transporte' | 'puerto' | 'tasaDga' | 'seguro' | 'almacenaje' | 'otro' */
+  concept: string;
+  /** Free-text label override (shown instead of the concept's default name). */
+  label?: string;
+  supplierId?: string | null;
+  ncf?: string | null;
+  /** Total DOP for this cost, INCLUDING its ITBIS. */
+  amount: number;
+  /** Recoverable ITBIS portion of `amount` (0 / omitted = no creditable ITBIS). */
+  itbis?: number;
+  paymentMethod?: PaymentMethod;
+}
+
+/** One product line landed by an expediente — the goods + their CIF value, which
+ *  is the weight the capitalizable costs are prorated by. */
+export interface ImportExpedienteLine {
+  id: string;
+  itemId?: string | null;
+  name: string;
+  reference?: string;
+  qty: number;
+  /** This line's CIF / valor en aduana (DOP) — the allocation weight. */
+  cifValue: number;
+}
+
+/**
+ * An import expediente = one BL/shipment landed in full: its product lines + the
+ * DGA taxes (gravamen + import ITBIS) + an itemized cost sheet, all capitalized
+ * to a per-line landed cost (ITBIS credited). Posts one asiento (source='import')
+ * + a kardex IN per line. Optionally linked to its tracked container + order.
+ * Amounts are DOP.
+ */
+export interface ImportExpediente {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  /** Bill of lading — links to the tracked container. */
+  bl?: string;
+  customsRef?: string;
+  supplierId?: string | null;   // foreign supplier (Roset)
+  orderId?: string | null;
+  containerId?: string | null;
+  liquidatedAt: number;
+  cif: number;          // total CIF / valor en aduana
+  duty: number;         // gravamen arancelario (total)
+  importItbis: number;  // ITBIS de importación (creditable)
+  costs: ImportCost[];
+  lines: ImportExpedienteLine[];
+  paymentMethod: PaymentMethod;  // settlement of the customs taxes
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Customer {
   id: string;
   profileId: string;

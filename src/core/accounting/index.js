@@ -42,6 +42,10 @@ export { resolveImportsList } from './imports.js';
 export {
   buildImportEntry, computeImportTaxes, landedCost, landedUnitCost, allocateShipment,
 } from '../../lib/accounting/importLiquidation.js';
+export {
+  COST_CONCEPTS, costLabel, expedienteCostTotals, expedienteLanded, expedienteCreditableItbis,
+  expedienteTaxCheck, allocateExpediente, buildExpedienteEntry,
+} from '../../lib/accounting/expediente.js';
 
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
 export {
