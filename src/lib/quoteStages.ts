@@ -125,3 +125,27 @@ export function currentQuoteStage(
 export function isTerminalStage(key: string | null | undefined): boolean {
   return QUOTE_TERMINAL_STAGES.some((s) => s.key === key);
 }
+
+/** Days a SENT quote may wait for client acceptance before it auto-archives. */
+export const QUOTE_AUTO_ARCHIVE_DAYS = 15;
+
+/**
+ * Quotes that should AUTO-ARCHIVE: sent to a client but neither accepted nor
+ * moved on within QUOTE_AUTO_ARCHIVE_DAYS. Measured from `sentAt` — the
+ * "waiting on the client" clock, not creation — so a quote drafted weeks ago but
+ * only just sent isn't swept. Drafts (still being built) and already-terminal
+ * quotes (accepted/declined/archived) are deliberately left alone. Pure: the
+ * caller stamps each exactly like the manual stepper (status:'archived' +
+ * archivedAt), so an auto-archive and a hand-archive are indistinguishable — and
+ * "Volver" un-archives it just the same.
+ */
+export function quotesToAutoArchive<T extends Pick<Quote, 'id' | 'status' | 'sentAt'>>(
+  quotes: ReadonlyArray<T> | null | undefined,
+  now: number,
+  days: number = QUOTE_AUTO_ARCHIVE_DAYS,
+): T[] {
+  const cutoff = now - days * 86_400_000;
+  return (quotes || []).filter(
+    (q) => q.status === 'sent' && q.sentAt != null && q.sentAt < cutoff,
+  );
+}

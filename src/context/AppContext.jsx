@@ -3,9 +3,25 @@ import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } fro
 import { supabase } from '../db/supabaseClient.js';
 import { shouldPullDailyRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
+import { quotesToAutoArchive } from '../lib/quoteStages.js';
 import { useAuth } from './AuthContext.jsx';
 
 const Ctx = createContext(null);
+
+/**
+ * Auto-archive cold quotes — sent to a client but not accepted within
+ * QUOTE_AUTO_ARCHIVE_DAYS. Runs on app load (the same no-cron idiom as the daily
+ * rate pull): whoever opens the app sweeps any newly-stale 'sent' quotes to
+ * 'archived', stamping them exactly like the manual stepper (status + archivedAt)
+ * so the two are indistinguishable. Idempotent (only ever touches still-'sent'
+ * rows) and best-effort — it must never block boot.
+ */
+async function archiveStaleQuotes() {
+  const sent = await db.quotes.where('status').equals('sent').toArray();
+  const now = Date.now();
+  const stale = quotesToAutoArchive(sent, now);
+  await Promise.all(stale.map((q) => db.quotes.update(q.id, { status: 'archived', archivedAt: now })));
+}
 
 /**
  * App-level context. The team is still single-tenant (one shared 'team'
@@ -100,6 +116,10 @@ export function AppProvider({ children }) {
             })
             .catch(() => {});
         }
+
+        // Sweep cold quotes (sent, unaccepted past the window) to archived on
+        // load — same no-cron, no-manual-step idiom as the rate pull above.
+        archiveStaleQuotes().catch(() => {});
 
         const list = await refreshProfiles();
         if (cancelled) return;
