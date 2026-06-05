@@ -472,7 +472,15 @@ export async function searchProducts(profileId: string, term: string, limit = 40
     // how the term was typed (the catalog data is normalized to single spaces).
     const safe = needle.replace(/[%,()*]/g, ' ').replace(/\s+/g, ' ').trim();
     if (safe) {
-      q = q.or(`reference.ilike.%${safe}%,name.ilike.%${safe}%,family.ilike.%${safe}%`);
+      // Match EVERY whitespace-separated token (AND), each against any of the
+      // searchable fields (OR) — so "pukka sofa" finds "PUKKA MEDIUM SOFA": the
+      // words needn't be adjacent or in order, which the old single
+      // `%pukka sofa%` substring required. `category` is searchable too (the
+      // type word often lives only there). Chained `.or()` calls are ANDed by
+      // PostgREST; tokens are capped so a long paste can't explode the filter.
+      for (const tok of safe.split(' ').slice(0, 6)) {
+        q = q.or(`reference.ilike.%${tok}%,name.ilike.%${tok}%,family.ilike.%${tok}%,category.ilike.%${tok}%`);
+      }
     }
   }
   const { data, error } = await q.order('name').limit(limit);

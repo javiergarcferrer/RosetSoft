@@ -105,14 +105,22 @@ function matchTier(hay, needle) {
   return 0;
 }
 
-/** Relevance of a model to the query — best field match, weighting the model
- *  name over its family over its reference. */
-function relevanceScore(model, needle) {
-  return Math.max(
-    matchTier(model.name, needle) * 10,
-    matchTier(model.family, needle) * 8,
-    matchTier(model.root, needle) * 6,
-  );
+/** Relevance of a model to the query TOKENS — the sum over tokens of each
+ *  token's best field match (name > family > reference > category). Summing per
+ *  token (rather than scoring the whole phrase) means a multi-word query like
+ *  "pukka sofa" ranks "PUKKA MEDIUM SOFA" highly: each word pulls its weight even
+ *  when they aren't adjacent. `category` is the bucket the model sits in. */
+function relevanceScore(model, category, tokens) {
+  let total = 0;
+  for (const tok of tokens) {
+    total += Math.max(
+      matchTier(model.name, tok) * 10,
+      matchTier(model.family, tok) * 8,
+      matchTier(model.root, tok) * 6,
+      matchTier(category, tok) * 3,
+    );
+  }
+  return total;
 }
 
 /**
@@ -120,7 +128,7 @@ function relevanceScore(model, needle) {
  * models within a category sort best-match-first, and categories sort by their
  * single best match so the closest hit floats to the top.
  */
-function groupAndRank(products, needle) {
+function groupAndRank(products, tokens) {
   const byCat = new Map();
   for (const p of products || []) {
     const key = (p.category || '').trim();
@@ -130,7 +138,7 @@ function groupAndRank(products, needle) {
   }
   const sections = [];
   for (const [category, items] of byCat) {
-    const scored = groupFamilies(items).map((m) => ({ m, s: relevanceScore(m, needle) }));
+    const scored = groupFamilies(items).map((m) => ({ m, s: relevanceScore(m, category, tokens) }));
     scored.sort((a, b) => b.s - a.s || byName(a.m, b.m));
     sections.push({ category, models: scored.map((x) => x.m), best: scored[0]?.s || 0 });
   }
@@ -145,8 +153,11 @@ function PickerSearch({ profileId, term, onPick }) {
     [profileId, term],
     [],
   );
-  const needle = useMemo(() => term.toLowerCase().replace(/\s+/g, ' ').trim(), [term]);
-  const sections = useMemo(() => groupAndRank(products, needle), [products, needle]);
+  const tokens = useMemo(
+    () => term.toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean),
+    [term],
+  );
+  const sections = useMemo(() => groupAndRank(products, tokens), [products, tokens]);
 
   if (!loaded) {
     return (
