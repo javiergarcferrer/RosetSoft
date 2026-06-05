@@ -482,9 +482,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // (TotalsDock, the banners below) stays thin. It persists the share token
   // through updateQuote — the single quote writer from the controller above.
   const {
-    exporting, exportError, setExportError,
+    exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
-    exportPdf, shareQuote,
+    exportPdf, printPdf, shareQuote,
   } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote });
 
   // Heal legacy quotes that lost their sequence number to the old
@@ -539,7 +539,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
    * keypress, by which point `quote` is populated.
    */
   useKeyboardShortcut('mod+enter', () => setCatalogOpen(true), { ignoreInInput: false });
-  useKeyboardShortcut('mod+p', () => exportPdf(), { ignoreInInput: false });
+  useKeyboardShortcut('mod+p', () => printPdf(), { ignoreInInput: false });
 
   if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
 
@@ -714,6 +714,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onOpenInventory={() => setInventoryOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
+        onPrint={printPdf}
+        printing={printing}
         onShare={shareQuote}
         sharing={sharing}
       />

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, Download, Loader2, BookOpen, Boxes, Share2,
+  SlidersHorizontal, Download, Printer, Loader2, BookOpen, Boxes, Share2,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -40,7 +40,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onOpenCatalog, onOpenInventory, onExport, exporting, onShare, sharing,
+  onOpenCatalog, onOpenInventory, onExport, exporting, onPrint, printing, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
@@ -358,13 +358,24 @@ export default function TotalsDock({
                 title="Copiar un enlace interactivo para el cliente"
               />
 
+              {/* Print the PDF straight to the printer (no download). */}
+              <DockAction
+                icon={Printer}
+                label="Imprimir"
+                onClick={onPrint}
+                disabled={exporting || printing}
+                busy={printing}
+                ariaLabel="Imprimir PDF"
+                title="Imprimir directamente (sin descargar)"
+              />
+
               {/* Export / preview the PDF — the primary action, pinned at every
                   width. */}
               <DockAction
                 icon={Download}
                 label="Exportar"
                 onClick={onExport}
-                disabled={exporting}
+                disabled={exporting || printing}
                 busy={exporting}
                 primary
                 ariaLabel="Exportar PDF"

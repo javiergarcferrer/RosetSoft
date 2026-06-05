@@ -58,3 +58,50 @@ export async function downloadBlob(blob: Blob, filename: string): Promise<void> 
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
 }
+
+/**
+ * Send the generated PDF straight to the printer — for the dealer who wants
+ * paper, not a file in the downloads tray. Loads the blob in an off-screen,
+ * same-origin iframe (a blob: URL inherits our origin, so we can reach its
+ * window) and invokes the browser's own print dialog on it. If the frame can't
+ * be printed (some browsers block print() on a PDF frame), falls back to opening
+ * the PDF in a tab where the viewer's print button is one click away. The iframe
+ * + blob URL are held ~60 s so the spooled job finishes before teardown.
+ */
+export async function printBlob(blob: Blob): Promise<void> {
+  if (!blob || !blob.size) {
+    throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+  }
+  const url = URL.createObjectURL(blob);
+  let iframe: HTMLIFrameElement | null = null;
+  const teardown = () => setTimeout(() => {
+    try { if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* gone already */ }
+    URL.revokeObjectURL(url);
+  }, 60_000);
+
+  try {
+    iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    await new Promise<void>((resolve, reject) => {
+      iframe!.onload = () => resolve();
+      iframe!.onerror = () => reject(new Error('iframe load failed'));
+      iframe!.src = url;
+      document.body.appendChild(iframe!);
+    });
+    // Give the PDF viewer a beat to lay the document out before we print it.
+    await new Promise((r) => setTimeout(r, 300));
+    const win = iframe.contentWindow;
+    if (!win) throw new Error('no print window');
+    win.focus();
+    win.print();
+    teardown();
+  } catch (err) {
+    console.warn('[quotePdf] iframe print fell through, opening in a tab:', err);
+    teardown();
+    // Async generation can outlive the click gesture, so window.open may be
+    // blocked — last resort is navigating the current tab to the PDF viewer.
+    const opened = window.open(url, '_blank', 'noopener');
+    if (!opened) window.location.href = url;
+  }
+}

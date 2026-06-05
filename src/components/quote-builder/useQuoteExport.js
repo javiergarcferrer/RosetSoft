@@ -34,6 +34,7 @@ export function useQuoteExport({
   // flight, and surfaces failures (a malformed line, a refusal from the
   // browser to deliver the blob) instead of swallowing them.
   const [exporting, setExporting] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [exportError, setExportError] = useState(null);
   // Share-link state: a spinner while the token is minted/persisted, and a
   // transient toast confirming the copied link (or showing it to copy by
@@ -88,43 +89,44 @@ export function useQuoteExport({
     }
   }
 
+  // Shared PDF build for both Export (download) and Print. Resolves the related
+  // entities + totals on demand (so the path stays self-contained — the dealer
+  // pays the cost only on export) and renders the blob; the caller decides how
+  // to deliver it. Throws on an empty blob so both paths surface the same error.
+  // Passes *all* lines to the generator — including section breaks, which its
+  // groupBySection() consumes as headings (matching the on-screen ClientPreview).
+  async function generatePdf() {
+    const customer = quote.customerId
+      ? customers.find((c) => c.id === quote.customerId)
+      : null;
+    const professional = quote.professionalId
+      ? professionals.find((p) => p.id === quote.professionalId)
+      : null;
+    const seller = quote.createdByUserId
+      ? (profiles || []).find((p) => p.id === quote.createdByUserId)
+      : null;
+    const totals = computeTotals(
+      lines.filter(isPricedLine).map(lineForTotals),
+      { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },
+    );
+    const mod = await safeDynamicImport(() => import('../../pdf/react/index.js'));
+    const blob = await mod.generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups, families });
+    if (!blob || !blob.size) {
+      throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+    }
+    return { mod, blob, filename: `${mod.quoteFileName(quote, customer)}.pdf` };
+  }
+
   async function exportPdf() {
-    if (exporting) return;   // de-bounce double-taps
+    if (exporting || printing) return;   // de-bounce double-taps / concurrent gen
     setExportError(null);
     setExporting(true);
     try {
-      const customer = quote.customerId
-        ? customers.find((c) => c.id === quote.customerId)
-        : null;
-      const professional = quote.professionalId
-        ? professionals.find((p) => p.id === quote.professionalId)
-        : null;
-      const seller = quote.createdByUserId
-        ? (profiles || []).find((p) => p.id === quote.createdByUserId)
-        : null;
-      // Totals are computed on demand here (not threaded in) so the export
-      // path stays self-contained — the dealer pays the cost only on export.
-      const totals = computeTotals(
-        lines.filter(isPricedLine).map(lineForTotals),
-        { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },
-      );
-      const { generateQuotePdf, downloadBlob, quoteFileName } = await safeDynamicImport(
-        () => import('../../pdf/react/index.js'),
-      );
-      // Pass *all* lines to the generator — including section breaks. The
-      // generator's groupBySection() consumes them as headings; the earlier
-      // filter that stripped sections out predates the PDF matching the
-      // on-screen ClientPreview, where section headers ("MOBILIARIO DE SALA")
-      // are part of the layout the customer sees in both places.
-      const blob = await generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups, families });
-      if (!blob || !blob.size) {
-        throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
-      }
-      const filename = `${quoteFileName(quote, customer)}.pdf`;
-      // Deliver the file straight away. downloadBlob picks Web Share on the
-      // surfaces that need it (iOS PWA / touch) and an <a download> anchor
-      // everywhere else, so desktop just gets the file in the downloads tray.
-      await downloadBlob(blob, filename);
+      const { mod, blob, filename } = await generatePdf();
+      // downloadBlob picks Web Share on the surfaces that need it (iOS PWA /
+      // touch) and an <a download> anchor everywhere else, so desktop just gets
+      // the file in the downloads tray.
+      await mod.downloadBlob(blob, filename);
     } catch (err) {
       console.error('[QuoteBuilder] exportPdf failed:', err);
       setExportError(err?.message || 'No se pudo generar el PDF.');
@@ -133,9 +135,26 @@ export function useQuoteExport({
     }
   }
 
+  // Print directly — generate the same PDF and hand it to the browser's print
+  // dialog (printBlob) instead of the downloads tray.
+  async function printPdf() {
+    if (exporting || printing) return;
+    setExportError(null);
+    setPrinting(true);
+    try {
+      const { mod, blob } = await generatePdf();
+      await mod.printBlob(blob);
+    } catch (err) {
+      console.error('[QuoteBuilder] printPdf failed:', err);
+      setExportError(err?.message || 'No se pudo imprimir el PDF.');
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   return {
-    exporting, exportError, setExportError,
+    exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
-    exportPdf, shareQuote,
+    exportPdf, printPdf, shareQuote,
   };
 }
