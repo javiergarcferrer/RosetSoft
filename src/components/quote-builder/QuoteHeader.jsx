@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Briefcase, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
 import CustomerChip from './CustomerChip.jsx';
+import WhatsAppChip from './WhatsAppChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
 import OrderChip from './OrderChip.jsx';
 import SpecialOrderWarning from './SpecialOrderWarning.jsx';
@@ -149,6 +150,7 @@ export default function QuoteHeader({
           aria-label="Datos de la cotización"
         >
           <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
+          <WhatsAppChip customer={customer} />
           <ProfessionalChip
             quote={quote}
             professional={professional}
