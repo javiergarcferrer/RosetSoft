@@ -10,6 +10,7 @@ import { resolveAccountingConfig, accountFor } from '../src/lib/accounting/confi
 import {
   expedienteCostTotals, expedienteLanded, expedienteCreditableItbis,
   expedienteTaxCheck, allocateExpediente, buildExpedienteEntry,
+  prorateCif, computeLineTaxes,
 } from '../src/lib/accounting/expediente.js';
 
 const config = resolveAccountingConfig(null); // defaults: duty 20%, ITBIS 18%
@@ -89,6 +90,32 @@ test('tax check flags a gravamen/ITBIS mismatch vs the configured rates', () => 
   const off = expedienteTaxCheck({ cif: 10000, duty: 1400, importItbis: 2160, config });
   assert.equal(off.matches, false);
   assert.equal(off.dutyDiff, -600);
+});
+
+test('prorateCif: FOB + flete/seguro by FOB weight, sums to total CIF', () => {
+  const out = prorateCif([{ fob: 600 }, { fob: 400 }], 50, 50); // extras 100
+  assert.equal(out[0].cif, 660); // 600 + 100*0.6
+  assert.equal(out[1].cif, 440); // 400 + 40 (drift→last)
+  assert.equal(out[0].cif + out[1].cif, 1100); // == FOB 1000 + 100
+});
+
+test('computeLineTaxes: 20% gravamen + selectivo, ITBIS on the cascade', () => {
+  const t = computeLineTaxes({ cif: 1000, selectivo: 100, config });
+  assert.equal(t.gravamen, 200);   // 20% of CIF
+  assert.equal(t.selectivo, 100);
+  assert.equal(t.itbis, 234);      // 18% of (1000 + 200 + 100)
+  // No selectivo → ITBIS on (CIF + gravamen) only.
+  assert.equal(computeLineTaxes({ cif: 1000, config }).itbis, 216); // 18% of 1200
+});
+
+test('cascade reconciles to Alcover\'s real DUA (CIF 15,557,907.59 → 6,659,865.41)', () => {
+  const cif = 15557907.59;
+  const selectivo = 159131.23; // the embarque's ISC (a few HS lines)
+  const t = computeLineTaxes({ cif, selectivo, config });
+  const impuestos = t.gravamen + t.selectivo + t.itbis;
+  // Within a few pesos of the DUA's "Total Impuestos a Pagar" — the small drift
+  // is aggregate-vs-per-item rounding (the DUA sums 52 per-line roundings).
+  assert.ok(Math.abs(impuestos - 6659865.41) < 5, `got ${impuestos}`);
 });
 
 test('empty cost sheet: landed = CIF + duty, asiento still balances', () => {

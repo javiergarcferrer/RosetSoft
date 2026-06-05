@@ -39,6 +39,48 @@ export function costLabel(c: ImportCost): string {
   return COST_CONCEPTS.find((x) => x.key === c?.concept)?.label || c?.concept || 'Costo';
 }
 
+/**
+ * CIF per line from its FOB: each line carries its prorated share of the
+ * embarque's flete + seguro, by FOB weight (rounding drift → last line), so
+ * Σ(line CIF) === FOB + flete + seguro. Mirrors how the DUA builds the valor en
+ * aduana (Total CIF = Total FOB + Flete + Seguro). Pure.
+ */
+export function prorateCif<T extends { fob?: number | null }>(
+  lines: readonly T[] | null | undefined,
+  flete: number = 0,
+  seguro: number = 0,
+): Array<T & { cif: number }> {
+  const list = lines || [];
+  const extras = round2((Number(flete) || 0) + (Number(seguro) || 0));
+  const totalFob = round2(list.reduce((s, l) => s + (Number(l.fob) || 0), 0));
+  let assigned = 0;
+  return list.map((l, i) => {
+    const fob = round2(Number(l.fob) || 0);
+    let share = totalFob > 0 ? round2((extras * fob) / totalFob) : 0;
+    if (i === list.length - 1) share = round2(extras - assigned); // drift → last
+    assigned = round2(assigned + share);
+    return { ...l, cif: round2(fob + share) };
+  });
+}
+
+/**
+ * The DR import-tax cascade for ONE product line, calibrated to Alcover's DUA:
+ *   gravamen  = dutyRate%  × CIF                         (20% on every product)
+ *   selectivo = ISC (given — varies by HS arancel, 0 for most)
+ *   ITBIS     = itbisRate% × (CIF + gravamen + selectivo)
+ * Gravamen + selectivo CAPITALIZE into landed cost; the ITBIS is recoverable
+ * input credit. Returns each component rounded to cents.
+ */
+export function computeLineTaxes({ cif, selectivo = 0, config }: {
+  cif: number; selectivo?: number; config: ResolvedAccountingConfig;
+}): { gravamen: number; selectivo: number; itbis: number } {
+  const c = round2(cif);
+  const gravamen = round2((c * config.dutyRate) / 100);
+  const sel = round2(selectivo || 0);
+  const itbis = round2(((c + gravamen + sel) * config.itbisRate) / 100);
+  return { gravamen, selectivo: sel, itbis };
+}
+
 /** Map a payment method to the chart role that settles it. */
 function payRole(method: PaymentMethod | undefined | null): string {
   if (method === 'credit') return 'accountsPayable';
