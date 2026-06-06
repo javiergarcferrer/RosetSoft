@@ -9,8 +9,8 @@ import { isBalanced, debitTotal, creditTotal } from '../src/lib/accounting/ledge
 import { resolveAccountingConfig, accountFor } from '../src/lib/accounting/config.js';
 import {
   expedienteCostTotals, expedienteLanded, expedienteCreditableItbis,
-  expedienteTaxCheck, allocateExpediente, buildExpedienteEntry,
-  prorateCif, computeLineTaxes,
+  expedienteTaxCheck, buildExpedienteEntry,
+  prorateCif, computeLineTaxes, resolveExpediente,
 } from '../src/lib/accounting/expediente.js';
 
 const config = resolveAccountingConfig(null); // defaults: duty 20%, ITBIS 18%
@@ -34,6 +34,25 @@ function expediente() {
   };
 }
 
+// The same shipment in the multi-embarque shape the asiento builder consumes:
+// one embarque (no flete/seguro), one Roset factura, two lines → identical totals
+// (CIF 10000, gravamen 2000, import ITBIS 2160) so the asiento asserts hold.
+function emb() {
+  return {
+    id: 'exp1', profileId: 'team', bl: 'HLCULE1251124881', liquidatedAt: 0, paymentMethod: 'bank',
+    cif: 0, duty: 0, importItbis: 0, lines: [],
+    embarques: [
+      { id: 'e1', bl: 'HLCULE1251124881', flete: 0, seguro: 0, facturas: [
+        { id: 'f1', supplierId: 'roset', lines: [
+          { id: 'a', itemId: 'iA', name: 'Sofá', qty: 2, fob: 6000 },
+          { id: 'b', itemId: 'iB', name: 'Mesa', qty: 1, fob: 4000 },
+        ] },
+      ] },
+    ],
+    costs: expediente().costs,
+  };
+}
+
 test('cost totals: net = gross − itbis, computed per cent', () => {
   const t = expedienteCostTotals(expediente().costs);
   assert.equal(t.gross, 2270);  // 1180 + 500 + 590
@@ -49,21 +68,9 @@ test('creditable ITBIS = import ITBIS + every service ITBIS', () => {
   assert.equal(expedienteCreditableItbis(expediente()), 2430); // 2160 + 270
 });
 
-test('allocate: capitalizable extras prorate by CIF value, sum to landed', () => {
-  const a = allocateExpediente(expediente());
-  // extras = duty 2000 + cost nets 2000 = 4000, spread over CIF 10000.
-  const byId = Object.fromEntries(a.pieces.map((p) => [p.line.id, p]));
-  assert.equal(byId.a.landedTotal, 8400);   // 6000 + 4000*0.6
-  assert.equal(byId.a.landedUnitCost, 4200); // /2
-  assert.equal(byId.b.landedTotal, 5600);   // 4000 + 1600 (drift→last)
-  assert.equal(byId.b.landedUnitCost, 5600); // /1
-  const sum = a.pieces.reduce((s, p) => s + p.landedTotal, 0);
-  assert.equal(sum, 14000); // == expedienteLanded
-});
-
 test('asiento balances and books the right debits', () => {
   let i = 0;
-  const { lines } = buildExpedienteEntry({ newId: () => `id${i++}`, config, expediente: expediente(), postedAt: 0 });
+  const { lines } = buildExpedienteEntry({ newId: () => `id${i++}`, config, expediente: emb(), postedAt: 0 });
   assert.ok(isBalanced(lines));
   assert.equal(debitTotal(lines), creditTotal(lines));
   assert.equal(debitTotal(lines), 16430); // 14000 inventory + 2430 ITBIS
@@ -118,10 +125,46 @@ test('cascade reconciles to Alcover\'s real DUA (CIF 15,557,907.59 → 6,659,865
   assert.ok(Math.abs(impuestos - 6659865.41) < 5, `got ${impuestos}`);
 });
 
+test('resolveExpediente: multi-embarque → per-line landed + rolled-up totals', () => {
+  const exp = {
+    id: 'e', profileId: 'team', liquidatedAt: 0, paymentMethod: 'bank',
+    cif: 0, duty: 0, importItbis: 0, lines: [],
+    costs: [{ id: 'k', concept: 'agenciamiento', amount: 354, itbis: 54 }], // net 300
+    embarques: [
+      { id: 'em1', bl: 'BL1', flete: 100, seguro: 0, facturas: [
+        { id: 'fA', supplierId: 'S1', lines: [
+          { id: 'a1', itemId: 'iA', name: 'Sofá', qty: 2, fob: 600 },
+          { id: 'a2', itemId: 'iB', name: 'Mesa', qty: 1, fob: 400 },
+        ] },
+      ] },
+      { id: 'em2', bl: 'BL2', flete: 0, seguro: 0, facturas: [
+        { id: 'fB', supplierId: 'S2', lines: [
+          { id: 'b1', itemId: 'iC', name: 'Espejo', qty: 1, fob: 500, selectivo: 50 },
+        ] },
+      ] },
+    ],
+  };
+  const r = resolveExpediente(exp, config);
+  assert.equal(r.lines.length, 3);
+  // CIF: flete 100 prorated over FOB 1000 → a1 660, a2 440; em2 has no flete → b1 500.
+  assert.equal(r.totals.cif, 1600);
+  assert.equal(r.totals.gravamen, 320);        // 20% of 1600
+  assert.equal(r.totals.selectivo, 50);         // only the espejo
+  assert.equal(r.totals.importItbis, 354.6);    // 18% cascade per line, summed
+  assert.equal(r.totals.landed, 2270);          // 1600 + 320 + 50 + costNet 300
+  assert.equal(r.totals.creditableItbis, 408.6); // import 354.6 + service 54
+  // Per-line landed reconciles to the total.
+  assert.equal(r.lines.reduce((s, l) => s + l.landedTotal, 0), 2270);
+  // The espejo line carries its selectivo into landed.
+  const espejo = r.lines.find((l) => l.id === 'b1');
+  assert.equal(espejo.gravamen, 100);
+  assert.equal(espejo.selectivo, 50);
+  assert.equal(espejo.itbis, 117);              // 18% of (500+100+50)
+});
+
 test('empty cost sheet: landed = CIF + duty, asiento still balances', () => {
-  const e = { ...expediente(), costs: [] };
-  assert.equal(expedienteLanded(e), 12000);
+  assert.equal(expedienteLanded({ cif: 10000, duty: 2000, costs: [] }), 12000);
   let i = 0;
-  const { lines } = buildExpedienteEntry({ newId: () => `x${i++}`, config, expediente: e, postedAt: 0 });
+  const { lines } = buildExpedienteEntry({ newId: () => `x${i++}`, config, expediente: { ...emb(), costs: [] }, postedAt: 0 });
   assert.ok(isBalanced(lines));
 });

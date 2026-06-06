@@ -528,24 +528,52 @@ export interface ImportCost {
   paymentMethod?: PaymentMethod;
 }
 
-/** One product line landed by an expediente — the goods + their CIF value, which
- *  is the weight the capitalizable costs are prorated by. */
+/** One product line landed by an expediente — the goods + their value. FOB is
+ *  the customs base (CIF = FOB + the embarque's prorated flete/seguro); selectivo
+ *  is the ISC for this line's HS arancel (0 for most). */
 export interface ImportExpedienteLine {
   id: string;
   itemId?: string | null;
   name: string;
   reference?: string;
   qty: number;
-  /** This line's CIF / valor en aduana (DOP) — the allocation weight. */
-  cifValue: number;
+  /** FOB value (DOP) — the customs base before flete/seguro. */
+  fob?: number;
+  /** Impuesto Selectivo al Consumo (ISC) for this line — varies by HS arancel. */
+  selectivo?: number;
+  /** Legacy single-liquidation weight (this line's CIF). Superseded by `fob`. */
+  cifValue?: number;
+}
+
+/** A supplier invoice within an embarque — its lines share a supplier (and NCF
+ *  if it's a local invoice). The foreign supplier invoice seeds the FOB values. */
+export interface ExpedienteFactura {
+  id: string;
+  supplierId?: string | null;
+  invoiceRef?: string;
+  ncf?: string | null;
+  lines: ImportExpedienteLine[];
+}
+
+/** One embarque (shipment) of an expediente — a BL/contenedor with its own DUA,
+ *  flete and seguro, holding one or more supplier facturas. */
+export interface ExpedienteEmbarque {
+  id: string;
+  bl?: string;
+  containerId?: string | null;
+  customsRef?: string;   // DUA
+  flete?: number;
+  seguro?: number;
+  facturas: ExpedienteFactura[];
 }
 
 /**
- * An import expediente = one BL/shipment landed in full: its product lines + the
- * DGA taxes (gravamen + import ITBIS) + an itemized cost sheet, all capitalized
- * to a per-line landed cost (ITBIS credited). Posts one asiento (source='import')
- * + a kardex IN per line. Optionally linked to its tracked container + order.
- * Amounts are DOP.
+ * An import expediente = one customs FILE, possibly spanning several embarques
+ * (BLs), each with several supplier facturas, each with product lines. The DGA
+ * taxes are computed per line (gravamen 20% + selectivo + ITBIS 18% on the
+ * cascade); an itemized cost sheet (agenciamiento, transporte, puerto…) is shared
+ * across the whole expediente and prorated to every line by CIF. Posts one
+ * asiento + a kardex IN per line at its landed unit cost. Amounts are DOP.
  */
 export interface ImportExpediente {
   id: string;
@@ -558,10 +586,14 @@ export interface ImportExpediente {
   orderId?: string | null;
   containerId?: string | null;
   liquidatedAt: number;
-  cif: number;          // total CIF / valor en aduana
-  duty: number;         // gravamen arancelario (total)
-  importItbis: number;  // ITBIS de importación (creditable)
+  cif: number;          // total CIF / valor en aduana (derived from the embarques)
+  duty: number;         // gravamen arancelario (total, derived)
+  selectivo?: number;   // ISC (total, derived)
+  importItbis: number;  // ITBIS de importación (creditable, derived)
+  /** Multi-level structure: embarques → facturas → lines. */
+  embarques?: ExpedienteEmbarque[];
   costs: ImportCost[];
+  /** Legacy flat lines (single-embarque). Superseded by `embarques`. */
   lines: ImportExpedienteLine[];
   paymentMethod: PaymentMethod;  // settlement of the customs taxes
   journalEntryId?: string | null;

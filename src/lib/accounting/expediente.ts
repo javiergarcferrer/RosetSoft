@@ -8,18 +8,18 @@
  * across the lines by CIF value — while the ITBIS portions are recoverable input
  * credit. A cost carrying a DR supplier + NCF lands in the 606.
  *
- *   Debit  Inventario          landedTotal = cif + duty + Σ(cost.net)
- *   Debit  ITBIS adelantado     importItbis + Σ(cost.itbis)
- *   Credit Mercancía en tránsito  cif        (clears the in-transit goods)
- *   Credit <bank|caja>            duty + importItbis   (aduanas)
- *   Credit <CxP|bank|caja>        cost.amount          (one per cost line)
+ *   Debit  Inventario           landed = Σ(cif + gravamen + selectivo + cost net)
+ *   Debit  ITBIS adelantado     Σ(line ITBIS) + Σ(cost itbis)
+ *   Credit Mercancía en tránsito  CIF, split per foreign supplier (each clears)
+ *   Credit <bank|caja>            gravamen + selectivo + import ITBIS  (aduanas)
+ *   Credit <CxP|bank|caja>        cost.amount                          (one per cost)
  *
- * The caller records a kardex IN per line at its landed unit cost
- * (`allocateExpediente`). Pure: no React, no Supabase.
+ * The caller records a kardex IN per line at its landed unit cost (read straight
+ * off `resolveExpediente`). Pure: no React, no Supabase.
  */
 import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
-import { computeImportTaxes, allocateShipment, type ShipmentAllocation } from './importLiquidation.js';
+import { computeImportTaxes } from './importLiquidation.js';
 import type { ImportExpediente, ImportCost, JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
 /** The preset cost concepts an expediente itemizes. `otro` covers anything else. */
@@ -81,6 +81,81 @@ export function computeLineTaxes({ cif, selectivo = 0, config }: {
   return { gravamen, selectivo: sel, itbis };
 }
 
+/** One product line of an expediente, fully resolved: its CIF, the tax cascade,
+ *  its share of the shared cost sheet, and the resulting landed cost. */
+export interface ResolvedExpLine {
+  embarqueId: string; bl: string; facturaId: string; supplierId: string | null;
+  id: string; itemId: string | null; name: string; reference: string; qty: number;
+  fob: number; cif: number; gravamen: number; selectivo: number; itbis: number;
+  costShare: number; landedTotal: number; landedUnitCost: number;
+}
+
+export interface ResolvedExpediente {
+  lines: ResolvedExpLine[];
+  totals: {
+    fob: number; cif: number; gravamen: number; selectivo: number; importItbis: number;
+    impuestos: number; costGross: number; costNet: number; costItbis: number;
+    landed: number; creditableItbis: number;
+  };
+}
+
+/**
+ * Resolve a multi-level expediente (embarques → facturas → lines) into the per-
+ * line landed cost + rolled-up totals. Within each embarque a line gets its CIF
+ * (FOB + prorated flete/seguro) and the tax cascade (gravamen 20% + selectivo +
+ * ITBIS 18%); then the shared cost-sheet NET is prorated across ALL lines by CIF
+ * (drift → last). Landed per line = CIF + gravamen + selectivo + cost share; the
+ * ITBIS (import + service) is the recoverable credit. Pure — the single source
+ * the workspace, the asiento, and the kardex all read from.
+ */
+export function resolveExpediente(
+  expediente: ImportExpediente,
+  config: ResolvedAccountingConfig,
+): ResolvedExpediente {
+  const taxed: ResolvedExpLine[] = [];
+  for (const emb of expediente.embarques || []) {
+    const flat = (emb.facturas || []).flatMap((f) =>
+      (f.lines || []).map((l) => ({
+        embarqueId: emb.id, bl: emb.bl || '', facturaId: f.id, supplierId: f.supplierId || null,
+        id: l.id, itemId: l.itemId || null, name: l.name || '', reference: l.reference || '',
+        qty: round2(Number(l.qty) || 0), fob: round2(Number(l.fob ?? l.cifValue) || 0),
+        selectivo: round2(Number(l.selectivo) || 0),
+      })),
+    );
+    for (const l of prorateCif(flat, emb.flete, emb.seguro)) {
+      const t = computeLineTaxes({ cif: l.cif, selectivo: l.selectivo, config });
+      taxed.push({ ...l, gravamen: t.gravamen, selectivo: t.selectivo, itbis: t.itbis, costShare: 0, landedTotal: 0, landedUnitCost: 0 });
+    }
+  }
+  const totalCif = round2(taxed.reduce((s, l) => s + l.cif, 0));
+  const { gross: costGross, net: costNet, itbis: costItbis } = expedienteCostTotals(expediente.costs);
+
+  let assigned = 0;
+  const lines = taxed.map((l, i) => {
+    let share = totalCif > 0 ? round2((costNet * l.cif) / totalCif) : 0;
+    if (i === taxed.length - 1) share = round2(costNet - assigned); // drift → last
+    assigned = round2(assigned + share);
+    const landedTotal = round2(l.cif + l.gravamen + l.selectivo + share);
+    const landedUnitCost = l.qty > 0 ? Math.round((landedTotal / l.qty) * 10000) / 10000 : 0;
+    return { ...l, costShare: share, landedTotal, landedUnitCost };
+  });
+
+  const sum = (f: (l: ResolvedExpLine) => number) => round2(lines.reduce((s, l) => s + f(l), 0));
+  const gravamen = sum((l) => l.gravamen);
+  const selectivo = sum((l) => l.selectivo);
+  const importItbis = sum((l) => l.itbis);
+  return {
+    lines,
+    totals: {
+      fob: sum((l) => l.fob), cif: totalCif, gravamen, selectivo, importItbis,
+      impuestos: round2(gravamen + selectivo + importItbis),
+      costGross, costNet, costItbis,
+      landed: sum((l) => l.landedTotal),
+      creditableItbis: round2(importItbis + costItbis),
+    },
+  };
+}
+
 /** Map a payment method to the chart role that settles it. */
 function payRole(method: PaymentMethod | undefined | null): string {
   if (method === 'credit') return 'accountsPayable';
@@ -108,9 +183,10 @@ export function expedienteCostTotals(costs: readonly ImportCost[] | null | undef
   return { gross, itbis, net };
 }
 
-/** Capitalized landed total = CIF + gravamen + Σ(cost net). Excludes recoverable ITBIS. */
-export function expedienteLanded(e: Pick<ImportExpediente, 'cif' | 'duty' | 'costs'>): number {
-  return round2(round2(e.cif) + round2(e.duty) + expedienteCostTotals(e.costs).net);
+/** Capitalized landed total = CIF + gravamen + selectivo + Σ(cost net). Excludes
+ *  recoverable ITBIS. Reads a saved record's stored totals (the list view). */
+export function expedienteLanded(e: Pick<ImportExpediente, 'cif' | 'duty' | 'selectivo' | 'costs'>): number {
+  return round2(round2(e.cif) + round2(e.duty) + round2(e.selectivo || 0) + expedienteCostTotals(e.costs).net);
 }
 
 /** All recoverable input ITBIS = import ITBIS + Σ(service ITBIS). */
@@ -133,27 +209,13 @@ export function expedienteTaxCheck({ cif, duty, importItbis, config }: {
 }
 
 /**
- * Prorate the capitalizable extras (gravamen + Σ cost nets) across the product
- * lines by CIF value, yielding a landed unit cost per line for the kardex.
- * Reuses `allocateShipment` (CIF value = weight; rounding drift → last line), so
- * the per-line and whole-expediente costs reconcile to the cent.
- */
-export function allocateExpediente(e: Pick<ImportExpediente, 'duty' | 'importItbis' | 'costs' | 'lines'>): ShipmentAllocation<ImportExpediente['lines'][number] & { quantity: number; unitCostUsd: number }> {
-  const { net } = expedienteCostTotals(e.costs);
-  const adapted = (e.lines || []).map((l) => {
-    const qty = Number(l.qty) || 0;
-    return { ...l, quantity: qty, unitCostUsd: qty > 0 ? (Number(l.cifValue) || 0) / qty : 0 };
-  });
-  return allocateShipment(adapted, { duty: round2(e.duty), otherCosts: net, importItbis: round2(e.importItbis) });
-}
-
-/**
- * Build the single balanced asiento for an expediente. CIF clears from
- * Mercancía en tránsito into Inventario (the foreign purchase was booked there
- * when the supplier was paid — confirm this with your advisor / remap the role
- * if you book CIF differently). Customs taxes settle per the expediente's
- * payment method; each cost settles per its own (credit → the supplier's CxP,
- * carrying its NCF for the 606; else paid from bank/cash/card).
+ * Build the single balanced asiento for an expediente, over the resolved (multi-
+ * embarque) model. CIF clears from Mercancía en tránsito into Inventario — split
+ * per foreign supplier so each supplier's in-transit balance zeroes — (the foreign
+ * purchase was booked there when the supplier was paid; remap the role if you book
+ * CIF differently). Customs (gravamen + selectivo + import ITBIS) settle per the
+ * expediente's payment method; each cost settles per its own (credit → the
+ * supplier's CxP, carrying its NCF for the 606; else paid from bank/cash/card).
  */
 export function buildExpedienteEntry({ newId, config, expediente, postedAt }: {
   newId: () => string;
@@ -161,32 +223,33 @@ export function buildExpedienteEntry({ newId, config, expediente, postedAt }: {
   expediente: ImportExpediente;
   postedAt?: number;
 }): { entry: JournalEntry; lines: JournalLine[] } {
-  const cif = round2(expediente.cif);
-  const duty = round2(expediente.duty);
-  const importItbis = round2(expediente.importItbis);
+  const r = resolveExpediente(expediente, config);
+  const { landed, creditableItbis, gravamen, selectivo, importItbis } = r.totals;
   const costs = Array.isArray(expediente.costs) ? expediente.costs : [];
-  const landedTotal = expedienteLanded(expediente);
-  const creditableItbis = expedienteCreditableItbis(expediente);
-  if (landedTotal <= 0) throw new Error('El expediente no tiene costo a capitalizar.');
+  if (landed <= 0) throw new Error('El expediente no tiene costo a capitalizar.');
 
   const lines: DraftLine[] = [
-    { accountCode: requireAccount(config, 'inventory'), debit: landedTotal, memo: 'Costo en destino' },
+    { accountCode: requireAccount(config, 'inventory'), debit: landed, memo: 'Costo en destino' },
   ];
   if (creditableItbis > 0) {
     lines.push({ accountCode: requireAccount(config, 'itbisCredit'), debit: creditableItbis, memo: 'ITBIS importación + servicios' });
   }
-  if (cif > 0) {
+  // CIF clears from goods-in-transit, one credit per foreign supplier.
+  const cifBySupplier = new Map<string | null, number>();
+  for (const l of r.lines) cifBySupplier.set(l.supplierId, round2((cifBySupplier.get(l.supplierId) || 0) + l.cif));
+  for (const [supplierId, cif] of cifBySupplier) {
+    if (cif <= 0) continue;
     lines.push({
       accountCode: requireAccount(config, 'goodsInTransit'),
       credit: cif,
-      thirdPartyType: expediente.supplierId ? 'supplier' : null,
-      thirdPartyId: expediente.supplierId || null,
+      thirdPartyType: supplierId ? 'supplier' : null,
+      thirdPartyId: supplierId || null,
       memo: 'CIF (mercancía en tránsito)',
     });
   }
-  const customs = round2(duty + importItbis);
+  const customs = round2(gravamen + selectivo + importItbis);
   if (customs > 0) {
-    lines.push({ accountCode: requireAccount(config, payRole(expediente.paymentMethod)), credit: customs, memo: 'Aduanas: gravamen + ITBIS' });
+    lines.push({ accountCode: requireAccount(config, payRole(expediente.paymentMethod)), credit: customs, memo: 'Aduanas: gravamen + selectivo + ITBIS' });
   }
   for (const c of costs) {
     const amt = round2(c?.amount || 0);
