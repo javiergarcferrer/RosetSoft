@@ -93,16 +93,23 @@
   body {
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
-    /* Pin a background so any 1-pixel overscroll gap never reveals the OS color.
-       A faint fixed violet bloom in the top-right gives the whole app a sense
-       of depth — white cards now lift off a subtly-toned field instead of
-       dissolving into a flat near-white page (the old "flat / undeveloped"
-       complaint). Fixed attachment so it stays put while the main column
-       scrolls over it. */
-    background-color: theme('colors.ink.50');
-    background-image: theme('backgroundImage.app-wash');
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    /* Warm-editorial canvas. Three stacked, fixed layers (top → bottom):
+         1. film grain — a faint desaturated noise so the surface has real
+            texture instead of a dead flat fill (the recurring complaint). At
+            ~4.5% it's felt, not seen; cards are opaque so it lives mostly in
+            the gutters/gaps between them.
+         2. wash — violet + terracotta blooms that light the page corners.
+         3. canvas color (#f3f1ed) — a warm paper tone set a clear step BELOW
+            the white cards, so the cards finally read as elevated surfaces.
+       Tonal elevation, Radix-style: canvas (deepest) → card (white + sheen) →
+       overlay (white + shadow-pop). */
+    background-color: #f3f1ed;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E"),
+      theme('backgroundImage.app-wash');
+    background-repeat: repeat, no-repeat;
+    background-size: 160px 160px, 100% 100%;
+    background-attachment: fixed, fixed;
     /* iOS treats position: fixed on a child as an Anchor for scroll-into-view
        when a focused input is covered by the keyboard. Keeping body as a
        static block lets that machinery work even though it doesn't scroll. */
@@ -317,13 +324,25 @@
     @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
   }
   .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
-  .card  { @apply rounded-xl bg-white border border-ink-100 shadow-soft transition-shadow duration-200; }
+  /* Card = the resting elevated surface. Softer 2xl radius (warm editorial),
+     a faint top-down gradient sheen (lit-from-above), a warm hairline border,
+     and the warm layered `soft` shadow. This is the tonal step above the
+     canvas — the single biggest fix for the "flat" feeling. */
+  .card  {
+    @apply rounded-2xl border border-ink-100 shadow-soft transition-[box-shadow,transform,border-color] duration-200;
+    background-color: #ffffff;
+    background-image: theme('backgroundImage.card-grad');
+  }
   /* Interactive card — for cards that are links/buttons. Lifts on hover with a
      deeper shadow + a hairline violet border so the whole surface reads as
      tappable, not just a cursor change. Pairs with `hover:-translate-y-0.5`
      at the call site where a lift is wanted. */
   .card-interactive { @apply card cursor-pointer hover:shadow-md hover:border-brand-200; }
   .card-pad { @apply p-5; }
+  /* Subtle nested surface — Radix step-2/3: a faint inset panel for areas
+     INSIDE a card (table heads, secondary fills, sub-sections) that need to
+     read as recessed rather than as another raised card. */
+  .surface-subtle { @apply rounded-xl bg-ink-50 border border-ink-100/80; }
   .kbd   { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
   .badge { @apply inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700; }
   .badge-brand { @apply inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700; }
@@ -340,7 +359,7 @@
      tracked small-caps. */
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors; }
   .table { @apply w-full text-sm; }
-  .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 border-b border-ink-100; }
+  .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 bg-ink-50/70 border-b border-ink-100; }
   .table td { @apply px-3 py-2 border-b border-ink-100; }
   .table tbody tr:hover { @apply bg-ink-50; }
 
@@ -434,7 +453,11 @@
      room when the card is the only thing on screen, plus
      max-w-sm so the form is comfortable on a tablet without
      stretching to absurd widths. */
-  .card-auth { @apply rounded-xl bg-white border border-ink-100 shadow-soft p-8 w-full max-w-sm; }
+  .card-auth {
+    @apply rounded-2xl border border-ink-100 shadow-md p-8 w-full max-w-sm;
+    background-color: #ffffff;
+    background-image: theme('backgroundImage.card-grad');
+  }
 
   /* ===========================================================
      Quote line item — responsive shell driven by container

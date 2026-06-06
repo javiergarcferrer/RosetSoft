@@ -64,23 +64,27 @@ export default {
       },
       backgroundImage: {
         // Primary-CTA gradient — a touch of motion in the violet so the main
-        // action button reads as a lit surface, not a flat fill. Lightens at
-        // the top-left, deepens toward the bottom-right.
+        // action button reads as a lit surface, not a flat fill.
         'brand-grad': 'linear-gradient(135deg, #4a1cff 0%, #3600ff 52%, #2c00d6 100%)',
-        // Whole-app backdrop wash — a faint violet bloom in the top-right of
-        // the scroll area so white cards lift off the surface instead of
-        // dissolving into a flat near-white field (the old "flat" complaint).
-        'app-wash': 'radial-gradient(1100px 520px at 100% -8%, rgba(54,0,255,0.06), transparent 58%)',
+        // Card surface sheen — a barely-there top-to-bottom gradient that gives
+        // every card a faint lit-from-above quality (Radix/Linear "surface"
+        // tonal step) instead of reading as a dead white rectangle.
+        'card-grad': 'linear-gradient(180deg, #ffffff 0%, #fcfbf9 100%)',
+        // Whole-app backdrop wash — a faint violet bloom top-right + a warm
+        // terracotta bloom top-left, so the warm-editorial canvas feels lit and
+        // white cards lift off it. Paired with grain (in index.css) for texture.
+        'app-wash': 'radial-gradient(900px 480px at 100% -6%, rgba(54,0,255,0.055), transparent 60%), radial-gradient(720px 440px at -8% 4%, rgba(201,106,42,0.05), transparent 56%)',
       },
       boxShadow: {
-        // Elevation ladder — the old single `soft`/`pop` pair read as almost no
-        // depth. This is a proper scale: hairline → resting card → raised →
-        // floating popover, plus a violet focus ring and a violet button glow.
-        xs:   '0 1px 2px rgba(23,22,18,0.05)',
-        sm:   '0 1px 2px rgba(23,22,18,0.06), 0 1px 3px rgba(23,22,18,0.05)',
-        soft: '0 1px 2px rgba(23,22,18,0.04), 0 4px 12px rgba(23,22,18,0.06), 0 14px 34px -8px rgba(23,22,18,0.06)',
-        md:   '0 2px 4px rgba(23,22,18,0.05), 0 10px 24px -4px rgba(23,22,18,0.10)',
-        pop:  '0 12px 38px -6px rgba(23,22,18,0.22), 0 4px 10px rgba(23,22,18,0.12)',
+        // Warm-tinted elevation ladder (shadow color = ink-700 #3b3830, not
+        // neutral black) so depth reads as warm editorial paper, not cold SaaS.
+        // hairline → resting card → raised/hover → floating overlay, plus the
+        // violet focus ring and violet button glow.
+        xs:   '0 1px 2px rgba(59,56,48,0.05)',
+        sm:   '0 1px 2px rgba(59,56,48,0.06), 0 1px 3px rgba(59,56,48,0.05)',
+        soft: '0 1px 2px rgba(59,56,48,0.05), 0 3px 8px rgba(59,56,48,0.06), 0 14px 30px -10px rgba(59,56,48,0.12)',
+        md:   '0 2px 4px rgba(59,56,48,0.06), 0 10px 24px -6px rgba(59,56,48,0.14)',
+        pop:  '0 18px 50px -12px rgba(23,22,18,0.30), 0 6px 16px -6px rgba(23,22,18,0.16)',
         focus:'0 0 0 4px rgba(54,0,255,0.16)',
         glow: '0 1px 2px rgba(54,0,255,0.30), 0 10px 26px -6px rgba(54,0,255,0.45)',
       },
