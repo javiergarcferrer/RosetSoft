@@ -281,7 +281,13 @@ export default function TotalsDock({
               five-figure USD, a seven-figure DOP and the touch icons can't all
               share one line — the DOP conversion wraps to its own line just
               beneath the amount, so it's always shown in full, never clipped. */}
-          <div className="flex items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          {/* Tight bottom padding so the bar hugs the screen edge. We deliberately
+              do NOT pad by the full env(safe-area-inset-bottom) (~34px on iPhone)
+              here — that left a big empty white band below the buttons that read
+              as a gap between the bar and the bottom edge. A small fixed clearance
+              keeps the icons just above the home-indicator pill while the solid
+              white background still fills down to the physical edge. */}
+          <div className="flex items-center gap-2 sm:gap-3 py-2.5 pb-3">
             {/* The total leads the row — the hero figure and the breakdown
                 toggle. The row wraps: amount + chevron hold the first line and
                 the DOP conversion takes the second on phones; from sm: up there's
