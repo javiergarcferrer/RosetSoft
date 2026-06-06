@@ -91,7 +91,7 @@ export default function Dashboard() {
         actions={
           <div className="flex items-center gap-2">
             {meId && <ScopeToggle scope={scope} onChange={setScope} />}
-            <Link to="/quotes/new" className="btn-primary">
+            <Link to="/quotes/new" className="btn-brand">
               <Plus size={14} /> Nueva cotización
             </Link>
           </div>

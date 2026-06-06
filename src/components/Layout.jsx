@@ -112,7 +112,7 @@ export default function Layout() {
           pb-safe-area / pl-safe-area keep the panel content clear of the
           notch, home indicator, and landscape ear. */}
       <aside
-        className={`bg-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+        className={`bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
         } ${collapsed ? 'md:hidden' : ''}`}
         aria-label="Navegación principal"
@@ -192,8 +192,10 @@ export default function Layout() {
                     end={end}
                     className={({ isActive }) => {
                       const on = sectionActive != null ? sectionActive : isActive;
-                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-colors active:bg-ink-700 ${
-                        on ? 'bg-ink-700 text-white' : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
+                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${
+                        on
+                          ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(54,0,255,0.6)]'
+                          : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
                       }`;
                     }}
                   >

@@ -40,23 +40,47 @@ export default {
           800: '#26241f',
           900: '#171612',
         },
+        // Alcover electric violet. Anchored on #3600ff at the 600 step (the
+        // primary-action color); lighter tints toward 50, deeper shades toward
+        // 900. Generated as a constant-hue (253°) ladder so every step reads as
+        // the same color, just brighter/darker. This REPLACED the previous
+        // terracotta scale under the same `brand` token name, so every existing
+        // `brand-*` usage (buttons, badges, map markers, the ::selection wash,
+        // chart accents) flipped to violet in one move.
         brand: {
-          50: '#fdf6f0',
-          100: '#fae8d8',
-          200: '#f2cba6',
-          300: '#e8a76d',
-          400: '#dd8542',
-          500: '#c96a2a',
-          600: '#a55322',
-          700: '#7d3e1c',
-          800: '#5a2c14',
-          900: '#3a1d0d',
+          50:  '#f3f0ff',
+          100: '#e7e0ff',
+          200: '#ccbefe',
+          300: '#a890fd',
+          400: '#7752ff',
+          500: '#5729ff',
+          600: '#3600ff',
+          700: '#3000db',
+          800: '#2904af',
+          900: '#20077e',
         },
       },
+      backgroundImage: {
+        // Primary-CTA gradient — a touch of motion in the violet so the main
+        // action button reads as a lit surface, not a flat fill. Lightens at
+        // the top-left, deepens toward the bottom-right.
+        'brand-grad': 'linear-gradient(135deg, #4a1cff 0%, #3600ff 52%, #2c00d6 100%)',
+        // Whole-app backdrop wash — a faint violet bloom in the top-right of
+        // the scroll area so white cards lift off the surface instead of
+        // dissolving into a flat near-white field (the old "flat" complaint).
+        'app-wash': 'radial-gradient(1100px 520px at 100% -8%, rgba(54,0,255,0.06), transparent 58%)',
+      },
       boxShadow: {
-        soft: '0 1px 2px rgba(23,22,18,0.04), 0 8px 24px rgba(23,22,18,0.06)',
-        pop:  '0 8px 28px rgba(23,22,18,0.18), 0 2px 6px rgba(23,22,18,0.10)',
-        focus:'0 0 0 4px rgba(23,22,18,0.10)',
+        // Elevation ladder — the old single `soft`/`pop` pair read as almost no
+        // depth. This is a proper scale: hairline → resting card → raised →
+        // floating popover, plus a violet focus ring and a violet button glow.
+        xs:   '0 1px 2px rgba(23,22,18,0.05)',
+        sm:   '0 1px 2px rgba(23,22,18,0.06), 0 1px 3px rgba(23,22,18,0.05)',
+        soft: '0 1px 2px rgba(23,22,18,0.04), 0 4px 12px rgba(23,22,18,0.06), 0 14px 34px -8px rgba(23,22,18,0.06)',
+        md:   '0 2px 4px rgba(23,22,18,0.05), 0 10px 24px -4px rgba(23,22,18,0.10)',
+        pop:  '0 12px 38px -6px rgba(23,22,18,0.22), 0 4px 10px rgba(23,22,18,0.12)',
+        focus:'0 0 0 4px rgba(54,0,255,0.16)',
+        glow: '0 1px 2px rgba(54,0,255,0.30), 0 10px 26px -6px rgba(54,0,255,0.45)',
       },
     },
   },

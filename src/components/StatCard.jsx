@@ -41,7 +41,7 @@ export default function StatCard({ label, value, hint, icon: Icon, tone = 'ink',
         {hint && <div className="text-xs text-ink-500 mt-1">{hint}</div>}
       </div>
       {Icon && (
-        <div className={`w-9 h-9 rounded-md flex items-center justify-center transition-colors flex-shrink-0 ${iconTint}`}>
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ring-1 ring-inset ring-black/5 transition-colors flex-shrink-0 ${iconTint}`}>
           <Icon size={18} />
         </div>
       )}
@@ -51,7 +51,7 @@ export default function StatCard({ label, value, hint, icon: Icon, tone = 'ink',
   const baseClass = `card card-pad ${borderClass}`;
   if (to) {
     return (
-      <Link to={to} className={`${baseClass} hover:border-ink-300 transition-colors group block`}>
+      <Link to={to} className={`${baseClass} block group hover:shadow-md hover:border-brand-200 hover:-translate-y-0.5 transition-[transform,box-shadow,border-color] duration-200`}>
         {inner}
       </Link>
     );

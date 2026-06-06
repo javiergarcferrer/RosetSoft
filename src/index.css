@@ -93,14 +93,22 @@
   body {
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
-    /* Pin a background so any 1-pixel overscroll gap never reveals the OS color. */
+    /* Pin a background so any 1-pixel overscroll gap never reveals the OS color.
+       A faint fixed violet bloom in the top-right gives the whole app a sense
+       of depth — white cards now lift off a subtly-toned field instead of
+       dissolving into a flat near-white page (the old "flat / undeveloped"
+       complaint). Fixed attachment so it stays put while the main column
+       scrolls over it. */
     background-color: theme('colors.ink.50');
+    background-image: theme('backgroundImage.app-wash');
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     /* iOS treats position: fixed on a child as an Anchor for scroll-into-view
        when a focused input is covered by the keyboard. Keeping body as a
        static block lets that machinery work even though it doesn't scroll. */
     position: relative;
   }
-  ::selection { background-color: #dd8542; color: #171612; }
+  ::selection { background-color: #3600ff; color: #ffffff; }
 
   /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px). */
   @media (max-width: 767px) {
@@ -268,10 +276,12 @@
 }
 
 @layer base {
-  /* Vercel/Linear style keyboard focus ring — invisible until tabbed. */
+  /* Vercel/Linear style keyboard focus ring — invisible until tabbed. Now in
+     the electric-violet brand color so keyboard focus reads as a deliberate
+     brand cue instead of a plain dark box. */
   *:focus { outline: none; }
   :where(a, button, [role="button"], input, select, textarea):focus-visible {
-    outline: 2px solid theme('colors.ink.900');
+    outline: 2px solid theme('colors.brand.600');
     outline-offset: 2px;
     border-radius: 0.375rem;
   }
@@ -285,11 +295,14 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 min-h-9 coarse:min-h-11 text-sm font-medium transition-[background-color,color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] select-none;
   }
-  .btn-primary   { @apply btn bg-ink-900 text-ink-50 hover:bg-ink-800 active:bg-ink-700; }
-  .btn-secondary { @apply btn bg-ink-100 text-ink-900 hover:bg-ink-200 active:bg-ink-300; }
+  .btn-primary   { @apply btn bg-ink-900 text-ink-50 shadow-sm hover:bg-ink-800 hover:shadow-md active:bg-ink-700 active:shadow-sm; }
+  .btn-secondary { @apply btn bg-white text-ink-900 border border-ink-200 shadow-xs hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100; }
   .btn-ghost    { @apply btn text-ink-700 hover:bg-ink-100 active:bg-ink-200; }
-  .btn-danger   { @apply btn bg-red-600 text-white hover:bg-red-700 active:bg-red-800; }
-  .btn-brand    { @apply btn bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700; }
+  .btn-danger   { @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800; }
+  /* Brand CTA — the electric-violet primary action. A lit gradient surface
+     with a violet glow so it reads as the single loudest control on screen;
+     brightness nudges replace flat hover/active color swaps on the gradient. */
+  .btn-brand    { @apply btn text-white bg-brand-grad shadow-glow hover:brightness-110 hover:shadow-glow active:brightness-95; }
 
   /* Square icon-only button — 44x44 on touch, 36x36 on mouse. Use this for
      close (×), overflow (⋯), chevrons, paginators, etc. instead of
@@ -301,10 +314,15 @@
   /* Inputs. Same coarse-pointer touch-target treatment as buttons. The
      16px-on-mobile rule above keeps Safari from auto-zooming on focus. */
   .input {
-    @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 transition-shadow focus:border-ink-900 focus:outline-none focus:shadow-focus;
+    @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
   }
   .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
-  .card  { @apply rounded-xl bg-white border border-ink-100 shadow-soft; }
+  .card  { @apply rounded-xl bg-white border border-ink-100 shadow-soft transition-shadow duration-200; }
+  /* Interactive card — for cards that are links/buttons. Lifts on hover with a
+     deeper shadow + a hairline violet border so the whole surface reads as
+     tappable, not just a cursor change. Pairs with `hover:-translate-y-0.5`
+     at the call site where a lift is wanted. */
+  .card-interactive { @apply card cursor-pointer hover:shadow-md hover:border-brand-200; }
   .card-pad { @apply p-5; }
   .kbd   { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
   .badge { @apply inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700; }
