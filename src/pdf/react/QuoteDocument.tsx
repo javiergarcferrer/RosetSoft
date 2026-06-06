@@ -65,7 +65,7 @@ function UpholsteryHero({ subtype, swatchImageId, images }: { subtype: string; s
   // image/code resolves (never drop the fabric name).
   if (!src.imageId && !src.url && !label) return null;
   return (
-    <View style={{ marginTop: 7, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <View style={{ marginTop: 7, flexDirection: 'row', gap: 8, alignItems: 'center' }} wrap={false}>
       <Swatch src={src} images={images} size={40} />
       <View style={{ flex: 1 }}>
         <Text style={{ fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase' }}>Tapizado</Text>
@@ -183,41 +183,67 @@ function LineRow({
   return (
     // Dim the WHOLE row (photo included) for an optional / non-selected
     // alternative — matches the pdf-lib renderer + the on-screen veil.
-    <View style={[s.line, dimmed ? { opacity: 0.45 } : {}]} wrap={false}>
-      <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 92, height: 92, objectFit: 'contain' }} />}</View>
-      <View style={s.lineBody}>
-        <View style={s.lineMain}>
-          {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
-          {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
-          <Text style={s.lineName}>{line.name || '—'}</Text>
-          {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
-          {(line.reference || line.dimensions) && (
-            <View style={s.lineRefRow}>
-              {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
-              {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
-            </View>
-          )}
-          {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
-          <MaterialGrid cells={cells} images={images} />
-          {compound && upholstery.uniform && (
+    //
+    // wrap: a SIMPLE line is short — keep its photo + name + price together on
+    // one page (wrap={false}). A COMPOUND / modular line can carry a dozen
+    // components and grow taller than a whole page, so it MUST be allowed to
+    // break across pages; forcing wrap={false} there made react-pdf give up
+    // ("Node of type VIEW can't wrap between pages…") and overlap/cram every row
+    // — the real cause of the "messed up" #1018 PDF. So compound lines paginate.
+    <View
+      wrap={compound}
+      style={[
+        // For a compound line the outer wrapper carries the row's padding +
+        // bottom hairline (the identity row inside stays border-less); a simple
+        // line keeps using s.line directly, so its look is unchanged.
+        ...(compound ? [{ paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: C.inkLine }] : []),
+        ...(dimmed ? [{ opacity: 0.45 }] : []),
+      ]}
+    >
+      {/* Identity row — photo | family/name/ref/swatch | line total. */}
+      <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line}>
+        <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 92, height: 92, objectFit: 'contain' }} />}</View>
+        <View style={s.lineBody}>
+          <View style={s.lineMain}>
+            {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
+            {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
+            <Text style={s.lineName}>{line.name || '—'}</Text>
+            {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
+            {(line.reference || line.dimensions) && (
+              <View style={s.lineRefRow}>
+                {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
+                {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
+              </View>
+            )}
+            {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
+            <MaterialGrid cells={cells} images={images} />
+            {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
+          </View>
+          <MoneyCell line={line} fmt={fmt} />
+        </View>
+      </View>
+
+      {/* Component list — pulled OUT of the identity row's flex-row layout into
+          normal block flow so a tall modular/compound paginates cleanly across
+          pages (react-pdf can't break a tall column trapped inside a row). Each
+          ComponentRow is itself wrap={false}, so breaks land between pieces. */}
+      {compound && (
+        <View style={{ marginTop: 8 }}>
+          {upholstery.uniform && (
             <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
           )}
           {modular ? (
-            // Group by module: each component product under its own header with
-            // a per-module subtotal; the whole modular keeps one image above. A
-            // module may itself be a client-OPTIONAL add-on (excluded from the
-            // total) or a pick-one ALTERNATIVE — rendered read-only, dimmed with
-            // a caption, mirroring the line-level optional/alternative treatment
-            // and the on-screen client link.
+            // Group by module: a header per component product (suppressed when it
+            // just repeats its own piece), optional/alternative modules dimmed
+            // with a caption — mirroring the on-screen client link.
             modulesWithAltPos(line.components).map((m, mi) => (
               <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
             ))
-          ) : compound && grouping.grouped ? (
-            // A fabric header per contiguous run, its rows collapsed to clean
-            // name+price (the run header states the fabric). Non-bearing runs
-            // (metal base, glass) render header-less.
+          ) : grouping.grouped ? (
+            // A fabric header per contiguous run; non-bearing runs (metal base,
+            // glass) render header-less.
             grouping.runs.map((run, ri) => (
-              <View key={run.key + ri}>
+              <View key={run.key + ri} wrap={false}>
                 {run.bearing && (
                   <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
                 )}
@@ -227,14 +253,13 @@ function LineRow({
               </View>
             ))
           ) : (
-            compound && Array.isArray(line.components) && line.components.map((c, i) => (
+            Array.isArray(line.components) && line.components.map((c, i) => (
               <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={upholstery.uniform} />
             ))
           )}
           {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
-        <MoneyCell line={line} fmt={fmt} />
-      </View>
+      )}
     </View>
   );
 }
@@ -259,7 +284,9 @@ function ComponentRow({
   const ranged = isRangeComponent(c);
   const range = ranged ? componentSubtotalRange(c) : null;
   return (
-    <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }}>
+    // wrap={false}: the parent compound line wraps across pages, so keep each
+    // component row atomic — a page break lands BETWEEN rows, never mid-row.
+    <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }} wrap={false}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
           {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
@@ -404,7 +431,10 @@ function ModuleBlock({
       ? { text: `Alternativa ${m.altPos?.index ?? '?'} de ${m.altPos?.total ?? '?'}${m.selected ? ' · seleccionada' : ''}`, color: C.brand700 }
       : null;
   return (
-    <View style={dimmed ? { opacity: 0.45 } : {}}>
+    // wrap={false}: keep a whole module (its header + element rows) together so a
+    // page break lands BETWEEN modules — a module that doesn't fit in the space
+    // left on a page moves to the next one, instead of spilling over the footer.
+    <View style={dimmed ? { opacity: 0.45 } : {}} wrap={false}>
       {caption && <Text style={[s.groupCaption, { color: caption.color, marginTop: 5 }]}>{caption.text}</Text>}
       {/* A module header labels a GROUP of elements. With a single element the
           element's own row already names and prices it, so a header here just
