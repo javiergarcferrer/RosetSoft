@@ -44,7 +44,7 @@ export {
 } from '../../lib/accounting/importLiquidation.js';
 export {
   COST_CONCEPTS, costLabel, prorateCif, computeLineTaxes, resolveExpediente, expedienteCostTotals,
-  expedienteLanded, expedienteCreditableItbis, expedienteTaxCheck, allocateExpediente, buildExpedienteEntry,
+  expedienteLanded, expedienteCreditableItbis, expedienteTaxCheck, buildExpedienteEntry,
 } from '../../lib/accounting/expediente.js';
 
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload

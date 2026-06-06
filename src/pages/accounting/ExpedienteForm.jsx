@@ -1,104 +1,152 @@
 import { useMemo, useState } from 'react';
-import { Loader2, Check, X, Plus, Trash2, FileText } from 'lucide-react';
+import { Loader2, Check, X, Plus, Trash2, FileText, Upload, Ship, Receipt } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
+import { effectiveDopRate } from '../../lib/exchangeRate.js';
+import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
 import {
-  buildExpedienteEntry, allocateExpediente, computeImportTaxes, expedienteLanded,
-  expedienteCreditableItbis, expedienteCostTotals, expedienteTaxCheck, COST_CONCEPTS,
-  weightedAverageIn,
+  resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
 } from '../../core/accounting/index.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const sum = (arr, f) => r2(arr.reduce((s, x) => s + (Number(f(x)) || 0), 0));
+
+const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', fob: '', selectivo: '' });
+const blankFactura = () => ({ id: newId(), supplierId: '', invoiceRef: '', ncf: '', lines: [blankLine()] });
+const blankEmbarque = () => ({ id: newId(), bl: '', containerId: '', customsRef: '', flete: '', seguro: '', facturas: [blankFactura()] });
+
+const field = 'rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm';
+const num = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+
+/** A single landed-cost KPI tile. */
+function Stat({ label, value, accent }) {
+  return (
+    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
+    </div>
+  );
+}
 
 /**
- * Expediente de importación — the complete customs file for one BL: product
- * lines (each with a CIF value) + DGA taxes + an itemized cost sheet
- * (agenciamiento, transporte, puerto, tasa DGA…). Each cost's NET capitalizes
- * into the per-line landed cost (prorated by CIF value); the ITBIS is credited.
- * Saving posts ONE asiento and a kardex IN per line. The total CIF is derived
- * from the lines, so the per-line landed costs always reconcile to the whole.
+ * Expediente de importación — the executive customs workspace. One file spans
+ * EMBARQUES (each a BL/contenedor with its own DUA, flete & seguro), each holding
+ * supplier FACTURAS, each with product LÍNEAS (FOB + selectivo). A Roset invoice
+ * PDF can seed a factura's lines. Everything reconciles live through
+ * `resolveExpediente`: per line CIF → gravamen 20% → selectivo → ITBIS 18%, the
+ * shared cost sheet prorated by CIF → landed unit cost. Saving posts ONE asiento
+ * and a kardex IN per line; the KPI band + DUA cuadre stay in sync with the DUA.
  */
-export default function ExpedienteForm({ scope, config, suppliers, items, orders, containers, onClose }) {
+export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, onClose }) {
   const [head, setHead] = useState({
-    bl: '', supplierId: '', orderId: '', containerId: '', customsRef: '',
-    date: new Date().toISOString().slice(0, 10), paymentMethod: 'bank',
-    duty: '', importItbis: '', dutyTouched: false,
+    date: new Date().toISOString().slice(0, 10), orderId: '', paymentMethod: 'bank',
+    rate: String(effectiveDopRate(settings) || ''), duaTotal: '',
   });
-  const [lines, setLines] = useState([{ id: newId(), itemId: '', name: '', reference: '', qty: '', cifValue: '' }]);
+  const [embs, setEmbs] = useState([blankEmbarque()]);
   const [costs, setCosts] = useState([]);
+  const [parsing, setParsing] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
-  const cif = useMemo(() => sum(lines, (l) => l.cifValue), [lines]);
-  // Gravamen + ITBIS auto-suggest from the CIF (editable to match the DUA).
-  const suggested = useMemo(() => computeImportTaxes({ cif, config }), [cif, config]);
-  const duty = head.dutyTouched ? (Number(head.duty) || 0) : suggested.duty;
-  const importItbis = head.importItbis !== '' ? (Number(head.importItbis) || 0) : suggested.importItbis;
-
-  const expediente = useMemo(() => ({
-    id: 'preview', profileId: scope, bl: head.bl, supplierId: head.supplierId || null,
-    liquidatedAt: 0, paymentMethod: head.paymentMethod,
-    cif, duty, importItbis,
-    costs: costs.map((c) => ({ ...c, amount: Number(c.amount) || 0, itbis: Number(c.itbis) || 0 })),
-    lines: lines.map((l) => ({ ...l, qty: Number(l.qty) || 0, cifValue: Number(l.cifValue) || 0 })),
-  }), [scope, head, cif, duty, importItbis, costs, lines]);
-
-  const landed = expedienteLanded(expediente);
-  const creditItbis = expedienteCreditableItbis(expediente);
-  const costT = expedienteCostTotals(expediente.costs);
-  const taxCheck = useMemo(() => expedienteTaxCheck({ cif, duty, importItbis, config }), [cif, duty, importItbis, config]);
-  const alloc = useMemo(() => allocateExpediente(expediente), [expediente]);
-  const unitById = useMemo(() => Object.fromEntries(alloc.pieces.map((p) => [p.line.id, p.landedUnitCost])), [alloc]);
-
-  function setLine(id, patch) { setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l))); }
-  function addLine() { setLines((ls) => [...ls, { id: newId(), itemId: '', name: '', reference: '', qty: '', cifValue: '' }]); }
-  function removeLine(id) { setLines((ls) => ls.filter((l) => l.id !== id)); }
-  function pickItem(id, itemId) {
-    const it = items.find((i) => i.id === itemId);
-    setLine(id, { itemId, name: it?.name || '', reference: it?.sku || '' });
+  // ── nested immutable updaters ───────────────────────────────────────────
+  const patchEmb = (eid, patch) => setEmbs((es) => es.map((e) => (e.id === eid ? { ...e, ...patch } : e)));
+  const delEmb = (eid) => setEmbs((es) => es.filter((e) => e.id !== eid));
+  const addFac = (eid) => setEmbs((es) => es.map((e) => (e.id !== eid ? e : { ...e, facturas: [...e.facturas, blankFactura()] })));
+  const patchFac = (eid, fid, patch) => setEmbs((es) => es.map((e) => (e.id !== eid ? e : { ...e, facturas: e.facturas.map((f) => (f.id === fid ? { ...f, ...patch } : f)) })));
+  const delFac = (eid, fid) => setEmbs((es) => es.map((e) => (e.id !== eid ? e : { ...e, facturas: e.facturas.filter((f) => f.id !== fid) })));
+  const addLine = (eid, fid) => mapLines(eid, fid, (ls) => [...ls, blankLine()]);
+  const delLine = (eid, fid, lid) => mapLines(eid, fid, (ls) => ls.filter((l) => l.id !== lid));
+  const patchLine = (eid, fid, lid, patch) => mapLines(eid, fid, (ls) => ls.map((l) => (l.id === lid ? { ...l, ...patch } : l)));
+  function mapLines(eid, fid, fn) {
+    setEmbs((es) => es.map((e) => (e.id !== eid ? e : { ...e, facturas: e.facturas.map((f) => (f.id !== fid ? f : { ...f, lines: fn(f.lines) })) })));
   }
+  function pickItem(eid, fid, lid, itemId) {
+    const it = items.find((i) => i.id === itemId);
+    patchLine(eid, fid, lid, { itemId, name: it?.name || '', reference: it?.sku || '' });
+  }
+
+  async function importPdf(eid, fid, file) {
+    if (!file) return;
+    setErr(''); setParsing(fid);
+    try {
+      const parsed = await parseInvoicePdf(file);
+      const rate = Number(head.rate) || 0;
+      const seeded = parsed.furniture.map((l) => {
+        const match = items.find((i) => (i.sku || '').trim().startsWith(l.reference));
+        return {
+          id: newId(), itemId: match?.id || '', name: match?.name || l.description, reference: l.reference,
+          qty: l.quantity, fob: rate > 0 ? r2(l.unitCostUsd * l.quantity * rate) : '', selectivo: '',
+        };
+      });
+      if (!seeded.length) { setErr('No se encontraron muebles en el PDF.'); return; }
+      mapLines(eid, fid, (ls) => [...ls.filter((l) => l.name || l.fob !== ''), ...seeded]);
+    } catch (e) {
+      setErr(e?.message || 'No se pudo leer el PDF.');
+    } finally {
+      setParsing('');
+    }
+  }
+
+  // ── live projection ─────────────────────────────────────────────────────
+  const expediente = useMemo(() => ({
+    id: 'preview', profileId: scope, paymentMethod: head.paymentMethod, cif: 0, duty: 0, importItbis: 0, lines: [],
+    embarques: embs.map((e) => ({
+      ...e, flete: Number(e.flete) || 0, seguro: Number(e.seguro) || 0,
+      facturas: e.facturas.map((f) => ({
+        ...f, lines: f.lines.map((l) => ({ ...l, qty: Number(l.qty) || 0, fob: Number(l.fob) || 0, selectivo: Number(l.selectivo) || 0 })),
+      })),
+    })),
+    costs: costs.map((c) => ({ ...c, amount: Number(c.amount) || 0, itbis: Number(c.itbis) || 0 })),
+  }), [scope, head.paymentMethod, embs, costs]);
+
+  const resolved = useMemo(() => resolveExpediente(expediente, config), [expediente, config]);
+  const byLine = useMemo(() => Object.fromEntries(resolved.lines.map((l) => [l.id, l])), [resolved]);
+  const t = resolved.totals;
+  const costT = expedienteCostTotals(expediente.costs);
+  const dua = Number(head.duaTotal) || 0;
+  const duaDiff = r2(dua - t.impuestos);
+
   function setCost(id, patch) { setCosts((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
   function addCost() { setCosts((cs) => [...cs, { id: newId(), concept: 'agenciamiento', supplierId: '', ncf: '', amount: '', itbis: '', paymentMethod: 'bank' }]); }
   function removeCost(id) { setCosts((cs) => cs.filter((c) => c.id !== id)); }
 
   async function save() {
     setErr('');
-    if (cif <= 0) { setErr('Agrega al menos una línea con valor CIF.'); return; }
+    if (t.cif <= 0) { setErr('Agrega al menos una línea con valor FOB.'); return; }
     setSaving(true);
     try {
       const id = newId();
       const postedAt = new Date(head.date).getTime();
-      const exp = { ...expediente, id, orderId: head.orderId || null, containerId: head.containerId || null, customsRef: head.customsRef };
+      const exp = { ...expediente, id, bl: embs[0]?.bl || '', supplierId: embs[0]?.facturas?.[0]?.supplierId || null };
       const built = buildExpedienteEntry({ newId, config, expediente: exp, postedAt });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
       await assignSequenceNumber({
         table: 'importExpedientes', profileId: scope, start: 1,
         build: (n) => ({
-          id, profileId: scope, number: n, bl: head.bl, customsRef: head.customsRef,
-          supplierId: head.supplierId || null, orderId: head.orderId || null, containerId: head.containerId || null,
-          liquidatedAt: postedAt, cif, duty, importItbis, costs: exp.costs, lines: exp.lines,
+          id, profileId: scope, number: n, bl: exp.bl, customsRef: embs[0]?.customsRef || '',
+          supplierId: exp.supplierId, orderId: head.orderId || null, containerId: embs[0]?.containerId || null,
+          liquidatedAt: postedAt,
+          cif: t.cif, duty: t.gravamen, selectivo: t.selectivo, importItbis: t.importItbis,
+          embarques: exp.embarques, costs: exp.costs,
+          lines: resolved.lines.map((l) => ({ id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, fob: l.fob, selectivo: l.selectivo, cifValue: l.cif })),
           paymentMethod: head.paymentMethod, journalEntryId: built.entry.id,
         }),
       });
       // Land each line into inventory at its landed unit cost.
       const touched = [];
-      for (const p of alloc.pieces) {
-        const itemId = p.line.itemId;
-        const qty = Number(p.line.qty) || 0;
-        if (!itemId || qty <= 0 || p.landedUnitCost <= 0) continue;
+      for (const l of resolved.lines) {
+        if (!l.itemId || l.qty <= 0 || l.landedUnitCost <= 0) continue;
         await db.inventoryMovements.put({
-          id: newId(), profileId: scope, itemId, type: 'in', qty, unitCost: p.landedUnitCost,
+          id: newId(), profileId: scope, itemId: l.itemId, type: 'in', qty: l.qty, unitCost: l.landedUnitCost,
           movedAt: postedAt, refTable: 'import_expedientes', refId: id, journalEntryId: built.entry.id,
         });
-        const it = items.find((i) => i.id === itemId);
+        const it = items.find((i) => i.id === l.itemId);
         if (it) {
-          const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, qty, p.landedUnitCost);
-          await db.inventoryItems.update(itemId, { qtyOnHand: (it.qtyOnHand || 0) + qty, avgCost: avg });
+          const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, l.landedUnitCost);
+          await db.inventoryItems.update(l.itemId, { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg });
         }
-        touched.push(itemId);
+        touched.push(l.itemId);
       }
       if (touched.length) syncShopify(touched).catch(() => {});
       onClose();
@@ -108,9 +156,8 @@ export default function ExpedienteForm({ scope, config, suppliers, items, orders
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm';
-  const num = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
   const supplierOpts = suppliers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const itemOpts = items.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   return (
     <div className="card p-4 mb-4 border-ink-300">
@@ -119,66 +166,108 @@ export default function ExpedienteForm({ scope, config, suppliers, items, orders
         <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
       </div>
 
-      {/* Header */}
-      <div className="grid sm:grid-cols-3 gap-3">
-        <input value={head.bl} onChange={(e) => setHead((h) => ({ ...h, bl: e.target.value }))} placeholder="BL (conocimiento de embarque)" className={field} />
-        <input value={head.customsRef} onChange={(e) => setHead((h) => ({ ...h, customsRef: e.target.value }))} placeholder="DUA / declaración" className={field} />
-        <input type="date" value={head.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} className={field} />
-        <select value={head.supplierId} onChange={(e) => setHead((h) => ({ ...h, supplierId: e.target.value }))} className={field}>
-          <option value="">— Proveedor (exterior) —</option>
-          {supplierOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+      {/* Expediente meta */}
+      <div className="grid sm:grid-cols-4 gap-3">
+        <label className="text-xs text-ink-500">Fecha<input type="date" value={head.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} className={`${field} w-full mt-0.5`} /></label>
         {orders.length > 0 && (
-          <select value={head.orderId} onChange={(e) => setHead((h) => ({ ...h, orderId: e.target.value }))} className={field}>
-            <option value="">— Pedido (opcional) —</option>
+          <label className="text-xs text-ink-500">Pedido<select value={head.orderId} onChange={(e) => setHead((h) => ({ ...h, orderId: e.target.value }))} className={`${field} w-full mt-0.5`}>
+            <option value="">— Opcional —</option>
             {orders.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.name || ''}</option>)}
-          </select>
+          </select></label>
         )}
-        {containers?.length > 0 && (
-          <select value={head.containerId} onChange={(e) => setHead((h) => ({ ...h, containerId: e.target.value }))} className={field}>
-            <option value="">— Contenedor (tracking) —</option>
-            {containers.map((c) => <option key={c.id} value={c.id}>{c.code || c.number || c.id}</option>)}
-          </select>
-        )}
+        <label className="text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full mt-0.5 text-right tabular-nums`} /></label>
+        <label className="text-xs text-ink-500">Pago aduanas<select value={head.paymentMethod} onChange={(e) => setHead((h) => ({ ...h, paymentMethod: e.target.value }))} className={`${field} w-full mt-0.5`}>
+          <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
+        </select></label>
       </div>
 
-      {/* Product lines */}
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-1.5">
-          <h4 className="text-sm font-medium text-ink-700">Productos del embarque</h4>
-          <button type="button" onClick={addLine} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Línea</button>
-        </div>
-        <div className="space-y-1.5">
-          {lines.map((l) => (
-            <div key={l.id} className="flex flex-wrap items-center gap-2">
-              <select value={l.itemId} onChange={(e) => pickItem(l.id, e.target.value)} className={`${field} flex-1 min-w-[180px]`}>
-                <option value="">— Artículo a inventariar —</option>
-                {items.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((i) => <option key={i.id} value={i.id}>{i.name}{i.sku ? ` (${i.sku})` : ''}</option>)}
-              </select>
-              <input type="number" min="0" step="1" value={l.qty} onChange={(e) => setLine(l.id, { qty: e.target.value })} placeholder="Cant." className="w-20 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right" />
-              <input type="number" min="0" step="0.01" value={l.cifValue} onChange={(e) => setLine(l.id, { cifValue: e.target.value })} placeholder="Valor CIF RD$" className={num} />
-              <span className="text-xs text-ink-500 w-28 text-right tabular-nums">{unitById[l.id] > 0 ? `u. ${formatDop(unitById[l.id])}` : ''}</span>
-              <button type="button" onClick={() => removeLine(l.id)} className="text-ink-300 hover:text-rose-600"><Trash2 size={15} /></button>
+      {/* KPI band */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4">
+        <Stat label="CIF (valor aduana)" value={formatDop(t.cif)} />
+        <Stat label="Gravamen 20%" value={formatDop(t.gravamen)} />
+        <Stat label="Selectivo (ISC)" value={formatDop(t.selectivo)} />
+        <Stat label="ITBIS al crédito" value={formatDop(t.creditableItbis)} accent="text-sky-700" />
+        <Stat label="Costo en destino" value={formatDop(t.landed)} accent="text-emerald-700" />
+      </div>
+
+      {/* Embarques → facturas → líneas */}
+      <div className="mt-4 space-y-3">
+        {embs.map((emb, ei) => (
+          <div key={emb.id} className="rounded-xl border border-ink-200 bg-ink-50/40 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
+              {embs.length > 1 && <button type="button" onClick={() => delEmb(emb.id)} className="text-ink-300 hover:text-rose-600"><Trash2 size={15} /></button>}
             </div>
-          ))}
-        </div>
-        <div className="text-xs text-ink-500 mt-1.5">CIF total <b className="tabular-nums">{formatDop(cif)}</b></div>
-      </div>
+            <div className="grid sm:grid-cols-5 gap-2">
+              <input value={emb.bl} onChange={(e) => patchEmb(emb.id, { bl: e.target.value })} placeholder="BL / conocimiento" className={`${field} sm:col-span-2`} />
+              <input value={emb.customsRef} onChange={(e) => patchEmb(emb.id, { customsRef: e.target.value })} placeholder="DUA" className={field} />
+              <input type="number" step="0.01" min="0" value={emb.flete} onChange={(e) => patchEmb(emb.id, { flete: e.target.value })} placeholder="Flete RD$" className={`${field} text-right tabular-nums`} />
+              <input type="number" step="0.01" min="0" value={emb.seguro} onChange={(e) => patchEmb(emb.id, { seguro: e.target.value })} placeholder="Seguro RD$" className={`${field} text-right tabular-nums`} />
+            </div>
+            {containers?.length > 0 && (
+              <select value={emb.containerId} onChange={(e) => patchEmb(emb.id, { containerId: e.target.value })} className={`${field} mt-2 w-full sm:w-64`}>
+                <option value="">— Contenedor (tracking) —</option>
+                {containers.map((c) => <option key={c.id} value={c.id}>{c.code || c.number || c.id}</option>)}
+              </select>
+            )}
 
-      {/* DGA taxes */}
-      <div className="flex flex-wrap items-end gap-3 mt-4">
-        <label className="text-sm">Gravamen<br /><input type="number" step="0.01" min="0" value={head.dutyTouched ? head.duty : suggested.duty} onChange={(e) => setHead((h) => ({ ...h, duty: e.target.value, dutyTouched: true }))} className={num} /></label>
-        <label className="text-sm">ITBIS imp.<br /><input type="number" step="0.01" min="0" value={head.importItbis !== '' ? head.importItbis : suggested.importItbis} onChange={(e) => setHead((h) => ({ ...h, importItbis: e.target.value }))} className={num} /></label>
-        <label className="text-sm">Pago aduanas<br />
-          <select value={head.paymentMethod} onChange={(e) => setHead((h) => ({ ...h, paymentMethod: e.target.value }))} className={field}>
-            <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
-          </select>
-        </label>
-        {cif > 0 && !taxCheck.matches && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-            Calculado al {config.dutyRate}% / {config.itbisRate}%: gravamen {formatDop(taxCheck.computed.duty)} · ITBIS {formatDop(taxCheck.computed.importItbis)}. Revisa el arancel (HS) si no coincide con la DUA.
-          </p>
-        )}
+            {/* Facturas */}
+            <div className="mt-3 space-y-2">
+              {emb.facturas.map((fac) => (
+                <div key={fac.id} className="rounded-lg border border-ink-200 bg-white p-2.5">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Receipt size={14} className="text-ink-400" />
+                    <select value={fac.supplierId} onChange={(e) => patchFac(emb.id, fac.id, { supplierId: e.target.value })} className={`${field} flex-1 min-w-[160px]`}>
+                      <option value="">— Suplidor de la factura —</option>
+                      {supplierOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <input value={fac.invoiceRef} onChange={(e) => patchFac(emb.id, fac.id, { invoiceRef: e.target.value })} placeholder="No. factura" className={`${field} w-32`} />
+                    <input value={fac.ncf} onChange={(e) => patchFac(emb.id, fac.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-32`} />
+                    <label className="btn-ghost text-xs inline-flex items-center gap-1 cursor-pointer">
+                      {parsing === fac.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} PDF
+                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => importPdf(emb.id, fac.id, e.target.files?.[0])} />
+                    </label>
+                    {emb.facturas.length > 1 && <button type="button" onClick={() => delFac(emb.id, fac.id)} className="text-ink-300 hover:text-rose-600"><Trash2 size={14} /></button>}
+                  </div>
+
+                  {/* Líneas */}
+                  <table className="w-full text-sm">
+                    <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left font-medium pb-1">Artículo</th>
+                        <th className="text-right font-medium pb-1 w-16">Cant.</th>
+                        <th className="text-right font-medium pb-1 w-28">FOB RD$</th>
+                        <th className="text-right font-medium pb-1 w-24">Selectivo</th>
+                        <th className="text-right font-medium pb-1 w-28">C. unit.</th>
+                        <th className="w-6"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fac.lines.map((l) => (
+                        <tr key={l.id}>
+                          <td className="py-0.5 pr-2">
+                            <select value={l.itemId} onChange={(e) => pickItem(emb.id, fac.id, l.id, e.target.value)} className={`${field} w-full`}>
+                              <option value="">{l.name || '— Artículo a inventariar —'}</option>
+                              {itemOpts.map((i) => <option key={i.id} value={i.id}>{i.name}{i.sku ? ` (${i.sku})` : ''}</option>)}
+                            </select>
+                          </td>
+                          <td className="py-0.5"><input type="number" min="0" step="1" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="w-16 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="0.01" value={l.fob} onChange={(e) => patchLine(emb.id, fac.id, l.id, { fob: e.target.value })} className={num} /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="0.01" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} placeholder="0" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5 text-right text-xs text-ink-500 tabular-nums">{byLine[l.id]?.landedUnitCost > 0 ? formatDop(byLine[l.id].landedUnitCost) : '—'}</td>
+                          <td className="py-0.5 text-right"><button type="button" onClick={() => delLine(emb.id, fac.id, l.id)} className="text-ink-300 hover:text-rose-600"><Trash2 size={14} /></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <button type="button" onClick={() => addLine(emb.id, fac.id)} className="btn-ghost text-xs inline-flex items-center gap-1 mt-1"><Plus size={12} /> Línea</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => addFac(emb.id)} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={12} /> Factura</button>
+            </div>
+          </div>
+        ))}
+        <button type="button" onClick={() => setEmbs((es) => [...es, blankEmbarque()])} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Plus size={14} /> Embarque</button>
       </div>
 
       {/* Cost sheet */}
@@ -188,7 +277,7 @@ export default function ExpedienteForm({ scope, config, suppliers, items, orders
           <button type="button" onClick={addCost} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Costo</button>
         </div>
         {costs.length === 0 ? (
-          <p className="text-xs text-ink-400">Agrega agenciamiento (FDA), transporte, puerto (Caucedo), tasa DGA… El neto suma al costo del producto; el ITBIS va al crédito fiscal.</p>
+          <p className="text-xs text-ink-400">El neto suma al costo del producto (prorrateado por CIF); el ITBIS va al crédito fiscal.</p>
         ) : (
           <div className="space-y-1.5">
             {costs.map((c) => (
@@ -214,11 +303,18 @@ export default function ExpedienteForm({ scope, config, suppliers, items, orders
         )}
       </div>
 
-      {/* Totals + save */}
+      {/* Cuadre vs DUA + save */}
       <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-ink-100">
-        <div className="text-sm text-ink-600 space-x-4">
-          <span>Costo en destino <b className="tabular-nums">{formatDop(landed)}</b></span>
-          <span>ITBIS al crédito <b className="tabular-nums">{formatDop(creditItbis)}</b></span>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs text-ink-500">Total impuestos DUA (Colector)<br />
+            <input type="number" step="0.01" min="0" value={head.duaTotal} onChange={(e) => setHead((h) => ({ ...h, duaTotal: e.target.value }))} placeholder="opcional" className={`${num} mt-0.5`} />
+          </label>
+          <div className="text-xs">
+            <div className="text-ink-500">Impuestos calculados <b className="tabular-nums">{formatDop(t.impuestos)}</b></div>
+            {dua > 0 && (Math.abs(duaDiff) < 1
+              ? <span className="inline-flex items-center gap-1 text-emerald-700"><Check size={13} /> Cuadra con la DUA</span>
+              : <span className="text-amber-700">Diferencia {formatDop(duaDiff)} — revisa FOB / selectivo / arancel</span>)}
+          </div>
         </div>
         <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar expediente
