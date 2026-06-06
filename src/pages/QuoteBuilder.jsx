@@ -710,8 +710,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         totalsRange={totalsRange}
         professional={professional}
         onUpdateQuote={hx(updateQuote)}
-        onOpenCatalog={() => setCatalogOpen(true)}
-        onOpenInventory={() => setInventoryOpen(true)}
         onExport={exportPdf}
         exporting={exporting}
         onPrint={printPdf}

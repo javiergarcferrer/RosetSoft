@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, Download, Printer, Loader2, BookOpen, Boxes, Share2,
+  SlidersHorizontal, Download, Printer, Loader2, Share2,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -25,8 +25,9 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  *
  * Two states:
  *   • Collapsed bar — the grand total + live DOP conversion (USD and DOP on a
- *     single line at every width) and the Share + Export PDF actions, pinned at
- *     every width (Inventario rides along on mobile, where the header hides it).
+ *     single line at every width) and the Share / Print / Export actions, pinned
+ *     at every width. (Catálogo + Inventario live on the Artículos card, not
+ *     here — duplicating them in the dock stamped a redundant pair on mobile.)
  *     Always visible.
  *   • Open panel — tapping the total slides up the full step-by-step total
  *     (subtotal → margin → discount → ITBIS → shipping), margin gauge,
@@ -40,7 +41,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onOpenCatalog, onOpenInventory, onExport, exporting, onPrint, printing, onShare, sharing,
+  onExport, exporting, onPrint, printing, onShare, sharing,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
@@ -340,24 +341,10 @@ export default function TotalsDock({
                 Ajustes moved into the drop-up panel (tap the total), which frees
                 the width here to keep USD + DOP inline on one line. */}
             <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-              {/* Two separate sources — phone/tablet only; the header and items
-                  card carry them on desktop. */}
-              <DockAction
-                icon={BookOpen}
-                label="Catálogo"
-                onClick={onOpenCatalog}
-                ariaLabel="Agregar desde el catálogo Ligne Roset"
-                title="Catálogo Ligne Roset"
-                className="md:hidden"
-              />
-              <DockAction
-                icon={Boxes}
-                label="Inventario"
-                onClick={onOpenInventory}
-                ariaLabel="Agregar desde el inventario"
-                title="Inventario (existencias)"
-                className="md:hidden"
-              />
+              {/* Catálogo + Inventario are NOT here: the Artículos card carries
+                  them at every width, so duplicating them in the dock just
+                  stamped a redundant pair on mobile. The dock keeps only the
+                  cross-cutting actions: Share / Print / Export. */}
 
               {/* Share an interactive client link — pinned at every width. */}
               <DockAction
