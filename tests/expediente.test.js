@@ -10,7 +10,7 @@ import { resolveAccountingConfig, accountFor } from '../src/lib/accounting/confi
 import {
   expedienteCostTotals, expedienteLanded, expedienteCreditableItbis,
   expedienteTaxCheck, allocateExpediente, buildExpedienteEntry,
-  prorateCif, computeLineTaxes,
+  prorateCif, computeLineTaxes, resolveExpediente,
 } from '../src/lib/accounting/expediente.js';
 
 const config = resolveAccountingConfig(null); // defaults: duty 20%, ITBIS 18%
@@ -116,6 +116,43 @@ test('cascade reconciles to Alcover\'s real DUA (CIF 15,557,907.59 → 6,659,865
   // Within a few pesos of the DUA's "Total Impuestos a Pagar" — the small drift
   // is aggregate-vs-per-item rounding (the DUA sums 52 per-line roundings).
   assert.ok(Math.abs(impuestos - 6659865.41) < 5, `got ${impuestos}`);
+});
+
+test('resolveExpediente: multi-embarque → per-line landed + rolled-up totals', () => {
+  const exp = {
+    id: 'e', profileId: 'team', liquidatedAt: 0, paymentMethod: 'bank',
+    cif: 0, duty: 0, importItbis: 0, lines: [],
+    costs: [{ id: 'k', concept: 'agenciamiento', amount: 354, itbis: 54 }], // net 300
+    embarques: [
+      { id: 'em1', bl: 'BL1', flete: 100, seguro: 0, facturas: [
+        { id: 'fA', supplierId: 'S1', lines: [
+          { id: 'a1', itemId: 'iA', name: 'Sofá', qty: 2, fob: 600 },
+          { id: 'a2', itemId: 'iB', name: 'Mesa', qty: 1, fob: 400 },
+        ] },
+      ] },
+      { id: 'em2', bl: 'BL2', flete: 0, seguro: 0, facturas: [
+        { id: 'fB', supplierId: 'S2', lines: [
+          { id: 'b1', itemId: 'iC', name: 'Espejo', qty: 1, fob: 500, selectivo: 50 },
+        ] },
+      ] },
+    ],
+  };
+  const r = resolveExpediente(exp, config);
+  assert.equal(r.lines.length, 3);
+  // CIF: flete 100 prorated over FOB 1000 → a1 660, a2 440; em2 has no flete → b1 500.
+  assert.equal(r.totals.cif, 1600);
+  assert.equal(r.totals.gravamen, 320);        // 20% of 1600
+  assert.equal(r.totals.selectivo, 50);         // only the espejo
+  assert.equal(r.totals.importItbis, 354.6);    // 18% cascade per line, summed
+  assert.equal(r.totals.landed, 2270);          // 1600 + 320 + 50 + costNet 300
+  assert.equal(r.totals.creditableItbis, 408.6); // import 354.6 + service 54
+  // Per-line landed reconciles to the total.
+  assert.equal(r.lines.reduce((s, l) => s + l.landedTotal, 0), 2270);
+  // The espejo line carries its selectivo into landed.
+  const espejo = r.lines.find((l) => l.id === 'b1');
+  assert.equal(espejo.gravamen, 100);
+  assert.equal(espejo.selectivo, 50);
+  assert.equal(espejo.itbis, 117);              // 18% of (500+100+50)
 });
 
 test('empty cost sheet: landed = CIF + duty, asiento still balances', () => {

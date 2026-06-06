@@ -81,6 +81,81 @@ export function computeLineTaxes({ cif, selectivo = 0, config }: {
   return { gravamen, selectivo: sel, itbis };
 }
 
+/** One product line of an expediente, fully resolved: its CIF, the tax cascade,
+ *  its share of the shared cost sheet, and the resulting landed cost. */
+export interface ResolvedExpLine {
+  embarqueId: string; bl: string; facturaId: string; supplierId: string | null;
+  id: string; itemId: string | null; name: string; reference: string; qty: number;
+  fob: number; cif: number; gravamen: number; selectivo: number; itbis: number;
+  costShare: number; landedTotal: number; landedUnitCost: number;
+}
+
+export interface ResolvedExpediente {
+  lines: ResolvedExpLine[];
+  totals: {
+    fob: number; cif: number; gravamen: number; selectivo: number; importItbis: number;
+    impuestos: number; costGross: number; costNet: number; costItbis: number;
+    landed: number; creditableItbis: number;
+  };
+}
+
+/**
+ * Resolve a multi-level expediente (embarques → facturas → lines) into the per-
+ * line landed cost + rolled-up totals. Within each embarque a line gets its CIF
+ * (FOB + prorated flete/seguro) and the tax cascade (gravamen 20% + selectivo +
+ * ITBIS 18%); then the shared cost-sheet NET is prorated across ALL lines by CIF
+ * (drift → last). Landed per line = CIF + gravamen + selectivo + cost share; the
+ * ITBIS (import + service) is the recoverable credit. Pure — the single source
+ * the workspace, the asiento, and the kardex all read from.
+ */
+export function resolveExpediente(
+  expediente: ImportExpediente,
+  config: ResolvedAccountingConfig,
+): ResolvedExpediente {
+  const taxed: ResolvedExpLine[] = [];
+  for (const emb of expediente.embarques || []) {
+    const flat = (emb.facturas || []).flatMap((f) =>
+      (f.lines || []).map((l) => ({
+        embarqueId: emb.id, bl: emb.bl || '', facturaId: f.id, supplierId: f.supplierId || null,
+        id: l.id, itemId: l.itemId || null, name: l.name || '', reference: l.reference || '',
+        qty: round2(Number(l.qty) || 0), fob: round2(Number(l.fob ?? l.cifValue) || 0),
+        selectivo: round2(Number(l.selectivo) || 0),
+      })),
+    );
+    for (const l of prorateCif(flat, emb.flete, emb.seguro)) {
+      const t = computeLineTaxes({ cif: l.cif, selectivo: l.selectivo, config });
+      taxed.push({ ...l, gravamen: t.gravamen, selectivo: t.selectivo, itbis: t.itbis, costShare: 0, landedTotal: 0, landedUnitCost: 0 });
+    }
+  }
+  const totalCif = round2(taxed.reduce((s, l) => s + l.cif, 0));
+  const { gross: costGross, net: costNet, itbis: costItbis } = expedienteCostTotals(expediente.costs);
+
+  let assigned = 0;
+  const lines = taxed.map((l, i) => {
+    let share = totalCif > 0 ? round2((costNet * l.cif) / totalCif) : 0;
+    if (i === taxed.length - 1) share = round2(costNet - assigned); // drift → last
+    assigned = round2(assigned + share);
+    const landedTotal = round2(l.cif + l.gravamen + l.selectivo + share);
+    const landedUnitCost = l.qty > 0 ? Math.round((landedTotal / l.qty) * 10000) / 10000 : 0;
+    return { ...l, costShare: share, landedTotal, landedUnitCost };
+  });
+
+  const sum = (f: (l: ResolvedExpLine) => number) => round2(lines.reduce((s, l) => s + f(l), 0));
+  const gravamen = sum((l) => l.gravamen);
+  const selectivo = sum((l) => l.selectivo);
+  const importItbis = sum((l) => l.itbis);
+  return {
+    lines,
+    totals: {
+      fob: sum((l) => l.fob), cif: totalCif, gravamen, selectivo, importItbis,
+      impuestos: round2(gravamen + selectivo + importItbis),
+      costGross, costNet, costItbis,
+      landed: sum((l) => l.landedTotal),
+      creditableItbis: round2(importItbis + costItbis),
+    },
+  };
+}
+
 /** Map a payment method to the chart role that settles it. */
 function payRole(method: PaymentMethod | undefined | null): string {
   if (method === 'credit') return 'accountsPayable';
