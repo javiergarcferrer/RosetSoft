@@ -251,8 +251,13 @@ export default function TotalsDock({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
-      {/* Premium elevated dock — strong top border in brand violet, deep shadow. */}
-      <div className="border-t-[3px] border-brand-500 bg-white/97 backdrop-blur-md shadow-pop">
+      {/* Premium elevated dock — strong top border in brand violet, deep shadow.
+          SOLID white (no translucency / backdrop-blur): in the installed PWA a
+          see-through dock smeared the content behind it and made the bottom
+          safe-area band read as an ugly blurry gap. Opaque white fills straight
+          down through the home-indicator inset so the dock reads as one bar
+          pinned flush to the bottom edge. */}
+      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
