@@ -1286,6 +1286,13 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                     const inModAlt = !!altGroup;
                     const modDimmed = modOptional || (inModAlt && !selected);
                     const altPos = inModAlt ? modAltInfo.get(m.moduleGroup) : null;
+                    // Suppress a module header that just repeats one of its own
+                    // pieces (a "RIGHT ARM LOVESEAT" module whose seat element is
+                    // also "RIGHT ARM LOVESEAT") — the element rows already name +
+                    // price the pieces. Parity with the PDF renderer.
+                    const headerDuplicatesElement = (m.components || []).some(
+                      (c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase(),
+                    );
                     return (
                       <div
                         key={m.moduleGroup || mi}
@@ -1321,7 +1328,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             single element its own row already names + prices it,
                             so a header would just repeat it. Show only for a
                             real 2+-element grouping (parity with the PDF). */}
-                        {m.moduleGroup && m.components.length > 1 && (
+                        {m.moduleGroup && m.components.length > 1 && !headerDuplicatesElement && (
                           <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
                             {/* An excluded module (optional / non-selected) adds

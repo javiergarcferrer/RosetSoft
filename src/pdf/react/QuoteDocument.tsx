@@ -355,6 +355,15 @@ function ModuleBlock({
   wholeUniform?: boolean;
 }) {
   const dimmed = m.optional || (m.inAlt && !m.selected);
+  // When the dealer named the module after one of its own pieces (the common
+  // case: a "RIGHT ARM LOVESEAT" module whose seat element is also "RIGHT ARM
+  // LOVESEAT"), the module header prints that exact name + a roll-up price right
+  // above the element row that repeats it — the duplicated "EXCLUSIF
+  // COMPOSITION" wall. Suppress the header then; the element rows already name
+  // and price the pieces.
+  const headerDuplicatesElement = (m.components || []).some(
+    (c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase(),
+  );
   // Group the module's pieces by material — one "Tapizado" hero for a uniform
   // module, a header per contiguous same-fabric run for a mixed one (ERPI seat
   // pieces, then a CLOUD accent cushion) — so an identical swatch isn't stamped
@@ -401,7 +410,7 @@ function ModuleBlock({
           element's own row already names and prices it, so a header here just
           repeats the name + price (the modular "EXCLUSIF COMPOSITION" clutter) —
           show it only for a real 2+-element grouping. */}
-      {m.moduleGroup && m.components.length > 1 && (
+      {m.moduleGroup && m.components.length > 1 && !headerDuplicatesElement && (
         <View style={s.moduleHead}>
           <Text style={s.moduleName}>{m.name || '—'}</Text>
           {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
