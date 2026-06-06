@@ -269,8 +269,11 @@ function ComponentRow({
           </View>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: fs(7.5), color: C.inkMid }}>{qty} × {ranged ? 'rango' : fmt(unit)}</Text>
-          <Text style={{ fontSize: fs(9), color: C.inkMid, marginTop: 1 }}>
+          {/* The "qty ×" line only earns its place when there's more than one
+              unit (2 seats, a pair of cushions). At qty 1 it just repeats the
+              subtotal below — so show the subtotal alone. */}
+          {qty > 1 && <Text style={{ fontSize: fs(7.5), color: C.inkMid }}>{qty} × {ranged ? 'rango' : fmt(unit)}</Text>}
+          <Text style={{ fontSize: fs(9), color: C.inkMid, marginTop: qty > 1 ? 1 : 0 }}>
             {ranged && range ? `${fmt(range.min)} – ${fmt(range.max)}` : fmt(componentSubtotal(c))}
           </Text>
         </View>
@@ -394,7 +397,11 @@ function ModuleBlock({
   return (
     <View style={dimmed ? { opacity: 0.45 } : {}}>
       {caption && <Text style={[s.groupCaption, { color: caption.color, marginTop: 5 }]}>{caption.text}</Text>}
-      {m.moduleGroup && (
+      {/* A module header labels a GROUP of elements. With a single element the
+          element's own row already names and prices it, so a header here just
+          repeats the name + price (the modular "EXCLUSIF COMPOSITION" clutter) —
+          show it only for a real 2+-element grouping. */}
+      {m.moduleGroup && m.components.length > 1 && (
         <View style={s.moduleHead}>
           <Text style={s.moduleName}>{m.name || '—'}</Text>
           {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}

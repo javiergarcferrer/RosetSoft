@@ -1317,7 +1317,11 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             )}
                           </div>
                         )}
-                        {m.moduleGroup && (
+                        {/* Module header labels a GROUP of elements; with a
+                            single element its own row already names + prices it,
+                            so a header would just repeat it. Show only for a
+                            real 2+-element grouping (parity with the PDF). */}
+                        {m.moduleGroup && m.components.length > 1 && (
                           <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
                             {/* An excluded module (optional / non-selected) adds
