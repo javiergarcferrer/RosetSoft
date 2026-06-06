@@ -81,94 +81,153 @@ export default function Comisiones() {
       <PageHeader title="Comisiones"
         subtitle={ownOnly ? 'Tus comisiones por ciclo' : 'Comisiones de vendedores y profesionales'} />
 
-      <div className="flex items-center gap-2 mb-4">
-        <Calendar size={15} className="text-ink-400" />
-        <button type="button" onClick={() => setMode('current')} className={`text-sm px-3 py-1.5 rounded-lg ${mode === 'current' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Ciclo actual</button>
-        <button type="button" onClick={() => setMode('previous')} className={`text-sm px-3 py-1.5 rounded-lg ${mode === 'previous' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Anterior</button>
-        <span className="text-sm text-ink-500 ml-2">{formatCycle(cycle)}</span>
+      <div className="flex items-center gap-2 mb-5">
+        <Calendar size={15} className="text-ink-400 shrink-0" />
+        <button
+          type="button"
+          onClick={() => setMode('current')}
+          className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-all active:scale-[0.98] ${mode === 'current' ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}
+        >
+          Ciclo actual
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('previous')}
+          className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-all active:scale-[0.98] ${mode === 'previous' ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}
+        >
+          Anterior
+        </button>
+        <span className="text-sm text-ink-500 ml-1 tabular-nums">{formatCycle(cycle)}</span>
       </div>
 
       {!loaded ? <ListLoading /> : ownOnly ? (
         <>
-          <div className="grid grid-cols-3 gap-3 mb-4 max-w-2xl">
-            <div className="card p-4"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Comisión del ciclo</div><div className="text-xl font-semibold tabular-nums">{usd(myRow?.commission || 0)}</div></div>
-            <div className="card p-4"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Pagado</div><div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(myRow?.paid || 0)}</div></div>
-            <div className="card p-4"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Pendiente</div><div className="text-xl font-semibold tabular-nums">{usd(myRow?.pending || 0)}</div></div>
+          <div className="grid grid-cols-3 gap-3 mb-5 max-w-2xl">
+            <div className="card p-4 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Comisión del ciclo</div>
+              <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(myRow?.commission || 0)}</div>
+            </div>
+            <div className="card p-4 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Pagado</div>
+              <div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(myRow?.paid || 0)}</div>
+            </div>
+            <div className="card p-4 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Pendiente</div>
+              <div className="text-xl font-semibold tabular-nums text-amber-700">{usd(myRow?.pending || 0)}</div>
+            </div>
           </div>
           {myEntries.length === 0 ? (
             <EmptyState icon={Wallet} title="Sin comisiones en el ciclo" description="Tus ventas con comisión aparecerán aquí." />
           ) : (
             <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr><th className="text-left py-2 px-3">Cotización</th><th className="text-left py-2 px-3">Cliente</th><th className="text-right py-2 px-3">Base</th><th className="text-right py-2 px-3">%</th><th className="text-right py-2 px-3">Comisión</th><th className="text-left py-2 px-3">Estado</th></tr>
-                </thead>
-                <tbody>
-                  {myEntries.map((e) => (
-                    <tr key={e.quote.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3 tabular-nums">#{e.quote.number ?? '—'}</td>
-                      <td className="py-1.5 px-3">{e.customer?.name || '—'}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{usd(e.base)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{e.commissionPct}%</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{usd(e.sellerReported)}</td>
-                      <td className="py-1.5 px-3">{e.sellerPaid ? <span className="text-emerald-700 text-xs">Pagada</span> : e.sellerPayable ? <span className="text-amber-700 text-xs">Por pagar</span> : <span className="text-ink-400 text-xs">Tras depósito</span>}</td>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Cotización</th>
+                      <th>Cliente</th>
+                      <th className="text-right whitespace-nowrap">Base</th>
+                      <th className="text-right">%</th>
+                      <th className="text-right whitespace-nowrap">Comisión</th>
+                      <th>Estado</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {myEntries.map((e) => (
+                      <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
+                        <td className="tabular-nums font-medium text-ink-900">#{e.quote.number ?? '—'}</td>
+                        <td className="text-ink-700">{e.customer?.name || '—'}</td>
+                        <td className="text-right tabular-nums">{usd(e.base)}</td>
+                        <td className="text-right tabular-nums">{e.commissionPct}%</td>
+                        <td className="text-right tabular-nums font-semibold text-ink-900">{usd(e.sellerReported)}</td>
+                        <td>
+                          {e.sellerPaid
+                            ? <span className="status-pill status-pill-active">Pagada</span>
+                            : e.sellerPayable
+                              ? <span className="status-pill status-pill-deposito">Por pagar</span>
+                              : <span className="text-[11px] text-ink-400 italic">Tras depósito</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>
       ) : (
         <div className="space-y-4">
           <div className="card overflow-hidden">
-            <div className="px-4 pt-3"><h2 className="eyebrow font-semibold text-ink-600">Vendedores</h2></div>
-            <table className="w-full text-sm mt-2">
-              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                <tr><th className="text-left py-2 px-3">Vendedor</th><th className="text-right py-2 px-3">Ventas</th><th className="text-right py-2 px-3">Base</th><th className="text-right py-2 px-3">Comisión</th><th className="text-right py-2 px-3">Pagado</th><th className="text-right py-2 px-3">Pendiente</th></tr>
-              </thead>
-              <tbody>
-                {sales.vendedorRows.length === 0 ? (
-                  <tr><td colSpan={6} className="py-6 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
-                ) : sales.vendedorRows.map((r) => (
-                  <tr key={r.user.id} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3 font-medium">{r.user.name}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{r.count}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{usd(r.base)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium">{usd(r.commission)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{usd(r.pending)}</td>
+            <div className="card-header">
+              <h2 className="eyebrow font-semibold text-ink-700">Vendedores</h2>
+              <span className="badge">{sales.vendedorRows.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Vendedor</th>
+                    <th className="text-right whitespace-nowrap">Ventas</th>
+                    <th className="text-right whitespace-nowrap">Base</th>
+                    <th className="text-right whitespace-nowrap">Comisión</th>
+                    <th className="text-right whitespace-nowrap">Pagado</th>
+                    <th className="text-right whitespace-nowrap">Pendiente</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {sales.profRows.length > 0 && (
-            <div className="card overflow-hidden">
-              <div className="px-4 pt-3"><h2 className="eyebrow font-semibold text-ink-600">Profesionales</h2></div>
-              <table className="w-full text-sm mt-2">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr><th className="text-left py-2 px-3">Profesional</th><th className="text-right py-2 px-3">Ventas</th><th className="text-right py-2 px-3">Comisión</th><th className="text-right py-2 px-3">Pagado</th><th className="text-right py-2 px-3">Pendiente</th></tr>
                 </thead>
                 <tbody>
-                  {sales.profRows.map((r) => (
-                    <tr key={r.professional.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3 font-medium">{r.professional.name}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{r.count}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{usd(r.commission)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{usd(r.pending)}</td>
+                  {sales.vendedorRows.length === 0 ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
+                  ) : sales.vendedorRows.map((r) => (
+                    <tr key={r.user.id} className="hover:bg-ink-50 transition-colors">
+                      <td className="font-medium text-ink-900">{r.user.name}</td>
+                      <td className="text-right tabular-nums">{r.count}</td>
+                      <td className="text-right tabular-nums">{usd(r.base)}</td>
+                      <td className="text-right tabular-nums font-semibold">{usd(r.commission)}</td>
+                      <td className="text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
+                      <td className="text-right tabular-nums font-medium text-amber-700">{usd(r.pending)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {sales.profRows.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="card-header">
+                <h2 className="eyebrow font-semibold text-ink-700">Profesionales</h2>
+                <span className="badge">{sales.profRows.length}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Profesional</th>
+                      <th className="text-right whitespace-nowrap">Ventas</th>
+                      <th className="text-right whitespace-nowrap">Comisión</th>
+                      <th className="text-right whitespace-nowrap">Pagado</th>
+                      <th className="text-right whitespace-nowrap">Pendiente</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sales.profRows.map((r) => (
+                      <tr key={r.professional.id} className="hover:bg-ink-50 transition-colors">
+                        <td className="font-medium text-ink-900">{r.professional.name}</td>
+                        <td className="text-right tabular-nums">{r.count}</td>
+                        <td className="text-right tabular-nums font-semibold">{usd(r.commission)}</td>
+                        <td className="text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
+                        <td className="text-right tabular-nums font-medium text-amber-700">{usd(r.pending)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
 
           {(role === 'admin' || role === 'accounting') && (
             <p className="text-xs text-ink-400">
-              Marca pagos y exporta desde <Link to="/accounting" className="underline hover:text-ink-700">Contabilidad → Ventas y comisiones</Link>.
+              Marca pagos y exporta desde <Link to="/accounting" className="text-brand-600 hover:text-brand-700 underline underline-offset-2">Contabilidad → Ventas y comisiones</Link>.
             </p>
           )}
         </div>

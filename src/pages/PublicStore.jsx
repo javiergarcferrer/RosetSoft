@@ -87,17 +87,20 @@ export default function PublicStore() {
 
   if (state.status === 'loading') {
     return (
-      <div className={`h-full flex items-center justify-center ${PAPER} text-ink-500`}>
-        <Loader2 className="animate-spin mr-2" size={18} /> Cargando…
+      <div className={`h-full flex flex-col items-center justify-center gap-3 ${PAPER} text-ink-500`}>
+        <Loader2 className="animate-spin text-ink-400" size={22} />
+        <span className="text-sm text-ink-400">Cargando…</span>
       </div>
     );
   }
   if (state.status === 'error') {
     return (
       <div className={`h-full flex flex-col items-center justify-center ${PAPER} text-center px-6`}>
-        <AlertCircle className="text-ink-400 mb-3" size={32} />
-        <div className="font-display text-lg text-ink-800">Tienda no disponible</div>
-        <p className="text-sm text-ink-500 mt-1 max-w-sm">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#e9e3d8] text-ink-400 mb-5">
+          <AlertCircle size={28} strokeWidth={1.5} aria-hidden />
+        </div>
+        <div className="font-display text-xl text-ink-800">Tienda no disponible</div>
+        <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
           No se pudo cargar la tienda en este momento. Inténtalo de nuevo en unos minutos.
         </p>
       </div>
@@ -110,9 +113,9 @@ export default function PublicStore() {
 
   return (
     <div className={`h-full overflow-y-auto overscroll-contain ${PAPER} text-ink-900`}>
-      {/* Slim, centered wordmark bar. */}
+      {/* Slim, centered wordmark bar. backdrop-blur reinforces depth as content scrolls under. */}
       <header
-        className={`sticky top-0 z-20 border-b border-ink-200/60 ${PAPER}`}
+        className={`sticky top-0 z-20 border-b border-ink-200/50 backdrop-blur-sm bg-[#f4f0e8]/90`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-center px-4 sm:px-8">
@@ -204,21 +207,21 @@ function ProductCard({ c }) {
         <ImageView
           id={c.imageId}
           alt={c.name}
-          className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           placeholderClassName="h-full w-full"
         />
       </div>
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm leading-snug text-ink-900 line-clamp-2" title={c.name}>{c.name}</h3>
-          <div className="mt-1 text-sm text-ink-500">{priceLabel(c.price)}</div>
+          <h3 className="text-sm font-medium leading-snug text-ink-900 line-clamp-2" title={c.name}>{c.name}</h3>
+          <div className="mt-1 text-sm text-ink-500 tabular-nums">{priceLabel(c.price)}</div>
           {showAvail && (
-            <div className="eyebrow-xs mt-1.5 text-ink-400">{c.availability.label}</div>
+            <div className="eyebrow-xs mt-1.5 text-ink-400 tracking-widest">{c.availability.label}</div>
           )}
         </div>
         {/* Fabric swatch as a small color dot — the material this piece is shown in. */}
         {c.swatchImageId && (
-          <div className="mt-0.5 h-7 w-7 shrink-0 overflow-hidden rounded-full border border-ink-200" title="Tela">
+          <div className="mt-0.5 h-7 w-7 shrink-0 overflow-hidden rounded-full border border-ink-200 shadow-xs" title="Tela">
             <ImageView
               id={c.swatchImageId}
               alt=""
@@ -234,12 +237,12 @@ function ProductCard({ c }) {
 
 function EmptyStore({ configured }) {
   return (
-    <div className="flex flex-col items-center justify-center py-32 text-center">
-      <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-ink-100 text-ink-500">
-        <StoreIcon size={22} />
+    <div className="flex flex-col items-center justify-center py-36 text-center">
+      <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#e9e3d8] text-ink-500">
+        <StoreIcon size={24} strokeWidth={1.5} />
       </div>
-      <h3 className="font-display text-xl text-ink-900">Tienda en preparación</h3>
-      <p className="mt-2 max-w-md text-sm text-ink-500">
+      <h3 className="font-display text-xl text-ink-800">Tienda en preparación</h3>
+      <p className="mt-2.5 max-w-md text-sm text-ink-500 leading-relaxed">
         {configured
           ? 'Aún no hay productos publicados. Vuelve pronto.'
           : 'Estamos preparando nuestro catálogo. Vuelve pronto para ver la mercancía disponible y en camino.'}

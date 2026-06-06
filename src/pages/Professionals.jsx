@@ -164,10 +164,10 @@ export default function Professionals() {
               <Link
                 key={p.id}
                 to={`/professionals/${p.id}`}
-                className="card block hover:bg-ink-50"
+                className="card card-interactive block transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
               >
                 <div className="flex items-center gap-3 p-3">
-                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 ring-1 ring-inset ring-brand-100">
                     {initialsFor(p) || <UserSquare2 size={16} />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -178,8 +178,8 @@ export default function Professionals() {
                     <MetaStrip p={p} />
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-[11px] text-ink-500">Comisión ref.</div>
-                    <div className="text-sm font-medium tabular-nums">
+                    <div className="text-[10px] uppercase tracking-wide text-ink-400 font-medium">Com. ref.</div>
+                    <div className="text-sm font-semibold tabular-nums text-ink-800">
                       {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
                     </div>
                   </div>
@@ -188,7 +188,15 @@ export default function Professionals() {
               </Link>
             ))}
             {filtered.length === 0 && (
-              <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
+              <div className="card card-pad flex flex-col items-center gap-3 py-12 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 ring-1 ring-inset ring-black/5">
+                  <UserSquare2 size={20} className="text-ink-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-ink-600">Sin coincidencias</p>
+                  <p className="mt-0.5 text-xs text-ink-400">Intenta cambiar el filtro o el término de búsqueda.</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -209,23 +217,23 @@ export default function Professionals() {
               </thead>
               <tbody>
                 {filtered.map((p) => (
-                  <tr key={p.id} className="cursor-pointer" onClick={() => { window.location.hash = `#/professionals/${p.id}`; }}>
+                  <tr key={p.id} className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100" onClick={() => { window.location.hash = `#/professionals/${p.id}`; }}>
                     <td className="font-medium truncate max-w-[200px]" title={p.name}>{p.name}</td>
                     <td className="text-ink-700 truncate max-w-[200px]" title={p.company || ''}>{p.company || '—'}</td>
                     <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={p.email || ''}>{p.email || '—'}</td>
                     <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{p.phone || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
+                    <td className="text-right tabular-nums whitespace-nowrap font-semibold text-ink-800">
                       {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
                     </td>
                     <td className="text-right w-24">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setEditing(p); }}
-                        className="text-xs text-ink-500 hover:text-ink-900"
+                        className="text-xs font-medium text-ink-400 hover:text-brand-700 transition-colors"
                       >
                         Editar
                       </button>
-                      <span className="text-ink-300 ml-2"><ArrowRight size={12} className="inline" /></span>
+                      <span className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
                     </td>
                   </tr>
                 ))}

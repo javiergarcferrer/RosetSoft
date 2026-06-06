@@ -69,15 +69,23 @@ export default function Settings() {
   return (
     <>
       <PageHeader title="Configuración" subtitle="Empresa, tasa de cambio, condiciones y datos" actions={
-        <button onClick={save} disabled={saveState === 'saving'} className="btn-primary">
-          {saveState === 'saving' && <><RefreshCw size={14} className="animate-spin" /> Guardando…</>}
-          {saveState === 'saved' && <><Check size={14} /> Guardado</>}
-          {(saveState === 'idle' || saveState === 'error') && 'Guardar'}
+        <button
+          onClick={save}
+          disabled={saveState === 'saving'}
+          className={[
+            'btn-primary active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-wait',
+            saveState === 'saved' ? '!bg-emerald-600 !border-emerald-600' : '',
+          ].join(' ')}
+        >
+          {saveState === 'saving' && <><RefreshCw size={14} className="animate-spin" aria-hidden /> Guardando…</>}
+          {saveState === 'saved' && <><Check size={14} aria-hidden /> Guardado</>}
+          {(saveState === 'idle' || saveState === 'error') && 'Guardar cambios'}
         </button>
       } />
       {saveState === 'error' && saveError && (
-        <div className="card card-pad mb-4 text-sm text-red-700 bg-red-50 border-red-200">
-          No se pudo guardar: {saveError}
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700">
+          <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" aria-hidden />
+          <span>No se pudo guardar: {saveError}</span>
         </div>
       )}
 
@@ -88,7 +96,9 @@ export default function Settings() {
       <div className="space-y-5">
           {/* Company */}
           <div className="card card-pad">
-            <h2 className="font-semibold mb-3">Empresa</h2>
+            <div className="card-header">
+              <h2 className="font-semibold">Empresa</h2>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4">
                 <ImageDrop
@@ -167,7 +177,9 @@ export default function Settings() {
 
           {/* Defaults */}
           <div className="card card-pad">
-            <h2 className="font-semibold mb-3">Predeterminados de cotización</h2>
+            <div className="card-header">
+              <h2 className="font-semibold">Predeterminados de cotización</h2>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="label">Descuento por defecto %</div>
@@ -246,7 +258,9 @@ function StoreCard({ settings, saveSettings, customers }) {
 
   return (
     <div className="card card-pad">
-      <h2 className="font-semibold mb-1">Tienda pública</h2>
+      <div className="card-header">
+        <h2 className="font-semibold">Tienda pública</h2>
+      </div>
       <p className="text-xs text-ink-500 mb-4">
         La tienda muestra los productos de las cotizaciones cuyo cliente sea la
         cuenta de la casa (Alcover). Elige ese cliente y comparte el enlace —
@@ -281,15 +295,19 @@ function StoreCard({ settings, saveSettings, customers }) {
           <div className="label">Enlace público</div>
           <div className="flex items-center gap-2">
             <input
-              className="input flex-1 font-mono text-xs"
+              className="input flex-1 font-mono text-xs text-ink-600"
               readOnly
               value={url}
               onFocus={(e) => e.target.select()}
             />
-            <button type="button" onClick={copy} className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
-              {copied ? 'Copiado' : 'Copiar'}
+            <button
+              type="button"
+              onClick={copy}
+              className={`btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 !border-emerald-200' : ''}`}
+            >
+              {copied ? <><Check size={12} aria-hidden /> Copiado</> : 'Copiar'}
             </button>
-            <a href={url} target="_blank" rel="noreferrer" className="btn-ghost border border-ink-200 text-xs whitespace-nowrap">
+            <a href={url} target="_blank" rel="noreferrer" className="btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-transform">
               Abrir
             </a>
           </div>
@@ -305,7 +323,9 @@ function StoreCard({ settings, saveSettings, customers }) {
 function OrdersCard({ local, set }) {
   return (
     <div className="card card-pad">
-      <h2 className="font-semibold mb-3">Pedidos</h2>
+      <div className="card-header">
+        <h2 className="font-semibold">Pedidos</h2>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="label">Monto mínimo para despacho (USD)</div>
@@ -375,7 +395,9 @@ function RateCard({ local, set, saveSettings }) {
 
   return (
     <div className="card card-pad">
-      <h2 className="font-semibold mb-2">Tasa de cambio USD → DOP</h2>
+      <div className="card-header">
+        <h2 className="font-semibold">Tasa de cambio USD → DOP</h2>
+      </div>
       <p className="text-xs text-ink-500 mb-4">
         Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano: tráela con el botón “Actualizar ahora”, o ajústala manualmente más abajo. {EXCHANGE_RATE_PULL_ENABLED
           ? 'Además se actualiza sola al abrir la app cada día.'
@@ -401,14 +423,14 @@ function RateCard({ local, set, saveSettings }) {
 
       {/* Banco Popular — read-only. The dealer can't adjust it; the daily
           job and the button below are the only writers. */}
-      <div className="rounded-md border border-ink-100 bg-ink-50 px-4 py-3 mb-3">
+      <div className="rounded-lg border border-ink-100 bg-ink-50/70 px-4 py-3.5 mb-3">
         <div className="flex items-center justify-between mb-3">
-          <div className="font-medium text-sm">Banco Popular Dominicano</div>
+          <div className="font-medium text-sm text-ink-800">Banco Popular Dominicano</div>
           <button
             type="button"
             onClick={fetchNow}
             disabled={fetching}
-            className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait"
+            className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait active:scale-[0.97] transition-transform"
             title="Trae ahora la tasa USD publicada por Banco Popular Dominicano"
           >
             <RefreshCw size={13} className={fetching ? 'animate-spin' : ''} />
@@ -416,23 +438,23 @@ function RateCard({ local, set, saveSettings }) {
           </button>
         </div>
         {fetchErr && (
-          <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1">
+          <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-md px-2.5 py-1.5">
             <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {fetchErr}
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
+          <div className="rounded-lg bg-white border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Compra</div>
-            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.buy)}</div>
-            <div className="text-[10px] text-ink-400">RD$ por 1 USD</div>
+            <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.buy)}</div>
+            <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD</div>
           </div>
-          <div className="rounded-md bg-white border border-ink-100 px-3 py-2">
+          <div className="rounded-lg bg-white border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Venta</div>
-            <div className="text-lg font-semibold text-ink-900 mt-0.5 tabular-nums">{fmt(rate.sell)}</div>
-            <div className="text-[10px] text-ink-400">RD$ por 1 USD · se cotiza con esta</div>
+            <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.sell)}</div>
+            <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD · se cotiza con esta</div>
           </div>
         </div>
-        <div className="text-[10px] text-ink-500 mt-2">
+        <div className="text-[10px] text-ink-400 mt-2.5">
           {rate.updatedAt
             ? <>Actualizado {formatDateTime(rate.updatedAt)}</>
             : 'Aún sin datos — presiona “Actualizar ahora” o ajústala manualmente más abajo.'}
@@ -440,61 +462,66 @@ function RateCard({ local, set, saveSettings }) {
       </div>
 
       {/* Manual override — stopgap until the BPD subscription is live. */}
-      <details className="rounded-md border border-ink-100 px-4 py-3 mb-3">
-        <summary className="text-sm font-medium cursor-pointer select-none">Ajustar tasa manualmente</summary>
-        <p className="text-[11px] text-ink-500 mt-2 mb-3">
-          Úsala mientras se conecta la API de Banco Popular. La tasa que guardes aquí se aplica a todas las cotizaciones nuevas hasta la próxima actualización automática.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="eyebrow-xs font-medium tracking-wide text-ink-600">Compra (RD$ por 1 USD)</div>
-            <input
-              type="number"
-              step="0.01"
-              inputMode="decimal"
-              className="input mt-1"
-              value={manualBuy}
-              onChange={(e) => { setManualBuy(e.target.value); setManualOk(false); setManualErr(null); }}
-              placeholder="58.50"
-            />
+      <details className="group rounded-lg border border-ink-100 mb-3 overflow-hidden">
+        <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
+          <span>Ajustar tasa manualmente</span>
+          <span className="text-ink-400 group-open:rotate-180 transition-transform duration-200">▾</span>
+        </summary>
+        <div className="px-4 pb-4 pt-1 border-t border-ink-100 bg-ink-50/40">
+          <p className="text-[11px] text-ink-500 mb-3 mt-2 leading-relaxed">
+            Úsala mientras se conecta la API de Banco Popular. La tasa que guardes aquí se aplica a todas las cotizaciones nuevas hasta la próxima actualización automática.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="label">Compra (RD$ / USD)</div>
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className="input mt-1"
+                value={manualBuy}
+                onChange={(e) => { setManualBuy(e.target.value); setManualOk(false); setManualErr(null); }}
+                placeholder="58.50"
+              />
+            </div>
+            <div>
+              <div className="label">Venta (se cotiza con esta)</div>
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className="input mt-1"
+                value={manualSell}
+                onChange={(e) => { setManualSell(e.target.value); setManualOk(false); setManualErr(null); }}
+                placeholder="62.00"
+              />
+            </div>
           </div>
-          <div>
-            <div className="eyebrow-xs font-medium tracking-wide text-ink-600">Venta (se cotiza con esta)</div>
-            <input
-              type="number"
-              step="0.01"
-              inputMode="decimal"
-              className="input mt-1"
-              value={manualSell}
-              onChange={(e) => { setManualSell(e.target.value); setManualOk(false); setManualErr(null); }}
-              placeholder="62.00"
-            />
+          <div className="flex items-center gap-2 mt-3">
+            <button type="button" onClick={saveManual} disabled={savingManual} className="btn-primary text-xs disabled:opacity-60 disabled:cursor-wait active:scale-[0.98] transition-transform">
+              {savingManual ? 'Guardando…' : 'Guardar tasa manual'}
+            </button>
+            {manualOk && (
+              <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
+                <Check size={12} /> Guardada
+              </span>
+            )}
+            {manualErr && (
+              <span className="text-[11px] text-red-600 inline-flex items-center gap-1">
+                <AlertTriangle size={12} /> {manualErr}
+              </span>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 mt-3">
-          <button type="button" onClick={saveManual} disabled={savingManual} className="btn-primary text-xs disabled:opacity-60 disabled:cursor-wait">
-            {savingManual ? 'Guardando…' : 'Guardar tasa manual'}
-          </button>
-          {manualOk && (
-            <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
-              <Check size={12} /> Guardada
-            </span>
-          )}
-          {manualErr && (
-            <span className="text-[11px] text-red-600 inline-flex items-center gap-1">
-              <AlertTriangle size={12} /> {manualErr}
-            </span>
-          )}
         </div>
       </details>
 
       {/* Effective */}
-      <div className="rounded-md bg-brand-50 border border-brand-200 px-4 py-3">
+      <div className="rounded-lg bg-brand-50 border border-brand-200 px-4 py-3.5">
         <div className="eyebrow-xs font-medium tracking-wider text-brand-700">Tasa efectiva</div>
-        <div className="text-xl font-semibold text-brand-900 mt-0.5">
+        <div className="text-xl font-semibold text-brand-900 mt-1 tabular-nums">
           1 USD = {eff.toFixed(2)} DOP
         </div>
-        <div className="text-[11px] text-brand-700 mt-1">
+        <div className="text-[11px] text-brand-700 mt-1 tabular-nums">
           RD$ 100 ≈ US$ {sample} · US$ 100 ≈ RD$ {sampleInverse}
         </div>
       </div>
@@ -559,21 +586,25 @@ function ShopifyCard({ settings }) {
 
   return (
     <div className="card card-pad">
-      <h2 className="font-semibold mb-1">Catálogo Shopify</h2>
+      <div className="card-header">
+        <h2 className="font-semibold">Catálogo Shopify</h2>
+      </div>
       <p className="text-xs text-ink-500 mb-4">
         Cada artículo en inventario con precio y foto se publica automáticamente en tu tienda Shopify;
         al agotarse, se retira. Pega el token de tu app personalizada de Shopify para conectar.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <label className="label">Dominio
-          <input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="alcover.myshopify.com"
-            className="mt-1 w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
-        </label>
-        <label className="label">Admin API token
-          <input type="password" value={token} onChange={(e) => setToken(e.target.value)}
+        <div>
+          <label className="label" htmlFor="shopify-domain">Dominio</label>
+          <input id="shopify-domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="alcover.myshopify.com"
+            className="input mt-1" />
+        </div>
+        <div>
+          <label className="label" htmlFor="shopify-token">Admin API token</label>
+          <input id="shopify-token" type="password" value={token} onChange={(e) => setToken(e.target.value)}
             placeholder={connectedAt ? '•••••••• (guardado)' : 'shpat_…'}
-            className="mt-1 w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
-        </label>
+            className="input mt-1" />
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">

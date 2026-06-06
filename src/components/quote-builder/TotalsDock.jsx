@@ -111,14 +111,14 @@ export default function TotalsDock({
   // DOP rate), so the bottom bar itself stays a single clean row — the total
   // (USD + DOP inline) plus the Share / Export actions.
   const breakdown = (
-    <div className="py-4 space-y-2.5">
+    <div className="py-4 space-y-2">
       <Row label="Subtotal" value={fmt(totals.subtotal)} />
       {totals.marginAmt !== 0 && <Row label="Margen aplicado" value={fmt(totals.marginAmt)} muted />}
       {discountPct ? <Row label={`Descuento (${discountPct}%)`} value={`–${fmt(totals.discountAmt)}`} muted /> : null}
       {courtesyPct ? <Row label={`Cortesía amigos y familia (${courtesyPct}%)`} value={`–${fmt(totals.courtesyDiscountAmt)}`} muted /> : null}
       <Row label={`ITBIS (${ITBIS_PCT}%)`} value={`+${fmt(totals.taxAmt)}`} muted />
       {shipping ? <Row label="Envío" value={`+${fmt(totals.shipping)}`} muted /> : null}
-      <div className="border-t border-ink-100 pt-2 mt-2">
+      <div className="border-t-2 border-brand-500/20 pt-3 mt-2">
         <Row label="Total" value={totalLabel} bold />
       </div>
       {showMarginMeter && <MarginMeter marginPct={marginPct} />}
@@ -251,7 +251,8 @@ export default function TotalsDock({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
-      <div className="border-t border-ink-200 bg-white shadow-[0_-10px_40px_-18px_rgba(0,0,0,0.25)]">
+      {/* Premium elevated dock — strong top border in brand violet, deep shadow. */}
+      <div className="border-t-[3px] border-brand-500 bg-white/97 backdrop-blur-md shadow-pop">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
@@ -275,7 +276,7 @@ export default function TotalsDock({
               five-figure USD, a seven-figure DOP and the touch icons can't all
               share one line — the DOP conversion wraps to its own line just
               beneath the amount, so it's always shown in full, never clipped. */}
-          <div className="flex items-center gap-2 sm:gap-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-2 sm:gap-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
             {/* The total leads the row — the hero figure and the breakdown
                 toggle. The row wraps: amount + chevron hold the first line and
                 the DOP conversion takes the second on phones; from sm: up there's
@@ -285,27 +286,27 @@ export default function TotalsDock({
               type="button"
               onClick={() => toggle('breakdown')}
               aria-expanded={breakdownOpen}
-              className="group min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors"
+              className="group min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left rounded-lg -ml-1 pl-1 pr-1 py-1 hover:bg-ink-50 transition-colors active:scale-[0.98]"
               title={breakdownOpen ? 'Ocultar desglose' : 'Ver desglose'}
             >
               {/* Eyebrow from sm: up only — on a phone the bold leading "$"
                   already reads as the total, and dropping it lets the amount and
                   its chevron hug on line one. */}
-              <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block">Total</span>
-              <span className="text-lg sm:text-xl font-semibold tabular-nums leading-none flex-shrink-0">{totalLabel}</span>
+              <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block text-brand-600 font-bold tracking-widest">Total</span>
+              <span className="text-2xl sm:text-[1.625rem] font-bold tabular-nums leading-none flex-shrink-0 text-ink-900 tracking-tight">{totalLabel}</span>
               {discountPct > 0 && (
-                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">−{discountPct}%</span>
+                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 ring-1 ring-inset ring-emerald-200/60 flex-shrink-0">−{discountPct}%</span>
               )}
               {/* Live DOP conversion. On phones `order-last w-full` parks it on
                   its own line beneath the amount (always shown, never clipped);
                   from sm: up `order-none w-auto` pulls it back inline, sitting
                   between the amount and the chevron — the desktop layout. */}
               {dopRate && currency === 'USD' && (
-                <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500 tabular-nums">
-                  <span className="truncate">≈ {dopTotalLabel}</span>
+                <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1.5 text-[11px] text-ink-500 tabular-nums">
+                  <span className="truncate font-medium">≈ {dopTotalLabel}</span>
                   {rateLocked ? (
-                    <span className="inline-flex items-center gap-1 text-amber-700 flex-shrink-0" title="Tasa bloqueada al aceptar · pulsa el total para actualizarla">
-                      <Lock size={10} /> @ {dopRate.toFixed(2)}
+                    <span className="inline-flex items-center gap-1 text-amber-600 flex-shrink-0 bg-amber-50 rounded px-1 py-0.5" title="Tasa bloqueada al aceptar · pulsa el total para actualizarla">
+                      <Lock size={9} /> {dopRate.toFixed(2)}
                     </span>
                   ) : (
                     <span className="text-ink-400 flex-shrink-0">@ {dopRate.toFixed(2)}</span>
@@ -317,17 +318,17 @@ export default function TotalsDock({
                   line two, keeping the chevron on the amount's line; on desktop
                   it trails the conversion inline. */}
               <ChevronUp
-                size={16}
-                className={`text-ink-400 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
+                size={15}
+                className={`text-ink-400 group-hover:text-ink-600 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                 aria-hidden
               />
             </button>
 
-            {/* Action cluster — compact icon buttons at every width (the filled
-                Export CTA last), pinned to the right and never shrinking.
+            {/* Action cluster — compact icon buttons at every width (the brand
+                gradient Export CTA last), pinned to the right and never shrinking.
                 Ajustes moved into the drop-up panel (tap the total), which frees
                 the width here to keep USD + DOP inline on one line. */}
-            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
               {/* Two separate sources — phone/tablet only; the header and items
                   card carry them on desktop. */}
               <DockAction
@@ -370,7 +371,7 @@ export default function TotalsDock({
               />
 
               {/* Export / preview the PDF — the primary action, pinned at every
-                  width. */}
+                  width. Uses btn-brand for the violet gradient marquee CTA. */}
               <DockAction
                 icon={Download}
                 label="Exportar"
@@ -403,7 +404,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
   const mode = decoratorBilling(quote);
   const trade = mode === 'trade_discount';
   return (
-    <div className="rounded-lg border border-ink-100 bg-ink-50/60 p-3 space-y-2 mt-1">
+    <div className="rounded-lg border border-ink-200 bg-ink-50/40 p-3 space-y-2 mt-1 shadow-xs">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">Comisión profesional</h3>
         <span className="text-[10px] text-ink-400 uppercase tracking-wide">Interno</span>
@@ -473,10 +474,10 @@ function DockAction({
   disabled, busy, pressed, primary, dot, className = '',
 }) {
   const tone = primary
-    ? 'bg-ink-900 text-white border border-ink-900 hover:bg-ink-800 active:bg-ink-700'
+    ? 'btn-brand shadow-glow active:brightness-95 border-0'
     : pressed
-      ? 'bg-ink-900 text-white border border-ink-900'
-      : 'text-ink-700 border border-ink-200 hover:bg-ink-100 hover:border-ink-300 active:bg-ink-200';
+      ? 'bg-ink-900 text-white border border-ink-900 shadow-sm'
+      : 'text-ink-700 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100 shadow-xs';
   return (
     <button
       type="button"
@@ -486,7 +487,7 @@ function DockAction({
       aria-pressed={pressed}
       aria-label={ariaLabel || label}
       title={title}
-      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-lg transition-colors active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait ${tone} ${className}`}
+      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-lg transition-all duration-150 active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait ${tone} ${className}`}
     >
       {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
       {dot && (
@@ -503,11 +504,11 @@ function DockAction({
 
 function Row({ label, value, muted, bold }) {
   return (
-    <div className={`flex items-center justify-between text-sm tabular-nums ${
-      muted ? 'text-ink-500' : ''
-    } ${bold ? 'font-semibold text-base' : ''}`}>
+    <div className={`flex items-baseline justify-between tabular-nums ${
+      muted ? 'text-xs text-ink-500' : 'text-sm text-ink-700'
+    } ${bold ? 'font-bold text-[15px] text-ink-900' : ''}`}>
       <span>{label}</span>
-      <span>{value}</span>
+      <span className={`font-semibold ${bold ? 'text-brand-700' : ''}`}>{value}</span>
     </div>
   );
 }

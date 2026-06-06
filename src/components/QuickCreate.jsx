@@ -34,21 +34,30 @@ export default function QuickCreate() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full inline-flex items-center justify-center gap-1.5 bg-white text-ink-900 font-semibold rounded-md px-3 py-2 text-sm hover:bg-ink-100 active:bg-ink-200 transition-colors"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="w-full inline-flex items-center justify-center gap-1.5 bg-brand-500 text-white font-semibold rounded-lg px-3 py-2 text-sm shadow-glow hover:bg-brand-600 active:bg-brand-700 active:scale-[0.98] transition-all duration-150 select-none"
       >
-        <Plus size={16} /> Nuevo <ChevronDown size={13} className="opacity-50" />
+        <Plus size={15} strokeWidth={2.5} aria-hidden />
+        Nuevo
+        <ChevronDown
+          size={13}
+          strokeWidth={2.5}
+          aria-hidden
+          className={`ml-auto opacity-60 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
       {open && (
-        <div className="absolute left-3 z-50 mt-1 w-[min(18rem,calc(100vw-2.5rem))] rounded-lg bg-white text-ink-800 shadow-pop border border-ink-200 p-2.5 max-h-[70vh] overflow-y-auto">
-          {QUICK_CREATE.map((col) => (
-            <div key={col.group} className="mb-2 last:mb-0">
-              <div className="text-[10px] uppercase tracking-widest text-ink-400 px-1.5 mb-0.5">{col.group}</div>
+        <div className="dropdown-pop absolute left-3 z-50 mt-2 w-[min(18rem,calc(100vw-2.5rem))] rounded-xl bg-white text-ink-800 shadow-pop border border-ink-100/80 ring-1 ring-inset ring-black/[0.03] py-2 max-h-[70vh] overflow-y-auto">
+          {QUICK_CREATE.map((col, gi) => (
+            <div key={col.group} className={gi > 0 ? 'mt-0.5 pt-1.5 border-t border-ink-100/60' : ''}>
+              <div className="eyebrow-xs text-ink-400 px-3 pt-0.5 pb-1">{col.group}</div>
               {col.items.map((it) => (
                 <button
                   key={it.label}
                   type="button"
                   onClick={() => go(it.to)}
-                  className="block w-full text-left text-sm py-1.5 px-1.5 rounded hover:bg-ink-50"
+                  className="flex items-center text-left text-sm py-2 px-3 rounded-lg mx-1 w-[calc(100%-0.5rem)] text-ink-700 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 transition-colors"
                 >
                   {it.label}
                 </button>

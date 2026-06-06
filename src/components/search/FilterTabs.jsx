@@ -36,7 +36,7 @@ export default function FilterTabs({ tabs, activeTab, onTabChange }) {
       role="group"
       aria-label="Filtrar por estado"
       onKeyDown={onKeyDown}
-      className="-mx-1 flex items-center gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="-mx-1 flex items-center gap-0.5 overflow-x-auto overscroll-x-contain px-1 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((t) => {
         const active = t.key === activeTab;
@@ -46,18 +46,18 @@ export default function FilterTabs({ tabs, activeTab, onTabChange }) {
             type="button"
             onClick={() => onTabChange(t.key)}
             aria-pressed={active}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 min-h-9 coarse:min-h-10 text-[13px] font-medium whitespace-nowrap transition-colors active:scale-[0.98] ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 min-h-9 coarse:min-h-10 text-[13px] font-medium whitespace-nowrap transition-all active:scale-[0.98] ${
               active
-                ? 'bg-ink-900 text-ink-50'
-                : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'
+                ? 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 shadow-xs'
+                : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800'
             }`}
           >
             {t.label}
             {t.count != null && (
               <span
-                className={`tabular-nums rounded px-1.5 py-px text-[11px] font-semibold ${
+                className={`tabular-nums rounded-full px-1.5 py-px text-[11px] font-semibold ${
                   active
-                    ? 'bg-white/20 text-ink-50'
+                    ? 'bg-brand-100 text-brand-700'
                     : t.pillCls
                       ? t.pillCls
                       : 'bg-ink-100 text-ink-500'

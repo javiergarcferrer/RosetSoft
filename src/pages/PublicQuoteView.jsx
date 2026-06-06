@@ -154,17 +154,20 @@ export default function PublicQuoteView() {
 
   if (state.status === 'loading') {
     return (
-      <div className="h-full flex items-center justify-center bg-ink-50 text-ink-500">
-        <Loader2 className="animate-spin mr-2" size={18} /> Cargando cotización…
+      <div className="h-full flex flex-col items-center justify-center gap-3 bg-ink-50 text-ink-500">
+        <Loader2 className="animate-spin text-brand-500" size={24} />
+        <span className="text-sm">Cargando cotización…</span>
       </div>
     );
   }
   if (state.status === 'error') {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-ink-50 text-center px-6">
-        <AlertCircle className="text-ink-400 mb-3" size={32} />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ink-100 text-ink-400 mb-5 shadow-xs">
+          <AlertCircle size={28} strokeWidth={1.5} aria-hidden />
+        </div>
         <div className="text-lg font-semibold text-ink-800">Enlace no disponible</div>
-        <p className="text-sm text-ink-500 mt-1 max-w-sm">
+        <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
           Este enlace de cotización no es válido o fue desactivado. Pídele a tu
           asesor un enlace actualizado.
         </p>
@@ -179,16 +182,18 @@ export default function PublicQuoteView() {
     // quote is clipped at the fold with no way to scroll on mobile.
     <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
-        <div className="flex flex-col items-end gap-1">
+        {/* Page-level action bar — right-aligned, lives above the content card */}
+        <div className="flex flex-col items-end gap-1.5">
           <button
             type="button"
             onClick={downloadPdf}
             disabled={pdf === 'working'}
-            className="inline-flex items-center gap-2 rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white shadow-soft transition hover:bg-ink-800 disabled:opacity-60"
+            className="btn-brand active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-wait"
+            aria-label="Descargar cotización en PDF"
           >
             {pdf === 'working'
-              ? <Loader2 size={15} className="animate-spin" aria-hidden />
-              : <Download size={15} aria-hidden />}
+              ? <Loader2 size={14} className="animate-spin" aria-hidden />
+              : <Download size={14} aria-hidden />}
             {pdf === 'working' ? 'Generando PDF…' : 'Descargar PDF'}
           </button>
           {pdf === 'error' && (
@@ -220,7 +225,7 @@ export default function PublicQuoteView() {
         {trackable.length > 0 ? (
           <section className="card p-4 sm:p-5 space-y-3">
             <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
-              <Ship size={16} className="text-ink-500" /> Seguimiento de tu envío
+              <Ship size={15} className="text-brand-500" aria-hidden /> Seguimiento de tu envío
             </h2>
             {trackable.map((c) => (
               <div key={c.code} className="space-y-1.5">
@@ -237,14 +242,14 @@ export default function PublicQuoteView() {
         ) : (
           <section className="card p-4 sm:p-5 space-y-3">
             <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
-              <Ship size={16} className="text-ink-500" /> Seguimiento de tu envío
+              <Ship size={15} className="text-brand-500" aria-hidden /> Seguimiento de tu envío
             </h2>
-            <div className="flex items-start gap-3 rounded-lg border border-ink-100 bg-ink-50/60 p-3.5">
-              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-                <MapPin size={16} />
+            <div className="flex items-start gap-3 rounded-lg border border-brand-100 bg-brand-50/40 p-3.5">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600 shadow-xs">
+                <MapPin size={15} aria-hidden />
               </span>
               <div className="space-y-1">
-                <p className="text-xs font-medium text-ink-800">Geolocalización en tiempo real</p>
+                <p className="text-xs font-semibold text-ink-800">Geolocalización en tiempo real</p>
                 <p className="text-[11px] leading-relaxed text-ink-600">
                   En cuanto tu pedido se embarque, podrás geolocalizarlo en tiempo
                   real desde este mismo enlace, gracias a nuestra conexión directa
@@ -267,14 +272,14 @@ export default function PublicQuoteView() {
 function SaveToast({ state }) {
   if (state === 'idle') return null;
   const cfg = {
-    saving: { cls: 'bg-ink-900 text-white', icon: <Loader2 size={13} className="animate-spin" />, label: 'Guardando cambios…' },
-    saved: { cls: 'bg-emerald-600 text-white', icon: <Check size={14} />, label: 'Guardado' },
-    error: { cls: 'bg-red-600 text-white', icon: <CloudOff size={14} />, label: 'No se pudo guardar — revisa tu conexión' },
+    saving: { cls: 'bg-ink-900 text-white', icon: <Loader2 size={13} className="animate-spin" aria-hidden />, label: 'Guardando cambios…' },
+    saved:  { cls: 'bg-emerald-600 text-white', icon: <Check size={14} aria-hidden />, label: 'Guardado' },
+    error:  { cls: 'bg-red-600 text-white', icon: <CloudOff size={14} aria-hidden />, label: 'No se pudo guardar — revisa tu conexión' },
   }[state];
   if (!cfg) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 flex justify-center px-4">
-      <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-lg ${cfg.cls}`}>
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-50 flex justify-center px-4">
+      <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-medium shadow-pop ${cfg.cls}`}>
         {cfg.icon}{cfg.label}
       </div>
     </div>

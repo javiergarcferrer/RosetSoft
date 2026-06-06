@@ -198,12 +198,12 @@ function StatusBadge({ status }) {
 function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {
   const stg = currentOrderStage(o);
   return (
-    <div className="card p-3">
+    <div className="card card-interactive transition-all hover:shadow-md hover:-translate-y-0.5 p-3">
       <Link to={`/orders/${o.id}`} className="block">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-semibold">
-              #{o.number || '—'}{o.name ? ` · ${o.name}` : ''}
+            <div className="text-sm font-semibold tabular-nums">
+              #{o.number || '—'}{o.name ? <span className="font-normal text-ink-500"> · {o.name}</span> : ''}
             </div>
             {/* customerLabel is derived in the parent: direct
                 order.customerId first, falling back to the customers
@@ -212,18 +212,18 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
             {customerLabel && (
               <div className="text-xs text-ink-500 truncate">{customerLabel}</div>
             )}
-            <div className="text-[11px] text-ink-500 mt-1">
+            <div className="text-[11px] text-ink-400 mt-1 tabular-nums">
               {quoteCount} cot. · {containerCount} cont. · {formatDateTime(o.updatedAt)}
             </div>
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-medium">{formatMoney(total, 'USD', { USD: 1 })}</div>
+            <div className="text-sm font-semibold tabular-nums">{formatMoney(total, 'USD', { USD: 1 })}</div>
             <div className="mt-1"><StatusBadge status={stg} /></div>
           </div>
         </div>
       </Link>
       <div className="flex items-center justify-end mt-1">
-        <button onClick={onDelete} className="text-ink-400 hover:text-red-600 p-2 -mr-2" aria-label="Eliminar">
+        <button onClick={onDelete} className="text-ink-300 hover:text-red-600 p-2 -mr-2 min-h-11 coarse:min-h-11 transition-colors active:scale-95" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -234,17 +234,17 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
 function OrderRow({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {
   const stg = currentOrderStage(o);
   return (
-    <tr className="cursor-pointer" onClick={() => (window.location.hash = `#/orders/${o.id}`)}>
-      <td className="font-medium whitespace-nowrap">#{o.number || '—'}</td>
+    <tr className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100" onClick={() => (window.location.hash = `#/orders/${o.id}`)}>
+      <td className="font-medium whitespace-nowrap tabular-nums">#{o.number || '—'}</td>
       <td className="truncate max-w-[220px]" title={o.name || ''}>{o.name || '—'}</td>
       <td className="text-ink-700 truncate max-w-[180px]" title={customerLabel || ''}>{customerLabel || '—'}</td>
       <td><StatusBadge status={stg} /></td>
-      <td className="hidden lg:table-cell text-ink-700">{quoteCount}</td>
-      <td className="hidden lg:table-cell text-ink-700">{containerCount}</td>
-      <td className="hidden xl:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(o.updatedAt)}</td>
-      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, 'USD', { USD: 1 })}</td>
+      <td className="hidden lg:table-cell text-ink-700 tabular-nums">{quoteCount}</td>
+      <td className="hidden lg:table-cell text-ink-700 tabular-nums">{containerCount}</td>
+      <td className="hidden xl:table-cell text-ink-400 whitespace-nowrap tabular-nums">{formatDateTime(o.updatedAt)}</td>
+      <td className="text-right font-semibold whitespace-nowrap tabular-nums">{formatMoney(total, 'USD', { USD: 1 })}</td>
       <td className="text-right w-12">
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-ink-400 hover:text-red-600" title="Eliminar">
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-ink-300 hover:text-red-600 transition-colors active:scale-95 p-1.5 rounded" title="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

@@ -99,8 +99,11 @@ export default function CustomerDetail() {
 
   if (!customer) {
     return (
-      <div className="card card-pad text-center text-sm text-ink-500">
-        Cargando cliente…
+      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+          <User size={20} className="text-ink-300" />
+        </span>
+        <p className="text-sm text-ink-500">Cargando cliente…</p>
       </div>
     );
   }
@@ -121,7 +124,7 @@ export default function CustomerDetail() {
           <button
             type="button"
             onClick={() => setEditing(customer)}
-            className="btn-secondary"
+            className="btn-secondary active:scale-[0.98] transition-transform"
             title="Editar cliente"
           >
             <Pencil size={14} /> Editar
@@ -168,15 +171,28 @@ export default function CustomerDetail() {
       <section className="card overflow-hidden mb-5">
         <header className="card-header">
           <h2 className="flex items-center gap-2">
-            <FileText size={14} className="text-ink-500" />
+            <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-700 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+              <FileText size={13} />
+            </span>
             Cotizaciones
           </h2>
         </header>
         {!loaded ? (
-          <div className="px-5 py-6 text-center text-sm text-ink-500">Cargando…</div>
+          <div className="px-5 py-10 flex flex-col items-center gap-2 text-center">
+            <span className="w-8 h-8 rounded-full bg-ink-50 flex items-center justify-center">
+              <FileText size={16} className="text-ink-300" />
+            </span>
+            <p className="text-sm text-ink-400">Cargando…</p>
+          </div>
         ) : quotes.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-ink-500">
-            Sin cotizaciones para este cliente.
+          <div className="px-5 py-14 flex flex-col items-center gap-3 text-center">
+            <span className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
+              <FileText size={22} className="text-brand-400" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-ink-700">Sin cotizaciones</p>
+              <p className="text-xs text-ink-400 mt-0.5">Aún no hay cotizaciones vinculadas a este cliente.</p>
+            </div>
           </div>
         ) : (
           <div className="divide-y divide-ink-100">
@@ -186,12 +202,15 @@ export default function CustomerDetail() {
               const total = list.reduce((s, q) => s + (derived.totalByQuote.get(q.id) || 0), 0);
               return (
                 <div key={status} className="px-5 py-3">
-                  <div className="flex items-baseline justify-between gap-2 mb-2">
-                    <span className={`status-pill status-pill-${status}`}>
-                      {QUOTE_STATUS_LABELS[status] || 'Borrador'}
-                    </span>
-                    <span className="text-[11px] text-ink-500 tabular-nums">
-                      {list.length} · {formatMoney(total, 'USD', { USD: 1 })}
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`status-pill status-pill-${status}`}>
+                        {QUOTE_STATUS_LABELS[status] || 'Borrador'}
+                      </span>
+                      <span className="eyebrow-xs text-ink-400 tabular-nums">{list.length}</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-ink-600 tabular-nums">
+                      {formatMoney(total, 'USD', { USD: 1 })}
                     </span>
                   </div>
                   <ul className="divide-y divide-ink-100">
@@ -199,9 +218,9 @@ export default function CustomerDetail() {
                       <li key={q.id}>
                         <Link
                           to={`/quotes/${q.id}`}
-                          className="flex items-center gap-3 px-2 py-2 -mx-2 hover:bg-ink-50 rounded transition-colors"
+                          className="group flex items-center gap-3 px-2 py-2.5 -mx-2 rounded-md hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150"
                         >
-                          <div className="text-sm font-medium tabular-nums w-16 flex-shrink-0">
+                          <div className="text-sm font-semibold tabular-nums w-16 flex-shrink-0 text-ink-800 group-hover:text-brand-700 transition-colors">
                             #{q.number || '—'}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -209,10 +228,10 @@ export default function CustomerDetail() {
                               Act. {formatDateTime(q.updatedAt)}
                             </div>
                           </div>
-                          <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+                          <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
                             {formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
                           </div>
-                          <ExternalLink size={12} className="text-ink-300 flex-shrink-0" />
+                          <ExternalLink size={12} className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
                         </Link>
                       </li>
                     ))}
@@ -228,15 +247,28 @@ export default function CustomerDetail() {
       <section className="card overflow-hidden">
         <header className="card-header">
           <h2 className="flex items-center gap-2">
-            <Package size={14} className="text-ink-500" />
+            <span className="w-7 h-7 rounded-lg bg-ink-100 text-ink-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+              <Package size={13} />
+            </span>
             Pedidos
           </h2>
         </header>
         {!loaded ? (
-          <div className="px-5 py-6 text-center text-sm text-ink-500">Cargando…</div>
+          <div className="px-5 py-10 flex flex-col items-center gap-2 text-center">
+            <span className="w-8 h-8 rounded-full bg-ink-50 flex items-center justify-center">
+              <Package size={16} className="text-ink-300" />
+            </span>
+            <p className="text-sm text-ink-400">Cargando…</p>
+          </div>
         ) : derived.orders.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-ink-500">
-            Aún no hay pedidos para este cliente.
+          <div className="px-5 py-14 flex flex-col items-center gap-3 text-center">
+            <span className="w-12 h-12 rounded-full bg-ink-50 flex items-center justify-center">
+              <Package size={22} className="text-ink-300" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-ink-700">Sin pedidos</p>
+              <p className="text-xs text-ink-400 mt-0.5">Aún no hay pedidos para este cliente.</p>
+            </div>
           </div>
         ) : (
           <ul className="divide-y divide-ink-100">
@@ -246,20 +278,20 @@ export default function CustomerDetail() {
                 <li key={o.id}>
                   <Link
                     to={`/orders/${o.id}`}
-                    className="flex items-center gap-3 px-5 py-2.5 hover:bg-ink-50 transition-colors"
+                    className="group flex items-center gap-3 px-5 py-3.5 hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150"
                   >
-                    <div className="text-sm font-medium tabular-nums w-16 flex-shrink-0">
+                    <div className="text-sm font-semibold tabular-nums w-16 flex-shrink-0 text-ink-800 group-hover:text-brand-700 transition-colors">
                       #{o.number || '—'}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-sm font-medium text-ink-800 truncate">
                         {stage?.label || 'Borrador'}
                       </div>
                       <div className="text-[11px] text-ink-500 truncate">
                         Act. {formatDateTime(o.updatedAt)}
                       </div>
                     </div>
-                    <ExternalLink size={12} className="text-ink-300 flex-shrink-0" />
+                    <ExternalLink size={12} className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
                   </Link>
                 </li>
               );
@@ -284,38 +316,48 @@ function ContactCard({ customer }) {
     return null;
   }
   return (
-    <div className="card card-pad mb-5 text-sm space-y-1.5">
-      {customer.contactName && (
-        <div className="flex items-center gap-2">
-          <User size={14} className="text-ink-400 flex-shrink-0" />
-          <div className="text-ink-700">{customer.contactName}</div>
-        </div>
-      )}
-      {customer.email && (
-        <div className="flex items-center gap-2">
-          <Mail size={14} className="text-ink-400 flex-shrink-0" />
-          <a href={`mailto:${customer.email}`} className="text-ink-700 hover:text-brand-700 truncate">
-            {customer.email}
-          </a>
-        </div>
-      )}
-      {customer.phone && (
-        <div className="flex items-center gap-2">
-          <Phone size={14} className="text-ink-400 flex-shrink-0" />
-          <a href={`tel:${customer.phone}`} className="text-ink-700 hover:text-brand-700">
-            {customer.phone}
-          </a>
-        </div>
-      )}
-      {addr && (
-        <div className="flex items-start gap-2">
-          <MapPin size={14} className="text-ink-400 flex-shrink-0 mt-0.5" />
-          <div className="text-ink-700">{addr}</div>
-        </div>
-      )}
-      {customer.notes && (
-        <p className="text-ink-500 pt-1 whitespace-pre-wrap text-xs">{customer.notes}</p>
-      )}
+    <div className="card overflow-hidden mb-5">
+      <div className="card-pad space-y-2.5 text-sm">
+        {customer.contactName && (
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-md bg-brand-50 text-brand-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+              <User size={12} />
+            </span>
+            <span className="text-ink-800 font-medium">{customer.contactName}</span>
+          </div>
+        )}
+        {customer.email && (
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-md bg-ink-100 text-ink-500 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+              <Mail size={12} />
+            </span>
+            <a href={`mailto:${customer.email}`} className="text-ink-700 hover:text-brand-600 transition-colors truncate">
+              {customer.email}
+            </a>
+          </div>
+        )}
+        {customer.phone && (
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-md bg-ink-100 text-ink-500 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+              <Phone size={12} />
+            </span>
+            <a href={`tel:${customer.phone}`} className="text-ink-700 hover:text-brand-600 transition-colors">
+              {customer.phone}
+            </a>
+          </div>
+        )}
+        {addr && (
+          <div className="flex items-start gap-2.5">
+            <span className="w-6 h-6 rounded-md bg-ink-100 text-ink-500 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <MapPin size={12} />
+            </span>
+            <span className="text-ink-600">{addr}</span>
+          </div>
+        )}
+        {customer.notes && (
+          <p className="text-ink-500 pt-2 whitespace-pre-wrap text-xs leading-relaxed border-t border-ink-100 mt-1">{customer.notes}</p>
+        )}
+      </div>
     </div>
   );
 }

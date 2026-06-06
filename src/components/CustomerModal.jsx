@@ -122,7 +122,11 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
   return (
     <Modal open={open} onClose={onClose} title={isNew ? 'Agregar cliente' : `Editar — ${data.name || 'Cliente'}`} footer={
       <>
-        {!isNew && <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50"><Trash2 size={14} /> Eliminar</button>}
+        {!isNew && (
+          <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700">
+            <Trash2 size={14} aria-hidden /> Eliminar
+          </button>
+        )}
         <div className="flex-1" />
         <button onClick={onClose} className="btn-ghost">Cancelar</button>
         <button onClick={save} className="btn-primary">Guardar</button>
@@ -149,13 +153,17 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
               type="button"
               onClick={doLookup}
               disabled={looking || !cleanRnc(data.rnc)}
-              className="btn-ghost inline-flex items-center gap-1 disabled:opacity-40 whitespace-nowrap"
+              className="btn-ghost inline-flex items-center gap-1.5 disabled:opacity-40 whitespace-nowrap"
               title="Buscar el nombre en el registro de la DGII"
             >
-              {looking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Buscar
+              {looking ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Search size={14} aria-hidden />} Buscar
             </button>
           </div>
-          {lookupMsg && <p className="text-xs text-ink-500 mt-1">{lookupMsg}</p>}
+          {lookupMsg && (
+            <p className={`text-xs mt-1.5 ${lookupMsg.startsWith('✓') ? 'text-green-600' : 'text-ink-500'}`}>
+              {lookupMsg}
+            </p>
+          )}
         </div>
         <div className="sm:col-span-2">
           <div className="label">Nombre *</div>

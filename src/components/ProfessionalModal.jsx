@@ -106,8 +106,8 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       footer={
         <>
           {!isNew && (
-            <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50">
-              <Trash2 size={14} /> Eliminar
+            <button onClick={remove} className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700">
+              <Trash2 size={14} aria-hidden /> Eliminar
             </button>
           )}
           <div className="flex-1" />

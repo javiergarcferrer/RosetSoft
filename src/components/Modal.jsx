@@ -33,34 +33,39 @@ export default function Modal({ open, onClose, title, children, footer, size = '
   // to that box instead of the viewport. Portaling to body escapes both.
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
-      <div className="fixed inset-0 bg-ink-900/50" onClick={onClose} aria-hidden />
+      {/* Refined backdrop: warm dark + subtle blur so content behind reads as
+          "there" but clearly behind — same technique as Linear and Stripe. */}
       <div
-        className={`relative w-full ${widths[size] || widths.md} bg-white shadow-2xl border border-ink-100 flex flex-col rounded-t-2xl sm:rounded-lg max-h-[92vh] sm:max-h-[90vh] pb-[env(safe-area-inset-bottom)] sm:pb-0`}
+        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] transition-opacity"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        className={`relative w-full ${widths[size] || widths.md} bg-white shadow-pop border border-ink-100/60 flex flex-col rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[88vh] pb-[env(safe-area-inset-bottom)] sm:pb-0 animate-in slide-in-from-bottom-2 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200`}
       >
         {/* iOS-style grab handle (decorative — pointer doesn't drag, but the
             visual cue makes the sheet read as dismissible). */}
-        <div className="sm:hidden pt-2 pb-1 flex justify-center" aria-hidden>
-          <div className="w-9 h-1 rounded-full bg-ink-200" />
+        <div className="sm:hidden pt-3 pb-1 flex justify-center" aria-hidden>
+          <div className="w-10 h-[3px] rounded-full bg-ink-200" />
         </div>
-        <div className="flex items-center justify-between px-5 py-3 sm:py-3.5 border-b border-ink-100">
-          <h2 className="text-base font-semibold truncate pr-3">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 sm:py-4 border-b border-ink-100">
+          <h2 className="font-display text-base font-semibold text-ink-900 truncate pr-3">{title}</h2>
           <button
             onClick={onClose}
-            className="inline-flex items-center justify-center w-11 h-11 sm:w-9 sm:h-9 -mr-2 rounded text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors"
+            className="btn-icon -mr-1.5 text-ink-400 hover:text-ink-600 hover:bg-ink-100 transition-colors"
             aria-label="Cerrar"
           >
-            <X size={20} className="sm:hidden" />
-            <X size={18} className="hidden sm:block" />
+            <X size={18} aria-hidden />
           </button>
         </div>
-        <div className="overflow-y-auto overscroll-contain px-5 py-4 flex-1">{children}</div>
+        <div className="overflow-y-auto overscroll-contain px-6 py-5 flex-1">{children}</div>
         {footer && (
-          <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-end gap-2">
+          <div className="px-6 py-4 border-t border-ink-100 bg-ink-50/50 rounded-b-2xl sm:rounded-b-2xl flex items-center justify-end gap-2.5">
             {footer}
           </div>
         )}

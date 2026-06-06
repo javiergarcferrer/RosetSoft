@@ -52,28 +52,28 @@ export default function FilterChips({ filters, activeFilters, onFiltersChange })
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       {chips.map(({ filter, text }) => (
         <span
           key={filter.key}
-          className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-ink-50 py-1 pl-2.5 pr-1 text-xs text-ink-700"
+          className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 py-1 pl-2.5 pr-1 text-xs text-brand-700 shadow-xs ring-1 ring-inset ring-black/5"
         >
-          <span className="text-ink-500">{filter.label}:</span>
-          <span className="font-medium text-ink-900">{text}</span>
+          <span className="text-brand-400 font-normal">{filter.label}:</span>
+          <span className="font-semibold text-brand-800">{text}</span>
           <button
             type="button"
             onClick={() => clearOne(filter.key)}
             aria-label={`Quitar filtro ${filter.label}`}
-            className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded text-ink-400 transition-colors hover:bg-ink-200 hover:text-ink-900"
+            className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-brand-400 transition-colors hover:bg-brand-100 hover:text-brand-700 active:scale-[0.96]"
           >
-            <X size={13} />
+            <X size={11} />
           </button>
         </span>
       ))}
       <button
         type="button"
         onClick={clearAll}
-        className="text-xs font-medium text-ink-500 underline-offset-2 hover:text-ink-900 hover:underline"
+        className="text-xs font-medium text-ink-400 underline-offset-2 transition-colors hover:text-ink-600 hover:underline active:scale-[0.97]"
       >
         Limpiar todo
       </button>

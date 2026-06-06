@@ -3,6 +3,21 @@ import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { userMessageFor } from '../lib/errorMessages.js';
 
+// Decorative violet bloom — absolutely positioned, pointer-events-none,
+// so it sits behind the card and never captures clicks.
+function VioletBloom() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full opacity-[0.18]"
+      style={{
+        background: 'radial-gradient(circle, #5729ff 0%, transparent 70%)',
+        filter: 'blur(60px)',
+      }}
+    />
+  );
+}
+
 /**
  * Sign-in page. The app is invite-only: there is no signup form, no
  * "Registrarme" link, no path on this page that creates a new account.
@@ -42,28 +57,35 @@ export default function Login() {
   }
 
   return (
-    <div className="h-full flex items-center justify-center bg-ink-50">
-      <div className="card-auth">
-        <div className="text-center mb-6">
-          <div className="eyebrow">Roset Soft</div>
-          <h1 className="text-xl font-semibold mt-1">Iniciar sesión</h1>
-          <p className="text-xs text-ink-500 mt-1">
-            Inicia sesión con el correo y contraseña de tu equipo.
+    <div className="relative h-full flex items-center justify-center bg-app-wash overflow-hidden">
+      <VioletBloom />
+      <div className="card-auth relative z-10">
+        {/* Wordmark / brand header */}
+        <div className="text-center mb-8">
+          {/* Brand icon mark */}
+          <div className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-grad shadow-soft mb-4">
+            <span className="font-wordmark text-white text-lg leading-none select-none">R</span>
+          </div>
+          <div className="font-wordmark text-2xl tracking-wide text-ink-900 mb-1.5">Roset Soft</div>
+          <h1 className="text-sm font-semibold text-ink-700">Iniciar sesión</h1>
+          <p className="text-xs text-ink-400 mt-1 leading-relaxed">
+            Correo y contraseña de tu equipo.
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-4">
           <div>
-            <div className="label">Correo</div>
-            <div className="relative">
-              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <label className="label" htmlFor="login-email">Correo</label>
+            <div className="relative mt-1.5">
+              <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" aria-hidden />
               <input
+                id="login-email"
                 type="email"
                 inputMode="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input pl-9"
+                className="input pl-9 transition-shadow focus:shadow-focus"
                 placeholder="tu@correo.com"
                 autoComplete="email"
                 autoCapitalize="off"
@@ -74,16 +96,17 @@ export default function Login() {
             </div>
           </div>
           <div>
-            <div className="label">Contraseña</div>
-            <div className="relative">
-              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <label className="label" htmlFor="login-password">Contraseña</label>
+            <div className="relative mt-1.5">
+              <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" aria-hidden />
               <input
+                id="login-password"
                 type="password"
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input pl-9"
+                className="input pl-9 transition-shadow focus:shadow-focus"
                 placeholder="••••••••"
                 autoComplete="current-password"
                 enterKeyHint="go"
@@ -92,19 +115,23 @@ export default function Login() {
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+            <div role="alert" className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <AlertCircle size={14} className="flex-shrink-0 mt-0.5" aria-hidden />
               <span>{error}</span>
             </div>
           )}
 
-          <button type="submit" disabled={busy} className="btn-primary w-full justify-center">
-            {busy ? '…' : <><LogIn size={14} /> Entrar</>}
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn-brand w-full justify-center mt-2 active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-wait"
+          >
+            {busy ? '…' : <><LogIn size={14} aria-hidden /> Entrar</>}
           </button>
         </form>
 
-        <p className="mt-5 text-center text-[11px] text-ink-500 max-w-xs mx-auto">
-          ¿No tienes cuenta? El acceso es solo por invitación de tu administrador.
+        <p className="mt-7 text-center text-[11px] text-ink-400 max-w-xs mx-auto leading-relaxed">
+          El acceso es solo por invitación de tu administrador.
         </p>
       </div>
     </div>

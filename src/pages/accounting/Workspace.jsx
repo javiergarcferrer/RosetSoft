@@ -628,7 +628,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
       : { cls: 'text-emerald-700', text: 'Comisiones pagadas' };
 
   return (
-    <li className="bg-white">
+    <li className="bg-white hover:bg-ink-50/40 transition-colors group">
       <div className="flex items-center gap-2 px-4 py-3">
         <button
           type="button"
@@ -638,19 +638,19 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
         >
           <ChevronDown
             size={16}
-            className={`flex-shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`flex-shrink-0 text-ink-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-medium whitespace-nowrap">#{quote.number || '—'}</span>
+              <span className="font-semibold tabular-nums whitespace-nowrap text-ink-900">#{quote.number || '—'}</span>
               <span className="text-ink-700 truncate">{customerName}</span>
             </div>
             <div className="text-[11px] text-ink-500 truncate">
-              {creatorDisplay(creator) || 'Sin vendedor'} · {formatDate(quote.acceptedAt)}
+              {creatorDisplay(creator) || 'Sin vendedor'} · <span className="tabular-nums">{formatDate(quote.acceptedAt)}</span>
             </div>
           </div>
           <div className="flex-shrink-0 text-right">
-            <div className="tabular-nums font-medium whitespace-nowrap">
+            <div className="tabular-nums font-semibold text-ink-900 whitespace-nowrap">
               {formatMoney(grandTotal, currency, rates)}
             </div>
             <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>
@@ -660,7 +660,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
       </div>
 
       {open && (
-        <div className="px-4 pb-4 sm:pl-10 space-y-4 bg-ink-50/40">
+        <div className="px-4 pb-5 sm:pl-10 space-y-4 border-t border-ink-100 bg-ink-50/30">
           <QuoteAccountingDetail
             invLines={invLines}
             totals={totals}
@@ -720,20 +720,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
 /** One commission row inside a sale card (vendedor or profesional). */
 function CommissionLine({ role, who, badge, detail, action }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-ink-100 bg-white px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-ink-100 bg-white px-3 py-2.5 shadow-xs">
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{role}</span>
-          <span className="text-sm text-ink-800 truncate">{who}</span>
+          <span className="eyebrow-xs tracking-wide text-ink-400">{role}</span>
+          <span className="text-sm font-medium text-ink-800 truncate">{who}</span>
           {badge && (
-            <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${
-              badge === 'Trade discount' ? 'bg-amber-100 text-amber-800' : 'bg-ink-100 text-ink-600'
+            <span className={`chip text-[9px] font-semibold uppercase tracking-wide ${
+              badge === 'Trade discount' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-ink-100 text-ink-600'
             }`}>
               {badge}
             </span>
           )}
         </div>
-        <div className="text-[11px] text-ink-500 truncate">{detail}</div>
+        <div className="text-[11px] text-ink-500 truncate mt-0.5">{detail}</div>
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -767,10 +767,10 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
             {rows.map((r) => {
               const sub = subOf(r);
               return (
-                <tr key={keyOf(r)}>
+                <tr key={keyOf(r)} className="hover:bg-ink-50 transition-colors">
                   <td className="font-medium">
                     {nameOf(r)}
-                    {sub && <div className="text-[11px] text-ink-500">{sub}</div>}
+                    {sub && <div className="text-[11px] text-ink-400">{sub}</div>}
                   </td>
                   <td className="text-right tabular-nums">{r.count}</td>
                   <td className="text-right tabular-nums whitespace-nowrap">
@@ -787,11 +787,11 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-ink-50">
-              <td colSpan={4} className="text-right text-xs font-semibold uppercase tracking-wide text-ink-600">
+            <tr className="bg-ink-50 border-t border-ink-200">
+              <td colSpan={4} className="text-right text-[11px] font-semibold uppercase tracking-wide text-ink-500 py-2 px-4">
                 Pendiente total
               </td>
-              <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700">
+              <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700 py-2 px-4">
                 {formatMoney(pendingTotal, 'USD', { USD: 1 })}
               </td>
             </tr>
@@ -853,29 +853,29 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-ink-100 bg-white">
+      <div className="overflow-x-auto rounded-md border border-ink-100 bg-white shadow-xs">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left text-ink-500 border-b border-ink-100">
-              <th className="font-medium py-1.5 px-2.5">Producto</th>
-              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Cant.</th>
-              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Precio unit.</th>
-              <th className="font-medium py-1.5 px-2.5 text-right whitespace-nowrap">Subtotal</th>
+            <tr className="text-left text-ink-500 bg-ink-50 border-b border-ink-100">
+              <th className="font-semibold py-1.5 px-2.5 uppercase tracking-wide text-[10px]">Producto</th>
+              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Cant.</th>
+              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Precio unit.</th>
+              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Subtotal</th>
             </tr>
           </thead>
           <tbody>
             {invLines.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-center text-ink-400 py-3">
+                <td colSpan={4} className="text-center text-ink-400 py-4">
                   Sin líneas facturables
                 </td>
               </tr>
             ) : invLines.map((il, i) => (
-              <tr key={i} className="border-b border-ink-50 last:border-0">
+              <tr key={i} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/60 transition-colors">
                 <td className="py-1.5 px-2.5 text-ink-800">{il.name || '—'}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums">{il.qty}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap">{fmt(il.unit)}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap">{fmt(il.subtotal)}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums text-ink-700">{il.qty}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap text-ink-700">{fmt(il.unit)}</td>
+                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap font-medium text-ink-900">{fmt(il.subtotal)}</td>
               </tr>
             ))}
           </tbody>
@@ -911,7 +911,7 @@ function ExportButton({ icon: Icon, label, busy, disabled, onClick }) {
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className="btn-ghost text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      className="btn-secondary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {busy
         ? <><Loader2 size={14} className="animate-spin" /> {label}</>
@@ -925,17 +925,17 @@ function CyclePill({ label, sub, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`text-left rounded-md border px-3 py-2 transition ${
+      className={`text-left rounded-lg border px-3 py-2 transition-all active:scale-[0.98] ${
         active
-          ? 'border-ink-700 bg-ink-700 text-white'
-          : 'border-ink-200 hover:border-ink-400 bg-white'
+          ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
+          : 'border-ink-200 hover:border-ink-300 bg-white hover:shadow-xs text-ink-700'
       }`}
     >
       <div className="flex items-center gap-1.5 text-sm font-medium">
-        <Calendar size={12} className={active ? 'text-ink-300' : 'text-ink-500'} />
+        <Calendar size={12} className={active ? 'text-brand-200' : 'text-ink-400'} />
         {label}
       </div>
-      <div className={`text-[10px] mt-0.5 ${active ? 'text-ink-300' : 'text-ink-500'}`}>{sub}</div>
+      <div className={`text-[10px] mt-0.5 tabular-nums ${active ? 'text-brand-200' : 'text-ink-500'}`}>{sub}</div>
     </button>
   );
 }

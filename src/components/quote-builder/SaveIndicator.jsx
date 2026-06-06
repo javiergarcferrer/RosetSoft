@@ -19,8 +19,8 @@ export default function SaveIndicator({ savedAt, saving }) {
 
   if (saving) {
     return (
-      <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500">
-        <RefreshCw size={11} className="shrink-0 animate-spin" />
+      <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-400">
+        <RefreshCw size={10} className="shrink-0 animate-spin text-brand-500" />
         <span className="truncate">Guardando…</span>
       </span>
     );
@@ -33,8 +33,8 @@ export default function SaveIndicator({ savedAt, saving }) {
     );
   }
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-500">
-      <Check size={11} className="shrink-0 text-emerald-600" />
+    <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-ink-400">
+      <Check size={10} className="shrink-0 text-emerald-500" />
       <span className="truncate">Guardado {relativeFromNow(savedAt)}</span>
     </span>
   );

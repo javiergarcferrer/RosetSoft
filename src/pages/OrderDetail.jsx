@@ -104,8 +104,11 @@ export default function OrderDetail() {
 
   if (!order) {
     return (
-      <div className="card card-pad text-center text-sm text-ink-500">
-        Cargando pedido…
+      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+          <Package size={20} className="text-ink-300" />
+        </span>
+        <p className="text-sm text-ink-500">Cargando pedido…</p>
       </div>
     );
   }
@@ -248,25 +251,36 @@ export default function OrderDetail() {
           {/* Containers section */}
           <section className="card overflow-hidden">
             <header className="card-header">
-              <div className="min-w-0">
-                <h2 className="flex items-center gap-2">
-                  <Truck size={16} className="text-ink-500" />
-                  Contenedores ({containers.length})
-                </h2>
-                <p className="text-[11px] text-ink-500 mt-0.5">
-                  Cada contenedor sigue su propio ciclo de despacho. Un pedido
-                  puede tener varios contenedores cuando los artículos llegan
-                  en envíos separados.
-                </p>
+              <div className="min-w-0 flex items-start gap-3">
+                <span className="w-7 h-7 rounded-lg bg-ink-100 text-ink-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Truck size={13} />
+                </span>
+                <div className="min-w-0">
+                  <h2>Contenedores
+                    {containers.length > 0 && (
+                      <span className="ml-1.5 text-ink-400 font-normal text-sm">({containers.length})</span>
+                    )}
+                  </h2>
+                  <p className="text-[11px] text-ink-500 mt-0.5">
+                    Cada contenedor sigue su propio ciclo de despacho. Un pedido
+                    puede tener varios contenedores cuando los artículos llegan
+                    en envíos separados.
+                  </p>
+                </div>
               </div>
-              <button onClick={addContainer} className="btn-secondary flex-shrink-0">
+              <button onClick={addContainer} className="btn-secondary flex-shrink-0 active:scale-[0.98] transition-transform">
                 <Plus size={14} /> Contenedor
               </button>
             </header>
             {containers.length === 0 ? (
-              <div className="px-5 py-10 text-center text-sm text-ink-500">
-                Sin contenedores aún. Crea uno cuando recibas la confirmación
-                de envío de Ligne Roset.
+              <div className="px-5 py-12 flex flex-col items-center gap-3 text-center">
+                <span className="w-12 h-12 rounded-full bg-ink-50 flex items-center justify-center">
+                  <Truck size={22} className="text-ink-300" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-ink-700">Sin contenedores</p>
+                  <p className="text-xs text-ink-400 mt-0.5">Crea uno cuando recibas la confirmación de envío de Ligne Roset.</p>
+                </div>
               </div>
             ) : (
               <ul className="divide-y divide-ink-100">
@@ -284,22 +298,35 @@ export default function OrderDetail() {
           {/* Quotes section */}
           <section className="card overflow-hidden">
             <header className="card-header">
-              <div className="min-w-0">
-                <h2 className="flex items-center gap-2">
-                  <FileText size={16} className="text-ink-500" />
-                  Cotizaciones ({quotes.length})
-                </h2>
-                <p className="text-[11px] text-ink-500 mt-0.5">
-                  Las ventas que componen este pedido. Suma {formatMoney(orderTotal, 'USD', { USD: 1 })}.
-                </p>
+              <div className="min-w-0 flex items-start gap-3">
+                <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-700 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <FileText size={13} />
+                </span>
+                <div className="min-w-0">
+                  <h2>Cotizaciones
+                    {quotes.length > 0 && (
+                      <span className="ml-1.5 text-ink-400 font-normal text-sm">({quotes.length})</span>
+                    )}
+                  </h2>
+                  <p className="text-[11px] text-ink-500 mt-0.5">
+                    Las ventas que componen este pedido. Suma{' '}
+                    <span className="font-medium text-ink-700 tabular-nums">{formatMoney(orderTotal, 'USD', { USD: 1 })}</span>.
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setPicker(true)} className="btn-secondary flex-shrink-0">
+              <button onClick={() => setPicker(true)} className="btn-secondary flex-shrink-0 active:scale-[0.98] transition-transform">
                 <Plus size={14} /> Cotización
               </button>
             </header>
             {quotes.length === 0 ? (
-              <div className="px-5 py-10 text-center text-sm text-ink-500">
-                Sin cotizaciones. Acepta una desde la cotización o añade una existente.
+              <div className="px-5 py-12 flex flex-col items-center gap-3 text-center">
+                <span className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
+                  <FileText size={22} className="text-brand-400" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-ink-700">Sin cotizaciones</p>
+                  <p className="text-xs text-ink-400 mt-0.5">Acepta una desde la cotización o añade una existente.</p>
+                </div>
               </div>
             ) : (
               <ul className="divide-y divide-ink-100">
@@ -376,10 +403,12 @@ function ContainerRow({ container }) {
   return (
     <li className="px-5 py-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <Package size={14} className="text-ink-500" />
-            <span className="text-sm font-semibold">Contenedor #{container.number || '—'}</span>
+            <span className={`w-6 h-6 rounded-md ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 ${filled ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'}`}>
+              <Package size={12} />
+            </span>
+            <span className="text-sm font-semibold text-ink-900">Contenedor #{container.number || '—'}</span>
             {filled ? (
               <span className="status-pill status-pill-accepted">
                 <CheckCircle2 size={11} /> Lleno · {formatDateTime(container.filledAt)}
@@ -392,7 +421,7 @@ function ContainerRow({ container }) {
           {/* Container number + fill toggle, side by side. ISO 6346 is a
               fixed 11 characters (4 letters + 7 digits), so the field is
               sized to exactly that — no wider. */}
-          <div className="mt-2 flex items-start gap-2 flex-wrap">
+          <div className="mt-2.5 flex items-start gap-2 flex-wrap">
             <div>
               <DebouncedInput
                 className="input font-mono text-xs uppercase w-auto"
@@ -407,7 +436,7 @@ function ContainerRow({ container }) {
             <button
               type="button"
               onClick={toggleFilled}
-              className={`inline-flex items-center gap-1.5 px-3 min-h-9 coarse:min-h-11 rounded-md text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 min-h-9 coarse:min-h-11 rounded-md text-xs font-medium transition-all active:scale-[0.98] ${
                 filled
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                   : 'btn-primary'
@@ -423,7 +452,7 @@ function ContainerRow({ container }) {
         </div>
         <button
           onClick={del}
-          className="text-ink-400 hover:text-red-600 p-1.5 flex-shrink-0"
+          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md flex-shrink-0 transition-colors"
           title="Eliminar contenedor"
           aria-label="Eliminar contenedor"
         >
@@ -499,13 +528,13 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
   }
 
   return (
-    <li className="px-5 py-3 space-y-2">
+    <li className="group px-5 py-3.5 space-y-2 hover:bg-brand-50/60 transition-colors duration-150">
       <div className="flex items-center gap-3 flex-wrap">
         <Link
           to={`/quotes/${quote.id}`}
-          className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
+          className="flex-1 min-w-[180px]"
         >
-          <div className="text-sm font-semibold truncate">
+          <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
             #{quote.number || '—'}
             {creatorLabel && (
               <span className="ml-2 text-[11px] font-normal text-ink-500">
@@ -517,12 +546,12 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
             Act. {formatDateTime(quote.updatedAt)}
           </div>
         </Link>
-        <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+        <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
           {formatMoney(total, quote.currencyCode || 'USD', displayRatesFor(quote, settings))}
         </div>
         <button
           onClick={onDetach}
-          className="text-ink-400 hover:text-red-600 p-1.5"
+          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors"
           title="Quitar del pedido"
           aria-label="Quitar del pedido"
         >
@@ -530,7 +559,7 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
         </button>
         <Link
           to={`/quotes/${quote.id}`}
-          className="text-ink-400 hover:text-ink-900 p-1.5"
+          className="text-ink-300 group-hover:text-brand-500 p-1.5 rounded-md transition-colors"
           title="Abrir cotización"
         >
           <ExternalLink size={14} />
@@ -618,7 +647,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
     return (
       <span
         title={disabledHint || ''}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100 cursor-default"
       >
         <Icon size={12} />
         {label}
@@ -630,7 +659,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
       type="button"
       onClick={onToggle}
       title={`Marcar ${label.toLowerCase()}`}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-ink-400 hover:text-ink-900 transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
     >
       <Icon size={12} />
       {label}
@@ -653,41 +682,46 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
 function DispatchThresholdCard({ containerCount, threshold, orderTotal, thresholdMet }) {
   const pct = threshold > 0 ? Math.min(100, (orderTotal / threshold) * 100) : 0;
   return (
-    <div className="card card-pad mt-4 space-y-2">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div>
-          <div className="eyebrow tracking-wide">
-            Mínimo de despacho
-          </div>
-          <div className="text-sm font-semibold mt-0.5">
-            {containerCount === 1
-              ? '1 contenedor'
-              : `${containerCount} contenedores`}
-            <span className="text-ink-500 font-normal"> · {formatMoney(threshold, 'USD', { USD: 1 })}</span>
+    <div className="card overflow-hidden mt-4">
+      <div className="card-pad space-y-3">
+        <div className="flex items-start gap-3">
+          <span className={`w-7 h-7 rounded-lg ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5 ${thresholdMet ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'}`}>
+            <Truck size={13} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="eyebrow tracking-wide mb-1">Mínimo de despacho</div>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div className="text-sm font-semibold text-ink-900">
+                {containerCount === 1
+                  ? '1 contenedor'
+                  : `${containerCount} contenedores`}
+                <span className="text-ink-500 font-normal tabular-nums"> · {formatMoney(threshold, 'USD', { USD: 1 })}</span>
+              </div>
+              <div className="text-right">
+                <div className={`text-sm font-semibold tabular-nums ${thresholdMet ? 'text-emerald-600' : 'text-ink-700'}`}>
+                  {formatMoney(orderTotal, 'USD', { USD: 1 })}
+                </div>
+                <div className="text-[11px] text-ink-400 tabular-nums">{Math.round(pct)}% del mínimo</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="text-right">
-          <div className={`text-sm font-medium tabular-nums ${thresholdMet ? 'text-emerald-600' : 'text-ink-700'}`}>
-            {formatMoney(orderTotal, 'USD', { USD: 1 })}
-          </div>
-          <div className="text-[11px] text-ink-500">{Math.round(pct)}% del mínimo</div>
-        </div>
+        {/* Native <progress> (themed in index.css: ink-100 track, brand-500
+            fill). When the minimum is met the `.is-complete` modifier recolours
+            the value bar emerald — the same green-on-complete cue the old
+            hand-rolled bar gave. value/max are the raw figures; the browser
+            clamps the fill to 100%, matching the previous Math.min(100,…). */}
+        <progress
+          className={`h-1.5 ${thresholdMet ? 'is-complete' : ''}`}
+          max={threshold}
+          value={Math.min(orderTotal, threshold)}
+          aria-label={`${Math.round(pct)}% del mínimo de despacho`}
+        />
+        <p className="text-[11px] text-ink-400 leading-relaxed">
+          El mínimo se multiplica por el número de contenedores en el pedido.
+          Todas las cotizaciones aportan al total, sin importar a cuál contenedor pertenezcan.
+        </p>
       </div>
-      {/* Native <progress> (themed in index.css: ink-100 track, brand-500
-          fill). When the minimum is met the `.is-complete` modifier recolours
-          the value bar emerald — the same green-on-complete cue the old
-          hand-rolled bar gave. value/max are the raw figures; the browser
-          clamps the fill to 100%, matching the previous Math.min(100,…). */}
-      <progress
-        className={`h-2 ${thresholdMet ? 'is-complete' : ''}`}
-        max={threshold}
-        value={Math.min(orderTotal, threshold)}
-        aria-label={`${Math.round(pct)}% del mínimo de despacho`}
-      />
-      <p className="text-[11px] text-ink-500">
-        El mínimo se multiplica por el número de contenedores en el pedido.
-        Todas las cotizaciones aportan al total, sin importar a cuál contenedor pertenezcan.
-      </p>
     </div>
   );
 }
@@ -695,13 +729,19 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
 function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
   if (!candidates.length) {
     return (
-      <div className="text-sm text-ink-500 text-center py-8">
-        No hay cotizaciones disponibles. Acepta una cotización para vincularla aquí.
+      <div className="py-12 flex flex-col items-center gap-3 text-center">
+        <span className="w-11 h-11 rounded-full bg-brand-50 flex items-center justify-center">
+          <FileText size={20} className="text-brand-400" />
+        </span>
+        <div>
+          <p className="text-sm font-medium text-ink-700">Sin cotizaciones disponibles</p>
+          <p className="text-xs text-ink-400 mt-0.5">Acepta una cotización para vincularla aquí.</p>
+        </div>
       </div>
     );
   }
   return (
-    <ul className="divide-y divide-ink-100">
+    <ul className="divide-y divide-ink-100 -mx-1">
       {candidates.map((q) => {
         const client = customerById?.get(q.customerId);
         return (
@@ -709,17 +749,19 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
           <button
             type="button"
             onClick={() => onPick(q.id)}
-            className="w-full text-left px-3 py-3 hover:bg-ink-50 transition-colors flex items-center gap-3"
+            className="w-full text-left px-4 py-3 hover:bg-brand-50/60 active:scale-[0.99] transition-all duration-150 flex items-center gap-3 rounded-md"
           >
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold truncate">
+              <div className="text-sm font-semibold truncate text-ink-900">
                 {client?.name || 'Sin cliente asignado'}
               </div>
-              <div className="text-[11px] text-ink-500 truncate">
-                #{q.number || '—'} · {q.status} · {formatDateTime(q.updatedAt)}
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <span className="text-[11px] text-ink-500 tabular-nums">#{q.number || '—'}</span>
+                <span className={`status-pill status-pill-${q.status || 'draft'} !py-0`}>{q.status || 'draft'}</span>
+                <span className="text-[11px] text-ink-400">{formatDateTime(q.updatedAt)}</span>
               </div>
             </div>
-            <div className="text-sm font-medium tabular-nums">
+            <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
               {formatMoney(totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
             </div>
           </button>

@@ -24,35 +24,35 @@ export default function SectionDivider({ line, onChange, onRemove, autoFocus, dr
 
   return (
     <li
-      className="px-3 sm:px-4 py-2 bg-ink-50/60 border-y border-ink-100 group"
+      className="px-3 sm:px-4 py-2 bg-brand-50/50 border-y border-brand-100/70 group"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
       <div className="flex items-center gap-2">
         <span
           {...(dragHandleProps || {})}
-          className={`cursor-grab text-ink-300 hover:text-ink-700 hidden sm:inline-flex ${hover || dragHandleProps?.['data-dragging'] === 'true' ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`}
+          className={`cursor-grab text-ink-300 hover:text-ink-600 hidden sm:inline-flex transition-opacity ${hover || dragHandleProps?.['data-dragging'] === 'true' ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`}
           title="Arrastra para reordenar"
         >
           <GripVertical size={14} />
         </span>
-        <Hash size={12} className="text-brand-600 flex-shrink-0" />
+        <Hash size={12} className="text-brand-500 flex-shrink-0" />
         <DebouncedInput
           ref={inputRef}
           value={line.name || ''}
           onCommit={(v) => onChange({ name: v })}
           placeholder='Sección · p. ej. "Sala", "Habitación principal"'
-          className="block flex-1 bg-transparent border-0 px-0 py-0 text-[13px] font-semibold uppercase tracking-wide text-ink-700 placeholder:text-ink-400 placeholder:normal-case placeholder:font-medium focus:outline-none"
+          className="block flex-1 bg-transparent border-0 px-0 py-0 text-[12px] font-bold uppercase tracking-widest text-ink-600 placeholder:text-ink-400 placeholder:normal-case placeholder:font-medium placeholder:tracking-normal focus:outline-none"
         />
         {subtotalLabel && (
-          <span className="text-[12px] font-semibold tabular-nums text-ink-600 whitespace-nowrap" title="Total de los artículos de esta sección">
+          <span className="text-[12px] font-semibold tabular-nums text-ink-500 whitespace-nowrap" title="Total de los artículos de esta sección">
             {subtotalLabel}
           </span>
         )}
         <button
           type="button"
           onClick={onRemove}
-          className={`text-ink-400 hover:text-red-600 p-1 ${hover ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+          className={`text-ink-300 hover:text-red-500 p-1 rounded transition-all active:scale-[0.92] ${hover ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
           aria-label="Eliminar sección"
           title="Eliminar sección"
         >

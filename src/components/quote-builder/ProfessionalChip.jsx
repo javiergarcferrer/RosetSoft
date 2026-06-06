@@ -39,8 +39,8 @@ export default function ProfessionalChip({ quote, professional, professionals, p
   if (!assigned) {
     return (
       <>
-        <span className={PILL}>
-          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-ink-900 pl-3 pr-2.5`}>
+        <span className={`${PILL} border-dashed hover:border-amber-400 hover:bg-amber-50/50`}>
+          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-amber-700 pl-3 pr-2.5`}>
             <DraftingCompass size={12} />
             Asignar profesional
           </button>
@@ -62,7 +62,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             picker, not a link, and the team knows the chip opens. */}
         <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
           <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
-          <span className="font-medium text-ink-900 truncate max-w-[150px] sm:max-w-[170px] lg:max-w-[210px]">
+          <span className="font-semibold text-ink-900 truncate max-w-[150px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
         </button>
@@ -79,12 +79,12 @@ export default function ProfessionalChip({ quote, professional, professionals, p
 /* The outer pill: one rounded-full segmented container shared by both states. */
 const PILL =
   'inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
-  'transition-colors max-w-full min-w-0 text-xs overflow-hidden';
+  'transition-all max-w-full min-w-0 text-xs overflow-hidden ring-1 ring-inset ring-black/5';
 
 /* A segment: full-height flex cell with consistent touch height + feedback. */
 const SEG =
-  'inline-flex items-center gap-1.5 min-h-7 coarse:min-h-9 transition-colors ' +
-  'hover:bg-ink-50 active:bg-ink-100 focus-visible:outline-none focus-visible:bg-ink-100';
+  'inline-flex items-center gap-1.5 min-h-7 coarse:min-h-9 transition-all ' +
+  'hover:bg-ink-50 active:bg-ink-100 active:scale-[0.98] focus-visible:outline-none focus-visible:bg-ink-100';
 
 /* A hairline seam between segments — same colour as the border so it reads as
    a fold in one pill, not a separate stroke. */
@@ -119,12 +119,12 @@ function TierSegments({ quote, onUpdateQuote }) {
                 ? 'Piso — comisión base del profesional al 15%'
                 : 'Especial — comisión base del profesional al 20%'
             }
-            className={`px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center font-medium transition-colors focus-visible:outline-none ${
+            className={`px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center font-semibold transition-all focus-visible:outline-none ${
               i > 0 ? 'border-l border-ink-200' : ''
             } ${
               active
-                ? 'bg-ink-900 text-white'
-                : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100 focus-visible:bg-ink-100'
+                ? 'bg-amber-600 text-white'
+                : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 focus-visible:bg-ink-100'
             }`}
           >
             {opt.label}

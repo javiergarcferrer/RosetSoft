@@ -39,7 +39,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
         type="button"
         onClick={() => createOrderFromQuote({ quote, profileId, onAttach })}
         aria-label="Crear pedido"
-        className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-medium text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-all active:scale-[0.97] ring-1 ring-inset ring-brand-200/50"
       >
         <Plus size={12} />
         Crear pedido
@@ -52,7 +52,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
     // Show a quiet placeholder rather than blank space so the layout
     // doesn't shift when the live query resolves.
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100">
+      <span className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
         <Package size={12} /> Pedido…
       </span>
     );
@@ -62,18 +62,18 @@ export default function OrderChip({ quote, profileId, onAttach }) {
   return (
     <Link
       to={`/orders/${order.id}`}
-      className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.97] ring-1 ring-inset ring-black/5"
       title={stage?.description}
     >
-      <Package size={12} className="text-ink-500" />
-      <span className="tabular-nums">Pedido #{order.number ?? order.id.slice(-4)}</span>
+      <Package size={12} className="text-ink-400 flex-shrink-0" />
+      <span className="tabular-nums font-semibold">Pedido #{order.number ?? order.id.slice(-4)}</span>
       {/* Stage label hidden on phones — the order page is one tap
           away if the dealer needs it, and dropping it saves enough
           width that all four chips can land on one line at iPhone
           widths instead of wrapping. */}
-      <span className="text-ink-400 hidden sm:inline">·</span>
-      <span className="text-ink-500 hidden sm:inline">{stage?.label || order.status}</span>
-      <ArrowRight size={11} className="text-ink-400" />
+      <span className="text-ink-300 hidden sm:inline">·</span>
+      <span className="text-ink-400 hidden sm:inline">{stage?.label || order.status}</span>
+      <ArrowRight size={11} className="text-ink-300 flex-shrink-0" />
     </Link>
   );
 }

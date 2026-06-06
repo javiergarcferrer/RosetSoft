@@ -148,10 +148,12 @@ export default function Catalog() {
       />
 
       {(result || error) && (
-        <div className={`mb-4 rounded-md px-3 py-2 text-xs flex items-center gap-2 ${
-          error ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-green-50 border border-green-200 text-green-800'
+        <div className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
+          error
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
         }`}>
-          {error ? null : <Check size={14} />}
+          {error ? null : <Check size={14} className="flex-shrink-0" />}
           {error || result}
         </div>
       )}
@@ -334,7 +336,7 @@ function SearchResults({ profileId, term }) {
     return <div className="card overflow-hidden"><ListLoading rows={6} /></div>;
   }
   if (sections.length === 0) {
-    return <div className="card px-4 py-8 text-center text-sm text-ink-500">Sin coincidencias.</div>;
+    return <div className="card px-4 py-10 text-center text-sm text-ink-400">Sin coincidencias para esa búsqueda.</div>;
   }
   return (
     <>
@@ -403,11 +405,11 @@ function ModelRow({ model }) {
   const members = memberSkus(model);
   return (
     <details className="group/model">
-      <summary className="cursor-pointer list-none select-none pl-8 pr-5 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50">
+      <summary className="cursor-pointer list-none select-none pl-8 pr-5 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50 transition-colors">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={13}
-            className="text-ink-400 flex-shrink-0 transition-transform group-open/model:rotate-90"
+            className="text-ink-400 flex-shrink-0 transition-transform duration-150 group-open/model:rotate-90"
             aria-hidden
           />
           <span className="font-medium text-sm text-ink-800 truncate" title={model.name || model.root}>
@@ -417,11 +419,11 @@ function ModelRow({ model }) {
             {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
           </span>
         </span>
-        <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">
+        <span className="text-sm tabular-nums font-medium text-ink-700 whitespace-nowrap flex-shrink-0">
           {priceRangeLabel(model)}
         </span>
       </summary>
-      <ul className="divide-y divide-ink-100/70 bg-ink-50/40 pl-10 pr-4 pb-2">
+      <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-10 pr-4 pb-1.5">
         {members.map(({ grade, product: p }) => (
           <SkuRow key={p.id} grade={grade} product={p} />
         ))}
@@ -436,21 +438,21 @@ function SkuRow({ grade, product: p }) {
   const cost = Number(p.cost) || 0;
   const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
   return (
-    <li className="flex items-center gap-3 py-1.5 text-sm">
+    <li className="flex items-center gap-3 py-1.5 text-sm hover:bg-ink-100/40 rounded transition-colors -mx-1 px-1">
       {grade ? (
         <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">{grade}</span>
       ) : (
-        <span className="chip text-ink-500 border border-dashed border-ink-300 flex-shrink-0">—</span>
+        <span className="chip text-ink-400 border border-dashed border-ink-200 flex-shrink-0">—</span>
       )}
-      <span className="font-mono text-xs text-ink-600 flex-shrink-0 w-24 truncate" title={p.reference}>
+      <span className="font-mono text-xs text-ink-500 flex-shrink-0 w-24 truncate" title={p.reference}>
         {p.reference}
       </span>
       <span className="text-ink-500 text-xs truncate flex-1 min-w-0" title={p.subtype || p.name}>
         {p.subtype || ''}
       </span>
-      <span className="tabular-nums text-right w-24 flex-shrink-0">{usd(price)}</span>
-      <span className="tabular-nums text-right text-ink-500 w-24 flex-shrink-0 hidden sm:inline">{usd(cost)}</span>
-      <span className="tabular-nums text-right text-ink-500 w-12 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
+      <span className="tabular-nums text-right w-24 flex-shrink-0 font-medium text-ink-800">{usd(price)}</span>
+      <span className="tabular-nums text-right text-ink-400 w-24 flex-shrink-0 hidden sm:inline">{usd(cost)}</span>
+      <span className="tabular-nums text-right text-ink-400 w-12 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
     </li>
   );
 }

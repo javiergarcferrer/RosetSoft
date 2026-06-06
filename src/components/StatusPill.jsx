@@ -11,8 +11,8 @@
  */
 export default function StatusPill({ cls, label, className = '', children }) {
   return (
-    <span className={`status-pill ${cls}${className ? ` ${className}` : ''}`}>
-      {children}
+    <span className={`status-pill ${cls} font-medium tracking-[0.02em]${className ? ` ${className}` : ''}`}>
+      {children && <span className="inline-flex items-center mr-1" aria-hidden>{children}</span>}
       {label}
     </span>
   );

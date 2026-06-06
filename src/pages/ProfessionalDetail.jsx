@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil } from 'lucide-react';
+import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil, FileText } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import StatCard from '../components/StatCard.jsx';
@@ -91,8 +91,11 @@ export default function ProfessionalDetail() {
 
   if (!pro) {
     return (
-      <div className="card card-pad text-center text-sm text-ink-500">
-        Cargando profesional…
+      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+          <UserSquare2 size={20} className="text-ink-300" />
+        </span>
+        <p className="text-sm text-ink-500">Cargando profesional…</p>
       </div>
     );
   }
@@ -114,7 +117,7 @@ export default function ProfessionalDetail() {
           <button
             type="button"
             onClick={() => setEditing(pro)}
-            className="btn-secondary"
+            className="btn-secondary active:scale-[0.98] transition-transform"
             title="Editar profesional"
           >
             <Pencil size={14} /> Editar
@@ -131,20 +134,26 @@ export default function ProfessionalDetail() {
 
       {/* Contact strip — small, dense, only shown if there's anything */}
       {(pro.email || pro.phone || pro.notes) && (
-        <div className="card card-pad mb-5 text-sm space-y-1">
-          {pro.email && (
-            <div className="flex items-center gap-2">
-              <Mail size={14} className="text-ink-400" />
-              <a href={`mailto:${pro.email}`} className="text-ink-700 hover:text-brand-700">{pro.email}</a>
-            </div>
-          )}
-          {pro.phone && (
-            <div className="flex items-center gap-2">
-              <Phone size={14} className="text-ink-400" />
-              <a href={`tel:${pro.phone}`} className="text-ink-700 hover:text-brand-700">{pro.phone}</a>
-            </div>
-          )}
-          {pro.notes && <p className="text-ink-500 pt-1 whitespace-pre-wrap">{pro.notes}</p>}
+        <div className="card overflow-hidden mb-5">
+          <div className="card-pad space-y-2.5 text-sm">
+            {pro.email && (
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-md bg-brand-50 text-brand-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+                  <Mail size={12} />
+                </span>
+                <a href={`mailto:${pro.email}`} className="text-ink-700 hover:text-brand-600 transition-colors truncate">{pro.email}</a>
+              </div>
+            )}
+            {pro.phone && (
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-md bg-ink-100 text-ink-500 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+                  <Phone size={12} />
+                </span>
+                <a href={`tel:${pro.phone}`} className="text-ink-700 hover:text-brand-600 transition-colors">{pro.phone}</a>
+              </div>
+            )}
+            {pro.notes && <p className="text-ink-500 pt-2 whitespace-pre-wrap text-xs leading-relaxed border-t border-ink-100 mt-1">{pro.notes}</p>}
+          </div>
         </div>
       )}
 
@@ -185,8 +194,14 @@ export default function ProfessionalDetail() {
       {/* Per-status sections. Empty groups are skipped — no need to
           render a "Rechazadas (0)" card cluttering the page. */}
       {quotes.length === 0 ? (
-        <div className="card card-pad text-center text-sm text-ink-500">
-          Este profesional aún no tiene cotizaciones asignadas.
+        <div className="card card-pad py-14 flex flex-col items-center gap-3 text-center">
+          <span className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
+            <UserSquare2 size={22} className="text-brand-400" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-ink-700">Sin cotizaciones asignadas</p>
+            <p className="text-xs text-ink-400 mt-0.5">Este profesional aún no tiene cotizaciones asignadas.</p>
+          </div>
         </div>
       ) : (
         <div className="space-y-5">
@@ -207,21 +222,38 @@ export default function ProfessionalDetail() {
   );
 }
 
+// Chip tones per status so the card header feels intentional at a glance.
+const STATUS_CHIP = {
+  accepted: 'bg-emerald-50 text-emerald-700',
+  sent: 'bg-blue-50 text-blue-700',
+  draft: 'bg-ink-100 text-ink-600',
+  declined: 'bg-rose-50 text-rose-600',
+  archived: 'bg-ink-100 text-ink-400',
+};
+
 function StatusGroup({ status, entries }) {
   const totalBase = entries.reduce((s, e) => s + e.base, 0);
   const totalCommission = entries.reduce((s, e) => s + e.commission, 0);
   const totalTrade = entries.reduce((s, e) => s + e.tradeDiscount, 0);
+  const chipClass = STATUS_CHIP[status] || 'bg-ink-100 text-ink-600';
   return (
     <section className="card overflow-hidden">
       <header className="card-header flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className={`status-pill status-pill-${status}`}>
-            {STATUS_LABELS[status] || status}
+        <div className="flex items-center gap-2.5">
+          <span className={`w-7 h-7 rounded-lg ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 ${chipClass}`}>
+            <FileText size={13} />
           </span>
-          <span className="text-sm text-ink-700">{entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`status-pill status-pill-${status}`}>
+                {STATUS_LABELS[status] || status}
+              </span>
+              <span className="eyebrow-xs text-ink-400 tabular-nums">{entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}</span>
+            </div>
+          </div>
         </div>
         <div className="text-right">
-          <div className="text-sm font-semibold tabular-nums">{formatMoney(totalBase, 'USD', { USD: 1 })}</div>
+          <div className="text-sm font-semibold tabular-nums text-ink-900">{formatMoney(totalBase, 'USD', { USD: 1 })}</div>
           <div className="text-[11px] text-ink-500 tabular-nums">
             Comisión {formatMoney(totalCommission, 'USD', { USD: 1 })}
             {totalTrade > 0 && (
@@ -232,29 +264,29 @@ function StatusGroup({ status, entries }) {
       </header>
       <ul className="divide-y divide-ink-100">
         {entries.map((e) => (
-          <li key={e.quote.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
+          <li key={e.quote.id} className="group px-5 py-3.5 flex items-center gap-3 flex-wrap hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150">
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="flex-1 min-w-[180px] hover:text-brand-700 transition-colors"
+              className="flex-1 min-w-[180px] group-hover:text-brand-700 transition-colors"
             >
-              <div className="text-sm font-semibold truncate">
+              <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
                 #{e.quote.number || '—'}
-                {e.customer ? <span className="text-ink-500 font-normal"> · {e.customer.company || e.customer.name}</span> : null}
+                {e.customer ? <span className="text-ink-500 font-normal group-hover:text-brand-500"> · {e.customer.company || e.customer.name}</span> : null}
               </div>
-              <div className="text-[11px] text-ink-500">
+              <div className="text-[11px] text-ink-500 mt-0.5">
                 Act. {formatDateTime(e.quote.updatedAt)}
               </div>
             </Link>
             {e.trade && (
               <span
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"
+                className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap ring-1 ring-inset ring-amber-200/60"
                 title="Trade discount: facturar al decorador (menos su %), sin comisión por pagar"
               >
                 Trade · facturar al decorador
               </span>
             )}
             <div className="text-right">
-              <div className="text-sm font-medium tabular-nums whitespace-nowrap">
+              <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
                 {formatMoney(e.base, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
               </div>
               <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
@@ -266,7 +298,7 @@ function StatusGroup({ status, entries }) {
             </div>
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="text-ink-400 hover:text-ink-900 p-1.5"
+              className="text-ink-300 group-hover:text-brand-500 p-1.5 transition-colors"
               title="Abrir cotización"
               aria-label="Abrir cotización"
             >

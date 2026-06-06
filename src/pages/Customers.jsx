@@ -141,10 +141,10 @@ export default function Customers() {
               <Link
                 key={c.id}
                 to={`/customers/${c.id}`}
-                className="card block hover:bg-ink-50"
+                className="card card-interactive block transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
               >
                 <div className="flex items-center gap-3 p-3">
-                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 ring-1 ring-inset ring-brand-100">
                     {initialsFor(c) || <Users size={16} />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -159,7 +159,15 @@ export default function Customers() {
               </Link>
             ))}
             {filtered.length === 0 && (
-              <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
+              <div className="card card-pad flex flex-col items-center gap-3 py-12 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 ring-1 ring-inset ring-black/5">
+                  <Users size={20} className="text-ink-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-ink-600">Sin coincidencias</p>
+                  <p className="mt-0.5 text-xs text-ink-400">Intenta cambiar el filtro o el término de búsqueda.</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -184,7 +192,7 @@ export default function Customers() {
                   // propagation so contact-info edits stay inline.
                   <tr
                     key={c.id}
-                    className="cursor-pointer"
+                    className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100"
                     onClick={() => { window.location.hash = `#/customers/${c.id}`; }}
                   >
                     <td className="font-medium truncate max-w-[200px]" title={c.name}>{c.name}</td>
@@ -196,11 +204,11 @@ export default function Customers() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setEditing(c); }}
-                        className="text-xs text-ink-500 hover:text-ink-900"
+                        className="text-xs font-medium text-ink-400 hover:text-brand-700 transition-colors"
                       >
                         Editar
                       </button>
-                      <span className="text-ink-300 ml-2"><ArrowRight size={12} className="inline" /></span>
+                      <span className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
                     </td>
                   </tr>
                 ))}

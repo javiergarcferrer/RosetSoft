@@ -13,14 +13,21 @@
  * keeps its shape and the page doesn't reflow when data arrives.
  */
 export default function ListLoading({ rows = 4, dense = false }) {
-  const rowH = dense ? 'h-9' : 'h-12';
+  const rowH = dense ? 'h-9' : 'h-14';
   return (
-    <ul className="divide-y divide-ink-100 animate-pulse" aria-busy="true" aria-label="Cargando…">
+    <ul className="divide-y divide-ink-100/70 animate-pulse" aria-busy="true" aria-label="Cargando…">
       {Array.from({ length: rows }).map((_, i) => (
-        <li key={i} className={`flex items-center gap-3 px-5 ${rowH}`}>
-          <span className="h-2.5 rounded bg-ink-100 flex-1 max-w-[40%]" />
-          <span className="h-2.5 rounded bg-ink-100 flex-1 max-w-[25%]" />
-          <span className="h-2.5 rounded bg-ink-100 w-16" />
+        <li key={i} className={`flex items-center gap-4 px-5 ${rowH}`}>
+          {/* Vary widths so adjacent rows feel organic, not like a grid */}
+          <span
+            className="h-[7px] rounded-full bg-ink-100 flex-1"
+            style={{ maxWidth: `${30 + ((i * 17) % 26)}%` }}
+          />
+          <span
+            className="h-[7px] rounded-full bg-ink-100/80 flex-1"
+            style={{ maxWidth: `${16 + ((i * 11) % 16)}%` }}
+          />
+          <span className="h-[7px] rounded-full bg-ink-100/60 w-12 shrink-0" />
         </li>
       ))}
     </ul>

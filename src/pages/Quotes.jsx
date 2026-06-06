@@ -244,7 +244,15 @@ export default function Quotes() {
           />
         ))}
         {filtered.length === 0 && (
-          <div className="card card-pad text-center text-sm text-ink-500">Sin coincidencias.</div>
+          <div className="card card-pad flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 ring-1 ring-inset ring-black/5">
+              <FileText size={20} className="text-ink-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-ink-600">Sin coincidencias</p>
+              <p className="mt-0.5 text-xs text-ink-400">Intenta cambiar el filtro o el término de búsqueda.</p>
+            </div>
+          </div>
         )}
       </div>
 
@@ -267,16 +275,18 @@ export default function Quotes() {
           <tbody>
             {orderGroups.map((u) => (u.type === 'group' ? (
               <Fragment key={`order-${u.order.id}`}>
-                <tr className="bg-ink-100/60">
-                  <td colSpan={7} className="border-l-2 border-t-2 border-ink-300 px-3 py-2">
+                <tr className="bg-ink-50/80">
+                  <td colSpan={7} className="border-l-2 border-t border-ink-200 px-3 py-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         to={`/orders/${u.order.id}`}
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-800 hover:text-brand-700 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700 hover:text-brand-600 transition-colors"
                       >
-                        <Truck size={14} className="text-ink-500" />
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-50 ring-1 ring-inset ring-brand-200/60">
+                          <Truck size={11} className="text-brand-600" />
+                        </span>
                         Pedido #{u.order.number ?? u.order.id.slice(-4)}
-                        {u.order.name ? <span className="font-normal text-ink-500">· {u.order.name}</span> : null}
+                        {u.order.name ? <span className="font-normal text-ink-400">· {u.order.name}</span> : null}
                       </Link>
                       <span className="text-[11px] text-ink-400">
                         {u.quotes.length} cotización{u.quotes.length === 1 ? '' : 'es'}
@@ -346,22 +356,22 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
   const creatorLabel = creatorDisplay(creator);
 
   return (
-    <div className="card p-3">
+    <div className="card card-interactive p-3 transition-all hover:shadow-md hover:-translate-y-0.5">
       <Link to={`/quotes/${qu.id}`} className="block">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-semibold">#{qu.number || '—'}</div>
+            <div className="text-sm font-semibold tabular-nums">#{qu.number || '—'}</div>
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-xs text-ink-500 truncate">{client?.name || 'Sin cliente'}</span>
               {client?.isProfessional && <ProfessionalTag />}
             </div>
             {creatorLabel && (
-              <div className="text-[11px] text-ink-500 truncate">Creada por {creatorLabel}</div>
+              <div className="text-[11px] text-ink-400 truncate">por {creatorLabel}</div>
             )}
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-medium">{formatMoney(total, qu.currencyCode || 'USD', rates)}</div>
-            <div className="text-[10px] text-ink-500">{formatDateTime(qu.updatedAt)}</div>
+            <div className="text-sm font-medium tabular-nums">{formatMoney(total, qu.currencyCode || 'USD', rates)}</div>
+            <div className="text-[10px] text-ink-400 tabular-nums">{formatDateTime(qu.updatedAt)}</div>
           </div>
         </div>
       </Link>
@@ -371,7 +381,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
-        <button onClick={del} className="text-ink-400 hover:text-red-600 p-2" aria-label="Eliminar">
+        <button onClick={del} className="text-ink-300 hover:text-red-500 p-2 transition-colors min-h-11 coarse:min-h-11 active:scale-95" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -387,8 +397,13 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
   const creatorLabel = creatorDisplay(creator);
 
   return (
-    <tr className={`cursor-pointer ${grouped ? 'bg-ink-50/40' : ''}`} onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}>
-      <td className={`font-medium whitespace-nowrap ${grouped ? 'border-l-2 border-ink-300 pl-5' : ''}`}>#{qu.number || '—'}</td>
+    <tr
+      className={`cursor-pointer transition-all hover:bg-ink-50/80 hover:shadow-xs active:bg-ink-100 ${grouped ? 'bg-ink-50/40' : ''}`}
+      onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}
+    >
+      <td className={`font-medium tabular-nums whitespace-nowrap ${grouped ? 'border-l-2 border-ink-300 pl-5' : ''}`}>
+        #{qu.number || '—'}
+      </td>
       <td className="text-ink-700 max-w-[160px]" title={client?.name || ''}>
         <div className="flex items-center gap-1 min-w-0">
           <span className="truncate">{client?.name || '—'}</span>
@@ -404,10 +419,10 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
           <TradeFlag quote={qu} />
         </div>
       </td>
-      <td className="hidden lg:table-cell text-ink-500 whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-medium whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
+      <td className="hidden lg:table-cell text-ink-400 tabular-nums whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
+      <td className="text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
       <td className="text-right w-12">
-        <button onClick={del} className="text-ink-400 hover:text-red-600" title="Eliminar">
+        <button onClick={del} className="text-ink-300 hover:text-red-500 transition-colors active:scale-95 p-1.5 rounded" title="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

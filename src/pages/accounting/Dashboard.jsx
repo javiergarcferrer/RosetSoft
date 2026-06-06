@@ -43,9 +43,9 @@ const SOURCE = {
 function CardHead({ title, note, to, action }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-3">
-      <h2 className="eyebrow font-semibold text-ink-600">{title}</h2>
+      <h2 className="eyebrow font-semibold text-ink-700">{title}</h2>
       {to ? (
-        <Link to={to} className="text-xs text-ink-400 hover:text-ink-800">{action || 'Ver →'}</Link>
+        <Link to={to} className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">{action || 'Ver →'}</Link>
       ) : note ? (
         <span className="text-[10px] uppercase tracking-wide text-ink-400">{note}</span>
       ) : null}
@@ -55,15 +55,20 @@ function CardHead({ title, note, to, action }) {
 
 function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   const body = (
-    <div className="card p-4 h-full">
-      <div className="flex items-center gap-1.5 text-ink-500 text-[11px] uppercase tracking-wide mb-1.5">
-        {Icon && <Icon size={14} />}{label}
+    <div className="card card-pad h-full flex flex-col gap-2 transition-shadow">
+      <div className="flex items-center gap-2">
+        {Icon && (
+          <span className="w-7 h-7 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0">
+            <Icon size={13} />
+          </span>
+        )}
+        <span className="eyebrow-xs tracking-wide text-ink-500">{label}</span>
       </div>
-      <div className={`text-[22px] leading-none font-semibold tabular-nums ${tone || ''}`}>{value}</div>
-      {sub && <div className="text-xs text-ink-400 mt-1.5">{sub}</div>}
+      <div className={`text-[22px] leading-none font-semibold tabular-nums ${tone || 'text-ink-900'}`}>{value}</div>
+      {sub && <div className="text-xs text-ink-400">{sub}</div>}
     </div>
   );
-  return to ? <Link to={to} className="block transition hover:shadow-pop">{body}</Link> : body;
+  return to ? <Link to={to} className="block hover:shadow-soft active:scale-[0.99] transition-all">{body}</Link> : body;
 }
 
 /** Simple proportional progress bar (P&L rows). */
@@ -138,13 +143,13 @@ export default function AccountingDashboard() {
           {(d.ecfPending > 0 || d.overdue > 0) && (
             <div className="flex flex-wrap gap-2">
               {d.ecfPending > 0 && (
-                <Link to="/accounting/facturacion" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
-                  <FileWarning size={14} /> {d.ecfPending} e-CF pendientes de transmitir a la DGII
+                <Link to="/accounting/facturacion" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
+                  <FileWarning size={14} className="shrink-0" /> {d.ecfPending} e-CF pendientes de transmitir a la DGII
                 </Link>
               )}
               {d.overdue > 0 && (
-                <Link to="/accounting/cuentas" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200">
-                  <AlertTriangle size={14} /> {formatDop(d.overdue)} en cuentas vencidas (+90 días)
+                <Link to="/accounting/cuentas" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
+                  <AlertTriangle size={14} className="shrink-0" /> {formatDop(d.overdue)} en cuentas vencidas (+90 días)
                 </Link>
               )}
             </div>
@@ -155,7 +160,7 @@ export default function AccountingDashboard() {
             {/* Flujo de caja */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
-              <div className="text-2xl font-semibold tabular-nums">{formatDop(d.cash)}</div>
+              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.cash)}</div>
               <div className="text-xs text-ink-400 mb-3">Saldo en caja y bancos</div>
               <div className="mt-auto">
                 <BarPairs
@@ -216,7 +221,7 @@ export default function AccountingDashboard() {
             {/* Cuentas por cobrar */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
-              <div className="text-2xl font-semibold tabular-nums">{formatDop(d.ar.unpaid)}</div>
+              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.ar.unpaid)}</div>
               <div className="text-xs text-ink-400 mb-3">Sin cobrar</div>
               <div className="mt-auto">
                 <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
@@ -237,7 +242,7 @@ export default function AccountingDashboard() {
             {/* Ventas */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Ventas" note="6 meses" />
-              <div className="text-2xl font-semibold tabular-nums">{formatDop(monthSales)}</div>
+              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(monthSales)}</div>
               <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
               <div className="mt-auto">
                 <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />
@@ -250,19 +255,19 @@ export default function AccountingDashboard() {
               {d.bankAccounts.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-sm text-ink-400 py-6">Sin movimientos de efectivo aún.</div>
               ) : (
-                <ul className="space-y-2.5">
+                <ul className="space-y-2">
                   {d.bankAccounts.slice(0, 5).map((b) => (
-                    <li key={b.code} className="flex items-center gap-2.5">
-                      <span className="w-8 h-8 rounded-lg bg-ink-50 flex items-center justify-center text-ink-400 shrink-0"><Landmark size={15} /></span>
+                    <li key={b.code} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1">
+                      <span className="w-8 h-8 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0"><Landmark size={14} /></span>
                       <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
-                      <span className="tabular-nums font-medium text-sm">{formatDop(b.balance)}</span>
+                      <span className="tabular-nums font-medium text-sm text-ink-900">{formatDop(b.balance)}</span>
                     </li>
                   ))}
                 </ul>
               )}
               <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
                 <span className="text-ink-500 font-medium">Total</span>
-                <span className="tabular-nums font-semibold">{formatDop(d.cash)}</span>
+                <span className="tabular-nums font-semibold text-ink-900">{formatDop(d.cash)}</span>
               </div>
             </div>
           </div>
@@ -280,41 +285,76 @@ export default function AccountingDashboard() {
 
           {/* Top debtors / creditors. */}
           <div className="grid lg:grid-cols-2 gap-4">
-            <div className="card p-4">
-              <CardHead title="Mayores deudores" to="/accounting/cuentas" action="Ver todo →" />
-              {d.cxcTop.length === 0 ? <p className="text-sm text-ink-400 py-3">Nada por cobrar.</p> : d.cxcTop.map((r) => (
-                <div key={r.partyId} className="flex items-center justify-between py-1.5 border-b border-ink-50 text-sm">
-                  <span className="truncate">{r.party?.name || '—'}</span>
-                  <span className="tabular-nums font-medium">{formatDop(r.balance)}</span>
-                </div>
-              ))}
+            <div className="card overflow-hidden">
+              <div className="card-header">
+                <h2 className="eyebrow font-semibold text-ink-700">Mayores deudores</h2>
+                <Link to="/accounting/cuentas" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ver todo →</Link>
+              </div>
+              {d.cxcTop.length === 0 ? (
+                <p className="text-sm text-ink-400 px-4 py-6 text-center">Nada por cobrar.</p>
+              ) : (
+                <ul className="divide-y divide-ink-100">
+                  {d.cxcTop.map((r) => (
+                    <li key={r.partyId} className="flex items-center justify-between py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors">
+                      <span className="truncate text-ink-700">{r.party?.name || '—'}</span>
+                      <span className="tabular-nums font-semibold text-ink-900 ml-4 shrink-0">{formatDop(r.balance)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <div className="card p-4">
-              <CardHead title="Mayores acreedores" to="/accounting/cuentas" action="Ver todo →" />
-              {d.cxpTop.length === 0 ? <p className="text-sm text-ink-400 py-3">Nada por pagar.</p> : d.cxpTop.map((r) => (
-                <div key={r.partyId} className="flex items-center justify-between py-1.5 border-b border-ink-50 text-sm">
-                  <span className="truncate">{r.party?.name || '—'}</span>
-                  <span className="tabular-nums font-medium">{formatDop(r.balance)}</span>
-                </div>
-              ))}
+            <div className="card overflow-hidden">
+              <div className="card-header">
+                <h2 className="eyebrow font-semibold text-ink-700">Mayores acreedores</h2>
+                <Link to="/accounting/cuentas" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ver todo →</Link>
+              </div>
+              {d.cxpTop.length === 0 ? (
+                <p className="text-sm text-ink-400 px-4 py-6 text-center">Nada por pagar.</p>
+              ) : (
+                <ul className="divide-y divide-ink-100">
+                  {d.cxpTop.map((r) => (
+                    <li key={r.partyId} className="flex items-center justify-between py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors">
+                      <span className="truncate text-ink-700">{r.party?.name || '—'}</span>
+                      <span className="tabular-nums font-semibold text-ink-900 ml-4 shrink-0">{formatDop(r.balance)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
           {/* Recent asientos. */}
-          <div className="card p-4">
-            <CardHead title={<span className="inline-flex items-center gap-1.5"><BookOpen size={14} /> Asientos recientes</span>} to="/accounting/ledger" action="Ir al diario →" />
-            {d.recent.length === 0 ? <p className="text-sm text-ink-400 py-3">Aún no hay asientos.</p> : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {d.recent.map(({ entry, debit }) => (
-                    <tr key={entry.id} className="border-b border-ink-50">
-                      <td className="py-1.5 text-ink-500 w-24">{formatDate(entry.postedAt)}</td>
-                      <td className="py-1.5"><span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ink-100 text-ink-600 mr-2">{SOURCE[entry.source] || entry.source}</span>{entry.memo || '—'}</td>
-                      <td className="py-1.5 text-right tabular-nums font-medium">{formatDop(debit)}</td>
+          <div className="card overflow-hidden">
+            <div className="card-header">
+              <h2 className="inline-flex items-center gap-1.5 eyebrow font-semibold text-ink-700"><BookOpen size={14} /> Asientos recientes</h2>
+              <Link to="/accounting/ledger" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ir al diario →</Link>
+            </div>
+            {d.recent.length === 0 ? (
+              <p className="text-sm text-ink-400 px-4 py-6">Aún no hay asientos.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th className="w-24">Fecha</th>
+                      <th>Origen / Detalle</th>
+                      <th className="text-right">Débito</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {d.recent.map(({ entry, debit }) => (
+                      <tr key={entry.id} className="hover:bg-ink-50 transition-colors">
+                        <td className="text-ink-500 whitespace-nowrap tabular-nums">{formatDate(entry.postedAt)}</td>
+                        <td>
+                          <span className="chip bg-ink-100 text-ink-600 mr-2">{SOURCE[entry.source] || entry.source}</span>
+                          <span className="text-ink-700">{entry.memo || '—'}</span>
+                        </td>
+                        <td className="text-right tabular-nums font-semibold text-ink-900 whitespace-nowrap">{formatDop(debit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

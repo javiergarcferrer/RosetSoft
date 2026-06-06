@@ -214,7 +214,7 @@ export default function AdminUsers() {
           <section>
             <SectionHeader title="Activos" count={active.length} />
             {active.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-ink-200 bg-white px-5 py-10 text-center text-sm text-ink-500">
+              <div className="rounded-xl border border-dashed border-ink-200 bg-white px-5 py-12 text-center text-sm text-ink-400">
                 Aún no hay usuarios activos.
               </div>
             ) : (
@@ -250,14 +250,14 @@ export default function AdminUsers() {
  */
 function SectionHeader({ title, count, tone = 'default', hint }) {
   return (
-    <div className="flex items-end justify-between gap-3 mb-3 px-0.5">
+    <div className="flex items-center justify-between gap-3 mb-3 px-0.5">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-ink-900">{title}</h2>
+        <h2 className="eyebrow font-semibold text-ink-700">{title}</h2>
         <span className={tone === 'sent' ? 'status-pill status-pill-sent' : 'badge'}>
           {count}
         </span>
       </div>
-      {hint && <p className="hidden sm:block text-xs text-ink-500">{hint}</p>}
+      {hint && <p className="hidden sm:block text-xs text-ink-400 italic">{hint}</p>}
     </div>
   );
 }
@@ -483,12 +483,12 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
   //   invited  — dashed border, reads as provisional until first sign-in
   //   default  — plain white card whose border firms up on hover
   const cardClass = [
-    'card card-pad transition-colors duration-150',
+    'card card-pad transition-all duration-150',
     invitePending
-      ? 'border-dashed border-ink-300'
+      ? 'border-dashed border-ink-300 bg-ink-50/30'
       : isSelf
-        ? 'border-brand-200 bg-brand-50/40'
-        : 'hover:border-ink-200',
+        ? 'border-brand-200 bg-brand-50/40 shadow-xs'
+        : 'hover:shadow-soft hover:border-ink-200',
   ].join(' ');
 
   return (

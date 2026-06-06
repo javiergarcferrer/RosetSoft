@@ -43,7 +43,7 @@ export default function WhatsAppChip({ customer }) {
 
   if (editing) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 min-h-7 coarse:min-h-9 text-xs">
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50">
         <MessageCircle size={12} className="text-emerald-600 flex-shrink-0" aria-hidden />
         <input
           autoFocus
@@ -71,7 +71,7 @@ export default function WhatsAppChip({ customer }) {
       <button
         type="button"
         onClick={startEdit}
-        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-emerald-500 hover:text-emerald-700 transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50/50 transition-all active:scale-[0.98]"
       >
         <MessageCircle size={12} /> Agregar WhatsApp
       </button>
@@ -79,19 +79,19 @@ export default function WhatsAppChip({ customer }) {
   }
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
       <a
         href={`https://wa.me/${waDigits(phone)}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 min-w-0"
+        className="inline-flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 min-w-0 transition-colors"
         title={`Abrir WhatsApp · ${phone}`}
       >
         <MessageCircle size={12} className="flex-shrink-0" aria-hidden />
-        <span className="font-medium truncate max-w-[120px] sm:max-w-[150px]">{phone}</span>
+        <span className="font-semibold truncate max-w-[120px] sm:max-w-[150px]">{phone}</span>
       </a>
-      <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="text-ink-300 hover:text-ink-700 flex-shrink-0">
-        <Pencil size={11} />
+      <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="text-ink-300 hover:text-ink-600 flex-shrink-0 transition-colors p-0.5 rounded">
+        <Pencil size={10} />
       </button>
     </span>
   );

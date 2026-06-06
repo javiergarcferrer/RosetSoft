@@ -1,3 +1,5 @@
+import tailwindcssAnimate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   // .ts and .tsx land in the scan set so utility classes used by the
@@ -85,6 +87,10 @@ export default {
     },
   },
   plugins: [
+    // Enter/exit animation utilities (animate-in, fade-in, slide-in-from-*,
+    // zoom-in-*) used by the elevated overlays (Modal, ProfileMenu, menus) so
+    // they emerge with motion instead of popping. Standard Tailwind companion.
+    tailwindcssAnimate,
     // Pointer-capability variants so we can size touch targets by the input
     // device, not by viewport width. iPads on Safari report pointer:coarse
     // even at >= sm widths, so a width-based breakpoint would under-size

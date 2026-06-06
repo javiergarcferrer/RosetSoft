@@ -79,7 +79,7 @@ export default function ListSearchHeader({
   const hasTabs = Array.isArray(tabs) && tabs.length > 0;
 
   return (
-    <div className="mb-5 space-y-3">
+    <div className="mb-5 space-y-2.5">
       {/* Row 1 — search + the two menu triggers. Wraps on a narrow phone. */}
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
@@ -132,10 +132,12 @@ export default function ListSearchHeader({
         />
       )}
 
-      {/* Row 4 — quiet result count. */}
+      {/* Row 4 — quiet result count; tabular-nums keeps the digit from jumping. */}
       {typeof resultCount === 'number' && (
-        <p className="text-xs text-ink-500" aria-live="polite">
-          {resultCount} {resultCount === 1 ? resultNoun[0] : resultNoun[1]}
+        <p className="text-[11px] tabular-nums text-ink-400 leading-none" aria-live="polite">
+          <span className="font-semibold text-ink-500">{resultCount}</span>
+          {' '}
+          {resultCount === 1 ? resultNoun[0] : resultNoun[1]}
         </p>
       )}
     </div>

@@ -47,19 +47,19 @@ export default function SortMenu({ sortOptions, sort, onSortChange }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="btn-ghost border border-ink-200 bg-white"
+        className="btn-ghost border border-ink-200 bg-white transition-colors hover:border-ink-300"
         title="Ordenar"
       >
         <ArrowUpDown size={14} />
         <span className="hidden sm:inline">{current.label}</span>
-        {dir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+        {dir === 'asc' ? <ArrowUp size={13} className="text-ink-400" /> : <ArrowDown size={13} className="text-ink-400" />}
       </button>
 
       {open && (
         <div
           role="menu"
           aria-label="Ordenar por"
-          className="absolute right-0 z-30 mt-1 w-56 rounded-lg border border-ink-100 bg-white py-1 shadow-pop"
+          className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-ink-100 bg-white py-1.5 shadow-pop"
         >
           {sortOptions.map((o) => {
             const isCurrent = o.key === current.key;
@@ -69,20 +69,22 @@ export default function SortMenu({ sortOptions, sort, onSortChange }) {
                 type="button"
                 role="menuitem"
                 onClick={() => pick(o.key)}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-ink-50 ${
-                  isCurrent ? 'font-medium text-ink-900' : 'text-ink-700'
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm transition-colors active:scale-[0.99] ${
+                  isCurrent
+                    ? 'bg-brand-50 font-medium text-brand-700 hover:bg-brand-100'
+                    : 'text-ink-600 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100'
                 }`}
               >
                 <span className="inline-flex items-center gap-2">
                   {isCurrent ? (
-                    <Check size={14} className="text-ink-900" />
+                    <Check size={14} className="text-brand-600" />
                   ) : (
                     <span className="w-3.5" aria-hidden />
                   )}
                   {o.label}
                 </span>
                 {isCurrent && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-ink-500">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-brand-400">
                     {dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
                     {dir === 'asc' ? 'Asc.' : 'Desc.'}
                   </span>

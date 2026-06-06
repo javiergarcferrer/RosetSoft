@@ -69,7 +69,7 @@ export default function QuoteHeader({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
-    <div className="mb-5">
+    <div className="mb-6">
       {/* Breadcrumb row — back link anchors the left; the order pill and the
           seller picker sit on the right, out of the customer/professional meta
           strip below. The seller is an attribution control (admin-only) and the
@@ -77,7 +77,7 @@ export default function QuoteHeader({
           both belong up here rather than crowding the meta row. The right group
           wraps (seller drops under the order pill) when an admin opens an
           accepted quote on a narrow phone and the two can't share a line. */}
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-4">
         <Link to="/quotes" className="back-link mb-0">
           <ArrowLeft size={12} />
           <span>Volver<span className="hidden sm:inline"> a cotizaciones</span></span>
@@ -110,15 +110,15 @@ export default function QuoteHeader({
         <div className="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div>
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="eyebrow shrink-0">Cotización</div>
+              <div className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest">Cotización</div>
               <SaveIndicator savedAt={savedAt} saving={saving} />
             </div>
-            <h1 className="mt-0.5 text-[26px] sm:text-[28px] font-semibold tracking-tight leading-tight text-ink-900">
+            <h1 className="mt-0.5 text-[28px] sm:text-[32px] font-bold tracking-tight leading-tight text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
             {!isAdmin && creatorLabel && (
-              <div className="text-[11px] text-ink-500 mt-1">
-                Creada por <span className="text-ink-700">{creatorLabel}</span>
+              <div className="text-[11px] text-ink-400 mt-0.5">
+                Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
               </div>
             )}
           </div>
@@ -145,7 +145,7 @@ export default function QuoteHeader({
         {/* Customer + professional only — the internal Facturación toggle moved
             to the totals dock's commission card, so these two fit one row. */}
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="flex flex-wrap items-center gap-1.5"
           role="group"
           aria-label="Datos de la cotización"
         >
@@ -191,10 +191,10 @@ export default function QuoteHeader({
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
   return (
     <label
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs"
+      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
       title="Vendedor"
     >
-      <Briefcase size={12} className="text-ink-500 flex-shrink-0" aria-hidden />
+      <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
       <select
         value={quote?.createdByUserId || ''}
         onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
@@ -221,12 +221,12 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
  */
 function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
   return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
+    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden bg-white shadow-xs">
       <button
         type="button"
         onClick={onUndo}
         disabled={!canUndo}
-        className="px-2 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-700 hover:bg-ink-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Deshacer (${shortcutLabel('mod+z')})`}
         aria-label="Deshacer"
       >
@@ -236,7 +236,7 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
         type="button"
         onClick={onRedo}
         disabled={!canRedo}
-        className="px-2 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-700 hover:bg-ink-50 border-l border-ink-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 border-l border-ink-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Rehacer (${shortcutLabel('mod+shift+z')})`}
         aria-label="Rehacer"
       >
@@ -248,12 +248,15 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
 
 function ViewToggle({ view, onChange }) {
   return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
+    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden bg-white shadow-xs">
       <button
         type="button"
         onClick={() => onChange('compose')}
-        className={`px-2.5 py-1.5 text-xs font-medium inline-flex items-center gap-1.5 transition-colors ${
-          view === 'compose' ? 'bg-ink-900 text-white' : 'text-ink-700 hover:bg-ink-50'
+        aria-pressed={view === 'compose'}
+        className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
+          view === 'compose'
+            ? 'bg-ink-900 text-white shadow-sm'
+            : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
         }`}
         title="Vista de edición"
       >
@@ -262,8 +265,11 @@ function ViewToggle({ view, onChange }) {
       <button
         type="button"
         onClick={() => onChange('client')}
-        className={`px-2.5 py-1.5 text-xs font-medium inline-flex items-center gap-1.5 transition-colors border-l border-ink-200 ${
-          view === 'client' ? 'bg-ink-900 text-white' : 'text-ink-700 hover:bg-ink-50'
+        aria-pressed={view === 'client'}
+        className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
+          view === 'client'
+            ? 'bg-brand-grad text-white shadow-glow'
+            : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
         }`}
         title="Vista del cliente"
       >

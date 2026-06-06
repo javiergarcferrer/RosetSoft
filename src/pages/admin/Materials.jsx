@@ -198,36 +198,36 @@ export default function Materials() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-ink-50 text-[10px] uppercase tracking-wide text-ink-500">
+            <table className="table">
+              <thead>
                 <tr>
-                  <th className="text-left px-3 py-2 w-12">Foto</th>
-                  <th className="text-left px-3 py-2">Categoría</th>
-                  <th className="text-left px-3 py-2">Nombre</th>
-                  <th className="text-left px-3 py-2">Grade</th>
-                  <th className="text-right px-3 py-2 whitespace-nowrap">Precio (USD)</th>
-                  <th className="text-right px-3 py-2 whitespace-nowrap">Medida</th>
-                  <th className="text-right px-3 py-2 whitespace-nowrap"># colores</th>
-                  <th className="px-3 py-2 w-px" />
+                  <th className="w-12">Foto</th>
+                  <th>Categoría</th>
+                  <th>Nombre</th>
+                  <th>Grade</th>
+                  <th className="text-right whitespace-nowrap">Precio (USD)</th>
+                  <th className="text-right whitespace-nowrap">Medida</th>
+                  <th className="text-right whitespace-nowrap"># colores</th>
+                  <th className="w-px" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-100">
+              <tbody>
                 {filtered.map((m) => (
-                  <tr key={m.id} className="hover:bg-ink-50/40">
-                    <td className="px-3 py-2">
+                  <tr key={m.id} className="hover:bg-ink-50 transition-colors">
+                    <td>
                       <ImageView
                         id={heroImageId(m)}
                         fallbackUrl={heroSwatchUrl(m)}
                         alt={m.name}
                         hoverPreview
-                        className="w-10 h-10 object-cover rounded border border-ink-100 bg-white"
-                        placeholderClassName="w-10 h-10 rounded border border-dashed border-ink-200 bg-ink-50"
+                        className="w-10 h-10 object-cover rounded-lg border border-ink-100 bg-white shadow-xs"
+                        placeholderClassName="w-10 h-10 rounded-lg border border-dashed border-ink-200 bg-ink-50"
                       />
                     </td>
-                    <td className="px-3 py-2 eyebrow font-normal tracking-wide">
+                    <td className="eyebrow font-normal tracking-wide text-ink-500">
                       {categoryLabel(m.category)}
                     </td>
-                    <td className="px-3 py-2 font-medium text-ink-900">
+                    <td className="font-medium text-ink-900">
                       {m.name}
                       {m.discontinuedAt && (
                         <span
@@ -246,15 +246,15 @@ export default function Materials() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2"><GradePill grade={m.grade} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                    <td><GradePill grade={m.grade} /></td>
+                    <td className="text-right tabular-nums whitespace-nowrap">
                       {m.price != null ? `$${m.price} / ${m.priceUnit === 'sm' ? 'm²' : 'yd'}` : '—'}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-ink-500 whitespace-nowrap">
+                    <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">
                       {m.measure != null ? `${m.measure} ${m.measureUnit || ''}` : '—'}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-ink-500">{m.colors?.length || 0}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <td className="text-right tabular-nums text-ink-500">{m.colors?.length || 0}</td>
+                    <td className="text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => setEditing(m)}
@@ -276,7 +276,7 @@ export default function Materials() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-ink-500">
+                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-ink-400">
                       Sin resultados.
                     </td>
                   </tr>
