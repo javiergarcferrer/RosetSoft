@@ -694,6 +694,17 @@
   .mb-safe-area { margin-bottom: env(safe-area-inset-bottom); }
   .inset-safe-bottom { bottom: env(safe-area-inset-bottom); }
 
+  /* Home-indicator clearance that applies ONLY in an installed PWA. A bottom-
+     pinned bar must pad past the home indicator in standalone (there's no
+     browser chrome there) — but in a regular Safari tab the browser's own
+     bottom toolbar already occupies that inset, so adding it there just leaves a
+     dead white strip under the bar (the TotalsDock "space at the bottom"). Gate
+     it on display-mode so each context gets exactly the clearance it needs. */
+  .pb-safe-standalone { padding-bottom: 0; }
+  @media (display-mode: standalone) {
+    .pb-safe-standalone { padding-bottom: env(safe-area-inset-bottom); }
+  }
+
   /* Constrain scroll chaining / momentum where it matters. */
   .overscroll-contain { overscroll-behavior: contain; }
   .overscroll-none    { overscroll-behavior: none; }

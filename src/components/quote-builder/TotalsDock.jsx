@@ -263,10 +263,10 @@ export default function TotalsDock({
     <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
-          behind it in the PWA. The pb-[env(safe-area-inset-bottom)] fills the
-          home-indicator inset with white so the bar reads as one solid surface
-          pinned flush to the physical bottom edge — no grey band, ever. */}
-      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          behind it in the PWA. pb-safe-standalone fills the home-indicator inset
+          with white ONLY when installed as a PWA — in a Safari tab the browser
+          toolbar owns that strip, so no padding is added there (no dead space). */}
+      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop pb-safe-standalone">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
