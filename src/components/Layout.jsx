@@ -194,7 +194,7 @@ export default function Layout() {
                       const on = sectionActive != null ? sectionActive : isActive;
                       return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${
                         on
-                          ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(54,0,255,0.6)]'
+                          ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(168,86,32,0.55)]'
                           : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
                       }`;
                     }}

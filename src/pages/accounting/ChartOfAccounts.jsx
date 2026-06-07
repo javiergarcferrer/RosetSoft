@@ -19,7 +19,7 @@ import { buildChartIndex, chartRoots, ACCOUNT_CLASS_NAMES } from '../../core/acc
 const CLASS_TONE = {
   1: 'bg-sky-100 text-sky-700',
   2: 'bg-amber-100 text-amber-700',
-  3: 'bg-violet-100 text-violet-700',
+  3: 'bg-teal-100 text-teal-700',
   4: 'bg-emerald-100 text-emerald-700',
   5: 'bg-rose-100 text-rose-700',
   6: 'bg-orange-100 text-orange-700',

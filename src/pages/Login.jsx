@@ -3,15 +3,15 @@ import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { userMessageFor } from '../lib/errorMessages.js';
 
-// Decorative violet bloom — absolutely positioned, pointer-events-none,
+// Decorative terracotta bloom — absolutely positioned, pointer-events-none,
 // so it sits behind the card and never captures clicks.
-function VioletBloom() {
+function BrandBloom() {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full opacity-[0.18]"
       style={{
-        background: 'radial-gradient(circle, #5729ff 0%, transparent 70%)',
+        background: 'radial-gradient(circle, #c76b29 0%, transparent 70%)',
         filter: 'blur(60px)',
       }}
     />
@@ -58,7 +58,7 @@ export default function Login() {
 
   return (
     <div className="relative h-full flex items-center justify-center bg-app-wash overflow-hidden">
-      <VioletBloom />
+      <BrandBloom />
       <div className="card-auth relative z-10">
         {/* Wordmark / brand header */}
         <div className="text-center mb-8">

@@ -42,51 +42,55 @@ export default {
           800: '#26241f',
           900: '#171612',
         },
-        // Alcover electric violet. Anchored on #3600ff at the 600 step (the
-        // primary-action color); lighter tints toward 50, deeper shades toward
-        // 900. Generated as a constant-hue (253°) ladder so every step reads as
-        // the same color, just brighter/darker. This REPLACED the previous
-        // terracotta scale under the same `brand` token name, so every existing
-        // `brand-*` usage (buttons, badges, map markers, the ::selection wash,
-        // chart accents) flipped to violet in one move.
+        // Alcover terracotta — a warm, grounded clay. Chosen for its
+        // neuropsychology: warm earth tones read as comfort, craftsmanship and
+        // approachability (the right register for high-end furniture), where the
+        // old electric violet read as cold tech. Anchored on the SAME hexes the
+        // PDF already used (theme.ts: 50 #fbf4ec · 300 #e8a76d · 500 #c76b29 ·
+        // 700 #7d3e1c) so screen, public link and printed paper finally share
+        // one brand color instead of drifting (violet on screen vs terracotta on
+        // paper). Constant-hue (~25°) ladder: lighter tints → 50, deeper shades
+        // → 900. Every `brand-*` usage (buttons, badges, map markers, the
+        // ::selection wash, focus ring, chart accents) flips to clay in one move.
         brand: {
-          50:  '#f3f0ff',
-          100: '#e7e0ff',
-          200: '#ccbefe',
-          300: '#a890fd',
-          400: '#7752ff',
-          500: '#5729ff',
-          600: '#3600ff',
-          700: '#3000db',
-          800: '#2904af',
-          900: '#20077e',
+          50:  '#fbf4ec',
+          100: '#f7e7d4',
+          200: '#eecbab',
+          300: '#e8a76d',
+          400: '#d9883f',
+          500: '#c76b29',
+          600: '#a85620',
+          700: '#7d3e1c',
+          800: '#612f16',
+          900: '#4d2713',
         },
       },
       backgroundImage: {
-        // Primary-CTA gradient — a touch of motion in the violet so the main
-        // action button reads as a lit surface, not a flat fill.
-        'brand-grad': 'linear-gradient(135deg, #4a1cff 0%, #3600ff 52%, #2c00d6 100%)',
+        // Primary-CTA gradient — a touch of motion in the clay so the main
+        // action button reads as a lit terracotta surface, not a flat fill.
+        'brand-grad': 'linear-gradient(135deg, #d2772f 0%, #c0641f 52%, #9c4f1d 100%)',
         // Card surface sheen — a barely-there top-to-bottom gradient that gives
         // every card a faint lit-from-above quality (Radix/Linear "surface"
         // tonal step) instead of reading as a dead white rectangle.
         'card-grad': 'linear-gradient(180deg, #ffffff 0%, #fcfbf9 100%)',
-        // Whole-app backdrop wash — a faint violet bloom top-right + a warm
-        // terracotta bloom top-left, so the warm-editorial canvas feels lit and
-        // white cards lift off it. Paired with grain (in index.css) for texture.
-        'app-wash': 'radial-gradient(900px 480px at 100% -6%, rgba(54,0,255,0.055), transparent 60%), radial-gradient(720px 440px at -8% 4%, rgba(201,106,42,0.05), transparent 56%)',
+        // Whole-app backdrop wash — two warm clay blooms (a brighter terracotta
+        // top-right, a deeper clay top-left) so the warm-editorial canvas feels
+        // lit and white cards lift off it. Paired with grain (in index.css) for
+        // texture. Both blooms now share the brand hue (no more cold violet).
+        'app-wash': 'radial-gradient(900px 480px at 100% -6%, rgba(199,107,41,0.06), transparent 60%), radial-gradient(720px 440px at -8% 4%, rgba(168,86,32,0.05), transparent 56%)',
       },
       boxShadow: {
         // Warm-tinted elevation ladder (shadow color = ink-700 #3b3830, not
         // neutral black) so depth reads as warm editorial paper, not cold SaaS.
         // hairline → resting card → raised/hover → floating overlay, plus the
-        // violet focus ring and violet button glow.
+        // terracotta focus ring and terracotta button glow.
         xs:   '0 1px 2px rgba(59,56,48,0.05)',
         sm:   '0 1px 2px rgba(59,56,48,0.06), 0 1px 3px rgba(59,56,48,0.05)',
         soft: '0 1px 2px rgba(59,56,48,0.05), 0 3px 8px rgba(59,56,48,0.06), 0 14px 30px -10px rgba(59,56,48,0.12)',
         md:   '0 2px 4px rgba(59,56,48,0.06), 0 10px 24px -6px rgba(59,56,48,0.14)',
         pop:  '0 18px 50px -12px rgba(23,22,18,0.30), 0 6px 16px -6px rgba(23,22,18,0.16)',
-        focus:'0 0 0 4px rgba(54,0,255,0.16)',
-        glow: '0 1px 2px rgba(54,0,255,0.30), 0 10px 26px -6px rgba(54,0,255,0.45)',
+        focus:'0 0 0 4px rgba(199,107,41,0.18)',
+        glow: '0 1px 2px rgba(168,86,32,0.30), 0 10px 26px -6px rgba(168,86,32,0.42)',
       },
     },
   },

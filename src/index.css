@@ -98,7 +98,7 @@
             texture instead of a dead flat fill (the recurring complaint). At
             ~4.5% it's felt, not seen; cards are opaque so it lives mostly in
             the gutters/gaps between them.
-         2. wash — violet + terracotta blooms that light the page corners.
+         2. wash — warm terracotta blooms that light the page corners.
          3. canvas color (#f3f1ed) — a warm paper tone set a clear step BELOW
             the white cards, so the cards finally read as elevated surfaces.
        Tonal elevation, Radix-style: canvas (deepest) → card (white + sheen) →
@@ -115,7 +115,7 @@
        static block lets that machinery work even though it doesn't scroll. */
     position: relative;
   }
-  ::selection { background-color: #3600ff; color: #ffffff; }
+  ::selection { background-color: #a85620; color: #ffffff; }
 
   /* Prevent iOS Safari auto-zoom on input focus (triggers when font-size < 16px). */
   @media (max-width: 767px) {
@@ -283,9 +283,9 @@
 }
 
 @layer base {
-  /* Vercel/Linear style keyboard focus ring — invisible until tabbed. Now in
-     the electric-violet brand color so keyboard focus reads as a deliberate
-     brand cue instead of a plain dark box. */
+  /* Vercel/Linear style keyboard focus ring — invisible until tabbed. In the
+     terracotta brand color so keyboard focus reads as a deliberate brand cue
+     instead of a plain dark box. */
   *:focus { outline: none; }
   :where(a, button, [role="button"], input, select, textarea):focus-visible {
     outline: 2px solid theme('colors.brand.600');
@@ -306,8 +306,8 @@
   .btn-secondary { @apply btn bg-white text-ink-900 border border-ink-200 shadow-xs hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100; }
   .btn-ghost    { @apply btn text-ink-700 hover:bg-ink-100 active:bg-ink-200; }
   .btn-danger   { @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800; }
-  /* Brand CTA — the electric-violet primary action. A lit gradient surface
-     with a violet glow so it reads as the single loudest control on screen;
+  /* Brand CTA — the terracotta primary action. A lit clay gradient surface
+     with a warm glow so it reads as the single loudest control on screen;
      brightness nudges replace flat hover/active color swaps on the gradient. */
   .btn-brand    { @apply btn text-white bg-brand-grad shadow-glow hover:brightness-110 hover:shadow-glow active:brightness-95; }
 
@@ -334,7 +334,7 @@
     background-image: theme('backgroundImage.card-grad');
   }
   /* Interactive card — for cards that are links/buttons. Lifts on hover with a
-     deeper shadow + a hairline violet border so the whole surface reads as
+     deeper shadow + a hairline terracotta border so the whole surface reads as
      tappable, not just a cursor change. Pairs with `hover:-translate-y-0.5`
      at the call site where a lift is wanted. */
   .card-interactive { @apply card cursor-pointer hover:shadow-md hover:border-brand-200; }
