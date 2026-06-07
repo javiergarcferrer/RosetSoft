@@ -161,10 +161,6 @@ function LineRow({
   // swatch is never stamped on every row). Resolved by the Model so screen + paper agree.
   const modular = compound ? isModularLine(line) : false;
   const upholstery = compound ? compoundFabric(line.components) : { uniform: false, subtype: '', swatchImageId: null };
-  // Mixed (non-modular) compound → group pieces into contiguous same-material
-  // runs, each under one fabric header (frame, then cushions); uniform stays the
-  // single hero above. Same Model rule as the on-screen preview.
-  const grouping = compound && !modular ? groupComponentsByMaterial(line.components) : { grouped: false as const, runs: [] };
   // Standalone swatch only for a SIMPLE line with no options grid (the grid
   // leads with the same material). A compound's parent carries a stale seed
   // subtype the editor hides — never draw it; its fabric is the hero (uniform)
@@ -200,8 +196,10 @@ function LineRow({
         ...(dimmed ? [{ opacity: 0.45 }] : []),
       ]}
     >
-      {/* Identity row — photo | family/name/ref/swatch | line total. */}
-      <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line}>
+      {/* Identity row — photo | family/name/ref/swatch | line total. Kept whole
+          (wrap={false}) so a compound line's photo + name + total never split
+          across a page; only the component list below is allowed to paginate. */}
+      <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line} wrap={false}>
         <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 92, height: 92, objectFit: 'contain' }} />}</View>
         <View style={s.lineBody}>
           <View style={s.lineMain}>
@@ -228,34 +226,24 @@ function LineRow({
           pages (react-pdf can't break a tall column trapped inside a row). Each
           ComponentRow is itself wrap={false}, so breaks land between pieces. */}
       {compound && (
-        <View style={{ marginTop: 8 }}>
-          {upholstery.uniform && (
-            <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
-          )}
+        // Containment rail: the components are indented to sit UNDER the product
+        // name (past the 92pt photo + 14pt gap) with a hairline left rule, so the
+        // whole block reads as "what this product is made of" instead of a stack
+        // of rows that look like top-level line items.
+        <View style={{ marginTop: 8, marginLeft: 106, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
           {modular ? (
-            // Group by module: a header per component product (suppressed when it
-            // just repeats its own piece), optional/alternative modules dimmed
-            // with a caption — mirroring the on-screen client link.
-            modulesWithAltPos(line.components).map((m, mi) => (
-              <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
-            ))
-          ) : grouping.grouped ? (
-            // A fabric header per contiguous run; non-bearing runs (metal base,
-            // glass) render header-less.
-            grouping.runs.map((run, ri) => (
-              <View key={run.key + ri} wrap={false}>
-                {run.bearing && (
-                  <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
-                )}
-                {run.components.map((c, i) => (
-                  <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={run.bearing} />
-                ))}
-              </View>
-            ))
+            <>
+              {/* Whole line one fabric → ONE hero here; each module then renders
+                  swatch-less. Mixed line → each module owns its fabric grouping. */}
+              {upholstery.uniform && (
+                <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
+              )}
+              {modulesWithAltPos(line.components).map((m, mi) => (
+                <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
+              ))}
+            </>
           ) : (
-            Array.isArray(line.components) && line.components.map((c, i) => (
-              <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={upholstery.uniform} />
-            ))
+            <ComponentList components={line.components} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
           )}
           {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
@@ -264,14 +252,20 @@ function LineRow({
   );
 }
 
-// compound component: swatch + name/ref over its subtotal, plus its own grid.
-// `hideSwatch` (uniform compound) collapses the row to a clean name + price —
-// the shared fabric is stated once in the header hero, so the per-piece swatch
-// and its now-redundant subtype line drop out.
+// compound component / element row. Three weights, set by the caller so the
+// hierarchy reads at a glance:
+//   • lead — the module's PRIMARY piece (e.g. the loveseat the module is named
+//     after). Bold name + bold price; carries the module's top divider.
+//   • sub  — a secondary piece of that module (a back cushion, an armrest). Slight
+//     indent + a "+" so it reads as "…and this is part of it", no divider.
+//   • (default) — a plain element of a non-promoted group.
+// `hideSwatch` (uniform compound) collapses the row to a clean name + price — the
+// shared fabric is stated once in the header hero, so the per-piece swatch and
+// its now-redundant subtype line drop out.
 function ComponentRow({
-  c, fmt, families, currency, rates, images, hideSwatch,
+  c, fmt, families, currency, rates, images, hideSwatch, lead, sub,
 }: {
-  c: LineComponent; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap; hideSwatch?: boolean;
+  c: LineComponent; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap; hideSwatch?: boolean; lead?: boolean; sub?: boolean;
 }) {
   const cells = materialCells({ mo: c.materialOptions, reference: c.reference, baseSwatchImageId: c.swatchImageId, families, currency, rates });
   const swatchSrc = swatchSrcFor(c.swatchImageId, c.subtype);
@@ -283,15 +277,30 @@ function ComponentRow({
   const unit = Number(c.unitPrice) || 0;
   const ranged = isRangeComponent(c);
   const range = ranged ? componentSubtotalRange(c) : null;
+  const nameStyle = lead
+    ? { fontSize: fs(10), color: C.ink, fontWeight: 'bold' as const }
+    : sub
+      ? { fontSize: fs(9), color: C.inkMid }
+      : { fontSize: fs(9), color: C.inkHigh };
+  const valStyle = lead
+    ? { fontSize: fs(10), color: C.inkHigh, fontWeight: 'bold' as const }
+    : { fontSize: fs(9), color: C.inkMid };
   return (
     // wrap={false}: the parent compound line wraps across pages, so keep each
-    // component row atomic — a page break lands BETWEEN rows, never mid-row.
-    <View style={{ marginTop: 5, paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }} wrap={false}>
+    // element row atomic — a page break lands BETWEEN rows, never mid-row.
+    <View
+      style={{
+        marginTop: sub ? 3 : 5,
+        ...(sub ? { marginLeft: 12 } : { paddingTop: 5, borderTopWidth: 0.5, borderTopColor: C.inkLine }),
+      }}
+      wrap={false}
+    >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+          {sub && <Text style={{ fontSize: fs(9), color: C.inkSoft }}>+</Text>}
           {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fs(9), color: C.inkHigh }}>{c.name || c.reference || '—'}</Text>
+            <Text style={nameStyle}>{c.name || c.reference || '—'}</Text>
             {!hideSwatch && c.subtype && <Text style={{ fontSize: fs(7.5), color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
           </View>
         </View>
@@ -300,7 +309,7 @@ function ComponentRow({
               unit (2 seats, a pair of cushions). At qty 1 it just repeats the
               subtotal below — so show the subtotal alone. */}
           {qty > 1 && <Text style={{ fontSize: fs(7.5), color: C.inkMid }}>{qty} × {ranged ? 'rango' : fmt(unit)}</Text>}
-          <Text style={{ fontSize: fs(9), color: C.inkMid, marginTop: qty > 1 ? 1 : 0 }}>
+          <Text style={[valStyle, { marginTop: qty > 1 ? 1 : 0 }]}>
             {ranged && range ? `${fmt(range.min)} – ${fmt(range.max)}` : fmt(componentSubtotal(c))}
           </Text>
         </View>
@@ -308,6 +317,52 @@ function ComponentRow({
       {!hideSwatch && <MaterialGrid cells={cells} images={images} />}
     </View>
   );
+}
+
+// A list of elements rendered with material grouping, shared by a non-modular
+// compound and by a module's body so the rule is identical everywhere:
+//   • whole list one fabric → ONE "Tapizado" hero, every row swatch-less.
+//   • mixed → a hero per same-fabric run of 2+ pieces; a lone piece (or a
+//     non-upholstered run: metal base, glass) just shows its own inline swatch
+//     instead of an oversized one-item hero.
+// `forceHideSwatch` is set when an ancestor already showed the single shared
+// fabric (a uniform whole line), so the whole list collapses to clean rows.
+function ComponentList({
+  components, fmt, families, currency, rates, images, forceHideSwatch,
+}: {
+  components: LineComponent[]; fmt: Fmt; families?: Map<string, CatalogFamily> | null; currency: CurrencyCode; rates: Record<string, number>; images?: ImageMap; forceHideSwatch?: boolean;
+}) {
+  const row = (c: LineComponent, hideSwatch: boolean, key: React.Key) => (
+    <ComponentRow key={key} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={hideSwatch} />
+  );
+  if (forceHideSwatch) return <>{components.map((c, i) => row(c, true, c.id || i))}</>;
+  const fab = compoundFabric(components);
+  if (fab.uniform) {
+    return (
+      <>
+        <UpholsteryHero subtype={fab.subtype} swatchImageId={fab.swatchImageId} images={images} />
+        {components.map((c, i) => row(c, true, c.id || i))}
+      </>
+    );
+  }
+  const g = groupComponentsByMaterial(components);
+  if (g.grouped) {
+    return (
+      <>
+        {g.runs.map((run, ri) =>
+          !run.bearing || run.components.length === 1 ? (
+            <View key={run.key + ri} wrap={false}>{run.components.map((c, i) => row(c, false, c.id || i))}</View>
+          ) : (
+            <View key={run.key + ri} wrap={false}>
+              <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
+              {run.components.map((c, i) => row(c, true, c.id || i))}
+            </View>
+          ),
+        )}
+      </>
+    );
+  }
+  return <>{components.map((c, i) => row(c, false, c.id || i))}</>;
 }
 
 // ---- modular modules (component products) ------------------------------
@@ -391,62 +446,49 @@ function ModuleBlock({
   const headerDuplicatesElement = (m.components || []).some(
     (c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase(),
   );
-  // Group the module's pieces by material — one "Tapizado" hero for a uniform
-  // module, a header per contiguous same-fabric run for a mixed one (ERPI seat
-  // pieces, then a CLOUD accent cushion) — so an identical swatch isn't stamped
-  // on every row. Read-only; mirrors ClientPreview's module block.
-  const renderBody = () => {
-    if (wholeUniform) {
-      return <>{m.components.map((c, i) => (
-        <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch />
-      ))}</>;
-    }
-    const modFabric = compoundFabric(m.components);
-    if (modFabric.uniform) {
-      return <>
-        <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} images={images} />
-        {m.components.map((c, i) => (
-          <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch />
-        ))}
-      </>;
-    }
-    const grouping = groupComponentsByMaterial(m.components);
-    if (grouping.grouped) {
-      return <>{grouping.runs.map((run, ri) => (
-        <View key={run.key + ri}>
-          {run.bearing && <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />}
-          {run.components.map((c, i) => (
-            <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} hideSwatch={run.bearing} />
-          ))}
-        </View>
-      ))}</>;
-    }
-    return <>{m.components.map((c, i) => (
-      <ComponentRow key={c.id || i} c={c} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-    ))}</>;
-  };
+  const isMulti = (m.components?.length || 0) > 1;
+  // Promotion: when a module is named after one of its own pieces (the common
+  // "RIGHT-ARM LOVESEAT" module = that loveseat + its cushions), that piece
+  // becomes the module's LEAD row (bold name + price) and the rest nest beneath
+  // it as add-ons. This shows the product→parts hierarchy WITHOUT the "same
+  // name, two prices" duplication a name+subtotal header used to print.
+  const primaryIdx = headerDuplicatesElement
+    ? m.components.findIndex((c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase())
+    : -1;
+  const primary = primaryIdx >= 0 ? m.components[primaryIdx] : null;
+  const rest = primary ? m.components.filter((_, i) => i !== primaryIdx) : [];
   const caption: { text: string; color: string } | null = m.optional
     ? { text: 'Opcional · no incluido', color: C.inkMid }
     : m.inAlt
       ? { text: `Alternativa ${m.altPos?.index ?? '?'} de ${m.altPos?.total ?? '?'}${m.selected ? ' · seleccionada' : ''}`, color: C.brand700 }
       : null;
   return (
-    // wrap={false}: keep a whole module (its header + element rows) together so a
+    // wrap={false}: keep a whole module (its lead + nested pieces) together so a
     // page break lands BETWEEN modules — a module that doesn't fit in the space
     // left on a page moves to the next one, instead of spilling over the footer.
     <View style={dimmed ? { opacity: 0.45 } : {}} wrap={false}>
       {caption && <Text style={[s.groupCaption, { color: caption.color, marginTop: 5 }]}>{caption.text}</Text>}
-      {/* A module header labels a GROUP of elements. With a single element the
-          element's own row already names and prices it, so a header here just
-          repeats the name + price (the modular "EXCLUSIF COMPOSITION" clutter) —
-          show it only for a real 2+-element grouping. */}
-      {m.moduleGroup && m.components.length > 1 && !headerDuplicatesElement && (
-        <View style={s.moduleHead}>
-          <Text style={s.moduleName}>{m.name || '—'}</Text>
-          {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
-        </View>
+      {isMulti && primary ? (
+        // Promoted module: its main piece leads, the rest nest as "+ add-on".
+        <>
+          <ComponentRow c={primary} lead hideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+          {rest.map((c, i) => (
+            <ComponentRow key={c.id || i} c={c} sub hideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+          ))}
+        </>
+      ) : m.moduleGroup && isMulti ? (
+        // Genuine module name (≠ its pieces): a labelled group + per-module subtotal.
+        <>
+          <View style={s.moduleHead}>
+            <Text style={s.moduleName}>{m.name || '—'}</Text>
+            {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
+          </View>
+          <ComponentList components={m.components} forceHideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+        </>
+      ) : (
+        // Single element / ungrouped.
+        <ComponentList components={m.components} forceHideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
       )}
-      {renderBody()}
     </View>
   );
 }
