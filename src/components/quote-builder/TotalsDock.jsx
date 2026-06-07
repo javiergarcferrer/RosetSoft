@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
@@ -250,15 +251,22 @@ export default function TotalsDock({
 
   /* -------------------------------- render -------------------------------- */
 
-  return (
+  // PORTAL TO document.body — not a flourish, the fix for the dead grey band
+  // under the dock. The dock renders deep inside <main>, which is
+  // overflow-y-auto; on iOS WebKit a position:fixed element inside a scroll
+  // container is scoped to that container, so bottom-0 landed ABOVE the
+  // home-indicator inset and the page background showed through underneath.
+  // Mounted on <body> the dock is finally viewport-fixed, so bottom-0 is the
+  // true physical bottom; the pb-[safe-area-inset-bottom] below then paints the
+  // home-indicator strip white instead of leaving that grey gap.
+  return createPortal(
     <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
-      {/* Premium elevated dock — strong top border in brand violet, deep shadow.
-          SOLID white (no translucency / backdrop-blur): in the installed PWA a
-          see-through dock smeared the content behind it and made the bottom
-          safe-area band read as an ugly blurry gap. Opaque white fills straight
-          down through the home-indicator inset so the dock reads as one bar
-          pinned flush to the bottom edge. */}
-      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop">
+      {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
+          (no translucency / backdrop-blur): a see-through dock smeared content
+          behind it in the PWA. The pb-[env(safe-area-inset-bottom)] fills the
+          home-indicator inset with white so the bar reads as one solid surface
+          pinned flush to the physical bottom edge — no grey band, ever. */}
+      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop pb-[max(0.625rem,env(safe-area-inset-bottom))]">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
@@ -282,13 +290,11 @@ export default function TotalsDock({
               five-figure USD, a seven-figure DOP and the touch icons can't all
               share one line — the DOP conversion wraps to its own line just
               beneath the amount, so it's always shown in full, never clipped. */}
-          {/* Tight bottom padding so the bar hugs the screen edge. We deliberately
-              do NOT pad by the full env(safe-area-inset-bottom) (~34px on iPhone)
-              here — that left a big empty white band below the buttons that read
-              as a gap between the bar and the bottom edge. A small fixed clearance
-              keeps the icons just above the home-indicator pill while the solid
-              white background still fills down to the physical edge. */}
-          <div className="flex items-center gap-2 sm:gap-3 py-2.5 pb-3">
+          {/* Just the row's own vertical rhythm — the home-indicator clearance
+              now lives on the outer white div (pb-[safe-area-inset-bottom]),
+              which both lifts this row above the pill AND paints the inset white.
+              No fixed bottom pad here, so there's no double clearance. */}
+          <div className="flex items-center gap-2 sm:gap-3 py-2.5">
             {/* The total leads the row — the hero figure and the breakdown
                 toggle. The row wraps: amount + chevron hold the first line and
                 the DOP conversion takes the second on phones; from sm: up there's
@@ -384,7 +390,8 @@ export default function TotalsDock({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
