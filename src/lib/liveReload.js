@@ -79,7 +79,17 @@ async function check() {
     if (!deployed || deployed === BOOT_ID) return;
     if (isTyping()) return; // catch it on the next poll / focus
     if (reloadBudgetExhausted()) return;
-    window.location.reload();
+    // Hard cache-bust, not location.reload(). An installed iOS PWA serves its
+    // start_url shell (index.html) from the WebKit app-shell cache and a plain
+    // reload() can return that SAME stale HTML — so the tab reloads, still sees
+    // the old build, and burns its reload budget without ever updating (the
+    // "I deployed it but the app is still broken" trap). Navigating to a NEW,
+    // versioned URL has no cache entry, so the browser MUST hit the network and
+    // pull the fresh index.html + hashed bundle. HashRouter keeps the route in
+    // the hash, so the ?v= search param is inert for routing.
+    const url = new URL(window.location.href);
+    url.searchParams.set('v', deployed);
+    window.location.replace(url.toString());
   } finally {
     checking = false;
   }
@@ -93,6 +103,11 @@ async function check() {
 export function startVersionWatcher() {
   if (started || typeof window === 'undefined') return;
   started = true;
+  // Check ONCE right now — a cold PWA launch loads the cached shell, and
+  // without this it would sit on the stale build until the first 60s tick or
+  // the next focus. An immediate check means a reopened app jumps to the latest
+  // deploy within a second.
+  check();
   setInterval(check, POLL_MS);
   window.addEventListener('focus', check);
   document.addEventListener('visibilitychange', () => {
