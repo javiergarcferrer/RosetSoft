@@ -4,7 +4,7 @@ import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
-import { canPrintPdfInIframe } from '../../pdf/shareTarget.js';
+import { openPrintSession } from '../../pdf/printSession.js';
 
 /**
  * PDF export + share-link logic for the quote editor, lifted out of the
@@ -145,22 +145,21 @@ export function useQuoteExport({
   async function printPdf() {
     if (exporting || printing) return;
     setExportError(null);
-    const printTab = canPrintPdfInIframe() ? null : window.open('', '_blank');
-    if (!canPrintPdfInIframe() && !printTab) {
+    // Open the print target inside the click gesture (Safari needs a real tab;
+    // it downloads a blob PDF from a hidden iframe). openPrintSession handles
+    // the engine split; generatePdf's `mod` provides printBlob/printInWindow.
+    const session = openPrintSession('Generando PDF…');
+    if (session.blocked) {
       setExportError('Permite las ventanas emergentes para imprimir, o usa “Exportar PDF”.');
       return;
-    }
-    if (printTab) {
-      printTab.document.write('<title>Imprimiendo…</title><p style="font:14px system-ui,sans-serif;padding:1rem;color:#555">Generando PDF…</p>');
     }
     setPrinting(true);
     try {
       const { mod, blob } = await generatePdf();
-      if (printTab) mod.printInWindow(printTab, blob);
-      else await mod.printBlob(blob);
+      await session.run(blob, mod);
     } catch (err) {
       console.error('[QuoteBuilder] printPdf failed:', err);
-      if (printTab && !printTab.closed) printTab.close();
+      session.cancel();
       setExportError(err?.message || 'No se pudo imprimir el PDF.');
     } finally {
       setPrinting(false);

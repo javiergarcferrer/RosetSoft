@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { openPrintSession } from '../../pdf/printSession.js';
 import {
   resolveReceivables, resolvePayables, resolvePartyStatement,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
@@ -67,17 +68,27 @@ export default function CuentasCobrarPagar() {
 
   async function printStatement() {
     if (!statement || !selected) return;
+    // Open the print target inside the click (Safari needs a real tab opened
+    // while the gesture is live — it downloads a blob PDF from a hidden iframe).
+    const session = openPrintSession('Generando estado de cuenta…');
+    if (session.blocked) {
+      window.alert('Permite las ventanas emergentes para imprimir el estado de cuenta.');
+      return;
+    }
     setPrintingSt(true);
     try {
       const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
-      const { generateStatementPdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
-      const blob = await generateStatementPdf({
+      const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
+      const blob = await mod.generateStatementPdf({
         emisor: { name: settings?.companyName || '', rnc: (settings?.companyRnc || '').replace(/\D/g, '') },
         party: { name: statement.name, rnc: party?.rnc },
         title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
         rows: statement.rows, balance: statement.balance, asOf: Date.now(),
       });
-      await downloadBlob(blob, `Estado ${statement.name}.pdf`);
+      await session.run(blob, mod);
+    } catch (e) {
+      session.cancel();
+      window.alert(e?.message || 'No se pudo generar el estado de cuenta.');
     } finally {
       setPrintingSt(false);
     }

@@ -11,6 +11,7 @@ import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
+import { openPrintSession } from '../../pdf/printSession.js';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
@@ -86,6 +87,13 @@ export default function Facturacion() {
     const p = postingById.get(rowId);
     if (!p || !p.ncf) return;
     setErr('');
+    // Open the print target inside the click (Safari needs a real tab opened
+    // while the gesture is live — it downloads a blob PDF from a hidden iframe).
+    const session = openPrintSession('Generando factura…');
+    if (session.blocked) {
+      setErr('Permite las ventanas emergentes para imprimir la factura.');
+      return;
+    }
     setPrinting(rowId);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
@@ -95,8 +103,8 @@ export default function Facturacion() {
         rncEmisor: cleanRnc(settings?.companyRnc), rncComprador: p.rnc, eNcf: p.ncf,
         total: p.total, fechaEmision: formatEcfDate(p.postedAt), securityCode: p.securityCode,
       }) : '';
-      const { generateInvoicePdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
-      const blob = await generateInvoicePdf({
+      const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
+      const blob = await mod.generateInvoicePdf({
         emisor: {
           name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc),
           address: settings?.companyAddress, phone: settings?.companyPhone, email: settings?.companyEmail,
@@ -107,8 +115,9 @@ export default function Facturacion() {
         gravado: p.base, itbis: p.itbis, total: p.total, itbisRate: config.itbisRate,
         securityCode: p.securityCode, qrUrl,
       });
-      await downloadBlob(blob, `Factura ${p.ncf}.pdf`);
+      await session.run(blob, mod);
     } catch (e) {
+      session.cancel();
       setErr(e?.message || 'No se pudo generar la factura.');
     } finally {
       setPrinting(null);
