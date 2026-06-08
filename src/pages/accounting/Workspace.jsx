@@ -849,12 +849,12 @@ function PaidToggle({ paid, busy, onToggle }) {
 function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv }) {
   const fmt = (v) => formatMoney(v, currency, rates);
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="eyebrow font-semibold tracking-wide text-ink-600">
+        <h3 className="eyebrow font-semibold tracking-wide text-ink-600 min-w-0 truncate">
           Detalle para facturar
         </h3>
-        <button type="button" onClick={onExportCsv} className="btn-ghost text-xs">
+        <button type="button" onClick={onExportCsv} className="btn-ghost text-xs shrink-0 min-h-[44px]">
           <Download size={12} /> CSV Odoo
         </button>
       </div>
@@ -931,7 +931,7 @@ function CyclePill({ label, sub, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`text-left rounded-lg border px-3 py-2 transition-all active:scale-[0.98] ${
+      className={`text-left rounded-lg border px-3 py-2 min-h-[44px] transition-all active:scale-[0.98] ${
         active
           ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
           : 'border-ink-200 hover:border-ink-300 bg-white hover:shadow-xs text-ink-700'
