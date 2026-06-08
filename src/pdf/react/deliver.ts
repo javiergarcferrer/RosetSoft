@@ -105,3 +105,29 @@ export async function printBlob(blob: Blob): Promise<void> {
     if (!opened) window.location.href = url;
   }
 }
+
+/**
+ * Print into a tab the caller already opened *inside the click gesture*. This
+ * is the Safari/WebKit path: Safari downloads a blob PDF loaded into a hidden
+ * iframe (see printBlob), so instead we point a real tab at the PDF — Safari's
+ * built-in viewer renders it inline — and best-effort fire its print dialog.
+ * The user can also just press Cmd+P; either way the file is never downloaded.
+ *
+ * The window must be opened synchronously by the caller (before the async PDF
+ * generation) so the popup blocker treats it as user-initiated. The blob URL is
+ * held ~60 s so the viewer finishes loading and the print job spools.
+ */
+export function printInWindow(win: Window, blob: Blob): void {
+  if (!blob || !blob.size) {
+    try { win.close(); } catch { /* already gone */ }
+    throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+  }
+  const url = URL.createObjectURL(blob);
+  win.location.href = url;
+  const fire = () => { try { win.focus(); win.print(); } catch { /* user prints manually */ } };
+  // The viewer needs a beat to lay the PDF out before print() has anything to
+  // capture; try on load and again on a timer in case the load event is missed.
+  try { win.addEventListener('load', () => setTimeout(fire, 500)); } catch { /* cross-state */ }
+  setTimeout(fire, 1500);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

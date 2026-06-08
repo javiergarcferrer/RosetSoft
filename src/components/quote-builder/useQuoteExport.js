@@ -4,6 +4,7 @@ import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
+import { canPrintPdfInIframe } from '../../pdf/shareTarget.js';
 
 /**
  * PDF export + share-link logic for the quote editor, lifted out of the
@@ -136,16 +137,30 @@ export function useQuoteExport({
   }
 
   // Print directly — generate the same PDF and hand it to the browser's print
-  // dialog (printBlob) instead of the downloads tray.
+  // dialog instead of the downloads tray. Chrome/Edge/Firefox print a blob PDF
+  // from a hidden iframe (printBlob); Safari/WebKit downloads that iframe blob
+  // instead, so there we open a real tab *synchronously inside this click*
+  // (before the async generation, so the popup blocker allows it) and print the
+  // PDF from Safari's inline viewer (printInWindow).
   async function printPdf() {
     if (exporting || printing) return;
     setExportError(null);
+    const printTab = canPrintPdfInIframe() ? null : window.open('', '_blank');
+    if (!canPrintPdfInIframe() && !printTab) {
+      setExportError('Permite las ventanas emergentes para imprimir, o usa “Exportar PDF”.');
+      return;
+    }
+    if (printTab) {
+      printTab.document.write('<title>Imprimiendo…</title><p style="font:14px system-ui,sans-serif;padding:1rem;color:#555">Generando PDF…</p>');
+    }
     setPrinting(true);
     try {
       const { mod, blob } = await generatePdf();
-      await mod.printBlob(blob);
+      if (printTab) mod.printInWindow(printTab, blob);
+      else await mod.printBlob(blob);
     } catch (err) {
       console.error('[QuoteBuilder] printPdf failed:', err);
+      if (printTab && !printTab.closed) printTab.close();
       setExportError(err?.message || 'No se pudo imprimir el PDF.');
     } finally {
       setPrinting(false);
