@@ -8,12 +8,20 @@
 
     <!-- iOS / Android standalone behavior when "Add to Home Screen" is used.
          viewport-fit=cover above is what makes env(safe-area-inset-*) return
-         non-zero on iPhones with a notch / Dynamic Island. status-bar-style
-         "black-translucent" lets our dark topbar paint under the status bar
-         (handled via pt-safe utilities in the Layout). -->
+         non-zero on iPhones with a notch / Dynamic Island.
+
+         status-bar-style is "black" (opaque dark bar), NOT "black-translucent".
+         black-translucent lets content paint under the status bar, but iOS then
+         sizes the standalone web viewport one status-bar-height SHORT and anchors
+         it at the top — so a fixed bottom-0 bar (the quote TotalsDock) lands above
+         the physical screen edge and the manifest background_color shows through
+         as a dead strip beneath it. "black" makes iOS lay the viewport out below
+         the status bar and fill all the way to the physical bottom, so the dock is
+         truly pinned to the edge. The bar reads white-on-near-black, matching our
+         dark ink-900 topbar that sits right below it. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Roset Soft" />
     <meta name="format-detection" content="telephone=no" />
 
