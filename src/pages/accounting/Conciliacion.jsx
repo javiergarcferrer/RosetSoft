@@ -73,7 +73,7 @@ export default function Conciliacion() {
               </select>
             </label>
             <label className="text-sm">Saldo del estado<br />
-              <input type="number" step="0.01" value={stmt} onChange={(e) => setStmt(e.target.value)} placeholder="Saldo final banco" className={`${field} w-full sm:w-40 text-right tabular-nums`} />
+              <input type="number" step="0.01" inputMode="decimal" enterKeyHint="done" value={stmt} onChange={(e) => setStmt(e.target.value)} placeholder="Saldo final banco" className={`${field} w-full sm:w-40 text-right tabular-nums`} />
             </label>
           </div>
 

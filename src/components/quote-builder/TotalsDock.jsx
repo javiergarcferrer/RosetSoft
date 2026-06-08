@@ -260,7 +260,12 @@ export default function TotalsDock({
   // true physical bottom; the pb-[safe-area-inset-bottom] below then paints the
   // home-indicator strip white instead of leaving that grey gap.
   return createPortal(
-    <div className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden">
+    // Soft-keyboard behaviour: `kb-hide-when-open` slides the dock off-screen
+    // while a line-item input out in the page is focused (so it can't cover the
+    // field being typed into); `data-kb-keep` lifts the dock above the keyboard
+    // instead when ITS OWN adjustment inputs (discount % / envío / courtesy) are
+    // focused, so they stay visible while editing.
+    <div data-kb-keep className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
           behind it in the PWA. pb-safe-standalone fills the home-indicator inset

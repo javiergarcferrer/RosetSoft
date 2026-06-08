@@ -308,10 +308,10 @@ function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersBy
       </div>
 
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 mt-3">
-        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} /></label>
-        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={numField} /></label>
+        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} /></label>
+        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={numField} /></label>
+        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={numField} /></label>
+        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={numField} /></label>
         <label className="text-sm col-span-2">Pago<br />
           <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={field}>
             <option value="bank">Banco</option>

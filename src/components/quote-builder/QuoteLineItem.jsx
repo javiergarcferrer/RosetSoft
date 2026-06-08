@@ -1416,6 +1416,7 @@ function SpecStrip({
         widthClass="min-w-[5rem]"
         autoCapitalize="characters"
         autoComplete="off"
+        enterKeyHint="next"
       />
       {/* Catalog page input ("Pág.") intentionally hidden — the field
           remains in the data model (line.pageRef) and is still surfaced

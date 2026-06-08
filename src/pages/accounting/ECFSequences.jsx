@@ -95,9 +95,9 @@ export default function ECFSequences() {
                 {ECF_TYPES.map((t) => <option key={t.code} value={t.code}>{t.code} · {t.label}</option>)}
               </select>
             </label>
-            <label className="text-sm">Desde<br /><input type="number" min="1" value={form.seqFrom} onChange={(e) => setForm((f) => ({ ...f, seqFrom: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
-            <label className="text-sm">Hasta<br /><input type="number" min="1" value={form.seqTo} onChange={(e) => setForm((f) => ({ ...f, seqTo: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
-            {editing !== 'new' && <label className="text-sm">Próximo<br /><input type="number" min="1" value={form.nextSeq} onChange={(e) => setForm((f) => ({ ...f, nextSeq: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>}
+            <label className="text-sm">Desde<br /><input type="number" min="1" inputMode="numeric" value={form.seqFrom} onChange={(e) => setForm((f) => ({ ...f, seqFrom: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
+            <label className="text-sm">Hasta<br /><input type="number" min="1" inputMode="numeric" value={form.seqTo} onChange={(e) => setForm((f) => ({ ...f, seqTo: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
+            {editing !== 'new' && <label className="text-sm">Próximo<br /><input type="number" min="1" inputMode="numeric" value={form.nextSeq} onChange={(e) => setForm((f) => ({ ...f, nextSeq: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>}
             <label className="text-sm">Vence<br /><input type="date" value={form.expires} onChange={(e) => setForm((f) => ({ ...f, expires: e.target.value }))} className={`${field} w-full sm:w-auto`} /></label>
             <label className="inline-flex items-center gap-2 text-sm pb-1.5 min-h-[44px]">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="w-4 h-4" /> Activa

@@ -491,6 +491,7 @@ function MaterialEditor({ material, profileId, onClose }) {
             <span className="label">Double rubs</span>
             <DebouncedInput
               type="number"
+              inputMode="numeric"
               className="input tabular-nums"
               value={draft.wearDoubleRubs ?? ''}
               onCommit={(v) => set({ wearDoubleRubs: v === '' ? null : Number(v) })}
@@ -505,6 +506,7 @@ function MaterialEditor({ material, profileId, onClose }) {
             <div className="flex gap-2">
               <DebouncedInput
                 type="number"
+                inputMode="decimal"
                 className="input tabular-nums flex-1"
                 value={draft.measure ?? ''}
                 onCommit={(v) => set({ measure: v === '' ? null : Number(v) })}
@@ -524,6 +526,7 @@ function MaterialEditor({ material, profileId, onClose }) {
             <div className="flex gap-2">
               <DebouncedInput
                 type="number"
+                inputMode="decimal"
                 className="input tabular-nums flex-1"
                 value={draft.price ?? ''}
                 onCommit={(v) => set({ price: v === '' ? null : Number(v) })}

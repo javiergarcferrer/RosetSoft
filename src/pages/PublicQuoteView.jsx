@@ -180,7 +180,7 @@ export default function PublicQuoteView() {
     // scroll container — and html/body/#root are pinned to the viewport with
     // overflow:hidden (see index.css). Be our own scroll container, or the
     // quote is clipped at the fold with no way to scroll on mobile.
-    <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] kb-scroll-pad">
       <div className="mx-auto max-w-4xl space-y-4">
         {/* Page-level action bar — right-aligned, lives above the content card */}
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -278,7 +278,7 @@ function SaveToast({ state }) {
   }[state];
   if (!cfg) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-50 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-50 flex justify-center px-4 kb-hide-when-open">
       <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-medium shadow-pop ${cfg.cls}`}>
         {cfg.icon}{cfg.label}
       </div>

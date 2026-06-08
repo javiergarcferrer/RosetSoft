@@ -9,9 +9,14 @@ import './index.css';
 import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { startVersionWatcher } from './lib/liveReload.js';
+import { installVirtualKeyboardWatcher } from './lib/useVirtualKeyboard.js';
 
 // Auto-reload the tab when a new build is deployed (see lib/liveReload).
 startVersionWatcher();
+
+// Watch the soft keyboard (visualViewport) so bottom-pinned chrome gets out of
+// the way while typing instead of covering the focused field. See the hook.
+installVirtualKeyboardWatcher();
 
 // Mark the installed-PWA context on <html> so bottom-pinned chrome (the quote
 // TotalsDock) fills the home-indicator safe-area inset with its own background

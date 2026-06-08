@@ -175,7 +175,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             {orders.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.name || ''}</option>)}
           </select></label>
         )}
-        <label className="text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full mt-0.5 text-right tabular-nums`} /></label>
+        <label className="text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" inputMode="decimal" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full mt-0.5 text-right tabular-nums`} /></label>
         <label className="text-xs text-ink-500">Pago aduanas<select value={head.paymentMethod} onChange={(e) => setHead((h) => ({ ...h, paymentMethod: e.target.value }))} className={`${field} w-full mt-0.5`}>
           <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
         </select></label>
@@ -201,8 +201,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               <input value={emb.bl} onChange={(e) => patchEmb(emb.id, { bl: e.target.value })} placeholder="BL / conocimiento" className={`${field} w-full lg:col-span-2`} />
               <input value={emb.customsRef} onChange={(e) => patchEmb(emb.id, { customsRef: e.target.value })} placeholder="DUA" className={`${field} w-full`} />
-              <input type="number" step="0.01" min="0" value={emb.flete} onChange={(e) => patchEmb(emb.id, { flete: e.target.value })} placeholder="Flete RD$" className={`${field} w-full text-right tabular-nums`} />
-              <input type="number" step="0.01" min="0" value={emb.seguro} onChange={(e) => patchEmb(emb.id, { seguro: e.target.value })} placeholder="Seguro RD$" className={`${field} w-full text-right tabular-nums`} />
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.flete} onChange={(e) => patchEmb(emb.id, { flete: e.target.value })} placeholder="Flete RD$" className={`${field} w-full text-right tabular-nums`} />
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.seguro} onChange={(e) => patchEmb(emb.id, { seguro: e.target.value })} placeholder="Seguro RD$" className={`${field} w-full text-right tabular-nums`} />
             </div>
             {containers?.length > 0 && (
               <select value={emb.containerId} onChange={(e) => patchEmb(emb.id, { containerId: e.target.value })} className={`${field} mt-2 w-full sm:w-64`}>
@@ -252,9 +252,9 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                               {itemOpts.map((i) => <option key={i.id} value={i.id}>{i.name}{i.sku ? ` (${i.sku})` : ''}</option>)}
                             </select>
                           </td>
-                          <td className="py-0.5"><input type="number" min="0" step="1" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="w-16 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
-                          <td className="py-0.5"><input type="number" min="0" step="0.01" value={l.fob} onChange={(e) => patchLine(emb.id, fac.id, l.id, { fob: e.target.value })} className={num} /></td>
-                          <td className="py-0.5"><input type="number" min="0" step="0.01" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} placeholder="0" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="w-16 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.fob} onChange={(e) => patchLine(emb.id, fac.id, l.id, { fob: e.target.value })} className={num} /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} placeholder="0" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
                           <td className="py-0.5 text-right text-xs text-ink-500 tabular-nums whitespace-nowrap pr-1">{byLine[l.id]?.landedUnitCost > 0 ? formatDop(byLine[l.id].landedUnitCost) : '—'}</td>
                           <td className="py-0.5 text-right pr-2.5"><button type="button" onClick={() => delLine(emb.id, fac.id, l.id)} className="text-ink-300 hover:text-rose-600 p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={14} /></button></td>
                         </tr>
@@ -292,8 +292,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                   {supplierOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <input value={c.ncf} onChange={(e) => setCost(c.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-28 min-w-0`} />
-                <input type="number" step="0.01" min="0" value={c.amount} onChange={(e) => setCost(c.id, { amount: e.target.value })} placeholder="Monto RD$" className={num} />
-                <input type="number" step="0.01" min="0" value={c.itbis} onChange={(e) => setCost(c.id, { itbis: e.target.value })} placeholder="ITBIS" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.amount} onChange={(e) => setCost(c.id, { amount: e.target.value })} placeholder="Monto RD$" className={num} />
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.itbis} onChange={(e) => setCost(c.id, { itbis: e.target.value })} placeholder="ITBIS" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
                 <select value={c.paymentMethod} onChange={(e) => setCost(c.id, { paymentMethod: e.target.value })} className={`${field} w-full sm:w-auto`}>
                   <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
                 </select>
@@ -309,7 +309,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-3 border-t border-ink-100">
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-xs text-ink-500">Total impuestos DUA (Colector)<br />
-            <input type="number" step="0.01" min="0" value={head.duaTotal} onChange={(e) => setHead((h) => ({ ...h, duaTotal: e.target.value }))} placeholder="opcional" className={`${num} mt-0.5`} />
+            <input type="number" step="0.01" min="0" inputMode="decimal" enterKeyHint="done" value={head.duaTotal} onChange={(e) => setHead((h) => ({ ...h, duaTotal: e.target.value }))} placeholder="opcional" className={`${num} mt-0.5`} />
           </label>
           <div className="text-xs">
             <div className="text-ink-500">Impuestos calculados <b className="tabular-nums">{formatDop(t.impuestos)}</b></div>

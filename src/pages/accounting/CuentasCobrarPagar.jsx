@@ -300,7 +300,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
           </select>
         </label>
         <label className="text-sm">Fecha<br /><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={`${field} w-full`} /></label>
-        <label className="text-sm">Monto<br /><input type="number" step="0.01" min="0" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={numField} /></label>
+        <label className="text-sm">Monto<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={numField} /></label>
         <label className="text-sm">Método<br />
           <select value={form.method} onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))} className={`${field} w-full`}>
             <option value="bank">Banco</option><option value="cash">Efectivo</option><option value="transfer">Transferencia</option>
@@ -313,10 +313,10 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
       {isCard && (
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 mt-3 pt-3 border-t border-ink-100">
           <span className="text-xs text-ink-500 col-span-2 sm:w-full">Deducciones de la pasarela (lo que retiene el procesador):</span>
-          <label className="text-sm">Comisión<br /><input type="number" step="0.01" min="0" value={form.commission} onChange={(e) => setForm((f) => ({ ...f, commission: e.target.value }))} className={numField} /></label>
-          <label className="text-sm">ITBIS comisión<br /><input type="number" step="0.01" min="0" value={form.commissionItbis} onChange={(e) => setForm((f) => ({ ...f, commissionItbis: e.target.value }))} className={numField} /></label>
-          <label className="text-sm">ITBIS retenido<br /><input type="number" step="0.01" min="0" value={form.itbisRetained} onChange={(e) => setForm((f) => ({ ...f, itbisRetained: e.target.value }))} className={numField} /></label>
-          <label className="text-sm">ISR retenido<br /><input type="number" step="0.01" min="0" value={form.isrRetained} onChange={(e) => setForm((f) => ({ ...f, isrRetained: e.target.value }))} className={numField} /></label>
+          <label className="text-sm">Comisión<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.commission} onChange={(e) => setForm((f) => ({ ...f, commission: e.target.value }))} className={numField} /></label>
+          <label className="text-sm">ITBIS comisión<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.commissionItbis} onChange={(e) => setForm((f) => ({ ...f, commissionItbis: e.target.value }))} className={numField} /></label>
+          <label className="text-sm">ITBIS retenido<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.itbisRetained} onChange={(e) => setForm((f) => ({ ...f, itbisRetained: e.target.value }))} className={numField} /></label>
+          <label className="text-sm">ISR retenido<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.isrRetained} onChange={(e) => setForm((f) => ({ ...f, isrRetained: e.target.value }))} className={numField} /></label>
         </div>
       )}
 
@@ -331,7 +331,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
               <div key={d.docId} className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-ink-500 shrink-0 whitespace-nowrap">{formatDate(d.date)}</span>
                 <span className="flex-1 min-w-0 truncate">{d.label} · pendiente {formatDop(d.open)}</span>
-                <input type="number" step="0.01" min="0" value={alloc[d.docId] || ''}
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={alloc[d.docId] || ''}
                   onChange={(e) => setAlloc((a) => ({ ...a, [d.docId]: e.target.value }))}
                   className="w-28 rounded-lg border border-ink-200 px-2 py-2 text-sm text-right tabular-nums min-h-[44px]" />
               </div>

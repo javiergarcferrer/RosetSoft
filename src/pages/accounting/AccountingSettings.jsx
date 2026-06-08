@@ -130,19 +130,19 @@ export default function AccountingSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">ITBIS</span>
-                <input type="number" step="0.01" value={form.itbisRate} onChange={(e) => setRate('itbisRate', e.target.value)} className={rateInput} />
+                <input type="number" step="0.01" inputMode="decimal" value={form.itbisRate} onChange={(e) => setRate('itbisRate', e.target.value)} className={rateInput} />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Gravamen arancelario (importación)</span>
-                <input type="number" step="0.01" value={form.dutyRate} onChange={(e) => setRate('dutyRate', e.target.value)} className={rateInput} />
+                <input type="number" step="0.01" inputMode="decimal" value={form.dutyRate} onChange={(e) => setRate('dutyRate', e.target.value)} className={rateInput} />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Retención ISR servicios (PF)</span>
-                <input type="number" step="0.01" value={form.retentionIsrServicesRate} onChange={(e) => setRate('retentionIsrServicesRate', e.target.value)} className={rateInput} />
+                <input type="number" step="0.01" inputMode="decimal" value={form.retentionIsrServicesRate} onChange={(e) => setRate('retentionIsrServicesRate', e.target.value)} className={rateInput} />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Retención ITBIS servicios (PF)</span>
-                <input type="number" step="0.01" value={form.retentionItbisRate} onChange={(e) => setRate('retentionItbisRate', e.target.value)} className={rateInput} />
+                <input type="number" step="0.01" inputMode="decimal" value={form.retentionItbisRate} onChange={(e) => setRate('retentionItbisRate', e.target.value)} className={rateInput} />
               </label>
             </div>
             <p className="text-xs text-ink-400 mt-3">
@@ -183,7 +183,7 @@ export default function AccountingSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl mb-4">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">RNC del emisor</span>
-                <input value={companyRnc} onChange={(e) => setCompanyRnc(e.target.value)}
+                <input value={companyRnc} onChange={(e) => setCompanyRnc(e.target.value)} inputMode="numeric"
                   className="w-36 min-w-0 rounded-lg border border-ink-200 px-2 py-1.5 text-sm tabular-nums" />
               </label>
               <label className="flex items-center justify-between gap-3">

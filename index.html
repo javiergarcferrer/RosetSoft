@@ -2,7 +2,11 @@
 <html lang="es-DO">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content: on Chrome/Android the soft keyboard
+         RESIZES the viewport (so layout reflows above it) instead of overlaying
+         content. iOS ignores it and is handled via visualViewport in JS
+         (lib/useVirtualKeyboard). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#171612" />
     <meta name="color-scheme" content="light" />
 

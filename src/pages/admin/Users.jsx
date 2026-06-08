@@ -845,6 +845,8 @@ function InviteModal({ open, onClose, session, onInvited }) {
               min="0"
               max="50"
               step="0.5"
+              inputMode="decimal"
+              enterKeyHint="done"
               className="input tabular-nums"
               value={pct}
               onChange={(e) => setPct(e.target.value)}

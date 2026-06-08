@@ -60,9 +60,28 @@ export interface DebouncedInputProps
 }
 
 export const DebouncedInput = forwardRef<HTMLInputElement, DebouncedInputProps>(
-  function DebouncedInput({ value, onCommit, delay = 400, ...rest }, ref) {
+  function DebouncedInput({ value, onCommit, delay = 400, onKeyDown, enterKeyHint, ...rest }, ref) {
     const field = useDebouncedField<HTMLInputElement>(value, onCommit, delay);
-    return <input ref={ref} {...rest} {...field} />;
+    return (
+      <input
+        ref={ref}
+        // Default the return key to "Done" so it reads as a dismiss, not a
+        // line break; a caller can still override (e.g. "next" / "search").
+        enterKeyHint={enterKeyHint ?? 'done'}
+        {...rest}
+        {...field}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          // Enter on a single-line field commits (via the blur handler) AND
+          // drops the soft keyboard, so the dealer's flow isn't blocked by a
+          // keyboard sitting over the next field. A caller that needs Enter for
+          // something else can preventDefault to opt out.
+          if (e.key === 'Enter' && !e.defaultPrevented) {
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    );
   },
 );
 

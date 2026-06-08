@@ -713,6 +713,33 @@
   /* Constrain scroll chaining / momentum where it matters. */
   .overscroll-contain { overscroll-behavior: contain; }
   .overscroll-none    { overscroll-behavior: none; }
+
+  /* ─── Virtual-keyboard choreography ──────────────────────────────────────
+     Driven by lib/useVirtualKeyboard, which toggles `html.kb-open` /
+     `html.kb-keep-open` and sets `--rs-keyboard` from window.visualViewport.
+
+     On iOS, fixed bottom chrome (the quote TotalsDock, the client Personalizar
+     pill, the save toast) gets shoved up above the keyboard and covers the
+     field being edited. These rules slide that chrome away instead — UNLESS the
+     focused field lives inside the chrome itself (`[data-kb-keep]`), in which
+     case the chrome is LIFTED above the keyboard so its own inputs stay in view. */
+  .kb-hide-when-open { transition: transform 0.22s ease, opacity 0.22s ease; }
+  html.kb-open .kb-hide-when-open {
+    transform: translateY(130%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* Focus is inside a keep-zone → lift it clear of the keyboard. */
+  [data-kb-keep] { transition: transform 0.22s ease; }
+  html.kb-keep-open [data-kb-keep] {
+    transform: translateY(calc(-1 * var(--rs-keyboard, 0px)));
+  }
+  /* Give scroll containers room to bring the focused field above the keyboard
+     when it auto-scrolls into view. */
+  html.kb-open .kb-scroll-pad,
+  html.kb-keep-open .kb-scroll-pad {
+    scroll-padding-bottom: calc(var(--rs-keyboard, 0px) + 1rem);
+  }
 }
 
 /* ===================================================================

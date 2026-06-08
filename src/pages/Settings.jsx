@@ -183,7 +183,7 @@ export default function Settings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Descuento por defecto %</div>
-                <input className="input" type="number" min="0" max="100" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', clampPct(e.target.value))} />
+                <input className="input" type="number" min="0" max="100" inputMode="decimal" enterKeyHint="done" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', clampPct(e.target.value))} />
               </div>
               <div>
                 <div className="label">ITBIS</div>
@@ -336,6 +336,8 @@ function OrdersCard({ local, set }) {
             type="number"
             min="0"
             step="100"
+            inputMode="decimal"
+            enterKeyHint="done"
             value={local.dispatchThreshold ?? 50000}
             onChange={(e) => set('dispatchThreshold', Math.max(0, Number(e.target.value) || 0))}
           />

@@ -102,10 +102,10 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
               <option value="">— Cuenta —</option>
               {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
             </select>
-            <input type="number" step="0.01" min="0" value={l.debit} placeholder="Débito"
+            <input type="number" step="0.01" min="0" inputMode="decimal" value={l.debit} placeholder="Débito"
               onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })}
               className="w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
-            <input type="number" step="0.01" min="0" value={l.credit} placeholder="Crédito"
+            <input type="number" step="0.01" min="0" inputMode="decimal" value={l.credit} placeholder="Crédito"
               onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
               className="w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
             <button type="button" onClick={() => setLines((arr) => arr.length > 2 ? arr.filter((_, idx) => idx !== i) : arr)}

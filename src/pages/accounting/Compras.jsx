@@ -201,7 +201,7 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
               <option value="">— Artículo —</option>
               {items.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((i) => <option key={i.id} value={i.id}>{i.name}{i.sku ? ` (${i.sku})` : ''}</option>)}
             </select>
-            <input type="number" min="0" step="1" value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} placeholder="Cantidad" className={field} />
+            <input type="number" min="0" step="1" inputMode="numeric" value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} placeholder="Cantidad" className={field} />
           </>
         ) : (
           <select value={form.accountCode} onChange={(e) => setForm((f) => ({ ...f, accountCode: e.target.value }))} className={`${field} sm:col-span-2`}>
@@ -212,10 +212,10 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
       </div>
 
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 mt-3">
-        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" value={form.base} onChange={(e) => onBase(e.target.value)} className={`${numField} w-full sm:w-28`} /></label>
-        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
-        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
-        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.base} onChange={(e) => onBase(e.target.value)} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
         <label className="text-sm col-span-2">Pago<br />
           <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={field}>
             <option value="credit">Crédito</option><option value="bank">Banco</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>

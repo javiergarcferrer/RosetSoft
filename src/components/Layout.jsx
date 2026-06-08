@@ -235,7 +235,7 @@ export default function Layout() {
           would otherwise show a 1-pixel bounce flicker). When the sidebar is
           collapsed, a small left gutter (md:pl-12) keeps content clear of the
           floating show-toggle. */}
-      <main className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain ${collapsed ? 'md:pl-12' : ''}`}>
+      <main className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-12' : ''}`}>
         <MainContent />
       </main>
     </div>
