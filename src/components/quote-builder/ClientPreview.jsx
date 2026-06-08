@@ -225,11 +225,12 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
       </div>
 
-      {/* Header — stacks on mobile (logo block, then quote#) and promotes
-          to a side-by-side row on sm+. The quote# column reads left-aligned
-          on mobile so it shares the page gutter instead of orphaning to the
-          right edge. */}
-      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      {/* Header — logo on the left, quote # pinned to its right on EVERY width
+          (a single row, never stacked) so the number sits beside the wordmark
+          instead of orphaning onto its own line and eating vertical space. The
+          quote date already rides the banner above, so it isn't repeated here.
+          flex-wrap is only a safety net for an extreme-narrow width. */}
+      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-row flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           {settings?.logoImageId ? (
             <ImageView
@@ -243,12 +244,11 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             {[settings?.companyAddress, settings?.companyPhone, settings?.companyEmail].filter(Boolean).join('\n')}
           </div>
         </div>
-        <div className="text-left sm:text-right">
+        <div className="text-right flex-shrink-0">
           <div className="eyebrow">Cotización</div>
           {/* Quieter quote number — it shouldn't out-shout the company
               wordmark or (on the totals) the grand total. */}
           <div className="text-xl font-semibold tracking-tight">#{quote.number || '—'}</div>
-          <div className="text-[11px] text-ink-500 mt-2">{formatDate(quote.updatedAt)}</div>
         </div>
       </div>
 
