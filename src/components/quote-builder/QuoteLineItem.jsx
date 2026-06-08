@@ -20,6 +20,7 @@ import { MaterialsContext } from './MaterialsContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
+import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
@@ -74,8 +75,13 @@ export default function QuoteLineItem({
   const refInput = useRef(null);
 
   useEffect(() => {
-    if (autoFocus && refInput.current) {
+    // Skip the keyboard-popping focus on touch devices — adding a line
+    // shouldn't open the soft keyboard before the dealer taps the field.
+    if (autoFocus && refInput.current && shouldAutoFocusInput()) {
       refInput.current.focus();
+      refInput.current.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    } else if (autoFocus && refInput.current) {
+      // Still bring the new line into view, just without grabbing the keyboard.
       refInput.current.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     }
   }, [autoFocus]);

@@ -1,4 +1,4 @@
-import { Palette } from 'lucide-react';
+import { Palette, Pencil } from 'lucide-react';
 
 // The material-picker trigger. Two faces share ONE component so the dealer's
 // editor and the client link can't drift:
@@ -6,10 +6,12 @@ import { Palette } from 'lucide-react';
 //     where a labelled button would crowd the row's other controls.
 //   - labelled (`label` given) — the client-facing preview / share link, where
 //     a bare glyph went unnoticed; a customer on a phone gets a full, obviously
-//     tappable button instead.
+//     tappable button instead. When a `colorUrl` is passed it leads with a
+//     colour chip of the CURRENT material (color-coded) + an edit pencil, so it
+//     reads as "edit this material", sitting to the right of the swatch.
 // A caller just hands an onClick that opens its own picker modal; the glyph,
 // sizing, and hover/touch states live here.
-export default function MaterialPickerButton({ onClick, label, className = '' }) {
+export default function MaterialPickerButton({ onClick, label, colorUrl, className = '' }) {
   if (label) {
     return (
       <button
@@ -18,8 +20,17 @@ export default function MaterialPickerButton({ onClick, label, className = '' })
         className={`inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 min-h-9 coarse:min-h-11 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 hover:border-brand-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 ${className}`}
         title="Elegir del catálogo de materiales"
       >
-        <Palette size={15} aria-hidden />
+        {colorUrl ? (
+          <span
+            className="h-4 w-4 rounded-full border border-brand-300 bg-cover bg-center flex-shrink-0"
+            style={{ backgroundImage: `url(${colorUrl})` }}
+            aria-hidden
+          />
+        ) : (
+          <Palette size={15} aria-hidden />
+        )}
         {label}
+        <Pencil size={12} className="opacity-70" aria-hidden />
       </button>
     );
   }

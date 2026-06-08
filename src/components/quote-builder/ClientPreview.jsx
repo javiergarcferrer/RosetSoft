@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, SlidersHorizontal, Eye } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Pencil } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
@@ -60,50 +60,6 @@ function SectionDisclosure({ label, subtotalLabel, children }) {
       </summary>
       {children}
     </details>
-  );
-}
-
-// The Ver / Personalizar mode switch on the interactive link. A segmented
-// control (NOT a floating action button — this flips a MODE, and a FAB reads as
-// a primary action; a segment pair states "you are here, tap to switch"). Ver is
-// the clean read-only proposal a client lands on; Personalizar reveals every
-// control. The amber dot on Personalizar quietly advertises that there's more to
-// do without shouting, so a client discovers they can configure their own fabric.
-function ModeToggle({ mode, onChange, floating }) {
-  const opts = [
-    { value: 'view', label: 'Ver', Icon: Eye },
-    { value: 'edit', label: 'Personalizar', Icon: SlidersHorizontal },
-  ];
-  // Floating: carries its own dark surface + pop shadow (it no longer sits on
-  // the dark banner). Inline keeps the translucent fill it had on the banner.
-  return (
-    <span
-      className={`inline-flex items-stretch rounded-full p-0.5 ${floating ? 'bg-ink-900 shadow-pop ring-1 ring-white/10' : 'bg-white/10'}`}
-      role="group"
-      aria-label="Modo de la cotización"
-    >
-      {opts.map(({ value, label, Icon }) => {
-        const active = mode === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onChange(value)}
-            aria-pressed={active}
-            className={`relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 coarse:min-h-[44px] coarse:px-3.5 text-[11px] font-medium transition-colors ${
-              active ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-50/80 hover:text-white'
-            }`}
-          >
-            <Icon size={12} aria-hidden />
-            {label}
-            {/* Quiet "there's more here" hint on the inactive Personalizar tab. */}
-            {value === 'edit' && !active && (
-              <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden />
-            )}
-          </button>
-        );
-      })}
-    </span>
   );
 }
 
@@ -219,7 +175,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
       <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between gap-3">
         <span>
           {interactive
-            ? (mode === 'edit' ? 'Personaliza tu cotización · elige opciones y telas' : 'Tu propuesta · pulsa Personalizar para configurar')
+            ? (mode === 'edit' ? 'Personaliza tu cotización · elige opciones y telas' : 'Tu propuesta · toca el lápiz para personalizar')
             : 'Vista previa del cliente · de solo lectura'}
         </span>
         <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
@@ -501,17 +457,27 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
       )}
     </div>
 
-    {/* Floating Ver / Personalizar toggle — interactive link only. Pinned to
-        the screen so a client scrolling a long quote can always switch into
-        Personalizar (or back) without hunting for the top. Bottom-centred (the
-        thumb zone on a phone) and lifted above the home indicator; z-40 sits
-        under the transient SaveToast (z-50) so a "Guardando…" confirmation
-        still reads over it. */}
+    {/* Floating "Personalizar" pencil — interactive link only. One FAB pinned to
+        the bottom-RIGHT (thumb zone, clear of the centred content) toggles edit
+        mode: a pencil to start configuring, a check to return to the clean
+        proposal. An amber dot quietly advertises there's more to do. z-40 sits
+        under the transient SaveToast (z-50). Lifted above the editor's bottom
+        dock when shown inside the in-app preview (gradePricesFor). */}
     {interactive && (
-      <div className={`fixed z-40 flex justify-center px-4 print:hidden pointer-events-none overflow-hidden kb-hide-when-open ${gradePricesFor ? 'left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))]' : 'inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))]'}`}>
-        <div className="pointer-events-auto max-w-full">
-          <ModeToggle mode={mode} onChange={setMode} floating />
-        </div>
+      <div className={`fixed z-40 print:hidden kb-hide-when-open right-[max(1rem,env(safe-area-inset-right))] ${gradePricesFor ? 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]'}`}>
+        <button
+          type="button"
+          onClick={() => setMode(mode === 'edit' ? 'view' : 'edit')}
+          aria-pressed={editable}
+          title={editable ? 'Listo · volver a la propuesta' : 'Personalizar · elegir opciones y telas'}
+          className={`relative inline-flex h-14 w-14 items-center justify-center rounded-full shadow-pop ring-1 transition-colors ${
+            editable ? 'bg-white text-ink-900 ring-ink-200 hover:bg-ink-50' : 'bg-ink-900 text-white ring-white/10 hover:bg-ink-800'
+          }`}
+        >
+          {editable ? <Check size={22} strokeWidth={2.5} aria-hidden /> : <Pencil size={20} aria-hidden />}
+          {!editable && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-white" aria-hidden />}
+          <span className="sr-only">{editable ? 'Listo' : 'Personalizar'}</span>
+        </button>
       </div>
     )}
     </>
@@ -908,9 +874,14 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, c
     return allow?.length ? new Set(allow) : undefined;
   }, [modelKey, reference, picker.modelFabrics]);
   const { grade, fabric } = parseSubtype(subtype);
+  const chosen = !!(grade || fabric);
   return (
     <div className={`relative z-[2] ${className}`}>
-      <MaterialPickerButton onClick={() => setOpen(true)} label="Elegir tela" />
+      <MaterialPickerButton
+        onClick={() => setOpen(true)}
+        label={chosen ? 'Cambiar tela' : 'Elegir tela'}
+        colorUrl={chosen ? swatchUrl(colorCodeFromSubtype(subtype)) : undefined}
+      />
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
           <>

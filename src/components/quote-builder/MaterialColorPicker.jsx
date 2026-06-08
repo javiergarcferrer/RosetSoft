@@ -4,6 +4,7 @@ import ImageView from '../ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import { locateColor } from '../../lib/swatchMatch.js';
 import { composeSubtype } from '../../lib/subtype.js';
+import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { fabricKey, isMaterialOffered } from '../../lib/lrCatalog.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
@@ -106,7 +107,7 @@ export default function MaterialColorPicker({
     didAutoDrill.current = true;
     const hit = locateColor(list, composeSubtype(currentGrade, currentFabric));
     if (hit?.material) setPicked(hit.material);
-    else queueMicrotask(() => inputRef.current?.focus());
+    else if (shouldAutoFocusInput()) queueMicrotask(() => inputRef.current?.focus());
   }, [autoDrill, multiMode, list, currentGrade, currentFabric]);
 
   const allowGrade = useMemo(() => {
@@ -407,7 +408,7 @@ function MaterialList({
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar por nombre, grade, color o composición…"
             className="input pl-9"
-            autoFocus
+            autoFocus={shouldAutoFocusInput()}
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -671,7 +672,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar color o código…"
           className="input pl-9"
-          autoFocus
+          autoFocus={shouldAutoFocusInput()}
         />
       </div>
 
