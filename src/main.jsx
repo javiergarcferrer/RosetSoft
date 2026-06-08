@@ -23,9 +23,18 @@ startVersionWatcher();
 // installs. In a normal browser tab neither is true, so the class stays off and
 // the bar sits flush above the browser toolbar with no dead strip.
 try {
+  // On iOS, `navigator.standalone` is a DEFINITIVE boolean — true only for a
+  // home-screen launch, false in a Safari tab. We trust it outright there and
+  // must NOT fall through to `matchMedia('(display-mode: standalone)')`, which
+  // iOS Safari can mis-match (reporting standalone in a normal tab) — that's
+  // what stamped the dock's home-indicator pad onto the bar in Safari, leaving
+  // the dead white band under it. Only when `navigator.standalone` is undefined
+  // (Android / desktop) do we consult the display-mode query.
+  const iosFlag = window.navigator.standalone;
   const standalone =
-    window.navigator.standalone === true ||
-    window.matchMedia('(display-mode: standalone)').matches;
+    typeof iosFlag === 'boolean'
+      ? iosFlag
+      : window.matchMedia('(display-mode: standalone)').matches;
   document.documentElement.classList.toggle('is-standalone', standalone);
 } catch {
   /* unsupported — no-op */
