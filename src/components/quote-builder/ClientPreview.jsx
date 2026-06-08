@@ -225,30 +225,30 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
       </div>
 
-      {/* Header — stacks on mobile (logo block, then quote#) and promotes
-          to a side-by-side row on sm+. The quote# column reads left-aligned
-          on mobile so it shares the page gutter instead of orphaning to the
-          right edge. */}
-      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      {/* Header — the quote number sits to the RIGHT of the logo at EVERY width
+          (it used to stack below on mobile, orphaning a tall block and pushing
+          everything down). The company address flows beneath the logo on the
+          left; the date is shown once in the banner above, so it's not repeated
+          here. */}
+      <div className="px-6 sm:px-10 pt-6 pb-5 border-b border-ink-100 flex flex-row items-start justify-between gap-4">
         <div className="min-w-0">
           {settings?.logoImageId ? (
             <ImageView
               id={settings.logoImageId}
-              className="h-12 max-w-[200px] object-contain object-left mb-3"
+              className="h-10 sm:h-12 max-w-[180px] sm:max-w-[200px] object-contain object-left"
             />
           ) : (
             <div className="font-wordmark text-2xl text-ink-900">{settings?.companyName || 'Tu empresa'}</div>
           )}
-          <div className="text-[11px] text-ink-500 leading-relaxed whitespace-pre-line max-w-xs">
+          <div className="text-[11px] text-ink-500 leading-relaxed whitespace-pre-line max-w-xs mt-2 empty:hidden">
             {[settings?.companyAddress, settings?.companyPhone, settings?.companyEmail].filter(Boolean).join('\n')}
           </div>
         </div>
-        <div className="text-left sm:text-right">
+        <div className="text-right flex-shrink-0">
           <div className="eyebrow">Cotización</div>
           {/* Quieter quote number — it shouldn't out-shout the company
               wordmark or (on the totals) the grand total. */}
-          <div className="text-xl font-semibold tracking-tight">#{quote.number || '—'}</div>
-          <div className="text-[11px] text-ink-500 mt-2">{formatDate(quote.updatedAt)}</div>
+          <div className="text-xl font-semibold tracking-tight leading-tight">#{quote.number || '—'}</div>
         </div>
       </div>
 
@@ -259,7 +259,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           stay justified instead of the second wrapping below. The inner pair
           runs INLINE on mobile (side by side) and stacks on sm+. */}
       {(customer || seller || professional) && (
-        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-nowrap sm:items-start sm:justify-between sm:gap-x-6">
+        <div className="px-6 sm:px-10 py-4 border-b border-ink-100 flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-start sm:justify-between sm:gap-x-6">
           <div className="min-w-0 sm:flex-1">
             <div className="eyebrow mb-1.5">Cliente</div>
             {customer ? (
