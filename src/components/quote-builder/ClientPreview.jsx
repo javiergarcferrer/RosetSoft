@@ -427,7 +427,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           the visual climax. Sub-rows above stay right-aligned body text
           (Descuento in brand); the FX shadow sits below the band.
           Mirrors the redesigned PDF. */}
-      <div className="px-6 sm:px-10 py-7 border-t border-ink-100">
+      <div className="px-6 sm:px-10 py-5 border-t border-ink-100">
         <div className="w-full sm:ml-auto sm:max-w-sm tabular-nums">
           <div className="space-y-1.5">
             <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
