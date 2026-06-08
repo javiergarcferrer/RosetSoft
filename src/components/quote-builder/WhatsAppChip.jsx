@@ -43,7 +43,7 @@ export default function WhatsAppChip({ customer }) {
 
   if (editing) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50">
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50 max-w-full min-w-0">
         <MessageCircle size={12} className="text-emerald-600 flex-shrink-0" aria-hidden />
         <input
           autoFocus
@@ -53,7 +53,7 @@ export default function WhatsAppChip({ customer }) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
           placeholder="809 000 0000"
-          className="w-28 bg-transparent border-0 p-0 text-xs text-ink-900 focus:outline-none focus:ring-0"
+          className="w-24 min-w-0 bg-transparent border-0 p-0 text-xs text-ink-900 focus:outline-none focus:ring-0"
           aria-label="Número de WhatsApp"
         />
         <button type="button" onClick={save} title="Guardar" aria-label="Guardar" className="text-emerald-600 hover:text-emerald-700 flex-shrink-0">
@@ -79,7 +79,9 @@ export default function WhatsAppChip({ customer }) {
   }
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
+    // min-w-0 instead of shrink-0 so the chip can yield space in a
+    // flex-wrap row rather than pushing siblings off-screen.
+    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
       <a
         href={`https://wa.me/${waDigits(phone)}`}
         target="_blank"

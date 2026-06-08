@@ -89,7 +89,7 @@ export default function Dashboard() {
         title={firstName ? `Hola, ${firstName}` : 'Inicio'}
         subtitle={settings?.companyName || 'Tu empresa'}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {meId && <ScopeToggle scope={scope} onChange={setScope} />}
             <Link to="/quotes/new" className="btn-brand">
               <Plus size={14} /> Nueva cotización

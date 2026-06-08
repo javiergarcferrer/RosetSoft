@@ -52,7 +52,7 @@ export default function Compras() {
   return (
     <>
       <PageHeader title="Compras" subtitle="Compra de mercancía (a inventario), activos y servicios — se asienta sola"
-        actions={<button type="button" onClick={() => setShowForm((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nueva compra</button>} />
+        actions={<button type="button" onClick={() => setShowForm((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Plus size={15} /> Nueva compra</button>} />
 
       {showForm && loaded && (
         <NewPurchaseForm scope={scope} config={config} suppliers={suppliersQ.data} suppliersById={suppliersById}
@@ -63,34 +63,36 @@ export default function Compras() {
         <EmptyState icon={ShoppingCart} title="Sin compras" description="Registra una compra con “Nueva compra”." />
       ) : (
         <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-              <tr>
-                <th className="text-left py-2 px-3">Fecha</th>
-                <th className="text-left py-2 px-3">Proveedor</th>
-                <th className="text-left py-2 px-3">Tipo</th>
-                <th className="text-left py-2 px-3">NCF</th>
-                <th className="text-right py-2 px-3">Base</th>
-                <th className="text-right py-2 px-3">ITBIS</th>
-                <th className="text-right py-2 px-3">Total</th>
-                <th className="text-left py-2 px-3">Pago</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3 text-ink-500">{formatDate(p.purchaseAt)}</td>
-                  <td className="py-1.5 px-3">{suppliersById.get(p.supplierId)?.name || '—'}</td>
-                  <td className="py-1.5 px-3 text-ink-600">{KIND_LABEL[p.kind] || p.kind}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-500">{p.ncf || '—'}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(p.base)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(p.itbis)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop((p.base || 0) + (p.itbis || 0))}</td>
-                  <td className="py-1.5 px-3 text-ink-600">{PAY_LABEL[p.paymentMethod] || p.paymentMethod}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                  <th className="text-left py-2 px-3">Proveedor</th>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">Tipo</th>
+                  <th className="text-left py-2 px-3">NCF</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap">Base</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap">Total</th>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">Pago</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr key={p.id} className="border-t border-ink-50">
+                    <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(p.purchaseAt)}</td>
+                    <td className="py-1.5 px-3">{suppliersById.get(p.supplierId)?.name || '—'}</td>
+                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{KIND_LABEL[p.kind] || p.kind}</td>
+                    <td className="py-1.5 px-3 tabular-nums text-ink-500">{p.ncf || '—'}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(p.base)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(p.itbis)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop((p.base || 0) + (p.itbis || 0))}</td>
+                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{PAY_LABEL[p.paymentMethod] || p.paymentMethod}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>
@@ -171,15 +173,15 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
-  const numField = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+  const field = 'rounded-lg border border-ink-200 px-3 py-2 text-sm w-full min-h-[44px]';
+  const numField = 'w-28 rounded-lg border border-ink-200 px-2 py-2 text-sm text-right tabular-nums min-h-[44px]';
   const net = (Number(form.base) || 0) + (Number(form.itbis) || 0) - (Number(form.retIsr) || 0) - (Number(form.retItbis) || 0);
 
   return (
-    <div className="card p-4 mb-4 border-ink-300">
+    <div className="card p-4 mb-4 border-ink-300 min-w-0">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">Nueva compra</h3>
-        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
       </div>
       <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
         <select value={form.supplierId} onChange={(e) => onSupplier(e.target.value)} className={field}>
@@ -209,21 +211,21 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 mt-3">
-        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} /></label>
-        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Pago<br />
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 mt-3">
+        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" value={form.base} onChange={(e) => onBase(e.target.value)} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={`${numField} w-full sm:w-28`} /></label>
+        <label className="text-sm col-span-2">Pago<br />
           <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={field}>
             <option value="credit">Crédito</option><option value="bank">Banco</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
           </select>
         </label>
       </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-ink-100">
         <div className="text-sm text-ink-600">Neto a pagar <b className="tabular-nums">{formatDop(net)}</b></div>
-        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] disabled:opacity-40">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar compra
         </button>
       </div>

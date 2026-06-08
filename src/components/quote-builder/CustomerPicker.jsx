@@ -147,7 +147,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
         {showCreate && (
           <div
             onMouseEnter={() => setActiveIdx(0)}
-            className={`rounded-md mx-1 mb-1 flex items-center gap-1 transition-colors ${
+            className={`rounded-md mx-1 mb-1 flex flex-wrap items-stretch gap-1 transition-colors ${
               activeIdx === 0 ? 'bg-brand-50' : 'hover:bg-ink-50'
             }`}
           >
@@ -171,7 +171,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
             <button
               type="button"
               onClick={openDetail}
-              className="flex-shrink-0 mr-1.5 px-2.5 py-1.5 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 transition-colors"
+              className="flex-shrink-0 self-center mr-1.5 px-2.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 transition-colors"
             >
               Con detalles
             </button>

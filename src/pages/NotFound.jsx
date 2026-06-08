@@ -15,7 +15,7 @@ export default function NotFound() {
         <p className="text-sm text-ink-500 mt-3 leading-relaxed max-w-xs mx-auto">
           El enlace que seguiste no existe o el registro fue eliminado.
         </p>
-        <div className="mt-8 flex items-center gap-3 justify-center">
+        <div className="mt-8 flex flex-wrap items-center gap-3 justify-center">
           <Link to="/" className="btn-brand active:scale-[0.98] transition-transform">Volver al inicio</Link>
           <Link to="/quotes" className="btn-ghost active:scale-[0.98] transition-transform">Ver cotizaciones</Link>
         </div>

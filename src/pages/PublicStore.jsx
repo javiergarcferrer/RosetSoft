@@ -139,15 +139,18 @@ export default function PublicStore() {
           <>
             {/* Collection header — eyebrow + large title + count, controls tucked right. */}
             <div className="flex flex-col gap-5 py-8 sm:flex-row sm:items-end sm:justify-between sm:py-12">
-              <div>
+              <div className="min-w-0">
                 <div className="eyebrow">Tienda</div>
                 <h1 className="mt-2 font-display text-3xl font-normal leading-none tracking-tight sm:text-[42px]">
                   Catálogo{' '}
                   <span className="align-middle text-2xl text-ink-300 sm:text-3xl">({resultCount})</span>
                 </h1>
               </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="relative flex-1 sm:w-48 sm:flex-none">
+              {/* Controls row: search grows to fill; filter + sort stay fixed-size.
+                  On 320px the whole row is below the title (flex-col above sm:),
+                  so `w-full` on the search ensures no clipping. */}
+              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
+                <div className="relative min-w-0 flex-1 sm:w-48 sm:flex-none">
                   <Search size={15} className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden />
                   <DebouncedInput
                     className="w-full rounded-none border-0 border-b border-ink-300 bg-transparent pl-6 pr-2 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-ink-900 focus:outline-none focus:ring-0"
@@ -162,12 +165,16 @@ export default function PublicStore() {
                     placeholder="Buscar"
                   />
                 </div>
-                <FilterPopover
-                  filters={popoverFilters}
-                  activeFilters={popoverActive}
-                  onFiltersChange={onPopoverChange}
-                />
-                <SortMenu sortOptions={sortOptions} sort={sort} onSortChange={setSort} />
+                <div className="flex-shrink-0">
+                  <FilterPopover
+                    filters={popoverFilters}
+                    activeFilters={popoverActive}
+                    onFiltersChange={onPopoverChange}
+                  />
+                </div>
+                <div className="flex-shrink-0">
+                  <SortMenu sortOptions={sortOptions} sort={sort} onSortChange={setSort} />
+                </div>
               </div>
             </div>
 
@@ -214,7 +221,7 @@ function ProductCard({ c }) {
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium leading-snug text-ink-900 line-clamp-2" title={c.name}>{c.name}</h3>
-          <div className="mt-1 text-sm text-ink-500 tabular-nums">{priceLabel(c.price)}</div>
+          <div className="mt-1 text-sm text-ink-500 tabular-nums break-words">{priceLabel(c.price)}</div>
           {showAvail && (
             <div className="eyebrow-xs mt-1.5 text-ink-400 tracking-widest">{c.availability.label}</div>
           )}

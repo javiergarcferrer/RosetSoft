@@ -44,12 +44,12 @@ export default function ShipmentTracking({
   if (trackable.length === 0) return null;
 
   const panels = (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0 w-full">
       {trackable.map((c) => (
-        <div key={c.id} className="space-y-1.5">
-          <div className="text-[11px] font-medium text-ink-600">
-            Contenedor #{c.number ?? '—'}
-            <span className="font-mono text-ink-400"> · {normalizeContainerNo(c.code)}</span>
+        <div key={c.id} className="space-y-1.5 min-w-0">
+          <div className="text-[11px] font-medium text-ink-600 min-w-0 flex flex-wrap items-baseline gap-x-1">
+            <span>Contenedor #{c.number ?? '—'}</span>
+            <span className="font-mono text-ink-400 break-all">{normalizeContainerNo(c.code)}</span>
           </div>
           <ContainerTracking containerNo={normalizeContainerNo(c.code)} />
         </div>
@@ -61,12 +61,12 @@ export default function ShipmentTracking({
   // mount once the dealer opens it.
   if (collapsible) {
     return (
-      <div className={className}>
+      <div className={`min-w-0 ${className}`}>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
           aria-expanded={open}
-          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600 hover:border-ink-400 hover:text-ink-900 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1 min-h-[2rem] coarse:min-h-[2.75rem] text-[11px] font-medium text-ink-600 hover:border-ink-400 hover:text-ink-900 transition-colors"
         >
           <Ship size={12} />
           Rastrear envío{trackable.length > 1 ? ` · ${trackable.length}` : ''}

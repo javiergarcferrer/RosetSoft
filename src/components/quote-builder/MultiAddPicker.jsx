@@ -109,9 +109,9 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
         )}
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="text-[11px] font-medium text-ink-500 whitespace-nowrap">Grado para todos:</span>
-        <Select variant="ghost" value={grade} onChange={setGrade} aria-label="Grado para todos los elementos">
+        <Select variant="ghost" value={grade} onChange={setGrade} aria-label="Grado para todos los elementos" className="flex-1 min-w-0">
           <option value="">Sin material · rango</option>
           {GRADE_GROUPS.map((group) => (
             <optgroup key={group.label} label={group.label}>
@@ -140,13 +140,13 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3 border-t border-ink-100 pt-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3">
         <span className="text-xs text-ink-500 tabular-nums">{count} seleccionado{count === 1 ? '' : 's'}</span>
         <button
           type="button"
           onClick={add}
           disabled={!count}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
         >
           <Plus size={14} aria-hidden />
           Agregar {count || ''} {count === 1 ? 'elemento' : 'elementos'}
@@ -171,7 +171,7 @@ function MultiRow({ fam, grade, checked, onToggle }) {
       type="button"
       onClick={onToggle}
       disabled={!offered}
-      className={`w-full text-left rounded-md px-3 py-2 flex items-center gap-3 transition-colors ${
+      className={`w-full text-left rounded-md px-3 py-2.5 min-h-[44px] flex items-center gap-3 transition-colors ${
         checked ? 'bg-brand-50' : 'hover:bg-ink-50'
       } ${!offered ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
@@ -182,11 +182,11 @@ function MultiRow({ fam, grade, checked, onToggle }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-ink-900 truncate">{fam.name || fam.root}</span>
-        <span className="block text-[11px] text-ink-500">
+        <span className="block text-[11px] text-ink-500 truncate">
           {[fam.family, fam.graded ? `${fam.grades.length} grados` : null].filter(Boolean).join(' · ')}
         </span>
       </span>
-      <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">{priceLabel}</span>
+      <span className="text-xs tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">{priceLabel}</span>
     </button>
   );
 }

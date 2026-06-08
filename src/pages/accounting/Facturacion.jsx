@@ -276,7 +276,7 @@ export default function Facturacion() {
 
   const tabBtn = (key, label) => (
     <button type="button" onClick={() => setTab(key)}
-      className={`text-sm px-3 py-1.5 rounded-lg ${tab === key ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>{label}</button>
+      className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === key ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>{label}</button>
   );
 
   return (
@@ -301,16 +301,16 @@ export default function Facturacion() {
               const customer = q.customerId ? customersById.get(q.customerId) : null;
               const draft = drafts[q.id] || {};
               return (
-                <div key={q.id} className="card p-4">
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                <div key={q.id} className="card p-4 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
                     <span className="text-xs text-ink-400 tabular-nums">#{q.number ?? '—'}</span>
-                    <span className="font-medium">{customer?.name || 'Cliente'}</span>
-                    <span className="text-sm text-ink-500">
+                    <span className="font-medium truncate">{customer?.name || 'Cliente'}</span>
+                    <span className="text-sm text-ink-500 whitespace-nowrap">
                       {q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}
                     </span>
-                    <span className="ml-auto text-sm tabular-nums">{formatDop(book.total)} <span className="text-ink-400">({formatMoney(book.usdTotal, 'USD')})</span></span>
+                    <span className="text-sm tabular-nums whitespace-nowrap sm:ml-auto">{formatDop(book.total)} <span className="text-ink-400">({formatMoney(book.usdTotal, 'USD')})</span></span>
                   </div>
-                  <div className="text-xs text-ink-500 mb-3 tabular-nums">
+                  <div className="text-xs text-ink-500 mb-3 tabular-nums break-words">
                     Base {formatDop(book.base)} · ITBIS {formatDop(book.itbis)}
                     {book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}
                   </div>
@@ -318,21 +318,21 @@ export default function Facturacion() {
                     <div className="flex gap-1">
                       <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
                         onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
-                        className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-36" />
+                        className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-36 min-h-[44px]" />
                       <button type="button" onClick={() => lookupFor(q)}
                         disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
-                        className="btn-ghost text-sm inline-flex items-center px-2.5 disabled:opacity-40" title="Buscar nombre en el registro DGII">
+                        className="btn-ghost text-sm inline-flex items-center px-2.5 min-h-[44px] min-w-[44px] justify-center disabled:opacity-40" title="Buscar nombre en el registro DGII">
                         {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                       </button>
                     </div>
                     <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
                       onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
-                      className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-52" />
+                      className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-full sm:w-52 min-h-[44px]" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
-                      className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+                      className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] disabled:opacity-40">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
                     </button>
-                    {draft.msg && <span className="text-xs text-ink-500">{draft.msg}</span>}
+                    {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
                   </div>
                 </div>
               );
@@ -350,67 +350,69 @@ export default function Facturacion() {
               description="Las ventas facturadas del mes aparecen aquí." />
           ) : (
             <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left py-2 px-3">RNC/Cédula</th>
-                    <th className="text-left py-2 px-3">Cliente</th>
-                    <th className="text-left py-2 px-3">NCF</th>
-                    <th className="text-left py-2 px-3">Fecha</th>
-                    <th className="text-right py-2 px-3">Base</th>
-                    <th className="text-right py-2 px-3">ITBIS</th>
-                    <th className="text-right py-2 px-3">Total</th>
-                    <th className="text-left py-2 px-3">e-CF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sales607.rows.map((r) => {
-                    const p = postingById.get(r.id);
-                    const status = p?.ecfStatus || '';
-                    const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
-                    return (
-                    <tr key={r.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3 tabular-nums">{r.rnc || '—'}</td>
-                      <td className="py-1.5 px-3">{r.name || '—'}</td>
-                      <td className="py-1.5 px-3 tabular-nums text-ink-500">{r.ncf || '—'}</td>
-                      <td className="py-1.5 px-3 text-ink-500">{formatDate(r.date)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.base)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.itbis)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.total)}</td>
-                      <td className="py-1.5 px-3">
-                        <div className="flex items-center gap-3">
-                          {status === 'sent' || status === 'accepted' ? (
-                            <span className="text-xs text-emerald-700">Transmitido</span>
-                          ) : status === 'rejected' ? (
-                            <span className="text-xs text-rose-600">Rechazado</span>
-                          ) : !isEcf ? (
-                            <span className="text-xs text-ink-400">—</span>
-                          ) : (
-                            <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-                              className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40">
-                              {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
-                            </button>
-                          )}
-                          <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
-                            title="Imprimir factura" className="text-ink-400 hover:text-ink-900 disabled:opacity-40">
-                            {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
-                          </button>
-                        </div>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">RNC/Cédula</th>
+                      <th className="text-left py-2 px-3">Cliente</th>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">NCF</th>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Base</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Total</th>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">e-CF</th>
                     </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-ink-200 font-semibold">
-                    <td className="py-2 px-3" colSpan={4}>{sales607.count} ventas</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.base)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.itbis)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(sales607.totals.total)}</td>
-                    <td className="py-2 px-3"></td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sales607.rows.map((r) => {
+                      const p = postingById.get(r.id);
+                      const status = p?.ecfStatus || '';
+                      const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
+                      return (
+                      <tr key={r.id} className="border-t border-ink-50">
+                        <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
+                        <td className="py-1.5 px-3 min-w-[120px]">{r.name || '—'}</td>
+                        <td className="py-1.5 px-3 tabular-nums text-ink-500 whitespace-nowrap">{r.ncf || '—'}</td>
+                        <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
+                        <td className="py-1.5 px-3">
+                          <div className="flex items-center gap-3">
+                            {status === 'sent' || status === 'accepted' ? (
+                              <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
+                            ) : status === 'rejected' ? (
+                              <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
+                            ) : !isEcf ? (
+                              <span className="text-xs text-ink-400">—</span>
+                            ) : (
+                              <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+                                className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40 whitespace-nowrap min-h-[44px]">
+                                {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+                              </button>
+                            )}
+                            <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
+                              title="Imprimir factura" className="text-ink-400 hover:text-ink-900 disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                              {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-ink-200 font-semibold">
+                      <td className="py-2 px-3 whitespace-nowrap" colSpan={4}>{sales607.count} ventas</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.base)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.itbis)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.total)}</td>
+                      <td className="py-2 px-3"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </>

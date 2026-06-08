@@ -90,7 +90,7 @@ function ModeToggle({ mode, onChange, floating }) {
             type="button"
             onClick={() => onChange(value)}
             aria-pressed={active}
-            className={`relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            className={`relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 coarse:min-h-[44px] coarse:px-3.5 text-[11px] font-medium transition-colors ${
               active ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-50/80 hover:text-white'
             }`}
           >
@@ -453,9 +453,9 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
           </div>
           {/* The anchored grand-total band. */}
-          <div className="mt-3 flex items-center justify-between gap-4 bg-ink-900 px-5 py-3.5">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 bg-ink-900 px-5 py-3.5">
             <span className="eyebrow-xs tracking-[0.18em] text-ink-200 flex-shrink-0">Total</span>
-            <span className="text-xl sm:text-2xl font-semibold text-white text-right whitespace-nowrap">
+            <span className="text-xl sm:text-2xl font-semibold text-white text-right break-words min-w-0">
               {hasRange ? `${fmt(totalsRange.min)} – ${fmt(totalsRange.max)}` : fmt(totals.grandTotal)}
             </span>
           </div>
@@ -467,7 +467,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
             Flete y agenciamiento incluido
           </div>
           {dopRate && currency === 'USD' && (
-            <div className="flex items-center justify-end gap-1.5 text-[11px] text-ink-500 pt-0.5">
+            <div className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-[11px] text-ink-500 pt-0.5">
               {settings?.rateLogoImageId && (
                 <ImageView
                   id={settings.rateLogoImageId}
@@ -475,7 +475,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                   className="h-4 w-4 flex-shrink-0 object-contain"
                 />
               )}
-              <span>
+              <span className="text-right break-words">
                 ≈ {hasRange
                   ? `${formatMoney(totalsRange.min, 'DOP', rates)} – ${formatMoney(totalsRange.max, 'DOP', rates)}`
                   : formatMoney(totals.grandTotal, 'DOP', rates)} a {dopRate.toFixed(2)} DOP/USD
@@ -508,8 +508,8 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         under the transient SaveToast (z-50) so a "Guardando…" confirmation
         still reads over it. */}
     {interactive && (
-      <div className={`fixed z-40 flex justify-center px-4 print:hidden pointer-events-none ${gradePricesFor ? 'left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))]' : 'inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))]'}`}>
-        <div className="pointer-events-auto">
+      <div className={`fixed z-40 flex justify-center px-4 print:hidden pointer-events-none overflow-hidden ${gradePricesFor ? 'left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] bottom-[calc(3.5rem+max(1rem,env(safe-area-inset-bottom)))]' : 'inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))]'}`}>
+        <div className="pointer-events-auto max-w-full">
           <ModeToggle mode={mode} onChange={setMode} floating />
         </div>
       </div>
@@ -548,38 +548,38 @@ function LinePriceCell({ priced, fmt }) {
   const { qty, unit, listUnit, total, listTotal, discount, ranged, range } = priced;
   const discounted = discount > 0;
   return (
-    <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[120px] sm:flex-shrink-0">
+    <div className="mt-3 pt-3 border-t border-ink-100 sm:mt-0 sm:pt-0 sm:border-t-0 flex items-end justify-between gap-3 sm:block sm:text-right tabular-nums sm:min-w-[110px] sm:max-w-[160px] sm:flex-shrink-0">
       {ranged ? (
         <>
           <div className="min-w-0">
-            <div className="text-[13px] text-ink-500 whitespace-nowrap">
+            <div className="text-[13px] text-ink-500">
               {qty} <span className="text-ink-400" aria-hidden>×</span> <span className="text-brand-700">rango</span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+          <div className="text-right min-w-0">
+            <div className="text-base font-semibold text-ink-900 break-words">
               {fmt(range.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(range.max)}
             </div>
-            <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
+            <div className="text-[10px] text-ink-500 mt-0.5">sin material</div>
           </div>
         </>
       ) : (
         <>
           <div className="min-w-0">
-            <div className="text-[13px] text-ink-500 whitespace-nowrap">
+            <div className="text-[13px] text-ink-500">
               {qty} <span className="text-ink-400" aria-hidden>×</span> {fmt(unit)}
             </div>
             {discounted && (
-              <div className="mt-0.5 whitespace-nowrap">
+              <div className="mt-0.5">
                 <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
                 <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
               </div>
             )}
           </div>
-          <div className="text-right">
-            <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">{fmt(total)}</div>
+          <div className="text-right min-w-0">
+            <div className="text-base font-semibold text-ink-900 break-words">{fmt(total)}</div>
             {discounted && qty > 1 && (
-              <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+              <div className="text-[10px] text-ink-500 mt-0.5">
                 ahorras {fmt(listTotal - total)}
               </div>
             )}
@@ -859,7 +859,7 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
       onClick={() => onSelect(line.alternativeGroup, line.id)}
       aria-pressed={isSelected}
       title={isSelected ? 'Esta es tu elección' : 'Elegir esta opción'}
-      className="group/alt relative z-[2] mb-2.5 flex w-full items-center gap-2.5 text-left"
+      className="group/alt relative z-[2] mb-2.5 flex w-full items-center gap-2.5 text-left coarse:min-h-[44px]"
     >
       <span className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
         isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white group-hover/alt:border-brand-400'
@@ -1330,12 +1330,12 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             real 2+-element grouping (parity with the PDF). */}
                         {m.moduleGroup && m.components.length > 1 && !headerDuplicatesElement && (
                           <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-ink-600">{m.name || '—'}</span>
+                            <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-ink-600 truncate">{m.name || '—'}</span>
                             {/* An excluded module (optional / non-selected) adds
                                 nothing to the total, so it asserts no price — the
                                 same reason an optional line is struck from the sum. */}
                             {!modDimmed && (
-                              <span className="text-xs tabular-nums text-ink-500">{fmt(moduleSubtotal(m.components) * mf)}</span>
+                              <span className="flex-shrink-0 text-xs tabular-nums text-ink-500">{fmt(moduleSubtotal(m.components) * mf)}</span>
                             )}
                           </div>
                         )}
@@ -1431,25 +1431,25 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               bold total anchor, matching the redesigned PDF footer. The
               optional struck list price / −Y% sit above when discounted. */}
           <div className="mt-3 pt-2 border-t border-ink-100 tabular-nums">
-            <div className="ml-auto w-fit text-right">
+            <div className="ml-auto max-w-full text-right">
               {discounted && !ranged && (
-                <div className="whitespace-nowrap">
+                <div>
                   <span className="text-[13px] text-ink-400 line-through">{fmt(subtotal)}</span>
                   <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
                 </div>
               )}
-              <div className="eyebrow-xs tracking-wide text-ink-500 whitespace-nowrap mt-0.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500 mt-0.5">
                 Total compuesto
               </div>
-              <div className="text-lg font-semibold text-ink-900 whitespace-nowrap">
+              <div className="text-base font-semibold text-ink-900 break-words">
                 {ranged
                   ? <>{fmt(tr.min)} <span className="text-ink-300" aria-hidden>–</span> {fmt(tr.max)}</>
                   : fmt(grandTotal)}
               </div>
               {ranged ? (
-                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">sin material</div>
+                <div className="text-[10px] text-ink-500 mt-0.5">sin material</div>
               ) : discounted && (
-                <div className="text-[10px] text-ink-500 mt-0.5 whitespace-nowrap">
+                <div className="text-[10px] text-ink-500 mt-0.5">
                   ahorras {fmt(subtotal - grandTotal)}
                 </div>
               )}
@@ -1648,23 +1648,25 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
     // as a list item so it sits naturally in the <ul> alongside flat rows.
     <li className="px-3 sm:px-2 py-3 list-none">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
-        <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
-            <Icon size={13} className="opacity-80" aria-hidden />
-            {eyebrow}
+        <div className={`${headBg} px-4 py-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0`}>
+            <Icon size={13} className="opacity-80 flex-shrink-0" aria-hidden />
+            <span className="truncate">{eyebrow}</span>
           </span>
-          <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
+          <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums flex-shrink-0">
             {memberCount} {isSet ? 'piezas' : 'opciones'}
           </span>
         </div>
         <ul>{children}</ul>
-        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
-            <Icon size={12} className="opacity-80" aria-hidden />
-            {footerLabel}
-            {optional && <span className="normal-case font-normal text-ink-400">· no incluido en el total</span>}
+        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0`}>
+            <Icon size={12} className="opacity-80 flex-shrink-0" aria-hidden />
+            <span className="min-w-0">
+              {footerLabel}
+              {optional && <span className="normal-case font-normal text-ink-400"> · no incluido en el total</span>}
+            </span>
           </span>
-          <span className="text-sm font-semibold text-ink-900 tabular-nums">
+          <span className="text-sm font-semibold text-ink-900 tabular-nums flex-shrink-0 whitespace-nowrap">
             {footerValue}
           </span>
         </div>
@@ -1685,7 +1687,7 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
 // washed out — the one clear next step on an otherwise quiet card.
 function OptionalAction({ included, onToggle }) {
   return (
-    <div className="relative z-[2] mt-3 pt-3 border-t border-dashed border-ink-200 flex items-center justify-between gap-3">
+    <div className="relative z-[2] mt-3 pt-3 border-t border-dashed border-ink-200 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       {included ? (
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
           <Check size={14} className="flex-shrink-0" aria-hidden />
@@ -1728,9 +1730,9 @@ function TotalRow({ label, value, muted, accent }) {
     ? 'text-ink-500'
     : '';
   return (
-    <div className={`flex justify-between text-sm ${tone}`}>
-      <span>{label}</span>
-      <span>{value}</span>
+    <div className={`flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm ${tone}`}>
+      <span className="min-w-0">{label}</span>
+      <span className="flex-shrink-0 whitespace-nowrap">{value}</span>
     </div>
   );
 }

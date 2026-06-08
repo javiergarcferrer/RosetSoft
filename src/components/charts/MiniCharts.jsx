@@ -52,7 +52,7 @@ export function Donut({ segments = [], size = 132, thickness = 16, children }) {
 export function BarPairs({ data = [], colors = ['#059669', '#e8a76d'], height = 128, format }) {
   const max = Math.max(1, ...data.flatMap((d) => [Math.abs(d.a || 0), Math.abs(d.b || 0)]));
   return (
-    <div>
+    <div className="min-w-0 w-full">
       <div className="flex items-end gap-2" style={{ height }}>
         {data.map((d, i) => (
           <div key={i} className="flex-1 flex items-end justify-center gap-1 h-full">
@@ -83,7 +83,7 @@ function Column({ h, color, title }) {
 /** Filled line over time. `points: [{ label, value }]`. */
 export function AreaChart({ points = [], color = '#059669', height = 116 }) {
   const id = useId();
-  const W = 320;
+  const W = 320; // SVG internal viewBox width — scales via width="100%"
   const H = 100;
   const pad = 8;
   const n = points.length;
@@ -98,7 +98,7 @@ export function AreaChart({ points = [], color = '#059669', height = 116 }) {
     ? `${line} L${xy[n - 1][0].toFixed(1)} ${H} L${xy[0][0].toFixed(1)} ${H} Z`
     : '';
   return (
-    <div>
+    <div className="min-w-0 w-full">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" className="block">
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">

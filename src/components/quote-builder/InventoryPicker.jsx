@@ -93,9 +93,9 @@ export default function InventoryPicker({ open, onClose, onInsert }) {
                 key={it.id}
                 type="button"
                 onClick={() => pick(it)}
-                className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center justify-between gap-3 hover:bg-ink-50 transition-colors"
+                className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50 transition-colors"
               >
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-ink-900 truncate">{it.name}</span>
                   <span className="block text-[11px] text-ink-500 truncate">
                     {it.sku ? `${it.sku} · ` : ''}
@@ -104,7 +104,7 @@ export default function InventoryPicker({ open, onClose, onInsert }) {
                     </span>
                   </span>
                 </span>
-                <span className="text-sm tabular-nums text-ink-900 whitespace-nowrap">{usd(it.sellingPrice)}</span>
+                <span className="text-xs tabular-nums text-ink-900 whitespace-nowrap flex-shrink-0">{usd(it.sellingPrice)}</span>
               </button>
             );
           })}

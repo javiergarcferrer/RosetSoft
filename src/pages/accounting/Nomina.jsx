@@ -81,7 +81,7 @@ export default function Nomina() {
         <div className="space-y-4">
           <div className="card p-4">
             <div className="flex flex-wrap items-end gap-3 mb-3">
-              <label className="text-sm">Fecha de pago<br /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm" /></label>
+              <label className="text-sm">Fecha de pago<br /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm min-h-[2.5rem] coarse:min-h-[2.75rem] w-full" /></label>
               <button type="button" onClick={post} disabled={posting || items.length === 0}
                 className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40">
                 {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar nómina
@@ -91,32 +91,55 @@ export default function Nomina() {
             {items.length === 0 ? (
               <EmptyState icon={Wallet} title="Sin empleados activos" description="Agrega empleados con salario en la página de Empleados." />
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr><th className="text-left py-2 px-3">Empleado</th><th className="text-right py-2 px-3">Salario</th><th className="text-right py-2 px-3">SFS</th><th className="text-right py-2 px-3">AFP</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
-                </thead>
-                <tbody>
+              /* Mobile: stacked cards; desktop: table */
+              <>
+                <div className="sm:hidden space-y-3">
                   {items.map((it) => (
-                    <tr key={it.employeeId} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3">{it.name}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(it.gross)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.sfsEmp)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.afpEmp)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.isr)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(it.net)}</td>
-                    </tr>
+                    <div key={it.employeeId} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1.5">
+                      <div className="font-medium text-ink-900">{it.name}</div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-ink-600">
+                        <span>Salario <span className="tabular-nums font-medium text-ink-900">{formatDop(it.gross)}</span></span>
+                        <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(it.net)}</span></span>
+                        <span>SFS <span className="tabular-nums">{formatDop(it.sfsEmp)}</span></span>
+                        <span>AFP <span className="tabular-nums">{formatDop(it.afpEmp)}</span></span>
+                        <span>ISR <span className="tabular-nums">{formatDop(it.isr)}</span></span>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-ink-200 font-semibold">
-                    <td className="py-2 px-3">{items.length} empleados</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.gross)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums" colSpan={2}>TSS emp. {formatDop(totals.tssEmp)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.isr)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.net)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  <div className="rounded-lg border border-ink-200 bg-ink-100/60 px-3 py-2 text-xs font-semibold flex justify-between gap-2">
+                    <span>{items.length} empleados</span>
+                    <span>Neto total: <span className="tabular-nums">{formatDop(totals.net)}</span></span>
+                  </div>
+                </div>
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                      <tr><th className="text-left py-2 px-3">Empleado</th><th className="text-right py-2 px-3">Salario</th><th className="text-right py-2 px-3">SFS</th><th className="text-right py-2 px-3">AFP</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
+                    </thead>
+                    <tbody>
+                      {items.map((it) => (
+                        <tr key={it.employeeId} className="border-t border-ink-50">
+                          <td className="py-1.5 px-3">{it.name}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(it.gross)}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.sfsEmp)}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.afpEmp)}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.isr)}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(it.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-ink-200 font-semibold">
+                        <td className="py-2 px-3">{items.length} empleados</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.gross)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums" colSpan={2}>TSS emp. {formatDop(totals.tssEmp)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.isr)}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.net)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
             )}
             {items.length > 0 && (
               <p className="text-xs text-ink-400 mt-2">
@@ -128,22 +151,41 @@ export default function Nomina() {
           {runs.length > 0 && (
             <div className="card overflow-hidden">
               <div className="px-4 pt-3"><h2 className="eyebrow font-semibold text-ink-600">Nóminas registradas</h2></div>
-              <table className="w-full text-sm mt-2">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr><th className="text-left py-2 px-3">Período</th><th className="text-left py-2 px-3">Pagada</th><th className="text-right py-2 px-3">Bruto</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
-                </thead>
-                <tbody>
-                  {runs.map((r) => (
-                    <tr key={r.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</td>
-                      <td className="py-1.5 px-3 text-ink-500">{formatDate(r.paidAt)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.gross)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.isr)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.net)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* Mobile: stacked cards */}
+              <div className="sm:hidden px-3 pb-3 mt-2 space-y-2">
+                {runs.map((r) => (
+                  <div key={r.id} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1">
+                    <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                      <span className="font-medium text-ink-900">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</span>
+                      <span className="text-xs text-ink-500">{formatDate(r.paidAt)}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-x-2 text-xs text-ink-600">
+                      <span>Bruto <span className="tabular-nums text-ink-900">{formatDop(r.gross)}</span></span>
+                      <span>ISR <span className="tabular-nums">{formatDop(r.isr)}</span></span>
+                      <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(r.net)}</span></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm mt-2">
+                  <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                    <tr><th className="text-left py-2 px-3">Período</th><th className="text-left py-2 px-3">Pagada</th><th className="text-right py-2 px-3">Bruto</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
+                  </thead>
+                  <tbody>
+                    {runs.map((r) => (
+                      <tr key={r.id} className="border-t border-ink-50">
+                        <td className="py-1.5 px-3">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</td>
+                        <td className="py-1.5 px-3 text-ink-500">{formatDate(r.paidAt)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.gross)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.isr)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

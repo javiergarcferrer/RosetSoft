@@ -218,7 +218,7 @@ export default function CustomerDetail() {
                       <li key={q.id}>
                         <Link
                           to={`/quotes/${q.id}`}
-                          className="group flex items-center gap-3 px-2 py-2.5 -mx-2 rounded-md hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150"
+                          className="group flex items-center gap-3 px-2 py-3 -mx-2 rounded-md hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150"
                         >
                           <div className="text-sm font-semibold tabular-nums w-16 flex-shrink-0 text-ink-800 group-hover:text-brand-700 transition-colors">
                             #{q.number || '—'}

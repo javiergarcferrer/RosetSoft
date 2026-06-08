@@ -69,99 +69,59 @@ export default function QuoteHeader({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
-    <div className="mb-6">
-      {/* Breadcrumb row — back link anchors the left; the order pill and the
-          seller picker sit on the right, out of the customer/professional meta
-          strip below. The seller is an attribution control (admin-only) and the
-          order pill is a navigation shortcut — neither is core quote data, so
-          both belong up here rather than crowding the meta row. The right group
-          wraps (seller drops under the order pill) when an admin opens an
-          accepted quote on a narrow phone and the two can't share a line. */}
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <Link to="/quotes" className="back-link mb-0">
-          <ArrowLeft size={12} />
-          <span>Volver<span className="hidden sm:inline"> a cotizaciones</span></span>
-        </Link>
-        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
-          <OrderChip
-            quote={quote}
-            profileId={profileId}
-            onAttach={(orderId) => onUpdateQuote({ orderId })}
-          />
-          {isAdmin && (
-            <SellerSelect
-              quote={quote}
-              assignableSellers={assignableSellers}
-              onUpdateQuote={onUpdateQuote}
-            />
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {/* Title (left) and actions (right) on one row that WRAPS rather
-            than overlaps. The earlier flex-1 + nowrap split let a wide
-            actions cluster shrink the title column to zero width, so the
-            opaque buttons painted over the number. Here the title keeps its
-            intrinsic min-width (the number is never clipped) and the actions
-            drop onto their own line when they can't fit beside it. On phones
-            the column layout stacks them; the SaveIndicator rides inline with
-            the eyebrow as the number's status line and truncates if cramped. */}
-        <div className="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <div>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest">Cotización</div>
+    <div className="mb-5">
+      {/* ROW 1 — back · identity (#number + save status) · undo/redo + view
+          toggle. Compact so it holds a single line on a normal phone; the action
+          cluster wraps beneath the number only on the very narrowest widths.
+          Folds the old separate breadcrumb row into this one. */}
+      <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <Link to="/quotes" className="back-link mb-0 px-2" title="Volver a cotizaciones">
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">Volver</span>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest">Cotización</span>
               <SaveIndicator savedAt={savedAt} saving={saving} />
             </div>
-            <h1 className="mt-0.5 text-[28px] sm:text-[32px] font-bold tracking-tight leading-tight text-ink-900">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-none text-ink-900">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
-            {!isAdmin && creatorLabel && (
-              <div className="text-[11px] text-ink-400 mt-0.5">
-                Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Buttons wrap among themselves on the narrowest phones; the whole
-              cluster drops below the title when the row is too tight. */}
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <UndoRedo
-              onUndo={onUndo}
-              onRedo={onRedo}
-              canUndo={canUndo}
-              canRedo={canRedo}
-            />
-
-            <ViewToggle view={view} onChange={onViewChange} />
           </div>
         </div>
-
-        {/* Meta row: customer + professional (with its order-type/commission
-            tier jointed in), in one horizontal group. Wraps naturally when the
-            chips don't all fit on a single line; each chip is a single flex
-            child, so a pill never splits across the wrap. The order pill moved
-            up to the breadcrumb row, out of this strip. */}
-        {/* Customer + professional only — the internal Facturación toggle moved
-            to the totals dock's commission card, so these two fit one row. */}
-        <div
-          className="flex flex-wrap items-center gap-1.5"
-          role="group"
-          aria-label="Datos de la cotización"
-        >
-          <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-          <WhatsAppChip customer={customer} />
-          <ProfessionalChip
-            quote={quote}
-            professional={professional}
-            professionals={professionals}
-            profileId={profileId}
-            onUpdateQuote={onUpdateQuote}
-          />
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
+          <ViewToggle view={view} onChange={onViewChange} />
         </div>
-
-        <SpecialOrderWarning quote={quote} />
       </div>
+
+      {/* ROW 2 — the "who": customer + professional, plus the order pill, the
+          admin seller picker and the creator credit. One wrapping flex group so
+          pills reflow without ever splitting. Folds the old breadcrumb + meta
+          rows together to keep the whole header to two rows. */}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Datos de la cotización">
+        <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
+        <WhatsAppChip customer={customer} />
+        <ProfessionalChip
+          quote={quote}
+          professional={professional}
+          professionals={professionals}
+          profileId={profileId}
+          onUpdateQuote={onUpdateQuote}
+        />
+        <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} />
+        {isAdmin && (
+          <SellerSelect quote={quote} assignableSellers={assignableSellers} onUpdateQuote={onUpdateQuote} />
+        )}
+        {!isAdmin && creatorLabel && (
+          <span className="text-[11px] text-ink-400 ml-0.5">
+            Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
+          </span>
+        )}
+      </div>
+
+      <SpecialOrderWarning quote={quote} />
 
       <CustomerPicker
         open={pickerOpen}

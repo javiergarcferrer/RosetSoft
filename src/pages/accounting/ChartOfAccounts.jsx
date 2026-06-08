@@ -32,20 +32,20 @@ function AccountNode({ node, index, depth }) {
   return (
     <div>
       <div
-        className={`flex items-center gap-2 py-1.5 border-b border-ink-50 ${hasChildren ? 'cursor-pointer' : ''}`}
-        style={{ paddingLeft: `${depth * 18}px` }}
+        className={`flex items-center gap-2 py-1.5 border-b border-ink-50 min-w-0 ${hasChildren ? 'cursor-pointer' : ''}`}
+        style={{ paddingLeft: `${depth * 16}px` }}
         onClick={hasChildren ? () => setOpen((v) => !v) : undefined}
       >
-        <span className="text-ink-400 w-3 text-xs">{hasChildren ? (open ? '▾' : '▸') : ''}</span>
-        <code className="text-xs text-ink-500 tabular-nums">{node.code}</code>
+        <span className="text-ink-400 w-3 text-xs shrink-0">{hasChildren ? (open ? '▾' : '▸') : ''}</span>
+        <code className="text-xs text-ink-500 tabular-nums shrink-0">{node.code}</code>
         {node.isPostable ? (
           <Link to={`/accounting/ledger?cuenta=${node.code}`} onClick={(e) => e.stopPropagation()}
-            className="text-sm text-ink-800 hover:underline">{node.name}</Link>
+            className="text-sm text-ink-800 hover:underline min-w-0 truncate flex-1">{node.name}</Link>
         ) : (
-          <span className="text-sm font-semibold text-ink-900">{node.name}</span>
+          <span className="text-sm font-semibold text-ink-900 min-w-0 truncate flex-1">{node.name}</span>
         )}
         {node.isPostable && (
-          <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">ver mayor</span>
+          <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>
         )}
       </div>
       {open && hasChildren && children.map((c) => (
@@ -116,17 +116,17 @@ export default function ChartOfAccounts() {
           {matches.length === 0 ? (
             <p className="text-sm text-ink-500 py-6 text-center">Sin coincidencias para “{q}”.</p>
           ) : matches.map((a) => (
-            <div key={a.code} className="flex items-center gap-3 py-1.5 border-b border-ink-50">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${CLASS_TONE[a.class] || 'bg-ink-100 text-ink-600'}`}>
+            <div key={a.code} className="flex items-center gap-2 py-1.5 border-b border-ink-50 min-w-0">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${CLASS_TONE[a.class] || 'bg-ink-100 text-ink-600'}`}>
                 {ACCOUNT_CLASS_NAMES[a.class] || a.class}
               </span>
-              <code className="text-xs text-ink-500 tabular-nums">{a.code}</code>
+              <code className="text-xs text-ink-500 tabular-nums shrink-0">{a.code}</code>
               {a.isPostable ? (
-                <Link to={`/accounting/ledger?cuenta=${a.code}`} className="text-sm text-ink-800 hover:underline">{a.name}</Link>
+                <Link to={`/accounting/ledger?cuenta=${a.code}`} className="text-sm text-ink-800 hover:underline min-w-0 truncate flex-1">{a.name}</Link>
               ) : (
-                <span className="text-sm font-semibold">{a.name}</span>
+                <span className="text-sm font-semibold min-w-0 truncate flex-1">{a.name}</span>
               )}
-              {a.isPostable && <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400">ver mayor</span>}
+              {a.isPostable && <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>}
             </div>
           ))}
         </div>

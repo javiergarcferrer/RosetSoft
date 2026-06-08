@@ -85,7 +85,7 @@ export default function Layout() {
             <ImageView
               id={settings.logoImageId}
               alt={company + ' logo'}
-              className="h-6 max-w-[140px] object-contain"
+              className="h-6 max-w-[clamp(7rem,30vw,10rem)] object-contain"
               style={{ filter: 'brightness(0) invert(1)' }}
               placeholderClassName="h-6 w-24"
             />

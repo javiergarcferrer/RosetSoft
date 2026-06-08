@@ -91,11 +91,11 @@ export default function LigneRosetSales() {
         <div>
           <div className="label">Mes a reportar</div>
           <input type="month" value={monthValue} onChange={(e) => setMonthValue(e.target.value)}
-            className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+            className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm min-h-[44px]" />
         </div>
         <button type="button" onClick={exportAndSend} disabled={report.lineCount === 0}
-          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-          <Send size={15} /> Exportar y enviar a Ligne Roset
+          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-4">
+          <Send size={15} /> <span className="hidden sm:inline">Exportar y enviar a Ligne Roset</span><span className="sm:hidden">Exportar</span>
         </button>
       </div>
 
@@ -115,44 +115,46 @@ export default function LigneRosetSales() {
           <div className="px-3 py-2 text-xs text-ink-500 bg-ink-50">
             {report.salesCount} venta{report.salesCount === 1 ? '' : 's'} · {report.lineCount} artículo{report.lineCount === 1 ? '' : 's'} · {label}
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left py-2 px-3">Fecha</th>
-                <th className="text-left py-2 px-3">#</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">#</th>
                 <th className="text-left py-2 px-3">Cliente</th>
-                <th className="text-left py-2 px-3">Referencia</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Referencia</th>
                 <th className="text-left py-2 px-3">Producto</th>
                 <th className="text-left py-2 px-3">Tela</th>
-                <th className="text-right py-2 px-3">Cant.</th>
-                <th className="text-right py-2 px-3">Unit. (USD)</th>
-                <th className="text-right py-2 px-3">Total (USD)</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Cant.</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Unit. (USD)</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Total (USD)</th>
               </tr>
             </thead>
             <tbody>
               {report.rows.map((r) => (
                 <tr key={r.id} className="border-t border-ink-50">
                   <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-400">{r.quoteNumber ?? '—'}</td>
-                  <td className="py-1.5 px-3">{r.customer || '—'}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-500">{r.reference || '—'}</td>
-                  <td className="py-1.5 px-3">{r.product || '—'}</td>
-                  <td className="py-1.5 px-3 text-ink-500">{r.fabric || '—'}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{r.qty}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatMoney(r.unitUsd, 'USD')}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatMoney(r.totalUsd, 'USD')}</td>
+                  <td className="py-1.5 px-3 tabular-nums text-ink-400 whitespace-nowrap">{r.quoteNumber ?? '—'}</td>
+                  <td className="py-1.5 px-3 min-w-0">{r.customer || '—'}</td>
+                  <td className="py-1.5 px-3 tabular-nums text-ink-500 whitespace-nowrap">{r.reference || '—'}</td>
+                  <td className="py-1.5 px-3 min-w-0">{r.product || '—'}</td>
+                  <td className="py-1.5 px-3 text-ink-500 min-w-0">{r.fabric || '—'}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{r.qty}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatMoney(r.unitUsd, 'USD')}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatMoney(r.totalUsd, 'USD')}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-ink-200 font-semibold">
                 <td className="py-2 px-3" colSpan={6}>Total</td>
-                <td className="py-2 px-3 text-right tabular-nums">{report.totals.qty}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{report.totals.qty}</td>
                 <td className="py-2 px-3"></td>
-                <td className="py-2 px-3 text-right tabular-nums">{formatMoney(report.totals.usd, 'USD')}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatMoney(report.totals.usd, 'USD')}</td>
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       )}
     </>

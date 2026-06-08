@@ -132,7 +132,7 @@ export default function FilterPopover({ filters, activeFilters, onFiltersChange 
         <div
           role="dialog"
           aria-label="Filtros"
-          className="absolute right-0 z-30 mt-1 w-80 rounded-xl border border-ink-100 bg-white p-4 shadow-pop"
+          className="absolute right-0 z-30 mt-1 w-[min(20rem,calc(100vw-1rem))] rounded-xl border border-ink-100 bg-white p-4 shadow-pop"
         >
           <FilterFields filters={filters} draft={draft} setDraftValue={setDraftValue} />
           <PanelActions onClear={clear} onApply={apply} hasDraft={activeCount(filters, draft) > 0} />

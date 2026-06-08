@@ -222,7 +222,7 @@ function BrowseCategory({ profileId, category, count, onPick }) {
       className="rounded-lg border border-ink-100 overflow-hidden group/cat"
       onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
     >
-      <summary className="cursor-pointer list-none select-none px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50">
+      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight size={14} className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90" aria-hidden />
           <span className="font-medium text-sm text-ink-900 truncate" title={label}>{label}</span>
@@ -267,7 +267,7 @@ function BrowseCategoryModels({ profileId, category, onPick }) {
 function ResultCategory({ section, onPick }) {
   return (
     <details open className="rounded-lg border border-ink-100 overflow-hidden group/cat">
-      <summary className="cursor-pointer list-none select-none px-3 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50">
+      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight size={14} className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90" aria-hidden />
           <span className="font-medium text-sm text-ink-900 truncate" title={section.category || NO_CATEGORY}>
@@ -295,21 +295,21 @@ function ModelButton({ model, onPick }) {
     <button
       type="button"
       onClick={() => onPick(model)}
-      className="w-full text-left rounded-md px-3 py-2 flex items-center gap-3 hover:bg-ink-50 transition-colors"
+      className="w-full text-left rounded-md px-3 py-2.5 min-h-[44px] flex items-center gap-3 hover:bg-ink-50 transition-colors"
     >
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-ink-100 text-ink-500 flex-shrink-0">
         <PackageSearch size={15} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-ink-900 truncate">{model.name || model.root}</span>
-        <span className="block text-[11px] text-ink-500">
+        <span className="block text-[11px] text-ink-500 truncate">
           {[model.family, model.graded ? `${model.grades.length} grados` : null].filter(Boolean).join(' · ')}
         </span>
         {description && (
           <span className="block text-[11px] text-ink-400 truncate" title={description}>{description}</span>
         )}
       </span>
-      <span className="text-sm tabular-nums text-ink-700 whitespace-nowrap">{priceLabel(model)}</span>
+      <span className="text-xs tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">{priceLabel(model)}</span>
     </button>
   );
 }

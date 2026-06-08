@@ -180,7 +180,7 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
                 </div>
                 {/* Reference rate only — the real commission is set by the
                     quote's order type (Piso 15% / Especial 20%), not here. */}
-                <span className="text-[11px] text-ink-400 tabular-nums whitespace-nowrap" title="Comisión de referencia · la fija el tipo de pedido">
+                <span className="text-[11px] text-ink-400 tabular-nums whitespace-nowrap flex-shrink-0" title="Comisión de referencia · la fija el tipo de pedido">
                   ref. {p.defaultCommissionPct ?? 10}%
                 </span>
               </button>

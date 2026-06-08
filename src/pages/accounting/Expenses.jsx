@@ -75,22 +75,23 @@ export default function Expenses() {
     downloadCsv(`606_${start}_${end}.csv`, rows);
   }
 
-  const dateInput = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
+  const dateInput = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px]';
 
   return (
     <>
       <PageHeader title="Gastos" subtitle="Captura un gasto y se asienta solo · 606"
         actions={<button type="button" onClick={() => { setShowForm((v) => !v); setTab('list'); }}
-          className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nuevo gasto</button>} />
+          className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Plus size={15} /> Nuevo gasto</button>} />
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <button type="button" onClick={() => setTab('list')} className={`text-sm px-3 py-1.5 rounded-lg ${tab === 'list' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Gastos</button>
-        <button type="button" onClick={() => setTab('606')} className={`text-sm px-3 py-1.5 rounded-lg ${tab === '606' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>606</button>
-        <span className="ml-auto" />
-        <label className="text-sm text-ink-500">Desde</label>
-        <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={dateInput} />
-        <label className="text-sm text-ink-500">Hasta</label>
-        <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={dateInput} />
+        <button type="button" onClick={() => setTab('list')} className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === 'list' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Gastos</button>
+        <button type="button" onClick={() => setTab('606')} className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === '606' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>606</button>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <label className="text-sm text-ink-500">Desde</label>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={dateInput} />
+          <label className="text-sm text-ink-500">Hasta</label>
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={dateInput} />
+        </div>
       </div>
 
       {showForm && loaded && (
@@ -105,43 +106,45 @@ export default function Expenses() {
             description="Registra un gasto con “Nuevo gasto”." />
         ) : (
           <div className="card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                <tr>
-                  <th className="text-left py-2 px-3">Fecha</th>
-                  <th className="text-left py-2 px-3">Proveedor</th>
-                  <th className="text-left py-2 px-3">Cuenta</th>
-                  <th className="text-left py-2 px-3">NCF</th>
-                  <th className="text-right py-2 px-3">Base</th>
-                  <th className="text-right py-2 px-3">ITBIS</th>
-                  <th className="text-right py-2 px-3">Total</th>
-                  <th className="text-left py-2 px-3">Pago</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.rows.map(({ expense: e, supplier, accountName, total }) => (
-                  <tr key={e.id} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3 text-ink-500">{formatDate(e.expenseAt)}</td>
-                    <td className="py-1.5 px-3">{supplier?.name || '—'}</td>
-                    <td className="py-1.5 px-3 text-ink-600"><code className="text-[11px] text-ink-400 mr-1">{e.accountCode}</code>{accountName}</td>
-                    <td className="py-1.5 px-3 tabular-nums text-ink-500">{e.ncf || '—'}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(e.base)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(e.itbis)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(total)}</td>
-                    <td className="py-1.5 px-3 text-ink-600">{PAY_LABEL[e.paymentMethod] || e.paymentMethod}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                  <tr>
+                    <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                    <th className="text-left py-2 px-3">Proveedor</th>
+                    <th className="text-left py-2 px-3">Cuenta</th>
+                    <th className="text-left py-2 px-3">NCF</th>
+                    <th className="text-right py-2 px-3 whitespace-nowrap">Base</th>
+                    <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS</th>
+                    <th className="text-right py-2 px-3 whitespace-nowrap">Total</th>
+                    <th className="text-left py-2 px-3 whitespace-nowrap">Pago</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-ink-200 font-semibold">
-                  <td className="py-2 px-3" colSpan={4}>{list.count} gastos</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.base)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.itbis)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.total)}</td>
-                  <td className="py-2 px-3"></td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {list.rows.map(({ expense: e, supplier, accountName, total }) => (
+                    <tr key={e.id} className="border-t border-ink-50">
+                      <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(e.expenseAt)}</td>
+                      <td className="py-1.5 px-3">{supplier?.name || '—'}</td>
+                      <td className="py-1.5 px-3 text-ink-600"><code className="text-[11px] text-ink-400 mr-1">{e.accountCode}</code>{accountName}</td>
+                      <td className="py-1.5 px-3 tabular-nums text-ink-500">{e.ncf || '—'}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(e.base)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(e.itbis)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(total)}</td>
+                      <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{PAY_LABEL[e.paymentMethod] || e.paymentMethod}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-ink-200 font-semibold">
+                    <td className="py-2 px-3" colSpan={4}>{list.count} gastos</td>
+                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.base)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.itbis)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.total)}</td>
+                    <td className="py-2 px-3"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         )
       ) : (
@@ -155,46 +158,48 @@ export default function Expenses() {
               description="El 606 se arma con los gastos (y compras) con NCF del período." />
           ) : (
             <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left py-2 px-3">RNC/Cédula</th>
-                    <th className="text-left py-2 px-3">Nombre</th>
-                    <th className="text-left py-2 px-3">NCF</th>
-                    <th className="text-left py-2 px-3">Fecha</th>
-                    <th className="text-right py-2 px-3">Base</th>
-                    <th className="text-right py-2 px-3">ITBIS</th>
-                    <th className="text-right py-2 px-3">Ret. ISR</th>
-                    <th className="text-right py-2 px-3">Ret. ITBIS</th>
-                    <th className="text-right py-2 px-3">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form606.rows.map((r) => (
-                    <tr key={r.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3 tabular-nums">{r.rnc || '—'}</td>
-                      <td className="py-1.5 px-3">{r.name}</td>
-                      <td className="py-1.5 px-3 tabular-nums text-ink-500">{r.ncf || '—'}</td>
-                      <td className="py-1.5 px-3 text-ink-500">{formatDate(r.date)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.base)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.itbis)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.retIsr)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.retItbis)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.total)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">RNC/Cédula</th>
+                      <th className="text-left py-2 px-3">Nombre</th>
+                      <th className="text-left py-2 px-3">NCF</th>
+                      <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Base</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Ret. ISR</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Ret. ITBIS</th>
+                      <th className="text-right py-2 px-3 whitespace-nowrap">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-ink-200 font-semibold">
-                    <td className="py-2 px-3" colSpan={4}>{form606.count} comprobantes</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(form606.totals.base)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(form606.totals.itbis)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(form606.totals.retIsr)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(form606.totals.retItbis)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatDop(form606.totals.total)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {form606.rows.map((r) => (
+                      <tr key={r.id} className="border-t border-ink-50">
+                        <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
+                        <td className="py-1.5 px-3">{r.name}</td>
+                        <td className="py-1.5 px-3 tabular-nums text-ink-500">{r.ncf || '—'}</td>
+                        <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.retIsr)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.retItbis)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-ink-200 font-semibold">
+                      <td className="py-2 px-3" colSpan={4}>{form606.count} comprobantes</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.base)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.itbis)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.retIsr)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.retItbis)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
         </>
@@ -279,14 +284,14 @@ function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersBy
   }
 
   const net = (Number(form.base) || 0) + (Number(form.itbis) || 0) - (Number(form.retIsr) || 0) - (Number(form.retItbis) || 0);
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
-  const numField = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+  const field = 'rounded-lg border border-ink-200 px-3 py-2 text-sm w-full min-h-[44px]';
+  const numField = 'w-full sm:w-28 rounded-lg border border-ink-200 px-2 py-2 text-sm text-right tabular-nums min-h-[44px]';
 
   return (
-    <div className="card p-4 mb-4 border-ink-300">
+    <div className="card p-4 mb-4 border-ink-300 min-w-0">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">Nuevo gasto</h3>
-        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
       </div>
       <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
         <select value={form.supplierId} onChange={(e) => onSupplier(e.target.value)} className={field}>
@@ -302,12 +307,12 @@ function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersBy
         <input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descripción" className={`${field} sm:col-span-2`} />
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 mt-3">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 mt-3">
         <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} /></label>
         <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={numField} /></label>
         <label className="text-sm">Ret. ISR<br /><input type="number" step="0.01" min="0" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={numField} /></label>
         <label className="text-sm">Ret. ITBIS<br /><input type="number" step="0.01" min="0" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={numField} /></label>
-        <label className="text-sm">Pago<br />
+        <label className="text-sm col-span-2">Pago<br />
           <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={field}>
             <option value="bank">Banco</option>
             <option value="cash">Efectivo</option>
@@ -317,9 +322,9 @@ function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersBy
         </label>
       </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-ink-100">
         <div className="text-sm text-ink-600">Neto a pagar <b className="tabular-nums">{formatDop(net)}</b></div>
-        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] disabled:opacity-40">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar gasto
         </button>
       </div>

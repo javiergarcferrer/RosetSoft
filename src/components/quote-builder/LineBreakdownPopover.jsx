@@ -49,7 +49,7 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
   return (
     <div
       ref={ref}
-      className={`absolute z-30 mt-1 w-72 rounded-md border border-ink-200 bg-white shadow-pop p-3 ${
+      className={`absolute z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-ink-200 bg-white shadow-pop p-3 ${
         anchor === 'right' ? 'right-0' : 'left-0'
       }`}
     >
@@ -96,11 +96,11 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
 
 function Row({ label, value, muted, bold }) {
   return (
-    <div className={`flex items-center justify-between py-0.5 text-xs tabular-nums ${
+    <div className={`flex items-baseline justify-between gap-x-3 gap-y-0.5 py-0.5 text-xs tabular-nums ${
       muted ? 'text-ink-500' : 'text-ink-900'
     } ${bold ? 'font-semibold text-sm' : ''}`}>
-      <span>{label}</span>
-      <span>{value}</span>
+      <span className="min-w-0 break-words">{label}</span>
+      <span className="whitespace-nowrap flex-shrink-0">{value}</span>
     </div>
   );
 }

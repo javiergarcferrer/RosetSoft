@@ -129,11 +129,11 @@ export default function Inventario() {
       <PageHeader title="Inventario"
         subtitle={loaded ? `${inv.count} artículos · valor ${formatDop(inv.totalValue)}` : ' '}
         actions={(
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-              {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar Shopify
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
+              {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} <span className="hidden sm:inline">Sincronizar Shopify</span><span className="sm:hidden">Shopify</span>
             </button>
-            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nuevo artículo</button>
+            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3"><Plus size={15} /> <span className="hidden sm:inline">Nuevo artículo</span><span className="sm:hidden">Nuevo</span></button>
           </div>
         )} />
 
@@ -159,30 +159,30 @@ export default function Inventario() {
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[320px]">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                 <tr>
                   <th className="text-left py-2 px-3">Artículo</th>
-                  <th className="text-right py-2 px-3">Existencia</th>
-                  <th className="text-right py-2 px-3">Costo prom.</th>
-                  <th className="text-right py-2 px-3">Valor</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap">Existencia</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap hidden sm:table-cell">Costo prom.</th>
+                  <th className="text-right py-2 px-3 whitespace-nowrap">Valor</th>
                 </tr>
               </thead>
               <tbody>
                 {inv.rows.map(({ item, qty, avgCost, value }) => (
                   <tr key={item.id} onClick={() => { setSelectedId(item.id); setOutQty(''); setErr(''); }}
                     className={`border-t border-ink-50 cursor-pointer hover:bg-ink-50 ${selectedId === item.id ? 'bg-ink-50' : ''}`}>
-                    <td className="py-1.5 px-3">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{qty} {item.unit}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(avgCost)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(value)}</td>
+                    <td className="py-1.5 px-3 min-w-0"><div className="truncate">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</div></td>
+                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{qty} {item.unit}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap hidden sm:table-cell">{formatDop(avgCost)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(value)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
                   <td className="py-2 px-3" colSpan={3}>Valor total</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{formatDop(inv.totalValue)}</td>
+                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(inv.totalValue)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -193,7 +193,7 @@ export default function Inventario() {
               <div className="card p-6 text-sm text-ink-500">Selecciona un artículo para ver su kardex.</div>
             ) : (
               <div className="card p-4">
-                <h3 className="font-semibold mb-1">{selectedItem.name}</h3>
+                <h3 className="font-semibold mb-1 min-w-0 truncate">{selectedItem.name}</h3>
                 <p className="text-sm text-ink-500 mb-3">{kardex.qty} {selectedItem.unit} · costo prom. {formatDop(kardex.avgCost)} · valor {formatDop(kardex.value)}</p>
 
                 <CatalogBlock item={selectedItem} key={selectedItem.id} />
@@ -202,7 +202,7 @@ export default function Inventario() {
                   <label className="text-sm">Salida (costo de venta)<br />
                     <input type="number" min="0" step="1" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="w-32 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
                   </label>
-                  <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+                  <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
                     {posting ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownToLine size={15} />} Registrar salida
                   </button>
                 </div>
@@ -211,22 +211,30 @@ export default function Inventario() {
                 {kardex.rows.length === 0 ? (
                   <p className="text-sm text-ink-500">Sin movimientos.</p>
                 ) : (
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto -mx-4 px-4">
+                  <table className="w-full text-sm min-w-[300px]">
                     <thead className="text-ink-500 text-xs uppercase tracking-wide">
-                      <tr><th className="text-left py-1">Fecha</th><th className="text-left py-1">Tipo</th><th className="text-right py-1">Cant.</th><th className="text-right py-1">C. unit.</th><th className="text-right py-1">Saldo</th></tr>
+                      <tr>
+                        <th className="text-left py-1 whitespace-nowrap">Fecha</th>
+                        <th className="text-left py-1">Tipo</th>
+                        <th className="text-right py-1 whitespace-nowrap">Cant.</th>
+                        <th className="text-right py-1 whitespace-nowrap">C. unit.</th>
+                        <th className="text-right py-1 whitespace-nowrap">Saldo</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {kardex.rows.slice().reverse().map(({ movement: m, qty, avgCost }) => (
                         <tr key={m.id} className="border-t border-ink-50">
-                          <td className="py-1 text-ink-500">{formatDate(m.movedAt)}</td>
+                          <td className="py-1 text-ink-500 whitespace-nowrap">{formatDate(m.movedAt)}</td>
                           <td className="py-1">{TYPE_LABEL[m.type]}</td>
-                          <td className="py-1 text-right tabular-nums">{m.type === 'out' ? '−' : ''}{m.qty}</td>
-                          <td className="py-1 text-right tabular-nums">{formatDop(m.unitCost || avgCost)}</td>
-                          <td className="py-1 text-right tabular-nums">{qty}</td>
+                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{m.type === 'out' ? '−' : ''}{m.qty}</td>
+                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{formatDop(m.unitCost || avgCost)}</td>
+                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{qty}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             )}

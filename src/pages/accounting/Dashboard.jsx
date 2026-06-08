@@ -55,20 +55,20 @@ function CardHead({ title, note, to, action }) {
 
 function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   const body = (
-    <div className="card card-pad h-full flex flex-col gap-2 transition-shadow">
-      <div className="flex items-center gap-2">
+    <div className="card card-pad h-full flex flex-col gap-2 transition-shadow min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
         {Icon && (
           <span className="w-7 h-7 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0">
             <Icon size={13} />
           </span>
         )}
-        <span className="eyebrow-xs tracking-wide text-ink-500">{label}</span>
+        <span className="eyebrow-xs tracking-wide text-ink-500 min-w-0 truncate">{label}</span>
       </div>
-      <div className={`text-[22px] leading-none font-semibold tabular-nums ${tone || 'text-ink-900'}`}>{value}</div>
-      {sub && <div className="text-xs text-ink-400">{sub}</div>}
+      <div className={`text-[22px] leading-none font-semibold tabular-nums break-all ${tone || 'text-ink-900'}`}>{value}</div>
+      {sub && <div className="text-xs text-ink-400 break-words">{sub}</div>}
     </div>
   );
-  return to ? <Link to={to} className="block hover:shadow-soft active:scale-[0.99] transition-all">{body}</Link> : body;
+  return to ? <Link to={to} className="block hover:shadow-soft active:scale-[0.99] transition-all min-w-0">{body}</Link> : body;
 }
 
 /** Simple proportional progress bar (P&L rows). */
@@ -138,7 +138,7 @@ export default function AccountingDashboard() {
       <PageHeader title="Resumen del negocio" subtitle={`Posición al ${formatDate(today.getTime())} · ${monthLabel}`} />
 
       {!loaded ? <ListLoading /> : (
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {/* Urgent flags float to the top. */}
           {(d.ecfPending > 0 || d.overdue > 0) && (
             <div className="flex flex-wrap gap-2">
@@ -156,7 +156,7 @@ export default function AccountingDashboard() {
           )}
 
           {/* Business-overview widgets — row 1: flujo · gastos · P&L. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
             {/* Flujo de caja */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
@@ -177,18 +177,18 @@ export default function AccountingDashboard() {
               {d.expenseDonut.total <= 0 ? (
                 <div className="flex items-center justify-center h-[148px] text-sm text-ink-400">Sin gastos este mes.</div>
               ) : (
-                <div className="flex items-center gap-4">
-                  <Donut size={132} thickness={16}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Donut size={112} thickness={14}
                     segments={d.expenseDonut.segments.map((s, i) => ({ value: s.amount, color: DONUT[i % DONUT.length] }))}>
                     <div className="text-[10px] uppercase tracking-wide text-ink-400">Total</div>
-                    <div className="text-sm font-semibold tabular-nums">{formatDop(d.expenseDonut.total)}</div>
+                    <div className="text-xs font-semibold tabular-nums">{formatDop(d.expenseDonut.total)}</div>
                   </Donut>
                   <ul className="flex-1 min-w-0 space-y-1.5">
                     {d.expenseDonut.segments.map((s, i) => (
-                      <li key={s.code} className="flex items-center gap-2 text-xs">
+                      <li key={s.code} className="flex items-center gap-2 text-xs min-w-0">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT[i % DONUT.length] }} />
-                        <span className="truncate text-ink-600 flex-1">{s.name}</span>
-                        <span className="tabular-nums font-medium text-ink-700">{formatDop(s.amount)}</span>
+                        <span className="truncate text-ink-600 flex-1 min-w-0">{s.name}</span>
+                        <span className="tabular-nums font-medium text-ink-700 shrink-0">{formatDop(s.amount)}</span>
                       </li>
                     ))}
                   </ul>
@@ -205,11 +205,11 @@ export default function AccountingDashboard() {
               <div className="text-xs text-ink-400 mb-3">Utilidad neta de {monthLabel}</div>
               <div className="space-y-3 mt-auto">
                 <div>
-                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium">{formatDop(d.ingresosMonth)}</span></div>
+                  <div className="flex items-center justify-between gap-2 text-sm mb-1 flex-wrap"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium shrink-0">{formatDop(d.ingresosMonth)}</span></div>
                   <Bar value={d.ingresosMonth} max={pnlMax} tone="bg-emerald-500" />
                 </div>
                 <div>
-                  <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium">{formatDop(d.egresosMonth)}</span></div>
+                  <div className="flex items-center justify-between gap-2 text-sm mb-1 flex-wrap"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium shrink-0">{formatDop(d.egresosMonth)}</span></div>
                   <Bar value={d.egresosMonth} max={pnlMax} tone="bg-rose-400" />
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function AccountingDashboard() {
           </div>
 
           {/* Row 2: cobros · ventas · bancos. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
             {/* Cuentas por cobrar */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
@@ -228,7 +228,7 @@ export default function AccountingDashboard() {
                   <div className="h-full" style={{ width: `${(d.ar.overdue / arTotal) * 100}%`, backgroundColor: C.overdue }} />
                   <div className="h-full" style={{ width: `${(d.ar.notDue / arTotal) * 100}%`, backgroundColor: C.current }} />
                 </div>
-                <div className="flex justify-between text-xs mt-2">
+                <div className="flex flex-wrap justify-between text-xs mt-2 gap-1">
                   <span className="text-rose-600">Vencido {formatDop(d.ar.overdue)}</span>
                   <span className="text-ink-500">Por vencer {formatDop(d.ar.notDue)}</span>
                 </div>
@@ -255,12 +255,12 @@ export default function AccountingDashboard() {
               {d.bankAccounts.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-sm text-ink-400 py-6">Sin movimientos de efectivo aún.</div>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-2 min-w-0">
                   {d.bankAccounts.slice(0, 5).map((b) => (
-                    <li key={b.code} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1">
+                    <li key={b.code} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1 min-w-0">
                       <span className="w-8 h-8 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0"><Landmark size={14} /></span>
                       <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
-                      <span className="tabular-nums font-medium text-sm text-ink-900">{formatDop(b.balance)}</span>
+                      <span className="tabular-nums font-medium text-sm text-ink-900 shrink-0">{formatDop(b.balance)}</span>
                     </li>
                   ))}
                 </ul>
@@ -273,7 +273,7 @@ export default function AccountingDashboard() {
           </div>
 
           {/* Compact KPI strip. */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 min-w-0">
             <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
             <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
               sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
@@ -295,9 +295,9 @@ export default function AccountingDashboard() {
               ) : (
                 <ul className="divide-y divide-ink-100">
                   {d.cxcTop.map((r) => (
-                    <li key={r.partyId} className="flex items-center justify-between py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors">
-                      <span className="truncate text-ink-700">{r.party?.name || '—'}</span>
-                      <span className="tabular-nums font-semibold text-ink-900 ml-4 shrink-0">{formatDop(r.balance)}</span>
+                    <li key={r.partyId} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0">
+                      <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
+                      <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
                     </li>
                   ))}
                 </ul>
@@ -313,9 +313,9 @@ export default function AccountingDashboard() {
               ) : (
                 <ul className="divide-y divide-ink-100">
                   {d.cxpTop.map((r) => (
-                    <li key={r.partyId} className="flex items-center justify-between py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors">
-                      <span className="truncate text-ink-700">{r.party?.name || '—'}</span>
-                      <span className="tabular-nums font-semibold text-ink-900 ml-4 shrink-0">{formatDop(r.balance)}</span>
+                    <li key={r.partyId} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0">
+                      <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
+                      <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
                     </li>
                   ))}
                 </ul>
@@ -345,9 +345,9 @@ export default function AccountingDashboard() {
                     {d.recent.map(({ entry, debit }) => (
                       <tr key={entry.id} className="hover:bg-ink-50 transition-colors">
                         <td className="text-ink-500 whitespace-nowrap tabular-nums">{formatDate(entry.postedAt)}</td>
-                        <td>
+                        <td className="min-w-0">
                           <span className="chip bg-ink-100 text-ink-600 mr-2">{SOURCE[entry.source] || entry.source}</span>
-                          <span className="text-ink-700">{entry.memo || '—'}</span>
+                          <span className="text-ink-700 break-words">{entry.memo || '—'}</span>
                         </td>
                         <td className="text-right tabular-nums font-semibold text-ink-900 whitespace-nowrap">{formatDop(debit)}</td>
                       </tr>

@@ -566,7 +566,7 @@ function TopStrip({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   return (
-    <div className="flex items-center gap-2 mb-2.5 -ml-1">
+    <div className="flex flex-wrap items-center gap-2 mb-2.5 -ml-1">
       <span
         {...(dragHandleProps || {})}
         className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
@@ -750,7 +750,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
               <button
                 type="button"
                 onClick={() => setProductPickerOpen(true)}
-                className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+                className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
                 title="Elegir el producto del catálogo"
                 aria-label="Elegir el producto del catálogo"
               >
@@ -987,7 +987,7 @@ function NoteToggle({ icon: Icon, label, content, open, onClick }) {
         onClick={onClick}
         aria-label={label}
         aria-expanded={open}
-        className={`relative inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded-md transition-colors ${
+        className={`relative inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md transition-colors ${
           active ? 'text-brand-700 hover:bg-brand-50' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50'
         } ${open ? 'bg-brand-50' : ''}`}
       >
@@ -1181,7 +1181,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             hoverPreview
           />
         </span>
-        <div className="flex items-baseline gap-x-1 min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 min-w-0 flex-1">
           <Select
             variant="ghost"
             value={grade}
@@ -1233,7 +1233,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             // as the material name (or the placeholder when empty), never
             // stretched across the row. Capped at 100% so a very long name
             // still wraps/scrolls within the row instead of overflowing.
-            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-[44px] text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
           />
           {/* Catalog picker — opens the swatch modal so the dealer can pick a
               material + color instead of typing the name and guessing the
@@ -1248,7 +1248,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             <button
               type="button"
               onClick={clearMaterial}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-red-600 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-red-50 transition-colors flex-shrink-0"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-red-600 rounded-md px-1.5 py-1 coarse:min-h-[44px] hover:bg-red-50 transition-colors flex-shrink-0"
               title="Quitar la tela y volver a cotizar sin material (rango de precio)"
             >
               <X size={12} className="opacity-80" aria-hidden />
@@ -1263,7 +1263,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
               href={sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-9 hover:bg-brand-50 transition-colors flex-shrink-0"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-[44px] hover:bg-brand-50 transition-colors flex-shrink-0"
               title="Ver este modelo en Ligne Roset"
             >
               <ExternalLink size={12} className="opacity-80" aria-hidden />
@@ -1330,7 +1330,7 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
     return `${sign}${formatMoney(Math.abs(v), currency, rates)}`;
   };
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pl-12">
+    <div className="flex flex-wrap items-center gap-1.5 pl-10 sm:pl-12">
       {materialOptions.baseLabel && (
         <span
           className="chip text-ink-500 bg-ink-50 border border-ink-200"
@@ -1361,7 +1361,7 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
                 className="w-4 h-4 rounded-sm object-cover border border-brand-100 bg-white flex-shrink-0"
               />
             )}
-            <span className="truncate max-w-[14rem]">{o.label || `Grade ${o.grade}`}</span>
+            <span className="break-words max-w-[14rem]">{o.label || `Grade ${o.grade}`}</span>
             <Palette size={10} className="opacity-40 flex-shrink-0" aria-hidden />
           </button>
           <span className="tabular-nums font-medium">{fmtDelta(o.delta)}</span>
@@ -1471,7 +1471,7 @@ function PricingRow({
           inputMode="decimal"
           min="0"
           step="any"
-          className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+          className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-[44px] py-1.5 px-2"
           value={qty ?? 1}
           onCommit={(v) => onQtyChange(Math.max(0, Number(v) || 0))}
           aria-label={qtyAriaLabel}
@@ -1580,7 +1580,7 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
             inputMode="decimal"
             min="0"
             step="any"
-            className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 px-2"
+            className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-[44px] py-1.5 px-2"
             value={line.qty ?? 1}
             onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
             aria-label="Cantidad"
@@ -1919,7 +1919,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     <button
                       type="button"
                       onClick={() => onAddToProduct(m.moduleGroup)}
-                      className="text-ink-400 hover:text-brand-700 p-1"
+                      className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
                       title="Agregar un componente a este producto"
                     >
                       <Plus size={12} />
@@ -1928,7 +1928,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                   <button
                     type="button"
                     onClick={() => onUngroupModule?.(m.moduleGroup)}
-                    className="text-ink-400 hover:text-brand-700 p-1"
+                    className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
                     title="Desagrupar este producto"
                   >
                     <Split size={12} />
@@ -2038,7 +2038,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
       {(optional || dimmed) && (
         <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
           {...(dragHandleProps || {})}
           className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover/comprow:opacity-60 hover:!opacity-100 transition-opacity"
@@ -2109,7 +2109,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <button
           type="button"
           onClick={onRemove}
-          className="inline-flex items-center justify-center w-7 h-7 coarse:w-9 coarse:h-9 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0"
           aria-label="Quitar componente"
           title="Quitar componente"
         >
@@ -2132,7 +2132,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <button
           type="button"
           onClick={() => setProductPickerOpen(true)}
-          className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+          className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
           title="Elegir el producto del catálogo"
           aria-label="Elegir el producto del catálogo"
         >
@@ -2172,7 +2172,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           <button
             type="button"
             onClick={onApplyToAll}
-            className="relative z-[2] mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 coarse:min-h-9 text-[11px] font-medium text-brand-700 hover:text-brand-800 hover:underline transition-colors"
+            className="relative z-[2] mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 coarse:min-h-[44px] text-[11px] font-medium text-brand-700 hover:text-brand-800 hover:underline transition-colors"
             title="Usar esta misma tela en todos los componentes de este producto"
           >
             <Copy size={11} className="opacity-80" aria-hidden />
@@ -2350,7 +2350,7 @@ function LineFooter({
       <button
         type="button"
         onClick={onRemove}
-        className="inline-flex items-center justify-center w-8 h-8 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors"
+        className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
         aria-label="Eliminar línea"
         title="Eliminar línea"
       >
@@ -2371,7 +2371,7 @@ function FooterButton({ onClick, icon: Icon, children, active, title, ...rest })
       type="button"
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-2 py-1 coarse:min-h-10 transition-colors ${
+      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-2 py-1 coarse:min-h-[44px] transition-colors ${
         active
           ? 'text-ink-700 bg-ink-100 hover:bg-ink-200'
           : 'text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200'

@@ -825,7 +825,7 @@ function InviteModal({ open, onClose, session, onInvited }) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
           <div>
             <div className="label">Rol</div>
             <select

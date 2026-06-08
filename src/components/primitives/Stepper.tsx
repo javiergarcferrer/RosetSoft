@@ -66,7 +66,7 @@ export default function Stepper({
   const lastIdx = stages.length - 1;
   return (
     <div className="card card-pad space-y-4">
-      <div className="relative">
+      <div className="relative overflow-x-auto">
         {/* Background track + filled-portion track. The filled width is
             (currentIndex / lastIdx) so the dot of the current stage sits
             on top of the head of the fill. */}
@@ -77,7 +77,7 @@ export default function Stepper({
             style={{ width: `${Math.max(0, currentIndex / lastIdx) * 100}%` }}
           />
         )}
-        <div className="relative flex justify-between gap-1">
+        <div className="relative flex justify-between gap-1 min-w-max">
           {stages.map((s, i) => {
             const ts = s.timestampField ? (row as Record<string, unknown> | null | undefined)?.[s.timestampField] : (row as Record<string, unknown> | null | undefined)?.createdAt;
             const isPast = i < currentIndex;
@@ -131,7 +131,7 @@ export default function Stepper({
           ) : null}
         </div>
         {!cancelled && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {prevStage && onUndo && (
               <button
                 onClick={() => {

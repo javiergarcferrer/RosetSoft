@@ -140,7 +140,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
           <div className="label">RNC / Cédula</div>
           <div className="flex gap-2">
             <input
-              className="input flex-1"
+              className="input flex-1 min-w-0"
               value={data.rnc}
               onChange={(e) => set('rnc', e.target.value)}
               inputMode="numeric"
@@ -153,7 +153,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
               type="button"
               onClick={doLookup}
               disabled={looking || !cleanRnc(data.rnc)}
-              className="btn-ghost inline-flex items-center gap-1.5 disabled:opacity-40 whitespace-nowrap"
+              className="btn-ghost inline-flex items-center gap-1.5 disabled:opacity-40 whitespace-nowrap flex-shrink-0"
               title="Buscar el nombre en el registro de la DGII"
             >
               {looking ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Search size={14} aria-hidden />} Buscar
@@ -261,7 +261,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
             enterKeyHint="next"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
           <div>
             <div className="label">Provincia</div>
             <input

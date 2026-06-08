@@ -252,7 +252,7 @@ function StatusGroup({ status, entries }) {
             </div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <div className="text-sm font-semibold tabular-nums text-ink-900">{formatMoney(totalBase, 'USD', { USD: 1 })}</div>
           <div className="text-[11px] text-ink-500 tabular-nums">
             Comisión {formatMoney(totalCommission, 'USD', { USD: 1 })}
@@ -267,7 +267,7 @@ function StatusGroup({ status, entries }) {
           <li key={e.quote.id} className="group px-5 py-3.5 flex items-center gap-3 flex-wrap hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150">
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="flex-1 min-w-[180px] group-hover:text-brand-700 transition-colors"
+              className="flex-1 min-w-0 basis-36 group-hover:text-brand-700 transition-colors"
             >
               <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
                 #{e.quote.number || '—'}
@@ -285,7 +285,7 @@ function StatusGroup({ status, entries }) {
                 Trade · facturar al decorador
               </span>
             )}
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
                 {formatMoney(e.base, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
               </div>
@@ -298,7 +298,7 @@ function StatusGroup({ status, entries }) {
             </div>
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="text-ink-300 group-hover:text-brand-500 p-1.5 transition-colors"
+              className="text-ink-300 group-hover:text-brand-500 p-1.5 transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
               title="Abrir cotización"
               aria-label="Abrir cotización"
             >

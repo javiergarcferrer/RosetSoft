@@ -136,7 +136,7 @@ export default function Dropdown({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+        className={`inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 min-h-[2rem] coarse:min-h-[2.75rem] text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
       >
         {label}
         <ChevronDown
@@ -188,7 +188,7 @@ export function DropdownItem({ onSelect, active = false, disabled = false, class
       aria-disabled={disabled || undefined}
       disabled={disabled}
       onClick={onSelect}
-      className={`flex items-start gap-2 px-3 py-2 text-left text-sm text-ink-700 rounded-lg mx-1 w-[calc(100%-0.5rem)] transition-colors hover:bg-ink-50 focus:bg-ink-50 focus:outline-none disabled:opacity-50 disabled:pointer-events-none ${active ? 'bg-brand-50 text-brand-700 font-medium' : ''} ${className}`}
+      className={`flex items-start gap-2 px-3 py-2 coarse:py-3 min-h-[2.25rem] coarse:min-h-[2.75rem] text-left text-sm text-ink-700 rounded-lg mx-1 w-[calc(100%-0.5rem)] transition-colors hover:bg-ink-50 focus:bg-ink-50 focus:outline-none disabled:opacity-50 disabled:pointer-events-none ${active ? 'bg-brand-50 text-brand-700 font-medium' : ''} ${className}`}
     >
       {children}
     </button>

@@ -43,21 +43,21 @@ export default function ModelLinkBar({ root, record }) {
 
   if (record?.sourceUrl && !editing) {
     return (
-      <div className="flex items-center gap-2 my-2 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 my-2 text-[11px]">
         <a
           href={record.sourceUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium"
+          className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium shrink-0"
         >
           <ExternalLink size={12} /> Ver en Ligne Roset
         </a>
         {record.patternNames?.length > 0 && (
-          <span className="text-ink-400">· {record.patternNames.length} telas disponibles</span>
+          <span className="text-ink-400 shrink-0">· {record.patternNames.length} telas disponibles</span>
         )}
-        <span className="ml-auto inline-flex items-center gap-2">
-          <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800">Actualizar</button>
-          <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800">Quitar</button>
+        <span className="inline-flex items-center gap-2 sm:ml-auto flex-shrink-0">
+          <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800 min-h-[44px] sm:min-h-0 coarse:min-h-[44px] px-1">Actualizar</button>
+          <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800 min-h-[44px] sm:min-h-0 coarse:min-h-[44px] px-1">Quitar</button>
         </span>
       </div>
     );
@@ -65,8 +65,8 @@ export default function ModelLinkBar({ root, record }) {
 
   return (
     <div className="my-2">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-0" style={{ minWidth: '10rem' }}>
           <Link2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             type="url"
@@ -74,18 +74,20 @@ export default function ModelLinkBar({ root, record }) {
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); link(); } }}
             placeholder="Pega el enlace de Ligne Roset de este modelo para filtrar las telas…"
-            className="input pl-8 text-xs py-1.5"
+            className="input pl-8 text-xs py-1.5 w-full"
             autoFocus={editing}
           />
         </div>
-        <button type="button" onClick={link} disabled={busy || !url.trim()} className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
-          {busy ? 'Vinculando…' : 'Vincular'}
-        </button>
-        {editing && (
-          <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
-            <X size={13} />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button type="button" onClick={link} disabled={busy || !url.trim()} className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+            {busy ? 'Vinculando…' : 'Vincular'}
           </button>
-        )}
+          {editing && (
+            <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
       {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
     </div>

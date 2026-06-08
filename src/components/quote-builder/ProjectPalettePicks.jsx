@@ -33,7 +33,7 @@ export default function ProjectPalettePicks({ palette, onApply }) {
                   key={m.id}
                   type="button"
                   onClick={() => onApply({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null })}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white py-1 pl-1 pr-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
+                  className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white py-1 pl-1 pr-2.5 min-h-[44px] sm:min-h-0 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 max-w-full min-w-0"
                   title="Aplicar esta tela"
                 >
                   <ImageView
@@ -41,7 +41,7 @@ export default function ProjectPalettePicks({ palette, onApply }) {
                     fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
                     className="h-8 w-8 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
                   />
-                  <span className="text-xs text-ink-700">
+                  <span className="text-xs text-ink-700 truncate min-w-0">
                     {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
                   </span>
                 </button>

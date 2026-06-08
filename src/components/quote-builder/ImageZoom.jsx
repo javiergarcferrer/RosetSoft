@@ -25,8 +25,8 @@ export default function ImageZoom({ id, fallbackUrl = null, className, alt = '' 
         <ImageView id={id} fallbackUrl={fallbackUrl} className={className} alt={alt} hoverPreview />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} size="xl">
-        <div className="flex items-center justify-center">
-          <ImageView id={id} fallbackUrl={fallbackUrl} alt={alt} className="max-h-[78vh] w-auto max-w-full object-contain rounded-md" />
+        <div className="flex items-center justify-center overflow-hidden">
+          <ImageView id={id} fallbackUrl={fallbackUrl} alt={alt} className="max-h-[70vh] w-auto max-w-full object-contain rounded-md" />
         </div>
       </Modal>
     </>

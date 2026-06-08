@@ -244,7 +244,7 @@ function OrderRow({ o, customerLabel, quoteCount, containerCount, total, onDelet
       <td className="hidden xl:table-cell text-ink-400 whitespace-nowrap tabular-nums">{formatDateTime(o.updatedAt)}</td>
       <td className="text-right font-semibold whitespace-nowrap tabular-nums">{formatMoney(total, 'USD', { USD: 1 })}</td>
       <td className="text-right w-12">
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-ink-300 hover:text-red-600 transition-colors active:scale-95 p-1.5 rounded" title="Eliminar">
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-ink-300 hover:text-red-600 transition-colors active:scale-95 p-1.5 rounded coarse:min-h-[44px] coarse:px-3" title="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

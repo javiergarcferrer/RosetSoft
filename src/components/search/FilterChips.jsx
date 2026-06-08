@@ -64,7 +64,7 @@ export default function FilterChips({ filters, activeFilters, onFiltersChange })
             type="button"
             onClick={() => clearOne(filter.key)}
             aria-label={`Quitar filtro ${filter.label}`}
-            className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-brand-400 transition-colors hover:bg-brand-100 hover:text-brand-700 active:scale-[0.96]"
+            className="ml-0.5 inline-flex h-5 w-5 coarse:h-7 coarse:w-7 items-center justify-center rounded-full text-brand-400 transition-colors hover:bg-brand-100 hover:text-brand-700 active:scale-[0.96]"
           >
             <X size={11} />
           </button>
@@ -73,7 +73,7 @@ export default function FilterChips({ filters, activeFilters, onFiltersChange })
       <button
         type="button"
         onClick={clearAll}
-        className="text-xs font-medium text-ink-400 underline-offset-2 transition-colors hover:text-ink-600 hover:underline active:scale-[0.97]"
+        className="text-xs font-medium text-ink-400 underline-offset-2 transition-colors hover:text-ink-600 hover:underline active:scale-[0.97] min-h-[2.25rem] coarse:min-h-[2.75rem] inline-flex items-center"
       >
         Limpiar todo
       </button>

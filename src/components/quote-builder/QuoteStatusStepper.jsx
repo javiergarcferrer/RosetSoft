@@ -65,7 +65,12 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
           className="absolute top-[11px] left-0 h-0.5 bg-brand-500 rounded-full transition-all duration-300 ease-out"
           style={{ width: `${(trackIdx / (QUOTE_STAGES.length - 1)) * 100}%` }}
         />
-        <div className="relative flex justify-between gap-1">
+        {/* On very narrow phones each step column gets a minimum guaranteed
+            width so the rail dot + label never collapse to zero. The
+            track itself is `overflow-x-auto` so if the four columns still
+            can't fit (e.g. a translated label is unusually long) they
+            scroll horizontally WITHOUT leaking to the page. */}
+        <div className="relative flex justify-between gap-0.5 overflow-x-auto">
           {QUOTE_STAGES.map((s, i) => {
             const isPast = i < trackIdx;
             const isCurrent = i === trackIdx;
@@ -81,9 +86,11 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
                   ? 'text-ink-600 font-medium'
                   : 'text-ink-400';
             return (
-              <div key={s.key} className="flex flex-col items-center text-center flex-1 min-w-0">
+              // min-w-[60px] guarantees the dot + short label always render;
+              // flex-1 distributes any extra space evenly across all steps.
+              <div key={s.key} className="flex flex-col items-center text-center flex-1 min-w-[60px] px-0.5">
                 <div
-                  className={`w-[22px] h-[22px] rounded-full border-2 z-10 flex items-center justify-center transition-all duration-200
+                  className={`w-[22px] h-[22px] shrink-0 rounded-full border-2 z-10 flex items-center justify-center transition-all duration-200
                     ${isPast || (isCurrent && i === QUOTE_STAGES.length - 1)
                       ? (accent === 'red'
                           ? 'bg-red-500 border-red-500 text-white shadow-sm'
@@ -99,7 +106,9 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
                 <div className={`mt-2 eyebrow-xs tracking-wide truncate w-full leading-snug ${labelMute}`} title={label}>
                   {label}
                 </div>
-                <div className="text-[10px] text-ink-400 mt-0.5 tabular-nums">
+                {/* Date: hidden on the smallest phones (< sm) to save vertical
+                    space and avoid cramping the label row — visible from sm up. */}
+                <div className="text-[10px] text-ink-400 mt-0.5 tabular-nums hidden sm:block">
                   {ts ? new Date(ts).toLocaleDateString('es-DO') : '—'}
                 </div>
               </div>
@@ -123,12 +132,12 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
           <div className="text-sm font-bold mt-0.5 text-ink-900">{(terminal ? stageDef.label : QUOTE_STAGE_BY_KEY[stage]?.label) || 'Borrador'}</div>
           <div className="text-xs text-ink-500 mt-1 leading-relaxed">{(terminal ? stageDef.description : QUOTE_STAGE_BY_KEY[stage]?.description) || ''}</div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {(idx > 0 || terminal) && (
             <button
               type="button"
               onClick={undo}
-              className="btn text-xs text-ink-600 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 active:scale-[0.98] transition-all"
+              className="btn text-xs text-ink-600 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 active:scale-[0.98] transition-all shrink-0"
               title="Revertir al estado anterior"
             >
               <Undo2 size={12} /> Volver
@@ -138,14 +147,14 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
             <button
               type="button"
               onClick={() => advance(next.key)}
-              className="btn-primary active:scale-[0.98]"
+              className="btn-primary active:scale-[0.98] shrink-0 whitespace-nowrap"
               title={`Avanzar a ${next.label}`}
             >
               Marcar {next.label.toLowerCase()} <ChevronRight size={14} />
             </button>
           )}
           {!terminal && !next && (
-            <span className="inline-flex items-center gap-1.5 text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1">
+            <span className="inline-flex items-center gap-1.5 text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 shrink-0">
               <CheckCircle2 size={14} /> {stageDef?.label || 'Listo'}
             </span>
           )}
@@ -183,7 +192,7 @@ function TerminalMenu({ stage, terminal, onPick }) {
         Más <ChevronDown size={12} className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1.5 w-52 rounded-lg border border-ink-200 bg-white shadow-pop py-1 z-30 overflow-hidden" role="menu">
+        <div className="absolute right-0 mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-white shadow-pop py-1 z-30 overflow-hidden" role="menu">
           {QUOTE_TERMINAL_STAGES.map((t) => (
             <button
               key={t.key}

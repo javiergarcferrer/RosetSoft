@@ -53,8 +53,8 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         <div className="sm:hidden pt-3 pb-1 flex justify-center" aria-hidden>
           <div className="w-10 h-[3px] rounded-full bg-ink-200" />
         </div>
-        <div className="flex items-center justify-between px-6 py-4 sm:py-4 border-b border-ink-100">
-          <h2 className="font-display text-base font-semibold text-ink-900 truncate pr-3">{title}</h2>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-ink-100">
+          <h2 className="font-display text-base font-semibold text-ink-900 break-words leading-snug pr-3 min-w-0">{title}</h2>
           <button
             onClick={onClose}
             className="btn-icon -mr-1.5 text-ink-400 hover:text-ink-600 hover:bg-ink-100 transition-colors"
@@ -63,9 +63,9 @@ export default function Modal({ open, onClose, title, children, footer, size = '
             <X size={18} aria-hidden />
           </button>
         </div>
-        <div className="overflow-y-auto overscroll-contain px-6 py-5 flex-1">{children}</div>
+        <div className="overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-5 flex-1 min-w-0">{children}</div>
         {footer && (
-          <div className="px-6 py-4 border-t border-ink-100 bg-ink-50/50 rounded-b-2xl sm:rounded-b-2xl flex items-center justify-end gap-2.5">
+          <div className="px-4 sm:px-6 py-4 border-t border-ink-100 bg-ink-50/50 sm:rounded-b-2xl flex flex-wrap items-center justify-end gap-2.5">
             {footer}
           </div>
         )}

@@ -405,8 +405,8 @@ function ModelRow({ model }) {
   const members = memberSkus(model);
   return (
     <details className="group/model">
-      <summary className="cursor-pointer list-none select-none pl-8 pr-5 py-2.5 flex items-center justify-between gap-3 hover:bg-ink-50 transition-colors">
-        <span className="flex items-center gap-2 min-w-0">
+      <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 flex items-center justify-between gap-2 hover:bg-ink-50 transition-colors min-w-0">
+        <span className="flex items-center gap-2 min-w-0 flex-1">
           <ChevronRight
             size={13}
             className="text-ink-400 flex-shrink-0 transition-transform duration-150 group-open/model:rotate-90"
@@ -423,7 +423,7 @@ function ModelRow({ model }) {
           {priceRangeLabel(model)}
         </span>
       </summary>
-      <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-10 pr-4 pb-1.5">
+      <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-8 sm:pl-10 pr-3 sm:pr-4 pb-1.5">
         {members.map(({ grade, product: p }) => (
           <SkuRow key={p.id} grade={grade} product={p} />
         ))}
@@ -438,21 +438,21 @@ function SkuRow({ grade, product: p }) {
   const cost = Number(p.cost) || 0;
   const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
   return (
-    <li className="flex items-center gap-3 py-1.5 text-sm hover:bg-ink-100/40 rounded transition-colors -mx-1 px-1">
+    <li className="flex items-center gap-2 py-1.5 text-sm hover:bg-ink-100/40 rounded transition-colors -mx-1 px-1 min-w-0">
       {grade ? (
         <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">{grade}</span>
       ) : (
         <span className="chip text-ink-400 border border-dashed border-ink-200 flex-shrink-0">—</span>
       )}
-      <span className="font-mono text-xs text-ink-500 flex-shrink-0 w-24 truncate" title={p.reference}>
+      <span className="font-mono text-xs text-ink-500 flex-shrink-0 w-20 min-[400px]:w-24 truncate" title={p.reference}>
         {p.reference}
       </span>
-      <span className="text-ink-500 text-xs truncate flex-1 min-w-0" title={p.subtype || p.name}>
+      <span className="text-ink-500 text-xs truncate flex-1 min-w-0 hidden min-[400px]:inline" title={p.subtype || p.name}>
         {p.subtype || ''}
       </span>
-      <span className="tabular-nums text-right w-24 flex-shrink-0 font-medium text-ink-800">{usd(price)}</span>
-      <span className="tabular-nums text-right text-ink-400 w-24 flex-shrink-0 hidden sm:inline">{usd(cost)}</span>
-      <span className="tabular-nums text-right text-ink-400 w-12 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
+      <span className="tabular-nums text-right flex-shrink-0 font-medium text-ink-800 ml-auto">{usd(price)}</span>
+      <span className="tabular-nums text-right text-ink-400 w-20 flex-shrink-0 hidden sm:inline">{usd(cost)}</span>
+      <span className="tabular-nums text-right text-ink-400 w-10 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
     </li>
   );
 }

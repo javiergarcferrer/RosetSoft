@@ -57,7 +57,7 @@ export default function Conciliacion() {
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
+  const field = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px]';
 
   return (
     <>
@@ -65,15 +65,15 @@ export default function Conciliacion() {
 
       {!loaded ? <ListLoading /> : (
         <>
-          <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3 mb-4">
             <label className="text-sm">Cuenta bancaria<br />
-              <select value={accountCode} onChange={(e) => setAccountCode(e.target.value)} className={`${field} min-w-[280px]`}>
+              <select value={accountCode} onChange={(e) => setAccountCode(e.target.value)} className={`${field} w-full sm:min-w-[240px]`}>
                 <option value="">— Elige una cuenta —</option>
                 {bankAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
             </label>
             <label className="text-sm">Saldo del estado<br />
-              <input type="number" step="0.01" value={stmt} onChange={(e) => setStmt(e.target.value)} placeholder="Saldo final banco" className={`${field} w-40 text-right tabular-nums`} />
+              <input type="number" step="0.01" value={stmt} onChange={(e) => setStmt(e.target.value)} placeholder="Saldo final banco" className={`${field} w-full sm:w-40 text-right tabular-nums`} />
             </label>
           </div>
 
@@ -82,11 +82,11 @@ export default function Conciliacion() {
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                <div className="card p-3"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Saldo en libros</div><div className="text-lg font-semibold tabular-nums">{formatDop(rec.ledgerBalance)}</div></div>
-                <div className="card p-3"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Conciliado</div><div className="text-lg font-semibold tabular-nums">{formatDop(rec.reconciledBalance)}</div></div>
-                <div className="card p-3"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Pendiente</div><div className="text-lg font-semibold tabular-nums">{formatDop(rec.pendingBalance)}</div></div>
-                <div className="card p-3"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Diferencia vs. estado</div>
-                  <div className={`text-lg font-semibold tabular-nums ${rec.difference === 0 ? 'text-emerald-700' : rec.difference == null ? 'text-ink-400' : 'text-rose-700'}`}>
+                <div className="card p-3 min-w-0"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Saldo en libros</div><div className="text-lg font-semibold tabular-nums break-all">{formatDop(rec.ledgerBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Conciliado</div><div className="text-lg font-semibold tabular-nums break-all">{formatDop(rec.reconciledBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Pendiente</div><div className="text-lg font-semibold tabular-nums break-all">{formatDop(rec.pendingBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Diferencia vs. estado</div>
+                  <div className={`text-lg font-semibold tabular-nums break-all ${rec.difference === 0 ? 'text-emerald-700' : rec.difference == null ? 'text-ink-400' : 'text-rose-700'}`}>
                     {rec.difference == null ? '—' : formatDop(rec.difference)}
                   </div>
                 </div>
@@ -96,34 +96,36 @@ export default function Conciliacion() {
                 <EmptyState icon={Landmark} title="Sin movimientos" description="Esta cuenta no tiene movimientos en el mayor." />
               ) : (
                 <div className="card overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                      <tr>
-                        <th className="text-left py-2 px-3 w-10"></th>
-                        <th className="text-left py-2 px-3">Fecha</th>
-                        <th className="text-left py-2 px-3">#</th>
-                        <th className="text-left py-2 px-3">Concepto</th>
-                        <th className="text-right py-2 px-3">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rec.rows.map((row) => (
-                        <tr key={row.line.id} className={`border-t border-ink-50 ${row.reconciled ? 'bg-emerald-50/40' : ''}`}>
-                          <td className="py-1.5 px-3">
-                            <button type="button" onClick={() => toggle(row)} disabled={busy === row.line.id}
-                              className={`w-5 h-5 rounded border inline-flex items-center justify-center ${row.reconciled ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-ink-300 text-transparent hover:border-ink-500'}`}
-                              title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}>
-                              <Check size={13} />
-                            </button>
-                          </td>
-                          <td className="py-1.5 px-3 text-ink-500">{formatDate(row.postedAt)}</td>
-                          <td className="py-1.5 px-3 tabular-nums text-ink-400">{row.number ?? '—'}</td>
-                          <td className="py-1.5 px-3">{row.memo || '—'}</td>
-                          <td className={`py-1.5 px-3 text-right tabular-nums ${row.amount < 0 ? 'text-rose-700' : ''}`}>{formatDop(row.amount)}</td>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                        <tr>
+                          <th className="text-left py-2 px-3 w-10"></th>
+                          <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+                          <th className="text-left py-2 px-3">#</th>
+                          <th className="text-left py-2 px-3">Concepto</th>
+                          <th className="text-right py-2 px-3 whitespace-nowrap">Monto</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rec.rows.map((row) => (
+                          <tr key={row.line.id} className={`border-t border-ink-50 ${row.reconciled ? 'bg-emerald-50/40' : ''}`}>
+                            <td className="py-1.5 px-3">
+                              <button type="button" onClick={() => toggle(row)} disabled={busy === row.line.id}
+                                className={`w-6 h-6 rounded border inline-flex items-center justify-center coarse:min-w-[44px] coarse:min-h-[44px] coarse:rounded-lg ${row.reconciled ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-ink-300 text-transparent hover:border-ink-500'}`}
+                                title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}>
+                                <Check size={13} />
+                              </button>
+                            </td>
+                            <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(row.postedAt)}</td>
+                            <td className="py-1.5 px-3 tabular-nums text-ink-400 whitespace-nowrap">{row.number ?? '—'}</td>
+                            <td className="py-1.5 px-3 min-w-[120px]">{row.memo || '—'}</td>
+                            <td className={`py-1.5 px-3 text-right tabular-nums whitespace-nowrap ${row.amount < 0 ? 'text-rose-700' : ''}`}>{formatDop(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>

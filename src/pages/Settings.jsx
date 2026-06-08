@@ -83,9 +83,9 @@ export default function Settings() {
         </button>
       } />
       {saveState === 'error' && saveError && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700">
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700 min-w-0">
           <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" aria-hidden />
-          <span>No se pudo guardar: {saveError}</span>
+          <span className="min-w-0 break-words">No se pudo guardar: {saveError}</span>
         </div>
       )}
 
@@ -99,8 +99,8 @@ export default function Settings() {
             <div className="card-header">
               <h2 className="font-semibold">Empresa</h2>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4">
                 <ImageDrop
                   imageId={local.logoImageId}
                   onChange={(id) => set('logoImageId', id)}
@@ -120,7 +120,7 @@ export default function Settings() {
                       autoCapitalize="words"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-3">
                     <div>
                       <div className="label">Teléfono</div>
                       <input
@@ -149,11 +149,11 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <div className="label">Dirección</div>
                 <textarea className="input min-h-[60px]" value={local.companyAddress || ''} onChange={(e) => set('companyAddress', e.target.value)} placeholder="Calle, ciudad, provincia, R.D." />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <div className="label">Correo de Ligne Roset (reporte de ventas)</div>
                 <input
                   className="input"
@@ -180,7 +180,7 @@ export default function Settings() {
             <div className="card-header">
               <h2 className="font-semibold">Predeterminados de cotización</h2>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Descuento por defecto %</div>
                 <input className="input" type="number" min="0" max="100" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', clampPct(e.target.value))} />
@@ -189,11 +189,11 @@ export default function Settings() {
                 <div className="label">ITBIS</div>
                 <div className="input bg-ink-50 text-ink-500 cursor-not-allowed">18% (fijo)</div>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <div className="label">Términos (se imprimen en el PDF)</div>
                 <textarea className="input min-h-[100px]" value={local.quoteTerms || ''} onChange={(e) => set('quoteTerms', e.target.value)} />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <div className="label">Pie de página (en cada página del PDF)</div>
                 <input className="input" value={local.quoteFooter || ''} onChange={(e) => set('quoteFooter', e.target.value)} />
               </div>
@@ -293,23 +293,25 @@ function StoreCard({ settings, saveSettings, customers }) {
         </div>
         <div>
           <div className="label">Enlace público</div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 min-[400px]:flex-row min-[400px]:flex-wrap min-[400px]:items-center">
             <input
-              className="input flex-1 font-mono text-xs text-ink-600"
+              className="input w-full min-[400px]:flex-1 min-w-0 font-mono text-xs text-ink-600"
               readOnly
               value={url}
               onFocus={(e) => e.target.select()}
             />
-            <button
-              type="button"
-              onClick={copy}
-              className={`btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 !border-emerald-200' : ''}`}
-            >
-              {copied ? <><Check size={12} aria-hidden /> Copiado</> : 'Copiar'}
-            </button>
-            <a href={url} target="_blank" rel="noreferrer" className="btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-transform">
-              Abrir
-            </a>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={copy}
+                className={`btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 !border-emerald-200' : ''}`}
+              >
+                {copied ? <><Check size={12} aria-hidden /> Copiado</> : 'Copiar'}
+              </button>
+              <a href={url} target="_blank" rel="noreferrer" className="btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-transform">
+                Abrir
+              </a>
+            </div>
           </div>
           <p className="text-[11px] text-ink-500 mt-1.5">
             Compártelo con tus clientes — no requiere iniciar sesión.
@@ -407,7 +409,7 @@ function RateCard({ local, set, saveSettings }) {
       {/* Bank logo shown SMALL next to the converted DOP rate on the client
           link + PDF. Upload the official Banco Popular logo (SVG or PNG) once;
           it lives in your storage, not the codebase. */}
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex items-start gap-3 min-w-0">
         <ImageDrop
           imageId={local.rateLogoImageId}
           onChange={(id) => set('rateLogoImageId', id)}
@@ -415,7 +417,7 @@ function RateCard({ local, set, saveSettings }) {
           label="Logo del banco"
           imgClassName="h-12 w-12 object-contain bg-white rounded-md border border-ink-100"
         />
-        <p className="text-[11px] text-ink-500 max-w-xs">
+        <p className="text-[11px] text-ink-500 min-w-0">
           Se muestra pequeño junto a la tasa (“≈ RD$ … DOP/USD”) en el enlace del
           cliente y el PDF. Sube el logo de Banco Popular (SVG o PNG).
         </p>
@@ -424,7 +426,7 @@ function RateCard({ local, set, saveSettings }) {
       {/* Banco Popular — read-only. The dealer can't adjust it; the daily
           job and the button below are the only writers. */}
       <div className="rounded-lg border border-ink-100 bg-ink-50/70 px-4 py-3.5 mb-3">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="font-medium text-sm text-ink-800">Banco Popular Dominicano</div>
           <button
             type="button"
@@ -471,7 +473,7 @@ function RateCard({ local, set, saveSettings }) {
           <p className="text-[11px] text-ink-500 mb-3 mt-2 leading-relaxed">
             Úsala mientras se conecta la API de Banco Popular. La tasa que guardes aquí se aplica a todas las cotizaciones nuevas hasta la próxima actualización automática.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3">
             <div>
               <div className="label">Compra (RD$ / USD)</div>
               <input
@@ -529,7 +531,7 @@ function RateCard({ local, set, saveSettings }) {
       {/* Default currency */}
       <div className="mt-4">
         <div className="label">Moneda por defecto al mostrar precios</div>
-        <select className="input max-w-[160px]" value={local.defaultCurrency || 'DOP'} onChange={(e) => set('defaultCurrency', e.target.value)}>
+        <select className="input w-full sm:max-w-[240px]" value={local.defaultCurrency || 'DOP'} onChange={(e) => set('defaultCurrency', e.target.value)}>
           <option value="DOP">DOP — Pesos dominicanos</option>
           <option value="USD">USD — Dólares</option>
         </select>
@@ -613,7 +615,7 @@ function ShopifyCard({ settings }) {
         <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
           {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar todo
         </button>
-        {connectedAt ? <span className="text-[11px] text-ink-400">Conectado · {formatDateTime(connectedAt)}</span> : null}
+        {connectedAt ? <span className="text-[11px] text-ink-400 min-w-0 truncate">Conectado · {formatDateTime(connectedAt)}</span> : null}
       </div>
       {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
     </div>

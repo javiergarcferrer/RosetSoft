@@ -14,7 +14,7 @@ import { BookOpen, Boxes } from 'lucide-react';
 export default function AddSourceButtons({ onOpenCatalog, onOpenInventory, variant = 'toolbar' }) {
   const cls = variant === 'cta'
     ? 'inline-flex items-center justify-center w-11 h-11 coarse:w-12 coarse:h-12 rounded-lg border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:scale-[0.97] transition-all shadow-xs ring-1 ring-inset ring-black/5'
-    : 'inline-flex items-center justify-center w-9 h-9 coarse:w-10 coarse:h-10 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 active:scale-[0.96] transition-all';
+    : 'inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 active:scale-[0.96] transition-all';
   const size = variant === 'cta' ? 20 : 17;
   return (
     <div className="inline-flex items-center gap-1">

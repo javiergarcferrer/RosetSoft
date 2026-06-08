@@ -62,7 +62,7 @@ export default function Impuestos() {
         <div className="space-y-4">
           <div className="card p-5 max-w-2xl">
             <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5"><Percent size={14} /> ITBIS del mes</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Débito fiscal (ventas)</div>
                 <div className="text-xl font-semibold tabular-nums">{formatDop(itbis.debitoFiscal)}</div>

@@ -430,7 +430,7 @@ function MaterialEditor({ material, profileId, onClose }) {
             simply the first color that has one (see heroImageId). Add
             per-color swatches in the Colores section below. */}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
             <span className="label">Categoría</span>
             <select
@@ -461,7 +461,7 @@ function MaterialEditor({ material, profileId, onClose }) {
           </label>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-3 gap-3">
           <label className="flex flex-col gap-1">
             <span className="label">Grade</span>
             <select
@@ -499,7 +499,7 @@ function MaterialEditor({ material, profileId, onClose }) {
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
             <span className="label">{draft.category === 'leather' ? 'Grosor' : 'Ancho'}</span>
             <div className="flex gap-2">
@@ -575,7 +575,7 @@ function MaterialEditor({ material, profileId, onClose }) {
                   setDragColor(null);
                   setDropColor(null);
                 }}
-                className={`relative grid grid-cols-[auto_auto_1fr_120px_auto] gap-2 items-center ${isDragging ? 'opacity-40' : ''}`}
+                className={`relative flex flex-wrap items-center gap-2 ${isDragging ? 'opacity-40' : ''}`}
               >
                 {isDropTarget && (
                   <div className="absolute left-0 right-0 -top-1 h-0.5 bg-brand-500 z-10 pointer-events-none" />
@@ -611,14 +611,14 @@ function MaterialEditor({ material, profileId, onClose }) {
                   sizeClass="w-9 h-9"
                 />
                 <DebouncedInput
-                  className="input py-1.5 text-sm"
+                  className="input py-1.5 text-sm flex-1 min-w-[90px]"
                   value={c.name || ''}
                   onCommit={(v) => updateColor(i, { name: v })}
                   placeholder="Nombre"
                   autoCapitalize="characters"
                 />
                 <DebouncedInput
-                  className="input py-1.5 text-sm font-mono tabular-nums"
+                  className="input py-1.5 text-sm font-mono tabular-nums w-24 flex-shrink-0"
                   value={c.code || ''}
                   onCommit={(v) => updateColor(i, { code: v })}
                   placeholder="Código"

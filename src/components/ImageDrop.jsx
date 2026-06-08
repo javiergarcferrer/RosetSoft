@@ -106,7 +106,7 @@ export default function ImageDrop({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy}
-            className="w-full h-32 flex flex-col items-center justify-center gap-1 text-ink-500 hover:text-ink-700 text-xs"
+            className="w-full h-32 min-h-[44px] flex flex-col items-center justify-center gap-1 text-ink-500 hover:text-ink-700 text-xs"
           >
             <Upload size={20} />
             <span>{busy ? 'Uploading…' : 'Click, drop, or paste'}</span>
@@ -114,11 +114,11 @@ export default function ImageDrop({
         )}
       </div>
 
-      <div className="flex items-center gap-2 mt-1.5">
+      <div className="flex flex-wrap items-center gap-2 mt-1.5">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="text-xs text-ink-500 hover:text-ink-900"
+          className="text-xs text-ink-500 hover:text-ink-900 min-h-[44px] sm:min-h-0 inline-flex items-center"
         >
           Choose file
         </button>
@@ -128,7 +128,7 @@ export default function ImageDrop({
             <button
               type="button"
               onClick={fetchFromUrl}
-              className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1"
+              className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 min-h-[44px] sm:min-h-0"
             >
               <LinkIcon size={11} /> From URL
             </button>

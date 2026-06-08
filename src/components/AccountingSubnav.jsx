@@ -17,7 +17,7 @@ export default function AccountingSubnav() {
           <NavLink
             key={t.to}
             to={t.to}
-            className={`px-3.5 py-2.5 text-sm border-b-2 -mb-px transition-all duration-150 rounded-t-md select-none ${
+            className={`px-3.5 py-2.5 coarse:py-3 text-sm border-b-2 -mb-px transition-all duration-150 rounded-t-md select-none ${
               t.to === pathname
                 ? 'border-brand-500 text-brand-600 font-semibold'
                 : 'border-transparent text-ink-500 hover:text-ink-800 hover:border-ink-200 hover:bg-ink-50/60'

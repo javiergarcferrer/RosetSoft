@@ -116,26 +116,26 @@ export default function Suppliers() {
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
+  const field = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px]';
 
   return (
     <>
       <PageHeader title="Proveedores"
         subtitle={suppliersQ.loaded ? `${suppliersQ.data.length} proveedores` : ' '}
-        actions={<button type="button" onClick={openNew} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nuevo proveedor</button>} />
+        actions={<button type="button" onClick={openNew} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Plus size={15} /> Nuevo proveedor</button>} />
 
       {editing && (
-        <div className="card p-4 mb-4 border-ink-300">
+        <div className="card p-4 mb-4 border-ink-300 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">{editing === 'new' ? 'Nuevo proveedor' : 'Editar proveedor'}</h3>
-            <button type="button" onClick={() => setEditing(null)} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+            <button type="button" onClick={() => setEditing(null)} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
             <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre / razón social" className={field} />
             <div className="flex gap-2">
               <input value={form.rnc} onChange={(e) => setForm((f) => ({ ...f, rnc: e.target.value }))} placeholder="RNC / Cédula" className={`${field} flex-1`} />
               <button type="button" onClick={doLookup} disabled={looking || !cleanRnc(form.rnc)}
-                className="btn-ghost text-sm inline-flex items-center gap-1 px-2.5 disabled:opacity-40" title="Buscar nombre en el registro DGII">
+                className="btn-ghost text-sm inline-flex items-center gap-1 px-2.5 min-h-[44px] min-w-[44px] justify-center disabled:opacity-40" title="Buscar nombre en el registro DGII">
                 {looking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
               </button>
             </div>
@@ -170,7 +170,7 @@ export default function Suppliers() {
               Retener ITBIS
             </label>
             <button type="button" onClick={save} disabled={saving || !form.name.trim()}
-              className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40">
+              className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto min-h-[44px] disabled:opacity-40">
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
             </button>
           </div>
@@ -181,38 +181,40 @@ export default function Suppliers() {
         <EmptyState icon={Truck} title="Sin proveedores" description="Agrega tu primer proveedor." />
       ) : (
         <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-              <tr>
-                <th className="text-left py-2 px-3">Proveedor</th>
-                <th className="text-left py-2 px-3">RNC / Cédula</th>
-                <th className="text-left py-2 px-3">Tipo</th>
-                <th className="text-left py-2 px-3">Cuenta</th>
-                <th className="text-left py-2 px-3">Retención</th>
-                <th className="py-2 px-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => (
-                <tr key={s.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3 font-medium">{s.name}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-600">{s.rnc || '—'}</td>
-                  <td className="py-1.5 px-3 text-ink-600">{KIND_LABEL[s.kind] || s.kind}</td>
-                  <td className="py-1.5 px-3 text-ink-600">
-                    {s.defaultAccountCode
-                      ? <span title={s.defaultAccountCode}>{acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode}</span>
-                      : '—'}
-                  </td>
-                  <td className="py-1.5 px-3 text-ink-600">
-                    {[s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'}
-                  </td>
-                  <td className="py-1.5 px-3 text-right">
-                    <button type="button" onClick={() => openEdit(s)} className="text-ink-400 hover:text-ink-700"><Pencil size={14} /></button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left py-2 px-3">Proveedor</th>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">RNC / Cédula</th>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">Tipo</th>
+                  <th className="text-left py-2 px-3">Cuenta</th>
+                  <th className="text-left py-2 px-3 whitespace-nowrap">Retención</th>
+                  <th className="py-2 px-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => (
+                  <tr key={s.id} className="border-t border-ink-50">
+                    <td className="py-1.5 px-3 font-medium min-w-[120px]">{s.name}</td>
+                    <td className="py-1.5 px-3 tabular-nums text-ink-600 whitespace-nowrap">{s.rnc || '—'}</td>
+                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{KIND_LABEL[s.kind] || s.kind}</td>
+                    <td className="py-1.5 px-3 text-ink-600 min-w-[100px]">
+                      {s.defaultAccountCode
+                        ? <span title={s.defaultAccountCode}>{acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode}</span>
+                        : '—'}
+                    </td>
+                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">
+                      {[s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'}
+                    </td>
+                    <td className="py-1.5 px-3 text-right">
+                      <button type="button" onClick={() => openEdit(s)} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] inline-flex items-center justify-center"><Pencil size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>

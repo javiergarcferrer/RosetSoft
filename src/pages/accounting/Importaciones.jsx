@@ -54,7 +54,7 @@ export default function Importaciones() {
     <>
       <PageHeader title="Importaciones" subtitle="Expediente aduanal (DGA) → costo en destino al inventario"
         actions={(
-          <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5"><FileText size={15} /> Nuevo expediente</button>
+          <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
         )} />
 
       {showExpediente && loaded && (
@@ -72,44 +72,46 @@ export default function Importaciones() {
           {list.count > 0 && (
           <div className="card overflow-hidden mt-4">
           <div className="px-3 py-2 text-xs uppercase tracking-wide text-ink-500 bg-ink-50 font-medium">Liquidaciones simples (histórico)</div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left py-2 px-3">Fecha</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
                 <th className="text-left py-2 px-3">Proveedor</th>
                 <th className="text-left py-2 px-3">Artículo</th>
-                <th className="text-right py-2 px-3">CIF</th>
-                <th className="text-right py-2 px-3">Gravamen</th>
-                <th className="text-right py-2 px-3">ITBIS imp.</th>
-                <th className="text-right py-2 px-3">Costo destino</th>
-                <th className="text-right py-2 px-3">C. unit.</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">CIF</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Gravamen</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS imp.</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Costo destino</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">C. unit.</th>
               </tr>
             </thead>
             <tbody>
               {list.rows.map(({ liq: l, supplier, item, landed, unitCost }) => (
                 <tr key={l.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3 text-ink-500">{formatDate(l.liquidatedAt)}</td>
-                  <td className="py-1.5 px-3">{supplier?.name || '—'}</td>
-                  <td className="py-1.5 px-3">{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(l.cif)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(l.duty)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(l.importItbis)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(landed)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(unitCost)}</td>
+                  <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(l.liquidatedAt)}</td>
+                  <td className="py-1.5 px-3 min-w-0">{supplier?.name || '—'}</td>
+                  <td className="py-1.5 px-3 min-w-0">{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.cif)}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.duty)}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.importItbis)}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(landed)}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(unitCost)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-ink-200 font-semibold">
                 <td className="py-2 px-3" colSpan={3}>{list.count} liquidaciones</td>
-                <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.cif)}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.duty)}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.importItbis)}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{formatDop(list.totals.landed)}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.cif)}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.duty)}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.importItbis)}</td>
+                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.landed)}</td>
                 <td className="py-2 px-3"></td>
               </tr>
             </tfoot>
           </table>
+          </div>
           </div>
           )}
         </>
@@ -131,16 +133,17 @@ function ExpedientesList({ expedientes, suppliers }) {
   return (
     <div className="card overflow-hidden">
       <div className="px-3 py-2 text-xs uppercase tracking-wide text-ink-500 bg-ink-50 font-medium">Expedientes</div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[540px]">
         <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
           <tr>
-            <th className="text-left py-2 px-3">Fecha</th>
-            <th className="text-left py-2 px-3">BL</th>
+            <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
+            <th className="text-left py-2 px-3 whitespace-nowrap">BL</th>
             <th className="text-left py-2 px-3">Proveedor</th>
-            <th className="text-right py-2 px-3">Líneas</th>
-            <th className="text-right py-2 px-3">CIF</th>
-            <th className="text-right py-2 px-3">Costo destino</th>
-            <th className="text-right py-2 px-3">ITBIS créd.</th>
+            <th className="text-right py-2 px-3 whitespace-nowrap">Líneas</th>
+            <th className="text-right py-2 px-3 whitespace-nowrap">CIF</th>
+            <th className="text-right py-2 px-3 whitespace-nowrap">Costo destino</th>
+            <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS créd.</th>
           </tr>
         </thead>
         <tbody>
@@ -149,18 +152,19 @@ function ExpedientesList({ expedientes, suppliers }) {
             const embCount = e.embarques?.length || 0;
             return (
               <tr key={e.id} className="border-t border-ink-50">
-                <td className="py-1.5 px-3 text-ink-500">{formatDate(e.liquidatedAt)}</td>
-                <td className="py-1.5 px-3 font-mono text-xs">{e.bl || '—'}{embCount > 1 ? <span className="text-ink-400"> +{embCount - 1}</span> : null}</td>
-                <td className="py-1.5 px-3">{supplier?.name || '—'}</td>
+                <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(e.liquidatedAt)}</td>
+                <td className="py-1.5 px-3 font-mono text-xs whitespace-nowrap">{e.bl || '—'}{embCount > 1 ? <span className="text-ink-400"> +{embCount - 1}</span> : null}</td>
+                <td className="py-1.5 px-3 min-w-0">{supplier?.name || '—'}</td>
                 <td className="py-1.5 px-3 text-right tabular-nums">{lineCount(e)}</td>
-                <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(e.cif)}</td>
-                <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(expedienteLanded(e))}</td>
-                <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(expedienteCreditableItbis(e))}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(e.cif)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(expedienteLanded(e))}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(expedienteCreditableItbis(e))}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

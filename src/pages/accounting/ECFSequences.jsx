@@ -91,18 +91,18 @@ export default function ECFSequences() {
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-sm">Tipo e-CF<br />
-              <select value={form.ecfType} onChange={(e) => setForm((f) => ({ ...f, ecfType: e.target.value }))} className={field}>
+              <select value={form.ecfType} onChange={(e) => setForm((f) => ({ ...f, ecfType: e.target.value }))} className={`${field} w-full sm:w-auto`}>
                 {ECF_TYPES.map((t) => <option key={t.code} value={t.code}>{t.code} · {t.label}</option>)}
               </select>
             </label>
             <label className="text-sm">Desde<br /><input type="number" min="1" value={form.seqFrom} onChange={(e) => setForm((f) => ({ ...f, seqFrom: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
             <label className="text-sm">Hasta<br /><input type="number" min="1" value={form.seqTo} onChange={(e) => setForm((f) => ({ ...f, seqTo: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
             {editing !== 'new' && <label className="text-sm">Próximo<br /><input type="number" min="1" value={form.nextSeq} onChange={(e) => setForm((f) => ({ ...f, nextSeq: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>}
-            <label className="text-sm">Vence<br /><input type="date" value={form.expires} onChange={(e) => setForm((f) => ({ ...f, expires: e.target.value }))} className={field} /></label>
-            <label className="inline-flex items-center gap-2 text-sm pb-1.5">
-              <input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} /> Activa
+            <label className="text-sm">Vence<br /><input type="date" value={form.expires} onChange={(e) => setForm((f) => ({ ...f, expires: e.target.value }))} className={`${field} w-full sm:w-auto`} /></label>
+            <label className="inline-flex items-center gap-2 text-sm pb-1.5 min-h-[44px]">
+              <input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="w-4 h-4" /> Activa
             </label>
-            <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40">
+            <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40 min-h-[44px] px-4">
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
             </button>
           </div>
@@ -114,14 +114,15 @@ export default function ECFSequences() {
           description="Carga los rangos de e-NCF que la DGII te autorizó." />
       ) : (
         <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left py-2 px-3">Tipo</th>
-                <th className="text-left py-2 px-3">Rango</th>
-                <th className="text-left py-2 px-3">Próximo e-NCF</th>
-                <th className="text-right py-2 px-3">Restan</th>
-                <th className="text-left py-2 px-3">Vence</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Rango</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Próximo e-NCF</th>
+                <th className="text-right py-2 px-3 whitespace-nowrap">Restan</th>
+                <th className="text-left py-2 px-3 whitespace-nowrap">Vence</th>
                 <th className="text-left py-2 px-3">Estado</th>
                 <th className="py-2 px-3"></th>
               </tr>
@@ -133,20 +134,21 @@ export default function ECFSequences() {
                 const tone = status === 'Activa' ? 'text-emerald-700' : 'text-rose-600';
                 return (
                   <tr key={s.id} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3">{s.ecfType} · {ecfTypeLabel(s.ecfType)}</td>
-                    <td className="py-1.5 px-3 tabular-nums text-ink-600">{s.seqFrom}–{s.seqTo}</td>
-                    <td className="py-1.5 px-3 tabular-nums">{st.nextENcf || '—'}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{st.remaining}</td>
-                    <td className="py-1.5 px-3 text-ink-600">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
-                    <td className={`py-1.5 px-3 ${tone}`}>{status}</td>
+                    <td className="py-1.5 px-3 min-w-0">{s.ecfType} · {ecfTypeLabel(s.ecfType)}</td>
+                    <td className="py-1.5 px-3 tabular-nums text-ink-600 whitespace-nowrap">{s.seqFrom}–{s.seqTo}</td>
+                    <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{st.nextENcf || '—'}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{st.remaining}</td>
+                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
+                    <td className={`py-1.5 px-3 whitespace-nowrap ${tone}`}>{status}</td>
                     <td className="py-1.5 px-3 text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="text-ink-400 hover:text-ink-700"><Pencil size={14} /></button>
+                      <button type="button" onClick={() => openEdit(s)} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><Pencil size={14} /></button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </>

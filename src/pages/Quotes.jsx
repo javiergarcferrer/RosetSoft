@@ -205,7 +205,7 @@ export default function Quotes() {
         title="Cotizaciones"
         subtitle={`${scopedCount} ${scopedCount === 1 ? 'cotización' : 'cotizaciones'}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             {meId && <ScopeToggle scope={scope} onChange={setScope} />}
             <Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>
           </div>
@@ -422,7 +422,7 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
       <td className="hidden lg:table-cell text-ink-400 tabular-nums whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
       <td className="text-right w-12">
-        <button onClick={del} className="text-ink-300 hover:text-red-500 transition-colors active:scale-95 p-1.5 rounded" title="Eliminar">
+        <button onClick={del} className="text-ink-300 hover:text-red-500 transition-colors active:scale-95 p-1.5 rounded coarse:min-h-[44px] coarse:px-3" title="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

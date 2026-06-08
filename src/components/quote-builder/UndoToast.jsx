@@ -30,10 +30,10 @@ export function useUndoToast() {
 
   const element = state ? (
     <div
-      className="fixed left-1/2 -translate-x-1/2 z-40 bottom-24 md:bottom-6 bg-ink-900 text-ink-50 rounded-lg shadow-pop px-4 py-2.5 flex items-center gap-3 text-sm"
+      className="fixed left-1/2 -translate-x-1/2 z-40 bottom-24 md:bottom-6 bg-ink-900 text-ink-50 rounded-lg shadow-pop px-4 py-2.5 flex items-center gap-3 text-sm w-max max-w-[calc(100vw-2rem)]"
       role="status"
     >
-      <span className="min-w-0">{state.message}</span>
+      <span className="min-w-0 break-words">{state.message}</span>
       <button
         type="button"
         onClick={async () => {

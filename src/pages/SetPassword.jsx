@@ -91,7 +91,7 @@ export default function SetPassword() {
       {/* Subtle terracotta bloom behind the card */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full opacity-[0.15]"
+        className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 w-[min(520px,100vw)] h-[min(520px,100vw)] rounded-full opacity-[0.15]"
         style={{ background: 'radial-gradient(circle, #c76b29 0%, transparent 70%)', filter: 'blur(60px)' }}
       />
       <div className="card-auth relative z-10">

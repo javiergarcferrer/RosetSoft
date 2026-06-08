@@ -114,7 +114,7 @@ export default function MaterialOptionsStrip({
       {interactive && (
         <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Elige el material</div>
       )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 max-w-md">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 min-w-0">
         {cells.map((c) => {
           const selected = interactive && c.grade != null && c.grade === activeGrade;
           const body = (
@@ -135,9 +135,9 @@ export default function MaterialOptionsStrip({
                   </span>
                 )}
               </div>
-              <div className="mt-1 leading-tight">
-                <div className={`text-[11px] font-medium ${selected ? 'text-brand-800' : 'text-ink-700'}`}>{c.label}</div>
-                {c.note && <div className={`text-[10px] ${c.noteClass}`}>{c.note}</div>}
+              <div className="mt-1 leading-tight min-w-0">
+                <div className={`text-[11px] font-medium break-words ${selected ? 'text-brand-800' : 'text-ink-700'}`}>{c.label}</div>
+                {c.note && <div className={`text-[10px] break-words ${c.noteClass}`}>{c.note}</div>}
               </div>
             </>
           );

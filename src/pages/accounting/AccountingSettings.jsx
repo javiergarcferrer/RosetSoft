@@ -114,7 +114,7 @@ export default function AccountingSettings() {
         subtitle="Parámetros fiscales y mapa de cuentas que usan los asientos automáticos"
         actions={
           <button type="button" onClick={save} disabled={saving}
-            className="btn-primary text-sm inline-flex items-center gap-1.5">
+            className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-4">
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
           </button>
         }
@@ -127,7 +127,7 @@ export default function AccountingSettings() {
             <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5">
               <Settings2 size={15} /> Parámetros fiscales (%)
             </h2>
-            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">ITBIS</span>
                 <input type="number" step="0.01" value={form.itbisRate} onChange={(e) => setRate('itbisRate', e.target.value)} className={rateInput} />
@@ -161,10 +161,10 @@ export default function AccountingSettings() {
                     <h3 className="text-xs uppercase tracking-wide text-ink-400 mb-1">{group}</h3>
                     <div className="space-y-1.5">
                       {roles.map((r) => (
-                        <div key={r.key} className="flex flex-wrap items-center gap-3">
-                          <span className="text-sm w-56 shrink-0">{r.label}</span>
+                        <div key={r.key} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3">
+                          <span className="text-sm sm:w-56 sm:shrink-0 text-ink-700">{r.label}</span>
                           <select value={form.postingMap[r.key] || ''} onChange={(e) => setMap(r.key, e.target.value)}
-                            className="flex-1 min-w-[240px] rounded-lg border border-ink-200 px-2 py-1.5 text-sm">
+                            className="flex-1 min-w-0 sm:min-w-[200px] rounded-lg border border-ink-200 px-2 py-1.5 text-sm w-full sm:w-auto">
                             {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
                           </select>
                         </div>
@@ -180,16 +180,16 @@ export default function AccountingSettings() {
             <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5">
               <FileCheck size={15} /> Comprobantes electrónicos (e-CF)
             </h2>
-            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 max-w-2xl mb-4">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">RNC del emisor</span>
                 <input value={companyRnc} onChange={(e) => setCompanyRnc(e.target.value)}
-                  className="w-44 rounded-lg border border-ink-200 px-2 py-1.5 text-sm tabular-nums" />
+                  className="w-36 min-w-0 rounded-lg border border-ink-200 px-2 py-1.5 text-sm tabular-nums" />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Ambiente DGII</span>
                 <select value={ecfEnv} onChange={(e) => setEcfEnv(e.target.value)}
-                  className="rounded-lg border border-ink-200 px-2 py-1.5 text-sm">
+                  className="rounded-lg border border-ink-200 px-2 py-1.5 text-sm min-w-0 flex-shrink">
                   {ECF_ENVS.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
                 </select>
               </label>
@@ -208,11 +208,11 @@ export default function AccountingSettings() {
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <input type="file" accept=".p12,.pfx" onChange={(e) => setCertFile(e.target.files?.[0] || null)} className="text-sm" />
+                <input type="file" accept=".p12,.pfx" onChange={(e) => setCertFile(e.target.files?.[0] || null)} className="text-sm w-full sm:w-auto" />
                 <input type="password" value={certPassword} onChange={(e) => setCertPassword(e.target.value)}
-                  placeholder="Clave del .p12" className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+                  placeholder="Clave del .p12" className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm flex-1 min-w-[140px]" />
                 <button type="button" onClick={saveCert} disabled={certSaving || !certFile || !certPassword}
-                  className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+                  className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-4">
                   {certSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar certificado
                 </button>
               </div>

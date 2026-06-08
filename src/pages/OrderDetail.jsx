@@ -205,7 +205,15 @@ export default function OrderDetail() {
       </Link>
       <PageHeader
         title={`Pedido #${order.number || order.id.slice(-4)}`}
-        subtitle={`${stageDef.label} · ${quotes.length} cotización${quotes.length === 1 ? '' : 'es'} · Actualizado ${formatDateTime(order.updatedAt)}`}
+        subtitle={
+          <span className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+            <span>{stageDef.label}</span>
+            <span aria-hidden="true" className="text-ink-300">·</span>
+            <span className="tabular-nums">{quotes.length} cotización{quotes.length === 1 ? '' : 'es'}</span>
+            <span aria-hidden="true" className="text-ink-300 hidden sm:inline">·</span>
+            <span className="hidden sm:inline tabular-nums">Actualizado {formatDateTime(order.updatedAt)}</span>
+          </span>
+        }
         actions={
           <OrderOverflow
             cancelled={isCancelled}
@@ -250,7 +258,7 @@ export default function OrderDetail() {
       <div className="space-y-6 mt-6">
           {/* Containers section */}
           <section className="card overflow-hidden">
-            <header className="card-header">
+            <header className="card-header flex-wrap gap-y-2">
               <div className="min-w-0 flex items-start gap-3">
                 <span className="w-7 h-7 rounded-lg bg-ink-100 text-ink-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <Truck size={13} />
@@ -297,7 +305,7 @@ export default function OrderDetail() {
 
           {/* Quotes section */}
           <section className="card overflow-hidden">
-            <header className="card-header">
+            <header className="card-header flex-wrap gap-y-2">
               <div className="min-w-0 flex items-start gap-3">
                 <span className="w-7 h-7 rounded-lg bg-brand-50 text-brand-700 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <FileText size={13} />
@@ -452,7 +460,7 @@ function ContainerRow({ container }) {
         </div>
         <button
           onClick={del}
-          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md flex-shrink-0 transition-colors"
+          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md flex-shrink-0 transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
           title="Eliminar contenedor"
           aria-label="Eliminar contenedor"
         >
@@ -532,7 +540,7 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
       <div className="flex items-center gap-3 flex-wrap">
         <Link
           to={`/quotes/${quote.id}`}
-          className="flex-1 min-w-[180px]"
+          className="flex-1 min-w-0 basis-36"
         >
           <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
             #{quote.number || '—'}
@@ -551,7 +559,7 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
         </div>
         <button
           onClick={onDetach}
-          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors"
+          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
           title="Quitar del pedido"
           aria-label="Quitar del pedido"
         >
@@ -559,7 +567,7 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
         </button>
         <Link
           to={`/quotes/${quote.id}`}
-          className="text-ink-300 group-hover:text-brand-500 p-1.5 rounded-md transition-colors"
+          className="text-ink-300 group-hover:text-brand-500 p-1.5 rounded-md transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
           title="Abrir cotización"
         >
           <ExternalLink size={14} />
@@ -631,7 +639,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
         type="button"
         onClick={onToggle}
         title="Clic para desmarcar"
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${doneClass}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 coarse:py-2.5 rounded-md text-xs font-medium border transition-colors ${doneClass}`}
       >
         <CheckCircle2 size={12} />
         <span>{label}</span>
@@ -659,7 +667,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
       type="button"
       onClick={onToggle}
       title={`Marcar ${label.toLowerCase()}`}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 coarse:py-2.5 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
     >
       <Icon size={12} />
       {label}
@@ -751,7 +759,7 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
             onClick={() => onPick(q.id)}
             className="w-full text-left px-4 py-3 hover:bg-brand-50/60 active:scale-[0.99] transition-all duration-150 flex items-center gap-3 rounded-md"
           >
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 mr-2">
               <div className="text-sm font-semibold truncate text-ink-900">
                 {client?.name || 'Sin cliente asignado'}
               </div>

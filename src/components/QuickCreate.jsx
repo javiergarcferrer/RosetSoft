@@ -48,7 +48,7 @@ export default function QuickCreate() {
         />
       </button>
       {open && (
-        <div className="dropdown-pop absolute left-3 z-50 mt-2 w-[min(18rem,calc(100vw-2.5rem))] rounded-xl bg-white text-ink-800 shadow-pop border border-ink-100/80 ring-1 ring-inset ring-black/[0.03] py-2 max-h-[70vh] overflow-y-auto">
+        <div className="dropdown-pop absolute left-0 right-0 z-50 mt-2 w-auto min-w-[12rem] rounded-xl bg-white text-ink-800 shadow-pop border border-ink-100/80 ring-1 ring-inset ring-black/[0.03] py-2 max-h-[70vh] overflow-y-auto">
           {QUICK_CREATE.map((col, gi) => (
             <div key={col.group} className={gi > 0 ? 'mt-0.5 pt-1.5 border-t border-ink-100/60' : ''}>
               <div className="eyebrow-xs text-ink-400 px-3 pt-0.5 pb-1">{col.group}</div>
@@ -57,7 +57,7 @@ export default function QuickCreate() {
                   key={it.label}
                   type="button"
                   onClick={() => go(it.to)}
-                  className="flex items-center text-left text-sm py-2 px-3 rounded-lg mx-1 w-[calc(100%-0.5rem)] text-ink-700 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 transition-colors"
+                  className="flex items-center text-left text-sm py-2 coarse:py-2.5 px-3 rounded-lg mx-1 w-[calc(100%-0.5rem)] text-ink-700 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 transition-colors"
                 >
                   {it.label}
                 </button>

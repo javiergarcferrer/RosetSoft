@@ -81,7 +81,7 @@ export default function Comisiones() {
       <PageHeader title="Comisiones"
         subtitle={ownOnly ? 'Tus comisiones por ciclo' : 'Comisiones de vendedores y profesionales'} />
 
-      <div className="flex items-center gap-2 mb-5">
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
         <Calendar size={15} className="text-ink-400 shrink-0" />
         <button
           type="button"
@@ -102,7 +102,7 @@ export default function Comisiones() {
 
       {!loaded ? <ListLoading /> : ownOnly ? (
         <>
-          <div className="grid grid-cols-3 gap-3 mb-5 max-w-2xl">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 max-w-2xl">
             <div className="card p-4 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Comisión del ciclo</div>
               <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(myRow?.commission || 0)}</div>

@@ -183,12 +183,15 @@ export default function PublicQuoteView() {
     <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-6 px-3 sm:px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="mx-auto max-w-4xl space-y-4">
         {/* Page-level action bar — right-aligned, lives above the content card */}
-        <div className="flex flex-col items-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {pdf === 'error' && (
+            <p className="text-xs text-red-600 min-w-0">No se pudo generar el PDF. Inténtalo de nuevo.</p>
+          )}
           <button
             type="button"
             onClick={downloadPdf}
             disabled={pdf === 'working'}
-            className="btn-brand active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-wait"
+            className="btn-brand active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-wait flex-shrink-0"
             aria-label="Descargar cotización en PDF"
           >
             {pdf === 'working'
@@ -196,9 +199,6 @@ export default function PublicQuoteView() {
               : <Download size={14} aria-hidden />}
             {pdf === 'working' ? 'Generando PDF…' : 'Descargar PDF'}
           </button>
-          {pdf === 'error' && (
-            <p className="text-xs text-red-600">No se pudo generar el PDF. Inténtalo de nuevo.</p>
-          )}
         </div>
         <ClientPreview
           quote={quote}

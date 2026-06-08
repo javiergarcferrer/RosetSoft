@@ -179,7 +179,7 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
         <div className="text-xs text-ink-500 mt-1 max-w-sm mx-auto">
           Agrega un producto del <b>catálogo</b> o del <b>inventario</b> para empezar.
         </div>
-        <div className="mt-4 flex items-center justify-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} variant="cta" />
           <button type="button" onClick={onAddSection} className="btn-ghost">
             <Hash size={14} /> Sección
@@ -446,7 +446,7 @@ function SetConnector({ onJoin }) {
       <button
         type="button"
         onClick={onJoin}
-        className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2.5 py-1 coarse:py-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-ink-400 shadow-sm transition-colors opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 focus:outline-none coarse:opacity-100"
+        className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2.5 py-1 coarse:py-3 coarse:px-4 text-[10px] font-medium uppercase tracking-[0.06em] text-ink-400 shadow-sm transition-colors opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 focus:outline-none coarse:opacity-100"
         title="Unir esta línea con la de arriba en un conjunto que se vende junto"
       >
         <PlusCircle size={11} className="opacity-80" aria-hidden />
@@ -481,24 +481,24 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
     // Inset card so the surrounding row dividers don't bleed into it.
     <div className="px-3 sm:px-4 py-3">
       <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
-        <div className={`${headBg} px-4 py-2 flex items-center justify-between gap-2`}>
-          <span className="inline-flex items-center gap-1.5 min-w-0">
+        <div className={`${headBg} px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
+          <span className="inline-flex items-center gap-1.5 min-w-0 flex-shrink">
             {dragHandleProps && (
               <span
                 {...dragHandleProps}
-                className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 -ml-1"
+                className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 -ml-1 flex-shrink-0"
                 title="Arrastra el grupo para reordenarlo"
                 aria-label="Arrastrar el grupo"
               >
                 <GripVertical size={13} />
               </span>
             )}
-            <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
-              <Icon size={13} className="opacity-80" aria-hidden />
-              {eyebrow}
+            <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0`}>
+              <Icon size={13} className="opacity-80 flex-shrink-0" aria-hidden />
+              <span className="min-w-0">{eyebrow}</span>
             </span>
           </span>
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex flex-wrap items-center gap-2 ml-auto min-w-0">
             {/* Top-level "apply material to all" — one pick stamps the chosen
                 grade + fabric + swatch onto every member line of the Conjunto
                 (repricing material-less members against their own model). */}
@@ -513,7 +513,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
                 Aplicar material a todo
               </button>
             )}
-            <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums">
+            <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums whitespace-nowrap">
               {memberCount} {isSet ? 'piezas' : 'opciones'}
             </span>
             {onToggleOptional && (
@@ -539,13 +539,13 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
           </span>
         </div>
         {children}
-        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex items-center justify-between gap-2`}>
-          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor}`}>
-            <Icon size={12} className="opacity-80" aria-hidden />
-            {footerLabel}
-            {optional && <span className="normal-case font-normal text-ink-400">· no incluido</span>}
+        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1`}>
+          <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0 flex-shrink`}>
+            <Icon size={12} className="opacity-80 flex-shrink-0" aria-hidden />
+            <span className="min-w-0">{footerLabel}</span>
+            {optional && <span className="normal-case font-normal text-ink-400 whitespace-nowrap">· no incluido</span>}
           </span>
-          <span className="text-sm font-semibold text-ink-900 tabular-nums">
+          <span className="text-sm font-semibold text-ink-900 tabular-nums whitespace-nowrap ml-auto flex-shrink-0">
             {footerValue}
           </span>
         </div>
@@ -583,7 +583,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
           <button
             type="button"
             onClick={onToggleEdit}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-900 rounded-md px-2 py-1 coarse:min-h-9"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-900 rounded-md px-2 py-1 coarse:min-h-[44px]"
           >
             <Check size={12} aria-hidden /> Listo
           </button>
@@ -607,7 +607,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
     : (line.subtype || (ranged ? 'Sin material · rango' : 'Sin material'));
   const dim = selected ? '' : 'opacity-60';
   return (
-    <li className={`list-none flex items-center gap-3 px-3 py-2.5 transition-colors ${selected ? 'bg-brand-50/40' : 'hover:bg-ink-50'}`}>
+    <li className={`list-none flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 transition-colors ${selected ? 'bg-brand-50/40' : 'hover:bg-ink-50'}`}>
       <button
         type="button"
         onClick={onSelect}
@@ -615,7 +615,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
         aria-checked={selected}
         aria-label="Seleccionar esta alternativa"
         title={selected ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
-        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors flex-shrink-0 ${
+        className={`inline-flex items-center justify-center w-5 h-5 coarse:w-11 coarse:h-11 rounded-full border-2 transition-colors flex-shrink-0 ${
           selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
         }`}
       >
@@ -631,20 +631,22 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
         <div className="w-12 h-12 rounded-md bg-ink-50 border border-ink-100 flex-shrink-0" />
       )}
       <button type="button" onClick={onSelect} className={`min-w-0 flex-1 text-left ${dim}`}>
-        <div className="text-sm font-medium text-ink-900 truncate">{line.name || 'Alternativa'}</div>
-        <div className="text-[11px] text-ink-500 truncate">{material}</div>
+        <div className="text-sm font-medium text-ink-900 break-words">{line.name || 'Alternativa'}</div>
+        <div className="text-[11px] text-ink-500 break-words">{material}</div>
       </button>
-      <div className={`text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap ${dim}`}>
-        {priceLabel}
+      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+        <div className={`text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap ${dim}`}>
+          {priceLabel}
+        </div>
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-md px-2 py-1 coarse:min-h-[44px] flex-shrink-0"
+          title="Editar esta alternativa"
+        >
+          <Pencil size={12} className="opacity-80" aria-hidden /> Editar
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onToggleEdit}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-md px-2 py-1 coarse:min-h-9 flex-shrink-0"
-        title="Editar esta alternativa"
-      >
-        <Pencil size={12} className="opacity-80" aria-hidden /> Editar
-      </button>
     </li>
   );
 }

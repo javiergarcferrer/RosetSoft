@@ -281,14 +281,14 @@ function ModeToggle({ multi, onChange }) {
     { v: true, label: 'Agregar opciones' },
   ];
   return (
-    <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs mb-3">
+    <div className="flex rounded-md border border-ink-200 bg-white text-xs mb-3 w-full sm:w-auto sm:inline-flex">
       {opts.map((o, i) => (
         <button
           key={o.label}
           type="button"
           onClick={() => onChange(o.v)}
           aria-pressed={multi === o.v}
-          className={`px-3 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
+          className={`flex-1 sm:flex-none px-3 py-2 min-h-[44px] sm:min-h-0 sm:py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
             multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
           }`}
         >
@@ -411,7 +411,7 @@ function MaterialList({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border border-ink-200 bg-white text-xs flex-shrink-0">
+          <div className="flex rounded-md border border-ink-200 bg-white text-xs w-full sm:w-auto sm:inline-flex">
             {[
               { k: '', label: 'Todos' },
               { k: 'fabric', label: 'Telas' },
@@ -422,7 +422,7 @@ function MaterialList({
                 key={c.k}
                 type="button"
                 onClick={() => setCategory(c.k)}
-                className={`px-2.5 py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
+                className={`flex-1 sm:flex-none px-2.5 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 ${i > 0 ? 'border-l border-ink-200' : ''} ${
                   category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
                 }`}
               >
@@ -430,13 +430,13 @@ function MaterialList({
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="inline-flex items-center gap-1 text-[11px] text-ink-500">
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+            <label className="inline-flex items-center gap-1 text-[11px] text-ink-500 flex-1 sm:flex-none">
               <span className="hidden sm:inline">Ordenar</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 focus:outline-none focus:border-ink-900"
+                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 focus:outline-none focus:border-ink-900 flex-1 sm:flex-none"
                 aria-label="Ordenar materiales"
               >
                 {SORTS.map((s) => (
@@ -448,7 +448,7 @@ function MaterialList({
               type="button"
               onClick={() => setGroupByFiber((v) => !v)}
               aria-pressed={groupByFiber}
-              className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-1.5 transition-colors ${
+              className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 transition-colors flex-shrink-0 ${
                 groupByFiber
                   ? 'bg-ink-900 text-white border-ink-900'
                   : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'
@@ -542,7 +542,7 @@ function MaterialList({
       </ul>
 
       {multiSelect ? (
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <span className="text-[10px] text-ink-400">
             {displayList.length} de {total} · {selected?.size || 0} seleccionadas
           </span>
@@ -550,13 +550,13 @@ function MaterialList({
             type="button"
             onClick={onConfirmMany}
             disabled={!selected?.size}
-            className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-primary text-xs min-h-[44px] sm:min-h-0 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={13} /> Agregar {selected?.size || 0} {selected?.size === 1 ? 'opción' : 'opciones'}
           </button>
         </div>
       ) : (
-        <div className="text-[10px] text-ink-400 text-right">
+        <div className="text-[10px] text-ink-400 text-right hidden sm:block">
           {displayList.length} de {total} materiales · ↑↓ navegar · ↵ elegir · Esc cerrar
         </div>
       )}
@@ -576,7 +576,7 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
         onClick={onActivate}
         onMouseEnter={onHover}
         aria-pressed={multiSelect ? !!checked : undefined}
-        className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
+        className={`w-full text-left px-3 py-2.5 min-h-[44px] flex items-center gap-3 transition-colors ${
           multiSelect && checked ? 'bg-brand-50' : active ? 'bg-ink-100' : 'hover:bg-ink-50'
         }`}
       >
@@ -609,8 +609,8 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <span className="font-medium text-ink-900 truncate">{m.name}</span>
+          <div className="flex items-baseline gap-1.5 min-w-0 flex-wrap">
+            <span className="font-medium text-ink-900 truncate min-w-0">{m.name}</span>
             {m.grade && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
                 Grade {m.grade}
@@ -623,7 +623,7 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
         </div>
         <div className="text-right text-xs text-ink-500 tabular-nums flex-shrink-0">
           <div><MaterialPrice family={family} material={m} /></div>
-          <div className="text-[10px]">{m.colors?.length || 0} colores</div>
+          <div className="text-[10px] hidden sm:block">{m.colors?.length || 0} colores</div>
         </div>
       </button>
     </li>
@@ -649,15 +649,15 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
           onClick={onBack}
-          className="btn-ghost text-xs"
+          className="btn-ghost text-xs min-h-[44px] sm:min-h-0"
         >
           <ChevronLeft size={14} /> Volver al catálogo
         </button>
-        <div className="flex-1 text-right text-[11px] text-ink-500">
+        <div className="flex-1 text-right text-[11px] text-ink-500 min-w-0">
           {material.grade && <span className="font-medium text-ink-700">Grade {material.grade}</span>}
           <span className="ml-2 tabular-nums"><MaterialPrice family={family} material={material} /></span>
         </div>
@@ -693,7 +693,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
                   key={c.code}
                   type="button"
                   onClick={() => onPick(c)}
-                  className={`text-left p-2 rounded border transition-colors flex items-center gap-2 min-w-0 ${
+                  className={`text-left p-2 min-h-[44px] rounded border transition-colors flex items-center gap-2 min-w-0 ${
                     active
                       ? 'border-brand-300 bg-brand-50'
                       : 'border-ink-200 hover:border-ink-400 hover:bg-ink-50'
@@ -708,7 +708,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
                     placeholderClassName="w-8 h-8 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0"
                   />
                   <span className="flex-1 min-w-0 text-sm text-ink-900 truncate">{c.name}</span>
-                  <span className="text-[10px] text-ink-500 font-mono tabular-nums flex-shrink-0">
+                  <span className="text-[10px] text-ink-500 font-mono tabular-nums flex-shrink-0 hidden min-[360px]:block">
                     #{c.code}
                   </span>
                   {active && <Check size={12} className="text-brand-700 flex-shrink-0" />}
@@ -719,11 +719,11 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
         )}
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-ink-100">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ink-100">
         <button
           type="button"
           onClick={() => onPick(null)}
-          className="btn-ghost text-xs text-ink-500"
+          className="btn-ghost text-xs text-ink-500 min-h-[44px] sm:min-h-0"
           title="Usar la tela sin elegir un color específico"
         >
           <X size={12} /> Sin color específico

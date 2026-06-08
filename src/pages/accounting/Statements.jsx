@@ -30,17 +30,17 @@ function TreeRows({ node, depth = 0 }) {
   if (!node) return null;
   return (
     <>
-      <div className="flex items-center justify-between py-1 gap-4" style={{ paddingLeft: `${depth * 16}px` }}>
+      <div className="flex items-center justify-between py-1 gap-2 min-w-0" style={{ paddingLeft: `${Math.min(depth * 16, 48)}px` }}>
         {node.isPostable ? (
-          <Link to={`/accounting/ledger?cuenta=${node.code}`} className="text-sm text-ink-700 min-w-0 hover:text-ink-900 hover:underline">
-            <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>{node.name}
+          <Link to={`/accounting/ledger?cuenta=${node.code}`} className="text-sm text-ink-700 min-w-0 truncate hover:text-ink-900 hover:underline flex-1">
+            <code className="text-[11px] text-ink-400 mr-1 tabular-nums">{node.code}</code>{node.name}
           </Link>
         ) : (
-          <span className="text-sm font-semibold text-ink-900 min-w-0">
-            <code className="text-[11px] text-ink-400 mr-2 tabular-nums">{node.code}</code>{node.name}
+          <span className="text-sm font-semibold text-ink-900 min-w-0 truncate flex-1">
+            <code className="text-[11px] text-ink-400 mr-1 tabular-nums">{node.code}</code>{node.name}
           </span>
         )}
-        <span className={`text-sm tabular-nums whitespace-nowrap ${node.isPostable ? 'text-ink-600' : 'font-semibold'}`}>
+        <span className={`text-sm tabular-nums whitespace-nowrap shrink-0 ${node.isPostable ? 'text-ink-600' : 'font-semibold'}`}>
           {formatDop(node.amount)}
         </span>
       </div>
@@ -51,9 +51,9 @@ function TreeRows({ node, depth = 0 }) {
 
 function SectionTotal({ label, value, strong }) {
   return (
-    <div className={`flex items-center justify-between py-2 mt-1 border-t ${strong ? 'border-ink-300' : 'border-ink-100'}`}>
-      <span className={strong ? 'text-sm font-bold' : 'text-sm font-semibold text-ink-700'}>{label}</span>
-      <span className={`tabular-nums whitespace-nowrap ${strong ? 'text-base font-bold' : 'text-sm font-semibold'}`}>
+    <div className={`flex items-center justify-between gap-3 py-2 mt-1 border-t min-w-0 ${strong ? 'border-ink-300' : 'border-ink-100'}`}>
+      <span className={`min-w-0 ${strong ? 'text-sm font-bold' : 'text-sm font-semibold text-ink-700'}`}>{label}</span>
+      <span className={`tabular-nums whitespace-nowrap shrink-0 ${strong ? 'text-base font-bold' : 'text-sm font-semibold'}`}>
         {formatDop(value)}
       </span>
     </div>
@@ -122,7 +122,7 @@ export default function Statements() {
     );
   }
 
-  const dateInput = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300';
+  const dateInput = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-ink-300';
 
   return (
     <>
@@ -130,41 +130,41 @@ export default function Statements() {
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <button type="button" onClick={() => setTab('balance')}
-          className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'balance' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          className={`text-sm px-3 py-2 rounded-lg inline-flex items-center gap-1.5 min-h-[44px] ${tab === 'balance' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
           <Scale size={15} /> Balance General
         </button>
         <button type="button" onClick={() => setTab('income')}
-          className={`text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 ${tab === 'income' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          className={`text-sm px-3 py-2 rounded-lg inline-flex items-center gap-1.5 min-h-[44px] ${tab === 'income' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
           <TrendingUp size={15} /> Estado de Resultados
         </button>
         <button type="button" onClick={exportActive}
-          className="ml-auto btn-ghost text-sm inline-flex items-center gap-1.5"><Download size={14} /> Exportar</button>
+          className="sm:ml-auto btn-ghost text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Download size={14} /> Exportar</button>
       </div>
 
       {!loaded ? <ListLoading /> : tab === 'balance' ? (
         <>
-          <div className="flex items-center gap-2 mb-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2 mb-4 text-sm">
             <label className="text-ink-500">Al</label>
             <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={dateInput} />
-            <span className={`ml-auto text-xs px-2 py-1 rounded ${balance.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+            <span className={`sm:ml-auto text-xs px-2 py-1 rounded whitespace-nowrap ${balance.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
               {balance.balanced ? 'Cuadrado' : `Descuadre: ${formatDop(balance.difference)}`}
             </span>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="card p-4">
+            <div className="card p-4 min-w-0">
               <h2 className="eyebrow font-semibold text-ink-600 mb-2">Activos</h2>
               <TreeRows node={balance.assets} />
               <SectionTotal label="Total activos" value={balance.totalAssets} strong />
             </div>
-            <div className="card p-4">
+            <div className="card p-4 min-w-0">
               <h2 className="eyebrow font-semibold text-ink-600 mb-2">Pasivos y patrimonio</h2>
               <TreeRows node={balance.liabilities} />
               <SectionTotal label="Total pasivos" value={balance.totalLiabilities} />
               <div className="mt-3">
                 <TreeRows node={balance.equity} />
-                <div className="flex items-center justify-between py-1 gap-4">
-                  <span className="text-sm text-ink-700">Resultado del ejercicio</span>
-                  <span className="text-sm tabular-nums text-ink-600">{formatDop(balance.netIncome)}</span>
+                <div className="flex items-center justify-between py-1 gap-2 min-w-0">
+                  <span className="text-sm text-ink-700 min-w-0">Resultado del ejercicio</span>
+                  <span className="text-sm tabular-nums text-ink-600 whitespace-nowrap shrink-0">{formatDop(balance.netIncome)}</span>
                 </div>
                 <SectionTotal label="Total patrimonio" value={balance.totalEquity} />
               </div>
@@ -180,7 +180,7 @@ export default function Statements() {
             <label className="text-ink-500">Hasta</label>
             <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={dateInput} />
           </div>
-          <div className="card p-4 max-w-2xl">
+          <div className="card p-4 max-w-2xl min-w-0">
             <h2 className="eyebrow font-semibold text-ink-600 mb-2">Ingresos</h2>
             <TreeRows node={income.income} />
             <SectionTotal label="Total ingresos" value={income.totalIncome} />

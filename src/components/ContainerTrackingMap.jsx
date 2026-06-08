@@ -108,12 +108,12 @@ const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, v
   return (
     <div
       ref={wrapRef}
-      className={`vmap-leaf ${expanded ? 'fixed inset-2 z-[60] sm:inset-4' : 'relative'}`}
+      className={`vmap-leaf min-w-0 w-full ${expanded ? 'fixed inset-2 z-[60] sm:inset-4' : 'relative'}`}
     >
-      <div className="relative h-full">
+      <div className="relative h-full w-full">
         <div
           ref={elRef}
-          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-64'}`}
+          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-48 sm:h-64'}`}
           aria-label="Mapa del viaje del contenedor"
         />
 
@@ -138,7 +138,7 @@ const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, v
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-500 mt-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-500 mt-1.5 min-w-0 w-full">
         <LegendDot className="bg-brand-600" /> Recorrido
         <LegendDot className="ring-2 ring-ink-500 bg-white" /> Escala
         <LegendDot className="bg-emerald-600" /> Posición actual
@@ -189,7 +189,7 @@ function MapButton({ title, onClick, children }) {
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="w-7 h-7 grid place-items-center rounded-md border border-ink-200 bg-white/90 backdrop-blur text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft transition-colors"
+      className="w-7 h-7 coarse:w-11 coarse:h-11 grid place-items-center rounded-md border border-ink-200 bg-white/90 backdrop-blur text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft transition-colors"
     >
       {children}
     </button>

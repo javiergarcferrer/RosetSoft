@@ -199,7 +199,7 @@ export default function FamilyPicker({ open, onClose, onSelect, currentFamily })
                 type="button"
                 onMouseEnter={() => setActiveIdx(idx)}
                 onClick={() => pickAtIdx(idx)}
-                className={`w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center gap-2.5 transition-colors ${
+                className={`w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-[44px] flex items-center gap-2.5 transition-colors ${
                   isActive ? 'bg-ink-100' : 'hover:bg-ink-50'
                 } ${isCurrent ? 'ring-1 ring-inset ring-brand-300' : ''}`}
               >
@@ -212,7 +212,7 @@ export default function FamilyPicker({ open, onClose, onSelect, currentFamily })
                     {isCurrent && <span className="ml-1.5 text-[10px] text-brand-700 font-medium normal-case tracking-normal">· actual</span>}
                   </div>
                 </div>
-                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">
+                <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap flex-shrink-0">
                   {f.useCount === 1 ? 'usada 1 vez' : `usada ${f.useCount} veces`}
                 </span>
               </button>

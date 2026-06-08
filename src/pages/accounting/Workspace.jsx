@@ -629,27 +629,33 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
 
   return (
     <li className="bg-white hover:bg-ink-50/40 transition-colors group">
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="flex items-start gap-2 px-4 py-3">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          className="flex items-start gap-3 flex-1 min-w-0 text-left"
           aria-expanded={open}
         >
           <ChevronDown
             size={16}
-            className={`flex-shrink-0 text-ink-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+            className={`flex-shrink-0 text-ink-400 transition-transform duration-150 mt-0.5 ${open ? 'rotate-180' : ''}`}
           />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold tabular-nums whitespace-nowrap text-ink-900">#{quote.number || '—'}</span>
-              <span className="text-ink-700 truncate">{customerName}</span>
+              <span className="text-ink-700 truncate min-w-0">{customerName}</span>
             </div>
             <div className="text-[11px] text-ink-500 truncate">
               {creatorDisplay(creator) || 'Sin vendedor'} · <span className="tabular-nums">{formatDate(quote.acceptedAt)}</span>
             </div>
+            <div className="flex sm:hidden flex-wrap items-center gap-2 mt-1">
+              <span className="tabular-nums font-semibold text-ink-900 text-sm">
+                {formatMoney(grandTotal, currency, rates)}
+              </span>
+              <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>
+            </div>
           </div>
-          <div className="flex-shrink-0 text-right">
+          <div className="hidden sm:block flex-shrink-0 text-right">
             <div className="tabular-nums font-semibold text-ink-900 whitespace-nowrap">
               {formatMoney(grandTotal, currency, rates)}
             </div>
@@ -660,7 +666,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
       </div>
 
       {open && (
-        <div className="px-4 pb-5 sm:pl-10 space-y-4 border-t border-ink-100 bg-ink-50/30">
+        <div className="px-3 sm:px-4 pb-5 sm:pl-10 space-y-4 border-t border-ink-100 bg-ink-50/30 min-w-0">
           <QuoteAccountingDetail
             invLines={invLines}
             totals={totals}
@@ -733,7 +739,7 @@ function CommissionLine({ role, who, badge, detail, action }) {
             </span>
           )}
         </div>
-        <div className="text-[11px] text-ink-500 truncate mt-0.5">{detail}</div>
+        <div className="text-[11px] text-ink-500 break-words mt-0.5">{detail}</div>
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
     </div>
@@ -814,7 +820,7 @@ function PaidToggle({ paid, busy, onToggle }) {
         type="button"
         onClick={() => onToggle(false)}
         disabled={busy}
-        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-wait"
+        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 min-h-[44px] text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-wait"
         title="Pagada — clic para revertir a pendiente"
       >
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Pagada
@@ -826,7 +832,7 @@ function PaidToggle({ paid, busy, onToggle }) {
       type="button"
       onClick={() => onToggle(true)}
       disabled={busy}
-      className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-2 py-1 text-xs font-medium text-ink-700 hover:border-ink-400 disabled:opacity-50 disabled:cursor-wait"
+      className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-ink-700 hover:border-ink-400 disabled:opacity-50 disabled:cursor-wait"
       title="Marcar comisión como pagada"
     >
       {busy ? <Loader2 size={12} className="animate-spin" /> : null}Marcar pagada
@@ -882,7 +888,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
         </table>
       </div>
 
-      <div className="sm:ml-auto sm:w-72 text-xs tabular-nums">
+      <div className="w-full sm:ml-auto sm:w-72 text-xs tabular-nums">
         <TotalLine label="Subtotal" value={fmt(totals.subtotal)} />
         {totals.discountAmt > 0 && <TotalLine label="Descuento" value={`–${fmt(totals.discountAmt)}`} />}
         <TotalLine label="Base imponible" value={fmt(totals.taxableBase)} />
@@ -911,7 +917,7 @@ function ExportButton({ icon: Icon, label, busy, disabled, onClick }) {
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className="btn-secondary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+      className="btn-secondary text-sm min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {busy
         ? <><Loader2 size={14} className="animate-spin" /> {label}</>

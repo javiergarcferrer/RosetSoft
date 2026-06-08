@@ -42,7 +42,7 @@ export default function SectionDivider({ line, onChange, onRemove, autoFocus, dr
           value={line.name || ''}
           onCommit={(v) => onChange({ name: v })}
           placeholder='Sección · p. ej. "Sala", "Habitación principal"'
-          className="block flex-1 bg-transparent border-0 px-0 py-0 text-[12px] font-bold uppercase tracking-widest text-ink-600 placeholder:text-ink-400 placeholder:normal-case placeholder:font-medium placeholder:tracking-normal focus:outline-none"
+          className="block flex-1 min-w-0 bg-transparent border-0 px-0 py-0 text-[12px] font-bold uppercase tracking-widest text-ink-600 placeholder:text-ink-400 placeholder:normal-case placeholder:font-medium placeholder:tracking-normal focus:outline-none"
         />
         {subtotalLabel && (
           <span className="text-[12px] font-semibold tabular-nums text-ink-500 whitespace-nowrap" title="Total de los artículos de esta sección">
@@ -52,7 +52,7 @@ export default function SectionDivider({ line, onChange, onRemove, autoFocus, dr
         <button
           type="button"
           onClick={onRemove}
-          className={`text-ink-300 hover:text-red-500 p-1 rounded transition-all active:scale-[0.92] ${hover ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          className={`inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 text-ink-300 hover:text-red-500 rounded transition-all active:scale-[0.92] flex-shrink-0 ${hover ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
           aria-label="Eliminar sección"
           title="Eliminar sección"
         >
