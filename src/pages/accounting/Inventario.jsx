@@ -198,13 +198,16 @@ export default function Inventario() {
 
                 <CatalogBlock item={selectedItem} key={selectedItem.id} />
 
-                <div className="flex flex-wrap items-end gap-2 mb-3 pb-3 border-b border-ink-100">
-                  <label className="text-sm">Salida (costo de venta)<br />
-                    <input type="number" min="0" step="1" inputMode="numeric" enterKeyHint="done" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="w-32 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
-                  </label>
-                  <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
-                    {posting ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownToLine size={15} />} Registrar salida
-                  </button>
+                <div className="mb-3 pb-3 border-b border-ink-100">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="text-sm">Salida de stock (unidades)<br />
+                      <input type="number" min="0" step="1" inputMode="numeric" enterKeyHint="done" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="w-32 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+                    </label>
+                    <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
+                      {posting ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownToLine size={15} />} Registrar salida
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-ink-400 mt-1">Descuenta unidades vendidas y registra el costo de venta al costo promedio (no es el precio de venta).</p>
                 </div>
                 {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
 
@@ -297,7 +300,7 @@ function CatalogBlock({ item }) {
     <div className="mb-3 pb-3 border-b border-ink-100">
       <div className="label mb-2">Catálogo (Shopify)</div>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm">Precio de venta (USD)<br />
+        <label className="text-sm">Precio de venta en tienda (USD)<br />
           <input type="number" min="0" step="0.01" inputMode="decimal" enterKeyHint="done" value={price} onChange={(e) => setPrice(e.target.value)}
             placeholder="0.00" className="w-36 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
         </label>
