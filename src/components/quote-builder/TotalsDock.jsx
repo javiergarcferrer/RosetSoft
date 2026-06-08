@@ -266,6 +266,14 @@ export default function TotalsDock({
     // instead when ITS OWN adjustment inputs (discount % / envío / courtesy) are
     // focused, so they stay visible while editing.
     <div data-kb-keep className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
+      {/* Safe-area apron — a white fill that spills BELOW the dock to the
+          physical screen edge. If iOS lays the standalone viewport SHORT (a
+          legacy / cached black-translucent install, before the status-bar=black
+          fix is picked up on reinstall), the home-indicator strip would
+          otherwise leak the page / manifest grey under the bar. This paints it
+          white WITH the dock. Off-screen (harmless) when the dock already sits
+          flush at the physical bottom — Safari tabs, desktop, fresh installs. */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-24 bg-white" />
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
           behind it in the PWA. pb-safe-standalone fills the home-indicator inset
