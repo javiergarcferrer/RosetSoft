@@ -229,18 +229,18 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           (it used to stack below on mobile, orphaning a tall block and pushing
           everything down). The company address flows beneath the logo on the
           left; the date is shown once in the banner above, so it's not repeated
-          here. */}
-      <div className="px-6 sm:px-10 pt-6 pb-5 border-b border-ink-100 flex flex-row items-start justify-between gap-4">
+          here. Spacing stays generous — this is the client-facing proposal. */}
+      <div className="px-6 sm:px-10 pt-8 pb-6 border-b border-ink-100 flex flex-row items-start justify-between gap-4">
         <div className="min-w-0">
           {settings?.logoImageId ? (
             <ImageView
               id={settings.logoImageId}
-              className="h-10 sm:h-12 max-w-[180px] sm:max-w-[200px] object-contain object-left"
+              className="h-12 max-w-[200px] object-contain object-left"
             />
           ) : (
             <div className="font-wordmark text-2xl text-ink-900">{settings?.companyName || 'Tu empresa'}</div>
           )}
-          <div className="text-[11px] text-ink-500 leading-relaxed whitespace-pre-line max-w-xs mt-2 empty:hidden">
+          <div className="text-[11px] text-ink-500 leading-relaxed whitespace-pre-line max-w-xs mt-3 empty:hidden">
             {[settings?.companyAddress, settings?.companyPhone, settings?.companyEmail].filter(Boolean).join('\n')}
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           stay justified instead of the second wrapping below. The inner pair
           runs INLINE on mobile (side by side) and stacks on sm+. */}
       {(customer || seller || professional) && (
-        <div className="px-6 sm:px-10 py-4 border-b border-ink-100 flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-start sm:justify-between sm:gap-x-6">
+        <div className="px-6 sm:px-10 py-5 border-b border-ink-100 flex flex-col gap-4 sm:flex-row sm:flex-nowrap sm:items-start sm:justify-between sm:gap-x-6">
           <div className="min-w-0 sm:flex-1">
             <div className="eyebrow mb-1.5">Cliente</div>
             {customer ? (
@@ -427,7 +427,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           the visual climax. Sub-rows above stay right-aligned body text
           (Descuento in brand); the FX shadow sits below the band.
           Mirrors the redesigned PDF. */}
-      <div className="px-6 sm:px-10 py-5 border-t border-ink-100">
+      <div className="px-6 sm:px-10 py-7 border-t border-ink-100">
         <div className="w-full sm:ml-auto sm:max-w-sm tabular-nums">
           <div className="space-y-1.5">
             <TotalRow label="Subtotal" value={fmt(totals.subtotal)} />
