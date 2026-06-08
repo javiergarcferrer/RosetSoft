@@ -616,12 +616,14 @@ function ShopifyCard({ settings }) {
       </div>
       <p className="text-xs text-ink-500 mb-4">
         Cada artículo en inventario con precio y foto se publica automáticamente en tu tienda Shopify;
-        al agotarse, se retira. Pega el token de tu app personalizada de Shopify para conectar.
+        al agotarse, se retira. Usa el dominio <code>.myshopify.com</code> de tu tienda (suele ser un
+        código aleatorio, p. ej. <code>fg9gaq-3c.myshopify.com</code>, no tu dominio público) y el
+        <strong> Admin API access token</strong> (<code>shpat_…</code>) de tu app personalizada.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label" htmlFor="shopify-domain">Dominio</label>
-          <input id="shopify-domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="alcover.myshopify.com"
+          <input id="shopify-domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="fg9gaq-3c.myshopify.com"
             className="input mt-1" />
         </div>
         <div>

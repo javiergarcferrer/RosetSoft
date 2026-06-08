@@ -18,9 +18,17 @@ const TEAM_PROFILE_ID = 'team';
  */
 export async function saveShopifyConfig({ domain, token, profileId = TEAM_PROFILE_ID }) {
   const d = String(domain || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  if (!d) throw new Error('Ingresa el dominio de tu tienda (ej. alcover.myshopify.com).');
-  if (!token || !token.trim()) throw new Error('Ingresa el Admin API access token (shpat_…).');
-  const { error } = await supabase.rpc('save_shopify_config', { p_domain: d, p_token: token.trim() });
+  if (!d) throw new Error('Ingresa el dominio .myshopify.com de tu tienda (Shopify → Configuración → Dominios).');
+  const t = String(token || '').trim();
+  if (!t) throw new Error('Ingresa el Admin API access token (shpat_…).');
+  // The custom-app Admin API access token always starts with `shpat_`. The
+  // similarly-named API key (`shpck_`/hex) and API secret key (`shpss_`) sit
+  // right next to it on the credentials page and are the usual wrong paste —
+  // catch them here with a clear message instead of a Shopify 401 later.
+  if (!/^shpat_/.test(t)) {
+    throw new Error('Eso no es un Admin API access token. Debe empezar con “shpat_”. En tu app personalizada de Shopify: Credenciales de API → Admin API access token (no la API key ni la API secret key shpss_…).');
+  }
+  const { error } = await supabase.rpc('save_shopify_config', { p_domain: d, p_token: t });
   if (error) throw new Error(error.message || 'No se pudo guardar la conexión con Shopify.');
   await updateSettings(profileId, { shopifyDomain: d, shopifyConnectedAt: Date.now() });
 }
