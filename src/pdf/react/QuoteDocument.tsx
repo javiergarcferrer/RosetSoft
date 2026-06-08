@@ -65,7 +65,10 @@ function UpholsteryHero({ subtype, swatchImageId, images }: { subtype: string; s
   // image/code resolves (never drop the fabric name).
   if (!src.imageId && !src.url && !label) return null;
   return (
-    <View style={{ marginTop: 9, marginBottom: 2, flexDirection: 'row', gap: 11, alignItems: 'center' }} wrap={false}>
+    // wrap={false} keeps the swatch + its label together; minPresenceAhead makes
+    // the hero defer to the next page unless a couple of its rows can follow it,
+    // so a fabric header never strands alone at the bottom of a page.
+    <View style={{ marginTop: 9, marginBottom: 2, flexDirection: 'row', gap: 11, alignItems: 'center' }} wrap={false} minPresenceAhead={54}>
       <Swatch src={src} images={images} size={68} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ fontFamily: 'Sohne', fontSize: fs(8), color: C.brand700, letterSpacing: 1.4, textTransform: 'uppercase' }}>Tapizado</Text>
@@ -359,17 +362,17 @@ function ComponentList({
       <>
         {g.runs.map((run, ri) =>
           run.bearing ? (
-            // Every upholstered run — even a single piece — leads with ONE big
-            // material swatch + fabric name, and its pieces list swatch-less
-            // beneath it. Same-material pieces collapse under the one swatch; a
-            // lone piece still gets the large, high-end swatch treatment.
-            <View key={run.key + ri} wrap={false}>
+            // No wrap={false} on the group: a tall material group must be allowed
+            // to FILL the current page and continue on the next, instead of being
+            // pushed whole to page 2 and stranding a near-empty page 1. Each row
+            // stays atomic (ComponentRow wrap={false}); the hero carries
+            // minPresenceAhead so the swatch never lands alone at a page bottom.
+            <View key={run.key + ri}>
               <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
               {run.components.map((c, i) => row(c, true, c.id || i))}
             </View>
           ) : (
-            // Non-upholstered run (metal base, glass) — no fabric to hoist.
-            <View key={run.key + ri} wrap={false}>{run.components.map((c, i) => row(c, false, c.id || i))}</View>
+            <View key={run.key + ri}>{run.components.map((c, i) => row(c, false, c.id || i))}</View>
           ),
         )}
       </>
