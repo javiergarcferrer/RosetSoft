@@ -61,9 +61,32 @@ Deno.serve(async (req: Request) => {
     return b.data as T;
   }
 
-  let body: { itemIds?: string[] } = {};
+  let body: { itemIds?: string[]; test?: boolean } = {};
   try { body = await req.json(); } catch { /* empty body = sync all */ }
   const itemIds = Array.isArray(body?.itemIds) ? body.itemIds : null;
+
+  // Connection check — verify the token reaches the store and that the custom
+  // app was granted every scope the sync needs. The Settings screen calls this
+  // right after saving a token so a bad/under-scoped credential is caught at
+  // connect time (not silently as "0 published" later).
+  if (body?.test === true) {
+    const REQUIRED = [
+      'read_products', 'write_products', 'read_locations',
+      'read_publications', 'write_publications', 'read_inventory', 'write_inventory',
+    ];
+    try {
+      const shop = (await gql<{ shop: { name: string; myshopifyDomain: string } }>(
+        `{ shop { name myshopifyDomain } }`,
+      )).shop;
+      const granted = (await gql<{ currentAppInstallation: { accessScopes: { handle: string }[] } }>(
+        `{ currentAppInstallation { accessScopes { handle } } }`,
+      )).currentAppInstallation.accessScopes.map((s) => s.handle);
+      const missingScopes = REQUIRED.filter((s) => !granted.includes(s));
+      return json({ configured: true, ok: true, shop: shop.name, domain: shop.myshopifyDomain, missingScopes });
+    } catch (e) {
+      return json({ configured: true, ok: false, error: `Shopify rechazó el token: ${(e as Error).message}` }, 502);
+    }
+  }
 
   // Items to reconcile: the requested ones, else everything that is either
   // already linked (so sold ones get archived) or priced (so it can publish).

@@ -26,14 +26,43 @@ export async function saveShopifyConfig({ domain, token, profileId = TEAM_PROFIL
 }
 
 /**
+ * Invoke the `shopify-sync` Edge Function and return its JSON body.
+ *
+ * The function answers a non-2xx (e.g. 502 on an auth/scope problem) with a
+ * JSON body that carries the real reason. supabase-js surfaces that as a
+ * generic "Edge Function returned a non-2xx status code" and tucks the Response
+ * away on `error.context` — so we read the body back to recover the actual
+ * message instead of the opaque one. Throws only on a true transport failure
+ * (the function never answered).
+ */
+async function invokeShopify(body) {
+  const { data, error } = await supabase.functions.invoke('shopify-sync', { body });
+  if (!error) return data;
+  const ctx = error.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { return await ctx.json(); } catch { /* not a JSON body — fall through */ }
+  }
+  throw new Error(error.message || 'No se pudo contactar con Shopify.');
+}
+
+/**
  * Push inventory to Shopify. Pass specific item ids to sync just those (e.g.
  * after a liquidation or a sale), or omit to reconcile the whole catalog.
- * Returns the function's summary; throws only on a transport error. Safe to
- * call fire-and-forget from accounting flows (`.catch(() => {})`).
+ * Returns the function's summary ({ synced, archived, skipped, errors } or
+ * { configured:false } / { error }). Safe to call fire-and-forget from
+ * accounting flows (`.catch(() => {})`).
  */
 export async function syncShopify(itemIds) {
   const body = Array.isArray(itemIds) && itemIds.length ? { itemIds } : {};
-  const { data, error } = await supabase.functions.invoke('shopify-sync', { body });
-  if (error) throw new Error(error.message || 'No se pudo sincronizar con Shopify.');
-  return data;
+  return invokeShopify(body);
+}
+
+/**
+ * Verify the saved connection: does the token reach the store, and was the
+ * custom app granted every scope the sync needs? Returns
+ * { configured:false } when no token is saved, { ok:true, shop, missingScopes }
+ * when reachable, or { ok:false, error } when Shopify rejects the token.
+ */
+export async function pingShopify() {
+  return invokeShopify({ test: true });
 }

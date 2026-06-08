@@ -246,6 +246,23 @@ export default function Inventario() {
 }
 
 /**
+ * Turn a single-item sync result into an honest message: published, retired,
+ * a Shopify error, or — the confusing case — saved-but-not-published because
+ * the catalog is in-stock-and-priced only. `ok:false` styles it as an alert.
+ */
+function publishMessage(res, { hasPrice, hasStock }) {
+  if (res?.configured === false) return { ok: false, text: 'Guardado. Conecta Shopify en Configuración para publicarlo.' };
+  if (res?.error) return { ok: false, text: `Guardado, pero Shopify devolvió un error: ${res.error}` };
+  if (res?.errors?.length) return { ok: false, text: `Guardado, pero Shopify devolvió un error: ${res.errors[0]}` };
+  if ((res?.synced ?? 0) > 0) return { ok: true, text: 'Guardado y publicado en Shopify.' };
+  if ((res?.archived ?? 0) > 0) return { ok: true, text: 'Guardado. Retirado del catálogo (agotado).' };
+  const why = [];
+  if (!hasPrice) why.push('falta el precio de venta');
+  if (!hasStock) why.push('no hay existencia (registra una entrada en Compras)');
+  return { ok: true, text: why.length ? `Guardado, pero aún no se publica: ${why.join(' y ')}.` : 'Guardado.' };
+}
+
+/**
  * Catalog (Shopify) block on a selected inventory item — set the PERMANENT
  * selling price (from the Alcover purchase order) and the receiving photo, then
  * publish. Keyed by item id so the local state resets when the selection
@@ -266,11 +283,10 @@ function CatalogBlock({ item }) {
         imageId: imageId || null,
       });
       const res = await syncShopify([item.id]);
-      setStatus('saved');
-      setMsg(res?.configured === false
-        ? 'Guardado. Conecta Shopify en Configuración para publicarlo.'
-        : 'Guardado y publicado en Shopify.');
-      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2500);
+      const r = publishMessage(res, { hasPrice: Number(price) > 0, hasStock: Number(item.qtyOnHand) > 0 });
+      setStatus(r.ok ? 'saved' : 'error');
+      setMsg(r.text);
+      if (r.ok) setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
       setMsg(e?.message || 'No se pudo guardar.');

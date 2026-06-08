@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
-import { saveShopifyConfig, syncShopify } from '../lib/shopifySync.js';
+import { saveShopifyConfig, syncShopify, pingShopify } from '../lib/shopifySync.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
@@ -564,9 +564,20 @@ function ShopifyCard({ settings }) {
     try {
       await saveShopifyConfig({ domain, token });
       setToken('');
-      setStatus('saved');
-      setMsg('Conexión guardada.');
-      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+      // Verify the token actually reaches the store before claiming success —
+      // a bad or under-scoped credential is caught here, not later as "0 published".
+      const ping = await pingShopify();
+      if (ping?.ok) {
+        const missing = ping.missingScopes || [];
+        setStatus(missing.length ? 'error' : 'saved');
+        setMsg(missing.length
+          ? `Conectado a ${ping.shop}, pero la app no tiene estos permisos: ${missing.join(', ')}. Añádelos en tu app de Shopify y vuelve a pegar el token.`
+          : `Conectado a ${ping.shop}. ✓`);
+      } else {
+        setStatus('error');
+        setMsg(ping?.error || 'Guardado, pero no se pudo verificar la conexión con Shopify.');
+      }
+      setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
       setMsg(e?.message || 'No se pudo guardar.');
@@ -578,10 +589,20 @@ function ShopifyCard({ settings }) {
     setMsg('');
     try {
       const res = await syncShopify();
-      setMsg(res?.configured === false
-        ? 'Conecta Shopify primero (guarda el token).'
-        : `Sincronizado: ${res?.synced ?? 0} publicado(s), ${res?.archived ?? 0} retirado(s).`);
+      if (res?.configured === false) {
+        setStatus('error');
+        setMsg('Conecta Shopify primero (guarda el token).');
+      } else if (res?.error) {
+        setStatus('error');
+        setMsg(res.error);
+      } else {
+        const parts = [`${res?.synced ?? 0} publicado(s)`, `${res?.archived ?? 0} retirado(s)`];
+        if (res?.skipped) parts.push(`${res.skipped} sin existencia o precio`);
+        setStatus('saved');
+        setMsg(`Sincronizado: ${parts.join(', ')}.${res?.errors?.length ? ` ${res.errors.length} con error.` : ''}`);
+      }
     } catch (e) {
+      setStatus('error');
       setMsg(e?.message || 'No se pudo sincronizar.');
     } finally {
       setSyncing(false);
