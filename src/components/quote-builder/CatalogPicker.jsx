@@ -73,6 +73,13 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
   // catalog subtype (the wood finish / variant text).
   function insertProduct(fam, product, grade, material, color) {
     if (!product) return;
+    // The catalog's "Description 2" — the model's finish/variant text, e.g.
+    // "STANDARD HEADBOARD" — parses into product.subtype. Keep it as the line's
+    // `description` (its SECOND identifying line) so it SURVIVES when a fabric
+    // grade takes over the subtype, and shows on every surface (quote pane,
+    // client preview, public link, PDF). The subtype slot is then the fabric
+    // (graded) or empty (non-upholstered) — never the finish text masquerading
+    // as a fabric.
     onInsert({
       family: product.family || fam.family,
       reference: product.reference,
@@ -80,7 +87,8 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       dimensions: product.dimensions,
       subtype: (grade || material)
         ? composeSubtype(grade, composeFabricLabel(material, color))
-        : (product.subtype || ''),
+        : '',
+      description: product.subtype || '',
       unitPrice: product.priceUsd,
       unitCost: product.cost,
       swatchImageId: color?.imageId ?? null,
@@ -114,6 +122,8 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       name: lo.name || fam.name,
       dimensions: lo.dimensions,
       subtype: '',
+      // Carry the model's second description (finish/variant) — see insertProduct.
+      description: lo.subtype || '',
       unitPrice: min,
       unitCost: lo.cost,
       swatchImageId: null,
