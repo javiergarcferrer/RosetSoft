@@ -313,6 +313,18 @@ function ComponentRow({
           <View style={{ flex: 1 }}>
             <Text style={nameStyle}>{c.name || c.reference || '—'}</Text>
             {!hideSwatch && c.subtype && <Text style={{ fontSize: fs(7.5), color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
+            {/* Secondary identifiers — REF / DIM and the per-piece description,
+                so two same-named pieces (e.g. twin corner seats) read apart.
+                Mirrors the line-level row and the on-screen LineContent. REF is
+                suppressed when it stood in AS the name (no name set), so it's
+                never repeated. */}
+            {((c.name && c.reference) || c.dimensions) && (
+              <View style={s.lineRefRow}>
+                {c.name && c.reference && <Text style={s.lineRef}>REF. {c.reference}</Text>}
+                {c.dimensions && <Text style={s.lineRef}>DIM. {c.dimensions}</Text>}
+              </View>
+            )}
+            {c.description && <Text style={s.lineDesc}>{c.description}</Text>}
           </View>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
