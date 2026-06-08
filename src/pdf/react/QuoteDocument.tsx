@@ -43,7 +43,7 @@ const imgFor = (images: ImageMap | undefined, key: string | null): string | unde
   (key && images ? images.get(key) : undefined);
 
 // ---- swatch tile (uploaded id or catalog-color url, pre-resolved) ------
-function Swatch({ src, images, size = 40 }: { src: { imageId?: string | null; url?: string | null }; images?: ImageMap; size?: number }) {
+function Swatch({ src, images, size = 56 }: { src: { imageId?: string | null; url?: string | null }; images?: ImageMap; size?: number }) {
   const uri = imgFor(images, swatchKey(src));
   return (
     <View style={{ width: size, height: size, backgroundColor: C.bgSoft, borderWidth: 0.5, borderColor: C.inkLine2, borderRadius: 3 }}>
@@ -65,11 +65,11 @@ function UpholsteryHero({ subtype, swatchImageId, images }: { subtype: string; s
   // image/code resolves (never drop the fabric name).
   if (!src.imageId && !src.url && !label) return null;
   return (
-    <View style={{ marginTop: 7, flexDirection: 'row', gap: 8, alignItems: 'center' }} wrap={false}>
-      <Swatch src={src} images={images} size={40} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase' }}>Tapizado</Text>
-        {label ? <Text style={{ fontSize: fs(9.5), color: C.inkHigh, marginTop: 1.5 }}>{label}</Text> : null}
+    <View style={{ marginTop: 9, marginBottom: 2, flexDirection: 'row', gap: 11, alignItems: 'center' }} wrap={false}>
+      <Swatch src={src} images={images} size={68} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontFamily: 'Sohne', fontSize: fs(8), color: C.brand700, letterSpacing: 1.4, textTransform: 'uppercase' }}>Tapizado</Text>
+        {label ? <Text style={{ fontSize: fs(12), color: C.ink, marginTop: 2, fontWeight: 'bold' }}>{label}</Text> : null}
       </View>
     </View>
   );
@@ -81,8 +81,8 @@ function MaterialGrid({ cells, images }: { cells: MoCell[]; images?: ImageMap })
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 8 }}>
       {cells.map((cell, i) => (
-        <View key={i} style={{ width: '48%', marginBottom: 8, flexDirection: 'row', gap: 6 }}>
-          <Swatch src={cell.swatch} images={images} size={36} />
+        <View key={i} style={{ width: '48%', marginBottom: 8, flexDirection: 'row', gap: 7 }}>
+          <Swatch src={cell.swatch} images={images} size={48} />
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: fs(8), color: C.inkHigh }}>{cell.label}</Text>
             {cell.note && <Text style={{ fontSize: fs(7.5), color: cell.noteColor, marginTop: 1 }}>{cell.note}</Text>}
@@ -200,7 +200,7 @@ function LineRow({
           (wrap={false}) so a compound line's photo + name + total never split
           across a page; only the component list below is allowed to paginate. */}
       <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line} wrap={false}>
-        <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 92, height: 92, objectFit: 'contain' }} />}</View>
+        <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} />}</View>
         <View style={s.lineBody}>
           <View style={s.lineMain}>
             {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
@@ -230,21 +230,29 @@ function LineRow({
         // name (past the 92pt photo + 14pt gap) with a hairline left rule, so the
         // whole block reads as "what this product is made of" instead of a stack
         // of rows that look like top-level line items.
-        <View style={{ marginTop: 8, marginLeft: 106, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
-          {modular ? (
-            <>
-              {/* Whole line one fabric → ONE hero here; each module then renders
-                  swatch-less. Mixed line → each module owns its fabric grouping. */}
-              {upholstery.uniform && (
-                <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
-              )}
-              {modulesWithAltPos(line.components).map((m, mi) => (
-                <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
-              ))}
-            </>
-          ) : (
-            <ComponentList components={line.components} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-          )}
+        <View style={{ marginTop: 8, marginLeft: 134, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
+          {(() => {
+            // A modular line whose modules carry OPTIONAL / ALTERNATIVE state must
+            // render per-module (each dimmed block keeps its own caption). Every
+            // other compound — plain, mixed, or a plain modular composition —
+            // renders ONE material-grouped list so the same fabric collapses to a
+            // single big swatch across the WHOLE product (not once per module).
+            const modVMs = modular ? modulesWithAltPos(line.components) : [];
+            const perModule = modular && modVMs.some((m) => m.optional || m.inAlt);
+            if (perModule) {
+              return (
+                <>
+                  {upholstery.uniform && (
+                    <UpholsteryHero subtype={upholstery.subtype} swatchImageId={upholstery.swatchImageId} images={images} />
+                  )}
+                  {modVMs.map((m, mi) => (
+                    <ModuleBlock key={m.moduleGroup || mi} m={m} fmt={fmt} families={families} currency={currency} rates={rates} images={images} wholeUniform={upholstery.uniform} />
+                  ))}
+                </>
+              );
+            }
+            return <ComponentList components={line.components} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />;
+          })()}
           {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
       )}
@@ -298,7 +306,7 @@ function ComponentRow({
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
         <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
           {sub && <Text style={{ fontSize: fs(9), color: C.inkSoft }}>+</Text>}
-          {showSwatch && <Swatch src={swatchSrc} images={images} size={26} />}
+          {showSwatch && <Swatch src={swatchSrc} images={images} size={40} />}
           <View style={{ flex: 1 }}>
             <Text style={nameStyle}>{c.name || c.reference || '—'}</Text>
             {!hideSwatch && c.subtype && <Text style={{ fontSize: fs(7.5), color: C.inkMid, marginTop: 1 }}>{fabricDisplay(c.subtype)}</Text>}
@@ -350,13 +358,18 @@ function ComponentList({
     return (
       <>
         {g.runs.map((run, ri) =>
-          !run.bearing || run.components.length === 1 ? (
-            <View key={run.key + ri} wrap={false}>{run.components.map((c, i) => row(c, false, c.id || i))}</View>
-          ) : (
+          run.bearing ? (
+            // Every upholstered run — even a single piece — leads with ONE big
+            // material swatch + fabric name, and its pieces list swatch-less
+            // beneath it. Same-material pieces collapse under the one swatch; a
+            // lone piece still gets the large, high-end swatch treatment.
             <View key={run.key + ri} wrap={false}>
               <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} images={images} />
               {run.components.map((c, i) => row(c, true, c.id || i))}
             </View>
+          ) : (
+            // Non-upholstered run (metal base, glass) — no fabric to hoist.
+            <View key={run.key + ri} wrap={false}>{run.components.map((c, i) => row(c, false, c.id || i))}</View>
           ),
         )}
       </>
@@ -447,48 +460,32 @@ function ModuleBlock({
     (c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase(),
   );
   const isMulti = (m.components?.length || 0) > 1;
-  // Promotion: when a module is named after one of its own pieces (the common
-  // "RIGHT-ARM LOVESEAT" module = that loveseat + its cushions), that piece
-  // becomes the module's LEAD row (bold name + price) and the rest nest beneath
-  // it as add-ons. This shows the product→parts hierarchy WITHOUT the "same
-  // name, two prices" duplication a name+subtotal header used to print.
-  const primaryIdx = headerDuplicatesElement
-    ? m.components.findIndex((c) => (c?.name || '').trim().toLowerCase() === (m.name || '').trim().toLowerCase())
-    : -1;
-  const primary = primaryIdx >= 0 ? m.components[primaryIdx] : null;
-  const rest = primary ? m.components.filter((_, i) => i !== primaryIdx) : [];
+  // Show the module header (name + per-module subtotal) only for a GENUINE
+  // grouping — a real 2+-element module whose name is NOT just one of its own
+  // pieces. When the dealer named the module after its main piece, the header
+  // would duplicate that element's row, so we suppress it and let the material-
+  // grouped body (big swatch + pieces) carry the module on its own.
+  const showHeader = !!m.moduleGroup && isMulti && !headerDuplicatesElement;
   const caption: { text: string; color: string } | null = m.optional
     ? { text: 'Opcional · no incluido', color: C.inkMid }
     : m.inAlt
       ? { text: `Alternativa ${m.altPos?.index ?? '?'} de ${m.altPos?.total ?? '?'}${m.selected ? ' · seleccionada' : ''}`, color: C.brand700 }
       : null;
   return (
-    // wrap={false}: keep a whole module (its lead + nested pieces) together so a
-    // page break lands BETWEEN modules — a module that doesn't fit in the space
-    // left on a page moves to the next one, instead of spilling over the footer.
+    // wrap={false}: keep a whole module (its header + material groups) together
+    // so a page break lands BETWEEN modules — a module that doesn't fit in the
+    // space left on a page moves to the next one, never spilling over the footer.
     <View style={dimmed ? { opacity: 0.45 } : {}} wrap={false}>
       {caption && <Text style={[s.groupCaption, { color: caption.color, marginTop: 5 }]}>{caption.text}</Text>}
-      {isMulti && primary ? (
-        // Promoted module: its main piece leads, the rest nest as "+ add-on".
-        <>
-          <ComponentRow c={primary} lead hideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-          {rest.map((c, i) => (
-            <ComponentRow key={c.id || i} c={c} sub hideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-          ))}
-        </>
-      ) : m.moduleGroup && isMulti ? (
-        // Genuine module name (≠ its pieces): a labelled group + per-module subtotal.
-        <>
-          <View style={s.moduleHead}>
-            <Text style={s.moduleName}>{m.name || '—'}</Text>
-            {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
-          </View>
-          <ComponentList components={m.components} forceHideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
-        </>
-      ) : (
-        // Single element / ungrouped.
-        <ComponentList components={m.components} forceHideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
+      {showHeader && (
+        <View style={s.moduleHead}>
+          <Text style={s.moduleName}>{m.name || '—'}</Text>
+          {!dimmed && <Text style={s.moduleAmount}>{fmt(moduleSubtotal(m.components))}</Text>}
+        </View>
       )}
+      {/* Body grouped BY MATERIAL: same-fabric pieces collapse under one big
+          swatch (ComponentList). No per-piece swatch repetition. */}
+      <ComponentList components={m.components} forceHideSwatch={wholeUniform} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />
     </View>
   );
 }
@@ -661,8 +658,8 @@ function CustomerBlock({ customer, professional, seller }: { customer: Customer 
             <>
               <Text style={s.custName}>{customer.name || '—'}</Text>
               {customer.company && <Text style={s.custCompany}>{customer.company}</Text>}
-              {customer.address && <Text style={s.custMeta}>{customer.address}</Text>}
-              {meta && <Text style={s.custMeta}>{meta}</Text>}
+              {customer.address ? <Text style={s.custMeta}>{customer.address}</Text> : null}
+              {meta ? <Text style={s.custMeta}>{meta}</Text> : null}
             </>
           ) : (
             <Text style={[s.custName, { fontStyle: 'italic', color: C.inkSoft, fontWeight: 'normal' }]}>Sin cliente asignado</Text>

@@ -226,7 +226,7 @@ test('compose ∘ parse is identity for every canonical shape', () => {
 
 /* ---- groupComponentsByMaterial — frame fabric vs cushion fabric ---------- */
 
-test('group — 2 materials split into contiguous runs (frame, then cushions)', () => {
+test('group — 2 materials split into material groups (frame, then cushions)', () => {
   const g = groupComponentsByMaterial([
     { id: 's1', subtype: 'Grade C — PAMPA' },
     { id: 's2', subtype: 'Grade C — PAMPA' },
@@ -277,15 +277,18 @@ test('group — non-bearing piece forms its own header-less run between material
   assert.equal(g.runs[1].subtype, '');     // header-less
 });
 
-test('group — order is preserved, never reordered (interleaved stays interleaved)', () => {
+test('group — interleaved same-material pieces CLUSTER under one swatch', () => {
+  // Same fabric must collapse to ONE group even when interleaved with another
+  // material, so the PDF/preview shows one big swatch per fabric (not repeated).
   const g = groupComponentsByMaterial([
     { id: 'a1', subtype: 'Grade C — PAMPA' },
     { id: 'b1', subtype: 'Grade A — VELVET' },
     { id: 'a2', subtype: 'Grade C — PAMPA' },
   ]);
   assert.equal(g.grouped, true);
-  assert.equal(g.runs.length, 3); // A | B | A — not clustered to 2
-  assert.deepEqual(g.runs.map((r) => r.components[0].id), ['a1', 'b1', 'a2']);
+  assert.equal(g.runs.length, 2); // PAMPA clusters a1+a2; VELVET its own
+  // First-appearance order of materials: PAMPA then VELVET.
+  assert.deepEqual(g.runs.map((r) => r.components.map((c) => c.id)), [['a1', 'a2'], ['b1']]);
 });
 
 test('fabricMaterialName / fabricColorName — split a "MATERIAL · COLOR (#code)" label', () => {

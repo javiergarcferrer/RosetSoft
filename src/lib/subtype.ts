@@ -354,7 +354,7 @@ export function compoundFabric(
  * their own header-less runs; they carry no fabric to hoist.
  * ------------------------------------------------------------------------- */
 
-/** One contiguous run of compound pieces sharing a material. */
+/** One group of compound pieces sharing a material (clustered, not contiguous). */
 export interface MaterialRun<T extends MaterialBearing = MaterialBearing> {
   /** materialIdentity shared by the run's pieces — the partition key. */
   key: string;
@@ -391,23 +391,30 @@ export function groupComponentsByMaterial<T extends MaterialBearing>(
   }
   if (distinct.size < 2) return { grouped: false, runs: [] };
 
-  const runs: Array<MaterialRun<T>> = [];
+  // Cluster ALL pieces of each material together (not merely contiguous runs),
+  // in first-appearance order of the material — so the SAME fabric shows under
+  // ONE swatch even when its pieces are interleaved with other materials across
+  // a composition (e.g. seat-D, cushion-E, seat-D collapses to one D group + one
+  // E group). Order within a material preserves the pieces' original order.
+  const order: string[] = [];
+  const byKey = new Map<string, MaterialRun<T>>();
   for (const c of list) {
     const { grade, fabric } = parseSubtype(c?.subtype);
     const bearing = !!(grade || fabric);
     const key = materialIdentity(c);
-    const last = runs[runs.length - 1];
-    if (last && last.key === key) {
-      last.components.push(c);
-    } else {
-      runs.push({
+    let run = byKey.get(key);
+    if (!run) {
+      run = {
         key,
         subtype: bearing ? (c?.subtype || '').trim() : '',
         swatchImageId: bearing ? (c?.swatchImageId ?? null) : null,
         bearing,
-        components: [c],
-      });
+        components: [],
+      };
+      byKey.set(key, run);
+      order.push(key);
     }
+    run.components.push(c);
   }
-  return { grouped: true, runs };
+  return { grouped: true, runs: order.map((k) => byKey.get(k) as MaterialRun<T>) };
 }

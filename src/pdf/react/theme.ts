@@ -130,7 +130,7 @@ export const s = StyleSheet.create({
   // ---- Line row ----
   line: { flexDirection: 'row', gap: 14, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: C.inkLine },
   imgBox: {
-    width: 92, height: 92, backgroundColor: C.bgSoft,
+    width: 120, height: 120, backgroundColor: C.bgSoft,
     borderWidth: 0.5, borderColor: C.inkLine2, borderRadius: 4,
     alignItems: 'center', justifyContent: 'center',
   },
