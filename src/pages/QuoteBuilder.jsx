@@ -265,6 +265,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     updateQuote, addLine, addSection, updateLine, duplicateLine,
     toggleOptional, addAlternative, selectAlternative, separateFromSet,
     toggleGroupOptional, joinSet, ungroupLine, removeLine, reorderLines,
+    moveTargetsFor, moveLineIntoCompound, extractFromLine,
   } = useQuoteController({ quoteId, quote, lines, groups, settings, ensurePersisted });
 
   // Curated per-quote material library ("Paleta del proyecto") — the pinned
@@ -667,6 +668,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             onAddLine: hx(() => addLine({})),
             onOpenCatalog: () => setCatalogOpen(true),
             onOpenInventory: () => setInventoryOpen(true),
+            // Line ⇄ component moves. getMoveTargets is a pure read (no hx);
+            // the two mutations are one-gesture/one-snapshot like the rest.
+            getMoveTargets: moveTargetsFor,
+            onMoveLineIntoCompound: hx(moveLineIntoCompound),
+            onExtractFromLine: hx(extractFromLine),
             // Catalog side-effect (not an undoable line edit): remember a
             // material's swatch so the next quote that picks it is pre-filled.
             // Owns the profileId source + persistence so the editor row doesn't.

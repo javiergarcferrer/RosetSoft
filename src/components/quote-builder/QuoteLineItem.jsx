@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, Combine, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, Combine, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink, ArrowUpRight } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -23,7 +23,7 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription } from '../../lib/catalog.js';
-import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
+import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine, healComponentAlternatives } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
@@ -97,6 +97,12 @@ export default function QuoteLineItem({
   // to re-price a material-less RANGE sibling at the propagated grade, exactly
   // as GradeFabricRow.commit does for a single pick.
   const families = useContext(FamiliesContext);
+  // Line ⇄ component moves (quote-level: they touch a SECOND line, so they
+  // live in the controller and arrive via context). getMoveTargets owns every
+  // source gate (sections, grouped lines, compound-into-plain); an empty list
+  // simply hides the "Mover dentro de…" affordance.
+  const { getMoveTargets, onMoveLineIntoCompound, onExtractFromLine } = useQuoteActions();
+  const moveTargets = getMoveTargets ? getMoveTargets(line) : [];
   // One-time legacy normalization. The catalog's "Description 2" used to be
   // auto-filled into the editable `description` (before it got its own read-only
   // `productDescription` field). For a line still carrying that exact catalog
@@ -384,6 +390,21 @@ export default function QuoteLineItem({
   // client preview and the PDF export use.
   const dimmed = vm.dimmed;
 
+  // Species header band data for a compound/modular card (TopStrip renders it).
+  // Containers announce themselves with a tinted header — the same grammar as
+  // the Conjunto/Alternativa GroupCard — while a simple product stays bandless.
+  // The rolled-up total rides in the band so a TALL composition can be scanned
+  // by its header alone, without scrolling to the calculator at the bottom.
+  const headerMeta = compound
+    ? {
+        isModular,
+        count: vm.compound.count,
+        totalLabel: vm.compound.hasRange
+          ? `${fmt(vm.compound.range.min)} – ${fmt(vm.compound.range.max)}`
+          : fmt(rowTotal),
+      }
+    : null;
+
   return (
     // qli-row turns each row into its own container-query root, so the
     // body below reflows based on this row's width — not the viewport's.
@@ -426,7 +447,7 @@ export default function QuoteLineItem({
       <TopStrip
         family={line.family}
         onPickFamily={(value) => onChange({ family: value || '' })}
-        compound={compound}
+        headerMeta={headerMeta}
         isOptional={!!line.isOptional}
         alternativeGroup={line.alternativeGroup}
         isSelectedAlternative={!!line.isSelectedAlternative}
@@ -512,6 +533,7 @@ export default function QuoteLineItem({
           onMakeProduct={makeComponentProduct}
           onAddToProduct={addComponentToModule}
           onAddMany={addComponentsFromSeeds}
+          onExtract={onExtractFromLine ? (ids) => onExtractFromLine(line, ids) : undefined}
         />
       )}
 
@@ -528,6 +550,8 @@ export default function QuoteLineItem({
         onSeparateFromSet={onSeparateFromSet}
         onUngroup={onUngroup}
         onRemove={onRemove}
+        moveTargets={moveTargets}
+        onMoveInto={onMoveLineIntoCompound ? (targetId) => onMoveLineIntoCompound(targetId, line) : undefined}
       />
     </li>
   );
@@ -550,34 +574,8 @@ function makeBlankComponent(overrides = {}) {
   };
 }
 
-// Keep component alternative groups well-formed after a removal: a group that
-// drops to a SINGLE member dissolves back to a normal component, and a group
-// that lost its selected member promotes its first survivor — so a removed
-// option can never leave an orphan that's silently excluded from the total.
-function healComponentAlternatives(components) {
-  const counts = new Map();
-  const hasSelected = new Map();
-  for (const c of components) {
-    if (!c?.alternativeGroup) continue;
-    counts.set(c.alternativeGroup, (counts.get(c.alternativeGroup) || 0) + 1);
-    if (c.isSelectedAlternative) hasSelected.set(c.alternativeGroup, true);
-  }
-  const promoted = new Set();
-  return components.map((c) => {
-    const g = c?.alternativeGroup;
-    if (!g) return c;
-    if (counts.get(g) === 1) {
-      // Lone survivor → no longer an alternative.
-      const { alternativeGroup, isSelectedAlternative, ...rest } = c;
-      return rest;
-    }
-    if (!hasSelected.get(g) && !promoted.has(g)) {
-      promoted.add(g);
-      return { ...c, isSelectedAlternative: true };
-    }
-    return c;
-  });
-}
+// (healComponentAlternatives moved to lib/modules — the line ⇄ component move
+// transforms there share the same group-healing rules as the editor's delete.)
 
 // ---------------------------------------------------------------------------
 // Top strip — drag handle + family chip + READ-ONLY status badges. The chip
@@ -593,15 +591,29 @@ function healComponentAlternatives(components) {
 // an action cluster pinned to the right edge here.
 // ---------------------------------------------------------------------------
 function TopStrip({
-  family, onPickFamily, compound,
+  family, onPickFamily, headerMeta,
   isOptional, alternativeGroup, isSelectedAlternative, groupInfo,
   setGroup, setInfo, insideGroupCard,
   onSelectAlternative,
   dragHandleProps,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  // SPECIES GRAMMAR: a container (compound/modular) gets a tinted, full-bleed
+  // header band — the same visual language as the Conjunto / Alternativa
+  // GroupCard headers — so scanning the list reads container vs leaf at a
+  // glance. A simple product line stays a quiet, bandless chip row. The band
+  // re-rounds its top corners to sit inside the card's rounded-xl border
+  // (the card can't overflow-hidden: popovers must escape), except inside a
+  // GroupCard where the row isn't rounded.
+  const band = !!headerMeta;
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-2.5 -ml-1">
+    <div
+      className={
+        band
+          ? `qli-band flex flex-wrap items-center gap-2 bg-ink-50/80 border-b border-ink-200 ${insideGroupCard ? '' : 'rounded-t-[11px]'}`
+          : 'flex flex-wrap items-center gap-2 mb-2.5 -ml-1'
+      }
+    >
       <span
         {...(dragHandleProps || {})}
         className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
@@ -633,6 +645,16 @@ function TopStrip({
         </button>
       )}
 
+      {/* Species eyebrow — the band's identity. Mirrors the GroupCard header
+          eyebrow (icon + semibold tracking) so all three container types
+          (Modular/Compuesto · Conjunto · Alternativas) read as one family. */}
+      {band && (
+        <span className="inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] text-ink-600 whitespace-nowrap">
+          <Layers size={13} className="opacity-80" aria-hidden />
+          {headerMeta.isModular ? 'Producto modular' : 'Compuesto'}
+        </span>
+      )}
+
       {family ? (
         <button
           type="button"
@@ -656,22 +678,13 @@ function TopStrip({
         </button>
       )}
 
-      {/* Read-only status badges. Order: Modular → Opcional → Alternativa
-          → Conjunto. Multiple can show concurrently when a modular product is
+      {/* Read-only status badges. Order: Opcional → Alternativa → Conjunto.
+          (The compound species itself is announced by the band's eyebrow above,
+          not a chip.) Multiple can show concurrently when a modular product is
           in an alternative group; isOptional+alternative is forbidden by the DB
           so those two are visually mutually exclusive too. These are NON-
           interactive labels — the matching toggles (Modular, Opcional) live in
           the per-line LineFooter. */}
-      {compound && (
-        <span
-          className="chip text-ink-600 bg-ink-100 border border-ink-200"
-          title="Producto modular"
-        >
-          <Layers size={10} className="opacity-80" aria-hidden />
-          Modular
-        </span>
-      )}
-
       {/* Opcional badge — read-only. Shown only when the line IS optional;
           the on/off toggle (and its "Hacer opcional" affordance) lives in
           the footer. Hidden for grouped lines, where optional is forbidden. */}
@@ -712,6 +725,21 @@ function TopStrip({
       )}
 
       <div className="flex-1" />
+
+      {/* Band meta — piece count + the rolled-up total, right-aligned. The
+          total here is what lets the dealer scan a tall composition without
+          scrolling to the calculator at the card's bottom; it's the same VM
+          figure (vm.compound / rowTotal), so the two can't disagree. */}
+      {band && (
+        <span className="inline-flex items-baseline gap-2.5 min-w-0 ml-auto">
+          <span className="text-[11px] text-ink-500 tabular-nums whitespace-nowrap">
+            {headerMeta.count} pieza{headerMeta.count === 1 ? '' : 's'}
+          </span>
+          <span className="text-sm font-semibold text-ink-900 tabular-nums whitespace-nowrap">
+            {headerMeta.totalLabel}
+          </span>
+        </span>
+      )}
 
       <FamilyPicker
         open={pickerOpen}
@@ -894,7 +922,13 @@ function ExtraPhotos({ line, onChange }) {
           hoverPreview
         />
       ))}
-      <AddPhotoTile kind="quote-line" ownerId={line.id} onAdd={(id) => setExtra([...extra, id])} />
+      {/* With no extras yet, the dashed tile is pure chrome — ghost it at rest
+          (qli-reveal: visible on row hover / focus / touch) so it stops
+          competing with the product identity on every card. Once extras exist
+          the strip is real content and the tile stays visible beside them. */}
+      <span className={extra.length ? '' : 'qli-reveal'}>
+        <AddPhotoTile kind="quote-line" ownerId={line.id} onAdd={(id) => setExtra([...extra, id])} />
+      </span>
     </div>
   );
 }
@@ -1723,7 +1757,7 @@ function CompoundCalculatorBand({
 // (see LineItemList) — a grip handle per row, a brand drop-indicator bar,
 // and a renormalised order on drop. Kept deliberately identical so the
 // interaction is consistent across the two nesting levels.
-function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onApplyMaterialToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onMakeProduct, onAddToProduct, onAddMany }) {
+function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt, nameFilter, sourceUrl, onAdd, onUpdate, onRemove, onReorder, onAddAlternative, onSelectAlternative, onApplyToAll, onApplyMaterialToAll, isModular, modules, onSetModular, onGroupModule, onUngroupModule, onRenameModule, onToggleModuleOptional, onAddModuleAlternative, onSelectModuleAlternative, onMakeProduct, onAddToProduct, onAddMany, onExtract }) {
   const components = line.components || [];
   // Per-component display projection (total, range swap, optional/alternative
   // flags + dim state, and the "Opción N de M" position) resolved once in the
@@ -1841,6 +1875,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             onSelectAlternative={() => onSelectAlternative?.(c.id)}
             onApplyToAll={() => onApplyToAll?.(c.id)}
             onMakeProduct={() => startSelecting(c.id)}
+            onExtract={onExtract ? () => onExtract([c.id]) : undefined}
             selecting={selecting}
             dragHandleProps={dragHandleProps}
           />
@@ -1855,8 +1890,10 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
     <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 overflow-hidden">
       {/* Composition controls: toggle modular, and group the current selection. */}
       <div className="px-3 py-2 bg-white border-b border-ink-100 flex items-center gap-2 flex-wrap">
+        {/* The species ("Producto modular" / "Compuesto") is announced by the
+            card's header band — this inner strip labels just the contents. */}
         <span className="text-[11px] font-medium text-ink-500">
-          Modular
+          Componentes
         </span>
         <div className="flex-1" />
         {/* Top-level "apply material to all" — one pick stamps the chosen grade +
@@ -1975,6 +2012,19 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                       <Plus size={12} />
                     </button>
                   )}
+                  {/* Extract this whole product (module) OUT as its own
+                      top-level line. Hidden inside a pick-one (extracting one
+                      option would strand its siblings — un-alternative first). */}
+                  {onExtract && !m.altGroup && (
+                    <button
+                      type="button"
+                      onClick={() => onExtract(m.componentIds)}
+                      className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
+                      title="Sacar este producto como artículo independiente de la cotización"
+                    >
+                      <ArrowUpRight size={12} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onUngroupModule?.(m.moduleGroup)}
@@ -2041,7 +2091,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   );
 }
 
-function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, onMakeProduct, selecting, dragHandleProps }) {
+function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, sourceUrl, onChange, onRemove, onAddAlternative, onSelectAlternative, onApplyToAll, onMakeProduct, onExtract, selecting, dragHandleProps }) {
   // Display fields resolved in the VM (see resolveComponents): the component's
   // total, its optional/alternative flags, the resulting "off" (dimmed) state,
   // the "Opción N de M" position, the range swap (a material-less sub-piece
@@ -2153,6 +2203,20 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             title="Desglosar este componente en un producto — un producto completo que agrupa varios componentes"
           >
             <Boxes size={10} className="opacity-80" aria-hidden /> Desglosar
+          </button>
+        )}
+        {/* Move this piece OUT as its own top-level line. Component-level
+            alternative groups heal on both sides (lib/modules), so the action
+            stays available inside them; module members extract via their
+            module header instead. */}
+        {onExtract && !component.moduleGroup && !selecting && (
+          <button
+            type="button"
+            onClick={onExtract}
+            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            title="Sacar este componente como artículo independiente de la cotización"
+          >
+            <ArrowUpRight size={10} className="opacity-80" aria-hidden /> Sacar como artículo
           </button>
         )}
         <div className="flex-1" />
@@ -2325,9 +2389,15 @@ function LineFooter({
   onConvertToCompound, onDissolveCompound,
   onAddAlternative, onToggleOptional,
   onDuplicate, onSeparateFromSet, onUngroup, onRemove,
+  moveTargets, onMoveInto,
 }) {
   const canToggleOptional = !alternativeGroup && !setGroup;
   const canAddAlternative = !isOptional && !setGroup;
+  // "Mover dentro de…" — drop this line INSIDE one of the quote's compounds /
+  // modulares (it becomes a component / module there). The target list arrives
+  // pre-gated by the controller; empty ⇒ no affordance.
+  const [moveOpen, setMoveOpen] = useState(false);
+  const canMove = !!onMoveInto && Array.isArray(moveTargets) && moveTargets.length > 0;
   return (
     <div className="qli-footer relative z-[2] mt-2.5 pt-2 border-t border-ink-100 flex flex-wrap items-center gap-x-1 gap-y-1">
       <FooterButton
@@ -2374,6 +2444,52 @@ function LineFooter({
         <FooterButton onClick={onDuplicate} icon={Copy} title="Duplicar esta línea">
           Duplicar
         </FooterButton>
+      )}
+
+      {/* Move this line INSIDE a compound/modular elsewhere in the quote. A
+          small in-place menu lists the eligible targets (pre-gated by the
+          controller: a compound source only fits modular targets, grouped
+          lines don't move at all). */}
+      {canMove && (
+        <span className="relative inline-flex">
+          <FooterButton
+            onClick={() => setMoveOpen((v) => !v)}
+            icon={Combine}
+            aria-expanded={moveOpen}
+            title="Mover esta línea dentro de un compuesto o modular de la cotización"
+          >
+            Mover dentro de…
+          </FooterButton>
+          {moveOpen && (
+            <>
+              {/* Click-away veil under the menu. */}
+              <button
+                type="button"
+                className="fixed inset-0 z-30 cursor-default"
+                aria-label="Cerrar menú"
+                onClick={() => setMoveOpen(false)}
+                tabIndex={-1}
+              />
+              <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 max-h-60 overflow-y-auto rounded-lg border border-ink-200 bg-white shadow-pop py-1">
+                <div className="px-3 py-1.5 eyebrow-xs text-ink-400">Mover dentro de</div>
+                {moveTargets.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => { setMoveOpen(false); onMoveInto(t.id); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-700 hover:bg-ink-50"
+                  >
+                    <Layers size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate font-medium">{t.name}</span>
+                    <span className="text-[10px] text-ink-400 whitespace-nowrap">
+                      {t.isModular ? 'Modular' : 'Compuesto'} · {t.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </span>
       )}
 
       {setGroup && onSeparateFromSet && (

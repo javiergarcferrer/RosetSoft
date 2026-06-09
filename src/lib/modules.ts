@@ -28,6 +28,7 @@
  */
 
 import { isPricedComponent } from './constants.js';
+import { applyLineAdjustments } from './pricing.js';
 import type { LineComponent, QuoteLine } from '../types/domain.ts';
 
 /** Coerce to a finite number, else a fallback. Mirrors lib/pricing. */
@@ -217,6 +218,249 @@ export function addModuleAlternative(
     if (i === lastIdx) out.push(...dups);
   });
   return out;
+}
+
+/**
+ * Keep component alternative groups well-formed after members leave: a group
+ * that drops to a SINGLE member dissolves back to a normal component, and a
+ * group that lost its selected member promotes its first survivor — so a
+ * removal/extraction can never leave an orphan silently excluded from the
+ * total. Shared by the editor's component delete and the line⇄component moves.
+ */
+export function healComponentAlternatives(
+  components: readonly LineComponent[] | null | undefined,
+): LineComponent[] {
+  const list = (components || []).filter(Boolean) as LineComponent[];
+  const counts = new Map<string, number>();
+  const hasSelected = new Map<string, boolean>();
+  for (const c of list) {
+    if (!c.alternativeGroup) continue;
+    counts.set(c.alternativeGroup, (counts.get(c.alternativeGroup) || 0) + 1);
+    if (c.isSelectedAlternative) hasSelected.set(c.alternativeGroup, true);
+  }
+  const promoted = new Set<string>();
+  return list.map((c) => {
+    const g = c.alternativeGroup;
+    if (!g) return c;
+    if (counts.get(g) === 1) {
+      // Lone survivor → no longer an alternative.
+      const { alternativeGroup, isSelectedAlternative, ...rest } = c;
+      void alternativeGroup; void isSelectedAlternative;
+      return rest as LineComponent;
+    }
+    if (!hasSelected.get(g) && !promoted.has(g)) {
+      promoted.add(g);
+      return { ...c, isSelectedAlternative: true };
+    }
+    return c;
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   LINE ⇄ COMPONENT MOVES — the dealer restructures a quote without retyping:
+   a top-level product line moves INSIDE a compound/modular (absorb), and a
+   component / module moves back OUT to a top-level line (extract). Both are
+   pure transforms over the same uniform structure documented above; the
+   controller owns persistence.
+
+   LOGIC GATES (every flag/field accounted for):
+   • Source line in a Conjunto/Alternativa → the MOVE IS REFUSED upstream (UI
+     hides it; controller guards) — yanking a member would corrupt the group.
+   • A compound source can only be absorbed by a MODULAR target (its pieces
+     become a module / its modules carry over); nesting a compound inside a
+     plain component-product is not representable.
+   • Line-level margin/discount have no component twin → they are FOLDED into
+     each absorbed unit price (and price range) so the quote total is
+     IDENTICAL before and after the move.
+   • line.isOptional → moduleOptional (modular target: the whole product stays
+     an opt-in add-on) or component isOptional (plain target). Extraction maps
+     the same flags back up (module/component optional → line isOptional).
+   • Module pick-one (moduleAlternativeGroup) can't leave its siblings → a
+     module in an alternative group refuses extraction (un-alternative first);
+     component-level alternative groups HEAL on both sides instead.
+   • All ids (component / module / alternative groups) are re-minted on the
+     way in so two absorbs of duplicated lines can never collide.
+   • Dropped with eyes open: internal `notes`, the product photo(s) (a
+     compound shows ONE cover photo) and `unitCost` (components carry none) —
+     none of these affect the client-facing quote or the total.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Convert a top-level line into the component rows a compound/modular target
+ * absorbs. Returns null when the move is not representable (section row, or a
+ * compound source into a non-modular target).
+ */
+export function absorbLineAsComponents(
+  line: QuoteLine | null | undefined,
+  intoModular: boolean,
+  newId: IdFactory,
+): LineComponent[] | null {
+  if (!line || line.kind === 'section') return null;
+  const comps = (line.components || []).filter(Boolean) as LineComponent[];
+  const isCompoundSource = comps.length > 0;
+  if (isCompoundSource && !intoModular) return null;
+
+  // Fold the line-level margin/discount into unit prices so the total is
+  // preserved exactly (components have no per-line adjustment fields).
+  const fold = (v: number | null | undefined): number =>
+    applyLineAdjustments(safeNum(v), line.lineMarginPct, line.lineDiscountPct);
+  const foldRange = (v: number | null | undefined): number | null =>
+    v == null ? null : fold(v);
+
+  if (!isCompoundSource) {
+    const component: LineComponent = {
+      id: newId(),
+      name: line.name || '',
+      reference: line.reference || '',
+      subtype: line.subtype || '',
+      dimensions: line.dimensions || '',
+      // The dealer's text wins; fall back to the catalog descriptor so the
+      // line's second identity line survives the move.
+      description: line.description || line.productDescription || '',
+      qty: safeNum(line.qty, 1),
+      unitPrice: fold(line.unitPrice),
+      priceMin: foldRange(line.priceMin),
+      priceMax: foldRange(line.priceMax),
+      swatchImageId: line.swatchImageId ?? null,
+      materialOptions: line.materialOptions ?? null,
+    };
+    if (intoModular) {
+      // A single product enters as its own single-element module; a line-level
+      // optional becomes a module-level optional (same client semantics).
+      return [{
+        ...component,
+        moduleGroup: newId(),
+        moduleName: line.name || '',
+        moduleOptional: !!line.isOptional,
+      }];
+    }
+    return [{
+      ...component,
+      isOptional: !!line.isOptional,
+      optionalOffered: !!line.optionalOffered,
+    }];
+  }
+
+  // Compound source into a modular target: existing modules carry over 1:1
+  // (fresh group ids), ungrouped elements wrap into ONE module named after the
+  // line — so a plain component-product enters as exactly one module.
+  const groupMap = new Map<string, string>();
+  const altMap = new Map<string, string>();
+  const wrapGroup = newId();
+  const remap = (m: Map<string, string>, key: string): string => {
+    let v = m.get(key);
+    if (!v) { v = newId(); m.set(key, v); }
+    return v;
+  };
+  return comps.map((c) => {
+    const next: LineComponent = {
+      ...c,
+      id: newId(),
+      unitPrice: fold(c.unitPrice),
+      priceMin: foldRange(c.priceMin),
+      priceMax: foldRange(c.priceMax),
+      alternativeGroup: c.alternativeGroup ? remap(altMap, `c-${c.alternativeGroup}`) : c.alternativeGroup,
+      moduleGroup: c.moduleGroup ? remap(groupMap, c.moduleGroup) : wrapGroup,
+      moduleName: c.moduleGroup ? c.moduleName : (line.name || ''),
+      moduleAlternativeGroup: c.moduleAlternativeGroup
+        ? remap(altMap, `m-${c.moduleAlternativeGroup}`)
+        : c.moduleAlternativeGroup,
+    };
+    // A whole-line optional makes every absorbed module an opt-in add-on —
+    // the closest faithful mapping of "this entire product is optional".
+    if (line.isOptional) next.moduleOptional = true;
+    return next;
+  });
+}
+
+/** Seed for a line extracted out of a compound (consumed by the controller's
+ *  addLine-style insert) plus the healed remaining components. */
+export interface ExtractedLine {
+  seed: {
+    family: string;
+    name: string;
+    reference?: string;
+    subtype?: string;
+    dimensions?: string;
+    description?: string;
+    qty?: number;
+    unitPrice?: number;
+    priceMin?: number | null;
+    priceMax?: number | null;
+    swatchImageId?: string | null;
+    materialOptions?: QuoteLine['materialOptions'];
+    isOptional?: boolean;
+    optionalOffered?: boolean;
+    components?: LineComponent[];
+  };
+  remaining: LineComponent[];
+}
+
+/**
+ * Extract the given components OUT of a compound line as a new top-level line:
+ * one component → a simple product line; several (a module) → a compound line
+ * of its elements. Returns null when nothing resolves or when any member sits
+ * in a module pick-one (extracting one option would strand its siblings — the
+ * dealer un-alternatives first). Component-level alternative groups heal on
+ * both sides instead of blocking.
+ */
+export function extractComponentsAsLine(
+  line: QuoteLine | null | undefined,
+  componentIds: readonly string[] | null | undefined,
+  newId: IdFactory,
+): ExtractedLine | null {
+  if (!line) return null;
+  const list = ((line.components || []).filter(Boolean)) as LineComponent[];
+  const idSet = new Set((componentIds || []).filter(Boolean));
+  const members = list.filter((c) => idSet.has(c.id));
+  if (members.length === 0) return null;
+  if (members.some((c) => c.moduleAlternativeGroup)) return null;
+
+  const remaining = healComponentAlternatives(list.filter((c) => !idSet.has(c.id)));
+
+  if (members.length === 1) {
+    const c = members[0];
+    return {
+      seed: {
+        family: line.family || '',
+        name: c.name || '',
+        reference: c.reference || '',
+        subtype: c.subtype || '',
+        dimensions: c.dimensions || '',
+        description: c.description || '',
+        qty: safeNum(c.qty, 1),
+        unitPrice: safeNum(c.unitPrice),
+        priceMin: c.priceMin ?? null,
+        priceMax: c.priceMax ?? null,
+        swatchImageId: c.swatchImageId ?? null,
+        materialOptions: c.materialOptions ?? null,
+        // Whichever level marked it an add-on, the extracted line stays one.
+        isOptional: !!(c.isOptional || c.moduleOptional),
+        optionalOffered: !!c.optionalOffered,
+      },
+      remaining,
+    };
+  }
+
+  // A module (or hand-picked group) leaves as a compound line of its elements:
+  // module chrome is stripped (fresh single-product context), component-level
+  // alternative groups heal within the extracted set too.
+  const moduleName = members.find((c) => c.moduleName)?.moduleName || '';
+  const moduleOptional = members.some((c) => c.moduleOptional);
+  const components = healComponentAlternatives(members).map((c) => {
+    const { moduleGroup, moduleName: mn, moduleOptional: mo, moduleAlternativeGroup, moduleSelected, ...rest } = c;
+    void moduleGroup; void mn; void mo; void moduleAlternativeGroup; void moduleSelected;
+    return { ...rest, id: newId() } as LineComponent;
+  });
+  return {
+    seed: {
+      family: line.family || '',
+      name: moduleName || line.name || '',
+      isOptional: moduleOptional,
+      components,
+    },
+    remaining,
+  };
 }
 
 /**

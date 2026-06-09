@@ -5,6 +5,7 @@ import { effectiveRates } from '../../lib/exchangeRate.js';
 import {
   isGroupOptional, selectAlternativePatches, healAlternativeOnRemove, healSetOnRemove,
 } from '../../lib/quoteGroups.js';
+import { isModularLine, absorbLineAsComponents, extractComponentsAsLine } from '../../lib/modules.js';
 import { boundedPush, diffLinesForRestore } from '../../lib/quoteHistory.js';
 import { useUndoToast } from './UndoToast.jsx';
 
@@ -223,7 +224,109 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         priceMax: seed.priceMax ?? null,
         notes: seed.notes || '',
         components: Array.isArray(seed.components) ? seed.components : [],
+        // Carried by extraction (a component moved out keeps being an opt-in
+        // add-on and keeps its material options); both default off/empty.
+        isOptional: !!seed.isOptional,
+        optionalOffered: !!seed.optionalOffered,
+        materialOptions: seed.materialOptions ?? null,
       });
+      setFocusLineId(id);
+    } finally {
+      markSaved();
+    }
+  }
+
+  /* ------------------- line ⇄ component moves ------------------- */
+
+  // Compounds this line could move INTO. A simple line fits any compound; a
+  // compound source only fits a MODULAR target (its pieces become a module —
+  // nesting inside a plain component-product isn't representable). Lines in a
+  // Conjunto/Alternativa don't move (the UI also hides the affordance): the
+  // dealer separates them first, keeping group surgery explicit.
+  function moveTargetsFor(sourceLine) {
+    if (!sourceLine || sourceLine.kind === LINE_KIND_SECTION) return [];
+    if (sourceLine.setGroup || sourceLine.alternativeGroup) return [];
+    const sourceCompound = (sourceLine.components || []).length > 0;
+    return lines
+      .filter((l) => l.id !== sourceLine.id
+        && l.kind !== LINE_KIND_SECTION
+        && (l.components || []).length > 0
+        && (!sourceCompound || isModularLine(l)))
+      .map((l) => ({
+        id: l.id,
+        name: l.name || 'Compuesto',
+        isModular: isModularLine(l),
+        count: (l.components || []).length,
+      }));
+  }
+
+  // Move a top-level line INSIDE a compound/modular: the line's content
+  // becomes component rows of the target (lib/modules:absorbLineAsComponents
+  // owns every gate — adjustment folding, optional mapping, id re-minting)
+  // and the source row is deleted. One gesture, one undo snapshot (hx).
+  async function moveLineIntoCompound(targetId, sourceLine) {
+    const target = lines.find((l) => l.id === targetId);
+    if (!target || !sourceLine) return;
+    if (sourceLine.setGroup || sourceLine.alternativeGroup) return;
+    const absorbed = absorbLineAsComponents(sourceLine, isModularLine(target), newId);
+    if (!absorbed) return;
+    markSaving();
+    try {
+      await db.quoteLines.update(targetId, {
+        components: [...(target.components || []), ...absorbed],
+      });
+      await db.quoteLines.delete(sourceLine.id);
+      setFocusLineId(targetId);
+    } finally {
+      markSaved();
+    }
+  }
+
+  // Move a component / module OUT of a compound as its own top-level line,
+  // inserted right AFTER the source compound (duplicateLine's renumber dance)
+  // so the extracted product lands where the eye already is.
+  async function extractFromLine(sourceLine, componentIds) {
+    const res = extractComponentsAsLine(sourceLine, componentIds, newId);
+    if (!res) return;
+    markSaving();
+    try {
+      await ensurePersisted();
+      const id = newId();
+      const srcIdx = lines.findIndex((l) => l.id === sourceLine.id);
+      const newSortOrder = (sourceLine.sortOrder ?? 0) + 1;
+      const s = res.seed;
+      await db.quoteLines.put({
+        id,
+        quoteId,
+        kind: LINE_KIND_ITEM,
+        sortOrder: newSortOrder,
+        family: s.family || '',
+        reference: s.reference || '',
+        name: s.name || '',
+        subtype: s.subtype || '',
+        dimensions: s.dimensions || '',
+        description: s.description || '',
+        productDescription: '',
+        pageRef: '',
+        imageId: null,
+        swatchImageId: s.swatchImageId ?? null,
+        qty: s.qty ?? 1,
+        unitPrice: s.unitPrice ?? 0,
+        unitCost: null,
+        lineMarginPct: 0,
+        lineDiscountPct: 0,
+        priceMin: s.priceMin ?? null,
+        priceMax: s.priceMax ?? null,
+        notes: '',
+        components: Array.isArray(s.components) ? s.components : [],
+        isOptional: !!s.isOptional,
+        optionalOffered: !!s.optionalOffered,
+        materialOptions: s.materialOptions ?? null,
+      });
+      for (const l of lines.slice(srcIdx + 1)) {
+        await db.quoteLines.update(l.id, { sortOrder: (l.sortOrder ?? 0) + 1 });
+      }
+      await db.quoteLines.update(sourceLine.id, { components: res.remaining });
       setFocusLineId(id);
     } finally {
       markSaved();
@@ -636,5 +739,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     updateQuote, addLine, addSection, updateLine, duplicateLine,
     toggleOptional, addAlternative, selectAlternative, separateFromSet,
     toggleGroupOptional, joinSet, ungroupLine, removeLine, reorderLines,
+    // line ⇄ component moves
+    moveTargetsFor, moveLineIntoCompound, extractFromLine,
   };
 }

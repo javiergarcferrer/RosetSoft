@@ -669,6 +669,41 @@
     .qli-footer { opacity: 1; }
   }
 
+  /* Full-bleed header band inside a line card (the compound/modular species
+     header in QuoteLineItem's TopStrip). Negative margins cancel .qli-row's
+     padding exactly — keep the two in sync — so the tinted band runs edge to
+     edge like a GroupCard header, then re-pads its own content and re-spaces
+     itself from the body below. */
+  .qli-band {
+    margin: -0.875rem -0.75rem 0.875rem;
+    padding: 0.5rem 0.75rem;
+  }
+  @container qli (min-width: 380px) {
+    .qli-band {
+      margin: -1rem -1.25rem 0.875rem;
+      padding: 0.5rem 1.25rem;
+    }
+  }
+
+  /* Secondary affordances inside a line card (e.g. the "+ add photo" tile)
+     follow the SAME visibility contract as .qli-footer: ghosted at rest on
+     fine pointers so a dense list stays calm, full on row hover / focus,
+     always visible on touch. Geometry never changes — only opacity — so
+     cards don't reflow under the cursor while scanning. */
+  .qli-reveal {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .qli-row:hover .qli-reveal,
+  .qli-row:focus-within .qli-reveal,
+  .qli-reveal:hover,
+  .qli-reveal:focus-within {
+    opacity: 1;
+  }
+  @media (pointer: coarse) {
+    .qli-reveal { opacity: 1; }
+  }
+
   /* Auto-growing single-line inputs. `field-sizing: content` sizes
      the input to its value; the widthClass on the JSX side becomes a
      min, not a max. Browser support is Chrome 123+, Safari 17.4+,
