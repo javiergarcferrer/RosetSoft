@@ -24,7 +24,10 @@ export default function SectionDivider({ line, onChange, onRemove, autoFocus, dr
 
   return (
     <li
-      className="px-3 sm:px-4 py-2 bg-brand-50/50 border-y border-brand-100/70 group"
+      // Full-bleed (negative margin cancels the list's padding) so the section
+      // band spans edge-to-edge and reads as a strong divider that brackets the
+      // item cards beneath it — a clear level above an individual product.
+      className="-mx-2.5 sm:-mx-3 px-4 sm:px-5 py-2.5 bg-brand-50/60 border-y border-brand-200/70 group"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >

@@ -378,7 +378,11 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
 
   return (
     <div className="group/list">
-      <ul className="divide-y divide-ink-100">
+      {/* A gap-separated stack (not edge-to-edge hairline rows): each top-level
+          line / group renders as its own card with breathing room between them,
+          so the eye parses the quote as discrete units even when scrolling fast.
+          Sections stay full-bleed (negative margin) to read as strong dividers. */}
+      <ul className="flex flex-col gap-2.5 sm:gap-3 p-2.5 sm:p-3">
         {runs.map((run, ri) => {
           const node = renderRun(run);
           // Connector at the boundary between this run and the next, joining
@@ -478,9 +482,11 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
     ? (optional ? 'Conjunto opcional' : 'Conjunto')
     : 'Alternativas — elige una';
   return (
-    // Inset card so the surrounding row dividers don't bleed into it.
-    <div className="px-3 sm:px-4 py-3">
-      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white ${optional ? 'border-dashed' : ''}`}>
+    // The list owns the spacing now; the card sits flush with the single-line
+    // cards. A heavier border-2 (vs the hairline of a plain line) marks this as a
+    // CONTAINER of several lines, one clear step up the hierarchy.
+    <div>
+      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white shadow-sm ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
           <span className="inline-flex items-center gap-1.5 min-w-0 flex-shrink">
             {dragHandleProps && (

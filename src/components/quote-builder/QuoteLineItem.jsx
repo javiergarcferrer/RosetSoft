@@ -399,18 +399,29 @@ export default function QuoteLineItem({
     //   • non-selected sibs  white veil on top of the accent so the
     //                        selected one wins the eye.
     <li
-      className={`qli-row group relative transition-colors duration-150 hover:bg-ink-50/40 ${
-        line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''
-      } ${
-        // Per-line group accents are drawn by the wrapping GroupCard when
-        // this line lives inside one (insideGroupCard) — don't double them.
-        // A standalone alternative line (mid-edit, before the card forms)
-        // keeps its own accent as a fallback.
-        !insideGroupCard && line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''
-      }`}
+      className={[
+        'qli-row group relative transition-all duration-150',
+        insideGroupCard
+          // Inside a GroupCard the row stays FLAT — the card owns the chrome and
+          // the member rows are divided by hairlines. Keep the legacy left-accent
+          // for the option flags so a dimmed/optional member still reads.
+          ? `hover:bg-ink-50/40 ${line.isOptional ? 'border-l-2 border-dashed border-ink-300 bg-ink-50/30' : ''} ${line.alternativeGroup ? 'border-l-2 border-solid border-brand-300' : ''}`
+          // Top-level line → a discrete CARD. The list gap-separates them, so each
+          // product reads as its own scannable unit (the fix for rows blurring
+          // together), mirroring the Conjunto / Compuesto card language. The
+          // border encodes state: dashed+tinted = optional, brand = a loose
+          // alternative mid-edit, otherwise a quiet hairline that lifts on hover.
+          : `rounded-xl border bg-white shadow-sm hover:shadow-md ${
+              line.isOptional
+                ? 'border-dashed border-ink-300 bg-ink-50/40'
+                : line.alternativeGroup
+                  ? 'border-brand-300'
+                  : 'border-ink-200 hover:border-ink-300'
+            }`,
+      ].join(' ')}
     >
       {dimmed && (
-        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55 rounded-xl" aria-hidden />
       )}
       <TopStrip
         family={line.family}
@@ -786,6 +797,15 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
               </button>
             )}
           </div>
+          {/* Catalog Description 2 (finish/variant, e.g. "STANDARD HEADBOARD").
+              READ-ONLY product identity, parked immediately UNDER the name so it
+              reads as part of the title — the first thing the eye lands on. Kept
+              separate from the editable Descripción (below). */}
+          {!compound && line.productDescription && (
+            <p className="text-xs leading-snug text-ink-500 whitespace-pre-line break-words">
+              {line.productDescription}
+            </p>
+          )}
           {/* Extra product angles — a horizontal, responsive strip that flows
               across the width beside the cover (flex-wrap), so the thumbnails
               spread out instead of stacking in a narrow column that strands dead
@@ -807,14 +827,6 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           every component within (the components inherit this link). */}
       {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
-      {/* Second description — the model's finish/variant (catalog Description 2,
-          e.g. "STANDARD HEADBOARD"). Shown READ-ONLY here (it's product identity,
-          not the dealer's field) so the dealer sees it without opening Descripción;
-          the client preview, public link and PDF render the same productDescription.
-          The editable Descripción below is a SEPARATE field. */}
-      {!compound && line.productDescription && (
-        <p className="text-[11px] leading-snug text-ink-600 whitespace-pre-line break-words">{line.productDescription}</p>
-      )}
       {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
           inline icons — the least vertical space — each expanding its field on
           click. Shown on every line, INCLUDING compound/modular, so the dealer
