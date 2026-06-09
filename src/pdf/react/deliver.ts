@@ -82,7 +82,14 @@ export async function printBlob(blob: Blob): Promise<void> {
   try {
     iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    // Real A4-sized area, parked off-screen — NOT 0×0. Chrome refuses to
+    // instantiate its PDF viewer plugin inside a zero-area (or display:none)
+    // iframe: with no viewport to paint into it falls back to *downloading*
+    // the blob, so contentWindow.print() has nothing to capture (the "it
+    // downloads instead of printing" bug on Mac/Chrome). Giving the frame a
+    // genuine page-sized box that's pushed far off-screen lets the viewer
+    // render — invisibly — so print() finds a laid-out document.
+    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;';
     await new Promise<void>((resolve, reject) => {
       iframe!.onload = () => resolve();
       iframe!.onerror = () => reject(new Error('iframe load failed'));
@@ -90,7 +97,7 @@ export async function printBlob(blob: Blob): Promise<void> {
       document.body.appendChild(iframe!);
     });
     // Give the PDF viewer a beat to lay the document out before we print it.
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 400));
     const win = iframe.contentWindow;
     if (!win) throw new Error('no print window');
     win.focus();
