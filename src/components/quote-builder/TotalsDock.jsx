@@ -289,7 +289,7 @@ export default function TotalsDock({
             }`}
           >
             <div className="overflow-hidden min-h-0">
-              <div className="max-h-[55vh] overflow-y-auto border-b border-ink-100">
+              <div className="max-h-[55vh] overflow-y-auto overflow-x-hidden border-b border-ink-100">
                 {panel === 'breakdown' ? breakdown : null}
               </div>
             </div>
@@ -456,7 +456,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
         <select
           value={mode}
           onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
-          className={`text-xs font-medium rounded-md border px-2 py-1 cursor-pointer focus:outline-none ${
+          className={`text-xs font-medium rounded-md border px-2 py-1 cursor-pointer focus:outline-none min-w-0 max-w-[60%] truncate ${
             trade ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-ink-200 bg-white text-ink-700'
           }`}
           aria-label="Modalidad de facturación con el decorador"
