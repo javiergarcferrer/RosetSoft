@@ -344,6 +344,7 @@ export default function OrderDetail() {
                     quote={q}
                     order={order}
                     settings={settings}
+                    customer={q.customerId ? customerById.get(q.customerId) : null}
                     creator={q.createdByUserId ? profiles.find((p) => p.id === q.createdByUserId) : null}
                     total={totalByQuote.get(q.id) || 0}
                     onDetach={() => detachQuote(q.id)}
@@ -508,7 +509,7 @@ function ContainerNoHint({ validation, carrier }) {
 // before then the customer's pieces are still on a boat (or not yet
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
-function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
+function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }) {
   // Three commerce milestones live on the quote (not the order):
   //
   //   1. depositReceivedAt — the act of receiving the deposit IS what
@@ -527,6 +528,9 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
   const creatorLabel = creator
     ? (creator.name?.trim() || creator.email?.split('@')[0] || '')
     : '';
+  // Lead each row with the client so the dealer can tell whose order this is
+  // at a glance — the quote number alone doesn't identify the customer.
+  const clientLabel = customer?.name?.trim() || 'Sin cliente asignado';
 
   async function setMilestone(field, on) {
     await db.quotes.update(quote.id, {
@@ -543,15 +547,12 @@ function QuoteRow({ quote, order, settings, creator, total, onDetach }) {
           className="flex-1 min-w-0 basis-36"
         >
           <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
-            #{quote.number || '—'}
-            {creatorLabel && (
-              <span className="ml-2 text-[11px] font-normal text-ink-500">
-                · creada por {creatorLabel}
-              </span>
-            )}
+            {clientLabel}
           </div>
-          <div className="text-[11px] text-ink-500">
-            Act. {formatDateTime(quote.updatedAt)}
+          <div className="text-[11px] text-ink-500 truncate">
+            #{quote.number || '—'}
+            {creatorLabel && <> · creada por {creatorLabel}</>}
+            {' · '}Act. {formatDateTime(quote.updatedAt)}
           </div>
         </Link>
         <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
