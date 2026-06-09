@@ -648,6 +648,13 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
         />
         {/* No standalone swatch (a grid showed instead) → controls render here. */}
         {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
+        {/* Catalog Description 2 (read-only product identity) then the dealer's
+            editable Descripción — two distinct fields. */}
+        {entity.productDescription && (
+          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+            {entity.productDescription}
+          </div>
+        )}
         {entity.description && (
           <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
             {entity.description}
@@ -1418,6 +1425,14 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
             <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
               {(line.components || []).map((c, i) => renderComponentRow(c, i, hideSwatch, !hideSwatch))}
             </ul>
+          )}
+          {/* Dealer-authored Descripción for the composition as a whole — a
+              compound/modular has no single product line, so its description
+              lives on the parent and renders here (and on the PDF). */}
+          {line.description && (
+            <div className="text-[11px] text-ink-600 mt-2 max-w-xl whitespace-pre-line">
+              {line.description}
+            </div>
           )}
           {/* Compound roll-up — a neutral "Total compuesto" caption +
               bold total anchor, matching the redesigned PDF footer. The

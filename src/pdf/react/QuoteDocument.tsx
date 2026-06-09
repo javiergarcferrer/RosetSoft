@@ -218,6 +218,9 @@ function LineRow({
             )}
             {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
             <MaterialGrid cells={cells} images={images} />
+            {/* Catalog Description 2 (read-only product identity) then the
+                dealer-authored Descripción — two distinct fields. */}
+            {!compound && line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
             {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
           </View>
           <MoneyCell line={line} fmt={fmt} />

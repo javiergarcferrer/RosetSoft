@@ -209,6 +209,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         subtype: seed.subtype || '',
         dimensions: seed.dimensions || '',
         description: seed.description || '',
+        productDescription: seed.productDescription || '',
         pageRef: seed.pageRef || '',
         imageId: seed.imageId || null,
         swatchImageId: seed.swatchImageId ?? null,

@@ -771,7 +771,20 @@ export interface QuoteLine {
   name?: string;
   subtype?: string;
   dimensions?: string;
+  /**
+   * Dealer-authored description — the editable, PDF-facing "Descripción". Free
+   * for the dealer to write (on simple AND compound/modular lines); starts empty
+   * on a fresh catalog insert.
+   */
   description?: string;
+  /**
+   * The catalog's "Description 2" (the model's finish/variant, e.g. "STANDARD
+   * HEADBOARD"), parsed from the price list. A READ-ONLY secondary identifier
+   * shown under the name on every surface — kept SEPARATE from `description` so
+   * the catalog text never pollutes the dealer's editable field. Auto-filled on
+   * a catalog insert; absent on a compound parent (it has no single product).
+   */
+  productDescription?: string;
   pageRef?: string;
   imageId?: string | null;
   /**

@@ -724,9 +724,10 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
       name: seed.name,
       dimensions: seed.dimensions,
       subtype: seed.subtype,
-      // The model's second description (catalog Description 2) — carried so it
-      // shows as the line's secondary identifier everywhere.
-      description: seed.description ?? '',
+      // The model's second description (catalog Description 2) — carried as the
+      // read-only secondary identifier. The dealer's editable `description` is
+      // left untouched on a product swap, so a typed note survives.
+      productDescription: seed.productDescription ?? '',
       unitPrice: seed.unitPrice,
       unitCost: seed.unitCost ?? null,
       swatchImageId: seed.swatchImageId ?? null,
@@ -789,19 +790,20 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
       {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
       {/* Second description — the model's finish/variant (catalog Description 2,
-          e.g. "STANDARD HEADBOARD"). Shown read-only here so the dealer sees it
-          without opening the Descripción field; it's the same line.description
-          the client preview, public link and PDF render, and stays editable via
-          the Descripción icon below. */}
-      {!compound && line.description && (
-        <p className="text-[11px] leading-snug text-ink-600 whitespace-pre-line break-words">{line.description}</p>
+          e.g. "STANDARD HEADBOARD"). Shown READ-ONLY here (it's product identity,
+          not the dealer's field) so the dealer sees it without opening Descripción;
+          the client preview, public link and PDF render the same productDescription.
+          The editable Descripción below is a SEPARATE field. */}
+      {!compound && line.productDescription && (
+        <p className="text-[11px] leading-snug text-ink-600 whitespace-pre-line break-words">{line.productDescription}</p>
       )}
       {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
           inline icons — the least vertical space — each expanding its field on
-          click. A compound carries no line-level description (its components
-          do), so only the note icon shows there. */}
+          click. Shown on every line, INCLUDING compound/modular, so the dealer
+          can describe a composition as a whole (renders on the client PDF +
+          preview). */}
       <LineNotes
-        showDescription={!compound}
+        showDescription
         description={line.description || ''}
         onChangeDescription={(v) => onChange({ description: v })}
         note={line.notes || ''}
