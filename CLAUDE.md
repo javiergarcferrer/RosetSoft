@@ -108,6 +108,12 @@ ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
 - **Decisive**: find the root cause yourself (code, git history, pasted logs), act,
   then report. Ask only on a real fork the user must own. Diagnose once, act once —
   no flip-flop.
+- **"It's a cache issue" is a BANNED diagnosis**: never blame a cache / stale deploy /
+  "reinstall the PWA" for a layout or behavior bug. It's a non-answer that pushes a
+  manual step onto the user (which `main` deploys are supposed to make unnecessary)
+  and it's almost always wrong — the real cause is in the repo (CSS, shell height,
+  migration order, …). Find it in the code and fix it so the next `main` push lands
+  it with zero user action.
 - **Stay in your diff**: don't fix pre-existing bugs / dead imports / type errors in
   files your task doesn't touch — surface them, don't fold them in. (Genuinely
   blocks you? say so before touching.)
@@ -141,3 +147,13 @@ ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
 - **Big sweep → orchestrate parallel agents on DISJOINT files**: partition by file
   ownership so they can't collide; the orchestrator owns the shared barrels and runs
   the SINGLE final typecheck + targeted tests + build; agents don't commit/push/build.
+- **iOS PWA "dead strip at the bottom" = shell height, NOT cache**: the app shell is
+  pinned full-viewport in `src/index.css` (`html,body,#root`). In an installed iOS
+  PWA, `100dvh` resolves ONE home-indicator inset SHORT of the window, so the shell
+  ends above the physical edge and the manifest background leaks as a grey band on
+  EVERY page. Fix is shell-level: `html.is-standalone {…} { height: 100vh }` (no
+  dynamic chrome in standalone → `100vh` = full window, no `dvh` rounding), gated on
+  the reliable `is-standalone` class `main.jsx` sets from `navigator.standalone`
+  (never the flaky `@media (display-mode: standalone)`). Do NOT band-aid it per-page
+  with white "aprons" under fixed bars (`TotalsDock`) — that only masks the symptom
+  where that bar renders and leaves every other page bare. Fix the shell once.
