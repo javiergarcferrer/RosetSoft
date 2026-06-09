@@ -54,6 +54,12 @@ export function saleEcfType(hasFiscalId: boolean): string {
   return hasFiscalId ? '31' : '32';
 }
 
+/** A well-formed DR fiscal id: RNC (9 digits) or cédula (11 digits). */
+export function isValidFiscalId(id: string | null | undefined): boolean {
+  const digits = String(id || '').replace(/\D/g, '');
+  return digits.length === 9 || digits.length === 11;
+}
+
 export interface SequenceState {
   active: boolean;
   expired: boolean;

@@ -51,11 +51,13 @@ export function prorateCif<T extends { fob?: number | null }>(
   seguro: number = 0,
 ): Array<T & { cif: number }> {
   const list = lines || [];
-  const extras = round2((Number(flete) || 0) + (Number(seguro) || 0));
-  const totalFob = round2(list.reduce((s, l) => s + (Number(l.fob) || 0), 0));
+  // Money inputs are clamped at 0 — a negative FOB/flete/seguro (DevTools or a
+  // bad import) would poison every other line's prorated share.
+  const extras = round2(Math.max(0, Number(flete) || 0) + Math.max(0, Number(seguro) || 0));
+  const totalFob = round2(list.reduce((s, l) => s + Math.max(0, Number(l.fob) || 0), 0));
   let assigned = 0;
   return list.map((l, i) => {
-    const fob = round2(Number(l.fob) || 0);
+    const fob = round2(Math.max(0, Number(l.fob) || 0));
     let share = totalFob > 0 ? round2((extras * fob) / totalFob) : 0;
     if (i === list.length - 1) share = round2(extras - assigned); // drift → last
     assigned = round2(assigned + share);
@@ -118,8 +120,8 @@ export function resolveExpediente(
       (f.lines || []).map((l) => ({
         embarqueId: emb.id, bl: emb.bl || '', facturaId: f.id, supplierId: f.supplierId || null,
         id: l.id, itemId: l.itemId || null, name: l.name || '', reference: l.reference || '',
-        qty: round2(Number(l.qty) || 0), fob: round2(Number(l.fob ?? l.cifValue) || 0),
-        selectivo: round2(Number(l.selectivo) || 0),
+        qty: round2(Math.max(0, Number(l.qty) || 0)), fob: round2(Math.max(0, Number(l.fob ?? l.cifValue) || 0)),
+        selectivo: round2(Math.max(0, Number(l.selectivo) || 0)),
       })),
     );
     for (const l of prorateCif(flat, emb.flete, emb.seguro)) {
@@ -174,8 +176,10 @@ export function expedienteCostTotals(costs: readonly ImportCost[] | null | undef
   let itbis = 0;
   let net = 0;
   for (const c of costs || []) {
-    const a = round2(c?.amount || 0);
-    const t = round2(c?.itbis || 0);
+    // Clamp: no negative costs, and a cost's ITBIS can never exceed its amount
+    // (else the capitalized net would go negative and unbalance the asiento).
+    const a = round2(Math.max(0, Number(c?.amount) || 0));
+    const t = Math.min(round2(Math.max(0, Number(c?.itbis) || 0)), a);
     gross = round2(gross + a);
     itbis = round2(itbis + t);
     net = round2(net + round2(a - t));

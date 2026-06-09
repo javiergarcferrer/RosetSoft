@@ -78,9 +78,12 @@ verify_jwt = false
 
 # ecf-send signs an e-CF and transmits it to the DGII (dgii-ecf). It reads the
 # team's .p12 from the write-only ecf_credentials table via the service role.
-# verify_jwt stays TRUE (default) — only a signed-in team member may issue.
+# It verifies the caller ITSELF (auth.getUser on the Authorization header —
+# rejecting the anon key, which a gateway verify_jwt=true would happily pass,
+# since the anon key is a valid JWT). Gateway check off for the same reason as
+# invite-user: the browser's CORS preflight carries no Authorization header.
 [functions.ecf-send]
-verify_jwt = true
+verify_jwt = false
 
 # shopify-sync mirrors in-stock inventory into the Shopify catalog. Called by a
 # signed-in team member (after a liquidation lands stock, a sale empties it, or a
