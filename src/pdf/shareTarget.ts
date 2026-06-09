@@ -38,26 +38,3 @@ export function shouldUseWebShare(): boolean {
   const isTouchPrimary = mq('(pointer: coarse)') && mq('(hover: none)');
   return !!(isStandalonePwa || isTouchPrimary);
 }
-
-/**
- * Can this browser print a generated PDF by loading the blob into a hidden
- * iframe and calling `iframe.contentWindow.print()`?
- *
- * Chrome / Edge / Firefox render a `blob:` PDF inside an iframe and print it
- * fine. Safari/WebKit instead treats the iframe's blob PDF as a *download* —
- * so the "Imprimir" button silently saves the file instead of printing. On
- * that engine the caller must open a real tab (Safari's viewer renders the
- * PDF inline) and print from there. Returns false on Safari/WebKit.
- *
- * Lives here (no pdf-lib import) so the export gesture can branch synchronously
- * — opening the print tab *inside* the click, before the heavy PDF chunk loads,
- * so the popup blocker allows it.
- */
-export function canPrintPdfInIframe(): boolean {
-  if (typeof navigator === 'undefined') return true;
-  const ua = navigator.userAgent;
-  const isSafari =
-    /^((?!chrome|chromium|crios|android|fxios|edg).)*safari/i.test(ua) ||
-    /\b(iPad|iPhone|iPod)\b/.test(ua);
-  return !isSafari;
-}

@@ -365,15 +365,16 @@ export default function TotalsDock({
                   stamped a redundant pair on mobile. The dock keeps only the
                   cross-cutting actions: Share / Print / Export. */}
 
-              {/* Share an interactive client link — pinned at every width. */}
+              {/* Send the quote PDF straight to the share sheet (Mail / WhatsApp /
+                  Messages) — never a download. Pinned at every width. */}
               <DockAction
                 icon={Share2}
                 label="Compartir"
                 onClick={onShare}
-                disabled={sharing}
+                disabled={sharing || exporting || printing}
                 busy={sharing}
-                ariaLabel="Compartir enlace para el cliente"
-                title="Copiar un enlace interactivo para el cliente"
+                ariaLabel="Compartir la cotización"
+                title="Enviar el PDF directamente (Correo, WhatsApp…) sin descargar"
               />
 
               {/* Print the PDF straight to the printer (no download). */}
@@ -381,7 +382,7 @@ export default function TotalsDock({
                 icon={Printer}
                 label="Imprimir"
                 onClick={onPrint}
-                disabled={exporting || printing}
+                disabled={exporting || printing || sharing}
                 busy={printing}
                 ariaLabel="Imprimir PDF"
                 title="Imprimir directamente (sin descargar)"
@@ -393,7 +394,7 @@ export default function TotalsDock({
                 icon={Download}
                 label="Exportar"
                 onClick={onExport}
-                disabled={exporting || printing}
+                disabled={exporting || printing || sharing}
                 busy={exporting}
                 primary
                 ariaLabel="Exportar PDF"

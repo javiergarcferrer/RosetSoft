@@ -59,34 +59,64 @@ export function useQuoteExport({
     }
   }, [exportError]);
 
-  // Mint (once) + copy a public interactive link for the client. The token is
-  // generated on first share and persisted on the quote; `shareEnabled` lets a
-  // later revoke flip it off without losing the URL.
+  // Send the quote DIRECTLY — never via the downloads tray. Builds the same PDF
+  // the dealer would export and hands the actual File to the OS share sheet
+  // (`navigator.share({files})`), so it goes straight to Mail / WhatsApp /
+  // Messages / AirDrop. `canShare({files})` is the capability probe: it's true on
+  // Safari (incl. macOS) and mobile; where it's false — notably desktop Chrome,
+  // which can't share files — we fall back to copying the live interactive
+  // client link (`shareClientLink`) so Share still does something useful.
   async function shareQuote() {
-    if (sharing) return;
+    if (sharing || exporting || printing) return;
     setSharing(true);
+    setExportError(null);
     try {
-      let token = quote.shareToken;
-      if (!token || !quote.shareEnabled) {
-        token = token || newShareToken();
-        await updateQuote({ shareToken: token, shareEnabled: true });
+      const { blob, filename } = await generatePdf();
+      // Attach the real PDF file to the native share sheet when supported. The
+      // gesture survives the async build (Web Share's transient-activation
+      // window outlasts a render), the same way the iOS download path shares.
+      if (typeof File !== 'undefined' && navigator.canShare) {
+        const file = new File([blob], filename, { type: blob.type || 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: filename });
+            return;
+          } catch (err) {
+            if (err && err.name === 'AbortError') return; // user dismissed the sheet
+            // Anything else (e.g. gesture lost) → fall through to the link copy.
+            console.warn('[QuoteBuilder] share with file fell through:', err);
+          }
+        }
       }
-      // Slug the SAME "client - Cotizacion N" label the PDF uses into the URL,
-      // so the link the dealer copies reads like the file it matches.
-      const customer = quote.customerId
-        ? customers.find((c) => c.id === quote.customerId)
-        : null;
-      const url = shareLinkUrl(token, quoteSlug(quote, customer));
-      try {
-        await navigator.clipboard.writeText(url);
-        setShareMsg(`Enlace copiado · ${url}`);
-      } catch {
-        setShareMsg(url);
-      }
-    } catch {
-      setShareMsg('No se pudo crear el enlace para compartir.');
+      await shareClientLink();
+    } catch (err) {
+      console.error('[QuoteBuilder] shareQuote failed:', err);
+      setExportError(err?.message || 'No se pudo compartir la cotización.');
     } finally {
       setSharing(false);
+    }
+  }
+
+  // Fallback share: mint (once) + copy a public interactive link for the client.
+  // The token is generated on first share and persisted on the quote;
+  // `shareEnabled` lets a later revoke flip it off without losing the URL.
+  async function shareClientLink() {
+    let token = quote.shareToken;
+    if (!token || !quote.shareEnabled) {
+      token = token || newShareToken();
+      await updateQuote({ shareToken: token, shareEnabled: true });
+    }
+    // Slug the SAME "client - Cotizacion N" label the PDF uses into the URL, so
+    // the link the dealer copies reads like the file it matches.
+    const customer = quote.customerId
+      ? customers.find((c) => c.id === quote.customerId)
+      : null;
+    const url = shareLinkUrl(token, quoteSlug(quote, customer));
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareMsg(`Enlace copiado · ${url}`);
+    } catch {
+      setShareMsg(url);
     }
   }
 
@@ -119,7 +149,7 @@ export function useQuoteExport({
   }
 
   async function exportPdf() {
-    if (exporting || printing) return;   // de-bounce double-taps / concurrent gen
+    if (exporting || printing || sharing) return;   // de-bounce double-taps / concurrent gen
     setExportError(null);
     setExporting(true);
     try {
@@ -137,17 +167,16 @@ export function useQuoteExport({
   }
 
   // Print directly — generate the same PDF and hand it to the browser's print
-  // dialog instead of the downloads tray. Chrome/Edge/Firefox print a blob PDF
-  // from a hidden iframe (printBlob); Safari/WebKit downloads that iframe blob
-  // instead, so there we open a real tab *synchronously inside this click*
-  // (before the async generation, so the popup blocker allows it) and print the
-  // PDF from Safari's inline viewer (printInWindow).
+  // dialog instead of the downloads tray. Every engine prints from a real
+  // top-level tab where a blob: PDF renders inline (a hidden iframe instead
+  // *downloads* on Chrome and Safari — the bug this avoids). The tab is opened
+  // synchronously inside this click (before the async generation, so the popup
+  // blocker allows it); generatePdf's `mod` provides printInWindow.
   async function printPdf() {
-    if (exporting || printing) return;
+    if (exporting || printing || sharing) return;
     setExportError(null);
-    // Open the print target inside the click gesture (Safari needs a real tab;
-    // it downloads a blob PDF from a hidden iframe). openPrintSession handles
-    // the engine split; generatePdf's `mod` provides printBlob/printInWindow.
+    // Open the print tab inside the click gesture so the popup blocker treats
+    // it as user-initiated; we point it at the finished PDF in session.run.
     const session = openPrintSession('Generando PDF…');
     if (session.blocked) {
       setExportError('Permite las ventanas emergentes para imprimir, o usa “Exportar PDF”.');

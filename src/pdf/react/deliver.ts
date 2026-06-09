@@ -60,65 +60,13 @@ export async function downloadBlob(blob: Blob, filename: string): Promise<void> 
 }
 
 /**
- * Send the generated PDF straight to the printer — for the dealer who wants
- * paper, not a file in the downloads tray. Loads the blob in an off-screen,
- * same-origin iframe (a blob: URL inherits our origin, so we can reach its
- * window) and invokes the browser's own print dialog on it. If the frame can't
- * be printed (some browsers block print() on a PDF frame), falls back to opening
- * the PDF in a tab where the viewer's print button is one click away. The iframe
- * + blob URL are held ~60 s so the spooled job finishes before teardown.
- */
-export async function printBlob(blob: Blob): Promise<void> {
-  if (!blob || !blob.size) {
-    throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
-  }
-  const url = URL.createObjectURL(blob);
-  let iframe: HTMLIFrameElement | null = null;
-  const teardown = () => setTimeout(() => {
-    try { if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch { /* gone already */ }
-    URL.revokeObjectURL(url);
-  }, 60_000);
-
-  try {
-    iframe = document.createElement('iframe');
-    iframe.setAttribute('aria-hidden', 'true');
-    // Real A4-sized area, parked off-screen — NOT 0×0. Chrome refuses to
-    // instantiate its PDF viewer plugin inside a zero-area (or display:none)
-    // iframe: with no viewport to paint into it falls back to *downloading*
-    // the blob, so contentWindow.print() has nothing to capture (the "it
-    // downloads instead of printing" bug on Mac/Chrome). Giving the frame a
-    // genuine page-sized box that's pushed far off-screen lets the viewer
-    // render — invisibly — so print() finds a laid-out document.
-    iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;';
-    await new Promise<void>((resolve, reject) => {
-      iframe!.onload = () => resolve();
-      iframe!.onerror = () => reject(new Error('iframe load failed'));
-      iframe!.src = url;
-      document.body.appendChild(iframe!);
-    });
-    // Give the PDF viewer a beat to lay the document out before we print it.
-    await new Promise((r) => setTimeout(r, 400));
-    const win = iframe.contentWindow;
-    if (!win) throw new Error('no print window');
-    win.focus();
-    win.print();
-    teardown();
-  } catch (err) {
-    console.warn('[quotePdf] iframe print fell through, opening in a tab:', err);
-    teardown();
-    // Async generation can outlive the click gesture, so window.open may be
-    // blocked — last resort is navigating the current tab to the PDF viewer.
-    const opened = window.open(url, '_blank', 'noopener');
-    if (!opened) window.location.href = url;
-  }
-}
-
-/**
- * Print into a tab the caller already opened *inside the click gesture*. This
- * is the Safari/WebKit path: Safari downloads a blob PDF loaded into a hidden
- * iframe (see printBlob), so instead we point a real tab at the PDF — Safari's
- * built-in viewer renders it inline — and best-effort fire its print dialog.
- * The user can also just press Cmd+P; either way the file is never downloaded.
+ * Print into a tab the caller already opened *inside the click gesture* — the
+ * single, universal print path (see printSession.js). We point a real top-level
+ * tab at the blob PDF: every modern engine (Chrome, Safari, Firefox, Edge)
+ * renders a blob: PDF inline in its built-in viewer there — unlike a hidden
+ * iframe, which Chrome turns into a download and Safari refuses to print — so
+ * print() has a laid-out document to capture and the file is never downloaded.
+ * The user can also just press Cmd+P.
  *
  * The window must be opened synchronously by the caller (before the async PDF
  * generation) so the popup blocker treats it as user-initiated. The blob URL is
