@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, FileText, Loader2, Check, Download, Search, Send, Printer } from 'lucide-react';
+import { Shield, FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, assignSequenceNumber } from '../../db/database.js';
+import { db, newId, invalidate } from '../../db/database.js';
+import { toRow } from '../../db/rowMapping.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -15,7 +16,8 @@ import { openPrintSession } from '../../pdf/printSession.js';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
-  resolveAccountingConfig, buildEcfPayload, saleEcfType, ecfQrUrl, formatEcfDate,
+  resolveAccountingConfig, buildEcfPayload, saleEcfType, isValidFiscalId,
+  ecfQrUrl, formatEcfDate,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -81,6 +83,7 @@ export default function Facturacion() {
   const postedQuoteIds = useMemo(() => new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
   const [transmitting, setTransmitting] = useState(null);
+  const [checking, setChecking] = useState(null);
   const [printing, setPrinting] = useState(null);
 
   async function printInvoice(rowId) {
@@ -101,7 +104,8 @@ export default function Facturacion() {
       const qrUrl = (isEcf && p.securityCode) ? ecfQrUrl({
         environment: settings?.ecfEnvironment || 'cert', ecfType: p.ecfType || '31',
         rncEmisor: cleanRnc(settings?.companyRnc), rncComprador: p.rnc, eNcf: p.ncf,
-        total: p.total, fechaEmision: formatEcfDate(p.postedAt), securityCode: p.securityCode,
+        total: p.total, fechaEmision: formatEcfDate(p.postedAt),
+        fechaFirma: p.fechaFirma || '', securityCode: p.securityCode,
       }) : '';
       const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
       const blob = await mod.generateInvoicePdf({
@@ -134,6 +138,7 @@ export default function Facturacion() {
       const payload = buildEcfPayload({
         ecfType: p.ecfType || saleEcfType(!!p.rnc),
         eNcf: p.ncf,
+        sequenceExpiresAt: p.ecfExpiresAt || null,
         emisor: {
           rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
           address: settings?.companyAddress || '',
@@ -142,18 +147,50 @@ export default function Facturacion() {
         items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
         gravado: p.base, itbis: p.itbis, total: p.total,
         itbisRate: config.itbisRate, fechaEmision: p.postedAt,
+        // Contado if the deposit covered the sale; crédito if a balance remains.
+        tipoPago: (p.depositApplied || 0) >= p.total ? 1 : 2,
       });
       const { data, error } = await supabase.functions.invoke('ecf-send', {
         body: { payload, eNcf: p.ncf, profileId: scope },
       });
       if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error transmitiendo el e-CF.');
       await db.salesPostings.update(p.id, {
-        trackId: data.trackId || '', securityCode: data.securityCode || '', ecfStatus: data.status || 'sent',
+        trackId: data.trackId || '', securityCode: data.securityCode || '',
+        fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
       });
     } catch (e) {
       setErr(e?.message || 'Error transmitiendo el e-CF.');
     } finally {
       setTransmitting(null);
+    }
+  }
+
+  // Ask the DGII what became of a transmitted e-CF (trackId → estado). The
+  // send is async on their side: 'sent' only means received, not accepted.
+  async function checkStatus(rowId) {
+    const p = postingById.get(rowId);
+    if (!p?.trackId) return;
+    setErr('');
+    setChecking(rowId);
+    try {
+      const { data, error } = await supabase.functions.invoke('ecf-send', {
+        body: { op: 'status', trackId: p.trackId, profileId: scope },
+      });
+      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error consultando el estado.');
+      const estado = String(data.estado || '');
+      const norm = estado.toLowerCase();
+      if (norm.includes('acept')) {
+        await db.salesPostings.update(p.id, { ecfStatus: 'accepted' });
+      } else if (norm.includes('rechaz')) {
+        await db.salesPostings.update(p.id, { ecfStatus: 'rejected' });
+        setErr(`DGII rechazó ${p.ncf}: ${estado}`);
+      } else {
+        setErr(`DGII — ${p.ncf}: ${estado || 'en proceso'}`);
+      }
+    } catch (e) {
+      setErr(e?.message || 'Error consultando el estado.');
+    } finally {
+      setChecking(null);
     }
   }
 
@@ -189,7 +226,7 @@ export default function Facturacion() {
     purchases: purchasesQ.data, imports: importsQ.data, ...win,
   }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, win]);
 
-  const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, ncfType, rnc, msg }
+  const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, rnc, msg }
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
@@ -225,44 +262,55 @@ export default function Facturacion() {
     setErr('');
     const draft = drafts[quote.id] || {};
     const book = bookFor(quote);
+    // Validate EVERYTHING before assigning the e-NCF — a failure past that
+    // point burns a sequence number (a gap: fiscally fine, but avoidable).
     if (!book.rate) { setErr('La cotización no tiene tasa USD→DOP fijada.'); return; }
+    if (book.total <= 0) { setErr('La venta no tiene monto a facturar.'); return; }
+    const customer = quote.customerId ? customersById.get(quote.customerId) : null;
+    const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
+    if (rnc && !isValidFiscalId(rnc)) {
+      setErr('RNC/cédula inválido: debe tener 9 dígitos (RNC) u 11 (cédula).');
+      return;
+    }
     setPosting(quote.id);
     try {
       const id = newId();
       const postedAt = invoiceReadyAt(quote);
-      const customer = quote.customerId ? customersById.get(quote.customerId) : null;
-      const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
       // e-CF: 31 (crédito fiscal) when the buyer has a fiscal id, else 32
-      // (consumo). Auto-assign the next e-NCF from the active sequence; if none
-      // is configured, fall back to the manually-typed NCF.
+      // (consumo). The e-NCF comes from the atomic assign_next_encf RPC; if no
+      // sequence is configured, a manually-typed NCF is the explicit fallback.
       const ecfType = saleEcfType(!!rnc);
       const assigned = await assignNextENcf(scope, ecfType);
-      const ncf = assigned ? assigned.eNcf : (draft.ncf || '');
-      const ecfStatus = assigned ? 'pending' : '';
+      const manualNcf = (draft.ncf || '').trim();
+      if (!assigned && !manualNcf) {
+        setErr(`No hay secuencia e-CF activa para el tipo ${ecfType}. Autoriza una en Secuencias e-CF, o escribe el NCF manualmente.`);
+        return;
+      }
+      const ncf = assigned ? assigned.eNcf : manualNcf;
       const built = buildSaleEntry({
         newId, config, postedAt,
         sale: {
           id, quoteId: quote.id, customerId: quote.customerId,
           base: book.base, itbis: book.itbis, deposit: book.deposit,
-          ncf: ncf || null, memo: `Venta #${quote.number ?? ''}`.trim(),
+          ncf, memo: `Venta #${quote.number ?? ''}`.trim(),
         },
       });
-      await assignSequenceNumber({
-        table: 'journalEntries', profileId: scope, start: 1,
-        build: (n) => ({ ...built.entry, number: n }),
-      });
-      await db.journalLines.bulkPut(built.lines);
-      await assignSequenceNumber({
-        table: 'salesPostings', profileId: scope, start: 1,
-        build: (n) => ({
-          id, profileId: scope, number: n, quoteId: quote.id, customerId: quote.customerId,
-          postedAt, ncf, ncfType: draft.ncfType || '', rnc,
-          ecfType, ecfStatus,
+      // One transaction: asiento + lines + posting land together (numbers
+      // assigned server-side) or not at all — no half-posted sale to re-book.
+      const { error } = await supabase.rpc('post_sale', {
+        p_entry: toRow(built.entry),
+        p_lines: built.lines.map(toRow),
+        p_posting: toRow({
+          id, profileId: scope, quoteId: quote.id, customerId: quote.customerId,
+          postedAt, ncf, rnc, ecfType,
+          ecfStatus: assigned ? 'pending' : '',
+          ecfExpiresAt: assigned?.expiresAt ?? null,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
-          journalEntryId: built.entry.id,
         }),
       });
+      if (error) throw new Error(error.message || 'No se pudo registrar la venta.');
+      invalidate();
       // Persist the RNC back onto the customer so it's reused next time.
       if (customer && rnc && rnc !== cleanRnc(customer.rnc)) {
         await db.customers.update(customer.id, { rnc });
@@ -389,8 +437,19 @@ export default function Facturacion() {
                         <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
                         <td className="py-1.5 px-3">
                           <div className="flex items-center gap-3">
-                            {status === 'sent' || status === 'accepted' ? (
-                              <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
+                            {status === 'accepted' ? (
+                              <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
+                            ) : status === 'sent' ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
+                                {p?.trackId && (
+                                  <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
+                                    title="Consultar estado en la DGII"
+                                    className="text-ink-400 hover:text-ink-900 disabled:opacity-40 min-h-[44px] min-w-[24px] flex items-center justify-center">
+                                    {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                                  </button>
+                                )}
+                              </span>
                             ) : status === 'rejected' ? (
                               <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
                             ) : !isEcf ? (

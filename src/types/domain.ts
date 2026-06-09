@@ -283,8 +283,12 @@ export interface SalePosting {
   /* e-CF (comprobante fiscal electrónico) lifecycle. */
   ecfType?: string;
   ecfStatus?: string;
+  /** FechaVencimientoSecuencia of the range the e-NCF came from. */
+  ecfExpiresAt?: number | null;
   trackId?: string;
   securityCode?: string;
+  /** Signature date (dd-mm-yyyy HH:mm:ss) — goes into the consulta-timbre QR. */
+  fechaFirma?: string;
   journalEntryId?: string | null;
   createdAt?: number;
   updatedAt?: number;

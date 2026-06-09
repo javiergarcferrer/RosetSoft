@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
+  padSeq, formatENcf, parseENcf, saleEcfType, isValidFiscalId, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -29,6 +29,14 @@ test('parseENcf round-trips', () => {
 test('saleEcfType: 31 with a fiscal id, 32 without', () => {
   assert.equal(saleEcfType(true), '31');
   assert.equal(saleEcfType(false), '32');
+});
+
+test('isValidFiscalId: 9-digit RNC or 11-digit cédula, formatting ignored', () => {
+  assert.equal(isValidFiscalId('131996035'), true);        // RNC
+  assert.equal(isValidFiscalId('001-1234567-8'), true);    // cédula with dashes
+  assert.equal(isValidFiscalId('12345'), false);
+  assert.equal(isValidFiscalId(''), false);
+  assert.equal(isValidFiscalId(null), false);
 });
 
 test('ecfTypeLabel resolves known types', () => {
@@ -109,4 +117,25 @@ test('buildEcfPayload (32 consumidor final) omits Comprador', () => {
   }).ECF;
   assert.equal(p.Encabezado.Comprador, undefined);
   assert.equal(p.Encabezado.Totales.MontoTotal, 5900);
+});
+
+test('buildEcfPayload (31) THROWS without the buyer RNC — fail at build, not at the DGII', () => {
+  assert.throws(() => buildEcfPayload({
+    ecfType: '31', eNcf: 'E310000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: null,
+    items: [{ name: 'Sofá', qty: 1, unitPrice: 10000, amount: 10000 }],
+    gravado: 10000, itbis: 1800, total: 11800,
+  }), /RNC/);
+});
+
+test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito', () => {
+  const base = {
+    ecfType: '32', eNcf: 'E320000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    items: [{ name: 'Mesa', qty: 1, unitPrice: 5000, amount: 5000 }],
+    gravado: 5000, itbis: 900, total: 5900,
+  };
+  assert.equal(buildEcfPayload(base).ECF.Encabezado.IdDoc.TipoPago, 1);
+  assert.equal(buildEcfPayload({ ...base, tipoPago: 2 }).ECF.Encabezado.IdDoc.TipoPago, 2);
 });

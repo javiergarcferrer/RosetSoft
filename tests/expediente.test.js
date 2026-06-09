@@ -168,3 +168,32 @@ test('empty cost sheet: landed = CIF + duty, asiento still balances', () => {
   const { lines } = buildExpedienteEntry({ newId: () => `x${i++}`, config, expediente: { ...emb(), costs: [] }, postedAt: 0 });
   assert.ok(isBalanced(lines));
 });
+
+test('hostile inputs clamp: negative FOB/qty/costs never unbalance the asiento', () => {
+  const hostile = {
+    ...emb(),
+    embarques: [
+      { id: 'e1', bl: 'BL1', flete: -100, seguro: 0, facturas: [
+        { id: 'f1', supplierId: 'roset', lines: [
+          { id: 'a', itemId: 'iA', name: 'Sofá', qty: 2, fob: 6000 },
+          { id: 'b', itemId: 'iB', name: 'Mesa', qty: -1, fob: -4000 }, // DevTools-tampered
+        ] },
+      ] },
+    ],
+    costs: [
+      { id: 'c1', concept: 'puerto', amount: -500, itbis: 0, paymentMethod: 'bank' },
+      { id: 'c2', concept: 'transporte', amount: 590, itbis: 900, paymentMethod: 'cash' }, // itbis > amount
+    ],
+  };
+  const r = resolveExpediente(hostile, config);
+  for (const l of r.lines) {
+    assert.ok(l.cif >= 0 && l.landedTotal >= 0 && l.landedUnitCost >= 0);
+  }
+  const t = expedienteCostTotals(hostile.costs);
+  assert.equal(t.gross, 590);          // negative cost dropped
+  assert.equal(t.itbis, 590);          // itbis capped at the amount
+  assert.equal(t.net, 0);              // never negative
+  let i = 0;
+  const { lines } = buildExpedienteEntry({ newId: () => `x${i++}`, config, expediente: hostile, postedAt: 0 });
+  assert.ok(isBalanced(lines));
+});

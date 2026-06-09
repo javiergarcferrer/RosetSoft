@@ -44,10 +44,16 @@ export interface EcfPayloadInput {
 
 /**
  * Build the nested e-CF object. Type 31 carries the Comprador block (buyer's
- * RNC + razón social); type 32 (consumo) omits it unless a name is known.
+ * RNC + razón social) and REQUIRES the buyer's fiscal id — throws without it,
+ * so a bad 31 fails at build time, not as a DGII rejection after the e-NCF was
+ * burned. Type 32 (consumo) omits the block unless a buyer is known.
  */
 export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown> {
   const rate = input.itbisRate ?? 18;
+  const buyerRnc = input.comprador?.rnc?.replace(/\D/g, '') || '';
+  if (input.ecfType === '31' && !buyerRnc) {
+    throw new Error('La factura de crédito fiscal (tipo 31) requiere el RNC/cédula del comprador.');
+  }
   const encab: Record<string, unknown> = {
     Version: '1.0',
     IdDoc: {
@@ -74,8 +80,8 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
     },
   };
 
-  // Comprador: required for 31; included for 32 only if we have a buyer.
-  const buyerRnc = input.comprador?.rnc?.replace(/\D/g, '') || '';
+  // Comprador: required for 31 (validated above); included for 32 only if we
+  // have a buyer.
   if (input.ecfType === '31' || buyerRnc) {
     encab.Comprador = {
       ...(buyerRnc ? { RNCComprador: buyerRnc } : {}),
