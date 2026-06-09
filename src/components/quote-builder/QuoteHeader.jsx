@@ -70,37 +70,39 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      {/* ROW 1 — back · identity (#number + save status) · undo/redo + view
-          toggle. Compact so it holds a single line on a normal phone; the action
-          cluster wraps beneath the number only on the very narrowest widths.
-          Folds the old separate breadcrumb row into this one. */}
+      {/* ROW 1 — back · identity (#number + save) · undo/redo + view toggle, all
+          on ONE line: the eyebrow + number sit inline (not stacked), the view
+          toggle is icon-only on a phone, so the cluster never wraps onto a
+          second line. */}
       <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <Link to="/quotes" className="back-link mb-0 px-2" title="Volver a cotizaciones">
             <ArrowLeft size={14} />
             <span className="hidden sm:inline">Volver</span>
           </Link>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest">Cotización</span>
-              <SaveIndicator savedAt={savedAt} saving={saving} />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-none text-ink-900">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest hidden sm:inline">Cotización</span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
+            <SaveIndicator savedAt={savedAt} saving={saving} />
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
           <ViewToggle view={view} onChange={onViewChange} />
         </div>
       </div>
 
-      {/* ROW 2 — the "who": customer + professional, plus the order pill, the
-          admin seller picker and the creator credit. One wrapping flex group so
-          pills reflow without ever splitting. Folds the old breadcrumb + meta
-          rows together to keep the whole header to two rows. */}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Datos de la cotización">
+      {/* ROW 2 — the "who": customer + professional + order + seller. A single
+          horizontally-scrollable strip on a phone (so it never stacks into
+          extra rows — the whole header stays TWO rows), wrapping normally on
+          sm+. */}
+      <div
+        className="mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto sm:overflow-visible sm:flex-wrap [&>*]:shrink-0 sm:[&>*]:shrink [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="group"
+        aria-label="Datos de la cotización"
+      >
         <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
         <WhatsAppChip customer={customer} />
         <ProfessionalChip
@@ -213,27 +215,27 @@ function ViewToggle({ view, onChange }) {
         type="button"
         onClick={() => onChange('compose')}
         aria-pressed={view === 'compose'}
-        className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
+        className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
           view === 'compose'
             ? 'bg-ink-900 text-white shadow-sm'
             : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
         }`}
         title="Vista de edición"
       >
-        <Pencil size={12} /> Edición
+        <Pencil size={12} /> <span className="hidden sm:inline">Edición</span>
       </button>
       <button
         type="button"
         onClick={() => onChange('client')}
         aria-pressed={view === 'client'}
-        className={`px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
+        className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
           view === 'client'
             ? 'bg-brand-grad text-white shadow-glow'
             : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
         }`}
         title="Vista del cliente"
       >
-        <Eye size={12} /> Cliente
+        <Eye size={12} /> <span className="hidden sm:inline">Cliente</span>
       </button>
     </div>
   );

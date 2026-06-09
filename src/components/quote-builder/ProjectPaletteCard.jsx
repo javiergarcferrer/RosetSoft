@@ -23,28 +23,25 @@ export default function ProjectPaletteCard() {
   const groups = groupPaletteByMaterial(list);
 
   return (
-    <div className="card card-pad">
+    <div className="card p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Palette size={16} className="text-ink-500" aria-hidden />
-          <h3 className="text-sm font-semibold text-ink-800">Paleta del proyecto</h3>
+        <div className="flex items-center gap-2 min-w-0">
+          <Palette size={15} className="text-ink-500 flex-shrink-0" aria-hidden />
+          <h3 className="text-sm font-semibold text-ink-800 truncate">Paleta del proyecto</h3>
         </div>
         {onAdd && (
-          <button type="button" onClick={() => setAddOpen(true)} className="btn-ghost text-xs">
+          <button type="button" onClick={() => setAddOpen(true)} className="btn-ghost text-xs flex-shrink-0">
             <Plus size={14} /> Agregar material
           </button>
         )}
       </div>
-      <p className="mt-1 text-xs text-ink-500">
-        Fija las telas de este proyecto para aplicarlas con un toque desde cualquier componente.
-      </p>
 
       {list.length === 0 ? (
-        <div className="mt-3 rounded-lg border border-dashed border-ink-200 px-4 py-5 text-center text-xs text-ink-500">
-          Aún no hay telas en la paleta. Agrega las que usarás en este proyecto.
-        </div>
+        <p className="mt-2 text-[11px] text-ink-500">
+          Fija las telas del proyecto para aplicarlas con un toque desde cualquier componente.
+        </p>
       ) : (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-1">
           {groups.map((g) => (
             // Label INLINE with its chips (same wrapping row) so a single-colour
             // group takes one line, not two — the previous header-above-chips
@@ -61,7 +58,7 @@ export default function ProjectPaletteCard() {
                   <ImageView
                     id={m.swatchImageId || null}
                     fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
-                    className="h-6 w-6 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
+                    className="h-5 w-5 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
                     hoverPreview
                   />
                   <span className="text-[11px] text-ink-700 truncate min-w-0">

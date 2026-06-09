@@ -19,9 +19,9 @@ export default function ProjectPalettePicks({ palette, onApply }) {
   const groups = groupPaletteByMaterial(palette);
   if (!groups.length) return null;
   return (
-    <div className="mb-3 border-b border-ink-100 pb-3">
-      <div className="eyebrow-xs tracking-widest text-ink-500 mb-2">Paleta del proyecto</div>
-      <div className="space-y-1.5">
+    <div className="mb-2.5 border-b border-ink-100 pb-2.5">
+      <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Paleta del proyecto</div>
+      <div className="space-y-1">
         {groups.map((g) => (
           // Label INLINE with its chips (same wrapping row) so a single-colour
           // group is one line, not two — keeps the palette compact in the sheet.
@@ -34,13 +34,13 @@ export default function ProjectPalettePicks({ palette, onApply }) {
                 key={m.id}
                 type="button"
                 onClick={() => onApply({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null })}
-                className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-white py-0.5 pl-0.5 pr-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 max-w-full min-w-0"
+                className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white py-0.5 pl-0.5 pr-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 max-w-full min-w-0"
                 title="Aplicar esta tela"
               >
                 <ImageView
                   id={m.swatchImageId || null}
                   fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
-                  className="h-7 w-7 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
+                  className="h-5 w-5 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
                 />
                 <span className="text-[11px] text-ink-700 truncate min-w-0">
                   {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
