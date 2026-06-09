@@ -315,3 +315,24 @@ export function skuFillPatch(
     priceMax: null,
   };
 }
+
+/**
+ * The catalog's "Description 2" (the model's finish/variant text, e.g. "STANDARD
+ * HEADBOARD") for a SKU, pulled live from the price-list families — i.e. what
+ * the product itself carries. This is the read-only secondary descriptor a quote
+ * line snapshots into `productDescription` on insert.
+ *
+ * Also used to recognise a LEGACY line whose editable `description` was
+ * auto-filled with this exact text (before the two fields were split), so the
+ * editor can move it into `productDescription` and free the dealer's field.
+ * Empty string when the SKU isn't in the catalog.
+ */
+export function catalogProductDescription(
+  families: ReadonlyMap<string, CatalogFamily> | null | undefined,
+  reference: string | null | undefined,
+): string {
+  const { root, grade } = splitSkuGrade((reference || '').trim());
+  const fam = families ? families.get(root) : null;
+  const p = fam ? productForGrade(fam, grade) : null;
+  return (p?.subtype || '').trim();
+}

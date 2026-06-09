@@ -22,7 +22,7 @@ import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
@@ -97,6 +97,24 @@ export default function QuoteLineItem({
   // to re-price a material-less RANGE sibling at the propagated grade, exactly
   // as GradeFabricRow.commit does for a single pick.
   const families = useContext(FamiliesContext);
+  // One-time legacy normalization. The catalog's "Description 2" used to be
+  // auto-filled into the editable `description` (before it got its own read-only
+  // `productDescription` field). For a line still carrying that exact catalog
+  // text in `description` — and not yet split — move it into productDescription
+  // and clear the editable field, so the dealer's Descripción is theirs alone.
+  // Exact-match only (a dealer wouldn't retype the catalog string verbatim), so
+  // genuine descriptions are never touched. Idempotent: once split, the guard
+  // below short-circuits. Persisting it here (where the catalog is loaded) fixes
+  // the line for the public link / PDF too, which have no catalog to derive it.
+  useEffect(() => {
+    if (compound || line.productDescription) return;
+    const desc = (line.description || '').trim();
+    if (!desc) return;
+    const catDesc = catalogProductDescription(families, line.reference);
+    if (catDesc && desc === catDesc) {
+      onChange({ productDescription: catDesc, description: '' });
+    }
+  }, [compound, line.productDescription, line.description, line.reference, families, onChange]);
   // The product line's Ligne Roset link governs its material picker(s). A SIMPLE
   // line is keyed by its model root (so the link persists per model across every
   // quote); a COMPOUND is keyed by the line id, so one link applies to EVERY
