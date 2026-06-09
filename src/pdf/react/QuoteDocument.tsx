@@ -191,53 +191,61 @@ function LineRow({
     // — the real cause of the "messed up" #1018 PDF. So compound lines paginate.
     <View
       wrap={compound}
+      // The photo is positioned absolutely for compound lines, so a line that
+      // begins near a page bottom could leave the photo orphaned on one page
+      // while its text flows to the next. minPresenceAhead makes a compound line
+      // only START where there's room for the photo (it jumps to the next page
+      // otherwise), keeping the photo with the identity + first components.
+      minPresenceAhead={compound ? 150 : undefined}
       style={[
         // For a compound line the outer wrapper carries the row's padding +
         // bottom hairline (the identity row inside stays border-less); a simple
-        // line keeps using s.line directly, so its look is unchanged.
-        ...(compound ? [{ paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: C.inkLine }] : []),
+        // line keeps using s.line directly, so its look is unchanged. `relative`
+        // anchors the absolutely-placed photo (compound only — see below).
+        ...(compound ? [{ position: 'relative' as const, paddingVertical: 10, minHeight: 140, borderBottomWidth: 0.5, borderBottomColor: C.inkLine }] : []),
         ...(dimmed ? [{ opacity: 0.45 }] : []),
       ]}
     >
-      {/* Identity row — photo | family/name/ref/swatch | line total. Kept whole
-          (wrap={false}) so a compound line's photo + name + total never split
-          across a page; only the component list below is allowed to paginate. */}
-      <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line} wrap={false}>
-        <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} />}</View>
-        <View style={s.lineBody}>
-          <View style={s.lineMain}>
-            {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
-            {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
-            <Text style={s.lineName}>{line.name || '—'}</Text>
-            {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
-            {(line.reference || line.dimensions) && (
-              <View style={s.lineRefRow}>
-                {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
-                {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
-              </View>
-            )}
-            {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
-            <MaterialGrid cells={cells} images={images} />
-            {/* Catalog Description 2 (read-only product identity) then the
-                dealer-authored Descripción — two distinct fields. */}
-            {!compound && line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
-            {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
+      {compound ? (
+        // A compound's photo is ABSOLUTELY positioned at the top-left so it no
+        // longer reserves a 120pt-tall flex row that pushes the component list
+        // down (a short identity body left a dead band beside the photo). The
+        // identity text AND the component list now flow in ONE indented column
+        // beside the photo, so the first component sits directly under the name.
+        // The column is plain block flow (no row trap), so a tall compound still
+        // paginates cleanly; `minHeight` on the wrapper guarantees the photo fits
+        // when the content is shorter than it.
+        <>
+          <View style={[s.imgBox, { position: 'absolute', top: 10, left: 0 }]}>
+            {cover && <Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} />}
           </View>
-          <MoneyCell line={line} fmt={fmt} />
-        </View>
-      </View>
-
-      {/* Component list — pulled OUT of the identity row's flex-row layout into
-          normal block flow so a tall modular/compound paginates cleanly across
-          pages (react-pdf can't break a tall column trapped inside a row). Each
-          ComponentRow is itself wrap={false}, so breaks land between pieces. */}
-      {compound && (
-        // Containment rail: the components are indented to sit UNDER the product
-        // name (past the 92pt photo + 14pt gap) with a hairline left rule, so the
-        // whole block reads as "what this product is made of" instead of a stack
-        // of rows that look like top-level line items.
-        <View style={{ marginTop: 8, marginLeft: 134, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
-          {(() => {
+          <View style={{ marginLeft: 134 }}>
+            {/* Identity row WITHOUT s.lineBody's `flex: 1` — that was for a
+                horizontal child beside the photo; here it's a vertical child of
+                the column, where flex:1 would collapse its height to 0 and the
+                component rows would overlap the name. */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }} wrap={false}>
+              <View style={s.lineMain}>
+                {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
+                {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
+                <Text style={s.lineName}>{line.name || '—'}</Text>
+                {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
+                {(line.reference || line.dimensions) && (
+                  <View style={s.lineRefRow}>
+                    {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
+                    {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
+                  </View>
+                )}
+                <MaterialGrid cells={cells} images={images} />
+              </View>
+              <MoneyCell line={line} fmt={fmt} />
+            </View>
+            {/* Component list — its own indented sub-block with the containment
+                rail (hairline left rule) so it reads as "what this product is
+                made of". Each ComponentRow is wrap={false}, so breaks land
+                between pieces. */}
+            <View style={{ marginTop: 8, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
+              {(() => {
             // A modular line whose modules carry OPTIONAL / ALTERNATIVE state must
             // render per-module (each dimmed block keeps its own caption). Every
             // other compound — plain, mixed, or a plain modular composition —
@@ -259,7 +267,36 @@ function LineRow({
             }
             return <ComponentList components={line.components} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />;
           })()}
-          {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
+              {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
+            </View>
+          </View>
+        </>
+      ) : (
+        // Simple line — photo | family/name/ref/swatch | total in one short row
+        // (wrap={false}); unchanged from before the compound restructure.
+        <View style={s.line} wrap={false}>
+          <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} />}</View>
+          <View style={s.lineBody}>
+            <View style={s.lineMain}>
+              {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
+              {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
+              <Text style={s.lineName}>{line.name || '—'}</Text>
+              {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
+              {(line.reference || line.dimensions) && (
+                <View style={s.lineRefRow}>
+                  {line.reference && <Text style={s.lineRef}>REF. {line.reference}</Text>}
+                  {line.dimensions && <Text style={s.lineRef}>DIM. {line.dimensions}</Text>}
+                </View>
+              )}
+              {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
+              <MaterialGrid cells={cells} images={images} />
+              {/* Catalog Description 2 (read-only product identity) then the
+                  dealer-authored Descripción — two distinct fields. */}
+              {line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
+              {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
+            </View>
+            <MoneyCell line={line} fmt={fmt} />
+          </View>
         </View>
       )}
     </View>
