@@ -81,6 +81,22 @@
   @supports (height: 100dvh) {
     html, body, #root { height: 100dvh; }
   }
+  /* Installed-PWA height — the real fix for the "dead strip at the bottom".
+     In an iOS home-screen app, 100dvh resolves ONE home-indicator inset SHORT of
+     the window, so the shell (and the body's canvas background) ends above the
+     physical bottom edge and the manifest background leaks through as a dead
+     grey/white band on EVERY page. The quote dock only ever masked it locally
+     with a white apron; pages without the dock (dashboard, lists, …) showed it
+     bare. Standalone has no dynamic browser chrome, so 100vh maps cleanly to the
+     FULL window with none of dvh's safe-area rounding — pin the shell to it so
+     the body paints edge to edge, under the home indicator, everywhere. Gated on
+     the reliable `is-standalone` class main.jsx sets from navigator.standalone,
+     never the flaky `@media (display-mode: standalone)` iOS Safari mis-matches. */
+  html.is-standalone,
+  html.is-standalone body,
+  html.is-standalone #root {
+    height: 100vh;
+  }
 
   /* iOS-tuned defaults:
      - prevent the text-size jump Safari applies when the address bar collapses
