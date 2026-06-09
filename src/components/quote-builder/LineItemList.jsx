@@ -61,6 +61,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     onToggleOptional, onAddAlternative, onSelectAlternative,
     onSeparateFromSet, onUngroup, onJoinSet, onToggleGroupOptional,
     onAddSection, onOpenCatalog, onOpenInventory,
+    // Drag a top-level line INTO a compound/modular to absorb it. getMoveTargets
+    // owns every gate (sections, grouped lines, compound→plain) and returns the
+    // eligible target ids for THIS source; an empty list ⇒ no drop zones light up.
+    getMoveTargets, onMoveLineIntoCompound,
   } = useQuoteActions();
   // ViewModel — position maps ("Alternativa/Conjunto N de M") + per-section
   // subtotals, all derived by the quote Model (core/quote/views/editor); the
@@ -132,8 +136,19 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   // group reads like the client quote-pane; the dealer taps "Editar" to expand
   // ONE option to its full editor inline. `expandedAltId` is that option's id.
   const [expandedAltId, setExpandedAltId] = useState(null);
+  // The compound card a dragged line is currently hovering for ABSORB (vs the
+  // reorder drop-bar). Separate from dropTargetId so the two gestures never
+  // fight: a valid target shows an absorb overlay; everything else reorders.
+  const [absorbHoverId, setAbsorbHoverId] = useState(null);
   const draggingIds = dragging?.ids || null;
   const isDraggingId = (id) => !!draggingIds && draggingIds.includes(id);
+  // Absorb is a single-line gesture (you don't drag a whole group into a
+  // compound). Resolve the dragged source + the set of compounds that accept
+  // it, so each eligible card can light up a drop zone mid-drag.
+  const dragSource = draggingIds && draggingIds.length === 1 ? byId.get(draggingIds[0]) : null;
+  const absorbTargetIds = dragSource && getMoveTargets
+    ? new Set(getMoveTargets(dragSource).map((t) => t.id))
+    : null;
 
   function onDragStart(e, ids) {
     const list = Array.isArray(ids) ? ids : [ids];
@@ -143,18 +158,39 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   function onDragEnd() {
     setDragging(null);
     setDropTargetId(null);
+    setAbsorbHoverId(null);
   }
   function onDragOver(e, id) {
     if (!draggingIds || isDraggingId(id)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropTargetId(id);
+    // Hovering a plain reorder zone — not an absorb target.
+    setAbsorbHoverId(null);
+  }
+  // Drop a dragged line INTO a compound (the absorb overlay's own handlers).
+  function onAbsorbOver(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setAbsorbHoverId(id);
+    setDropTargetId(null);
+  }
+  function onAbsorbDrop(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    const src = dragSource;
+    setDragging(null);
+    setDropTargetId(null);
+    setAbsorbHoverId(null);
+    if (src && onMoveLineIntoCompound) onMoveLineIntoCompound(id, src);
   }
   function onDrop(e, id) {
     e.preventDefault();
     const ids = draggingIds;
     setDragging(null);
     setDropTargetId(null);
+    setAbsorbHoverId(null);
     if (!ids || ids.includes(id)) return;
     // Pull the moved block out (it keeps its document order, so a group stays a
     // contiguous run), locate the target in what REMAINS, and splice the block
@@ -200,6 +236,11 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
     const isSection = l.kind === LINE_KIND_SECTION;
     const isDragging = isDraggingId(l.id);
     const isDropTarget = dropTargetId === l.id && !isDraggingId(l.id);
+    // This row is an eligible ABSORB target for the line currently being
+    // dragged (a top-level compound/modular, not the source itself, not a
+    // member inside a group card). The overlay below captures the drop.
+    const isAbsorbTarget = !insideGroupCard && !!absorbTargetIds && absorbTargetIds.has(l.id) && !isDragging;
+    const absorbHot = absorbHoverId === l.id;
     const handleProps = {
       draggable: true,
       onDragStart: (e) => onDragStart(e, l.id),
@@ -220,6 +261,26 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
       >
         {isDropTarget && (
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
+        )}
+        {/* ABSORB drop zone — overlays an eligible compound/modular card while a
+            line is being dragged, so dropping here nests the line as a component
+            / module (instead of reordering). Faint ring on every valid target;
+            the hovered one fills in and names itself. Captures the drop above
+            the row's reorder handlers (z-20, own stopPropagation handlers). */}
+        {isAbsorbTarget && (
+          <div
+            onDragOver={(e) => onAbsorbOver(e, l.id)}
+            onDrop={(e) => onAbsorbDrop(e, l.id)}
+            className={`absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed transition-colors ${
+              absorbHot
+                ? 'border-brand-500 bg-brand-50/95'
+                : 'border-brand-300/70 bg-brand-50/30'
+            }`}
+          >
+            <span className={`text-xs font-semibold text-brand-700 px-3 text-center transition-opacity ${absorbHot ? 'opacity-100' : 'opacity-0'}`}>
+              Soltar para añadir a {l.name || 'este producto'}
+            </span>
+          </div>
         )}
         {isSection ? (
           <SectionDivider
