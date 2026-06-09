@@ -3,9 +3,12 @@
 // The store catalog = in-stock pieces. For each inventory item this function:
 //   • in stock (qty > 0) AND priced (selling_price > 0) → upsert an ACTIVE
 //     Shopify product (one listing per item, keyed by the stable handle
-//     inv-<id>), set its price, on-hand quantity and photo, and publish it to
-//     the Online Store.
-//   • otherwise, if it was previously published → ARCHIVE it (leaves the
+//     inv-<id>), set its price, on-hand quantity and photo, and place it in
+//     the "Ligne Roset Inventory" collection (created if missing). It is NOT
+//     pushed to the Online Store sales channel — the products live in the
+//     Shopify admin so sales can be rung up there (draft orders / POS) or in
+//     the quoting engine.
+//   • otherwise, if it was previously synced → ARCHIVE it (leaves the
 //     catalog). Catalog stays "in-stock only".
 //
 // The app calls this (authed) after inventory changes — a liquidation lands
@@ -26,8 +29,10 @@ const CORS = {
 const json = (b: unknown, s = 200): Response =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-const API_VERSION = '2024-10';
+const API_VERSION = '2026-01';
 const TEAM = 'team';
+const COLLECTION_TITLE = 'Ligne Roset Inventory';
+const COLLECTION_HANDLE = 'ligne-roset-inventory';
 
 /** Stable Shopify handle for an inventory item (mirrors inventoryShopify.ts). */
 function pieceHandle(id: string): string {
@@ -50,13 +55,28 @@ Deno.serve(async (req: Request) => {
   const token = (cfg as { access_token?: string } | null)?.access_token;
   if (!domain || !token) return json({ configured: false, message: 'Shopify no conectado' });
 
+  // GraphQL call that turns the two classic setup mistakes into their OWN
+  // messages instead of a generic "invalid token": a wrong domain (the store
+  // answers 404/HTML — the token may be fine) vs a rejected token (401/403 on
+  // the right store).
   async function gql<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
     const r = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token as string },
       body: JSON.stringify({ query, variables }),
     });
-    const b = await r.json();
+    if (r.status === 401 || r.status === 403) {
+      await r.body?.cancel();
+      throw new Error(`token inválido o sin permisos para ${domain} (HTTP ${r.status}). Genera el Admin API access token en la app personalizada de ESA tienda.`);
+    }
+    if (r.status === 404) {
+      await r.body?.cancel();
+      throw new Error(`no existe una tienda Shopify en ${domain}. Usa el dominio .myshopify.com exacto (Shopify → Configuración → Dominios).`);
+    }
+    let b: { errors?: unknown; data?: T };
+    try { b = await r.json(); } catch {
+      throw new Error(`respuesta inesperada de ${domain} (HTTP ${r.status}) — ¿es el dominio .myshopify.com correcto?`);
+    }
     if (b.errors) throw new Error(JSON.stringify(b.errors));
     return b.data as T;
   }
@@ -72,7 +92,7 @@ Deno.serve(async (req: Request) => {
   if (body?.test === true) {
     const REQUIRED = [
       'read_products', 'write_products', 'read_locations',
-      'read_publications', 'write_publications', 'read_inventory', 'write_inventory',
+      'read_inventory', 'write_inventory',
     ];
     try {
       const shop = (await gql<{ shop: { name: string; myshopifyDomain: string } }>(
@@ -97,13 +117,29 @@ Deno.serve(async (req: Request) => {
   const { data: items } = await q;
   if (!items?.length) return json({ configured: true, synced: 0, archived: 0, skipped: 0 });
 
-  // Resolve the location + Online Store publication once.
+  // Resolve the location + the "Ligne Roset Inventory" collection once.
+  // Synced products are grouped there (created as a manual collection if it
+  // doesn't exist yet) instead of being published to the Online Store.
   let locationId: string | null = null;
-  let onlineStoreId: string | null = null;
+  let collectionId: string | null = null;
   try {
     locationId = (await gql<{ locations: { nodes: { id: string }[] } }>(`{ locations(first: 1) { nodes { id } } }`)).locations.nodes[0]?.id ?? null;
-    const pubs = (await gql<{ publications: { nodes: { id: string; title: string }[] } }>(`{ publications(first: 20) { nodes { id title } } }`)).publications.nodes;
-    onlineStoreId = pubs.find((p) => /online store/i.test(p.title))?.id ?? null;
+    const found = (await gql<{ collections: { nodes: { id: string }[] } }>(
+      `query($q: String!) { collections(first: 1, query: $q) { nodes { id } } }`,
+      { q: `handle:${COLLECTION_HANDLE}` },
+    )).collections.nodes[0]?.id ?? null;
+    if (found) {
+      collectionId = found;
+    } else {
+      const created = await gql<{ collectionCreate: { collection: { id: string } | null; userErrors: { message: string }[] } }>(
+        `mutation($input: CollectionInput!) { collectionCreate(input: $input) { collection { id } userErrors { field message } } }`,
+        { input: { title: COLLECTION_TITLE, handle: COLLECTION_HANDLE } },
+      );
+      if (created.collectionCreate.userErrors.length) {
+        throw new Error(created.collectionCreate.userErrors.map((e) => e.message).join('; '));
+      }
+      collectionId = created.collectionCreate.collection?.id ?? null;
+    }
   } catch (e) {
     return json({ configured: true, error: `Shopify auth/scope error: ${(e as Error).message}` }, 502);
   }
@@ -150,6 +186,10 @@ Deno.serve(async (req: Request) => {
         };
         if (pid) input.id = pid;
         if (imageUrl) input.files = [{ originalSource: imageUrl, contentType: 'IMAGE' }];
+        // productSet's `collections` is a SET (replaces memberships) — these
+        // products are owned by the sync, so their one home is the inventory
+        // collection.
+        if (collectionId) input.collections = [collectionId];
 
         const res = await gql<{ productSet: { product: { id: string; variants: { nodes: { inventoryItem: { id: string } | null }[] } } | null; userErrors: { field: string[]; message: string }[] } }>(
           `mutation($input: ProductSetInput!) {
@@ -176,16 +216,6 @@ Deno.serve(async (req: Request) => {
                 quantities: [{ inventoryItemId: invItemId, locationId, quantity: Math.floor(qty) }] } },
             );
           } catch (_) { /* leave qty for a later sync */ }
-        }
-
-        // Publish to the Online Store so it's live in the catalog.
-        if (onlineStoreId) {
-          await gql(
-            `mutation($id: ID!, $pubs: [PublicationInput!]!) {
-              publishablePublish(id: $id, input: $pubs) { userErrors { field message } }
-            }`,
-            { id: pid, pubs: [{ publicationId: onlineStoreId }] },
-          );
         }
 
         await admin.from('inventory_items')

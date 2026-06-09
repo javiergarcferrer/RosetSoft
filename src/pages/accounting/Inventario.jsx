@@ -257,7 +257,7 @@ function publishMessage(res, { hasPrice, hasStock }) {
   if (res?.configured === false) return { ok: false, text: 'Guardado. Conecta Shopify en Configuración para publicarlo.' };
   if (res?.error) return { ok: false, text: `Guardado, pero Shopify devolvió un error: ${res.error}` };
   if (res?.errors?.length) return { ok: false, text: `Guardado, pero Shopify devolvió un error: ${res.errors[0]}` };
-  if ((res?.synced ?? 0) > 0) return { ok: true, text: 'Guardado y publicado en Shopify.' };
+  if ((res?.synced ?? 0) > 0) return { ok: true, text: 'Guardado y añadido a Shopify (colección Ligne Roset Inventory).' };
   if ((res?.archived ?? 0) > 0) return { ok: true, text: 'Guardado. Retirado del catálogo (agotado).' };
   const why = [];
   if (!hasPrice) why.push('falta el precio de venta');

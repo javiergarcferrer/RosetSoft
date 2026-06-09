@@ -17,8 +17,14 @@ const TEAM_PROFILE_ID = 'team';
  * settings so the UI can show "connected" without ever reading the token back.
  */
 export async function saveShopifyConfig({ domain, token, profileId = TEAM_PROFILE_ID }) {
-  const d = String(domain || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const d = String(domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
   if (!d) throw new Error('Ingresa el dominio .myshopify.com de tu tienda (Shopify → Configuración → Dominios).');
+  // The Admin API only answers on the canonical *.myshopify.com host — a
+  // public/custom domain (alcover.do) or a misremembered store name is the
+  // usual wrong paste, and it surfaces later as a misleading "token inválido".
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(d)) {
+    throw new Error('Ese no es un dominio .myshopify.com. Cópialo exacto de Shopify → Configuración → Dominios (suele ser un código aleatorio, p. ej. fg9gaq-3c.myshopify.com — no tu dominio público).');
+  }
   const t = String(token || '').trim();
   if (!t) throw new Error('Ingresa el Admin API access token (shpat_…).');
   // The custom-app Admin API access token always starts with `shpat_`. The

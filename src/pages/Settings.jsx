@@ -615,10 +615,12 @@ function ShopifyCard({ settings }) {
         <h2 className="font-semibold">Catálogo Shopify</h2>
       </div>
       <p className="text-xs text-ink-500 mb-4">
-        Cada artículo en inventario con precio y foto se publica automáticamente en tu tienda Shopify;
-        al agotarse, se retira. Usa el dominio <code>.myshopify.com</code> de tu tienda (suele ser un
-        código aleatorio, p. ej. <code>fg9gaq-3c.myshopify.com</code>, no tu dominio público) y el
-        <strong> Admin API access token</strong> (<code>shpat_…</code>) de tu app personalizada.
+        Cada artículo en inventario con precio y foto se añade automáticamente a Shopify dentro de la
+        colección <strong>Ligne Roset Inventory</strong>; al agotarse, se retira. Las ventas se pueden
+        manejar desde Shopify o desde el cotizador. Usa el dominio <code>.myshopify.com</code> de tu
+        tienda (suele ser un código aleatorio, p. ej. <code>fg9gaq-3c.myshopify.com</code>, no tu
+        dominio público) y el <strong>Admin API access token</strong> (<code>shpat_…</code>) de tu app
+        personalizada.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
