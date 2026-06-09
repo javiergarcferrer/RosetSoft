@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { openPrintSession } from '../../pdf/printSession.js';
+import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
   resolveReceivables, resolvePayables, resolvePartyStatement,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
@@ -66,15 +66,11 @@ export default function CuentasCobrarPagar() {
     return { name: suppliersById.get(selected.id)?.name || 'Proveedor', ...resolvePartyStatement({ charges, payments }) };
   }, [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById]);
 
+  // In-app print preview state — the modal rasterizes the PDF and prints via
+  // window.print() on our own page, so printing can never become a download.
+  const [printDoc, setPrintDoc] = useState(null);   // { blob, title } | null
   async function printStatement() {
     if (!statement || !selected) return;
-    // Open the print target inside the click (Safari needs a real tab opened
-    // while the gesture is live — it downloads a blob PDF from a hidden iframe).
-    const session = openPrintSession('Generando estado de cuenta…');
-    if (session.blocked) {
-      window.alert('Permite las ventanas emergentes para imprimir el estado de cuenta.');
-      return;
-    }
     setPrintingSt(true);
     try {
       const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
@@ -85,9 +81,8 @@ export default function CuentasCobrarPagar() {
         title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
         rows: statement.rows, balance: statement.balance, asOf: Date.now(),
       });
-      await session.run(blob, mod);
+      setPrintDoc({ blob, title: 'Estado de cuenta' });
     } catch (e) {
-      session.cancel();
       window.alert(e?.message || 'No se pudo generar el estado de cuenta.');
     } finally {
       setPrintingSt(false);
@@ -221,6 +216,9 @@ export default function CuentasCobrarPagar() {
             </table>
           </div>
         </div>
+      )}
+      {printDoc && (
+        <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
     </>
   );

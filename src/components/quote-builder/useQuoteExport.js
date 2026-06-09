@@ -4,7 +4,6 @@ import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
-import { openPrintSession } from '../../pdf/printSession.js';
 
 /**
  * PDF export + share-link logic for the quote editor, lifted out of the
@@ -166,38 +165,32 @@ export function useQuoteExport({
     }
   }
 
-  // Print directly — generate the same PDF and hand it to the browser's print
-  // dialog instead of the downloads tray. Every engine prints from a real
-  // top-level tab where a blob: PDF renders inline (a hidden iframe instead
-  // *downloads* on Chrome and Safari — the bug this avoids). The tab is opened
-  // synchronously inside this click (before the async generation, so the popup
-  // blocker allows it); generatePdf's `mod` provides printInWindow.
+  // Print directly — generate the same PDF the export ships and hand it to
+  // the in-app print preview (PrintPdfModal), which rasterizes it and prints
+  // via window.print() on OUR page. No tab, no blob navigation, no popup
+  // blocker — a download is structurally impossible (the modal owns the
+  // rationale). The Workspace renders the modal off `printDoc`.
+  const [printDoc, setPrintDoc] = useState(null);   // { blob } | null
   async function printPdf() {
     if (exporting || printing || sharing) return;
     setExportError(null);
-    // Open the print tab inside the click gesture so the popup blocker treats
-    // it as user-initiated; we point it at the finished PDF in session.run.
-    const session = openPrintSession('Generando PDF…');
-    if (session.blocked) {
-      setExportError('Permite las ventanas emergentes para imprimir, o usa “Exportar PDF”.');
-      return;
-    }
     setPrinting(true);
     try {
-      const { mod, blob } = await generatePdf();
-      await session.run(blob, mod);
+      const { blob } = await generatePdf();
+      setPrintDoc({ blob });
     } catch (err) {
       console.error('[QuoteBuilder] printPdf failed:', err);
-      session.cancel();
       setExportError(err?.message || 'No se pudo imprimir el PDF.');
     } finally {
       setPrinting(false);
     }
   }
+  const closePrint = () => setPrintDoc(null);
 
   return {
     exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
     exportPdf, printPdf, shareQuote,
+    printDoc, closePrint,
   };
 }

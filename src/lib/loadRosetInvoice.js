@@ -5,25 +5,7 @@
  * main bundle, and y is flipped to top-down to match the parser's column model.
  */
 import { parseRosetInvoice } from './rosetInvoice.js';
-
-let workerReady = false;
-
-async function loadPdfjs() {
-  const pdfjsLib = await import('pdfjs-dist');
-  if (!workerReady) {
-    try {
-      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-    } catch {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url,
-      ).toString();
-    }
-    workerReady = true;
-  }
-  return pdfjsLib;
-}
+import { loadPdfjs } from './loadPdfjs.js';
 
 /**
  * Parse a Roset invoice PDF File into its article lines + furniture subset.

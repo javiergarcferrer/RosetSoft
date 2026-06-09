@@ -4,4 +4,4 @@
  * import path is the only change at the call sites.
  */
 export { generateQuotePdf } from './generate.js';
-export { quoteFileName, downloadBlob, printInWindow } from './deliver.js';
+export { quoteFileName, downloadBlob } from './deliver.js';

@@ -729,6 +729,49 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   In-app PDF printing (PrintPdfModal). While the modal is mounted it stamps
+   body[data-print-pdf]; on `window.print()` these rules swap the entire app
+   for the rasterized PDF pages — one image per sheet, no margins (the PDF
+   already carries its own). This is what makes "Imprimir" structurally unable
+   to download: we never navigate the browser to a PDF resource at all. */
+@media print {
+  body[data-print-pdf] > *:not(.print-pdf-root) { display: none !important; }
+  body[data-print-pdf] .print-pdf-root {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    background: none !important;
+    padding: 0 !important;
+    z-index: auto !important;
+  }
+  body[data-print-pdf] .print-pdf-frame {
+    display: block !important;
+    max-width: none !important;
+    background: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  body[data-print-pdf] .print-pdf-pages {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  body[data-print-pdf] .print-pdf-chrome { display: none !important; }
+  body[data-print-pdf] .print-pdf-page {
+    max-width: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    break-inside: avoid;
+  }
+  body[data-print-pdf] .print-pdf-page:last-child { break-after: auto; }
+  body[data-print-pdf] .print-pdf-page img { width: 100% !important; height: auto !important; }
+}
+/* NOTE: the @page { margin: 0 } that pairs with these rules is injected by
+   PrintPdfModal only while it's mounted — @page can't be scoped by selector,
+   and a global zero margin would mangle normal Cmd+P printing elsewhere. */
+
 @layer utilities {
   /* Safe-area helpers. With viewport-fit=cover on the meta viewport these
      resolve to non-zero values on notched iPhones (and zero everywhere else,

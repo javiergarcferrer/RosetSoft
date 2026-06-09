@@ -11,7 +11,7 @@ import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
-import { openPrintSession } from '../../pdf/printSession.js';
+import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
@@ -83,17 +83,13 @@ export default function Facturacion() {
   const [transmitting, setTransmitting] = useState(null);
   const [printing, setPrinting] = useState(null);
 
+  // In-app print preview state — the modal rasterizes the PDF and prints via
+  // window.print() on our own page, so printing can never become a download.
+  const [printDoc, setPrintDoc] = useState(null);   // { blob, title } | null
   async function printInvoice(rowId) {
     const p = postingById.get(rowId);
     if (!p || !p.ncf) return;
     setErr('');
-    // Open the print target inside the click (Safari needs a real tab opened
-    // while the gesture is live — it downloads a blob PDF from a hidden iframe).
-    const session = openPrintSession('Generando factura…');
-    if (session.blocked) {
-      setErr('Permite las ventanas emergentes para imprimir la factura.');
-      return;
-    }
     setPrinting(rowId);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
@@ -115,9 +111,8 @@ export default function Facturacion() {
         gravado: p.base, itbis: p.itbis, total: p.total, itbisRate: config.itbisRate,
         securityCode: p.securityCode, qrUrl,
       });
-      await session.run(blob, mod);
+      setPrintDoc({ blob, title: `Factura ${p.ncf}` });
     } catch (e) {
-      session.cancel();
       setErr(e?.message || 'No se pudo generar la factura.');
     } finally {
       setPrinting(null);
@@ -437,6 +432,9 @@ export default function Facturacion() {
             </div>
           </div>
         </div>
+      )}
+      {printDoc && (
+        <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
     </>
   );

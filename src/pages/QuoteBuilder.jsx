@@ -27,6 +27,7 @@ import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
+import PrintPdfModal from '../components/PrintPdfModal.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import InventoryPicker from '../components/quote-builder/InventoryPicker.jsx';
 import AddSourceButtons from '../components/quote-builder/AddSourceButtons.jsx';
@@ -486,6 +487,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
     exportPdf, printPdf, shareQuote,
+    printDoc, closePrint,
   } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote });
 
   // Heal legacy quotes that lost their sequence number to the old
@@ -735,6 +737,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         onClose={() => setInventoryOpen(false)}
         onInsert={hx((seed) => addLine(seed))}
       />
+
+      {/* In-app print preview — rasterizes the generated PDF and prints via
+          window.print() on our own page, so "Imprimir" can never download. */}
+      {printDoc && (
+        <PrintPdfModal
+          blob={printDoc.blob}
+          title="Imprimir cotización"
+          onClose={closePrint}
+        />
+      )}
 
       {undoToast}
     </>

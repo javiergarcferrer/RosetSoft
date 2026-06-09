@@ -59,30 +59,10 @@ export async function downloadBlob(blob: Blob, filename: string): Promise<void> 
   }
 }
 
-/**
- * Print into a tab the caller already opened *inside the click gesture* — the
- * single, universal print path (see printSession.js). We point a real top-level
- * tab at the blob PDF: every modern engine (Chrome, Safari, Firefox, Edge)
- * renders a blob: PDF inline in its built-in viewer there — unlike a hidden
- * iframe, which Chrome turns into a download and Safari refuses to print — so
- * print() has a laid-out document to capture and the file is never downloaded.
- * The user can also just press Cmd+P.
- *
- * The window must be opened synchronously by the caller (before the async PDF
- * generation) so the popup blocker treats it as user-initiated. The blob URL is
- * held ~60 s so the viewer finishes loading and the print job spools.
- */
-export function printInWindow(win: Window, blob: Blob): void {
-  if (!blob || !blob.size) {
-    try { win.close(); } catch { /* already gone */ }
-    throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
-  }
-  const url = URL.createObjectURL(blob);
-  win.location.href = url;
-  const fire = () => { try { win.focus(); win.print(); } catch { /* user prints manually */ } };
-  // The viewer needs a beat to lay the PDF out before print() has anything to
-  // capture; try on load and again on a timer in case the load event is missed.
-  try { win.addEventListener('load', () => setTimeout(fire, 500)); } catch { /* cross-state */ }
-  setTimeout(fire, 1500);
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
+// Printing no longer lives here. Every "Imprimir" goes through the in-app
+// print preview (components/PrintPdfModal.jsx): pdfjs rasterizes the generated
+// blob into page images rendered on OUR page and window.print() prints them.
+// Pointing the browser at a PDF resource (hidden iframe or popup tab → blob:
+// URL) left the render-vs-DOWNLOAD decision to the browser — Chrome's
+// "Download PDFs" setting, Safari's blob handling, silent print() failures in
+// the PDF-viewer extension — which is exactly the bug that kept resurfacing.
