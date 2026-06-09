@@ -21,32 +21,32 @@ export default function ProjectPalettePicks({ palette, onApply }) {
   return (
     <div className="mb-3 border-b border-ink-100 pb-3">
       <div className="eyebrow-xs tracking-widest text-ink-500 mb-2">Paleta del proyecto</div>
-      <div className="space-y-2.5">
+      <div className="space-y-1.5">
         {groups.map((g) => (
-          <div key={g.material}>
-            <div className="mb-1 text-[11px] font-medium text-ink-500">
+          // Label INLINE with its chips (same wrapping row) so a single-colour
+          // group is one line, not two — keeps the palette compact in the sheet.
+          <div key={g.material} className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+            <span className="text-[11px] font-medium text-ink-500 flex-shrink-0">
               {g.material}{g.grade ? <span className="text-ink-400"> · Grade {g.grade}</span> : null}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {g.items.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onApply({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null })}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white py-1 pl-1 pr-2.5 min-h-[44px] sm:min-h-0 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 max-w-full min-w-0"
-                  title="Aplicar esta tela"
-                >
-                  <ImageView
-                    id={m.swatchImageId || null}
-                    fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
-                    className="h-8 w-8 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
-                  />
-                  <span className="text-xs text-ink-700 truncate min-w-0">
-                    {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
-                  </span>
-                </button>
-              ))}
-            </div>
+            </span>
+            {g.items.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onApply({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null })}
+                className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-white py-0.5 pl-0.5 pr-1.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 max-w-full min-w-0"
+                title="Aplicar esta tela"
+              >
+                <ImageView
+                  id={m.swatchImageId || null}
+                  fallbackUrl={swatchUrl(colorCodeFromSubtype(composeSubtype(m.grade, m.fabric)))}
+                  className="h-7 w-7 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
+                />
+                <span className="text-[11px] text-ink-700 truncate min-w-0">
+                  {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
+                </span>
+              </button>
+            ))}
           </div>
         ))}
       </div>

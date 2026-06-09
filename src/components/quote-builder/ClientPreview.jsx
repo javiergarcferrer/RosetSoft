@@ -6,7 +6,6 @@ import Modal from '../Modal.jsx';
 import MaterialOptionsStrip from './MaterialOptionsStrip.jsx';
 import MaterialColorPicker from './MaterialColorPicker.jsx';
 import ProjectPalettePicks from './ProjectPalettePicks.jsx';
-import MaterialPickerButton from './MaterialPickerButton.jsx';
 import ApplyMaterialToAllButton from './ApplyMaterialToAllButton.jsx';
 import { splitSkuGrade } from '../../lib/catalog.js';
 import { parseSubtype, composeFabricLabel, canPropagateMaterial, compoundFabric, groupComponentsByMaterial, fabricDisplay } from '../../lib/subtype.js';
@@ -843,17 +842,22 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
 }
 
 // Full catalog fabric picker for an upholstered line/component on the
-// interactive client link. Renders the shared <MaterialPickerButton> (the same
-// icon-only trigger the editor uses) which opens the SAME two-step
-// <MaterialColorPicker> the editor uses (fabric → color), so the client link
-// and the dealer's in-app preview show one identical picker. The
-// catalog + the commit handler arrive via `picker` (the share bundle); the
+// interactive client link. A small icon-only edit (pencil) trigger sits next to
+// the swatch and opens a sheet that leads with the curated project palette, with
+// the SAME two-step <MaterialColorPicker> the editor uses (fabric → color) one
+// tap behind a button — so the client link and the dealer's in-app preview commit
+// the identical pick. The catalog + the commit handler arrive via `picker` (the
+// share bundle); the
 // per-line `gradePrices` drive both the in-grade restriction and the price each
 // fabric shows. On pick we hand back the SAME { grade, fabric, swatchImageId }
 // shape the dealer's SwatchPicker produces — the optimistic reducer + the Edge
 // Function reprice from it. `z-[2]` lifts the trigger above any dimming veil.
 function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, className = 'mt-2.5' }) {
   const [open, setOpen] = useState(false);
+  // Inside the picker: show the curated project palette first; the FULL catalog
+  // is one tap away (kept behind a button so the sheet opens compact, not a
+  // wall of swatches). No palette → the catalog shows straight away.
+  const [showAll, setShowAll] = useState(false);
   // A CatalogFamily-shaped shim so MaterialColorPicker shows the MODEL price (the
   // margin-baked `gradePrices`) per grade — never the material's own per-yard
   // price, which the bundle deliberately withholds.
@@ -875,13 +879,20 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, c
   }, [modelKey, reference, picker.modelFabrics]);
   const { grade, fabric } = parseSubtype(subtype);
   const chosen = !!(grade || fabric);
+  const hasPalette = (picker.palette?.length || 0) > 0;
   return (
     <div className={`relative z-[2] ${className}`}>
-      <MaterialPickerButton
-        onClick={() => setOpen(true)}
-        label={chosen ? 'Cambiar tela' : 'Elegir tela'}
-        colorUrl={chosen ? swatchUrl(colorCodeFromSubtype(subtype)) : undefined}
-      />
+      {/* Small icon-only edit affordance — sits next to the swatch (which already
+          shows the colour), so it never crowds the row with a wide labelled pill. */}
+      <button
+        type="button"
+        onClick={() => { setShowAll(false); setOpen(true); }}
+        className="inline-flex h-7 w-7 coarse:h-9 coarse:w-9 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 flex-shrink-0"
+        title={chosen ? 'Cambiar la tela' : 'Elegir tela'}
+        aria-label={chosen ? 'Cambiar la tela' : 'Elegir tela'}
+      >
+        <Pencil size={13} aria-hidden />
+      </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Elegir tela" size="lg">
         {open && (
           <>
@@ -889,23 +900,33 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, c
               palette={picker.palette}
               onApply={(pick) => { picker.onPick(id, pick); setOpen(false); }}
             />
-            <MaterialColorPicker
-              materials={picker.materials}
-              family={family}
-              gradeFilter={gradeFilter}
-              nameFilter={nameFilter}
-              currentGrade={grade}
-              currentFabric={fabric}
-              autoDrill
-              onPick={(m, c) => {
-                picker.onPick(id, {
-                  grade: m.grade || '',
-                  fabric: composeFabricLabel(m, c),
-                  swatchImageId: (c && c.imageId) || null,
-                });
-                setOpen(false);
-              }}
-            />
+            {hasPalette && !showAll ? (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="btn-ghost w-full justify-center text-sm"
+              >
+                Ver todo el catálogo de telas
+              </button>
+            ) : (
+              <MaterialColorPicker
+                materials={picker.materials}
+                family={family}
+                gradeFilter={gradeFilter}
+                nameFilter={nameFilter}
+                currentGrade={grade}
+                currentFabric={fabric}
+                autoDrill
+                onPick={(m, c) => {
+                  picker.onPick(id, {
+                    grade: m.grade || '',
+                    fabric: composeFabricLabel(m, c),
+                    swatchImageId: (c && c.imageId) || null,
+                  });
+                  setOpen(false);
+                }}
+              />
+            )}
           </>
         )}
       </Modal>
@@ -1333,7 +1354,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                           if (modFabric.uniform) {
                             return (
                               <>
-                                <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} components={m.components} siblings={m.components} mf={mf} picker={null} modelKey={line.id} />
+                                <UpholsteryHero subtype={modFabric.subtype} swatchImageId={modFabric.swatchImageId} components={m.components} siblings={m.components} mf={mf} picker={picker} modelKey={line.id} />
                                 <ul className={ulCls}>
                                   {m.components.map((c, i) => renderComponentRow(c, i, true, false))}
                                 </ul>
@@ -1345,7 +1366,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             return modGrouping.runs.map((run, ri) => (
                               <div key={run.key + ri}>
                                 {run.bearing && (
-                                  <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} components={run.components} siblings={m.components} mf={mf} picker={null} modelKey={line.id} />
+                                  <UpholsteryHero subtype={run.subtype} swatchImageId={run.swatchImageId} components={run.components} siblings={m.components} mf={mf} picker={picker} modelKey={line.id} />
                                 )}
                                 <ul className={ulCls}>
                                   {run.components.map((c, i) => renderComponentRow(c, i, run.bearing, false))}
