@@ -63,6 +63,26 @@ export default function ModelLinkBar({ root, record }) {
     );
   }
 
+  // Unlinked + not editing → a single quiet affordance instead of the old
+  // permanently-expanded paste-URL bar, which burned a full row of dead
+  // space on EVERY unlinked piece (the dealer's screenshots). The input
+  // appears only when asked for.
+  if (!editing) {
+    return (
+      <div className="my-1.5">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="chip-action"
+          title="Pega el enlace de Ligne Roset de este modelo para filtrar las telas a las que realmente ofrece"
+        >
+          <Link2 size={11} className="opacity-70" aria-hidden />
+          Vincular con Ligne Roset
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="my-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -73,20 +93,18 @@ export default function ModelLinkBar({ root, record }) {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); link(); } }}
-            placeholder="Pega el enlace de Ligne Roset de este modelo para filtrar las telas…"
+            placeholder="Pega el enlace de Ligne Roset de este modelo…"
             className="input pl-8 text-xs py-1.5 w-full"
-            autoFocus={editing}
+            autoFocus
           />
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button type="button" onClick={link} disabled={busy || !url.trim()} className="btn-primary text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
             {busy ? 'Vinculando…' : 'Vincular'}
           </button>
-          {editing && (
-            <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
-              <X size={13} />
-            </button>
-          )}
+          <button type="button" onClick={() => { setEditing(false); setUrl(''); setErr(''); }} className="btn-ghost text-xs" aria-label="Cancelar">
+            <X size={13} />
+          </button>
         </div>
       </div>
       {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
