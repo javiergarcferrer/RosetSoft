@@ -65,9 +65,17 @@ export default function OrderDetail() {
     [],
   );
 
-  // For the quote attach picker
+  // For the quote attach picker — only ACCEPTED, unattached quotes are
+  // eligible. A pedido is built from quotes the client has signed off on;
+  // offering drafts/sent quotes here would let unconfirmed work slip into
+  // an order.
   const unattachedQuotes = useLiveQuery(
-    () => db.quotes.where('profileId').equals(profileId || '').filter((q) => !q.orderId).toArray(),
+    () =>
+      db.quotes
+        .where('profileId')
+        .equals(profileId || '')
+        .filter((q) => !q.orderId && q.status === 'accepted')
+        .toArray(),
     [profileId],
     [],
   );

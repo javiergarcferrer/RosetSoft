@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, ArrowRight, Plus } from 'lucide-react';
+import { Package, ArrowRight, Plus, ChevronDown } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
@@ -8,17 +9,21 @@ import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js'
  * Order indicator surfaced in the quote header. Three states:
  *
  *   1. Quote isn't accepted yet     → render nothing (no order exists; the
- *                                     status stepper will offer to create
+ *                                     status stepper will offer to attach
  *                                     one when the dealer flips to 'accepted')
- *   2. Quote accepted, no order yet → "Crear pedido" CTA (one click creates
- *                                     an order with this quote attached)
+ *   2. Quote accepted, no order yet → "Agregar a pedido" menu — the dealer
+ *                                     either picks an EXISTING order to assign
+ *                                     this quote to, or creates a fresh one.
+ *                                     (A quote can ride along with sibling
+ *                                     quotes in one order, so "create" is no
+ *                                     longer the only door.)
  *   3. Quote attached to an order   → chip linking to the order detail
  *                                     page, with the order's current stage
  *                                     as a sub-label
  *
- * The chip deliberately does NOT let the dealer re-assign the quote to a
- * different order from here — that's a low-frequency action and lives on
- * the order detail page where the dealer can see both sides of the move.
+ * Re-assigning a quote to a DIFFERENT order still lives on the order detail
+ * page (detach there, then re-attach) — once it's in an order the chip is a
+ * link, not a picker, to keep the common case one tap.
  */
 export default function OrderChip({ quote, profileId, onAttach }) {
   const order = useLiveQuery(
@@ -30,21 +35,9 @@ export default function OrderChip({ quote, profileId, onAttach }) {
   // Quote isn't in a state where attaching to an order makes sense.
   if (quote.status !== 'accepted' && !quote.orderId) return null;
 
-  // Accepted but unattached — offer the one-click create. Matches the
-  // chip register of CustomerChip/ProfessionalChip (rounded-full, same
-  // min-height) so the meta row reads as one consistent strip.
+  // Accepted but unattached — offer the assign-or-create menu.
   if (!quote.orderId) {
-    return (
-      <button
-        type="button"
-        onClick={() => createOrderFromQuote({ quote, profileId, onAttach })}
-        aria-label="Crear pedido"
-        className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-all active:scale-[0.97] ring-1 ring-inset ring-brand-200/50"
-      >
-        <Plus size={12} />
-        Crear pedido
-      </button>
-    );
+    return <AttachMenu quote={quote} profileId={profileId} onAttach={onAttach} />;
   }
 
   if (!order) {
@@ -79,13 +72,125 @@ export default function OrderChip({ quote, profileId, onAttach }) {
 }
 
 /**
+ * The accepted-but-unattached affordance: a popover that lists the dealer's
+ * open orders (so this quote can join an order that already groups sibling
+ * quotes) and a "Crear pedido nuevo" action that spins up a fresh one.
+ *
+ * Existing orders are filtered to non-cancelled and sorted with the quote's
+ * own customer first, so the most-likely target sits at the top — the dealer
+ * usually wants the order that already holds this client's other quotes.
+ */
+function AttachMenu({ quote, profileId, onAttach }) {
+  const [open, setOpen] = useState(false);
+
+  const orders = useLiveQuery(
+    () =>
+      db.orders
+        .where('profileId')
+        .equals(profileId || '')
+        .filter((o) => o.status !== 'cancelled')
+        .toArray(),
+    [profileId],
+    [],
+  );
+
+  // Same-customer orders bubble up; within a group, most-recent first.
+  const sorted = [...orders].sort((a, b) => {
+    const am = a.customerId && a.customerId === quote.customerId ? 0 : 1;
+    const bm = b.customerId && b.customerId === quote.customerId ? 0 : 1;
+    if (am !== bm) return am - bm;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+
+  function assignTo(orderId) {
+    setOpen(false);
+    onAttach?.(orderId);
+  }
+
+  async function createNew() {
+    setOpen(false);
+    await createOrderFromQuote({ quote, profileId, onAttach });
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Agregar a pedido"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-all active:scale-[0.97] ring-1 ring-inset ring-brand-200/50"
+      >
+        <Package size={12} />
+        Agregar a pedido
+        <ChevronDown size={12} className="text-brand-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            className="absolute left-0 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-ink-200 bg-white shadow-pop py-1 z-40"
+          >
+            {sorted.length > 0 && (
+              <>
+                <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                  Asignar a un pedido
+                </p>
+                <ul className="max-h-64 overflow-y-auto">
+                  {sorted.map((o) => {
+                    const stage = ORDER_STAGE_BY_KEY[currentOrderStage(o)];
+                    return (
+                      <li key={o.id}>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => assignTo(o.id)}
+                          className="w-full text-left px-3 py-2 hover:bg-brand-50/60 transition-colors flex items-center gap-2.5"
+                        >
+                          <Package size={14} className="text-ink-400 flex-shrink-0" />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm font-semibold text-ink-900 truncate">
+                              Pedido #{o.number ?? o.id.slice(-4)}
+                              {o.name ? ` — ${o.name}` : ''}
+                            </span>
+                            <span className="block text-[11px] text-ink-400">{stage?.label || o.status}</span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="my-1 border-t border-ink-100" />
+              </>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={createNew}
+              className="w-full text-left px-3 py-2 hover:bg-brand-50/60 transition-colors inline-flex items-center gap-2.5 text-sm font-semibold text-brand-700"
+            >
+              <span className="w-3.5 flex justify-center flex-shrink-0">
+                <Plus size={14} />
+              </span>
+              Crear pedido nuevo
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Spin up a fresh order with this quote attached. The dealer can also
  * later move the quote to a different order from OrderDetail; this is
- * just the happy-path one-click that runs on quote acceptance.
+ * the create branch of the accept-time assign-or-create menu.
  *
  * The order inherits the quote's customer and a sensible default name
- * ("Pedido — {customer}"). Status starts at 'accepted' since the trigger
- * is precisely the quote-accept event.
+ * ("Pedido — {customer}"). Status starts at 'draft' since the order's
+ * own logistics lifecycle begins when the dealer places it with LR.
  */
 async function createOrderFromQuote({ quote, profileId, onAttach }) {
   const id = newId();
