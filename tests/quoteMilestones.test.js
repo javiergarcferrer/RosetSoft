@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 
 import {
   canMarkDeposit, canMarkBalance, canMarkDelivered,
-  deliveryBlockedReason, quoteMilestoneState,
+  deliveryBlockedReason, quoteMilestoneState, quoteOutstanding,
 } from '../src/lib/quoteMilestones.js';
 import {
   canAdvanceOrder, nextOrderStage, advanceBlockedReason,
@@ -215,4 +215,31 @@ test('the new stage chain is draft → placed → confirmed → in_transit → i
     chain,
     ['draft', 'placed', 'confirmed', 'in_transit', 'in_customs', 'received'],
   );
+});
+
+/* ----------------------------- outstanding ----------------------------- */
+
+test('quoteOutstanding: nothing paid → the full total is owed', () => {
+  assert.equal(quoteOutstanding({ depositAmount: 4000 }, 10000), 10000);
+});
+
+test('quoteOutstanding: deposit received → total minus the deposit', () => {
+  const q = { depositReceivedAt: 1, depositAmount: 4000 };
+  assert.equal(quoteOutstanding(q, 10000), 6000);
+});
+
+test('quoteOutstanding: deposit recorded without an amount leaves the full total owed', () => {
+  // Better to over-state what's owed than silently forgive the balance.
+  const q = { depositReceivedAt: 1, depositAmount: null };
+  assert.equal(quoteOutstanding(q, 10000), 10000);
+});
+
+test('quoteOutstanding: balance paid → zero, delivered or not', () => {
+  assert.equal(quoteOutstanding({ depositReceivedAt: 1, balancePaidAt: 2, depositAmount: 4000 }, 10000), 0);
+  assert.equal(quoteOutstanding({ depositReceivedAt: 1, balancePaidAt: 2, deliveredAt: 3 }, 10000), 0);
+});
+
+test('quoteOutstanding: never negative (over-collected deposit clamps to 0)', () => {
+  const q = { depositReceivedAt: 1, depositAmount: 12000 };
+  assert.equal(quoteOutstanding(q, 10000), 0);
 });

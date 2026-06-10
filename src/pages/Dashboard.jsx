@@ -11,7 +11,7 @@ import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.j
 import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { formatMoney } from '../lib/format.js';
-import { displayRatesFor } from '../lib/exchangeRate.js';
+import { displayRatesFor, readExchangeRate } from '../lib/exchangeRate.js';
 import { orderStatusPill } from '../lib/statusPill.js';
 import { resolveDashboard } from '../core/quote/views/dashboard.js';
 
@@ -22,21 +22,27 @@ import { resolveDashboard } from '../core/quote/views/dashboard.js';
  * — those belong on an admin/accounting view.
  *
  * Layout, top → bottom (everything derived in core/quote/views/dashboard):
- *   1. KPI strip — four small tiles (Borradores / Enviadas with a stale
- *      accent / En proceso / Ganadas este mes), each deep-linking into the
- *      pre-filtered Quotes list.
- *   2. Enviadas · esperando respuesta — THE follow-up list, OLDEST first,
+ *   1. Header — greeting + today's Banco Popular venta rate (the number
+ *      every client conversation references).
+ *   2. KPI strip — four small tiles (Borradores / Enviadas with a stale
+ *      accent / En proceso / Ganadas este mes), each pairing the count
+ *      with its USD pipeline value and deep-linking into the pre-filtered
+ *      Quotes list.
+ *   3. Enviadas · esperando respuesta — THE follow-up list, OLDEST first,
  *      each showing how long it's been waiting so the dealer chases the
  *      stalest deals first; 7+ days flags for follow-up. Gets the wide
  *      column — it's the seller's priority queue.
- *   3. Aceptadas · en proceso — won quotes, each tagged with its real next
- *      milestone (Anticipo / Balance / Entrega pendiente), most-pending
- *      first — and Borradores · continuar, stacked in the narrow column.
- *   4. Pedidos en curso — the team's active LR orders with their logistics
- *      stage, so the seller sees where the goods are without leaving home.
+ *   4. Aceptadas · en proceso — won quotes, each tagged with its real next
+ *      milestone (Anticipo / Balance / Entrega pendiente) and what the
+ *      customer still owes ("falta …"), most-pending first — and
+ *      Borradores · continuar, stacked in the narrow column.
+ *   5. Pedidos en curso — the team's active LR orders with their logistics
+ *      stage and how long they've sat in it, so the seller sees where the
+ *      goods are (and what's stuck) without leaving home.
  *
- * Per-quote deal value is shown (it helps prioritise), but no aggregate
- * "sales number" — that's an admin concern, not a seller's daily driver.
+ * The money shown is pipeline/collection value the SELLER acts on (what's
+ * in play, what to collect) — recognized-revenue roll-ups stay on the
+ * admin/accounting view.
  */
 
 // "hoy" / "ayer" / "hace N días" from a timestamp.
@@ -96,11 +102,23 @@ export default function Dashboard() {
   );
 
   const firstName = (currentProfile?.name || '').trim().split(/\s+/)[0];
-  const money = (q) => formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', displayRatesFor(q, settings));
+  const money = (q, amount = derived.totalByQuote.get(q.id) || 0) =>
+    formatMoney(amount, q.currencyCode || 'USD', displayRatesFor(q, settings));
+  // Aggregate values (KPI hints) are USD-base sums across quotes — no
+  // per-quote rate applies, so they render as plain USD.
+  const usd = (v) => formatMoney(v, 'USD', { USD: 1 });
   const customerName = (q) => {
     const c = derived.customersById.get(q.customerId);
     return c?.company || c?.name || 'Sin cliente';
   };
+
+  // Today's Banco Popular venta rate — the number every quote conversation
+  // references, surfaced once in the header instead of hidden in Settings.
+  const dopSell = readExchangeRate(settings).sell;
+  const subtitle = [
+    settings?.companyName || 'Tu empresa',
+    dopSell ? `US$1 = RD$ ${Number(dopSell).toFixed(2)}` : null,
+  ].filter(Boolean).join(' · ');
 
   const { kpis } = derived;
   const quotesLink = (status) => `/quotes?status=${status}&scope=${effectiveScope}`;
@@ -113,7 +131,7 @@ export default function Dashboard() {
     <>
       <PageHeader
         title={firstName ? `Hola, ${firstName}` : 'Inicio'}
-        subtitle={settings?.companyName || 'Tu empresa'}
+        subtitle={subtitle}
         actions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {meId && <ScopeToggle scope={scope} onChange={setScope} />}
@@ -148,15 +166,21 @@ export default function Dashboard() {
               label="Borradores"
               value={loaded ? kpis.draftCount : '—'}
               icon={FileEdit}
+              hint={loaded && kpis.draftValue > 0 ? usd(kpis.draftValue) : 'por completar'}
               to={quotesLink('draft')}
             />
             <StatCard
               label="Enviadas"
               value={loaded ? kpis.sentCount : '—'}
               icon={Send}
-              hint={loaded && kpis.staleCount > 0
-                ? <span className="text-amber-700 font-medium">{kpis.staleCount} sin respuesta +7 días</span>
-                : 'esperando respuesta'}
+              hint={loaded && kpis.sentCount > 0 ? (
+                <span>
+                  {usd(kpis.sentValue)}
+                  {kpis.staleCount > 0 && (
+                    <span className="text-amber-700 font-medium"> · {kpis.staleCount} sin resp. +7d</span>
+                  )}
+                </span>
+              ) : 'esperando respuesta'}
               to={quotesLink('sent')}
             />
             <StatCard
@@ -164,7 +188,9 @@ export default function Dashboard() {
               value={loaded ? kpis.inProcessCount : '—'}
               icon={CheckCircle2}
               tone="emerald"
-              hint="aceptadas sin entregar"
+              hint={loaded && kpis.dueValue > 0
+                ? `${usd(kpis.dueValue)} por cobrar`
+                : 'aceptadas sin entregar'}
               to={quotesLink('accepted')}
             />
             <StatCard
@@ -172,7 +198,7 @@ export default function Dashboard() {
               value={loaded ? kpis.wonThisMonth : '—'}
               icon={Trophy}
               tone="brand"
-              hint="cotizaciones aceptadas"
+              hint={loaded && kpis.wonThisMonth > 0 ? usd(kpis.wonThisMonthValue) : 'cotizaciones aceptadas'}
               to={quotesLink('accepted')}
             />
           </div>
@@ -239,12 +265,15 @@ export default function Dashboard() {
                       <ListLoading rows={3} dense />
                     ) : (
                       <ul className="divide-y divide-ink-100">
-                        {derived.accepted.slice(0, LIST_CAP).map(({ q, step }) => (
+                        {derived.accepted.slice(0, LIST_CAP).map(({ q, step, due }) => (
                           <li key={q.id}>
                             <Link to={`/quotes/${q.id}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-ink-50 transition-colors">
                               <div className="min-w-0 flex-1">
                                 <div className="text-sm truncate">{customerName(q)}</div>
-                                <div className="text-[11px] text-ink-500 truncate tabular-nums">#{q.number || '—'} · {money(q)}</div>
+                                <div className="text-[11px] text-ink-500 truncate tabular-nums">
+                                  #{q.number || '—'} · {money(q)}
+                                  {due > 0 && <span className="text-amber-700"> · falta {money(q, due)}</span>}
+                                </div>
                               </div>
                               <span className={`status-pill ${step.cls} flex-shrink-0`}>{step.label}</span>
                             </Link>
@@ -302,7 +331,7 @@ export default function Dashboard() {
                 </Link>
               </header>
               <ul className="divide-y divide-ink-100">
-                {derived.activeOrders.slice(0, ORDERS_CAP).map(({ order: o, stage, customerLabel, quoteCount, containerCount, total }) => {
+                {derived.activeOrders.slice(0, ORDERS_CAP).map(({ order: o, stage, stageAt, customerLabel, quoteCount, containerCount, total }) => {
                   const pill = orderStatusPill(stage);
                   return (
                     <li key={o.id}>
@@ -314,10 +343,15 @@ export default function Dashboard() {
                             {o.name && customerLabel ? <span className="text-ink-500"> · {customerLabel}</span> : ''}
                           </div>
                           <div className="text-[11px] text-ink-500 truncate tabular-nums">
-                            {quoteCount} cot. · {containerCount} cont.{total > 0 ? ` · ${formatMoney(total, 'USD', { USD: 1 })}` : ''}
+                            {quoteCount} cot. · {containerCount} cont.{total > 0 ? ` · ${usd(total)}` : ''}
                           </div>
                         </div>
-                        <span className={`status-pill ${pill.cls} flex-shrink-0`}>{pill.label}</span>
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          <span className={`status-pill ${pill.cls}`}>{pill.label}</span>
+                          {stageAt && (
+                            <span className="text-[10px] text-ink-400 tabular-nums">{relDays(stageAt)}</span>
+                          )}
+                        </div>
                       </Link>
                     </li>
                   );

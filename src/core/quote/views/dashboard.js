@@ -8,7 +8,8 @@
 // time-derived numbers (staleness, "won this month") stay testable.
 import { computeTotals, lineForTotals } from '../../../lib/pricing.js';
 import { isPricedLine } from '../../../lib/constants.js';
-import { currentOrderStage } from '../../../lib/orderStages.js';
+import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../../lib/orderStages.js';
+import { quoteOutstanding } from '../../../lib/quoteMilestones.js';
 
 // A sent quote waiting longer than this nudges a follow-up.
 export const STALE_DAYS = 7;
@@ -50,6 +51,10 @@ export function resolveDashboard({
   const inScope = (q) => scopeIsTeam || q.createdByUserId === meId;
   const scoped = qs.filter(inScope);
 
+  // USD deal-value rollup over a set of quotes — the tiles pair every count
+  // with the money it represents (quotes are USD-base; see lib/format).
+  const sumTotals = (arr) => arr.reduce((s, q) => s + (totalByQuote.get(q.id) || 0), 0);
+
   // Sent → follow-up queue, OLDEST first; each entry carries its staleness
   // so the row accent and the KPI "sin respuesta" count read the same rule.
   const sent = scoped
@@ -62,12 +67,21 @@ export function resolveDashboard({
     }));
   const staleCount = sent.filter((s) => s.stale).length;
 
+  // Accepted → fulfillment queue. Each entry carries its total AND what the
+  // customer still owes (quoteOutstanding), so the row and the "por cobrar"
+  // KPI read the same money rule.
   const accepted = scoped
     .filter((q) => q.status === 'accepted')
-    .map((q) => ({ q, step: acceptedNextStep(q) }))
+    .map((q) => ({
+      q,
+      step: acceptedNextStep(q),
+      total: totalByQuote.get(q.id) || 0,
+      due: quoteOutstanding(q, totalByQuote.get(q.id) || 0),
+    }))
     .sort((a, b) => a.step.rank - b.step.rank || (b.q.acceptedAt || 0) - (a.q.acceptedAt || 0));
   // "En proceso" = accepted with a milestone still pending (rank 3 = delivered).
   const inProcessCount = accepted.filter((a) => a.step.rank < 3).length;
+  const dueValue = accepted.reduce((s, a) => s + a.due, 0);
 
   const drafts = scoped
     .filter((q) => q.status === 'draft')
@@ -79,7 +93,8 @@ export function resolveDashboard({
   monthStartDate.setDate(1);
   monthStartDate.setHours(0, 0, 0, 0);
   const monthStart = monthStartDate.getTime();
-  const wonThisMonth = scoped.filter((q) => (q.acceptedAt || 0) >= monthStart).length;
+  const wonQuotes = scoped.filter((q) => (q.acceptedAt || 0) >= monthStart);
+  const wonThisMonth = wonQuotes.length;
 
   // ---- Pedidos en curso — orders not yet received/cancelled, with the cheap
   // per-order rollups the strip shows. Orders are the team's shared logistics
@@ -107,9 +122,14 @@ export function resolveDashboard({
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
     .map((o) => {
       const direct = o.customerId ? customersById.get(o.customerId) : null;
+      const stage = currentOrderStage(o);
+      // When the order ENTERED its current stage — the strip shows how long
+      // it's been sitting there (a stuck "en aduanas" should read as stuck).
+      const stampField = ORDER_STAGE_BY_KEY[stage]?.timestampField;
       return {
         order: o,
-        stage: currentOrderStage(o),
+        stage,
+        stageAt: (stampField && o[stampField]) || null,
         customerLabel: (direct && (direct.company || direct.name)) || customerLabelByOrder.get(o.id) || null,
         quoteCount: quoteCountByOrder.get(o.id) || 0,
         containerCount: containerCountByOrder.get(o.id) || 0,
@@ -124,13 +144,18 @@ export function resolveDashboard({
     accepted,
     drafts,
     activeOrders,
-    // KPI strip — every number the tiles show, derived here.
+    // KPI strip — every number the tiles show, derived here. Each count is
+    // paired with its USD value so the strip reads money, not just volume.
     kpis: {
       draftCount: drafts.length,
+      draftValue: sumTotals(drafts),
       sentCount: sent.length,
+      sentValue: sumTotals(sent.map((s) => s.q)),
       staleCount,
       inProcessCount,
+      dueValue,
       wonThisMonth,
+      wonThisMonthValue: sumTotals(wonQuotes),
     },
     scopedCount: scoped.length,
   };

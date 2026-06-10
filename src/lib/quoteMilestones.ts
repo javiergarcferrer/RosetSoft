@@ -121,3 +121,29 @@ export function quoteMilestoneState(quote: Quote | null | undefined): QuoteMiles
     delivered: !!quote?.deliveredAt,
   };
 }
+
+/**
+ * What the customer still owes on an accepted quote, in the same
+ * currency as `total` (the quote's grand total, USD base):
+ *
+ *   • nothing paid yet        → the full total (the deposit hasn't landed).
+ *   • deposit received        → total − depositAmount (the balance).
+ *   • balance paid            → 0 — nothing outstanding, delivered or not
+ *     (the dealer's rule: goods don't leave until the balance is paid,
+ *     so delivery never adds money owed).
+ *
+ * A deposit recorded without an amount (`depositAmount` null/0) leaves
+ * the full total outstanding — better to over-state what's owed than to
+ * silently forgive the balance. Clamped at 0 so an over-collected
+ * deposit can't show a negative receivable.
+ */
+export function quoteOutstanding(
+  quote: Pick<Quote, 'depositReceivedAt' | 'balancePaidAt' | 'depositAmount'> | null | undefined,
+  total: number,
+): number {
+  if (!quote) return 0;
+  if (quote.balancePaidAt) return 0;
+  const safeTotal = Math.max(0, Number(total) || 0);
+  if (!quote.depositReceivedAt) return safeTotal;
+  return Math.max(0, safeTotal - (Number(quote.depositAmount) || 0));
+}

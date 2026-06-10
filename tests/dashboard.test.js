@@ -1,12 +1,17 @@
 /**
- * Test for the Contabilidad dashboard ViewModel (src/core/accounting/dashboard.js)
- * — cash from the ledger's Cajas-y-Bancos subtree, CxC balance, month income,
- * and the e-CF-pending count.
+ * Tests for the two dashboard ViewModels:
+ *  • the Contabilidad dashboard (src/core/accounting/dashboard.js) — cash from
+ *    the ledger's Cajas-y-Bancos subtree, CxC balance, month income, and the
+ *    e-CF-pending count;
+ *  • the seller home (src/core/quote/views/dashboard.js) — the KPI money
+ *    rollups (pipeline values, "por cobrar") and per-row money facts the
+ *    Inicio page renders.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveAccountingDashboard } from '../src/core/accounting/dashboard.js';
+import { resolveDashboard } from '../src/core/quote/views/dashboard.js';
 
 const ACCOUNTS = [
   { code: '1-00-000-00-00-00', class: 1, nature: 'debit', parentCode: null, level: 1, isPostable: false, name: 'ACTIVOS' },
@@ -72,4 +77,71 @@ test('resolveAccountingDashboard builds the Business-overview series + breakdown
   // The whole receivable is unpaid; nothing collected (no payments).
   assert.equal(d.ar.unpaid, 11800);
   assert.equal(d.collected30, 0);
+});
+
+/* --------------------- seller home (resolveDashboard) --------------------- */
+
+// Fixture: one quote per pipeline state, all owned by 'me', each with one
+// $1,000-base line (totals then carry the fixed 18% ITBIS — the assertions
+// read totalByQuote instead of hard-coding the tax math).
+const NOW = Date.parse('2026-06-10T12:00:00Z');
+const SELLER_QUOTES = [
+  { id: 'qd', profileId: 't', status: 'draft', createdByUserId: 'me', updatedAt: NOW - 1 },
+  { id: 'qs', profileId: 't', status: 'sent', createdByUserId: 'me', sentAt: NOW - 10 * 86400000 },
+  // Accepted this month, deposit received → the balance is what's owed.
+  { id: 'qa', profileId: 't', status: 'accepted', createdByUserId: 'me', acceptedAt: NOW - 86400000, depositReceivedAt: NOW - 86400000, depositAmount: 500 },
+  // Accepted LAST month, nothing paid → the full total is owed.
+  { id: 'qb', profileId: 't', status: 'accepted', createdByUserId: 'me', acceptedAt: NOW - 40 * 86400000 },
+];
+const SELLER_LINES = SELLER_QUOTES.map((q) => ({
+  id: `l-${q.id}`, quoteId: q.id, kind: 'item', qty: 1, unitPrice: 1000,
+}));
+
+test('resolveDashboard pairs every KPI count with its USD pipeline value', () => {
+  const d = resolveDashboard({
+    quotes: SELLER_QUOTES, customers: [], lines: SELLER_LINES,
+    orders: [], containers: [], scopeIsTeam: false, meId: 'me', now: NOW,
+  });
+  const total = (id) => d.totalByQuote.get(id);
+
+  assert.equal(d.kpis.draftCount, 1);
+  assert.equal(d.kpis.draftValue, total('qd'));
+  assert.equal(d.kpis.sentCount, 1);
+  assert.equal(d.kpis.sentValue, total('qs'));
+  assert.equal(d.kpis.staleCount, 1); // sent 10 days ago ≥ STALE_DAYS
+  // Won this month counts/sums only the June acceptance, not May's.
+  assert.equal(d.kpis.wonThisMonth, 1);
+  assert.equal(d.kpis.wonThisMonthValue, total('qa'));
+});
+
+test('resolveDashboard "por cobrar" = balance after deposit + untouched totals', () => {
+  const d = resolveDashboard({
+    quotes: SELLER_QUOTES, customers: [], lines: SELLER_LINES,
+    orders: [], containers: [], scopeIsTeam: false, meId: 'me', now: NOW,
+  });
+  const total = (id) => d.totalByQuote.get(id);
+
+  // Per-row dues: qa owes total − 500 (deposit landed), qb owes everything.
+  const byId = new Map(d.accepted.map((a) => [a.q.id, a]));
+  assert.equal(byId.get('qa').due, total('qa') - 500);
+  assert.equal(byId.get('qa').total, total('qa'));
+  assert.equal(byId.get('qb').due, total('qb'));
+  // The KPI is the sum of the same per-row rule — one money source.
+  assert.equal(d.kpis.dueValue, byId.get('qa').due + byId.get('qb').due);
+});
+
+test('resolveDashboard stamps active orders with when they entered their stage', () => {
+  const d = resolveDashboard({
+    quotes: [], customers: [], lines: [],
+    orders: [
+      { id: 'o1', status: 'in_customs', inCustomsAt: NOW - 5 * 86400000, updatedAt: NOW },
+      { id: 'o2', status: 'draft', updatedAt: NOW - 1 },
+      { id: 'o3', status: 'received', receivedAt: NOW }, // done — excluded
+    ],
+    containers: [], scopeIsTeam: true, meId: null, now: NOW,
+  });
+  const byId = new Map(d.activeOrders.map((a) => [a.order.id, a]));
+  assert.equal(byId.get('o1').stageAt, NOW - 5 * 86400000);
+  assert.equal(byId.get('o2').stageAt, null); // draft has no stage timestamp
+  assert.equal(byId.has('o3'), false);
 });
