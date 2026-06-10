@@ -365,16 +365,17 @@ export default function TotalsDock({
                   stamped a redundant pair on mobile. The dock keeps only the
                   cross-cutting actions: Share / Print / Export. */}
 
-              {/* Send the quote PDF straight to the share sheet (Mail / WhatsApp /
-                  Messages) — never a download. Pinned at every width. */}
+              {/* Share the PUBLIC CLIENT LINK (the live interactive quote) via
+                  the OS share sheet — the PDF stays under Exportar. Pinned at
+                  every width. */}
               <DockAction
                 icon={Share2}
                 label="Compartir"
                 onClick={onShare}
                 disabled={sharing || exporting || printing}
                 busy={sharing}
-                ariaLabel="Compartir la cotización"
-                title="Enviar el PDF directamente (Correo, WhatsApp…) sin descargar"
+                ariaLabel="Compartir el enlace de la cotización"
+                title="Compartir el enlace público de la cotización (Correo, WhatsApp…)"
               />
 
               {/* Print the PDF straight to the printer (no download). */}

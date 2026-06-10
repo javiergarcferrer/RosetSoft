@@ -58,36 +58,35 @@ export function useQuoteExport({
     }
   }, [exportError]);
 
-  // Send the quote DIRECTLY — never via the downloads tray. Builds the same PDF
-  // the dealer would export and hands the actual File to the OS share sheet
-  // (`navigator.share({files})`), so it goes straight to Mail / WhatsApp /
-  // Messages / AirDrop. `canShare({files})` is the capability probe: it's true on
-  // Safari (incl. macOS) and mobile; where it's false — notably desktop Chrome,
-  // which can't share files — we fall back to copying the live interactive
-  // client link (`shareClientLink`) so Share still does something useful.
+  // Share the PUBLIC CLIENT LINK — never the PDF. The link opens the live
+  // interactive quote (ClientPreview) where the client can browse and pick
+  // fabrics; the static PDF stays one tap away under Exportar. Mints (once) and
+  // persists the share token, then hands the URL to the OS share sheet
+  // (`navigator.share`) so it goes straight to Mail / WhatsApp / Messages;
+  // where the Web Share API is unavailable (desktop browsers, mostly) it
+  // copies the link to the clipboard instead.
   async function shareQuote() {
     if (sharing || exporting || printing) return;
     setSharing(true);
     setExportError(null);
     try {
-      const { blob, filename } = await generatePdf();
-      // Attach the real PDF file to the native share sheet when supported. The
-      // gesture survives the async build (Web Share's transient-activation
-      // window outlasts a render), the same way the iOS download path shares.
-      if (typeof File !== 'undefined' && navigator.canShare) {
-        const file = new File([blob], filename, { type: blob.type || 'application/pdf' });
-        if (navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({ files: [file], title: filename });
-            return;
-          } catch (err) {
-            if (err && err.name === 'AbortError') return; // user dismissed the sheet
-            // Anything else (e.g. gesture lost) → fall through to the link copy.
-            console.warn('[QuoteBuilder] share with file fell through:', err);
-          }
+      const url = await mintClientLink();
+      if (navigator.share) {
+        try {
+          await navigator.share({ url, title: clientLinkLabel() });
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') return; // user dismissed the sheet
+          // Anything else (gesture lost, unsupported payload) → copy instead.
+          console.warn('[QuoteBuilder] link share fell through:', err);
         }
       }
-      await shareClientLink();
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareMsg(`Enlace copiado · ${url}`);
+      } catch {
+        setShareMsg(url);
+      }
     } catch (err) {
       console.error('[QuoteBuilder] shareQuote failed:', err);
       setExportError(err?.message || 'No se pudo compartir la cotización.');
@@ -96,27 +95,26 @@ export function useQuoteExport({
     }
   }
 
-  // Fallback share: mint (once) + copy a public interactive link for the client.
-  // The token is generated on first share and persisted on the quote;
-  // `shareEnabled` lets a later revoke flip it off without losing the URL.
-  async function shareClientLink() {
+  // The same "client - Cotizacion N" label the PDF filename uses — slugged into
+  // the URL and shown as the share-sheet title, so the link reads like the
+  // document it opens.
+  function clientLinkLabel() {
+    const customer = quote.customerId
+      ? customers.find((c) => c.id === quote.customerId)
+      : null;
+    return quoteSlug(quote, customer);
+  }
+
+  // Mint (once) + persist the public interactive link for the client. The token
+  // is generated on first share and persisted on the quote; `shareEnabled` lets
+  // a later revoke flip it off without losing the URL.
+  async function mintClientLink() {
     let token = quote.shareToken;
     if (!token || !quote.shareEnabled) {
       token = token || newShareToken();
       await updateQuote({ shareToken: token, shareEnabled: true });
     }
-    // Slug the SAME "client - Cotizacion N" label the PDF uses into the URL, so
-    // the link the dealer copies reads like the file it matches.
-    const customer = quote.customerId
-      ? customers.find((c) => c.id === quote.customerId)
-      : null;
-    const url = shareLinkUrl(token, quoteSlug(quote, customer));
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareMsg(`Enlace copiado · ${url}`);
-    } catch {
-      setShareMsg(url);
-    }
+    return shareLinkUrl(token, clientLinkLabel());
   }
 
   // Shared PDF build for both Export (download) and Print. Resolves the related

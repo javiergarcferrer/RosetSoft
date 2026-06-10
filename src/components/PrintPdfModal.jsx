@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X, Loader2, AlertTriangle } from 'lucide-react';
+import { Printer, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { renderPdfToImages } from '../lib/loadPdfjs.js';
 
 /**
@@ -80,31 +80,35 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
   return createPortal(
     <div className="print-pdf-root fixed inset-0 z-[100] flex items-stretch justify-center bg-ink-900/60 sm:py-6 sm:px-4">
       <div className="print-pdf-frame flex w-full max-w-3xl flex-col bg-ink-100 sm:rounded-xl sm:shadow-pop overflow-hidden">
-        {/* Header — hidden on paper (.print-pdf-chrome). */}
-        <div className="print-pdf-chrome flex items-center gap-2 bg-white border-b border-ink-200 px-4 py-2.5">
-          <Printer size={15} className="text-ink-500 flex-shrink-0" aria-hidden />
+        {/* Header — hidden on paper (.print-pdf-chrome). On a phone the modal is
+            full-screen, so the header pads itself past the iOS status bar
+            (safe-area-inset-top) and leads with a BACK button — the standard
+            mobile way out of a full-screen view. The print label collapses to
+            its icon on narrow screens so nothing ever clips. */}
+        <div className="print-pdf-chrome flex items-center gap-1.5 sm:gap-2 bg-white border-b border-ink-200 px-2 sm:px-4 py-2 sm:py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] sm:pt-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-2 min-h-[44px] text-sm font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900 flex-shrink-0"
+            aria-label="Volver"
+          >
+            <ArrowLeft size={17} aria-hidden />
+            <span className="hidden sm:inline">Volver</span>
+          </button>
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-900">{title}</span>
           <button
             type="button"
             onClick={() => window.print()}
             disabled={!pages || !pages.length}
-            className="btn-brand inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            className="btn-brand inline-flex items-center gap-1.5 rounded-lg px-3 py-2 min-h-[40px] text-xs font-semibold disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
           >
             <Printer size={13} aria-hidden /> Imprimir
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-8 w-8 coarse:h-11 coarse:w-11 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-900"
-            aria-label="Cerrar"
-            title="Cerrar"
-          >
-            <X size={16} />
-          </button>
         </div>
 
-        {/* Pages — the ONLY thing visible on paper. */}
-        <div className="print-pdf-pages flex-1 overflow-y-auto px-3 py-4 sm:px-6">
+        {/* Pages — the ONLY thing visible on paper. Bottom padding clears the
+            home-indicator inset on full-screen mobile. */}
+        <div className="print-pdf-pages flex-1 overflow-y-auto px-2 py-3 sm:px-6 sm:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {error ? (
             <div className="print-pdf-chrome mx-auto mt-10 max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800 flex items-start gap-2">
               <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
