@@ -1,11 +1,12 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink, ArrowUpRight } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink, ArrowUpRight, MoreHorizontal } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
 import InlineEditor from '../primitives/InlineEditor.jsx';
 import MoneyInput from '../primitives/MoneyInput.jsx';
 import Select from '../primitives/Select.jsx';
+import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 import { DebouncedInput, DebouncedTextarea } from '../DebouncedInput.jsx';
 import LineBreakdownPopover from './LineBreakdownPopover.jsx';
 import FamilyPicker from './FamilyPicker.jsx';
@@ -642,7 +643,7 @@ function TopStrip({
     <button
       type="button"
       onClick={() => setPickerOpen(true)}
-      className="chip-action text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200 active:bg-brand-100"
+      className="chip-action text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300 uppercase tracking-[0.06em] !text-[10px] font-semibold"
       title="Cambiar familia"
       aria-label={`Familia ${family}. Cambiar`}
     >
@@ -653,10 +654,10 @@ function TopStrip({
     <button
       type="button"
       onClick={() => setPickerOpen(true)}
-      className="chip-action font-medium text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 active:bg-ink-100"
+      className="chip-action"
       aria-label="Asignar familia"
     >
-      <Tag size={10} className="opacity-70" aria-hidden />
+      <Tag size={11} className="opacity-70" aria-hidden />
       Asignar familia
     </button>
   );
@@ -798,6 +799,10 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
                 onCommit={(v) => onChange({ name: v })}
                 autoCapitalize="words"
                 enterKeyHint="next"
+                // Weight ladder: the ARTICLE name is the card's anchor → bold
+                // (700). Component names keep the primitive's semibold so the
+                // parent always outranks its pieces.
+                className="!font-bold"
               />
             </div>
             {/* Product selector — opens the full catalog flow (model → material +
@@ -1005,10 +1010,11 @@ function LineNotes({ showDescription, description, onChangeDescription, note, on
   const [noteOpen, setNoteOpen] = useState(false);
   return (
     <div className="mt-1.5">
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5 flex-wrap">
         {showDescription && (
           <NoteToggle
             icon={AlignLeft}
+            text="Descripción"
             label="Descripción · visible en el PDF"
             content={description}
             open={descOpen}
@@ -1017,6 +1023,7 @@ function LineNotes({ showDescription, description, onChangeDescription, note, on
         )}
         <NoteToggle
           icon={StickyNote}
+          text="Nota interna"
           label="Nota interna · no se imprime"
           content={note}
           open={noteOpen}
@@ -1047,10 +1054,11 @@ function LineNotes({ showDescription, description, onChangeDescription, note, on
   );
 }
 
-// One collapsed note icon. Brand-tinted (with a dot) once its field carries
+// One collapsed note toggle — a LABELED mini-button (the bare icons read as
+// mystery glyphs on a phone). Brand-tinted (with a dot) once its field carries
 // copy, pressed-looking while its field is open; an elegant hover tooltip
 // previews the copy, or explains the field's purpose when it's still empty.
-function NoteToggle({ icon: Icon, label, content, open, onClick }) {
+function NoteToggle({ icon: Icon, text, label, content, open, onClick }) {
   const hasContent = !!(content && content.trim());
   const active = open || hasContent;
   const tip = hasContent ? content.trim() : label;
@@ -1061,13 +1069,14 @@ function NoteToggle({ icon: Icon, label, content, open, onClick }) {
         onClick={onClick}
         aria-label={label}
         aria-expanded={open}
-        className={`relative inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md transition-colors ${
+        className={`relative inline-flex items-center gap-1.5 rounded-md px-2 py-1 min-h-7 coarse:min-h-11 text-[11px] font-medium transition-colors ${
           active ? 'text-brand-700 hover:bg-brand-50 active:bg-brand-100' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50 active:bg-ink-100'
         } ${open ? 'bg-brand-50' : ''}`}
       >
-        <Icon size={14} />
+        <Icon size={13} aria-hidden />
+        {text}
         {hasContent && !open && (
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-white" aria-hidden />
+          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-white" aria-hidden />
         )}
       </button>
       <span
@@ -1532,8 +1541,11 @@ function PricingRow({
   onToggleBreakdown, breakdownOpen, breakdown, adjustmentLine, unitForCaption, hasAdjustment,
   qtyAriaLabel = 'Cantidad', unitAriaLabel = 'Precio unitario',
 }) {
+  // Weight ladder (Lausanne 400/500/600/700): the line TOTAL is the money
+  // anchor → bold; a component's total stays semibold one size down, so
+  // scanning a compound the parent figure always wins.
   const totalValCls = totalSize === 'lg'
-    ? 'qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight'
+    ? 'qli-total-val text-lg font-bold tabular-nums text-ink-900 leading-tight'
     : 'qli-total-val text-[15px] font-semibold tabular-nums text-ink-900 leading-tight';
   const totalEl = (
     <div className={totalValCls}>{fmt(total)}</div>
@@ -1663,7 +1675,7 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
         </CalcCell>
         <div className="text-right ml-auto">
           <div className="eyebrow-xs tracking-wide text-brand-700">Rango · sin material</div>
-          <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
+          <div className="qli-total-val text-lg font-bold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
             {fmt(totalRange.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(totalRange.max)}
           </div>
           <div className="text-[10px] text-ink-500 leading-tight mt-0.5">
@@ -1709,7 +1721,7 @@ function CompoundCalculatorBand({
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
-            <div className="qli-total-val text-lg font-semibold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
+            <div className="qli-total-val text-lg font-bold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
               {ranged
                 ? <>{fmt(tr.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(tr.max)}</>
                 : fmt(rowTotal)}
@@ -1933,100 +1945,112 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           {(modules || []).map((m) => (
             <div key={m.moduleGroup || m.componentIds[0]} className={(m.optional || (m.altGroup && !m.selected)) ? 'bg-ink-50/40' : ''}>
               {m.moduleGroup ? (
-                <div className="px-3 py-1.5 bg-ink-100/60 flex items-center gap-2 flex-wrap">
-                  {m.altGroup ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelectModuleAlternative?.(m.moduleGroup)}
-                      aria-pressed={m.selected}
-                      title={m.selected ? 'Producto seleccionado' : 'Seleccionar este producto'}
-                      className="inline-flex items-center gap-1.5 coarse:min-h-11 flex-shrink-0"
+                // Two quiet rows instead of one overcrowded flex-wrap: the
+                // product NAME owns the first row end to end (it used to get
+                // strangled to ~60px on a phone between chips, a subtotal and
+                // three icon buttons), commands live in ONE ⋯ menu, and the
+                // state row below carries the Opcional toggle + subtotal.
+                <div className="px-3 py-2 bg-ink-100/60 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    {m.altGroup ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectModuleAlternative?.(m.moduleGroup)}
+                        aria-pressed={m.selected}
+                        title={m.selected ? 'Producto seleccionado' : 'Seleccionar este producto'}
+                        className="inline-flex items-center gap-1.5 coarse:min-h-11 flex-shrink-0"
+                      >
+                        <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                          m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+                        }`}>
+                          {m.selected && <Check size={9} strokeWidth={3} aria-hidden />}
+                        </span>
+                        <span className="eyebrow-xs tracking-wide font-semibold text-brand-700 select-none whitespace-nowrap">
+                          Alternativa {m.altIndex ?? '?'}/{m.altTotal ?? '?'}
+                        </span>
+                      </button>
+                    ) : (
+                      <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
+                    )}
+                    <DebouncedInput
+                      value={m.name}
+                      onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
+                      className="input min-h-8 coarse:min-h-11 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
+                      placeholder="Nombre del producto"
+                    />
+                    <Dropdown
+                      chevron={false}
+                      align="right"
+                      ariaLabel="Acciones del producto"
+                      label={<MoreHorizontal size={14} aria-hidden />}
+                      className="!px-1.5 flex-shrink-0"
+                      panelClassName="w-72"
                     >
-                      <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                        m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
-                      }`}>
-                        {m.selected && <Check size={9} strokeWidth={3} aria-hidden />}
-                      </span>
-                      <span className="eyebrow-xs tracking-wide font-semibold text-brand-700 select-none whitespace-nowrap">
-                        Alternativa {m.altIndex ?? '?'}/{m.altTotal ?? '?'}
-                      </span>
-                    </button>
-                  ) : (
-                    <Boxes size={11} className="text-ink-400 flex-shrink-0" aria-hidden />
-                  )}
-                  <DebouncedInput
-                    value={m.name}
-                    onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
-                    className="input min-h-8 coarse:min-h-11 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
-                    placeholder="Nombre del producto"
-                  />
-                  {onToggleModuleOptional && !m.altGroup && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleModuleOptional(m.moduleGroup, !m.optional)}
-                      className={`chip-action font-medium ${
-                        m.optional
-                          ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
-                          : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
-                      }`}
-                      title={m.optional
-                        ? 'Quitar opcional — el producto vuelve a sumar al total'
-                        : 'Marcar el producto como opcional — se muestra pero no suma al total'}
-                      aria-pressed={m.optional}
-                    >
-                      <Sparkles size={10} className="opacity-70" aria-hidden /> Opcional
-                    </button>
-                  )}
-                  {onAddModuleAlternative && !m.optional && (
-                    <button
-                      type="button"
-                      onClick={() => onAddModuleAlternative(m.moduleGroup)}
-                      className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400"
-                      title={m.altGroup
-                        ? 'Agregar otra alternativa de este producto'
-                        : 'Ofrecer este producto como alternativa — el cliente elige uno'}
-                    >
-                      <GitFork size={10} className="opacity-80" aria-hidden /> Alternativa
-                    </button>
-                  )}
-                  <span className="text-[11px] tabular-nums text-ink-500 whitespace-nowrap">
-                    {m.hasRange && m.range
-                      ? `${fmt(m.range.min)} – ${fmt(m.range.max)}`
-                      : fmt(m.subtotal)}
-                    {m.optional && <span className="ml-1 text-ink-400">· no incluido</span>}
-                    {m.altGroup && !m.selected && <span className="ml-1 text-ink-400">· no elegido</span>}
-                  </span>
-                  {onAddToProduct && (
-                    <button
-                      type="button"
-                      onClick={() => onAddToProduct(m.moduleGroup)}
-                      className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
-                      title="Agregar un componente a este producto"
-                    >
-                      <Plus size={12} />
-                    </button>
-                  )}
-                  {/* Extract this whole product (module) OUT as its own
-                      top-level line. Hidden inside a pick-one (extracting one
-                      option would strand its siblings — un-alternative first). */}
-                  {onExtract && !m.altGroup && (
-                    <button
-                      type="button"
-                      onClick={() => onExtract(m.componentIds)}
-                      className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
-                      title="Sacar este producto como artículo independiente de la cotización"
-                    >
-                      <ArrowUpRight size={12} />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onUngroupModule?.(m.moduleGroup)}
-                    className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
-                    title="Desagrupar este producto"
-                  >
-                    <Split size={12} />
-                  </button>
+                      {({ close }) => (
+                        <>
+                          {onAddToProduct && (
+                            <DropdownItem onSelect={() => { onAddToProduct(m.moduleGroup); close(); }}>
+                              <Plus size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                              <span className="font-medium">Agregar componente</span>
+                            </DropdownItem>
+                          )}
+                          {onAddModuleAlternative && !m.optional && (
+                            <DropdownItem onSelect={() => { onAddModuleAlternative(m.moduleGroup); close(); }}>
+                              <GitFork size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                              <span>
+                                <span className="block font-medium">
+                                  {m.altGroup ? 'Agregar otra alternativa' : 'Ofrecer como alternativa'}
+                                </span>
+                                <span className="block text-xs text-ink-500">El cliente elige uno de los productos del grupo</span>
+                              </span>
+                            </DropdownItem>
+                          )}
+                          {/* Extracting one option of a pick-one would strand
+                              its siblings — un-alternative first. */}
+                          {onExtract && !m.altGroup && (
+                            <DropdownItem onSelect={() => { onExtract(m.componentIds); close(); }}>
+                              <ArrowUpRight size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                              <span>
+                                <span className="block font-medium">Sacar como artículo</span>
+                                <span className="block text-xs text-ink-500">El producto pasa a ser una línea independiente</span>
+                              </span>
+                            </DropdownItem>
+                          )}
+                          <DropdownItem onSelect={() => { onUngroupModule?.(m.moduleGroup); close(); }}>
+                            <Split size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                            <span>
+                              <span className="block font-medium">Desagrupar producto</span>
+                              <span className="block text-xs text-ink-500">Sus componentes vuelven a la lista general</span>
+                            </span>
+                          </DropdownItem>
+                        </>
+                      )}
+                    </Dropdown>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {onToggleModuleOptional && !m.altGroup && (
+                      <button
+                        type="button"
+                        onClick={() => onToggleModuleOptional(m.moduleGroup, !m.optional)}
+                        className={`chip-action ${
+                          m.optional ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300' : ''
+                        }`}
+                        title={m.optional
+                          ? 'Quitar opcional — el producto vuelve a sumar al total'
+                          : 'Marcar el producto como opcional — se muestra pero no suma al total'}
+                        aria-pressed={m.optional}
+                      >
+                        <Sparkles size={11} className="opacity-70" aria-hidden /> Opcional
+                      </button>
+                    )}
+                    <span className="ml-auto text-[11px] tabular-nums text-ink-500 whitespace-nowrap">
+                      {m.hasRange && m.range
+                        ? `${fmt(m.range.min)} – ${fmt(m.range.max)}`
+                        : fmt(m.subtotal)}
+                      {m.optional && <span className="ml-1 text-ink-400">· no incluido</span>}
+                      {m.altGroup && !m.selected && <span className="ml-1 text-ink-400">· no elegido</span>}
+                    </span>
+                  </div>
                 </div>
               ) : null}
               <div className={`${m.moduleGroup ? 'divide-y divide-ink-100 pl-2 border-l-2 border-ink-100' : 'divide-y divide-ink-100'}${(m.optional || (m.altGroup && !m.selected)) ? ' opacity-60' : ''}`}>
@@ -2176,56 +2200,60 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             onClick={() => onChange(optional
               ? { isOptional: false, optionalOffered: false }
               : { isOptional: true, optionalOffered: true })}
-            className={`chip-action font-medium ${
-              optional
-                ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
-                : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
+            className={`chip-action relative z-[2] ${
+              optional ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300' : ''
             }`}
             title={optional
               ? 'Quitar el marcador opcional — el componente vuelve a sumar al total modular'
               : 'Marcar este componente como opcional — se muestra pero no suma al total'}
             aria-pressed={optional}
           >
-            <Sparkles size={10} className="opacity-70" aria-hidden />
+            <Sparkles size={11} className="opacity-70" aria-hidden />
             Opcional
           </button>
         )}
-        {/* Make this component its OWN component product (a named producto you
-            then fill with componentes). Hidden once it already belongs to one. */}
-        {onMakeProduct && !component.moduleGroup && !selecting && (
-          <button
-            type="button"
-            onClick={onMakeProduct}
-            className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-            title="Desglosar este componente en un producto — un producto completo que agrupa varios componentes"
-          >
-            <Boxes size={10} className="opacity-80" aria-hidden /> Desglosar
-          </button>
-        )}
-        {/* Move this piece OUT as its own top-level line. Component-level
-            alternative groups heal on both sides (lib/modules), so the action
-            stays available inside them; module members extract via their
-            module header instead. */}
-        {onExtract && !component.moduleGroup && !selecting && (
-          <button
-            type="button"
-            onClick={onExtract}
-            className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
-            title="Sacar este componente como artículo independiente de la cotización"
-          >
-            <ArrowUpRight size={10} className="opacity-80" aria-hidden /> Sacar como artículo
-          </button>
-        )}
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onRemove}
-          className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
-          aria-label="Quitar componente"
-          title="Quitar componente"
-        >
-          <X size={13} />
-        </button>
+        {/* Everything that's a one-shot COMMAND (vs a state toggle) lives in
+            this overflow — the header row stays one quiet line on a phone.
+            Desglosar/Sacar hide while a member of a product (moduleGroup) or
+            during selection mode, exactly as the old inline chips did. */}
+        <span className="relative z-[2] flex-shrink-0">
+          <Dropdown
+            chevron={false}
+            align="right"
+            ariaLabel="Más acciones del componente"
+            label={<MoreHorizontal size={14} aria-hidden />}
+            className="!px-1.5"
+            panelClassName="w-72"
+          >
+            {({ close }) => (
+              <>
+                {onMakeProduct && !component.moduleGroup && !selecting && (
+                  <DropdownItem onSelect={() => { onMakeProduct(); close(); }}>
+                    <Boxes size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                    <span>
+                      <span className="block font-medium">Desglosar en producto</span>
+                      <span className="block text-xs text-ink-500">Agrupa varios componentes bajo un nombre propio</span>
+                    </span>
+                  </DropdownItem>
+                )}
+                {onExtract && !component.moduleGroup && !selecting && (
+                  <DropdownItem onSelect={() => { onExtract(); close(); }}>
+                    <ArrowUpRight size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                    <span>
+                      <span className="block font-medium">Sacar como artículo</span>
+                      <span className="block text-xs text-ink-500">Lo convierte en una línea independiente de la cotización</span>
+                    </span>
+                  </DropdownItem>
+                )}
+                <DropdownItem onSelect={() => { onRemove(); close(); }} className="!text-red-600 hover:!bg-red-50 focus:!bg-red-50">
+                  <Trash2 size={14} className="mt-0.5 flex-shrink-0" aria-hidden />
+                  <span className="font-medium">Quitar componente</span>
+                </DropdownItem>
+              </>
+            )}
+          </Dropdown>
+        </span>
       </div>
 
       <div className="flex items-start gap-2">
@@ -2399,7 +2427,11 @@ function LineFooter({
   const canToggleOptional = !alternativeGroup && !setGroup;
   const canAddAlternative = !isOptional && !setGroup;
   return (
-    <div className="qli-footer relative z-[2] mt-2.5 pt-2 border-t border-ink-100 flex flex-wrap items-center gap-x-1 gap-y-1">
+    // The action buttons wrap INSIDE their own flex-1 group while the trash
+    // stays a sibling — so on a narrow card the buttons reflow but the trash
+    // can never be stranded alone on a whole row of dead space.
+    <div className="qli-footer relative z-[2] mt-2 pt-1.5 border-t border-ink-100 flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 flex-1 min-w-0">
       <FooterButton
         onClick={compound ? onDissolveCompound : onConvertToCompound}
         icon={Layers}
@@ -2464,13 +2496,12 @@ function LineFooter({
           Separar de las alternativas
         </FooterButton>
       )}
-
-      <div className="flex-1" />
+      </div>
 
       <button
         type="button"
         onClick={onRemove}
-        className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
+        className="self-start inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
         aria-label="Eliminar línea"
         title="Eliminar línea"
       >

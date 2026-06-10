@@ -511,7 +511,7 @@ function SetConnector({ onJoin }) {
       <button
         type="button"
         onClick={onJoin}
-        className="chip font-medium tracking-[0.06em] text-ink-400 bg-white border border-ink-200 px-2.5 py-1 coarse:min-h-11 coarse:px-4 shadow-sm opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 active:bg-ink-50 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 coarse:opacity-100"
+        className="chip-action opacity-60 hover:opacity-100 focus:opacity-100 coarse:opacity-100 coarse:px-4"
         title="Unir esta línea con la de arriba en un conjunto que se vende junto"
       >
         <PlusCircle size={11} className="opacity-80" aria-hidden />
@@ -572,29 +572,27 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
             {/* Top-level "apply material to all" — one pick stamps the chosen
                 grade + fabric + swatch onto every member line of the Conjunto
                 (repricing material-less members against their own model). */}
+            <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums whitespace-nowrap">
+              {memberCount} {isSet ? 'piezas' : 'opciones'}
+            </span>
             {onApplyMaterial && (
               <button
                 type="button"
                 onClick={() => setMaterialOpen(true)}
-                className="chip-action font-medium text-ink-400 border border-dashed border-ink-200 hover:text-ink-700 hover:border-ink-400 active:bg-ink-50"
+                className="chip-action"
                 title="Elegir una tela y aplicarla a todas las piezas del conjunto"
               >
-                <Palette size={10} className="opacity-70" aria-hidden />
-                Aplicar material a todo
+                <Palette size={11} className="opacity-70" aria-hidden />
+                Aplicar material
               </button>
             )}
-            <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums whitespace-nowrap">
-              {memberCount} {isSet ? 'piezas' : 'opciones'}
-            </span>
             {onToggleOptional && (
               <button
                 type="button"
                 onClick={onToggleOptional}
                 aria-pressed={!!optional}
-                className={`chip-action font-medium border border-dashed ${
-                  optional
-                    ? 'text-ink-600 bg-ink-50 border-ink-300 hover:border-ink-500'
-                    : 'text-ink-400 border-ink-200 hover:text-ink-700 hover:border-ink-400'
+                className={`chip-action ${
+                  optional ? 'text-brand-700 bg-brand-50 border-brand-200 hover:bg-brand-100 hover:border-brand-300' : ''
                 }`}
                 title={optional
                   ? 'Quitar opcional — el grupo vuelve a sumar al total'
@@ -602,7 +600,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
                     ? 'Marcar el conjunto como opcional (todo o nada, no suma al total)'
                     : 'Permitir no elegir ninguna (el grupo no suma al total)')}
               >
-                <Sparkles size={10} className="opacity-70" aria-hidden />
+                <Sparkles size={11} className="opacity-70" aria-hidden />
                 {optional ? 'Opcional' : 'Hacer opcional'}
               </button>
             )}

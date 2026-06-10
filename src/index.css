@@ -378,11 +378,14 @@
      Distinct from `.badge` (rounded-md, sentence-case) by being a pill in
      tracked small-caps. */
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors; }
-  /* Interactive chip — a .chip that is a BUTTON (the quote editor's Opcional /
-     Alternativa / Desglosar / family toggles). Same pill shape, plus the
-     coarse-pointer touch floor so a thumb can actually hit it. Color still
-     belongs to the call site, exactly like .chip. */
-  .chip-action { @apply chip coarse:min-h-11 coarse:px-3; }
+  /* Interactive chip — a .chip-sized control that is a BUTTON (the quote
+     editor's Opcional / Alternativa / family toggles). Deliberately NOT the
+     .chip pill: actions must read as buttons (Shopify school) — sentence
+     case, solid border, white surface, slight shadow — while read-only
+     badges stay small-caps pills. Toggle call sites paint their ON state
+     (e.g. `text-brand-700 bg-brand-50 border-brand-200`); the OFF state is
+     this base. Coarse-pointer floor so a thumb can actually hit it. */
+  .chip-action { @apply inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2 py-1 text-[11px] font-medium text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 coarse:min-h-11 coarse:px-3; }
   /* Tab pill — the in-page tab switcher of the accounting module (Ledger,
      Facturación, Gastos/606, Estados, CxC/CxP). Compose with .btn:
      `btn tab-pill` at rest, `btn tab-pill-active` for the open tab. */
@@ -545,7 +548,10 @@
   .qli-body {
     display: flex;
     flex-direction: column;
-    gap: 0.875rem;
+    /* 0.625rem, not 0.875 — the card stacks up to six zones (link bar,
+       swatch, notes, pricing, total, footer); at the old gap a phone card
+       read as islands of dead space between them. */
+    gap: 0.625rem;
     min-width: 0;
   }
   .qli-identity {
@@ -576,7 +582,7 @@
      query below. */
   .qli-pricing {
     border-top: 1px solid theme('colors.ink.100');
-    padding-top: 0.75rem;
+    padding-top: 0.5rem;
     margin-top: 0.125rem;
     min-width: 0;
   }
@@ -630,35 +636,24 @@
     line-height: 1;
   }
 
-  /* Narrow container — the inline equation no longer fits comfortably
-     (its natural cluster width is ~300–330px). Below 360px we collapse
-     to a labelled stack: qty + unit share the top row, the operators
-     disappear (the labels carry the meaning), and the Total drops to
-     its own full-width row, left-aligned and emphasised. This guarantees
-     the inline form only ever renders with ≥360px of room, so the money
-     string can't be clipped and the row can't force horizontal scroll. */
+  /* Narrow container — the inline equation with operators no longer fits
+     (its natural cluster width is ~300–330px). Below 360px the operators
+     disappear (the cell labels carry the meaning) and the THREE cells stay
+     on ONE row: qty and unit content-sized on the left, the Total taking
+     the remaining space right-aligned. The previous fallback stacked the
+     Total onto its own bordered full-width row, which on a phone turned
+     every card's pricing into two tall bands of mostly dead space — the
+     single labelled row reads in one glance and saves ~3 lines per card. */
   @container qli (max-width: 359px) {
     .qli-pricing-grid {
       width: 100%;
       margin-inline-start: 0;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: auto auto 1fr;
       column-gap: 0.75rem;
     }
     .qli-pricing-op { display: none; }
     .qli-pricing-cell { min-width: 0; }
-    .qli-pricing-total {
-      grid-column: 1 / -1;
-      align-items: stretch;
-      text-align: left;
-      border-top: 1px solid theme('colors.ink.100');
-      padding-top: 0.5rem;
-      margin-top: 0.125rem;
-    }
-    /* Neutralise the Total button's right-alignment so the stacked,
-       full-width Total row reads left-aligned with its label and the
-       qty/unit cells above it. */
-    .qli-pricing-total > button { text-align: left; }
-    .qli-pricing-total .qli-total-val { text-align: left; }
+    .qli-pricing-total .qli-total-val { font-size: 1rem; }
   }
 
   /* Per-line footer action row (LineFooter in QuoteLineItem.jsx). The

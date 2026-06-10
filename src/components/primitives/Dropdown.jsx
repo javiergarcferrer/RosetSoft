@@ -35,6 +35,8 @@ import { ChevronDown } from 'lucide-react';
  *   disabled?: boolean,
  *   className?: string,
  *   panelClassName?: string,
+ *   chevron?: boolean,
+ *   ariaLabel?: string,
  * }} props
  */
 export default function Dropdown({
@@ -44,6 +46,10 @@ export default function Dropdown({
   disabled = false,
   className = '',
   panelClassName = '',
+  // chevron=false makes an icon-only trigger (the "⋯" overflow menus of the
+  // quote editor) — the chevron would just be noise next to a glyph.
+  chevron = true,
+  ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null); // fixed-coord box, computed from the trigger
@@ -135,15 +141,18 @@ export default function Dropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
       >
         {label}
-        <ChevronDown
-          size={14}
-          aria-hidden
-          className={`text-ink-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
+        {chevron && (
+          <ChevronDown
+            size={14}
+            aria-hidden
+            className={`text-ink-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          />
+        )}
       </button>
 
       {open && pos && createPortal(
