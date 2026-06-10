@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Menu, X, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Menu, X, PanelLeftClose, PanelLeft, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
 import QuickCreate from './QuickCreate.jsx';
+import GlobalSearch from './GlobalSearch.jsx';
 import { navForRole } from '../lib/access.js';
+import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 
 // Persisted preference for the desktop "hide sidebar" toggle (see Layout).
 const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
@@ -29,6 +31,10 @@ export default function Layout() {
   );
   const isMobile = !useMediaQuery('(min-width: 768px)');
   const company = settings?.companyName || 'Roset Soft';
+  // Global ⌘K search palette — opened from the topbar/sidebar triggers or the
+  // keyboard shortcut; the overlay itself owns Escape-to-close.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useKeyboardShortcut('mod+k', () => setSearchOpen((o) => !o));
 
   // Remember the collapse preference across sessions.
   useEffect(() => {
@@ -64,13 +70,22 @@ export default function Layout() {
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}
       <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-ink-900 text-ink-100 border-b border-ink-800">
-        <button
-          onClick={() => setNavOpen(true)}
-          className="inline-flex items-center justify-center w-11 h-11 -ml-2 rounded text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
-          aria-label="Abrir menú"
-        >
-          <Menu size={20} />
-        </button>
+        <div className="flex items-center">
+          <button
+            onClick={() => setNavOpen(true)}
+            className="inline-flex items-center justify-center w-11 h-11 -ml-2 rounded text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+            aria-label="Abrir menú"
+          >
+            <Menu size={20} />
+          </button>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="inline-flex items-center justify-center w-11 h-11 rounded text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+            aria-label="Buscar"
+          >
+            <Search size={19} />
+          </button>
+        </div>
         {/* Brand block — the dealer's typographic logo (an SVG, usually a
             wordmark) rendered in white over the dark bar, with a small
             "Roset Soft" eyebrow beneath. No background box, no rounded
@@ -94,7 +109,9 @@ export default function Layout() {
           )}
           <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Roset Soft</div>
         </div>
-        <div className="w-11" />
+        {/* Spacer mirrors the left button group (menu + search) so the brand
+            block stays visually centered between them. */}
+        <div className="w-20" />
       </header>
 
       {/* Mobile drawer overlay */}
@@ -157,6 +174,22 @@ export default function Layout() {
               <X size={20} />
             </button>
           </div>
+        </div>
+
+        {/* Global search trigger — a quiet "Buscar… ⌘K" pill under the brand.
+            Desktop-only: the mobile topbar already carries the search icon. */}
+        <div className="hidden md:block px-3 pt-3">
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2 px-3 h-9 rounded-lg bg-ink-800/60 border border-ink-700/60 text-ink-400 hover:bg-ink-800 hover:text-ink-200 text-sm transition-colors"
+          >
+            <Search size={14} aria-hidden />
+            <span className="flex-1 text-left">Buscar…</span>
+            <kbd className="rounded border border-ink-700 px-1.5 py-0.5 text-[10px] font-medium text-ink-400">
+              {shortcutLabel('mod+k')}
+            </kbd>
+          </button>
         </div>
 
         {/* QuickBooks-style "+ Nuevo" quick-create — only where accounting
@@ -238,6 +271,9 @@ export default function Layout() {
       <main className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-12' : ''}`}>
         <MainContent />
       </main>
+
+      {/* Global ⌘K search palette — renders (and fetches) only while open. */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }
