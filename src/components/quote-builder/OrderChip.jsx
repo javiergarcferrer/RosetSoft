@@ -1,25 +1,29 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, ArrowRight, Plus, ChevronDown } from 'lucide-react';
+import { Package, ArrowRight, Plus } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
+import Modal from '../Modal.jsx';
 
 /**
- * Order indicator surfaced in the quote header. Three states:
+ * Order indicator for the quote header. It owns its own row (QuoteHeader
+ * renders it OUTSIDE the horizontally-scrolling meta strip) so the
+ * primary post-accept action is always thumb-reachable on a phone instead
+ * of scrolled off the right edge. Three states:
  *
- *   1. Quote isn't accepted yet     → render nothing (no order exists; the
- *                                     status stepper will offer to attach
- *                                     one when the dealer flips to 'accepted')
- *   2. Quote accepted, no order yet → "Agregar a pedido" menu — the dealer
- *                                     either picks an EXISTING order to assign
- *                                     this quote to, or creates a fresh one.
- *                                     (A quote can ride along with sibling
- *                                     quotes in one order, so "create" is no
- *                                     longer the only door.)
- *   3. Quote attached to an order   → chip linking to the order detail
- *                                     page, with the order's current stage
- *                                     as a sub-label
+ *   1. Quote isn't accepted yet     → render nothing (no order makes sense
+ *                                     yet; the status stepper offers to
+ *                                     attach one when the dealer accepts)
+ *   2. Quote accepted, no order yet → full-width "Agregar a pedido" CTA
+ *                                     (auto-width on desktop) opening a
+ *                                     bottom-sheet picker: assign this quote
+ *                                     to an EXISTING order, or create a new
+ *                                     one. A quote can ride along with
+ *                                     sibling quotes in one order, so
+ *                                     "create" is no longer the only door.
+ *   3. Quote attached to an order   → chip linking to the order detail page
+ *                                     with the order's current stage label
  *
  * Re-assigning a quote to a DIFFERENT order still lives on the order detail
  * page (detach there, then re-attach) — once it's in an order the chip is a
@@ -35,52 +39,57 @@ export default function OrderChip({ quote, profileId, onAttach }) {
   // Quote isn't in a state where attaching to an order makes sense.
   if (quote.status !== 'accepted' && !quote.orderId) return null;
 
-  // Accepted but unattached — offer the assign-or-create menu.
+  // Accepted but unattached — the assign-or-create CTA owns the row.
   if (!quote.orderId) {
-    return <AttachMenu quote={quote} profileId={profileId} onAttach={onAttach} />;
+    return (
+      <div className="mt-2.5">
+        <AttachCta quote={quote} profileId={profileId} onAttach={onAttach} />
+      </div>
+    );
   }
 
   if (!order) {
     // Order id present but the row hasn't loaded yet (or was deleted).
-    // Show a quiet placeholder rather than blank space so the layout
-    // doesn't shift when the live query resolves.
+    // Quiet placeholder so the layout doesn't shift when it resolves.
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
-        <Package size={12} /> Pedido…
-      </span>
+      <div className="mt-2.5">
+        <span className="inline-flex items-center gap-1.5 px-2.5 min-h-8 coarse:min-h-9 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
+          <Package size={12} /> Pedido…
+        </span>
+      </div>
     );
   }
 
   const stage = ORDER_STAGE_BY_KEY[currentOrderStage(order)];
   return (
-    <Link
-      to={`/orders/${order.id}`}
-      className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.97] ring-1 ring-inset ring-black/5"
-      title={stage?.description}
-    >
-      <Package size={12} className="text-ink-400 flex-shrink-0" />
-      <span className="tabular-nums font-semibold">Pedido #{order.number ?? order.id.slice(-4)}</span>
-      {/* Stage label hidden on phones — the order page is one tap
-          away if the dealer needs it, and dropping it saves enough
-          width that all four chips can land on one line at iPhone
-          widths instead of wrapping. */}
-      <span className="text-ink-300 hidden sm:inline">·</span>
-      <span className="text-ink-400 hidden sm:inline">{stage?.label || order.status}</span>
-      <ArrowRight size={11} className="text-ink-300 flex-shrink-0" />
-    </Link>
+    <div className="mt-2.5">
+      <Link
+        to={`/orders/${order.id}`}
+        className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-10 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
+        title={stage?.description}
+      >
+        <Package size={13} className="text-ink-400 flex-shrink-0" />
+        <span className="tabular-nums font-semibold">Pedido #{order.number ?? order.id.slice(-4)}</span>
+        <span className="text-ink-300">·</span>
+        <span className="text-ink-400">{stage?.label || order.status}</span>
+        <ArrowRight size={12} className="text-ink-300 flex-shrink-0" />
+      </Link>
+    </div>
   );
 }
 
 /**
- * The accepted-but-unattached affordance: a popover that lists the dealer's
- * open orders (so this quote can join an order that already groups sibling
- * quotes) and a "Crear pedido nuevo" action that spins up a fresh one.
+ * The accepted-but-unattached affordance: a prominent button (full-width on
+ * a phone, auto on desktop) that opens a bottom-sheet / dialog picker. The
+ * sheet lists the dealer's open orders so this quote can join one that
+ * already groups sibling quotes, plus a "Crear pedido nuevo" action.
  *
- * Existing orders are filtered to non-cancelled and sorted with the quote's
- * own customer first, so the most-likely target sits at the top — the dealer
- * usually wants the order that already holds this client's other quotes.
+ * Why a Modal and not an inline dropdown: the header meta area sits inside
+ * an `overflow-x-auto` strip, which would clip an absolutely-positioned
+ * popover. The portal-based Modal escapes that and gives a native bottom
+ * sheet with full-size touch targets.
  */
-function AttachMenu({ quote, profileId, onAttach }) {
+function AttachCta({ quote, profileId, onAttach }) {
   const [open, setOpen] = useState(false);
 
   const orders = useLiveQuery(
@@ -94,7 +103,9 @@ function AttachMenu({ quote, profileId, onAttach }) {
     [],
   );
 
-  // Same-customer orders bubble up; within a group, most-recent first.
+  // Same-customer orders bubble to the top (the most likely target — it
+  // usually already holds this client's other quotes); within a group,
+  // most-recently-touched first.
   const sorted = [...orders].sort((a, b) => {
     const am = a.customerId && a.customerId === quote.customerId ? 0 : 1;
     const bm = b.customerId && b.customerId === quote.customerId ? 0 : 1;
@@ -113,80 +124,82 @@ function AttachMenu({ quote, profileId, onAttach }) {
   }
 
   return (
-    <div className="relative">
+    <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Agregar a pedido"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="inline-flex items-center gap-1.5 px-2.5 min-h-7 coarse:min-h-9 rounded-full text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-all active:scale-[0.97] ring-1 ring-inset ring-brand-200/50"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-3.5 min-h-10 coarse:min-h-11 rounded-xl text-sm font-semibold text-white bg-brand-grad shadow-glow hover:brightness-[1.03] active:scale-[0.99] transition-all"
       >
-        <Package size={12} />
+        <Package size={15} />
         Agregar a pedido
-        <ChevronDown size={12} className="text-brand-400" />
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div
-            role="menu"
-            className="absolute left-0 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-ink-200 bg-white shadow-pop py-1 z-40"
-          >
-            {sorted.length > 0 && (
-              <>
-                <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                  Asignar a un pedido
-                </p>
-                <ul className="max-h-64 overflow-y-auto">
-                  {sorted.map((o) => {
-                    const stage = ORDER_STAGE_BY_KEY[currentOrderStage(o)];
-                    return (
-                      <li key={o.id}>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => assignTo(o.id)}
-                          className="w-full text-left px-3 py-2 hover:bg-brand-50/60 transition-colors flex items-center gap-2.5"
-                        >
-                          <Package size={14} className="text-ink-400 flex-shrink-0" />
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-semibold text-ink-900 truncate">
-                              Pedido #{o.number ?? o.id.slice(-4)}
-                              {o.name ? ` — ${o.name}` : ''}
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Agregar a pedido" size="sm">
+        <button
+          type="button"
+          onClick={createNew}
+          className="w-full inline-flex items-center gap-3 px-3 py-3 rounded-xl border border-brand-200 bg-brand-50/60 hover:bg-brand-100/70 active:scale-[0.99] transition-all text-left"
+        >
+          <span className="w-9 h-9 rounded-full bg-white border border-brand-200 flex items-center justify-center flex-shrink-0">
+            <Plus size={18} className="text-brand-600" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-brand-700">Crear pedido nuevo</span>
+            <span className="block text-xs text-ink-400">Inicia un pedido con esta cotización</span>
+          </span>
+        </button>
+
+        {sorted.length > 0 && (
+          <>
+            <p className="mt-5 mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              O asignar a un pedido existente
+            </p>
+            <ul className="divide-y divide-ink-100 -mx-1">
+              {sorted.map((o) => {
+                const stage = ORDER_STAGE_BY_KEY[currentOrderStage(o)];
+                const sameCustomer = o.customerId && o.customerId === quote.customerId;
+                return (
+                  <li key={o.id}>
+                    <button
+                      type="button"
+                      onClick={() => assignTo(o.id)}
+                      className="w-full text-left px-3 py-3 hover:bg-brand-50/60 active:scale-[0.99] transition-all rounded-lg flex items-center gap-3"
+                    >
+                      <span className="w-9 h-9 rounded-full bg-ink-50 border border-ink-100 flex items-center justify-center flex-shrink-0">
+                        <Package size={16} className="text-ink-400" />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-semibold text-ink-900 truncate">
+                          Pedido #{o.number ?? o.id.slice(-4)}
+                          {o.name ? ` — ${o.name}` : ''}
+                        </span>
+                        <span className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-ink-400">{stage?.label || o.status}</span>
+                          {sameCustomer && (
+                            <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 border border-brand-100 rounded-full px-1.5 py-px">
+                              mismo cliente
                             </span>
-                            <span className="block text-[11px] text-ink-400">{stage?.label || o.status}</span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="my-1 border-t border-ink-100" />
-              </>
-            )}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={createNew}
-              className="w-full text-left px-3 py-2 hover:bg-brand-50/60 transition-colors inline-flex items-center gap-2.5 text-sm font-semibold text-brand-700"
-            >
-              <span className="w-3.5 flex justify-center flex-shrink-0">
-                <Plus size={14} />
-              </span>
-              Crear pedido nuevo
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+                          )}
+                        </span>
+                      </span>
+                      <ArrowRight size={15} className="text-ink-300 flex-shrink-0" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </Modal>
+    </>
   );
 }
 
 /**
  * Spin up a fresh order with this quote attached. The dealer can also
  * later move the quote to a different order from OrderDetail; this is
- * the create branch of the accept-time assign-or-create menu.
+ * the create branch of the accept-time assign-or-create picker.
  *
  * The order inherits the quote's customer and a sensible default name
  * ("Pedido — {customer}"). Status starts at 'draft' since the order's

@@ -94,11 +94,14 @@ export default function QuoteHeader({
         </div>
       </div>
 
-      {/* ROW 2 — the "who": customer + professional + order + seller. A single
+      {/* ROW 2 — the "who": customer + professional + seller. A single
           horizontally-scrollable strip on a phone (so it never stacks into
-          extra rows — the whole header stays TWO rows), with a soft right-edge
-          fade so the overflow reads as "scroll for more", not a clipped chip.
-          Wraps normally on sm+. */}
+          extra rows), with a soft right-edge fade so the overflow reads as
+          "scroll for more", not a clipped chip. Wraps normally on sm+.
+
+          The order affordance is deliberately NOT in this strip: it's the
+          primary post-accept action, so burying it behind a horizontal
+          scroll hid it on phones. It gets its own always-visible row below. */}
       <div
         className="mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto sm:overflow-visible sm:flex-wrap [&>*]:shrink-0 sm:[&>*]:shrink [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-mask-image:linear-gradient(to_right,#000_90%,transparent)] [mask-image:linear-gradient(to_right,#000_90%,transparent)] sm:[-webkit-mask-image:none] sm:[mask-image:none]"
         role="group"
@@ -113,7 +116,6 @@ export default function QuoteHeader({
           profileId={profileId}
           onUpdateQuote={onUpdateQuote}
         />
-        <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} />
         {isAdmin && (
           <SellerSelect quote={quote} assignableSellers={assignableSellers} onUpdateQuote={onUpdateQuote} />
         )}
@@ -123,6 +125,11 @@ export default function QuoteHeader({
           </span>
         )}
       </div>
+
+      {/* Order affordance — its own full-width row (renders nothing until the
+          quote is accepted), so the "Agregar a pedido" CTA / order chip is
+          always visible without horizontal scrolling on a phone. */}
+      <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} />
 
       <SpecialOrderWarning quote={quote} />
 
