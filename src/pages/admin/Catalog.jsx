@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
 import { db, searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import CatalogFilterBar, { DEFAULT_CATALOG_FILTERS } from '../../components/catalog/CatalogFilterBar.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { parsePriceList, dedupeBySku, unifySplitNames } from '../../lib/priceListCsv.js';
 import { groupFamilies } from '../../lib/catalog.js';
@@ -251,16 +252,115 @@ function memberSkus(model) {
   ].filter((m) => m.product);
 }
 
+/** A model's price span across its grade variants — `{ lo, hi }`, or null when
+ *  no variant carries a positive price. Drives the row label, the price-range
+ *  filter and the price sorts. */
+function modelPriceBounds(model) {
+  let lo = Infinity;
+  let hi = 0;
+  for (const p of model.byGrade.values()) {
+    const n = Number(p?.priceUsd) || 0;
+    if (n > 0) {
+      if (n < lo) lo = n;
+      if (n > hi) hi = n;
+    }
+  }
+  return hi > 0 ? { lo, hi } : null;
+}
+
 /** "$X" when every variant is one price, else "$lo – $hi" across the model's
  *  grade variants — the at-a-glance figure shown on the collapsed model row. */
 function priceRangeLabel(model) {
-  const prices = [...model.byGrade.values()]
-    .map((p) => Number(p?.priceUsd) || 0)
-    .filter((n) => n > 0);
-  if (!prices.length) return '—';
-  const lo = Math.min(...prices);
-  const hi = Math.max(...prices);
-  return lo === hi ? usd(lo) : `${usd(lo)} – ${usd(hi)}`;
+  const b = modelPriceBounds(model);
+  if (!b) return '—';
+  return b.lo === b.hi ? usd(b.lo) : `${usd(b.lo)} – ${usd(b.hi)}`;
+}
+
+/**
+ * Apply the filter bar's narrowing filters to a model list (pure; no sort).
+ * Text matches the model name, family, root and member SKU references; the
+ * Min/Max USD window keeps a model whose price RANGE overlaps it (a model
+ * priced $900–$1,400 matches "max $1,000"). Unpriced models drop out only
+ * when a price bound is set.
+ */
+function filterModels(models, filters) {
+  const text = (filters.text || '').trim().toLowerCase();
+  const min = filters.min === '' ? null : Number(filters.min) || 0;
+  const max = filters.max === '' ? null : Number(filters.max) || 0;
+  if (!text && min == null && max == null) return models;
+  return models.filter((m) => {
+    if (text) {
+      let hay = `${m.name || ''} ${m.family || ''} ${m.root || ''}`.toLowerCase();
+      for (const p of m.byGrade.values()) hay += ` ${(p.reference || '').toLowerCase()}`;
+      if (!hay.includes(text)) return false;
+    }
+    if (min != null || max != null) {
+      const b = modelPriceBounds(m);
+      if (!b) return false;
+      if (min != null && b.hi < min) return false;
+      if (max != null && b.lo > max) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Order a model list per the filter bar's sort (pure; returns a new array
+ * except for the default). 'name' is the order `toModels` already produced;
+ * price sorts key on the range's cheap end (↑) / expensive end (↓), sinking
+ * unpriced models to the bottom either way; 'skus' = most variants first.
+ */
+function sortModels(models, sort) {
+  if (sort === 'name' || !sort) return models;
+  const arr = [...models];
+  if (sort === 'priceAsc' || sort === 'priceDesc') {
+    const asc = sort === 'priceAsc';
+    arr.sort((a, b) => {
+      const A = modelPriceBounds(a);
+      const B = modelPriceBounds(b);
+      if (!A || !B) return (A ? 0 : 1) - (B ? 0 : 1);
+      return asc ? A.lo - B.lo || A.hi - B.hi : B.hi - A.hi || B.lo - A.lo;
+    });
+  } else if (sort === 'skus') {
+    arr.sort((a, b) => b.byGrade.size - a.byGrade.size);
+  }
+  return arr;
+}
+
+// Incremental rendering — a huge category (Asientos ≈ hundreds of models,
+// thousands of SKUs) must never mount every row at once. Lists render the
+// first batch and grow on "Mostrar más"; the limit resets the moment the
+// underlying list changes (new category / filter / sort), synchronously
+// during render so a stale larger limit never paints.
+const MODEL_BATCH = 40;
+const SKU_BATCH = 60;
+
+function useBatch(items, batch) {
+  const [state, setState] = useState({ items, limit: batch });
+  if (state.items !== items) setState({ items, limit: batch });
+  const limit = state.items === items ? state.limit : batch;
+  const visible = useMemo(
+    () => (items.length > limit ? items.slice(0, limit) : items),
+    [items, limit],
+  );
+  const remaining = Math.max(0, items.length - limit);
+  const showMore = () => setState((s) => ({ ...s, limit: s.limit + batch }));
+  return { visible, remaining, showMore };
+}
+
+/** The "Mostrar más (N restantes)" reveal control under a truncated list. */
+function ShowMoreButton({ remaining, onClick, className = '' }) {
+  return (
+    <div className={`py-2.5 ${className}`}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="btn-secondary w-full justify-center text-xs"
+      >
+        Mostrar más ({remaining} {remaining === 1 ? 'restante' : 'restantes'})
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -272,8 +372,11 @@ function CategoryCard({ profileId, category, count }) {
   const [everOpened, setEverOpened] = useState(false);
   const label = category || NO_CATEGORY;
   return (
+    // overflow-clip (not -hidden): same rounded-corner clipping, but it keeps
+    // the body's sticky filter bar working — overflow:hidden would make the
+    // card the sticky containing scrollport and the bar would never pin.
     <details
-      className="card overflow-hidden group/cat"
+      className="card overflow-clip group/cat"
       onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
     >
       <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
@@ -292,15 +395,20 @@ function CategoryCard({ profileId, category, count }) {
   );
 }
 
-/** Lazy body of a category card — fetches the category's products on mount and
- *  renders its models. */
+/** Lazy body of a category card — fetches the category's products on mount,
+ *  groups them into models and renders them behind the refine toolbar. */
 function CategoryModels({ profileId, category }) {
   const { data: products, loaded, error } = useLiveQueryStatus(
     () => productsByCategory(profileId, category),
     [profileId, category],
     [],
   );
-  const models = useMemo(() => toModels(products), [products]);
+  const allModels = useMemo(() => toModels(products), [products]);
+  const [filters, setFilters] = useState(DEFAULT_CATALOG_FILTERS);
+  const models = useMemo(
+    () => sortModels(filterModels(allModels, filters), filters.sort),
+    [allModels, filters],
+  );
 
   if (!loaded) {
     return (
@@ -312,10 +420,38 @@ function CategoryModels({ profileId, category }) {
   if (error) {
     return <div className="px-5 py-4 text-sm text-red-700">No se pudieron cargar los productos.</div>;
   }
-  if (models.length === 0) {
+  if (allModels.length === 0) {
     return <div className="px-5 py-4 text-sm text-ink-500">Sin productos en esta categoría.</div>;
   }
-  return <ModelList models={models} />;
+  return (
+    <>
+      {allModels.length > 1 && (
+        <CatalogFilterBar
+          value={filters}
+          onChange={setFilters}
+          shown={models.length}
+          total={allModels.length}
+        />
+      )}
+      {models.length === 0 ? (
+        <FilteredOutNotice onClear={() => setFilters({ ...DEFAULT_CATALOG_FILTERS, sort: filters.sort })} />
+      ) : (
+        <ModelList models={models} />
+      )}
+    </>
+  );
+}
+
+/** Empty state when the category HAS models but the bar's filters hide all. */
+function FilteredOutNotice({ onClear }) {
+  return (
+    <div className="px-5 py-6 text-center text-sm text-ink-500">
+      Ningún modelo coincide con los filtros.{' '}
+      <button type="button" className="font-medium text-brand-700 hover:underline" onClick={onClear}>
+        Limpiar filtros
+      </button>
+    </div>
+  );
 }
 
 /**
@@ -330,12 +466,33 @@ function SearchResults({ profileId, term }) {
     [profileId, term],
     [],
   );
-  const sections = useMemo(() => groupByCategory(rows), [rows]);
+  const allSections = useMemo(() => groupByCategory(rows), [rows]);
+
+  // The refine bar narrows the (already-fetched) matches client-side, across
+  // every category section; empty sections drop out.
+  const [filters, setFilters] = useState(DEFAULT_CATALOG_FILTERS);
+  const { sections, shown, total } = useMemo(() => {
+    let shownN = 0;
+    let totalN = 0;
+    const out = [];
+    for (const s of allSections) {
+      totalN += s.models.length;
+      const models = sortModels(filterModels(s.models, filters), filters.sort);
+      shownN += models.length;
+      if (models.length > 0) {
+        // Re-count SKUs over the surviving models so the section header
+        // ("N modelo(s) · M SKU") stays truthful under active filters.
+        const count = models.reduce((n, m) => n + m.byGrade.size, 0);
+        out.push({ ...s, models, count });
+      }
+    }
+    return { sections: out, shown: shownN, total: totalN };
+  }, [allSections, filters]);
 
   if (!loaded) {
     return <div className="card overflow-hidden"><ListLoading rows={6} /></div>;
   }
-  if (sections.length === 0) {
+  if (allSections.length === 0) {
     return <div className="card px-4 py-10 text-center text-sm text-ink-400">Sin coincidencias para esa búsqueda.</div>;
   }
   return (
@@ -343,11 +500,28 @@ function SearchResults({ profileId, term }) {
       <p className="mb-3 text-xs text-ink-500" aria-live="polite">
         {rows.length === 1 ? '1 producto' : `${rows.length} productos`}
       </p>
-      <div className="space-y-3">
-        {sections.map((section) => (
-          <CategorySection key={section.category || NONE_KEY} section={section} />
-        ))}
-      </div>
+      {total > 1 && (
+        <div className="card overflow-clip mb-3">
+          <CatalogFilterBar
+            value={filters}
+            onChange={setFilters}
+            shown={shown}
+            total={total}
+            placeholder="Filtrar resultados…"
+          />
+        </div>
+      )}
+      {sections.length === 0 ? (
+        <div className="card">
+          <FilteredOutNotice onClear={() => setFilters({ ...DEFAULT_CATALOG_FILTERS, sort: filters.sort })} />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {sections.map((section) => (
+            <CategorySection key={section.category || NONE_KEY} section={section} />
+          ))}
+        </div>
+      )}
       {rows.length >= SEARCH_LIMIT && (
         <div className="px-4 py-2 text-[11px] text-ink-500">
           Mostrando los primeros {SEARCH_LIMIT}. Afina la búsqueda para ver más.
@@ -385,13 +559,19 @@ function CategorySection({ section }) {
   );
 }
 
-/** The list of model rows inside a category. */
+/** The list of model rows inside a category — renders the first MODEL_BATCH
+ *  and grows on "Mostrar más"; the cursor resets whenever `models` changes
+ *  (new category / filter / sort). */
 function ModelList({ models }) {
+  const { visible, remaining, showMore } = useBatch(models, MODEL_BATCH);
   return (
     <div className="divide-y divide-ink-100">
-      {models.map((model) => (
+      {visible.map((model) => (
         <ModelRow key={model.root} model={model} />
       ))}
+      {remaining > 0 && (
+        <ShowMoreButton remaining={remaining} onClick={showMore} className="px-4 sm:px-5" />
+      )}
     </div>
   );
 }
@@ -400,11 +580,16 @@ function ModelList({ models }) {
  * One MODEL row — collapsed by default. The summary shows the model name and
  * its price range (everything the dealer needs at a glance); expanding reveals
  * the grade-variant SKUs with their reference, finish, price, cost and margin.
+ *
+ * Memoized (the `model` object is referentially stable across re-renders) and
+ * marked content-visibility:auto with an intrinsic height hint, so off-screen
+ * rows in a long category skip layout/paint entirely.
  */
-function ModelRow({ model }) {
-  const members = memberSkus(model);
+const ModelRow = memo(function ModelRow({ model }) {
+  const members = useMemo(() => memberSkus(model), [model]);
+  const { visible, remaining, showMore } = useBatch(members, SKU_BATCH);
   return (
-    <details className="group/model">
+    <details className="group/model [content-visibility:auto] [contain-intrinsic-size:auto_42px]">
       <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 flex items-center justify-between gap-2 hover:bg-ink-50 transition-colors min-w-0">
         <span className="flex items-center gap-2 min-w-0 flex-1">
           <ChevronRight
@@ -424,16 +609,22 @@ function ModelRow({ model }) {
         </span>
       </summary>
       <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-8 sm:pl-10 pr-3 sm:pr-4 pb-1.5">
-        {members.map(({ grade, product: p }) => (
+        {visible.map(({ grade, product: p }) => (
           <SkuRow key={p.id} grade={grade} product={p} />
         ))}
+        {remaining > 0 && (
+          <li className="list-none">
+            <ShowMoreButton remaining={remaining} onClick={showMore} />
+          </li>
+        )}
       </ul>
     </details>
   );
-}
+});
 
-/** One grade-variant SKU line inside an expanded model. */
-function SkuRow({ grade, product: p }) {
+/** One grade-variant SKU line inside an expanded model. Memoized: `grade` is a
+ *  string and `product` a stable row object, so re-renders skip untouched SKUs. */
+const SkuRow = memo(function SkuRow({ grade, product: p }) {
   const price = Number(p.priceUsd) || 0;
   const cost = Number(p.cost) || 0;
   const marginPct = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
@@ -455,4 +646,4 @@ function SkuRow({ grade, product: p }) {
       <span className="tabular-nums text-right text-ink-400 w-10 flex-shrink-0 hidden lg:inline">{marginPct}%</span>
     </li>
   );
-}
+});
