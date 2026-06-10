@@ -39,7 +39,7 @@ export function useUndoToast() {
         onClick={async () => {
           try { await state.undo(); } finally { dismiss(); }
         }}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-xs font-medium"
+        className="inline-flex items-center gap-1 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 text-xs font-medium transition-colors"
       >
         <Undo2 size={12} /> Deshacer
       </button>

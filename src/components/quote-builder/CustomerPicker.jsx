@@ -135,7 +135,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
           <button
             type="button"
             onClick={() => { setQ(''); inputRef.current?.focus(); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1"
+            className="btn-icon absolute right-0.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
             aria-label="Limpiar"
           >
             <X size={14} />
@@ -171,7 +171,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
             <button
               type="button"
               onClick={openDetail}
-              className="flex-shrink-0 self-center mr-1.5 px-2.5 py-1.5 min-h-[44px] sm:min-h-0 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 transition-colors"
+              className="flex-shrink-0 self-center mr-1.5 px-2.5 py-1.5 min-h-9 coarse:min-h-11 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 active:bg-ink-100 transition-colors"
             >
               Con detalles
             </button>

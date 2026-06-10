@@ -85,37 +85,37 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
     <div className="card p-4 mb-4 border-ink-300">
       <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
         <h3 className="font-semibold min-w-0 truncate">Nuevo asiento</h3>
-        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
       <div className="flex flex-wrap gap-3 mb-3">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+          className="input w-auto" />
         <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Concepto / descripción"
-          className="flex-1 min-w-[180px] rounded-lg border border-ink-200 px-3 py-1.5 text-sm" />
+          className="input flex-1 min-w-[180px]" />
       </div>
 
       <div className="space-y-2">
         {lines.map((l, i) => (
           <div key={i} className="flex flex-wrap gap-2 items-center">
             <select value={l.accountCode} onChange={(e) => setLine(i, { accountCode: e.target.value })}
-              className="flex-1 min-w-[180px] rounded-lg border border-ink-200 px-2 py-1.5 text-sm">
+              className="input flex-1 min-w-[180px]">
               <option value="">— Cuenta —</option>
               {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
             </select>
             <input type="number" step="0.01" min="0" inputMode="decimal" value={l.debit} placeholder="Débito"
               onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })}
-              className="w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+              className="input w-28 text-right tabular-nums" />
             <input type="number" step="0.01" min="0" inputMode="decimal" value={l.credit} placeholder="Crédito"
               onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
-              className="w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+              className="input w-28 text-right tabular-nums" />
             <button type="button" onClick={() => setLines((arr) => arr.length > 2 ? arr.filter((_, idx) => idx !== i) : arr)}
-              className="text-ink-400 hover:text-rose-600 min-h-[44px] min-w-[44px] flex items-center justify-center" title="Eliminar línea"><Trash2 size={15} /></button>
+              className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50" title="Eliminar línea"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
 
       <button type="button" onClick={() => setLines((arr) => [...arr, emptyLine()])}
-        className="mt-2 text-sm text-ink-600 inline-flex items-center gap-1 hover:text-ink-900 min-h-[44px] px-1">
+        className="btn-ghost mt-2 -ml-2">
         <Plus size={14} /> Agregar línea
       </button>
 
@@ -125,7 +125,7 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
           {imbalance !== 0 && <span className="ml-2 text-rose-600">Descuadre {formatDop(imbalance)}</span>}
         </div>
         <button type="button" onClick={save} disabled={saving || imbalance !== 0 || totDebit === 0}
-          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto min-h-[44px] px-4">
+          className="btn-primary self-start sm:self-auto">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar asiento
         </button>
       </div>
@@ -208,7 +208,7 @@ export default function Ledger() {
 
   const tabBtn = (key, label) => (
     <button type="button" onClick={() => setTab(key)}
-      className={`text-sm px-3 py-2 rounded-lg min-h-[44px] ${tab === key ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+      className={`btn ${tab === key ? 'tab-pill-active' : 'tab-pill'}`}>
       {label}
     </button>
   );
@@ -241,7 +241,7 @@ export default function Ledger() {
         subtitle="Diario, mayor y balanza — partida doble en RD$"
         actions={
           <button type="button" onClick={() => { setShowForm((v) => !v); setTab('diario'); }}
-            className="btn-primary text-sm inline-flex items-center gap-1.5">
+            className="btn-primary">
             <Plus size={15} /> Nuevo asiento
           </button>
         }
@@ -252,7 +252,7 @@ export default function Ledger() {
         {tabBtn('mayor', 'Mayor')}
         {tabBtn('balanza', 'Balanza')}
         <button type="button" onClick={exportActive}
-          className="ml-auto btn-ghost text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3"><Download size={14} /> <span className="hidden sm:inline">Exportar</span></button>
+          className="ml-auto btn-ghost"><Download size={14} /> <span className="hidden sm:inline">Exportar</span></button>
       </div>
 
       {showForm && accountsQ.loaded && (

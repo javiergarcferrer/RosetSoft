@@ -23,7 +23,7 @@ export default function ProjectPaletteCard() {
   const groups = groupPaletteByMaterial(list);
 
   return (
-    <div className="card p-3">
+    <div className="card p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <Palette size={15} className="text-ink-500 flex-shrink-0" aria-hidden />
@@ -61,7 +61,9 @@ export default function ProjectPaletteCard() {
                     className="h-5 w-5 flex-shrink-0 rounded border border-ink-100 bg-ink-50 object-cover"
                     hoverPreview
                   />
-                  <span className="text-[11px] text-ink-700 truncate min-w-0">
+                  {/* Fabric/color names WRAP, never truncate — they're the data
+                      the chip exists to show. */}
+                  <span className="text-[11px] text-ink-700 break-words min-w-0">
                     {fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—'}
                   </span>
                   {onRemove && (

@@ -284,7 +284,7 @@ export default function OrderDetail() {
                   </p>
                 </div>
               </div>
-              <button onClick={addContainer} className="btn-secondary flex-shrink-0 active:scale-[0.98] transition-transform">
+              <button onClick={addContainer} className="btn-secondary flex-shrink-0">
                 <Plus size={14} /> Contenedor
               </button>
             </header>
@@ -330,7 +330,7 @@ export default function OrderDetail() {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setPicker(true)} className="btn-secondary flex-shrink-0 active:scale-[0.98] transition-transform">
+              <button onClick={() => setPicker(true)} className="btn-secondary flex-shrink-0">
                 <Plus size={14} /> Cotización
               </button>
             </header>
@@ -469,7 +469,7 @@ function ContainerRow({ container }) {
         </div>
         <button
           onClick={del}
-          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md flex-shrink-0 transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
+          className="btn-icon-danger flex-shrink-0"
           title="Eliminar contenedor"
           aria-label="Eliminar contenedor"
         >
@@ -568,7 +568,7 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
         </div>
         <button
           onClick={onDetach}
-          className="text-ink-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
+          className="btn-icon-danger"
           title="Quitar del pedido"
           aria-label="Quitar del pedido"
         >
@@ -576,8 +576,9 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
         </button>
         <Link
           to={`/quotes/${quote.id}`}
-          className="text-ink-300 group-hover:text-brand-500 p-1.5 rounded-md transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
+          className="btn-icon text-ink-300 group-hover:text-brand-500 hover:text-brand-600"
           title="Abrir cotización"
+          aria-label="Abrir cotización"
         >
           <ExternalLink size={14} />
         </Link>
@@ -648,7 +649,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
         type="button"
         onClick={onToggle}
         title="Clic para desmarcar"
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 coarse:py-2.5 rounded-md text-xs font-medium border transition-colors ${doneClass}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium border transition-colors active:scale-[0.97] ${doneClass}`}
       >
         <CheckCircle2 size={12} />
         <span>{label}</span>
@@ -664,7 +665,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
     return (
       <span
         title={disabledHint || ''}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100 cursor-default"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium text-ink-300 bg-ink-50 border border-ink-100 cursor-default"
       >
         <Icon size={12} />
         {label}
@@ -676,7 +677,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
       type="button"
       onClick={onToggle}
       title={`Marcar ${label.toLowerCase()}`}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 coarse:py-2.5 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
     >
       <Icon size={12} />
       {label}
@@ -805,12 +806,12 @@ function OrderOverflow({ cancelled, onCancel, onUncancel }) {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div role="menu" className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-48 max-w-[calc(100vw-2rem)] rounded-md border border-ink-200 bg-white shadow-pop py-1 z-40">
+          <div role="menu" className="dropdown-pop absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-48 max-w-[calc(100vw-2rem)] rounded-md border border-ink-200 bg-white shadow-pop py-1 z-40">
             {cancelled ? (
               <button
                 type="button"
                 onClick={() => { onUncancel(); setOpen(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 inline-flex items-center gap-2"
+                className="w-full text-left px-3 py-2 min-h-9 coarse:min-h-11 text-sm hover:bg-ink-50 active:bg-ink-100 transition-colors inline-flex items-center gap-2"
               >
                 <Plus size={14} className="text-ink-500" />
                 Reactivar pedido
@@ -819,7 +820,7 @@ function OrderOverflow({ cancelled, onCancel, onUncancel }) {
               <button
                 type="button"
                 onClick={() => { onCancel(); setOpen(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-rose-50 text-rose-600 inline-flex items-center gap-2"
+                className="w-full text-left px-3 py-2 min-h-9 coarse:min-h-11 text-sm hover:bg-rose-50 active:bg-rose-100 text-rose-600 transition-colors inline-flex items-center gap-2"
               >
                 <Ban size={14} />
                 Cancelar pedido

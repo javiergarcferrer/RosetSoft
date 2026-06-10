@@ -732,8 +732,8 @@ function CommissionLine({ role, who, badge, detail, action }) {
           <span className="eyebrow-xs tracking-wide text-ink-400">{role}</span>
           <span className="text-sm font-medium text-ink-800 truncate">{who}</span>
           {badge && (
-            <span className={`chip text-[9px] font-semibold uppercase tracking-wide ${
-              badge === 'Trade discount' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-ink-100 text-ink-600'
+            <span className={`chip ${
+              badge === 'Trade discount' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-ink-100 text-ink-600'
             }`}>
               {badge}
             </span>
@@ -820,7 +820,7 @@ function PaidToggle({ paid, busy, onToggle }) {
         type="button"
         onClick={() => onToggle(false)}
         disabled={busy}
-        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 min-h-[44px] text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-wait"
+        className="btn text-xs border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 disabled:cursor-wait"
         title="Pagada — clic para revertir a pendiente"
       >
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Pagada
@@ -832,7 +832,7 @@ function PaidToggle({ paid, busy, onToggle }) {
       type="button"
       onClick={() => onToggle(true)}
       disabled={busy}
-      className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-3 py-2 min-h-[44px] text-xs font-medium text-ink-700 hover:border-ink-400 disabled:opacity-50 disabled:cursor-wait"
+      className="btn-secondary text-xs disabled:cursor-wait"
       title="Marcar comisión como pagada"
     >
       {busy ? <Loader2 size={12} className="animate-spin" /> : null}Marcar pagada
@@ -854,7 +854,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
         <h3 className="eyebrow font-semibold tracking-wide text-ink-600 min-w-0 truncate">
           Detalle para facturar
         </h3>
-        <button type="button" onClick={onExportCsv} className="btn-ghost text-xs shrink-0 min-h-[44px]">
+        <button type="button" onClick={onExportCsv} className="btn-ghost text-xs shrink-0">
           <Download size={12} /> CSV Odoo
         </button>
       </div>
@@ -917,7 +917,7 @@ function ExportButton({ icon: Icon, label, busy, disabled, onClick }) {
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className="btn-secondary text-sm min-h-[44px] disabled:opacity-40 disabled:cursor-not-allowed"
+      className="btn-secondary disabled:cursor-not-allowed"
     >
       {busy
         ? <><Loader2 size={14} className="animate-spin" /> {label}</>
@@ -931,7 +931,7 @@ function CyclePill({ label, sub, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`text-left rounded-lg border px-3 py-2 min-h-[44px] transition-all active:scale-[0.98] ${
+      className={`text-left rounded-md border px-3 py-2 min-h-11 transition-all active:scale-[0.98] select-none ${
         active
           ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
           : 'border-ink-200 hover:border-ink-300 bg-white hover:shadow-xs text-ink-700'

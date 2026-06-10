@@ -16,8 +16,8 @@ const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty
 const blankFactura = () => ({ id: newId(), supplierId: '', invoiceRef: '', ncf: '', lines: [blankLine()] });
 const blankEmbarque = () => ({ id: newId(), bl: '', containerId: '', customsRef: '', flete: '', seguro: '', facturas: [blankFactura()] });
 
-const field = 'rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm';
-const num = 'w-28 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+const field = 'input';
+const num = 'input w-28 text-right tabular-nums';
 
 const draftKey = (scope) => `rosetsoft.importacionDraft.${scope}`;
 export const TEMPLATE_KEY = (scope) => `rosetsoft.importacionTemplate.${scope}`;
@@ -40,9 +40,9 @@ function readSeed(scope, defaults) {
 /** A single landed-cost KPI tile. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
-      <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
+    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2 min-w-0">
+      <div className="eyebrow text-ink-400">{label}</div>
+      <div className={`text-base font-semibold tabular-nums whitespace-nowrap ${accent || 'text-ink-800'}`}>{value}</div>
     </div>
   );
 }
@@ -259,7 +259,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     <div className="card p-4 mb-4 border-ink-300">
       <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
         <h3 className="font-semibold inline-flex items-center gap-2 min-w-0 truncate"><FileText size={16} className="shrink-0" /> Nuevo expediente de importación</h3>
-        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700 shrink-0 p-2 -m-1 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
 
       {seededFrom && (
@@ -267,7 +267,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           {seededFrom === 'template'
             ? <><Sparkles size={13} className="shrink-0" /> Formulario sembrado desde la plantilla del expediente — revisa cantidades y montos.</>
             : <><History size={13} className="shrink-0" /> Borrador restaurado — seguiste donde lo dejaste.</>}
-          <button type="button" onClick={resetForm} className="ml-auto underline underline-offset-2 hover:text-sky-950 min-h-[32px]">Empezar en blanco</button>
+          <button type="button" onClick={resetForm} className="ml-auto underline underline-offset-2 hover:text-sky-950 inline-flex items-center min-h-8 coarse:min-h-11">Empezar en blanco</button>
         </div>
       )}
 
@@ -298,10 +298,10 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       {/* Embarques → facturas → líneas */}
       <div className="mt-4 space-y-3">
         {embs.map((emb, ei) => (
-          <div key={emb.id} className="rounded-xl border border-ink-200 bg-ink-50/40 p-3">
+          <div key={emb.id} className="surface-subtle p-3">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
-              {embs.length > 1 && <button type="button" onClick={() => delEmb(emb.id)} className="text-ink-300 hover:text-rose-600"><Trash2 size={15} /></button>}
+              {embs.length > 1 && <button type="button" onClick={() => delEmb(emb.id)} className="btn-icon-danger" title="Eliminar embarque" aria-label="Eliminar embarque"><Trash2 size={15} /></button>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               <input value={emb.bl} onChange={(e) => patchEmb(emb.id, { bl: e.target.value })} placeholder="BL / conocimiento" className={`${field} w-full lg:col-span-2`} />
@@ -328,11 +328,11 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                     </select>
                     <input value={fac.invoiceRef} onChange={(e) => patchFac(emb.id, fac.id, { invoiceRef: e.target.value })} placeholder="No. factura" className={`${field} w-28 min-w-0`} />
                     <input value={fac.ncf} onChange={(e) => patchFac(emb.id, fac.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-28 min-w-0`} />
-                    <label className="btn-ghost text-xs inline-flex items-center gap-1 cursor-pointer min-h-[44px] px-2">
+                    <label className="btn-ghost text-xs gap-1 cursor-pointer px-2">
                       {parsing === fac.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} PDF
                       <input type="file" accept="application/pdf" className="hidden" onChange={(e) => importPdf(emb.id, fac.id, e.target.files?.[0])} />
                     </label>
-                    {emb.facturas.length > 1 && <button type="button" onClick={() => delFac(emb.id, fac.id)} className="text-ink-300 hover:text-rose-600 min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={14} /></button>}
+                    {emb.facturas.length > 1 && <button type="button" onClick={() => delFac(emb.id, fac.id)} className="btn-icon-danger" title="Eliminar factura" aria-label="Eliminar factura"><Trash2 size={14} /></button>}
                   </div>
                   {pdfNote?.fid === fac.id && (
                     <p className="text-xs text-ink-500 mb-1.5">
@@ -375,17 +375,17 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                               </div>
                             )}
                           </td>
-                          <td className="py-0.5"><input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="w-16 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="input w-16 text-right tabular-nums" /></td>
                           <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.fob} onChange={(e) => patchLine(emb.id, fac.id, l.id, { fob: e.target.value })} className={num} /></td>
-                          <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(emb.id, fac.id); } }} placeholder="0" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" /></td>
+                          <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(emb.id, fac.id); } }} placeholder="0" className="input w-24 text-right tabular-nums" /></td>
                           <td className="py-0.5 text-right text-xs text-ink-500 tabular-nums whitespace-nowrap pr-1 pt-2.5">{byLine[l.id]?.landedUnitCost > 0 ? formatDop(byLine[l.id].landedUnitCost) : '—'}</td>
-                          <td className="py-0.5 text-right pr-2.5"><button type="button" onClick={() => delLine(emb.id, fac.id, l.id)} className="text-ink-300 hover:text-rose-600 p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={14} /></button></td>
+                          <td className="py-0.5 text-right pr-2.5"><button type="button" onClick={() => delLine(emb.id, fac.id, l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                   </div>
-                  <button type="button" onClick={() => addLine(emb.id, fac.id)} className="btn-ghost text-xs inline-flex items-center gap-1 mt-1 min-h-[44px] px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en Selectivo)</span></button>
+                  <button type="button" onClick={() => addLine(emb.id, fac.id)} className="btn-ghost text-xs gap-1 mt-1 px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en Selectivo)</span></button>
                 </div>
               ))}
               <button type="button" onClick={() => addFac(emb.id)} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={12} /> Factura</button>
@@ -416,11 +416,11 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                 </select>
                 <input value={c.ncf} onChange={(e) => setCost(c.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-28 min-w-0`} />
                 <input type="number" step="0.01" min="0" inputMode="decimal" value={c.amount} onChange={(e) => setCost(c.id, { amount: e.target.value })} placeholder="Monto RD$" className={num} />
-                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.itbis} onChange={(e) => setCost(c.id, { itbis: e.target.value })} placeholder="ITBIS" className="w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.itbis} onChange={(e) => setCost(c.id, { itbis: e.target.value })} placeholder="ITBIS" className="input w-24 text-right tabular-nums" />
                 <select value={c.paymentMethod} onChange={(e) => setCost(c.id, { paymentMethod: e.target.value })} className={`${field} w-full sm:w-auto`}>
                   <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
                 </select>
-                <button type="button" onClick={() => removeCost(c.id)} className="text-ink-300 hover:text-rose-600 min-h-[44px] min-w-[44px] flex items-center justify-center"><Trash2 size={15} /></button>
+                <button type="button" onClick={() => removeCost(c.id)} className="btn-icon-danger" title="Eliminar costo" aria-label="Eliminar costo"><Trash2 size={15} /></button>
               </div>
             ))}
             <div className="text-xs text-ink-500">Costos: bruto <b className="tabular-nums">{formatDop(costT.gross)}</b> · ITBIS crédito <b className="tabular-nums">{formatDop(costT.itbis)}</b> · neto al costo <b className="tabular-nums">{formatDop(costT.net)}</b></div>
@@ -444,7 +444,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <span className="text-xs text-amber-700 inline-flex items-center gap-1"><Plus size={12} /> {newItemCount} artículo{newItemCount > 1 ? 's' : ''} nuevo{newItemCount > 1 ? 's' : ''} se crear{newItemCount > 1 ? 'án' : 'á'} en inventario</span>
           )}
         </div>
-        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 self-start sm:self-auto min-h-[44px] px-4">
+        <button type="button" onClick={save} disabled={saving} className="btn-primary self-start sm:self-auto">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar expediente
         </button>
       </div>

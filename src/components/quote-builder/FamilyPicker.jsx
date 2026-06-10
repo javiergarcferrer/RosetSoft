@@ -151,7 +151,7 @@ export default function FamilyPicker({ open, onClose, onSelect, currentFamily })
           <button
             type="button"
             onClick={() => { setQ(''); inputRef.current?.focus(); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1"
+            className="btn-icon absolute right-0.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
             aria-label="Limpiar"
           >
             <X size={14} />
@@ -199,7 +199,7 @@ export default function FamilyPicker({ open, onClose, onSelect, currentFamily })
                 type="button"
                 onMouseEnter={() => setActiveIdx(idx)}
                 onClick={() => pickAtIdx(idx)}
-                className={`w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-[44px] flex items-center gap-2.5 transition-colors ${
+                className={`w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-11 flex items-center gap-2.5 transition-colors ${
                   isActive ? 'bg-ink-100' : 'hover:bg-ink-50'
                 } ${isCurrent ? 'ring-1 ring-inset ring-brand-300' : ''}`}
               >

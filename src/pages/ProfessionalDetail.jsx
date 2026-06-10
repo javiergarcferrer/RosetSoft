@@ -117,7 +117,7 @@ export default function ProfessionalDetail() {
           <button
             type="button"
             onClick={() => setEditing(pro)}
-            className="btn-secondary active:scale-[0.98] transition-transform"
+            className="btn-secondary"
             title="Editar profesional"
           >
             <Pencil size={14} /> Editar
@@ -298,7 +298,7 @@ function StatusGroup({ status, entries }) {
             </div>
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="text-ink-300 group-hover:text-brand-500 p-1.5 transition-colors min-h-[44px] min-w-[44px] coarse:flex coarse:items-center coarse:justify-center"
+              className="btn-icon flex-shrink-0 text-ink-300 group-hover:text-brand-500 hover:text-brand-600"
               title="Abrir cotización"
               aria-label="Abrir cotización"
             >

@@ -80,13 +80,13 @@ export default function Periodos() {
                   <tr key={key} className="border-t border-ink-50">
                     <td className="py-1.5 px-3">{MONTHS_ES[month - 1]} {year}</td>
                     <td className="py-1.5 px-3">
-                      <span className={`text-xs px-2 py-0.5 rounded ${closed ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      <span className={`status-pill ${closed ? 'bg-rose-100 text-rose-700' : 'status-pill-active'}`}>
                         {closed ? 'Cerrado' : 'Abierto'}
                       </span>
                     </td>
                     <td className="py-1.5 px-3 text-right">
                       <button type="button" onClick={() => toggle(year, month)} disabled={busy === key}
-                        className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40 min-h-[44px] px-1">
+                        className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-40">
                         {busy === key ? <Loader2 size={13} className="animate-spin" /> : closed ? <LockOpen size={13} /> : <Lock size={13} />}
                         {closed ? 'Reabrir' : 'Cerrar'}
                       </button>

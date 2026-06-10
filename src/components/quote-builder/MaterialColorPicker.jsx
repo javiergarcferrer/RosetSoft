@@ -282,15 +282,15 @@ function ModeToggle({ multi, onChange }) {
     { v: true, label: 'Agregar opciones' },
   ];
   return (
-    <div className="flex rounded-md border border-ink-200 bg-white text-xs mb-3 w-full sm:w-auto sm:inline-flex">
+    <div className="flex rounded-md border border-ink-200 bg-white text-xs mb-3 w-full sm:w-auto sm:inline-flex overflow-hidden">
       {opts.map((o, i) => (
         <button
           key={o.label}
           type="button"
           onClick={() => onChange(o.v)}
           aria-pressed={multi === o.v}
-          className={`flex-1 sm:flex-none px-3 py-2 min-h-[44px] sm:min-h-0 sm:py-1.5 ${i > 0 ? 'border-l border-ink-200' : ''} ${
-            multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+          className={`flex-1 sm:flex-none px-3 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
+            multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
           }`}
         >
           {o.label}
@@ -412,7 +412,7 @@ function MaterialList({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-md border border-ink-200 bg-white text-xs w-full sm:w-auto sm:inline-flex">
+          <div className="flex rounded-md border border-ink-200 bg-white text-xs w-full sm:w-auto sm:inline-flex overflow-hidden">
             {[
               { k: '', label: 'Todos' },
               { k: 'fabric', label: 'Telas' },
@@ -423,8 +423,9 @@ function MaterialList({
                 key={c.k}
                 type="button"
                 onClick={() => setCategory(c.k)}
-                className={`flex-1 sm:flex-none px-2.5 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                  category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50'
+                aria-pressed={category === c.k}
+                className={`flex-1 sm:flex-none px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
+                  category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
                 }`}
               >
                 {c.label}
@@ -437,7 +438,7 @@ function MaterialList({
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 focus:outline-none focus:border-ink-900 flex-1 sm:flex-none"
+                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 min-h-9 coarse:min-h-11 shadow-xs transition-shadow focus:outline-none focus:border-brand-500 focus:shadow-focus flex-1 sm:flex-none"
                 aria-label="Ordenar materiales"
               >
                 {SORTS.map((s) => (
@@ -449,10 +450,10 @@ function MaterialList({
               type="button"
               onClick={() => setGroupByFiber((v) => !v)}
               aria-pressed={groupByFiber}
-              className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 transition-colors flex-shrink-0 ${
+              className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors flex-shrink-0 ${
                 groupByFiber
                   ? 'bg-ink-900 text-white border-ink-900'
-                  : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50'
+                  : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50 active:bg-ink-100'
               }`}
               title="Agrupar por composición (fibra principal)"
             >
@@ -476,14 +477,14 @@ function MaterialList({
           {modelFiltered ? (
             <>
               <span>Mostrando solo las telas <b className="text-ink-700">disponibles para este modelo</b>.</span>
-              <button type="button" onClick={onToggleShowAllNames} className="text-brand-700 hover:underline font-medium">
+              <button type="button" onClick={onToggleShowAllNames} className="inline-flex items-center rounded-md px-1 -mx-1 min-h-6 coarse:min-h-11 coarse:-my-3 text-brand-700 font-medium hover:underline hover:bg-brand-50 active:bg-brand-100 transition-colors">
                 Mostrar todas
               </button>
             </>
           ) : (
             <>
               <span>Mostrando <b className="text-ink-700">todas</b> las telas del grade.</span>
-              <button type="button" onClick={onToggleShowAllNames} className="text-brand-700 hover:underline font-medium">
+              <button type="button" onClick={onToggleShowAllNames} className="inline-flex items-center rounded-md px-1 -mx-1 min-h-6 coarse:min-h-11 coarse:-my-3 text-brand-700 font-medium hover:underline hover:bg-brand-50 active:bg-brand-100 transition-colors">
                 Solo las del modelo
               </button>
             </>
@@ -503,7 +504,7 @@ function MaterialList({
         ) : groups ? (
           groups.map((g) => (
             <li key={g.fiber} className="py-0">
-              <div className="sticky top-0 z-[1] bg-white/95 backdrop-blur px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500 flex items-center justify-between">
+              <div className="sticky top-0 z-[1] bg-white/95 backdrop-blur px-3 py-1.5 eyebrow flex items-center justify-between">
                 <span className="truncate">{g.fiber}</span>
                 <span className="text-ink-400 font-normal tabular-nums">{g.items.length}</span>
               </div>
@@ -551,9 +552,9 @@ function MaterialList({
             type="button"
             onClick={onConfirmMany}
             disabled={!selected?.size}
-            className="btn-primary text-xs min-h-[44px] sm:min-h-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-primary text-xs"
           >
-            <Plus size={13} /> Agregar {selected?.size || 0} {selected?.size === 1 ? 'opción' : 'opciones'}
+            <Plus size={14} /> Agregar {selected?.size || 0} {selected?.size === 1 ? 'opción' : 'opciones'}
           </button>
         </div>
       ) : (
@@ -577,8 +578,8 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
         onClick={onActivate}
         onMouseEnter={onHover}
         aria-pressed={multiSelect ? !!checked : undefined}
-        className={`w-full text-left px-3 py-2.5 min-h-[44px] flex items-center gap-3 transition-colors ${
-          multiSelect && checked ? 'bg-brand-50' : active ? 'bg-ink-100' : 'hover:bg-ink-50'
+        className={`w-full text-left px-3 py-2.5 min-h-11 flex items-center gap-3 transition-colors ${
+          multiSelect && checked ? 'bg-brand-50' : active ? 'bg-ink-100' : 'hover:bg-ink-50 active:bg-ink-100'
         }`}
       >
         {multiSelect && (
@@ -611,9 +612,10 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5 min-w-0 flex-wrap">
-            <span className="font-medium text-ink-900 truncate min-w-0">{m.name}</span>
+            {/* Fabric names are data — wrap, never ellipsize. */}
+            <span className="font-medium text-ink-900 min-w-0 break-words">{m.name}</span>
             {m.grade && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
+              <span className="chip bg-brand-50 text-brand-700 border border-brand-100 flex-shrink-0">
                 Grade {m.grade}
               </span>
             )}
@@ -654,7 +656,7 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
         <button
           type="button"
           onClick={onBack}
-          className="btn-ghost text-xs min-h-[44px] sm:min-h-0"
+          className="btn-ghost text-xs"
         >
           <ChevronLeft size={14} /> Volver al catálogo
         </button>
@@ -694,10 +696,11 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
                   key={c.code}
                   type="button"
                   onClick={() => onPick(c)}
-                  className={`text-left p-2 min-h-[44px] rounded border transition-colors flex items-center gap-2 min-w-0 ${
+                  aria-pressed={!!active}
+                  className={`text-left p-2 min-h-11 rounded-md border transition-colors flex items-center gap-2 min-w-0 ${
                     active
-                      ? 'border-brand-300 bg-brand-50'
-                      : 'border-ink-200 hover:border-ink-400 hover:bg-ink-50'
+                      ? 'border-brand-300 bg-brand-50 ring-1 ring-inset ring-brand-300'
+                      : 'border-ink-200 hover:border-ink-400 hover:bg-ink-50 active:bg-ink-100'
                   }`}
                 >
                   <ImageView
@@ -708,11 +711,13 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
                     className="w-8 h-8 object-cover rounded border border-ink-100 bg-white flex-shrink-0"
                     placeholderClassName="w-8 h-8 rounded border border-dashed border-ink-200 bg-ink-50 flex-shrink-0"
                   />
-                  <span className="flex-1 min-w-0 text-sm text-ink-900 truncate">{c.name}</span>
+                  {/* Color names are data — wrap, never ellipsize. */}
+                  <span className="flex-1 min-w-0 text-sm text-ink-900 break-words">{c.name}</span>
                   <span className="text-[10px] text-ink-500 font-mono tabular-nums flex-shrink-0 hidden min-[360px]:block">
                     #{c.code}
                   </span>
-                  {active && <Check size={12} className="text-brand-700 flex-shrink-0" />}
+                  {/* Selected = ring + check, never color alone (color-blind safe). */}
+                  {active && <Check size={14} className="text-brand-700 flex-shrink-0" aria-hidden />}
                 </button>
               );
             })}
@@ -724,10 +729,10 @@ function ColorGrid({ material, onBack, onPick, currentFabric, family }) {
         <button
           type="button"
           onClick={() => onPick(null)}
-          className="btn-ghost text-xs text-ink-500 min-h-[44px] sm:min-h-0"
+          className="btn-ghost text-xs text-ink-500"
           title="Usar la tela sin elegir un color específico"
         >
-          <X size={12} /> Sin color específico
+          <X size={14} /> Sin color específico
         </button>
         <span className="text-[10px] text-ink-400">
           {colors.length} de {material.colors?.length || 0} colores

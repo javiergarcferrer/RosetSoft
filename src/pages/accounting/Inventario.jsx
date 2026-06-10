@@ -122,7 +122,7 @@ export default function Inventario() {
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
+  const field = 'input';
 
   return (
     <>
@@ -130,10 +130,10 @@ export default function Inventario() {
         subtitle={loaded ? `${inv.count} artículos · valor ${formatDop(inv.totalValue)}` : ' '}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
+            <button type="button" onClick={syncAll} disabled={syncing} className="btn-secondary">
               {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} <span className="hidden sm:inline">Sincronizar Shopify</span><span className="sm:hidden">Shopify</span>
             </button>
-            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3"><Plus size={15} /> <span className="hidden sm:inline">Nuevo artículo</span><span className="sm:hidden">Nuevo</span></button>
+            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary"><Plus size={15} /> <span className="hidden sm:inline">Nuevo artículo</span><span className="sm:hidden">Nuevo</span></button>
           </div>
         )} />
 
@@ -141,13 +141,13 @@ export default function Inventario() {
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">Nuevo artículo</h3>
-            <button type="button" onClick={() => setShowItem(false)} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+            <button type="button" onClick={() => setShowItem(false)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <input value={itemForm.sku} onChange={(e) => setItemForm((f) => ({ ...f, sku: e.target.value }))} placeholder="SKU / referencia" className={field} />
+            <input value={itemForm.sku} onChange={(e) => setItemForm((f) => ({ ...f, sku: e.target.value }))} placeholder="SKU / referencia" className={`${field} w-44`} />
             <input value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre" className={`${field} flex-1 min-w-[200px]`} />
             <input value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} placeholder="Unidad" className={`${field} w-28`} />
-            <button type="button" onClick={createItem} disabled={savingItem || !itemForm.name.trim()} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+            <button type="button" onClick={createItem} disabled={savingItem || !itemForm.name.trim()} className="btn-primary">
               {savingItem ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
             </button>
           </div>
@@ -159,33 +159,35 @@ export default function Inventario() {
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="card overflow-hidden">
-            <table className="w-full text-sm min-w-[320px]">
-              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+            <div className="overflow-x-auto">
+            <table className="table min-w-[320px]">
+              <thead>
                 <tr>
-                  <th className="text-left py-2 px-3">Artículo</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Existencia</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap hidden sm:table-cell">Costo prom.</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Valor</th>
+                  <th>Artículo</th>
+                  <th className="text-right whitespace-nowrap">Existencia</th>
+                  <th className="text-right whitespace-nowrap hidden sm:table-cell">Costo prom.</th>
+                  <th className="text-right whitespace-nowrap">Valor</th>
                 </tr>
               </thead>
               <tbody>
                 {inv.rows.map(({ item, qty, avgCost, value }) => (
                   <tr key={item.id} onClick={() => { setSelectedId(item.id); setOutQty(''); setErr(''); }}
-                    className={`border-t border-ink-50 cursor-pointer hover:bg-ink-50 ${selectedId === item.id ? 'bg-ink-50' : ''}`}>
-                    <td className="py-1.5 px-3 min-w-0"><div className="truncate">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</div></td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{qty} {item.unit}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap hidden sm:table-cell">{formatDop(avgCost)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(value)}</td>
+                    className={`cursor-pointer transition-colors active:bg-ink-100 ${selectedId === item.id ? 'bg-ink-50' : ''}`}>
+                    <td className="min-w-0"><div className="truncate">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</div></td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{qty} {item.unit}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap hidden sm:table-cell">{formatDop(avgCost)}</td>
+                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(value)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
-                  <td className="py-2 px-3" colSpan={3}>Valor total</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(inv.totalValue)}</td>
+                  <td colSpan={3}>Valor total</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(inv.totalValue)}</td>
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
 
           <div>
@@ -201,9 +203,9 @@ export default function Inventario() {
                 <div className="mb-3 pb-3 border-b border-ink-100">
                   <div className="flex flex-wrap items-end gap-2">
                     <label className="text-sm">Salida de stock (unidades)<br />
-                      <input type="number" min="0" step="1" inputMode="numeric" enterKeyHint="done" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="w-32 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+                      <input type="number" min="0" step="1" inputMode="numeric" enterKeyHint="done" value={outQty} onChange={(e) => setOutQty(e.target.value)} placeholder="Cantidad" className="input w-32 text-right tabular-nums" />
                     </label>
-                    <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-3">
+                    <button type="button" onClick={registerSalida} disabled={posting} className="btn-primary">
                       {posting ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownToLine size={15} />} Registrar salida
                     </button>
                   </div>
@@ -302,14 +304,14 @@ function CatalogBlock({ item }) {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">Precio de venta en tienda (USD)<br />
           <input type="number" min="0" step="0.01" inputMode="decimal" enterKeyHint="done" value={price} onChange={(e) => setPrice(e.target.value)}
-            placeholder="0.00" className="w-36 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums" />
+            placeholder="0.00" className="input w-36 text-right tabular-nums" />
         </label>
         <div className="w-40">
           <ImageDrop imageId={imageId} onChange={setImageId} kind="inventory-item" ownerId={item.id}
             label="Foto" imgClassName="h-24 w-full object-cover rounded-md" allowUrl={false} />
         </div>
         <button type="button" onClick={save} disabled={status === 'saving'}
-          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+          className="btn-primary">
           {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar y publicar
         </button>
       </div>

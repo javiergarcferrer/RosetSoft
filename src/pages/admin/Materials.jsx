@@ -231,7 +231,7 @@ export default function Materials() {
                       {m.name}
                       {m.discontinuedAt && (
                         <span
-                          className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200 align-middle"
+                          className="ml-2 chip bg-amber-50 text-amber-700 border border-amber-200 align-middle"
                           title="Ya no se ofrece en el sitio de Ligne Roset"
                         >
                           <AlertTriangle size={10} /> No en sitio
@@ -239,7 +239,7 @@ export default function Materials() {
                       )}
                       {m.notInPricelistAt && (
                         <span
-                          className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-red-50 text-red-700 border border-red-200 align-middle"
+                          className="ml-2 chip bg-red-50 text-red-700 border border-red-200 align-middle"
                           title="No aparece en la lista de precios (PDF) de Ligne Roset"
                         >
                           <AlertTriangle size={10} /> No en lista
@@ -261,15 +261,16 @@ export default function Materials() {
                         className="btn-ghost text-xs"
                         title="Editar"
                       >
-                        <Pencil size={12} /> Editar
+                        <Pencil size={14} /> Editar
                       </button>
                       <button
                         type="button"
                         onClick={() => remove(m)}
-                        className="btn-ghost text-xs text-red-600 hover:bg-red-50"
+                        className="btn-icon-danger"
                         title="Eliminar"
+                        aria-label={`Eliminar ${m.name}`}
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   </tr>
@@ -325,7 +326,7 @@ function categoryLabel(c) {
 function GradePill({ grade }) {
   if (!grade) return <span className="text-ink-400">—</span>;
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-brand-50 text-brand-700 border border-brand-100">
+    <span className="chip bg-brand-50 text-brand-700 border border-brand-100">
       Grade {grade}
     </span>
   );
@@ -421,7 +422,7 @@ function MaterialEditor({ material, profileId, onClose }) {
     <Modal open onClose={onClose} title={isNew ? 'Nuevo material' : `Editar ${material.name}`}>
       <div className="space-y-4">
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
             {error}
           </div>
         )}
@@ -629,10 +630,10 @@ function MaterialEditor({ material, profileId, onClose }) {
                 <button
                   type="button"
                   onClick={() => removeColor(i)}
-                  className="w-7 h-7 inline-flex items-center justify-center rounded text-ink-400 hover:text-red-600 hover:bg-red-50"
+                  className="btn-icon-danger"
                   aria-label="Quitar color"
                 >
-                  <X size={13} />
+                  <X size={14} />
                 </button>
               </div>
               );
@@ -755,14 +756,14 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
     <Modal open onClose={onClose} title="Importar precios (PDF)">
       <div className="space-y-4">
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
             {error}
           </div>
         )}
 
         {done ? (
           <>
-            <div className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">
+            <div className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
               <Check size={16} className="flex-shrink-0 mt-0.5" />
               <span>Catálogo actualizado.</span>
             </div>
@@ -780,7 +781,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
                 : null}.
             </p>
             {preview.siteFailed && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
                 No se pudo leer ligne-roset.com — se importan los precios del PDF, pero no se actualizaron colores ni fotos esta vez.
               </p>
             )}

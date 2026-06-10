@@ -29,7 +29,7 @@ export default function ProjectPalettePicks({ palette, onApply }) {
   );
   return (
     <div className="mb-3 border-b border-ink-100 pb-3">
-      <div className="eyebrow-xs tracking-widest text-ink-500 mb-2">Paleta del proyecto</div>
+      <div className="eyebrow-xs mb-2">Paleta del proyecto</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tiles.map((m) => {
           const color = fabricColorName(m.fabric) || fabricDisplay(composeSubtype(m.grade, m.fabric)) || '—';
@@ -48,9 +48,11 @@ export default function ProjectPalettePicks({ palette, onApply }) {
                   className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                 />
               </div>
+              {/* Captions WRAP rather than truncate — fabric/color names are data
+                  the dealer picks by, so they must stay fully readable. */}
               <div className="min-w-0 px-2 py-1.5">
-                <div className="truncate text-xs font-semibold text-ink-900">{color}</div>
-                <div className="truncate text-[10px] text-ink-500">
+                <div className="break-words text-xs font-semibold text-ink-900">{color}</div>
+                <div className="break-words text-[10px] text-ink-500">
                   {m.material}{m.groupGrade ? <span className="text-ink-400"> · Grade {m.groupGrade}</span> : null}
                 </div>
               </div>

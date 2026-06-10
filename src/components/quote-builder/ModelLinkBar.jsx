@@ -55,9 +55,9 @@ export default function ModelLinkBar({ root, record }) {
         {record.patternNames?.length > 0 && (
           <span className="text-ink-400 shrink-0">· {record.patternNames.length} telas disponibles</span>
         )}
-        <span className="inline-flex items-center gap-2 sm:ml-auto flex-shrink-0">
-          <button type="button" onClick={() => setEditing(true)} className="text-ink-500 hover:text-ink-800 min-h-[44px] sm:min-h-0 coarse:min-h-[44px] px-1">Actualizar</button>
-          <button type="button" onClick={() => clearModelFabrics(root)} className="text-ink-500 hover:text-ink-800 min-h-[44px] sm:min-h-0 coarse:min-h-[44px] px-1">Quitar</button>
+        <span className="inline-flex items-center gap-1 sm:ml-auto flex-shrink-0">
+          <button type="button" onClick={() => setEditing(true)} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors">Actualizar</button>
+          <button type="button" onClick={() => clearModelFabrics(root)} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors">Quitar</button>
         </span>
       </div>
     );

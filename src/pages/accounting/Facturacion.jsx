@@ -328,7 +328,7 @@ export default function Facturacion() {
 
   const tabBtn = (key, label) => (
     <button type="button" onClick={() => setTab(key)}
-      className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === key ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>{label}</button>
+      className={`btn ${tab === key ? 'tab-pill-active' : 'tab-pill'}`}>{label}</button>
   );
 
   return (
@@ -370,18 +370,18 @@ export default function Facturacion() {
                     <div className="flex gap-1">
                       <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
                         onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
-                        className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-36 min-h-[44px]" />
+                        className="input w-36" />
                       <button type="button" onClick={() => lookupFor(q)}
                         disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
-                        className="btn-ghost text-sm inline-flex items-center px-2.5 min-h-[44px] min-w-[44px] justify-center disabled:opacity-40" title="Buscar nombre en el registro DGII">
+                        className="btn-icon shrink-0" title="Buscar nombre en el registro DGII">
                         {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                       </button>
                     </div>
                     <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
                       onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
-                      className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm w-full sm:w-52 min-h-[44px]" />
+                      className="input w-full sm:w-52" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
-                      className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] disabled:opacity-40">
+                      className="btn-primary">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
                     </button>
                     {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
@@ -395,7 +395,7 @@ export default function Facturacion() {
         <>
           <div className="flex justify-end mb-3">
             <button type="button" onClick={export607} disabled={sales607.count === 0}
-              className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40"><Download size={14} /> Exportar 607 (CSV)</button>
+              className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
           </div>
           {sales607.count === 0 ? (
             <EmptyState icon={FileText} title="Sin ventas en el mes"
@@ -403,17 +403,17 @@ export default function Facturacion() {
           ) : (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                <table className="table">
+                  <thead>
                     <tr>
-                      <th className="text-left py-2 px-3 whitespace-nowrap">RNC/Cédula</th>
-                      <th className="text-left py-2 px-3">Cliente</th>
-                      <th className="text-left py-2 px-3 whitespace-nowrap">NCF</th>
-                      <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
-                      <th className="text-right py-2 px-3 whitespace-nowrap">Base</th>
-                      <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS</th>
-                      <th className="text-right py-2 px-3 whitespace-nowrap">Total</th>
-                      <th className="text-left py-2 px-3 whitespace-nowrap">e-CF</th>
+                      <th className="whitespace-nowrap">RNC/Cédula</th>
+                      <th>Cliente</th>
+                      <th className="whitespace-nowrap">NCF</th>
+                      <th className="whitespace-nowrap">Fecha</th>
+                      <th className="text-right whitespace-nowrap">Base</th>
+                      <th className="text-right whitespace-nowrap">ITBIS</th>
+                      <th className="text-right whitespace-nowrap">Total</th>
+                      <th className="whitespace-nowrap">e-CF</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -422,15 +422,15 @@ export default function Facturacion() {
                       const status = p?.ecfStatus || '';
                       const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
                       return (
-                      <tr key={r.id} className="border-t border-ink-50">
-                        <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
-                        <td className="py-1.5 px-3 min-w-[120px]">{r.name || '—'}</td>
-                        <td className="py-1.5 px-3 tabular-nums text-ink-500 whitespace-nowrap">{r.ncf || '—'}</td>
-                        <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
-                        <td className="py-1.5 px-3">
+                      <tr key={r.id}>
+                        <td className="tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
+                        <td className="min-w-[120px]">{r.name || '—'}</td>
+                        <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.ncf || '—'}</td>
+                        <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
+                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
+                        <td>
                           <div className="flex items-center gap-3">
                             {status === 'accepted' ? (
                               <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
@@ -440,7 +440,7 @@ export default function Facturacion() {
                                 {p?.trackId && (
                                   <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
                                     title="Consultar estado en la DGII"
-                                    className="text-ink-400 hover:text-ink-900 disabled:opacity-40 min-h-[44px] min-w-[24px] flex items-center justify-center">
+                                    className="btn-icon text-ink-400">
                                     {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                                   </button>
                                 )}
@@ -451,13 +451,13 @@ export default function Facturacion() {
                               <span className="text-xs text-ink-400">—</span>
                             ) : (
                               <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-                                className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-40 whitespace-nowrap min-h-[44px]">
+                                className="btn-ghost text-xs whitespace-nowrap">
                                 {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
                               </button>
                             )}
                             <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
-                              title="Imprimir factura" className="text-ink-400 hover:text-ink-900 disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center">
-                              {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
+                              title="Imprimir factura" className="btn-icon text-ink-400">
+                              {printing === r.id ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
                             </button>
                           </div>
                         </td>
@@ -467,11 +467,11 @@ export default function Facturacion() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-ink-200 font-semibold">
-                      <td className="py-2 px-3 whitespace-nowrap" colSpan={4}>{sales607.count} ventas</td>
-                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.base)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.itbis)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.total)}</td>
-                      <td className="py-2 px-3"></td>
+                      <td className="whitespace-nowrap" colSpan={4}>{sales607.count} ventas</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.base)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.itbis)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.total)}</td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>

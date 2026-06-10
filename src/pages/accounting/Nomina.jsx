@@ -81,9 +81,12 @@ export default function Nomina() {
         <div className="space-y-4">
           <div className="card p-4">
             <div className="flex flex-wrap items-end gap-3 mb-3">
-              <label className="text-sm">Fecha de pago<br /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm min-h-[2.5rem] coarse:min-h-[2.75rem] w-full" /></label>
+              <div>
+                <div className="label">Fecha de pago</div>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto" />
+              </div>
               <button type="button" onClick={post} disabled={posting || items.length === 0}
-                className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40">
+                className="btn-primary ml-auto">
                 {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar nómina
               </button>
             </div>

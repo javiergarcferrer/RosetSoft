@@ -103,7 +103,7 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
           autoFocus
         />
         {q && (
-          <button type="button" onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1" aria-label="Limpiar">
+          <button type="button" onClick={() => setQ('')} className="btn-icon absolute right-0.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
             <X size={14} />
           </button>
         )}
@@ -142,13 +142,14 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3">
         <span className="text-xs text-ink-500 tabular-nums">{count} seleccionado{count === 1 ? '' : 's'}</span>
+        {/* The single loudest action in this modal — the brand CTA. */}
         <button
           type="button"
           onClick={add}
           disabled={!count}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-0 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+          className="btn-brand"
         >
-          <Plus size={14} aria-hidden />
+          <Plus size={16} aria-hidden />
           Agregar {count || ''} {count === 1 ? 'elemento' : 'elementos'}
         </button>
       </div>
@@ -171,8 +172,8 @@ function MultiRow({ fam, grade, checked, onToggle }) {
       type="button"
       onClick={onToggle}
       disabled={!offered}
-      className={`w-full text-left rounded-md px-3 py-2.5 min-h-[44px] flex items-center gap-3 transition-colors ${
-        checked ? 'bg-brand-50' : 'hover:bg-ink-50'
+      className={`w-full text-left rounded-md px-3 py-2.5 min-h-11 flex items-center gap-3 transition-colors ${
+        checked ? 'bg-brand-50' : 'hover:bg-ink-50 active:bg-ink-100'
       } ${!offered ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
       <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors ${

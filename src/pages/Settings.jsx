@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Check, AlertTriangle, Shield, Loader2 } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Shield, Loader2, ChevronDown } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
@@ -96,7 +96,7 @@ export default function Settings() {
       <div className="space-y-5">
           {/* Company */}
           <div className="card card-pad">
-            <div className="card-header">
+            <div className="card-header -mx-5 -mt-5 mb-4">
               <h2 className="font-semibold">Empresa</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -177,7 +177,7 @@ export default function Settings() {
 
           {/* Defaults */}
           <div className="card card-pad">
-            <div className="card-header">
+            <div className="card-header -mx-5 -mt-5 mb-4">
               <h2 className="font-semibold">Predeterminados de cotización</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -258,7 +258,7 @@ function StoreCard({ settings, saveSettings, customers }) {
 
   return (
     <div className="card card-pad">
-      <div className="card-header">
+      <div className="card-header -mx-5 -mt-5 mb-4">
         <h2 className="font-semibold">Tienda pública</h2>
       </div>
       <p className="text-xs text-ink-500 mb-4">
@@ -325,7 +325,7 @@ function StoreCard({ settings, saveSettings, customers }) {
 function OrdersCard({ local, set }) {
   return (
     <div className="card card-pad">
-      <div className="card-header">
+      <div className="card-header -mx-5 -mt-5 mb-4">
         <h2 className="font-semibold">Pedidos</h2>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -399,7 +399,7 @@ function RateCard({ local, set, saveSettings }) {
 
   return (
     <div className="card card-pad">
-      <div className="card-header">
+      <div className="card-header -mx-5 -mt-5 mb-4">
         <h2 className="font-semibold">Tasa de cambio USD → DOP</h2>
       </div>
       <p className="text-xs text-ink-500 mb-4">
@@ -467,9 +467,9 @@ function RateCard({ local, set, saveSettings }) {
 
       {/* Manual override — stopgap until the BPD subscription is live. */}
       <details className="group rounded-lg border border-ink-100 mb-3 overflow-hidden">
-        <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
+        <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 min-h-11 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
           <span>Ajustar tasa manualmente</span>
-          <span className="text-ink-400 group-open:rotate-180 transition-transform duration-200">▾</span>
+          <ChevronDown size={14} className="disclosure-chevron text-ink-400" aria-hidden />
         </summary>
         <div className="px-4 pb-4 pt-1 border-t border-ink-100 bg-ink-50/40">
           <p className="text-[11px] text-ink-500 mb-3 mt-2 leading-relaxed">
@@ -611,7 +611,7 @@ function ShopifyCard({ settings }) {
 
   return (
     <div className="card card-pad">
-      <div className="card-header">
+      <div className="card-header -mx-5 -mt-5 mb-4">
         <h2 className="font-semibold">Catálogo Shopify</h2>
       </div>
       <p className="text-xs text-ink-500 mb-4">

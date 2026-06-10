@@ -36,7 +36,7 @@ export default function QuickCreate() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="w-full inline-flex items-center justify-center gap-1.5 bg-brand-500 text-white font-semibold rounded-lg px-3 py-2 text-sm shadow-glow hover:bg-brand-600 active:bg-brand-700 active:scale-[0.98] transition-all duration-150 select-none"
+        className="btn-brand w-full"
       >
         <Plus size={15} strokeWidth={2.5} aria-hidden />
         Nuevo

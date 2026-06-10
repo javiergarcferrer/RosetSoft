@@ -511,7 +511,7 @@ function SetConnector({ onJoin }) {
       <button
         type="button"
         onClick={onJoin}
-        className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2.5 py-1 coarse:py-3 coarse:px-4 text-[10px] font-medium uppercase tracking-[0.06em] text-ink-400 shadow-sm transition-colors opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 focus:outline-none coarse:opacity-100"
+        className="chip font-medium tracking-[0.06em] text-ink-400 bg-white border border-ink-200 px-2.5 py-1 coarse:min-h-11 coarse:px-4 shadow-sm opacity-60 hover:opacity-100 hover:text-ink-700 hover:border-ink-400 active:bg-ink-50 focus:opacity-100 focus:text-ink-700 focus:border-ink-400 coarse:opacity-100"
         title="Unir esta línea con la de arriba en un conjunto que se vende junto"
       >
         <PlusCircle size={11} className="opacity-80" aria-hidden />
@@ -547,13 +547,16 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
     // cards. A heavier border-2 (vs the hairline of a plain line) marks this as a
     // CONTAINER of several lines, one clear step up the hierarchy.
     <div>
-      <div className={`rounded-xl border-2 ${ring} overflow-hidden bg-white shadow-sm ${optional ? 'border-dashed' : ''}`}>
-        <div className={`${headBg} px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
+      {/* No overflow:hidden (hard rule — silent clipping): the header/footer
+          bands carry their own matched inner radius (12px outer − 2px border
+          = 10px) so their tinted backgrounds follow the card's corners. */}
+      <div className={`rounded-xl border-2 ${ring} bg-white shadow-sm ${optional ? 'border-dashed' : ''}`}>
+        <div className={`${headBg} rounded-t-[10px] px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
           <span className="inline-flex items-center gap-1.5 min-w-0 flex-shrink">
             {dragHandleProps && (
               <span
                 {...dragHandleProps}
-                className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 -ml-1 flex-shrink-0"
+                className="hidden fine:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 -ml-1 flex-shrink-0"
                 title="Arrastra el grupo para reordenarlo"
                 aria-label="Arrastrar el grupo"
               >
@@ -573,7 +576,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
               <button
                 type="button"
                 onClick={() => setMaterialOpen(true)}
-                className="chip font-medium text-ink-400 border border-dashed border-ink-200 hover:text-ink-700 hover:border-ink-400"
+                className="chip-action font-medium text-ink-400 border border-dashed border-ink-200 hover:text-ink-700 hover:border-ink-400 active:bg-ink-50"
                 title="Elegir una tela y aplicarla a todas las piezas del conjunto"
               >
                 <Palette size={10} className="opacity-70" aria-hidden />
@@ -588,7 +591,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
                 type="button"
                 onClick={onToggleOptional}
                 aria-pressed={!!optional}
-                className={`chip font-medium border border-dashed ${
+                className={`chip-action font-medium border border-dashed ${
                   optional
                     ? 'text-ink-600 bg-ink-50 border-ink-300 hover:border-ink-500'
                     : 'text-ink-400 border-ink-200 hover:text-ink-700 hover:border-ink-400'
@@ -606,7 +609,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
           </span>
         </div>
         {children}
-        <div className={`${footBg} border-t-2 ${ring} px-4 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1`}>
+        <div className={`${footBg} rounded-b-[10px] border-t-2 ${ring} px-4 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1`}>
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0 flex-shrink`}>
             <Icon size={12} className="opacity-80 flex-shrink-0" aria-hidden />
             <span className="min-w-0">{footerLabel}</span>
@@ -650,7 +653,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
           <button
             type="button"
             onClick={onToggleEdit}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-900 rounded-md px-2 py-1 coarse:min-h-[44px]"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:text-brand-900 hover:bg-brand-100/60 active:bg-brand-100 rounded-md px-2 py-1 coarse:min-h-11 transition-colors"
           >
             <Check size={12} aria-hidden /> Listo
           </button>
@@ -682,11 +685,15 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
         aria-checked={selected}
         aria-label="Seleccionar esta alternativa"
         title={selected ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
-        className={`inline-flex items-center justify-center w-5 h-5 coarse:w-11 coarse:h-11 rounded-full border-2 transition-colors flex-shrink-0 ${
-          selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
-        }`}
+        className="inline-flex items-center justify-center coarse:min-w-11 coarse:min-h-11 flex-shrink-0"
       >
-        {selected && <Check size={11} strokeWidth={3} aria-hidden />}
+        {/* Hit target wraps the visual circle: the glyph stays a quiet 20px
+            radio while the button meets the 44px touch minimum on coarse. */}
+        <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors ${
+          selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+        }`}>
+          {selected && <Check size={11} strokeWidth={3} aria-hidden />}
+        </span>
       </button>
       {line.imageId ? (
         <ImageView
@@ -708,7 +715,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
         <button
           type="button"
           onClick={onToggleEdit}
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-100 rounded-md px-2 py-1 coarse:min-h-[44px] flex-shrink-0"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 rounded-md px-2 py-1 coarse:min-h-11 flex-shrink-0 transition-colors"
           title="Editar esta alternativa"
         >
           <Pencil size={12} className="opacity-80" aria-hidden /> Editar

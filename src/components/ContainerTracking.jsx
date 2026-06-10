@@ -36,27 +36,27 @@ export default function ContainerTracking({ containerNo, shareToken }) {
   const { meta, transitEtaLabel: etaLabel, progressLabel } = resolveVoyageHud(voyage);
 
   return (
-    <div className="vtrack rounded-md border border-ink-100 bg-ink-50/60 p-3 text-xs space-y-3 min-w-0 w-full">
+    <div className="vtrack surface-subtle p-3 text-xs space-y-3 min-w-0 w-full">
       <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
         <span className="flex items-center gap-1.5 font-medium text-ink-600">
-          <Ship size={12} /> Rastreo Hapag-Lloyd
-          <span className="text-[10px] font-normal text-ink-400 border border-ink-200 rounded px-1">BETA</span>
+          <Ship size={12} aria-hidden /> Rastreo Hapag-Lloyd
+          <span className="chip text-ink-400 border border-ink-200">BETA</span>
         </span>
         <button
           type="button"
           onClick={reload}
           disabled={status === 'loading'}
-          className="text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-50"
         >
-          <RefreshCw size={11} className={status === 'loading' ? 'animate-spin' : ''} /> Actualizar
+          <RefreshCw size={11} className={status === 'loading' ? 'animate-spin' : ''} aria-hidden /> Actualizar
         </button>
       </div>
 
-      {status === 'loading' && <p className="text-ink-500">Consultando Hapag-Lloyd…</p>}
+      {status === 'loading' && <p role="status" aria-live="polite" className="text-ink-500">Consultando Hapag-Lloyd…</p>}
 
       {status === 'error' && (
-        <p className="text-amber-700 flex items-start gap-1.5">
-          <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
+        <p role="alert" className="text-amber-700 flex items-start gap-1.5">
+          <AlertCircle size={12} className="mt-0.5 flex-shrink-0" aria-hidden />
           <span>{error}</span>
         </p>
       )}
@@ -74,14 +74,15 @@ export default function ContainerTracking({ containerNo, shareToken }) {
               the map's overlay HUD only appears when expanded to full screen. */}
           <div className="vtrack-summary rounded-lg border border-ink-100 bg-white p-2.5 space-y-2 min-w-0">
             <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
+              {/* Port names wrap, never truncate — they're the client's data. */}
               {voyage.origin ? (
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 font-semibold text-ink-900">
-                  <span className="min-w-0 truncate">{voyage.origin.name}</span>
-                  <ArrowRight size={13} className="shrink-0 text-ink-300" />
-                  <span className="min-w-0 truncate">{voyage.destination?.name || '—'}</span>
+                  <span className="min-w-0 break-words">{voyage.origin.name}</span>
+                  <ArrowRight size={13} className="shrink-0 text-ink-300" aria-hidden />
+                  <span className="min-w-0 break-words">{voyage.destination?.name || '—'}</span>
                 </div>
               ) : (
-                <span className="font-semibold text-ink-900 min-w-0 truncate">Seguimiento del contenedor</span>
+                <span className="font-semibold text-ink-900 min-w-0 break-words">Seguimiento del contenedor</span>
               )}
               <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${voyage.arrived ? 'bg-emerald-50 text-emerald-700' : 'bg-brand-50 text-brand-700'}`}>
                 {voyage.arrived ? <CheckCircle2 size={11} /> : <Navigation size={11} />}
@@ -89,7 +90,7 @@ export default function ContainerTracking({ containerNo, shareToken }) {
               </span>
             </div>
 
-            {meta && <div className="truncate text-[11px] text-ink-500">{meta}</div>}
+            {meta && <div className="break-words text-[11px] text-ink-500">{meta}</div>}
 
             {voyage.totalKm > 0 && (
               <div className="space-y-1">
@@ -99,9 +100,9 @@ export default function ContainerTracking({ containerNo, shareToken }) {
                     style={{ width: `${Math.max(3, Math.round(voyage.progressPct))}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between gap-2 text-[10px] text-ink-500">
+                <div className="flex items-baseline justify-between gap-2 text-[10px] text-ink-500">
                   <span className="font-medium">{progressLabel}</span>
-                  {etaLabel && <span className="truncate">{etaLabel}</span>}
+                  {etaLabel && <span className="min-w-0 text-right break-words">{etaLabel}</span>}
                 </div>
               </div>
             )}

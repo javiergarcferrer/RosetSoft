@@ -83,7 +83,7 @@ const PILL =
 
 /* A segment: full-height flex cell with consistent touch height + feedback. */
 const SEG =
-  'inline-flex items-center gap-1.5 min-h-7 coarse:min-h-9 transition-all ' +
+  'inline-flex items-center gap-1.5 min-h-7 coarse:min-h-11 transition-all ' +
   'hover:bg-ink-50 active:bg-ink-100 active:scale-[0.98] focus-visible:outline-none focus-visible:bg-ink-100';
 
 /* A hairline seam between segments — same colour as the border so it reads as
@@ -119,7 +119,7 @@ function TierSegments({ quote, onUpdateQuote }) {
                 ? 'Piso — comisión base del profesional al 15%'
                 : 'Especial — comisión base del profesional al 20%'
             }
-            className={`px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center font-semibold transition-all focus-visible:outline-none ${
+            className={`px-2.5 min-h-7 coarse:min-h-11 inline-flex items-center font-semibold transition-all focus-visible:outline-none ${
               i > 0 ? 'border-l border-ink-200' : ''
             } ${
               active

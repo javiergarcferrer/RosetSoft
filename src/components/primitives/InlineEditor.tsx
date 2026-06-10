@@ -62,7 +62,7 @@ const InlineEditor = forwardRef<HTMLInputElement, InlineEditorProps>(function In
         value={value}
         onCommit={onCommit}
         placeholder={placeholder}
-        className={`qli-grow ${widthClass} bg-transparent border-0 border-b border-transparent coarse:border-ink-100 hover:border-ink-200 focus:!border-ink-900 px-0 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-900 placeholder:text-ink-300/70 placeholder:font-normal focus:outline-none focus:ring-0 transition-colors ${mono ? 'font-mono' : ''} ${className}`}
+        className={`qli-grow ${widthClass} bg-transparent border-0 border-b border-transparent coarse:border-ink-100 hover:border-ink-200 focus:!border-brand-600 px-0 py-1 coarse:min-h-10 text-[13px] coarse:text-sm text-ink-900 placeholder:text-ink-300/70 placeholder:font-normal focus:outline-none focus:ring-0 transition-colors ${mono ? 'font-mono' : ''} ${className}`}
         {...inputProps}
       />
     </label>

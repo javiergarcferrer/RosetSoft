@@ -121,7 +121,7 @@ export default function SetPassword() {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="label" htmlFor="sp-password">Nueva contraseña</label>
-            <div className="relative mt-1">
+            <div className="relative mt-1.5">
               <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" aria-hidden />
               <input
                 id="sp-password"
@@ -140,7 +140,7 @@ export default function SetPassword() {
           </div>
           <div>
             <label className="label" htmlFor="sp-confirm">Confirmar contraseña</label>
-            <div className="relative mt-1">
+            <div className="relative mt-1.5">
               <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" aria-hidden />
               <input
                 id="sp-confirm"

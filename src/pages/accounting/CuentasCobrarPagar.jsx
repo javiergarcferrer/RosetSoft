@@ -107,11 +107,11 @@ export default function CuentasCobrarPagar() {
     <>
       <PageHeader title="Cuentas por cobrar y pagar" subtitle="Saldos, antigüedad y estados de cuenta — valores en RD$"
         actions={<button type="button" onClick={() => { setShowForm((v) => !v); setSelected(null); }}
-          className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>} />
+          className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>} />
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <button type="button" onClick={() => { setTab('cxc'); setSelected(null); }} className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === 'cxc' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Por cobrar</button>
-        <button type="button" onClick={() => { setTab('cxp'); setSelected(null); }} className={`text-sm px-3 py-2 rounded-lg min-h-[44px] inline-flex items-center ${tab === 'cxp' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>Por pagar</button>
+        <button type="button" onClick={() => { setTab('cxc'); setSelected(null); }} className={`btn ${tab === 'cxc' ? 'tab-pill-active' : 'tab-pill'}`}>Por cobrar</button>
+        <button type="button" onClick={() => { setTab('cxp'); setSelected(null); }} className={`btn ${tab === 'cxp' ? 'tab-pill-active' : 'tab-pill'}`}>Por pagar</button>
         {loaded && (
           <span className="sm:ml-auto self-center text-sm text-ink-500">
             Balance total <b className="tabular-nums text-ink-800">{formatDop(view.totals.balance)}</b>
@@ -133,43 +133,43 @@ export default function CuentasCobrarPagar() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+            <table className="table min-w-[640px]">
+              <thead>
                 <tr>
-                  <th className="text-left py-2 px-3">{partyLabel}</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">0–30</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">31–60</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">61–90</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">+90</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Balance</th>
-                  <th className="py-2 px-3"></th>
+                  <th>{partyLabel}</th>
+                  <th className="text-right whitespace-nowrap">0–30</th>
+                  <th className="text-right whitespace-nowrap">31–60</th>
+                  <th className="text-right whitespace-nowrap">61–90</th>
+                  <th className="text-right whitespace-nowrap">+90</th>
+                  <th className="text-right whitespace-nowrap">Balance</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {view.rows.map((r) => (
-                  <tr key={r.partyId} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3 font-medium min-w-[120px]">{r.party?.name || '—'}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d0_30)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d31_60)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d61_90)}</td>
-                    <td className={`py-1.5 px-3 text-right tabular-nums whitespace-nowrap ${r.buckets.d90 > 0 ? 'text-rose-600' : ''}`}>{formatDop(r.buckets.d90)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-semibold whitespace-nowrap">{formatDop(r.balance)}</td>
-                    <td className="py-1.5 px-3 text-right">
+                  <tr key={r.partyId}>
+                    <td className="font-medium min-w-[120px]">{r.party?.name || '—'}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d0_30)}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d31_60)}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d61_90)}</td>
+                    <td className={`text-right tabular-nums whitespace-nowrap ${r.buckets.d90 > 0 ? 'text-rose-600' : ''}`}>{formatDop(r.buckets.d90)}</td>
+                    <td className="text-right tabular-nums font-semibold whitespace-nowrap">{formatDop(r.balance)}</td>
+                    <td className="text-right">
                       <button type="button" onClick={() => setSelected({ type: tab === 'cxc' ? 'customer' : 'supplier', id: r.partyId })}
-                        className="text-xs text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 min-h-[44px] whitespace-nowrap"><FileText size={13} /> Estado</button>
+                        className="text-xs text-ink-600 hover:text-ink-900 active:text-ink-700 inline-flex items-center gap-1 min-h-8 coarse:min-h-11 whitespace-nowrap"><FileText size={13} /> Estado</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
-                  <td className="py-2 px-3">{view.count} {partyLabel.toLowerCase()}s</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d0_30)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d31_60)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d61_90)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d90)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.balance)}</td>
-                  <td className="py-2 px-3"></td>
+                  <td>{view.count} {partyLabel.toLowerCase()}s</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d0_30)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d31_60)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d61_90)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d90)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.balance)}</td>
+                  <td></td>
                 </tr>
               </tfoot>
             </table>
@@ -180,36 +180,36 @@ export default function CuentasCobrarPagar() {
       {statement && (
         <div className="card p-4 mt-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <h3 className="font-semibold truncate min-w-0">Estado de cuenta — {statement.name}</h3>
+            <h3 className="font-semibold break-words min-w-0">Estado de cuenta — {statement.name}</h3>
             <div className="flex items-center gap-2 shrink-0">
               <button type="button" onClick={printStatement} disabled={printingSt}
-                className="text-sm text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 min-h-[44px] disabled:opacity-40">
+                className="btn-ghost">
                 {printingSt ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Imprimir
               </button>
-              <button type="button" onClick={() => setSelected(null)} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
+              <button type="button" onClick={() => setSelected(null)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-ink-500 text-xs uppercase tracking-wide">
+            <table className="table min-w-[560px]">
+              <thead>
                 <tr>
-                  <th className="text-left py-1 whitespace-nowrap">Fecha</th>
-                  <th className="text-left py-1">Concepto</th>
-                  <th className="text-left py-1">Ref.</th>
-                  <th className="text-right py-1 whitespace-nowrap">Cargo</th>
-                  <th className="text-right py-1 whitespace-nowrap">Abono</th>
-                  <th className="text-right py-1 whitespace-nowrap">Saldo</th>
+                  <th className="whitespace-nowrap">Fecha</th>
+                  <th>Concepto</th>
+                  <th>Ref.</th>
+                  <th className="text-right whitespace-nowrap">Cargo</th>
+                  <th className="text-right whitespace-nowrap">Abono</th>
+                  <th className="text-right whitespace-nowrap">Saldo</th>
                 </tr>
               </thead>
               <tbody>
                 {statement.rows.map((r, i) => (
-                  <tr key={i} className="border-t border-ink-50">
-                    <td className="py-1 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                    <td className="py-1">{r.label}</td>
-                    <td className="py-1 tabular-nums text-ink-500 whitespace-nowrap">{r.ref || '—'}</td>
-                    <td className="py-1 text-right tabular-nums whitespace-nowrap">{r.charge ? formatDop(r.charge) : ''}</td>
-                    <td className="py-1 text-right tabular-nums whitespace-nowrap">{r.payment ? formatDop(r.payment) : ''}</td>
-                    <td className="py-1 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.balance)}</td>
+                  <tr key={i}>
+                    <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
+                    <td>{r.label}</td>
+                    <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.ref || '—'}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{r.charge ? formatDop(r.charge) : ''}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{r.payment ? formatDop(r.payment) : ''}</td>
+                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.balance)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -292,14 +292,14 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px]';
-  const numField = 'w-full rounded-lg border border-ink-200 px-2 py-2 text-sm text-right tabular-nums min-h-[44px]';
+  const field = 'input';
+  const numField = 'input text-right tabular-nums';
 
   return (
     <div className="card p-4 mb-4 border-ink-300 min-w-0">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold">Registrar {direction === 'in' ? 'cobro' : 'pago'}</h3>
-        <button type="button" onClick={onClose} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={18} /></button>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-end gap-3">
         <label className="text-sm">{direction === 'in' ? 'Cliente' : 'Proveedor'}<br />
@@ -333,16 +333,16 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
         <div className="mt-3 pt-3 border-t border-ink-100">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-ink-500">Aplicar a facturas (opcional)</span>
-            <button type="button" onClick={autoFill} className="text-xs text-ink-600 hover:text-ink-900">Auto (FIFO)</button>
+            <button type="button" onClick={autoFill} className="text-xs text-ink-600 hover:text-ink-900 active:text-ink-700 inline-flex items-center min-h-8 coarse:min-h-11">Auto (FIFO)</button>
           </div>
           <div className="space-y-2">
             {openDocs.map((d) => (
               <div key={d.docId} className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-ink-500 shrink-0 whitespace-nowrap">{formatDate(d.date)}</span>
-                <span className="flex-1 min-w-0 truncate">{d.label} · pendiente {formatDop(d.open)}</span>
+                <span className="flex-1 min-w-0">{d.label} · pendiente <span className="whitespace-nowrap tabular-nums">{formatDop(d.open)}</span></span>
                 <input type="number" step="0.01" min="0" inputMode="decimal" value={alloc[d.docId] || ''}
                   onChange={(e) => setAlloc((a) => ({ ...a, [d.docId]: e.target.value }))}
-                  className="w-28 rounded-lg border border-ink-200 px-2 py-2 text-sm text-right tabular-nums min-h-[44px]" />
+                  className="input w-28 text-right tabular-nums" />
               </div>
             ))}
           </div>
@@ -351,7 +351,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
 
       <div className="flex flex-wrap items-center justify-between gap-3 mt-3 pt-3 border-t border-ink-100">
         {isCard ? <div className="text-sm text-ink-600">Neto al banco <b className="tabular-nums">{formatDop(net)}</b></div> : <span />}
-        <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] disabled:opacity-40">
+        <button type="button" onClick={save} disabled={saving} className="btn-primary">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar
         </button>
       </div>

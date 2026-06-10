@@ -17,7 +17,7 @@ export default function ApplyMaterialToAllButton({
       type="button"
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:bg-ink-100 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 ${className}`}
     >
       <Copy size={13} aria-hidden /> {label}
     </button>

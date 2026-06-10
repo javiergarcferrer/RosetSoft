@@ -18,7 +18,7 @@ export default function ImageZoom({ id, fallbackUrl = null, className, alt = '' 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex-shrink-0 block appearance-none p-0 bg-transparent border-0 cursor-zoom-in rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1"
+        className="flex-shrink-0 block appearance-none p-0 bg-transparent border-0 cursor-zoom-in rounded-md"
         aria-label="Ampliar imagen"
         title="Pasa el cursor para ampliar — o toca para verla en grande"
       >

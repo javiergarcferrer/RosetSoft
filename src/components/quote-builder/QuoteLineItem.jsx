@@ -434,7 +434,9 @@ export default function QuoteLineItem({
       ].join(' ')}
     >
       {dimmed && (
-        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55 rounded-xl" aria-hidden />
+        // Veil rounding matches the chrome: the standalone card is rounded-xl,
+        // a flat member row inside a GroupCard is square-cornered.
+        <div className={`pointer-events-none absolute inset-0 z-[1] bg-white/55 ${insideGroupCard ? '' : 'rounded-xl'}`} aria-hidden />
       )}
       <TopStrip
         family={line.family}
@@ -599,7 +601,7 @@ function TopStrip({
   const handle = dragHandleProps ? (
     <span
       {...dragHandleProps}
-      className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity flex-shrink-0"
+      className="hidden fine:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity flex-shrink-0"
       title="Arrastra para reordenar"
       aria-label="Arrastrar para reordenar"
     >
@@ -608,19 +610,23 @@ function TopStrip({
   ) : null;
 
   const altRadio = alternativeGroup ? (
+    // Hit target wraps the visual circle: the glyph stays a quiet 20px radio
+    // while the button grows to the 44px touch minimum on coarse pointers.
     <button
       type="button"
       onClick={onSelectAlternative}
-      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors flex-shrink-0 ${
-        isSelectedAlternative
-          ? 'border-brand-500 bg-brand-500 text-white'
-          : 'border-ink-300 bg-white hover:border-brand-400'
-      }`}
+      className="inline-flex items-center justify-center coarse:min-w-11 coarse:min-h-11 flex-shrink-0"
       title={isSelectedAlternative ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
       aria-pressed={isSelectedAlternative}
       aria-label="Seleccionar alternativa"
     >
-      {isSelectedAlternative && <Check size={11} strokeWidth={3} />}
+      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors ${
+        isSelectedAlternative
+          ? 'border-brand-500 bg-brand-500 text-white'
+          : 'border-ink-300 bg-white hover:border-brand-400'
+      }`}>
+        {isSelectedAlternative && <Check size={11} strokeWidth={3} />}
+      </span>
     </button>
   ) : null;
 
@@ -628,7 +634,7 @@ function TopStrip({
     <button
       type="button"
       onClick={() => setPickerOpen(true)}
-      className="chip text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200"
+      className="chip-action text-brand-700 bg-brand-50 border border-brand-100 hover:bg-brand-100 hover:border-brand-200 active:bg-brand-100"
       title="Cambiar familia"
       aria-label={`Familia ${family}. Cambiar`}
     >
@@ -639,7 +645,7 @@ function TopStrip({
     <button
       type="button"
       onClick={() => setPickerOpen(true)}
-      className="chip font-medium text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500"
+      className="chip-action font-medium text-ink-500 hover:text-ink-900 border border-dashed border-ink-300 hover:border-ink-500 active:bg-ink-100"
       aria-label="Asignar familia"
     >
       <Tag size={10} className="opacity-70" aria-hidden />
@@ -700,7 +706,7 @@ function TopStrip({
           {altRadio}
           <span className="inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] text-ink-600 min-w-0">
             <Layers size={13} className="opacity-80 flex-shrink-0" aria-hidden />
-            <span className="min-w-0 truncate">{headerMeta.isModular ? 'Producto modular' : 'Compuesto'}</span>
+            <span className="min-w-0">{headerMeta.isModular ? 'Producto modular' : 'Compuesto'}</span>
           </span>
         </span>
         <span className="inline-flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
@@ -794,7 +800,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
               <button
                 type="button"
                 onClick={() => setProductPickerOpen(true)}
-                className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+                className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
                 title="Elegir el producto del catálogo"
                 aria-label="Elegir el producto del catálogo"
               >
@@ -934,7 +940,7 @@ function AddPhotoTile({ kind, ownerId, onAdd }) {
         disabled={busy}
         title="Agregar otra foto"
         aria-label="Agregar otra foto al artículo"
-        className="inline-flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-ink-300 bg-ink-50 text-ink-400 transition-colors hover:border-ink-500 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-60"
+        className="inline-flex h-12 w-12 items-center justify-center rounded-md border-2 border-dashed border-ink-300 bg-ink-50 text-ink-400 transition-colors hover:border-ink-500 hover:bg-ink-100 hover:text-ink-700 active:bg-ink-200 disabled:opacity-60"
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
       </button>
@@ -967,7 +973,7 @@ function AutoGrowTextarea({ value, onCommit, label, placeholder, ...rest }) {
       placeholder={placeholder}
       aria-label={label || placeholder}
       onInput={(e) => autoSize(e.currentTarget)}
-      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:shadow-[inset_0_0_0_1px_theme('colors.ink.200')] focus:outline-none transition-colors"
+      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded-md resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:ring-1 focus:ring-inset focus:ring-ink-200 focus:outline-none transition-colors"
       {...rest}
     />
   );
@@ -1048,7 +1054,7 @@ function NoteToggle({ icon: Icon, label, content, open, onClick }) {
         aria-label={label}
         aria-expanded={open}
         className={`relative inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md transition-colors ${
-          active ? 'text-brand-700 hover:bg-brand-50' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50'
+          active ? 'text-brand-700 hover:bg-brand-50 active:bg-brand-100' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50 active:bg-ink-100'
         } ${open ? 'bg-brand-50' : ''}`}
       >
         <Icon size={14} />
@@ -1293,7 +1299,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             // as the material name (or the placeholder when empty), never
             // stretched across the row. Capped at 100% so a very long name
             // still wraps/scrolls within the row instead of overflowing.
-            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-[44px] text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-11 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
           />
           {/* Catalog picker — opens the swatch modal so the dealer can pick a
               material + color instead of typing the name and guessing the
@@ -1308,7 +1314,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             <button
               type="button"
               onClick={clearMaterial}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-red-600 rounded-md px-1.5 py-1 coarse:min-h-[44px] hover:bg-red-50 transition-colors flex-shrink-0"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-red-600 rounded-md px-1.5 py-1 coarse:min-h-11 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
               title="Quitar la tela y volver a cotizar sin material (rango de precio)"
             >
               <X size={12} className="opacity-80" aria-hidden />
@@ -1323,7 +1329,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
               href={sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-[44px] hover:bg-brand-50 transition-colors flex-shrink-0"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-400 hover:text-brand-700 rounded-md px-1.5 py-1 coarse:min-h-11 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
               title="Ver este modelo en Ligne Roset"
             >
               <ExternalLink size={12} className="opacity-80" aria-hidden />
@@ -1409,7 +1415,7 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
           <button
             type="button"
             onClick={() => onEditColor(i)}
-            className="inline-flex items-center gap-1 rounded hover:text-brand-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-brand-400"
+            className="inline-flex items-center gap-1 rounded-md hover:text-brand-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-brand-400"
             title="Cambiar el color o material de esta opción"
             aria-label={`Cambiar el color de ${o.label || 'la opción'}`}
           >
@@ -1428,7 +1434,7 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
           <button
             type="button"
             onClick={() => onMakeBase(i)}
-            className="text-[10px] text-brand-600 hover:text-brand-900 underline decoration-dotted"
+            className="rounded-md p-1 -m-1 text-[10px] text-brand-600 underline decoration-dotted hover:text-brand-900 hover:bg-brand-100/70 active:bg-brand-100 transition-colors"
             title="Usar este material como base de los deltas"
           >
             Hacer base
@@ -1436,7 +1442,7 @@ function MaterialOptionChips({ materialOptions, family, currency, rates, onRemov
           <button
             type="button"
             onClick={() => onRemove(i)}
-            className="text-brand-500 hover:text-red-600"
+            className="rounded-md p-1 -m-1 coarse:p-1.5 coarse:-m-1.5 text-brand-500 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors"
             aria-label={`Quitar ${o.label || 'opción'}`}
             title="Quitar opción"
           >
@@ -1532,7 +1538,7 @@ function PricingRow({
           inputMode="decimal"
           min="0"
           step="any"
-          className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-[44px] py-1.5 px-2"
+          className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-11 py-1.5 px-2"
           value={qty ?? 1}
           onCommit={(v) => onQtyChange(Math.max(0, Number(v) || 0))}
           aria-label={qtyAriaLabel}
@@ -1562,7 +1568,7 @@ function PricingRow({
             <button
               type="button"
               onClick={onToggleBreakdown}
-              className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+              className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-white active:bg-ink-100 transition-colors"
               title="Ver desglose"
               aria-expanded={breakdownOpen}
             >
@@ -1641,7 +1647,7 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
             inputMode="decimal"
             min="0"
             step="any"
-            className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-[44px] py-1.5 px-2"
+            className="qli-grow min-w-[3.25rem] max-w-[7rem] text-right tabular-nums input min-h-9 coarse:min-h-11 py-1.5 px-2"
             value={line.qty ?? 1}
             onCommit={(v) => onChange({ qty: Math.max(0, Number(v) || 0) })}
             aria-label="Cantidad"
@@ -1691,7 +1697,7 @@ function CompoundCalculatorBand({
           <button
             type="button"
             onClick={onToggleBreakdown}
-            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded hover:bg-white active:bg-ink-100 transition-colors"
+            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-white active:bg-ink-100 transition-colors"
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
@@ -1827,12 +1833,12 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
           <div className="absolute left-0 right-0 -top-px h-0.5 bg-brand-500 z-10 pointer-events-none" />
         )}
         {selecting && !c.moduleGroup && (
-          <label className="flex items-center pl-2 pr-0.5 cursor-pointer" title="Incluir este componente en el producto">
+          <label className="flex items-center pl-2 pr-0.5 coarse:pl-3 coarse:pr-2 cursor-pointer" title="Incluir este componente en el producto">
             <input
               type="checkbox"
               checked={selected.has(c.id)}
               onChange={() => toggleSelected(c.id)}
-              className="accent-brand-600"
+              className="h-4 w-4 coarse:h-5 coarse:w-5 accent-brand-600"
             />
           </label>
         )}
@@ -1864,12 +1870,15 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
   const byId = new Map(components.map((c) => [c.id, c]));
 
   return (
-    <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40 overflow-hidden">
+    // No overflow:hidden (hard rule — silent clipping): the first/last strips
+    // carry their own matched inner radius (8px outer − 1px border = 7px)
+    // so their backgrounds follow the panel's rounded corners.
+    <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40">
       {/* Composition controls: toggle modular, and group the current selection. */}
-      <div className="px-3 py-2 bg-white border-b border-ink-100 flex items-center gap-2 flex-wrap">
+      <div className="px-3 py-2 bg-white rounded-t-[7px] border-b border-ink-100 flex items-center gap-2 flex-wrap">
         {/* The species ("Producto modular" / "Compuesto") is announced by the
             card's header band — this inner strip labels just the contents. */}
-        <span className="text-[11px] font-medium text-ink-500">
+        <span className="eyebrow">
           Componentes
         </span>
         <div className="flex-1" />
@@ -1897,7 +1906,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
             type="button"
             onClick={groupSelected}
             disabled={selected.size === 0}
-            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+            className="btn bg-brand-600 text-white shadow-sm text-xs hover:bg-brand-700 active:bg-brand-800"
           >
             <Boxes size={12} aria-hidden /> Crear producto{selected.size ? ` (${selected.size})` : ''}
           </button>
@@ -1923,7 +1932,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                       onClick={() => onSelectModuleAlternative?.(m.moduleGroup)}
                       aria-pressed={m.selected}
                       title={m.selected ? 'Producto seleccionado' : 'Seleccionar este producto'}
-                      className="inline-flex items-center gap-1.5 flex-shrink-0"
+                      className="inline-flex items-center gap-1.5 coarse:min-h-11 flex-shrink-0"
                     >
                       <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                         m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
@@ -1940,14 +1949,14 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                   <DebouncedInput
                     value={m.name}
                     onCommit={(v) => onRenameModule?.(m.moduleGroup, v)}
-                    className="input min-h-8 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
+                    className="input min-h-8 coarse:min-h-11 py-1 px-2 text-xs font-semibold text-ink-700 flex-1 min-w-0"
                     placeholder="Nombre del producto"
                   />
                   {onToggleModuleOptional && !m.altGroup && (
                     <button
                       type="button"
                       onClick={() => onToggleModuleOptional(m.moduleGroup, !m.optional)}
-                      className={`chip font-medium ${
+                      className={`chip-action font-medium ${
                         m.optional
                           ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
                           : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
@@ -1964,7 +1973,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     <button
                       type="button"
                       onClick={() => onAddModuleAlternative(m.moduleGroup)}
-                      className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400"
+                      className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400"
                       title={m.altGroup
                         ? 'Agregar otra alternativa de este producto'
                         : 'Ofrecer este producto como alternativa — el cliente elige uno'}
@@ -1983,7 +1992,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     <button
                       type="button"
                       onClick={() => onAddToProduct(m.moduleGroup)}
-                      className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
+                      className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
                       title="Agregar un componente a este producto"
                     >
                       <Plus size={12} />
@@ -1996,7 +2005,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                     <button
                       type="button"
                       onClick={() => onExtract(m.componentIds)}
-                      className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
+                      className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
                       title="Sacar este producto como artículo independiente de la cotización"
                     >
                       <ArrowUpRight size={12} />
@@ -2005,7 +2014,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                   <button
                     type="button"
                     onClick={() => onUngroupModule?.(m.moduleGroup)}
-                    className="inline-flex items-center justify-center text-ink-400 hover:text-brand-700 p-1 coarse:min-h-[44px] coarse:min-w-[44px] flex-shrink-0"
+                    className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
                     title="Desagrupar este producto"
                   >
                     <Split size={12} />
@@ -2024,7 +2033,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         </div>
       )}
 
-      <div className="px-3 py-2 bg-white border-t border-ink-100 flex items-center justify-end gap-1.5">
+      <div className="px-3 py-2 bg-white rounded-b-[7px] border-t border-ink-100 flex items-center justify-end gap-1.5">
         {onAddMany && (
           <button
             type="button"
@@ -2118,7 +2127,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
           {...(dragHandleProps || {})}
-          className="hidden sm:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover/comprow:opacity-60 hover:!opacity-100 transition-opacity"
+          className="hidden fine:inline-flex items-center cursor-grab text-ink-300 hover:text-ink-700 opacity-0 group-hover/comprow:opacity-60 hover:!opacity-100 transition-opacity"
           title="Arrastra para reordenar"
           aria-label="Arrastrar para reordenar componente"
         >
@@ -2131,7 +2140,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             onClick={onSelectAlternative}
             aria-pressed={isSelected}
             title={isSelected ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
-            className="relative z-[2] inline-flex items-center gap-1.5"
+            className="relative z-[2] inline-flex items-center gap-1.5 coarse:min-h-11"
           >
             <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
               isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
@@ -2156,7 +2165,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             onClick={() => onChange(optional
               ? { isOptional: false, optionalOffered: false }
               : { isOptional: true, optionalOffered: true })}
-            className={`chip font-medium ${
+            className={`chip-action font-medium ${
               optional
                 ? 'text-ink-600 bg-ink-50 border border-dashed border-ink-300 hover:border-ink-500'
                 : 'text-ink-400 hover:text-ink-700 border border-dashed border-ink-200 hover:border-ink-400'
@@ -2176,7 +2185,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           <button
             type="button"
             onClick={onMakeProduct}
-            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
             title="Desglosar este componente en un producto — un producto completo que agrupa varios componentes"
           >
             <Boxes size={10} className="opacity-80" aria-hidden /> Desglosar
@@ -2190,7 +2199,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           <button
             type="button"
             onClick={onExtract}
-            className="chip font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
+            className="chip-action font-medium text-ink-400 hover:text-brand-700 border border-dashed border-ink-200 hover:border-brand-400 relative z-[2]"
             title="Sacar este componente como artículo independiente de la cotización"
           >
             <ArrowUpRight size={10} className="opacity-80" aria-hidden /> Sacar como artículo
@@ -2200,7 +2209,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <button
           type="button"
           onClick={onRemove}
-          className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0"
+          className="inline-flex items-center justify-center w-7 h-7 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors flex-shrink-0"
           aria-label="Quitar componente"
           title="Quitar componente"
         >
@@ -2223,7 +2232,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <button
           type="button"
           onClick={() => setProductPickerOpen(true)}
-          className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 transition-colors flex-shrink-0"
+          className="inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors flex-shrink-0"
           title="Elegir el producto del catálogo"
           aria-label="Elegir el producto del catálogo"
         >
@@ -2263,7 +2272,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           <button
             type="button"
             onClick={onApplyToAll}
-            className="relative z-[2] mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 coarse:min-h-[44px] text-[11px] font-medium text-brand-700 hover:text-brand-800 hover:underline transition-colors"
+            className="relative z-[2] mt-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 coarse:min-h-11 text-[11px] font-medium text-brand-700 hover:text-brand-800 hover:underline active:bg-brand-50 transition-colors"
             title="Usar esta misma tela en todos los componentes de este producto"
           >
             <Copy size={11} className="opacity-80" aria-hidden />
@@ -2462,7 +2471,7 @@ function FooterButton({ onClick, icon: Icon, children, active, title, ...rest })
       type="button"
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-2 py-1 coarse:min-h-[44px] transition-colors ${
+      className={`inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-2 py-1 coarse:min-h-11 transition-colors ${
         active
           ? 'text-ink-700 bg-ink-100 hover:bg-ink-200'
           : 'text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200'

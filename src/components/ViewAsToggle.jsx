@@ -96,7 +96,7 @@ export default function ViewAsToggle() {
       {open && (
         <div
           role="menu"
-          className="absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-ink-700 bg-ink-800 py-1 shadow-xl"
+          className="dropdown-pop absolute left-2 right-2 top-full z-50 mt-1 rounded-md border border-ink-700 bg-ink-800 py-1 shadow-pop"
         >
           <div className="px-3 py-1.5 eyebrow-xs font-normal tracking-wide text-ink-400">
             Ver la app como

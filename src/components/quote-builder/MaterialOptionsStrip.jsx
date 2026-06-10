@@ -112,7 +112,7 @@ export default function MaterialOptionsStrip({
   return (
     <div className="mt-2">
       {interactive && (
-        <div className="eyebrow-xs tracking-widest text-ink-500 mb-1.5">Elige el material</div>
+        <div className="eyebrow-xs mb-1.5">Elige el material</div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 min-w-0">
         {cells.map((c) => {
@@ -125,12 +125,12 @@ export default function MaterialOptionsStrip({
                   fallbackUrl={swatchUrl(c.code)}
                   alt=""
                   hoverPreview
-                  className={`w-16 h-16 object-cover rounded border bg-white ${
+                  className={`w-16 h-16 object-cover rounded-md border bg-white ${
                     selected ? 'border-brand-500 ring-2 ring-brand-500' : 'border-ink-200'
                   }`}
                 />
                 {selected && (
-                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white shadow ring-2 ring-white">
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white shadow-sm ring-2 ring-white">
                     <Check size={12} aria-hidden />
                   </span>
                 )}
@@ -151,7 +151,7 @@ export default function MaterialOptionsStrip({
               onClick={() => c.grade != null && onSelect(c.grade)}
               aria-pressed={selected}
               title={`Elegir ${c.label}${c.note && c.note !== 'Incluida' ? ` (${c.note})` : ''}`}
-              className="min-w-0 text-left appearance-none bg-transparent p-0 border-0 cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+              className="min-w-0 text-left appearance-none bg-transparent p-0 border-0 cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
             >
               {body}
             </button>

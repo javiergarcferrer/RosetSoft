@@ -70,7 +70,7 @@ export default function InventoryPicker({ open, onClose, onInsert }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar en existencias por nombre o SKU…"
-          className="w-full rounded-lg border border-ink-200 pl-9 pr-3 py-2 text-sm"
+          className="input pl-9"
           autoFocus
         />
       </div>
@@ -93,11 +93,12 @@ export default function InventoryPicker({ open, onClose, onInsert }) {
                 key={it.id}
                 type="button"
                 onClick={() => pick(it)}
-                className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50 transition-colors"
+                className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 min-h-11 flex items-center justify-between gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors"
               >
+                {/* Stock names are user-entered — wrap, never truncate. */}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-ink-900 truncate">{it.name}</span>
-                  <span className="block text-[11px] text-ink-500 truncate">
+                  <span className="block text-sm font-medium text-ink-900 break-words">{it.name}</span>
+                  <span className="block text-[11px] text-ink-500 break-words">
                     {it.sku ? `${it.sku} · ` : ''}
                     <span className={out ? 'text-amber-600' : 'text-emerald-600'}>
                       {onHand} {it.unit || 'u.'} {out ? '· sin stock' : 'en stock'}

@@ -53,7 +53,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
     // Quiet placeholder so the layout doesn't shift when it resolves.
     return (
       <div className="mt-2.5">
-        <span className="inline-flex items-center gap-1.5 px-2.5 min-h-8 coarse:min-h-9 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
+        <span className="inline-flex items-center gap-1.5 px-2.5 min-h-8 coarse:min-h-11 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
           <Package size={12} /> Pedido…
         </span>
       </div>
@@ -65,7 +65,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
     <div className="mt-2.5">
       <Link
         to={`/orders/${order.id}`}
-        className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-10 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
+        className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-11 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
         title={stage?.description}
       >
         <Package size={13} className="text-ink-400 flex-shrink-0" />
@@ -129,9 +129,9 @@ function AttachCta({ quote, profileId, onAttach }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-3.5 min-h-10 coarse:min-h-11 rounded-xl text-sm font-semibold text-white bg-brand-grad shadow-glow hover:brightness-[1.03] active:scale-[0.99] transition-all"
+        className="btn-brand w-full sm:w-auto"
       >
-        <Package size={15} />
+        <Package size={16} />
         Agregar a pedido
       </button>
 
@@ -152,7 +152,7 @@ function AttachCta({ quote, profileId, onAttach }) {
 
         {sorted.length > 0 && (
           <>
-            <p className="mt-5 mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+            <p className="eyebrow mt-5 mb-2">
               O asignar a un pedido existente
             </p>
             <ul className="divide-y divide-ink-100 -mx-1">
@@ -177,7 +177,7 @@ function AttachCta({ quote, profileId, onAttach }) {
                         <span className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[11px] text-ink-400">{stage?.label || o.status}</span>
                           {sameCustomer && (
-                            <span className="text-[10px] font-semibold text-brand-600 bg-brand-50 border border-brand-100 rounded-full px-1.5 py-px">
+                            <span className="chip text-brand-600 bg-brand-50 border border-brand-100">
                               mismo cliente
                             </span>
                           )}

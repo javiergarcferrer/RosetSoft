@@ -161,7 +161,7 @@ export default function QuoteHeader({
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
   return (
     <label
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
+      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
       title="Vendedor"
     >
       <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
@@ -191,12 +191,12 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
  */
 function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
   return (
-    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden bg-white shadow-xs">
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
       <button
         type="button"
         onClick={onUndo}
         disabled={!canUndo}
-        className="px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
+        className="px-2.5 min-h-7 coarse:min-h-11 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Deshacer (${shortcutLabel('mod+z')})`}
         aria-label="Deshacer"
       >
@@ -206,7 +206,7 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
         type="button"
         onClick={onRedo}
         disabled={!canRedo}
-        className="px-2.5 min-h-7 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 border-l border-ink-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
+        className="px-2.5 min-h-7 coarse:min-h-11 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 border-l border-ink-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Rehacer (${shortcutLabel('mod+shift+z')})`}
         aria-label="Rehacer"
       >
@@ -218,12 +218,12 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
 
 function ViewToggle({ view, onChange }) {
   return (
-    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden bg-white shadow-xs">
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
       <button
         type="button"
         onClick={() => onChange('compose')}
         aria-pressed={view === 'compose'}
-        className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
+        className={`px-2.5 sm:px-3 py-1.5 min-h-7 coarse:min-h-11 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
           view === 'compose'
             ? 'bg-ink-900 text-white shadow-sm'
             : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
@@ -236,7 +236,7 @@ function ViewToggle({ view, onChange }) {
         type="button"
         onClick={() => onChange('client')}
         aria-pressed={view === 'client'}
-        className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
+        className={`px-2.5 sm:px-3 py-1.5 min-h-7 coarse:min-h-11 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
           view === 'client'
             ? 'bg-brand-grad text-white shadow-glow'
             : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'

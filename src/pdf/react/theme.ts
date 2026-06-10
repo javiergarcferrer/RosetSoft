@@ -11,27 +11,29 @@ import { Font, StyleSheet } from '@react-pdf/renderer';
 export const PAGE = { width: 612, height: 792 } as const;
 export const MARGIN = 56;
 
-// Ink scale + brand accents (mirror constants.ts rgb() triples).
+// Ink scale + brand accents — the EXACT ink/brand ramp hexes from
+// tailwind.config.js, so screen, public link and paper share one palette
+// (the legacy near-miss tints have been snapped onto the ramps).
 export const C = {
   ink: '#171612',        // ink-900
-  inkHigh: '#3b3830',    // ink-800
-  inkMid: '#6b665c',     // ink-500
-  inkSoft: '#a8a396',    // ink-400
-  inkLine: '#e8e6e0',    // ink-100
-  inkLine2: '#d1cfc7',   // ink-200
-  bgSoft: '#f7f6f5',     // ink-50
+  inkHigh: '#3b3830',    // ink-700
+  inkMid: '#6c6859',     // ink-500
+  inkSoft: '#878374',    // ink-400
+  inkLine: '#e8e7e3',    // ink-100
+  inkLine2: '#cfccc4',   // ink-200
+  bgSoft: '#f7f7f6',     // ink-50
   accent: '#c76b29',     // brand-500
   brand700: '#7d3e1c',   // brand-700
   brand300: '#e8a76d',   // brand-300
-  emerald700: '#056b45',
+  emerald700: '#047857', // Tailwind emerald-700 (screen's text-emerald-700)
   // Group-zone tints (page-break-safe container bands).
-  bgGroupSet: '#f4f2f0',
-  bandGroupSet: '#e9e7e2',
-  brand50: '#fbf4ec',
-  bandGroupAlt: '#f9ecdf',
-  // Grand-total band.
-  bandInk: '#12110e',
-  bandCream: '#d1c9b8',
+  bgGroupSet: '#f7f7f6',   // ink-50
+  bandGroupSet: '#e8e7e3', // ink-100
+  brand50: '#fbf4ec',      // brand-50
+  bandGroupAlt: '#f7e7d4', // brand-100
+  // Grand-total band (screen twin: bg-ink-900 band, text-ink-200 eyebrow).
+  bandInk: '#171612',      // ink-900
+  bandCream: '#cfccc4',    // ink-200
   white: '#ffffff',
 } as const;
 
@@ -185,7 +187,7 @@ export const s = StyleSheet.create({
   footer: {
     position: 'absolute', bottom: 28, left: MARGIN, right: MARGIN,
     flexDirection: 'row', justifyContent: 'space-between',
-    borderTopWidth: 0.4, borderTopColor: C.inkLine, paddingTop: 6,
+    borderTopWidth: 0.5, borderTopColor: C.inkLine, paddingTop: 6,
   },
   footerText: { fontSize: fs(8), color: C.inkMid },
 });

@@ -63,17 +63,17 @@ export default function Impuestos() {
           <div className="card p-5 max-w-2xl">
             <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5"><Percent size={14} /> ITBIS del mes</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Débito fiscal (ventas)</div>
-                <div className="text-xl font-semibold tabular-nums">{formatDop(itbis.debitoFiscal)}</div>
+              <div className="min-w-0">
+                <div className="eyebrow mb-1">Débito fiscal (ventas)</div>
+                <div className="text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.debitoFiscal)}</div>
               </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Crédito fiscal (compras)</div>
-                <div className="text-xl font-semibold tabular-nums">{formatDop(itbis.creditoFiscal)}</div>
+              <div className="min-w-0">
+                <div className="eyebrow mb-1">Crédito fiscal (compras)</div>
+                <div className="text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.creditoFiscal)}</div>
               </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-ink-500 mb-1">{itbis.aPagar > 0 ? 'A pagar' : 'Saldo a favor'}</div>
-                <div className={`text-xl font-bold tabular-nums ${itbis.aPagar > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+              <div className="min-w-0">
+                <div className="eyebrow mb-1">{itbis.aPagar > 0 ? 'A pagar' : 'Saldo a favor'}</div>
+                <div className={`text-xl font-bold tabular-nums whitespace-nowrap ${itbis.aPagar > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                   {formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor)}
                 </div>
               </div>
@@ -82,10 +82,10 @@ export default function Impuestos() {
 
           <div className="grid md:grid-cols-3 gap-4">
             {forms.map((f) => (
-              <Link key={f.code} to={f.to} className="card p-4 group hover:shadow-pop transition">
+              <Link key={f.code} to={f.to} className="card-interactive p-4 group hover:-translate-y-0.5">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-ink-100 text-ink-700">{f.code}</span>
-                  <ChevronRight size={16} className="text-ink-300 group-hover:text-ink-600" />
+                  <span className="badge font-semibold">{f.code}</span>
+                  <ChevronRight size={16} className="text-ink-300 group-hover:text-ink-600 transition-colors" />
                 </div>
                 <div className="text-sm font-medium text-ink-900 mt-1">{f.label}</div>
                 <div className="text-xs text-ink-500 mt-0.5">{f.desc}</div>

@@ -160,7 +160,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
             </button>
           </div>
           {lookupMsg && (
-            <p className={`text-xs mt-1.5 ${lookupMsg.startsWith('✓') ? 'text-green-600' : 'text-ink-500'}`}>
+            <p className={`text-xs mt-1.5 ${lookupMsg.startsWith('✓') ? 'text-emerald-600' : 'text-ink-500'}`}>
               {lookupMsg}
             </p>
           )}

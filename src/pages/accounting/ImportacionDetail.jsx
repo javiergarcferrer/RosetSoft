@@ -16,8 +16,8 @@ import { TEMPLATE_KEY } from './ExpedienteForm.jsx';
 /** One KPI tile of the expediente's landed-cost band. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
+    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2 shadow-xs">
+      <div className="eyebrow text-ink-400">{label}</div>
       <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
     </div>
   );
@@ -27,7 +27,7 @@ function Stat({ label, value, accent }) {
 function Meta({ label, children }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="eyebrow text-ink-400">{label}</div>
       <div className="text-sm text-ink-700 truncate">{children || '—'}</div>
     </div>
   );
@@ -88,7 +88,7 @@ export default function ImportacionDetail() {
   if (!expQ.data || !detail) {
     return (
       <>
-        <Link to="/accounting/importaciones" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-800 mb-2">
+        <Link to="/accounting/importaciones" className="back-link">
           <ArrowLeft size={12} /> Volver a importaciones
         </Link>
         <EmptyState icon={Ship} title="Expediente no encontrado" description="Puede haber sido registrado en otro perfil." />
@@ -128,14 +128,14 @@ export default function ImportacionDetail() {
 
   return (
     <>
-      <Link to="/accounting/importaciones" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-800 mb-2">
+      <Link to="/accounting/importaciones" className="back-link">
         <ArrowLeft size={12} /> Volver a importaciones
       </Link>
       <PageHeader
         title={`Expediente${meta.number != null ? ` #${meta.number}` : ''}`}
         subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}`}
         actions={(
-          <button type="button" onClick={useAsTemplate} className="btn-ghost text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3">
+          <button type="button" onClick={useAsTemplate} className="btn-secondary">
             <Copy size={14} /> Usar como plantilla
           </button>
         )}
@@ -232,42 +232,42 @@ export default function ImportacionDetail() {
 
       {/* Cost sheet */}
       <div className="card overflow-hidden mt-4">
-        <div className="px-3 py-2 text-xs uppercase tracking-wide text-ink-500 bg-ink-50 font-medium">Costos del expediente</div>
+        <div className="card-header"><h2>Costos del expediente</h2></div>
         {costs.length === 0 ? (
           <p className="text-xs text-ink-400 px-3 py-3">Sin costos adicionales — el costo en destino es CIF + impuestos capitalizables.</p>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
+          <table className="table min-w-[560px]">
+            <thead>
               <tr>
-                <th className="text-left font-medium py-2 px-3">Concepto</th>
-                <th className="text-left font-medium py-2 px-3">Proveedor</th>
-                <th className="text-left font-medium py-2 px-3 whitespace-nowrap">NCF</th>
-                <th className="text-left font-medium py-2 px-3 whitespace-nowrap">Pago</th>
-                <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Monto</th>
-                <th className="text-right font-medium py-2 px-3 whitespace-nowrap">ITBIS</th>
-                <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Neto al costo</th>
+                <th>Concepto</th>
+                <th>Proveedor</th>
+                <th className="whitespace-nowrap">NCF</th>
+                <th className="whitespace-nowrap">Pago</th>
+                <th className="text-right whitespace-nowrap">Monto</th>
+                <th className="text-right whitespace-nowrap">ITBIS</th>
+                <th className="text-right whitespace-nowrap">Neto al costo</th>
               </tr>
             </thead>
             <tbody>
               {costs.map((c) => (
-                <tr key={c.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3">{c.label}</td>
-                  <td className="py-1.5 px-3 min-w-0">{c.supplierName || '—'}</td>
-                  <td className="py-1.5 px-3 font-mono text-xs whitespace-nowrap">{c.ncf || '—'}</td>
-                  <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{c.payment}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(c.amount)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(c.itbis)}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.net)}</td>
+                <tr key={c.id}>
+                  <td>{c.label}</td>
+                  <td className="min-w-0">{c.supplierName || '—'}</td>
+                  <td className="font-mono text-xs whitespace-nowrap">{c.ncf || '—'}</td>
+                  <td className="text-ink-500 whitespace-nowrap">{c.payment}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(c.amount)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(c.itbis)}</td>
+                  <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.net)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-ink-200 font-semibold">
-                <td className="py-2 px-3" colSpan={4}>{costs.length} costo{costs.length === 1 ? '' : 's'}</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.gross)}</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.itbis)}</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.net)}</td>
+                <td colSpan={4}>{costs.length} costo{costs.length === 1 ? '' : 's'}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.gross)}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.itbis)}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.net)}</td>
               </tr>
             </tfoot>
           </table>
@@ -278,37 +278,37 @@ export default function ImportacionDetail() {
       {/* Asiento contable */}
       {asientoLines.length > 0 && (
         <div className="card overflow-hidden mt-4">
-          <div className="px-3 py-2 text-xs uppercase tracking-wide text-ink-500 bg-ink-50 font-medium inline-flex items-center gap-1.5 w-full">
-            <BookOpen size={13} /> Asiento contable
+          <div className="card-header">
+            <h2 className="inline-flex items-center gap-1.5"><BookOpen size={14} /> Asiento contable</h2>
           </div>
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
+          <table className="table min-w-[560px]">
+            <thead>
               <tr>
-                <th className="text-left font-medium py-2 px-3">Cuenta</th>
-                <th className="text-left font-medium py-2 px-3">Detalle</th>
-                <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Débito</th>
-                <th className="text-right font-medium py-2 px-3 whitespace-nowrap">Crédito</th>
+                <th>Cuenta</th>
+                <th>Detalle</th>
+                <th className="text-right whitespace-nowrap">Débito</th>
+                <th className="text-right whitespace-nowrap">Crédito</th>
               </tr>
             </thead>
             <tbody>
               {asientoLines.map((l) => (
-                <tr key={l.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3 whitespace-nowrap">
+                <tr key={l.id}>
+                  <td className="whitespace-nowrap">
                     <span className="font-mono text-xs text-ink-500">{l.accountCode}</span>
                     {accountName(l.accountCode) && <span className="ml-1.5">{accountName(l.accountCode)}</span>}
                   </td>
-                  <td className="py-1.5 px-3 min-w-0 text-ink-500">{l.memo || ''}{l.ncf ? <span className="ml-1.5 font-mono text-xs">{l.ncf}</span> : null}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{l.debit ? formatDop(l.debit) : ''}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{l.credit ? formatDop(l.credit) : ''}</td>
+                  <td className="min-w-0 text-ink-500">{l.memo || ''}{l.ncf ? <span className="ml-1.5 font-mono text-xs">{l.ncf}</span> : null}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{l.debit ? formatDop(l.debit) : ''}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{l.credit ? formatDop(l.credit) : ''}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-ink-200 font-semibold">
-                <td className="py-2 px-3" colSpan={2}>Totales</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(debitTotal(asientoLines))}</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(creditTotal(asientoLines))}</td>
+                <td colSpan={2}>Totales</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(debitTotal(asientoLines))}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(creditTotal(asientoLines))}</td>
               </tr>
             </tfoot>
           </table>

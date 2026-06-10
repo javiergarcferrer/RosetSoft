@@ -16,8 +16,8 @@ export { SCOPE_MINE, SCOPE_TEAM };
 export default function ScopeToggle({ scope, onChange }) {
   const cls = (active) =>
     active
-      ? 'px-3 py-1.5 coarse:py-2 bg-ink-900 text-ink-50'
-      : 'px-3 py-1.5 coarse:py-2 text-ink-600 hover:bg-ink-100';
+      ? 'px-3 py-1.5 min-h-8 coarse:min-h-11 bg-ink-900 text-ink-50'
+      : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors';
   return (
     <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
       <button type="button" onClick={() => onChange(SCOPE_MINE)} className={cls(scope === SCOPE_MINE)}>

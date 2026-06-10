@@ -25,7 +25,7 @@ export default class ErrorBoundary extends React.Component {
     if (!this.state.error) return this.props.children;
     return (
       <div className="min-h-screen flex items-center justify-center bg-ink-50 p-6">
-        <div className="max-w-md w-full bg-white border border-ink-100 rounded-lg shadow-sm p-8 text-center">
+        <div className="card max-w-md w-full p-8 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-50 text-red-600 mb-4">
             <AlertCircle size={22} />
           </div>
@@ -33,7 +33,7 @@ export default class ErrorBoundary extends React.Component {
           <p className="text-sm text-ink-500 mt-2">
             La aplicación encontró un error inesperado. Recarga la página para continuar.
           </p>
-          <pre className="mt-4 text-[11px] text-ink-500 bg-ink-50 border border-ink-100 rounded p-3 text-left overflow-x-auto whitespace-pre-wrap break-words">
+          <pre className="surface-subtle mt-4 text-[11px] text-ink-500 p-3 text-left overflow-x-auto whitespace-pre-wrap break-words">
             {this.state.error?.message || String(this.state.error)}
           </pre>
           <button

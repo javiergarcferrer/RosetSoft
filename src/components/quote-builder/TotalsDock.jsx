@@ -137,7 +137,7 @@ export default function TotalsDock({
         />
       )}
       <details className="group">
-        <summary className="text-[11px] text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 pt-1 cursor-pointer">
+        <summary className="text-[11px] text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 pt-1 min-h-6 coarse:min-h-11 cursor-pointer transition-colors">
           <Info size={11} />
           Cómo se calcula
         </summary>
@@ -155,7 +155,7 @@ export default function TotalsDock({
             <span className="chip bg-amber-50 text-amber-700 border border-amber-200">Aplicado</span>
           )}
           {financiallyLocked && (
-            <span className="chip bg-ink-100 text-ink-600 border border-ink-200 inline-flex items-center gap-1">
+            <span className="chip bg-ink-100 text-ink-600 border border-ink-200">
               <Lock size={10} /> {depositReceived ? 'Bloqueado · depósito recibido' : 'Bloqueado · aceptada'}
             </span>
           )}
@@ -189,8 +189,8 @@ export default function TotalsDock({
             drawn out of the commission like the discount above; instead it
             lowers the base the commission is computed on. */}
         <label
-          className={`flex items-start gap-2.5 rounded-lg border p-3 max-w-md ${
-            financiallyLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-ink-50'
+          className={`flex items-start gap-2.5 rounded-lg border p-3 max-w-md transition-colors ${
+            financiallyLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-ink-50 active:bg-ink-100'
           } ${courtesyPct > 0 ? 'border-emerald-300 bg-emerald-50/50' : 'border-ink-200'}`}
         >
           <input
@@ -222,7 +222,7 @@ export default function TotalsDock({
               type="button"
               onClick={handleRefreshRate}
               disabled={refreshingRate || financiallyLocked}
-              className="inline-flex items-center gap-1 rounded border border-ink-200 px-1.5 py-0.5 font-medium text-ink-700 hover:bg-ink-100 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-2 py-1 min-h-7 coarse:min-h-11 font-medium text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title={financiallyLocked
                 ? 'La tasa quedó fija al aceptar la cotización — el total ya no puede cambiar'
                 : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
@@ -324,7 +324,7 @@ export default function TotalsDock({
                   already reads as the total, and dropping it lets the amount and
                   its chevron hug on line one. */}
               <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block text-brand-600 font-bold tracking-widest">Total</span>
-              <span className="text-2xl sm:text-[1.625rem] font-bold tabular-nums leading-none flex-shrink-0 text-ink-900 tracking-tight">{totalLabel}</span>
+              <span className="text-2xl font-bold tabular-nums leading-none flex-shrink-0 text-ink-900 tracking-tight whitespace-nowrap">{totalLabel}</span>
               {discountPct > 0 && (
                 <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 ring-1 ring-inset ring-emerald-200/60 flex-shrink-0">−{discountPct}%</span>
               )}
@@ -334,7 +334,8 @@ export default function TotalsDock({
                   between the amount and the chevron — the desktop layout. */}
               {dopRate && currency === 'USD' && (
                 <span className="order-last sm:order-none w-full sm:w-auto inline-flex min-w-0 items-center gap-1.5 text-[11px] text-ink-500 tabular-nums">
-                  <span className="truncate font-medium">≈ {dopTotalLabel}</span>
+                  {/* Money never ellipsizes — the row's flex-wrap reflows it instead. */}
+                  <span className="whitespace-nowrap font-medium">≈ {dopTotalLabel}</span>
                   {rateLocked ? (
                     <span className="inline-flex items-center gap-1 text-amber-600 flex-shrink-0 bg-amber-50 rounded px-1 py-0.5" title="Tasa bloqueada al aceptar · pulsa el total para actualizarla">
                       <Lock size={9} /> {dopRate.toFixed(2)}
@@ -349,7 +350,7 @@ export default function TotalsDock({
                   line two, keeping the chevron on the amount's line; on desktop
                   it trails the conversion inline. */}
               <ChevronUp
-                size={15}
+                size={16}
                 className={`text-ink-400 group-hover:text-ink-600 flex-shrink-0 transition-transform duration-200 ${breakdownOpen ? 'rotate-180' : ''}`}
                 aria-hidden
               />
@@ -390,7 +391,8 @@ export default function TotalsDock({
               />
 
               {/* Export / preview the PDF — the primary action, pinned at every
-                  width. Uses btn-brand for the violet gradient marquee CTA. */}
+                  width. Carries the terracotta brand gradient as the bar's one
+                  loudest control. */}
               <DockAction
                 icon={Download}
                 label="Exportar"
@@ -427,7 +429,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
     <div className="rounded-lg border border-ink-200 bg-ink-50/40 p-3 space-y-2 mt-1 shadow-xs">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">Comisión profesional</h3>
-        <span className="text-[10px] text-ink-400 uppercase tracking-wide">Interno</span>
+        <span className="eyebrow-xs text-ink-400">Interno</span>
       </div>
       {/* Gross is the % on the post-courtesy base — the courtesy already shrank
           it, so it's never shown as a separate deduction. Only the regular
@@ -458,7 +460,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
         <select
           value={mode}
           onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
-          className={`text-xs font-medium rounded-md border px-2 py-1 cursor-pointer focus:outline-none min-w-0 max-w-[60%] truncate ${
+          className={`text-xs font-medium rounded-md border px-2 py-1 min-h-7 coarse:min-h-11 cursor-pointer transition-colors min-w-0 max-w-[60%] truncate ${
             trade ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-ink-200 bg-white text-ink-700'
           }`}
           aria-label="Modalidad de facturación con el decorador"
@@ -483,7 +485,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
  * accessible name rather than visible text so the whole bar stays on one row.
  * Every button is the same rounded square so the cluster reads as one even,
  * deliberate rhythm:
- *   • primary (Export) — the filled ink-900 CTA.
+ *   • primary (Export) — the terracotta brand-gradient CTA.
  *   • pressed — the active-panel (toggle) state, also filled.
  *   • default — bordered ghost square (hairline ink-200), the consistent
  *     enclosure the rest of the cluster shares; `dot` flags an applied
@@ -493,8 +495,11 @@ function DockAction({
   icon: Icon, label, onClick, title, ariaLabel,
   disabled, busy, pressed, primary, dot, className = '',
 }) {
+  // Primary carries the btn-brand SURFACE (gradient + glow) spelled out
+  // explicitly — composing the `.btn-brand` class here would also drag in
+  // `.btn`'s px-3/min-h geometry and fight the fixed square below.
   const tone = primary
-    ? 'btn-brand shadow-glow active:brightness-95 border-0'
+    ? 'bg-brand-grad text-white shadow-glow hover:brightness-110 active:brightness-95'
     : pressed
       ? 'bg-ink-900 text-white border border-ink-900 shadow-sm'
       : 'text-ink-700 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100 shadow-xs';
@@ -507,9 +512,9 @@ function DockAction({
       aria-pressed={pressed}
       aria-label={ariaLabel || label}
       title={title}
-      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-lg transition-all duration-150 active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait ${tone} ${className}`}
+      className={`relative inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md transition-all duration-150 active:scale-[0.96] disabled:opacity-60 disabled:cursor-wait select-none ${tone} ${className}`}
     >
-      {busy ? <Loader2 size={18} className="animate-spin" /> : <Icon size={18} />}
+      {busy ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} />}
       {dot && (
         <span
           className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ring-2 ${
@@ -570,7 +575,7 @@ function BreakdownExplainer({ quote, totals, fmt }) {
   lines.push(['= Total', fmt(totals.grandTotal)]);
 
   return (
-    <div className="bg-ink-50 rounded-md p-2.5 mt-2 space-y-0.5 text-[11px] tabular-nums border border-ink-100">
+    <div className="surface-subtle p-2.5 mt-2 space-y-0.5 text-[11px] tabular-nums">
       {lines.map(([l, v], i) => (
         <div key={i} className={`flex justify-between ${i === lines.length - 1 ? 'font-semibold text-ink-900 pt-1 border-t border-ink-200 mt-1' : 'text-ink-600'}`}>
           <span>{l}</span>

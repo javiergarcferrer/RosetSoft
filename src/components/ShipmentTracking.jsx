@@ -66,7 +66,7 @@ export default function ShipmentTracking({
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
           aria-expanded={open}
-          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1 min-h-[2rem] coarse:min-h-[2.75rem] text-[11px] font-medium text-ink-600 hover:border-ink-400 hover:text-ink-900 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1 min-h-8 coarse:min-h-11 text-[11px] font-medium text-ink-600 hover:border-ink-400 hover:text-ink-900 active:bg-ink-50 transition-colors"
         >
           <Ship size={12} />
           Rastrear envío{trackable.length > 1 ? ` · ${trackable.length}` : ''}

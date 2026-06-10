@@ -81,37 +81,45 @@ export default function Comisiones() {
       <PageHeader title="Comisiones"
         subtitle={ownOnly ? 'Tus comisiones por ciclo' : 'Comisiones de vendedores y profesionales'} />
 
+      {/* Cycle picker — same segmented-control shape as the Mías/Equipo
+          ScopeToggle so the app has ONE two-state switch vocabulary. */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <Calendar size={15} className="text-ink-400 shrink-0" />
-        <button
-          type="button"
-          onClick={() => setMode('current')}
-          className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-all active:scale-[0.98] ${mode === 'current' ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}
-        >
-          Ciclo actual
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('previous')}
-          className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-all active:scale-[0.98] ${mode === 'previous' ? 'bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}
-        >
-          Anterior
-        </button>
+        <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-sm font-medium select-none">
+          <button
+            type="button"
+            onClick={() => setMode('current')}
+            className={mode === 'current'
+              ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
+              : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}
+          >
+            Ciclo actual
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('previous')}
+            className={mode === 'previous'
+              ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
+              : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}
+          >
+            Anterior
+          </button>
+        </div>
         <span className="text-sm text-ink-500 ml-1 tabular-nums">{formatCycle(cycle)}</span>
       </div>
 
       {!loaded ? <ListLoading /> : ownOnly ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 max-w-2xl">
-            <div className="card p-4 flex flex-col gap-1.5">
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Comisión del ciclo</div>
               <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(myRow?.commission || 0)}</div>
             </div>
-            <div className="card p-4 flex flex-col gap-1.5">
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pagado</div>
               <div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(myRow?.paid || 0)}</div>
             </div>
-            <div className="card p-4 flex flex-col gap-1.5">
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pendiente</div>
               <div className="text-xl font-semibold tabular-nums text-amber-700">{usd(myRow?.pending || 0)}</div>
             </div>
@@ -159,7 +167,7 @@ export default function Comisiones() {
         <div className="space-y-4">
           <div className="card overflow-hidden">
             <div className="card-header">
-              <h2 className="eyebrow font-semibold text-ink-700">Vendedores</h2>
+              <h2>Vendedores</h2>
               <span className="badge">{sales.vendedorRows.length}</span>
             </div>
             <div className="overflow-x-auto">
@@ -195,7 +203,7 @@ export default function Comisiones() {
           {sales.profRows.length > 0 && (
             <div className="card overflow-hidden">
               <div className="card-header">
-                <h2 className="eyebrow font-semibold text-ink-700">Profesionales</h2>
+                <h2>Profesionales</h2>
                 <span className="badge">{sales.profRows.length}</span>
               </div>
               <div className="overflow-x-auto">

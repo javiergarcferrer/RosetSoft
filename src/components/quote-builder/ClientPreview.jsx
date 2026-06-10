@@ -831,7 +831,7 @@ function AlternativeRadio({ line, groupInfo, isSelected, onSelect }) {
       onClick={() => onSelect(line.alternativeGroup, line.id)}
       aria-pressed={isSelected}
       title={isSelected ? 'Esta es tu elección' : 'Elegir esta opción'}
-      className="group/alt relative z-[2] mb-2.5 flex w-full items-center gap-2.5 text-left coarse:min-h-[44px]"
+      className="group/alt relative z-[2] mb-2.5 flex w-full items-center gap-2.5 text-left coarse:min-h-11"
     >
       <span className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
         isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white group-hover/alt:border-brand-400'
@@ -894,7 +894,7 @@ function FabricPicker({ id, subtype, reference, gradePrices, picker, modelKey, c
       <button
         type="button"
         onClick={() => { setShowAll(false); setOpen(true); }}
-        className="inline-flex h-7 w-7 coarse:h-9 coarse:w-9 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 flex-shrink-0"
+        className="inline-flex h-7 w-7 coarse:h-11 coarse:w-11 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 active:bg-brand-100 flex-shrink-0"
         title={chosen ? 'Cambiar la tela' : 'Elegir tela'}
         aria-label={chosen ? 'Cambiar la tela' : 'Elegir tela'}
       >
@@ -975,7 +975,7 @@ function ClearSwatch({ id, subtype, swatchImageId, gradePrices, picker, onClear,
           onClick={(e) => { e.stopPropagation(); clear(); }}
           title="Quitar la tela — volver a cotizar sin material (rango de precio)"
           aria-label="Quitar la tela seleccionada"
-          className="absolute -top-2 -right-2 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm opacity-0 transition-all hover:scale-110 hover:border-red-300 hover:bg-red-50 hover:text-red-600 group-hover/swatch:opacity-100 focus:opacity-100 coarse:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+          className="absolute -top-2 -right-2 z-10 inline-flex h-5 w-5 coarse:h-7 coarse:w-7 coarse:after:absolute coarse:after:-inset-2.5 coarse:after:content-[''] items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm opacity-0 transition-all hover:scale-110 hover:border-red-300 hover:bg-red-50 hover:text-red-600 group-hover/swatch:opacity-100 focus:opacity-100 coarse:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
         >
           <X size={11} strokeWidth={2.5} aria-hidden />
         </button>
@@ -1329,7 +1329,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
                             real 2+-element grouping (parity with the PDF). */}
                         {m.moduleGroup && m.components.length > 1 && !headerDuplicatesElement && (
                           <div className="flex items-baseline justify-between gap-2 pt-2 pb-1">
-                            <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-ink-600 truncate">{m.name || '—'}</span>
+                            <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-ink-600 break-words">{m.name || '—'}</span>
                             {/* An excluded module (optional / non-selected) adds
                                 nothing to the total, so it asserts no price — the
                                 same reason an optional line is struck from the sum. */}
@@ -1658,7 +1658,7 @@ function ClientGroupCard({ type, memberCount, optional, footerLabel, footerValue
         <div className={`${headBg} px-4 py-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1`}>
           <span className={`inline-flex items-center gap-1.5 eyebrow font-semibold tracking-[0.06em] ${eyebrowColor} min-w-0`}>
             <Icon size={13} className="opacity-80 flex-shrink-0" aria-hidden />
-            <span className="truncate">{eyebrow}</span>
+            <span className="min-w-0">{eyebrow}</span>
           </span>
           <span className="eyebrow-xs font-medium tracking-wide text-ink-400 tabular-nums flex-shrink-0">
             {memberCount} {isSet ? 'piezas' : 'opciones'}
@@ -1710,7 +1710,7 @@ function OptionalAction({ included, onToggle }) {
         <button
           type="button"
           onClick={() => onToggle(false)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-10 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:bg-ink-100 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 hover:border-ink-300 active:bg-ink-100 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
         >
           <X size={13} aria-hidden /> Quitar
         </button>
@@ -1718,7 +1718,7 @@ function OptionalAction({ included, onToggle }) {
         <button
           type="button"
           onClick={() => onToggle(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 min-h-8 coarse:min-h-10 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600 active:bg-brand-700 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 min-h-8 coarse:min-h-11 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600 active:bg-brand-700 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1"
         >
           <Plus size={14} aria-hidden /> Agregar
         </button>

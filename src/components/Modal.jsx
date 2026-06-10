@@ -54,7 +54,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
           <div className="w-10 h-[3px] rounded-full bg-ink-200" />
         </div>
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-ink-100">
-          <h2 className="font-display text-base font-semibold text-ink-900 break-words leading-snug pr-3 min-w-0">{title}</h2>
+          <h2 className="font-display text-lg font-semibold text-ink-900 break-words leading-snug pr-3 min-w-0">{title}</h2>
           <button
             onClick={onClose}
             className="btn-icon -mr-1.5 text-ink-400 hover:text-ink-600 hover:bg-ink-100 transition-colors"

@@ -89,20 +89,20 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-2 min-h-[44px] text-sm font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900 flex-shrink-0"
+            className="btn-ghost min-h-11 gap-1 px-2 flex-shrink-0"
             aria-label="Volver"
           >
-            <ArrowLeft size={17} aria-hidden />
+            <ArrowLeft size={16} aria-hidden />
             <span className="hidden sm:inline">Volver</span>
           </button>
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-900">{title}</span>
+          <span className="min-w-0 flex-1 break-words text-sm font-semibold text-ink-900">{title}</span>
           <button
             type="button"
             onClick={() => window.print()}
             disabled={!pages || !pages.length}
-            className="btn-brand inline-flex items-center gap-1.5 rounded-lg px-3 py-2 min-h-[40px] text-xs font-semibold disabled:opacity-50 flex-shrink-0 whitespace-nowrap"
+            className="btn-brand flex-shrink-0 whitespace-nowrap"
           >
-            <Printer size={13} aria-hidden /> Imprimir
+            <Printer size={14} aria-hidden /> Imprimir
           </button>
         </div>
 
@@ -110,13 +110,13 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
             home-indicator inset on full-screen mobile. */}
         <div className="print-pdf-pages flex-1 overflow-y-auto px-2 py-3 sm:px-6 sm:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {error ? (
-            <div className="print-pdf-chrome mx-auto mt-10 max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800 flex items-start gap-2">
-              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+            <div role="alert" className="print-pdf-chrome mx-auto mt-10 max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800 flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" aria-hidden />
               <span>{error}</span>
             </div>
           ) : !pages ? (
-            <div className="print-pdf-chrome flex flex-col items-center justify-center gap-3 py-24 text-ink-500">
-              <Loader2 size={22} className="animate-spin" />
+            <div role="status" aria-live="polite" className="print-pdf-chrome flex flex-col items-center justify-center gap-3 py-24 text-ink-500">
+              <Loader2 size={22} className="animate-spin" aria-hidden />
               <span className="text-xs font-medium">Preparando impresión…</span>
             </div>
           ) : (

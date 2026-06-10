@@ -158,12 +158,13 @@ function VoyageHud({ voyage }) {
 
   return (
     <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-white/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
+      {/* Port names wrap, never truncate — the HUD grows downward over the map. */}
       <div className="flex items-center gap-1.5 font-semibold text-ink-900 leading-tight">
-        <span className="truncate">{originName}</span>
-        <span className="text-ink-300">→</span>
-        <span className="truncate">{destName}</span>
+        <span className="min-w-0 break-words">{originName}</span>
+        <span className="text-ink-300" aria-hidden>→</span>
+        <span className="min-w-0 break-words">{destName}</span>
       </div>
-      {meta && <div className="text-[10px] text-ink-500 mt-0.5 truncate">{meta}</div>}
+      {meta && <div className="text-[10px] text-ink-500 mt-0.5 break-words">{meta}</div>}
 
       <div className="mt-2 h-1.5 rounded-full bg-ink-100 overflow-hidden">
         <div
@@ -175,7 +176,7 @@ function VoyageHud({ voyage }) {
         <span className={arrived ? 'text-emerald-700 font-medium' : 'text-ink-600 font-medium'}>
           {progressLabel}
         </span>
-        {etaLabel && <span className="text-ink-500 truncate">{etaLabel}</span>}
+        {etaLabel && <span className="min-w-0 text-right break-words text-ink-500">{etaLabel}</span>}
       </div>
       {updatedLabel && <div className="text-[10px] text-ink-400 mt-0.5">{updatedLabel}</div>}
     </div>
@@ -209,8 +210,10 @@ const VESSEL_SVG =
   '<svg viewBox="0 0 24 24" fill="#059669" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round">' +
   '<path d="M12 1.8 L19.6 21 L12 16.3 L4.4 21 Z"/></svg>';
 
-const SAILED_STYLE = { color: '#a55322', weight: 3.5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
-const REMAIN_STYLE = { color: '#a55322', weight: 3, opacity: 0.7, lineCap: 'round', className: 'vmap-flow' };
+// Route arcs in brand-600 (the exact tailwind ramp hex) — Leaflet takes raw
+// colors, so these can't come from a utility class.
+const SAILED_STYLE = { color: '#a85620', weight: 3.5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' };
+const REMAIN_STYLE = { color: '#a85620', weight: 3, opacity: 0.7, lineCap: 'round', className: 'vmap-flow' };
 
 function dotIcon(L, cls, size) {
   return L.divIcon({

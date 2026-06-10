@@ -85,7 +85,7 @@ export default function ImageDrop({
         }}
         onPaste={handlePaste}
         tabIndex={0}
-        className={`relative rounded-md border-2 border-dashed transition-colors group focus:outline-none ${
+        className={`relative rounded-md border-2 border-dashed transition-colors group focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
           dragging ? 'border-brand-500 bg-brand-50' : 'border-ink-200 bg-ink-50'
         }`}
       >
@@ -95,7 +95,7 @@ export default function ImageDrop({
             <button
               type="button"
               onClick={clear}
-              className="absolute top-1.5 right-1.5 bg-white/95 hover:bg-white text-ink-900 rounded-md p-1 shadow border border-ink-200 opacity-0 group-hover:opacity-100 transition"
+              className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 bg-white/95 hover:bg-white active:bg-ink-50 text-ink-900 rounded-md shadow-sm border border-ink-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity"
               title="Remove image"
             >
               <X size={14} />
@@ -118,7 +118,7 @@ export default function ImageDrop({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="text-xs text-ink-500 hover:text-ink-900 min-h-[44px] sm:min-h-0 inline-flex items-center"
+          className="text-xs font-medium text-ink-500 hover:text-ink-900 min-h-8 coarse:min-h-11 inline-flex items-center transition-colors"
         >
           Choose file
         </button>
@@ -128,7 +128,7 @@ export default function ImageDrop({
             <button
               type="button"
               onClick={fetchFromUrl}
-              className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 min-h-[44px] sm:min-h-0"
+              className="text-xs font-medium text-ink-500 hover:text-ink-900 inline-flex items-center gap-1 min-h-8 coarse:min-h-11 transition-colors"
             >
               <LinkIcon size={11} /> From URL
             </button>

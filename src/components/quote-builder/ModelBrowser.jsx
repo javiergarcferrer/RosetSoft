@@ -50,11 +50,13 @@ export default function ModelBrowser({ profileId, onPick }) {
           ref={inputRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          className="input pl-9"
+          className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
           placeholder="Buscar modelo por nombre, referencia o familia…"
         />
         {q && (
-          <button type="button" onClick={() => { setQ(''); inputRef.current?.focus(); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1" aria-label="Limpiar">
+          // btn-icon matches the input's 36/44 height exactly, so the clear
+          // affordance fills the input's right end as a full-size touch target.
+          <button type="button" onClick={() => { setQ(''); inputRef.current?.focus(); }} className="btn-icon absolute right-0 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
             <X size={14} />
           </button>
         )}
@@ -222,7 +224,7 @@ function BrowseCategory({ profileId, category, count, onPick }) {
       className="rounded-lg border border-ink-100 overflow-hidden group/cat"
       onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
     >
-      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50">
+      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-11 flex items-center justify-between gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight size={14} className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90" aria-hidden />
           <span className="font-medium text-sm text-ink-900 truncate" title={label}>{label}</span>
@@ -267,7 +269,7 @@ function BrowseCategoryModels({ profileId, category, onPick }) {
 function ResultCategory({ section, onPick }) {
   return (
     <details open className="rounded-lg border border-ink-100 overflow-hidden group/cat">
-      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-[44px] flex items-center justify-between gap-3 hover:bg-ink-50">
+      <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-11 flex items-center justify-between gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight size={14} className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90" aria-hidden />
           <span className="font-medium text-sm text-ink-900 truncate" title={section.category || NO_CATEGORY}>
@@ -295,7 +297,7 @@ function ModelButton({ model, onPick }) {
     <button
       type="button"
       onClick={() => onPick(model)}
-      className="w-full text-left rounded-md px-3 py-2.5 min-h-[44px] flex items-center gap-3 hover:bg-ink-50 transition-colors"
+      className="w-full text-left rounded-md px-3 py-2.5 min-h-11 flex items-center gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors"
     >
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-ink-100 text-ink-500 flex-shrink-0">
         <PackageSearch size={15} />

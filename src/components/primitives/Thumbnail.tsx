@@ -109,7 +109,7 @@ export default function Thumbnail({
         disabled={busy}
         title={imageId ? 'Cambiar imagen' : 'Añadir imagen'}
         aria-label={imageId ? 'Cambiar imagen del artículo' : 'Añadir imagen al artículo'}
-        className={`absolute inset-0 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 ${
+        className={`absolute inset-0 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1 ${
           showsImage
             ? 'bg-white border border-ink-200 hover:border-ink-400 overflow-hidden'
             : dragging

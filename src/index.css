@@ -333,6 +333,12 @@
   .btn-icon {
     @apply inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none select-none;
   }
+  /* Destructive icon button — quiet at rest (ink-300), turns red on intent.
+     One recipe for every per-row delete/detach across Quotes, Orders and
+     OrderDetail, so the danger affordance reads identically everywhere. */
+  .btn-icon-danger {
+    @apply btn-icon text-ink-300 hover:text-red-600 hover:bg-red-50 active:bg-red-100;
+  }
 
   /* Inputs. Same coarse-pointer touch-target treatment as buttons. The
      16px-on-mobile rule above keeps Safari from auto-zooming on focus. */
@@ -374,6 +380,16 @@
      Distinct from `.badge` (rounded-md, sentence-case) by being a pill in
      tracked small-caps. */
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors; }
+  /* Interactive chip — a .chip that is a BUTTON (the quote editor's Opcional /
+     Alternativa / Desglosar / family toggles). Same pill shape, plus the
+     coarse-pointer touch floor so a thumb can actually hit it. Color still
+     belongs to the call site, exactly like .chip. */
+  .chip-action { @apply chip coarse:min-h-11 coarse:px-3; }
+  /* Tab pill — the in-page tab switcher of the accounting module (Ledger,
+     Facturación, Gastos/606, Estados, CxC/CxP). Compose with .btn:
+     `btn tab-pill` at rest, `btn tab-pill-active` for the open tab. */
+  .tab-pill        { @apply bg-ink-100 text-ink-600 hover:bg-ink-200 active:bg-ink-300; }
+  .tab-pill-active { @apply bg-ink-900 text-white shadow-sm; }
   .table { @apply w-full text-sm; }
   .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 bg-ink-50/70 border-b border-ink-100; }
   .table td { @apply px-3 py-2 border-b border-ink-100; }
@@ -856,7 +872,7 @@
 .vmap-dot { display: block; box-sizing: border-box; border-radius: 9999px; background: #fff; }
 .vmap-origin { width: 13px; height: 13px; background: theme('colors.brand.600'); border: 2.5px solid #fff; box-shadow: 0 0 0 1.5px theme('colors.brand.600'), theme('boxShadow.soft'); }
 .vmap-via    { width: 11px; height: 11px; border: 2.5px solid theme('colors.ink.500'); box-shadow: theme('boxShadow.soft'); }
-.vmap-dest   { width: 15px; height: 15px; border: 3px solid theme('colors.brand.600'); box-shadow: 0 0 0 3px rgba(165,83,34,0.18), theme('boxShadow.soft'); }
+.vmap-dest   { width: 15px; height: 15px; border: 3px solid theme('colors.brand.600'); box-shadow: 0 0 0 3px rgba(168,86,32,0.18), theme('boxShadow.soft'); }
 .vmap-dest.vmap-arrived { background: theme('colors.emerald.600'); border-color: #fff; box-shadow: 0 0 0 3px rgba(5,150,105,0.20), theme('boxShadow.soft'); }
 
 /* The vessel: a heading-rotated glyph over a soft pulsing halo. */

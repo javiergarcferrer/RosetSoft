@@ -75,19 +75,19 @@ export default function ECFSequences() {
     }
   }
 
-  const field = 'rounded-lg border border-ink-200 px-3 py-1.5 text-sm';
+  const field = 'input';
 
   return (
     <>
       <PageHeader title="Secuencias e-NCF"
         subtitle="Rangos de e-NCF autorizados por la DGII; el sistema asigna el próximo al facturar"
-        actions={<button type="button" onClick={openNew} className="btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={15} /> Nueva secuencia</button>} />
+        actions={<button type="button" onClick={openNew} className="btn-primary"><Plus size={15} /> Nueva secuencia</button>} />
 
       {editing && (
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold">{editing === 'new' ? 'Nueva secuencia' : 'Editar secuencia'}</h3>
-            <button type="button" onClick={() => setEditing(null)} className="text-ink-400 hover:text-ink-700"><X size={18} /></button>
+            <button type="button" onClick={() => setEditing(null)} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-sm">Tipo e-CF<br />
@@ -99,10 +99,10 @@ export default function ECFSequences() {
             <label className="text-sm">Hasta<br /><input type="number" min="1" inputMode="numeric" value={form.seqTo} onChange={(e) => setForm((f) => ({ ...f, seqTo: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>
             {editing !== 'new' && <label className="text-sm">Próximo<br /><input type="number" min="1" inputMode="numeric" value={form.nextSeq} onChange={(e) => setForm((f) => ({ ...f, nextSeq: e.target.value }))} className={`${field} w-28 tabular-nums`} /></label>}
             <label className="text-sm">Vence<br /><input type="date" value={form.expires} onChange={(e) => setForm((f) => ({ ...f, expires: e.target.value }))} className={`${field} w-full sm:w-auto`} /></label>
-            <label className="inline-flex items-center gap-2 text-sm pb-1.5 min-h-[44px]">
+            <label className="inline-flex items-center gap-2 text-sm pb-1.5 min-h-9 coarse:min-h-11">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="w-4 h-4" /> Activa
             </label>
-            <button type="button" onClick={save} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40 min-h-[44px] px-4">
+            <button type="button" onClick={save} disabled={saving} className="btn-primary ml-auto">
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
             </button>
           </div>
@@ -115,33 +115,33 @@ export default function ECFSequences() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
-            <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+          <table className="table min-w-[560px]">
+            <thead>
               <tr>
-                <th className="text-left py-2 px-3">Tipo</th>
-                <th className="text-left py-2 px-3 whitespace-nowrap">Rango</th>
-                <th className="text-left py-2 px-3 whitespace-nowrap">Próximo e-NCF</th>
-                <th className="text-right py-2 px-3 whitespace-nowrap">Restan</th>
-                <th className="text-left py-2 px-3 whitespace-nowrap">Vence</th>
-                <th className="text-left py-2 px-3">Estado</th>
-                <th className="py-2 px-3"></th>
+                <th>Tipo</th>
+                <th className="whitespace-nowrap">Rango</th>
+                <th className="whitespace-nowrap">Próximo e-NCF</th>
+                <th className="text-right whitespace-nowrap">Restan</th>
+                <th className="whitespace-nowrap">Vence</th>
+                <th>Estado</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((s) => {
                 const st = sequenceState(s);
                 const status = !s.active ? 'Inactiva' : st.expired ? 'Vencida' : st.exhausted ? 'Agotada' : 'Activa';
-                const tone = status === 'Activa' ? 'text-emerald-700' : 'text-rose-600';
+                const pill = status === 'Activa' ? 'status-pill-active' : status === 'Inactiva' ? 'status-pill-inactive' : 'status-pill-declined';
                 return (
-                  <tr key={s.id} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3 min-w-0">{s.ecfType} · {ecfTypeLabel(s.ecfType)}</td>
-                    <td className="py-1.5 px-3 tabular-nums text-ink-600 whitespace-nowrap">{s.seqFrom}–{s.seqTo}</td>
-                    <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{st.nextENcf || '—'}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{st.remaining}</td>
-                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
-                    <td className={`py-1.5 px-3 whitespace-nowrap ${tone}`}>{status}</td>
-                    <td className="py-1.5 px-3 text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="text-ink-400 hover:text-ink-700 min-h-[44px] min-w-[44px] flex items-center justify-center"><Pencil size={14} /></button>
+                  <tr key={s.id}>
+                    <td className="min-w-0">{s.ecfType} · {ecfTypeLabel(s.ecfType)}</td>
+                    <td className="tabular-nums text-ink-600 whitespace-nowrap">{s.seqFrom}–{s.seqTo}</td>
+                    <td className="tabular-nums whitespace-nowrap">{st.nextENcf || '—'}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{st.remaining}</td>
+                    <td className="text-ink-600 whitespace-nowrap">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
+                    <td className="whitespace-nowrap"><span className={`status-pill ${pill}`}>{status}</span></td>
+                    <td className="text-right">
+                      <button type="button" onClick={() => openEdit(s)} className="btn-icon text-ink-400" title="Editar" aria-label="Editar secuencia"><Pencil size={14} /></button>
                     </td>
                   </tr>
                 );

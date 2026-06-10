@@ -56,10 +56,10 @@ export default function WhatsAppChip({ customer }) {
           className="w-24 min-w-0 bg-transparent border-0 p-0 text-xs text-ink-900 focus:outline-none focus:ring-0"
           aria-label="Número de WhatsApp"
         />
-        <button type="button" onClick={save} title="Guardar" aria-label="Guardar" className="text-emerald-600 hover:text-emerald-700 flex-shrink-0">
+        <button type="button" onClick={save} title="Guardar" aria-label="Guardar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors flex-shrink-0">
           <Check size={13} />
         </button>
-        <button type="button" onClick={() => setEditing(false)} title="Cancelar" aria-label="Cancelar" className="text-ink-300 hover:text-ink-600 flex-shrink-0">
+        <button type="button" onClick={() => setEditing(false)} title="Cancelar" aria-label="Cancelar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 transition-colors flex-shrink-0">
           <X size={13} />
         </button>
       </span>
@@ -90,9 +90,11 @@ export default function WhatsAppChip({ customer }) {
         title={`Abrir WhatsApp · ${phone}`}
       >
         <MessageCircle size={12} className="flex-shrink-0" aria-hidden />
-        <span className="font-semibold truncate max-w-[120px] sm:max-w-[150px]">{phone}</span>
+        {/* break-all (never truncate) — a phone number is user data; in the
+            worst case the pill wraps instead of hiding digits. */}
+        <span className="font-semibold break-all">{phone}</span>
       </a>
-      <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="text-ink-300 hover:text-ink-600 flex-shrink-0 transition-colors p-0.5 rounded">
+      <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 flex-shrink-0 transition-colors">
         <Pencil size={10} />
       </button>
     </span>

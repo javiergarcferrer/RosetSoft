@@ -6,6 +6,7 @@ import {
 import PageHeader from '../components/PageHeader.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ListLoading from '../components/ListLoading.jsx';
 import StatCard from '../components/StatCard.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
@@ -124,7 +125,7 @@ export default function CustomerDetail() {
           <button
             type="button"
             onClick={() => setEditing(customer)}
-            className="btn-secondary active:scale-[0.98] transition-transform"
+            className="btn-secondary"
             title="Editar cliente"
           >
             <Pencil size={14} /> Editar
@@ -178,12 +179,7 @@ export default function CustomerDetail() {
           </h2>
         </header>
         {!loaded ? (
-          <div className="px-5 py-10 flex flex-col items-center gap-2 text-center">
-            <span className="w-8 h-8 rounded-full bg-ink-50 flex items-center justify-center">
-              <FileText size={16} className="text-ink-300" />
-            </span>
-            <p className="text-sm text-ink-400">Cargando…</p>
-          </div>
+          <ListLoading rows={3} dense />
         ) : quotes.length === 0 ? (
           <div className="px-5 py-14 flex flex-col items-center gap-3 text-center">
             <span className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
@@ -254,12 +250,7 @@ export default function CustomerDetail() {
           </h2>
         </header>
         {!loaded ? (
-          <div className="px-5 py-10 flex flex-col items-center gap-2 text-center">
-            <span className="w-8 h-8 rounded-full bg-ink-50 flex items-center justify-center">
-              <Package size={16} className="text-ink-300" />
-            </span>
-            <p className="text-sm text-ink-400">Cargando…</p>
-          </div>
+          <ListLoading rows={3} dense />
         ) : derived.orders.length === 0 ? (
           <div className="px-5 py-14 flex flex-col items-center gap-3 text-center">
             <span className="w-12 h-12 rounded-full bg-ink-50 flex items-center justify-center">

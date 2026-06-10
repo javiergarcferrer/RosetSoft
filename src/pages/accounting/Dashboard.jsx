@@ -47,7 +47,7 @@ function CardHead({ title, note, to, action }) {
       {to ? (
         <Link to={to} className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">{action || 'Ver →'}</Link>
       ) : note ? (
-        <span className="text-[10px] uppercase tracking-wide text-ink-400">{note}</span>
+        <span className="eyebrow-xs text-ink-400">{note}</span>
       ) : null}
     </div>
   );
@@ -59,12 +59,12 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
       <div className="flex items-center gap-2 min-w-0">
         {Icon && (
           <span className="w-7 h-7 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0">
-            <Icon size={13} />
+            <Icon size={14} />
           </span>
         )}
         <span className="eyebrow-xs tracking-wide text-ink-500 min-w-0 truncate">{label}</span>
       </div>
-      <div className={`text-[22px] leading-none font-semibold tabular-nums break-all ${tone || 'text-ink-900'}`}>{value}</div>
+      <div className={`text-xl leading-none font-semibold tabular-nums break-all ${tone || 'text-ink-900'}`}>{value}</div>
       {sub && <div className="text-xs text-ink-400 break-words">{sub}</div>}
     </div>
   );
@@ -180,7 +180,7 @@ export default function AccountingDashboard() {
                 <div className="flex items-center gap-3 min-w-0">
                   <Donut size={112} thickness={14}
                     segments={d.expenseDonut.segments.map((s, i) => ({ value: s.amount, color: DONUT[i % DONUT.length] }))}>
-                    <div className="text-[10px] uppercase tracking-wide text-ink-400">Total</div>
+                    <div className="eyebrow-xs text-ink-400">Total</div>
                     <div className="text-xs font-semibold tabular-nums">{formatDop(d.expenseDonut.total)}</div>
                   </Donut>
                   <ul className="flex-1 min-w-0 space-y-1.5">

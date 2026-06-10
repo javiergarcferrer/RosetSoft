@@ -127,7 +127,7 @@ export default function Orders() {
           icon={Package}
           title="Sin pedidos"
           description="Cuando aceptes una cotización, crea un pedido para seguir su fulfillment hasta entrega."
-          action={<button onClick={newOrder} className="btn-primary">Crear pedido</button>}
+          action={<button onClick={newOrder} className="btn-brand">Crear pedido</button>}
         />
       </>
     );
@@ -138,7 +138,7 @@ export default function Orders() {
       <PageHeader
         title="Pedidos"
         subtitle={`${orders.length} pedido${orders.length === 1 ? '' : 's'}`}
-        actions={<button onClick={newOrder} className="btn-primary"><Plus size={14} /> Nuevo</button>}
+        actions={<button onClick={newOrder} className="btn-brand"><Plus size={14} /> Nuevo</button>}
       />
 
       {/* Mobile cards */}
@@ -223,7 +223,7 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
         </div>
       </Link>
       <div className="flex items-center justify-end mt-1">
-        <button onClick={onDelete} className="text-ink-300 hover:text-red-600 p-2 -mr-2 min-h-11 coarse:min-h-11 transition-colors active:scale-95" aria-label="Eliminar">
+        <button onClick={onDelete} className="btn-icon-danger -mr-1.5" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -244,7 +244,7 @@ function OrderRow({ o, customerLabel, quoteCount, containerCount, total, onDelet
       <td className="hidden xl:table-cell text-ink-400 whitespace-nowrap tabular-nums">{formatDateTime(o.updatedAt)}</td>
       <td className="text-right font-semibold whitespace-nowrap tabular-nums">{formatMoney(total, 'USD', { USD: 1 })}</td>
       <td className="text-right w-12">
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-ink-300 hover:text-red-600 transition-colors active:scale-95 p-1.5 rounded coarse:min-h-[44px] coarse:px-3" title="Eliminar">
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="btn-icon-danger" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

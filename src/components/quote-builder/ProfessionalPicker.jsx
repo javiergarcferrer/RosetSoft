@@ -117,7 +117,7 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
           <button
             type="button"
             onClick={() => { setQ(''); inputRef.current?.focus(); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-1"
+            className="btn-icon absolute right-0.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
             aria-label="Limpiar"
           >
             <X size={14} />

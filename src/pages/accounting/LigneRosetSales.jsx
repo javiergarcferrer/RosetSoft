@@ -91,10 +91,10 @@ export default function LigneRosetSales() {
         <div>
           <div className="label">Mes a reportar</div>
           <input type="month" value={monthValue} onChange={(e) => setMonthValue(e.target.value)}
-            className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm min-h-[44px]" />
+            className="input w-auto" />
         </div>
         <button type="button" onClick={exportAndSend} disabled={report.lineCount === 0}
-          className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-4">
+          className="btn-primary">
           <Send size={15} /> <span className="hidden sm:inline">Exportar y enviar a Ligne Roset</span><span className="sm:hidden">Exportar</span>
         </button>
       </div>
@@ -112,7 +112,7 @@ export default function LigneRosetSales() {
           description="Aquí aparecen las ventas de piso (cotizaciones aceptadas con depósito, sin orden de importación) del mes elegido." />
       ) : (
         <div className="card overflow-hidden">
-          <div className="px-3 py-2 text-xs text-ink-500 bg-ink-50">
+          <div className="px-3 py-2 text-xs text-ink-500 bg-ink-50 border-b border-ink-100">
             {report.salesCount} venta{report.salesCount === 1 ? '' : 's'} · {report.lineCount} artículo{report.lineCount === 1 ? '' : 's'} · {label}
           </div>
           <div className="overflow-x-auto">

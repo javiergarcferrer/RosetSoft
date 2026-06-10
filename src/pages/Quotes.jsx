@@ -28,7 +28,7 @@ function TradeFlag({ quote }) {
   if (!quote.professionalId || !isTradeDiscount(quote)) return null;
   return (
     <span
-      className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap"
+      className="chip bg-amber-100 text-amber-700 whitespace-nowrap"
       title="Trade discount: facturar al decorador (sin comisión)"
     >
       Trade
@@ -44,7 +44,7 @@ function TradeFlag({ quote }) {
 function ProfessionalTag() {
   return (
     <span
-      className="shrink-0 inline-flex items-center rounded-full bg-ink-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-500"
+      className="chip shrink-0 bg-ink-100 text-ink-500"
       title="Profesional · sin cliente asignado"
     >
       Profesional
@@ -193,7 +193,7 @@ export default function Quotes() {
           icon={FileText}
           title="Sin cotizaciones"
           description="Crea tu primera cotización. Elige un producto, una tela y color, ajusta la cantidad."
-          action={<Link to="/quotes/new" className="btn-primary">Nueva cotización</Link>}
+          action={<Link to="/quotes/new" className="btn-brand">Nueva cotización</Link>}
         />
       </>
     );
@@ -207,7 +207,7 @@ export default function Quotes() {
         actions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {meId && <ScopeToggle scope={scope} onChange={setScope} />}
-            <Link to="/quotes/new" className="btn-primary"><Plus size={14} /> Nueva cotización</Link>
+            <Link to="/quotes/new" className="btn-brand"><Plus size={14} /> Nueva cotización</Link>
           </div>
         }
       />
@@ -381,7 +381,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
-        <button onClick={del} className="text-ink-300 hover:text-red-500 p-2 transition-colors min-h-11 coarse:min-h-11 active:scale-95" aria-label="Eliminar">
+        <button onClick={del} className="btn-icon-danger -mr-1.5" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -422,7 +422,7 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
       <td className="hidden lg:table-cell text-ink-400 tabular-nums whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
       <td className="text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
       <td className="text-right w-12">
-        <button onClick={del} className="text-ink-300 hover:text-red-500 transition-colors active:scale-95 p-1.5 rounded coarse:min-h-[44px] coarse:px-3" title="Eliminar">
+        <button onClick={del} className="btn-icon-danger" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={14} />
         </button>
       </td>

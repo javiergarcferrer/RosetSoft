@@ -170,7 +170,7 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => setCleanupNote(null)}
-            className="text-amber-700 hover:text-amber-900"
+            className="btn-icon -my-1.5 text-amber-700 hover:text-amber-900 hover:bg-amber-100 active:bg-amber-200"
             aria-label="Cerrar"
           >
             <X size={14} />
@@ -541,7 +541,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
               {savedField === 'name' && (
                 <span
                   role="status"
-                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 flex-shrink-0"
+                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 flex-shrink-0"
                 >
                   <Check size={11} /> Guardado
                 </span>
@@ -572,7 +572,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
             mid-row over the truncated name input. */}
         <div className="mt-4 pt-4 border-t border-ink-100 xl:mt-0 xl:pt-0 xl:border-t-0 grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-center lg:gap-4 lg:justify-end">
           <label className="flex flex-col gap-1 lg:contents">
-            <span className="eyebrow-xs tracking-wide lg:hidden">
+            <span className="eyebrow-xs lg:hidden">
               Rol
             </span>
             <select
@@ -592,7 +592,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
           </label>
 
           <label className="flex flex-col gap-1 lg:contents">
-            <span className="eyebrow-xs tracking-wide lg:hidden">
+            <span className="eyebrow-xs lg:hidden">
               Comisión
             </span>
             <div className="relative">
@@ -659,7 +659,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
         </div>
       </div>
       {error && (
-        <div role="alert" className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+        <div role="alert" className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
           {error}
         </div>
       )}

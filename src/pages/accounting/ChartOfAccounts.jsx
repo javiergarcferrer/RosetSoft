@@ -32,7 +32,7 @@ function AccountNode({ node, index, depth }) {
   return (
     <div>
       <div
-        className={`flex items-center gap-2 py-1.5 border-b border-ink-50 min-w-0 ${hasChildren ? 'cursor-pointer' : ''}`}
+        className={`flex items-center gap-2 py-1.5 coarse:py-2.5 border-b border-ink-50 min-w-0 ${hasChildren ? 'cursor-pointer hover:bg-ink-50 active:bg-ink-100 transition-colors' : ''}`}
         style={{ paddingLeft: `${depth * 16}px` }}
         onClick={hasChildren ? () => setOpen((v) => !v) : undefined}
       >
@@ -40,12 +40,12 @@ function AccountNode({ node, index, depth }) {
         <code className="text-xs text-ink-500 tabular-nums shrink-0">{node.code}</code>
         {node.isPostable ? (
           <Link to={`/accounting/ledger?cuenta=${node.code}`} onClick={(e) => e.stopPropagation()}
-            className="text-sm text-ink-800 hover:underline min-w-0 truncate flex-1">{node.name}</Link>
+            className="text-sm text-ink-800 hover:underline min-w-0 break-words flex-1">{node.name}</Link>
         ) : (
-          <span className="text-sm font-semibold text-ink-900 min-w-0 truncate flex-1">{node.name}</span>
+          <span className="text-sm font-semibold text-ink-900 min-w-0 break-words flex-1">{node.name}</span>
         )}
         {node.isPostable && (
-          <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>
+          <span className="ml-auto eyebrow-xs text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>
         )}
       </div>
       {open && hasChildren && children.map((c) => (
@@ -102,7 +102,7 @@ export default function ChartOfAccounts() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por código o nombre…"
-          className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
+          className="input pl-9"
         />
       </div>
 
@@ -116,17 +116,17 @@ export default function ChartOfAccounts() {
           {matches.length === 0 ? (
             <p className="text-sm text-ink-500 py-6 text-center">Sin coincidencias para “{q}”.</p>
           ) : matches.map((a) => (
-            <div key={a.code} className="flex items-center gap-2 py-1.5 border-b border-ink-50 min-w-0">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${CLASS_TONE[a.class] || 'bg-ink-100 text-ink-600'}`}>
+            <div key={a.code} className="flex items-center gap-2 py-1.5 coarse:py-2.5 border-b border-ink-50 min-w-0">
+              <span className={`chip shrink-0 ${CLASS_TONE[a.class] || 'bg-ink-100 text-ink-600'}`}>
                 {ACCOUNT_CLASS_NAMES[a.class] || a.class}
               </span>
               <code className="text-xs text-ink-500 tabular-nums shrink-0">{a.code}</code>
               {a.isPostable ? (
-                <Link to={`/accounting/ledger?cuenta=${a.code}`} className="text-sm text-ink-800 hover:underline min-w-0 truncate flex-1">{a.name}</Link>
+                <Link to={`/accounting/ledger?cuenta=${a.code}`} className="text-sm text-ink-800 hover:underline min-w-0 break-words flex-1">{a.name}</Link>
               ) : (
-                <span className="text-sm font-semibold min-w-0 truncate flex-1">{a.name}</span>
+                <span className="text-sm font-semibold min-w-0 break-words flex-1">{a.name}</span>
               )}
-              {a.isPostable && <span className="ml-auto text-[10px] uppercase tracking-wide text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>}
+              {a.isPostable && <span className="ml-auto eyebrow-xs text-ink-400 shrink-0 hidden sm:inline">ver mayor</span>}
             </div>
           ))}
         </div>
@@ -135,7 +135,7 @@ export default function ChartOfAccounts() {
           {roots.map((root) => (
             <div key={root.code}>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${CLASS_TONE[root.class] || 'bg-ink-100 text-ink-600'}`}>
+                <span className={`chip ${CLASS_TONE[root.class] || 'bg-ink-100 text-ink-600'}`}>
                   {ACCOUNT_CLASS_NAMES[root.class] || root.class}
                 </span>
               </div>

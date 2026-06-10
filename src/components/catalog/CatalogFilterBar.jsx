@@ -94,7 +94,7 @@ export default function CatalogFilterBar({
             {priceActive ? priceChipLabel(value.min, value.max) : 'Precio'}
             <ChevronDown size={13} aria-hidden />
           </summary>
-          <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-3 shadow-md">
+          <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-3 shadow-pop dropdown-pop">
             <p className="eyebrow-xs mb-2">Rango de precio (USD)</p>
             <div className="flex items-center gap-2">
               <DebouncedInput
@@ -124,7 +124,7 @@ export default function CatalogFilterBar({
             <div className="mt-2.5 flex items-center justify-between">
               <button
                 type="button"
-                className="text-xs text-ink-500 hover:text-ink-900"
+                className="inline-flex items-center rounded-md px-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-50 active:bg-ink-100 transition-colors"
                 onClick={(e) => { set({ min: '', max: '' }); closePopover(e); }}
               >
                 Limpiar
@@ -163,7 +163,7 @@ export default function CatalogFilterBar({
           )}
           <button
             type="button"
-            className="text-[11px] font-medium text-ink-500 hover:text-ink-900 px-1"
+            className="inline-flex items-center rounded-md px-1.5 min-h-8 coarse:min-h-11 text-[11px] font-medium text-ink-500 hover:text-ink-900 hover:bg-ink-50 active:bg-ink-100 transition-colors"
             onClick={() => onChange({ ...DEFAULT_CATALOG_FILTERS, sort: value.sort })}
           >
             Limpiar
@@ -185,7 +185,7 @@ function FilterChip({ label, onClear }) {
       <span className="truncate">{label}</span>
       <button
         type="button"
-        className="rounded-full p-0.5 text-ink-400 hover:text-ink-900 hover:bg-ink-200"
+        className="rounded-full p-1 -my-0.5 coarse:p-1.5 text-ink-400 hover:text-ink-900 hover:bg-ink-200 active:bg-ink-300 transition-colors"
         aria-label={`Quitar filtro ${label}`}
         onClick={onClear}
       >

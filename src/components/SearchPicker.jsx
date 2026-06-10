@@ -22,7 +22,7 @@ export default function SearchPicker({
   placeholder,
   freeTextLabel = 'Usar',
   className = '',
-  inputClassName = 'w-full rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm',
+  inputClassName = 'input',
   inputProps = {},
 }) {
   const [query, setQuery] = useState(null); // null = closed/at-rest, string = editing
@@ -119,7 +119,7 @@ export default function SearchPicker({
       {open && (
         <ul
           ref={listRef}
-          className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-auto rounded-xl border border-ink-200 bg-white shadow-lg py-1 text-sm"
+          className="dropdown-pop absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-auto overscroll-contain rounded-xl border border-ink-200 bg-white shadow-pop py-1 text-sm"
         >
           {matches.map((o, i) => (
             <li key={o.id}>
@@ -128,10 +128,10 @@ export default function SearchPicker({
                 tabIndex={-1}
                 onMouseDown={(e) => { e.preventDefault(); commitPick(o); }}
                 onMouseEnter={() => setHi(i)}
-                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 ${i === hi ? 'bg-ink-50' : ''}`}
+                className={`w-full text-left px-3 py-1.5 min-h-8 coarse:min-h-11 flex items-center gap-2 transition-colors ${i === hi ? 'bg-ink-50' : ''}`}
               >
                 {o.id === value ? <Check size={13} className="shrink-0 text-emerald-600" /> : <span className="w-[13px] shrink-0" />}
-                <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                <span className="min-w-0 flex-1 break-words">{o.label}</span>
                 {o.sublabel && <span className="shrink-0 text-xs text-ink-400 font-mono">{o.sublabel}</span>}
               </button>
             </li>
@@ -143,10 +143,10 @@ export default function SearchPicker({
                 tabIndex={-1}
                 onMouseDown={(e) => { e.preventDefault(); commitFree(query); }}
                 onMouseEnter={() => setHi(matches.length)}
-                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-amber-700 ${hi === matches.length ? 'bg-amber-50' : ''}`}
+                className={`w-full text-left px-3 py-1.5 min-h-8 coarse:min-h-11 flex items-center gap-2 text-amber-700 transition-colors ${hi === matches.length ? 'bg-amber-50' : ''}`}
               >
                 <Plus size={13} className="shrink-0" />
-                <span className="min-w-0 truncate">{freeTextLabel} «{query.trim()}»</span>
+                <span className="min-w-0 break-words">{freeTextLabel} «{query.trim()}»</span>
               </button>
             </li>
           )}

@@ -104,7 +104,7 @@ export default function Customers() {
       <PageHeader
         title="Clientes"
         subtitle={loaded ? `${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'}` : ' '}
-        actions={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={14} /> Agregar cliente</button>}
+        actions={<button onClick={() => setEditing({})} className="btn-brand"><Plus size={14} /> Agregar cliente</button>}
       />
 
       {!loaded ? (
@@ -114,7 +114,7 @@ export default function Customers() {
           icon={Users}
           title="Sin clientes"
           description="Agrega tu primer cliente para reutilizar sus datos al crear cotizaciones."
-          action={<button onClick={() => setEditing({})} className="btn-primary">Agregar cliente</button>}
+          action={<button onClick={() => setEditing({})} className="btn-brand">Agregar cliente</button>}
         />
       ) : (
         <>
@@ -204,7 +204,7 @@ export default function Customers() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setEditing(c); }}
-                        className="text-xs font-medium text-ink-400 hover:text-brand-700 transition-colors"
+                        className="inline-flex items-center rounded-md px-2 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
                       >
                         Editar
                       </button>

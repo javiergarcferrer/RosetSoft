@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight } from 'lucide-react';
+import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
 import { db, searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -149,12 +149,12 @@ export default function Catalog() {
       />
 
       {(result || error) && (
-        <div className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
+        <div role={error ? 'alert' : 'status'} className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
           error
             ? 'bg-red-50 border border-red-200 text-red-800'
             : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
         }`}>
-          {error ? null : <Check size={14} className="flex-shrink-0" />}
+          {error ? <AlertTriangle size={14} className="flex-shrink-0" /> : <Check size={14} className="flex-shrink-0" />}
           {error || result}
         </div>
       )}
@@ -379,7 +379,7 @@ function CategoryCard({ profileId, category, count }) {
       className="card overflow-clip group/cat"
       onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
     >
-      <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
+      <summary className="card-header cursor-pointer list-none select-none transition-colors hover:bg-ink-50 active:bg-ink-100">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={15}
@@ -388,7 +388,7 @@ function CategoryCard({ profileId, category, count }) {
           />
           <span className="font-semibold text-sm text-ink-900 truncate" title={label}>{label}</span>
         </span>
-        <span className="eyebrow-xs tracking-wide flex-shrink-0">{count} SKU</span>
+        <span className="eyebrow-xs flex-shrink-0">{count} SKU</span>
       </summary>
       {everOpened && <CategoryModels profileId={profileId} category={category} />}
     </details>
@@ -447,7 +447,7 @@ function FilteredOutNotice({ onClear }) {
   return (
     <div className="px-5 py-6 text-center text-sm text-ink-500">
       Ningún modelo coincide con los filtros.{' '}
-      <button type="button" className="font-medium text-brand-700 hover:underline" onClick={onClear}>
+      <button type="button" className="inline-flex items-center rounded-md px-1.5 min-h-8 coarse:min-h-11 font-medium text-brand-700 hover:underline hover:bg-brand-50 transition-colors" onClick={onClear}>
         Limpiar filtros
       </button>
     </div>
@@ -539,7 +539,7 @@ function SearchResults({ profileId, term }) {
 function CategorySection({ section }) {
   return (
     <details open className="card overflow-hidden group/cat">
-      <summary className="card-header cursor-pointer list-none select-none hover:bg-ink-50">
+      <summary className="card-header cursor-pointer list-none select-none transition-colors hover:bg-ink-50 active:bg-ink-100">
         <span className="flex items-center gap-2 min-w-0">
           <ChevronRight
             size={15}
@@ -550,7 +550,7 @@ function CategorySection({ section }) {
             {section.category || NO_CATEGORY}
           </span>
         </span>
-        <span className="eyebrow-xs tracking-wide flex-shrink-0">
+        <span className="eyebrow-xs flex-shrink-0">
           {section.models.length} modelo(s) · {section.count} SKU
         </span>
       </summary>
@@ -590,7 +590,7 @@ const ModelRow = memo(function ModelRow({ model }) {
   const { visible, remaining, showMore } = useBatch(members, SKU_BATCH);
   return (
     <details className="group/model [content-visibility:auto] [contain-intrinsic-size:auto_42px]">
-      <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 flex items-center justify-between gap-2 hover:bg-ink-50 transition-colors min-w-0">
+      <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 coarse:py-3 flex items-center justify-between gap-2 hover:bg-ink-50 active:bg-ink-100 transition-colors min-w-0">
         <span className="flex items-center gap-2 min-w-0 flex-1">
           <ChevronRight
             size={13}
@@ -600,7 +600,7 @@ const ModelRow = memo(function ModelRow({ model }) {
           <span className="font-medium text-sm text-ink-800 truncate" title={model.name || model.root}>
             {model.name || model.root || '—'}
           </span>
-          <span className="eyebrow-xs tracking-wide flex-shrink-0 hidden sm:inline">
+          <span className="eyebrow-xs flex-shrink-0 hidden sm:inline">
             {members.length} {members.length === 1 ? 'SKU' : 'SKUs'}
           </span>
         </span>

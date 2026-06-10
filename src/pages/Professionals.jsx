@@ -122,7 +122,7 @@ export default function Professionals() {
         title="Profesionales"
         subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'}` : ' '}
         actions={
-          <button onClick={() => setEditing({})} className="btn-primary">
+          <button onClick={() => setEditing({})} className="btn-brand">
             <Plus size={14} /> Agregar profesional
           </button>
         }
@@ -135,7 +135,7 @@ export default function Professionals() {
           icon={UserSquare2}
           title="Sin profesionales"
           description="Arquitectos, decoradores u otros profesionales que te traen ventas. Asigna uno a cada cotización y la app calcula la comisión por ti."
-          action={<button onClick={() => setEditing({})} className="btn-primary">Agregar profesional</button>}
+          action={<button onClick={() => setEditing({})} className="btn-brand">Agregar profesional</button>}
         />
       ) : (
         <>
@@ -178,7 +178,7 @@ export default function Professionals() {
                     <MetaStrip p={p} />
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-[10px] uppercase tracking-wide text-ink-400 font-medium">Com. ref.</div>
+                    <div className="eyebrow-xs text-ink-400">Com. ref.</div>
                     <div className="text-sm font-semibold tabular-nums text-ink-800">
                       {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
                     </div>
@@ -229,7 +229,7 @@ export default function Professionals() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setEditing(p); }}
-                        className="text-xs font-medium text-ink-400 hover:text-brand-700 transition-colors"
+                        className="inline-flex items-center rounded-md px-2 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
                       >
                         Editar
                       </button>

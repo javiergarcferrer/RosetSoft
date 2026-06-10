@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Share2, Plus } from 'lucide-react';
+import { Hash, AlertCircle, Share2, Plus, Loader2 } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -544,7 +544,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   useKeyboardShortcut('mod+enter', () => setCatalogOpen(true), { ignoreInInput: false });
   useKeyboardShortcut('mod+p', () => printPdf(), { ignoreInInput: false });
 
-  if (!quote) return <div className="text-sm text-ink-500">Cargando…</div>;
+  if (!quote) {
+    return (
+      <div className="py-10 flex items-center justify-center gap-2 text-sm text-ink-500">
+        <Loader2 size={16} className="animate-spin" aria-hidden /> Cargando…
+      </div>
+    );
+  }
 
   const totalsQuote = { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping };
   const totals = computeTotals(lines.filter(isPricedLine).map(lineForTotals), totalsQuote);
@@ -592,7 +598,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           <button
             type="button"
             onClick={() => setExportError(null)}
-            className="text-red-700 hover:text-red-900 text-[11px] underline"
+            className="inline-flex items-center flex-shrink-0 rounded-md px-2 py-1 -my-1 -mr-1 min-h-7 coarse:min-h-11 coarse:-my-2 text-[11px] font-medium underline text-red-700 hover:text-red-900 hover:bg-red-100 active:bg-red-200 transition-colors"
           >
             Cerrar
           </button>
@@ -604,7 +610,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         <div role="status" className="mb-4 rounded-md bg-ink-900 text-white px-3 py-2 text-xs flex items-start gap-2">
           <Share2 size={14} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1 break-all">{shareMsg}</div>
-          <button type="button" onClick={() => setShareMsg(null)} className="text-white/70 hover:text-white text-[11px] underline">Cerrar</button>
+          <button type="button" onClick={() => setShareMsg(null)} className="inline-flex items-center flex-shrink-0 rounded-md px-2 py-1 -my-1 -mr-1 min-h-7 coarse:min-h-11 coarse:-my-2 text-[11px] font-medium underline text-white/70 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors">Cerrar</button>
         </div>
       )}
 
@@ -772,7 +778,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
             className="btn-ghost text-xs hidden sm:inline-flex"
             title="Agregar sección"
           >
-            <Hash size={12} /> Sección
+            <Hash size={14} /> Sección
           </button>
           {/* Quiet companion to the source buttons — adds a BLANK line to fill
               by hand (no picker), for when the dealer is typing from a paper
@@ -780,11 +786,11 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           <button
             type="button"
             onClick={onAddLine}
-            className="inline-flex items-center justify-center w-9 h-9 coarse:w-10 coarse:h-10 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors"
+            className="inline-flex items-center justify-center w-9 h-9 coarse:w-11 coarse:h-11 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100 active:bg-ink-200 active:scale-[0.96] transition-all"
             title="Agregar un artículo vacío para llenar a mano"
             aria-label="Agregar artículo vacío"
           >
-            <Plus size={18} />
+            <Plus size={17} />
           </button>
           {/* Two separate sources, icon-only: Catálogo (Ligne Roset supplier
               catalog) and Inventario (our stock on hand). */}
@@ -805,7 +811,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           </span>
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={onAddSection} className="btn-ghost text-xs">
-              <Hash size={12} /> Sección
+              <Hash size={14} /> Sección
             </button>
             <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} />
           </div>

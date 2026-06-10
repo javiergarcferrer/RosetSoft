@@ -32,11 +32,11 @@ function TreeRows({ node, depth = 0 }) {
     <>
       <div className="flex items-center justify-between py-1 gap-2 min-w-0" style={{ paddingLeft: `${Math.min(depth * 16, 48)}px` }}>
         {node.isPostable ? (
-          <Link to={`/accounting/ledger?cuenta=${node.code}`} className="text-sm text-ink-700 min-w-0 truncate hover:text-ink-900 hover:underline flex-1">
+          <Link to={`/accounting/ledger?cuenta=${node.code}`} className="text-sm text-ink-700 min-w-0 break-words hover:text-ink-900 hover:underline flex-1">
             <code className="text-[11px] text-ink-400 mr-1 tabular-nums">{node.code}</code>{node.name}
           </Link>
         ) : (
-          <span className="text-sm font-semibold text-ink-900 min-w-0 truncate flex-1">
+          <span className="text-sm font-semibold text-ink-900 min-w-0 break-words flex-1">
             <code className="text-[11px] text-ink-400 mr-1 tabular-nums">{node.code}</code>{node.name}
           </span>
         )}
@@ -122,7 +122,7 @@ export default function Statements() {
     );
   }
 
-  const dateInput = 'rounded-lg border border-ink-200 px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-ink-300';
+  const dateInput = 'input w-auto';
 
   return (
     <>
@@ -130,15 +130,15 @@ export default function Statements() {
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <button type="button" onClick={() => setTab('balance')}
-          className={`text-sm px-3 py-2 rounded-lg inline-flex items-center gap-1.5 min-h-[44px] ${tab === 'balance' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          className={`btn ${tab === 'balance' ? 'tab-pill-active' : 'tab-pill'}`}>
           <Scale size={15} /> Balance General
         </button>
         <button type="button" onClick={() => setTab('income')}
-          className={`text-sm px-3 py-2 rounded-lg inline-flex items-center gap-1.5 min-h-[44px] ${tab === 'income' ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600'}`}>
+          className={`btn ${tab === 'income' ? 'tab-pill-active' : 'tab-pill'}`}>
           <TrendingUp size={15} /> Estado de Resultados
         </button>
         <button type="button" onClick={exportActive}
-          className="sm:ml-auto btn-ghost text-sm inline-flex items-center gap-1.5 min-h-[44px]"><Download size={14} /> Exportar</button>
+          className="sm:ml-auto btn-ghost"><Download size={14} /> Exportar</button>
       </div>
 
       {!loaded ? <ListLoading /> : tab === 'balance' ? (
@@ -146,7 +146,7 @@ export default function Statements() {
           <div className="flex flex-wrap items-center gap-2 mb-4 text-sm">
             <label className="text-ink-500">Al</label>
             <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={dateInput} />
-            <span className={`sm:ml-auto text-xs px-2 py-1 rounded whitespace-nowrap ${balance.balanced ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+            <span className={`sm:ml-auto status-pill whitespace-nowrap ${balance.balanced ? 'status-pill-accepted' : 'bg-rose-100 text-rose-700'}`}>
               {balance.balanced ? 'Cuadrado' : `Descuadre: ${formatDop(balance.difference)}`}
             </span>
           </div>

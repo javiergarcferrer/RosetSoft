@@ -169,7 +169,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
             <button
               type="button"
               onClick={() => insertRange(sel)}
-              className="w-full text-left rounded-lg border border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 px-3 py-2.5 mb-2 min-h-[44px] flex flex-wrap items-center justify-between gap-x-2 gap-y-1 transition-colors"
+              className="w-full text-left rounded-lg border border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 active:bg-brand-100/70 px-3 py-2.5 mb-2 min-h-11 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 transition-colors"
               title="Agregar este modelo sin elegir tela — se cotiza como un rango de precio (del grado más económico al más caro)"
             >
               <span className="text-sm font-medium text-brand-800 inline-flex items-center gap-1.5 min-w-0">
@@ -189,7 +189,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
               {sel.grades.map((g) => {
                 const p = productForGrade(sel, g);
                 return (
-                  <button key={g} type="button" onClick={() => insertProduct(sel, p, g)} className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center justify-between gap-2 min-h-[44px] hover:bg-ink-50 transition-colors">
+                  <button key={g} type="button" onClick={() => insertProduct(sel, p, g)} className="w-full text-left rounded-md px-3 py-2.5 mx-1 mb-0.5 flex items-center justify-between gap-2 min-h-11 hover:bg-ink-50 active:bg-ink-100 transition-colors">
                     <span className="chip bg-ink-100 text-ink-700 border border-ink-200 flex-shrink-0">Grado {g}</span>
                     <span className="text-sm tabular-nums text-ink-900 whitespace-nowrap">{usd(p?.priceUsd)}</span>
                   </button>

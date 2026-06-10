@@ -60,7 +60,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
       <div className="relative">
         {/* Background rail */}
         <div className="absolute top-[11px] left-0 right-0 h-0.5 bg-ink-100 rounded-full" />
-        {/* Progress fill — brand violet */}
+        {/* Progress fill — brand terracotta */}
         <div
           className="absolute top-[11px] left-0 h-0.5 bg-brand-500 rounded-full transition-all duration-300 ease-out"
           style={{ width: `${(trackIdx / (QUOTE_STAGES.length - 1)) * 100}%` }}
@@ -137,7 +137,7 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
             <button
               type="button"
               onClick={undo}
-              className="btn text-xs text-ink-600 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 active:scale-[0.98] transition-all shrink-0"
+              className="btn-secondary text-xs shrink-0"
               title="Revertir al estado anterior"
             >
               <Undo2 size={12} /> Volver
@@ -185,7 +185,7 @@ function TerminalMenu({ stage, terminal, onPick }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="btn text-xs text-ink-600 bg-white border border-ink-200 hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 active:scale-[0.98] transition-all"
+        className="btn-secondary text-xs"
         aria-expanded={open}
         aria-haspopup="menu"
       >
@@ -200,7 +200,7 @@ function TerminalMenu({ stage, terminal, onPick }) {
               role="menuitem"
               disabled={t.key === stage}
               onClick={() => { onPick(t.key); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-ink-50 disabled:text-ink-300 disabled:bg-ink-50 disabled:cursor-default inline-flex items-center gap-2 transition-colors"
+              className="w-full text-left px-3 py-2 coarse:min-h-11 text-sm hover:bg-ink-50 active:bg-ink-100 disabled:text-ink-300 disabled:bg-ink-50 disabled:cursor-default inline-flex items-center gap-2 transition-colors"
             >
               {t.key === 'declined' ? <X size={13} className="text-red-400 flex-shrink-0" /> : <Archive size={13} className="text-ink-400 flex-shrink-0" />}
               Marcar {t.label.toLowerCase()}

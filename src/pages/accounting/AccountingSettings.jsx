@@ -105,7 +105,7 @@ export default function AccountingSettings() {
     }
   }
 
-  const rateInput = 'w-24 rounded-lg border border-ink-200 px-2 py-1.5 text-sm text-right tabular-nums';
+  const rateInput = 'input w-24 text-right tabular-nums';
 
   return (
     <>
@@ -114,7 +114,7 @@ export default function AccountingSettings() {
         subtitle="Parámetros fiscales y mapa de cuentas que usan los asientos automáticos"
         actions={
           <button type="button" onClick={save} disabled={saving}
-            className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-4">
+            className="btn-primary">
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
           </button>
         }
@@ -158,13 +158,13 @@ export default function AccountingSettings() {
                 if (!roles.length) return null;
                 return (
                   <div key={group}>
-                    <h3 className="text-xs uppercase tracking-wide text-ink-400 mb-1">{group}</h3>
+                    <h3 className="eyebrow text-ink-400 mb-1">{group}</h3>
                     <div className="space-y-1.5">
                       {roles.map((r) => (
                         <div key={r.key} className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-3">
                           <span className="text-sm sm:w-56 sm:shrink-0 text-ink-700">{r.label}</span>
                           <select value={form.postingMap[r.key] || ''} onChange={(e) => setMap(r.key, e.target.value)}
-                            className="flex-1 min-w-0 sm:min-w-[200px] rounded-lg border border-ink-200 px-2 py-1.5 text-sm w-full sm:w-auto">
+                            className="input flex-1 min-w-0 sm:min-w-[200px] w-full sm:w-auto">
                             {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
                           </select>
                         </div>
@@ -184,17 +184,17 @@ export default function AccountingSettings() {
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">RNC del emisor</span>
                 <input value={companyRnc} onChange={(e) => setCompanyRnc(e.target.value)} inputMode="numeric"
-                  className="w-36 min-w-0 rounded-lg border border-ink-200 px-2 py-1.5 text-sm tabular-nums" />
+                  className="input w-36 min-w-0 tabular-nums" />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm">Ambiente DGII</span>
                 <select value={ecfEnv} onChange={(e) => setEcfEnv(e.target.value)}
-                  className="rounded-lg border border-ink-200 px-2 py-1.5 text-sm min-w-0 flex-shrink">
+                  className="input w-auto min-w-0 flex-shrink">
                   {ECF_ENVS.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
                 </select>
               </label>
             </div>
-            <div className="rounded-lg border border-ink-200 p-3 max-w-2xl">
+            <div className="surface-subtle p-3 max-w-2xl">
               <div className="flex items-center gap-2 mb-2 text-sm font-medium text-ink-700">
                 <KeyRound size={15} /> Certificado digital (.p12)
               </div>
@@ -210,9 +210,9 @@ export default function AccountingSettings() {
               <div className="flex flex-wrap items-center gap-2">
                 <input type="file" accept=".p12,.pfx" onChange={(e) => setCertFile(e.target.files?.[0] || null)} className="text-sm w-full sm:w-auto" />
                 <input type="password" value={certPassword} onChange={(e) => setCertPassword(e.target.value)}
-                  placeholder="Clave del .p12" className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm flex-1 min-w-[140px]" />
+                  placeholder="Clave del .p12" className="input flex-1 min-w-[140px]" />
                 <button type="button" onClick={saveCert} disabled={certSaving || !certFile || !certPassword}
-                  className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40 min-h-[44px] px-4">
+                  className="btn-primary">
                   {certSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar certificado
                 </button>
               </div>

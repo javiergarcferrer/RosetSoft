@@ -154,8 +154,8 @@ export default function PublicQuoteView() {
 
   if (state.status === 'loading') {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 bg-ink-50 text-ink-500">
-        <Loader2 className="animate-spin text-brand-500" size={24} />
+      <div role="status" aria-live="polite" className="h-full flex flex-col items-center justify-center gap-3 bg-ink-50 text-ink-500">
+        <Loader2 className="animate-spin text-brand-500" size={24} aria-hidden />
         <span className="text-sm">Cargando cotización…</span>
       </div>
     );
@@ -185,13 +185,13 @@ export default function PublicQuoteView() {
         {/* Page-level action bar — right-aligned, lives above the content card */}
         <div className="flex flex-wrap items-center justify-end gap-2">
           {pdf === 'error' && (
-            <p className="text-xs text-red-600 min-w-0">No se pudo generar el PDF. Inténtalo de nuevo.</p>
+            <p role="alert" className="text-xs text-red-600 min-w-0">No se pudo generar el PDF. Inténtalo de nuevo.</p>
           )}
           <button
             type="button"
             onClick={downloadPdf}
             disabled={pdf === 'working'}
-            className="btn-brand active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-wait flex-shrink-0"
+            className="btn-brand flex-shrink-0"
             aria-label="Descargar cotización en PDF"
           >
             {pdf === 'working'
@@ -279,7 +279,7 @@ function SaveToast({ state }) {
   if (!cfg) return null;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-50 flex justify-center px-4 kb-hide-when-open">
-      <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-medium shadow-pop ${cfg.cls}`}>
+      <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-medium shadow-pop animate-in fade-in slide-in-from-bottom-2 duration-200 motion-reduce:animate-none ${cfg.cls}`}>
         {cfg.icon}{cfg.label}
       </div>
     </div>

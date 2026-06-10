@@ -15,8 +15,8 @@ import ExpedienteForm from './ExpedienteForm.jsx';
 /** One KPI tile of the band over the filtered expedientes. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-ink-400">{label}</div>
+    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2 shadow-xs">
+      <div className="eyebrow text-ink-400">{label}</div>
       <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
     </div>
   );
@@ -84,7 +84,7 @@ export default function Importaciones() {
     <>
       <PageHeader title="Importaciones" subtitle="Expediente aduanal (DGA) → costo en destino al inventario"
         actions={(
-          <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary text-sm inline-flex items-center gap-1.5 min-h-[44px] px-3"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
+          <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
         )} />
 
       {showExpediente && loaded && (
@@ -141,17 +141,17 @@ export default function Importaciones() {
           ) : (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[680px]">
-                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+              <table className="table min-w-[680px]">
+                <thead>
                   <tr>
-                    <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
-                    <th className="text-left py-2 px-3 whitespace-nowrap">No.</th>
-                    <th className="text-left py-2 px-3 whitespace-nowrap">BL / Contenedor</th>
-                    <th className="text-left py-2 px-3">Proveedor</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">Líneas</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">CIF</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">Costo destino</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS créd.</th>
+                    <th className="whitespace-nowrap">Fecha</th>
+                    <th className="whitespace-nowrap">No.</th>
+                    <th className="whitespace-nowrap">BL / Contenedor</th>
+                    <th>Proveedor</th>
+                    <th className="text-right whitespace-nowrap">Líneas</th>
+                    <th className="text-right whitespace-nowrap">CIF</th>
+                    <th className="text-right whitespace-nowrap">Costo destino</th>
+                    <th className="text-right whitespace-nowrap">ITBIS créd.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -160,19 +160,19 @@ export default function Importaciones() {
                       onClick={() => navigate(`/accounting/importaciones/${r.id}`)}
                       onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/importaciones/${r.id}`); }}
                       tabIndex={0}
-                      className="border-t border-ink-50 cursor-pointer hover:bg-ink-50/60 focus:bg-ink-50/60 focus:outline-none">
-                      <td className="py-2 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                      <td className="py-2 px-3 tabular-nums text-ink-500 whitespace-nowrap">{r.number != null ? `#${r.number}` : '—'}</td>
-                      <td className="py-2 px-3 whitespace-nowrap">
+                      className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
+                      <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
+                      <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.number != null ? `#${r.number}` : '—'}</td>
+                      <td className="whitespace-nowrap">
                         <span className="font-mono text-xs">{r.bl || '—'}</span>
                         {r.blExtra > 0 && <span className="text-ink-400 text-xs"> +{r.blExtra}</span>}
                         {r.containerCode && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-ink-400"><Container size={11} />{r.containerCode}</span>}
                       </td>
-                      <td className="py-2 px-3 min-w-0">{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</td>
-                      <td className="py-2 px-3 text-right tabular-nums">{r.lineCount}</td>
-                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.cif)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.landed)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.itbisCred)}</td>
+                      <td className="min-w-0">{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</td>
+                      <td className="text-right tabular-nums">{r.lineCount}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.cif)}</td>
+                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.landed)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbisCred)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -191,41 +191,41 @@ function LegacyTable({ list }) {
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[640px]">
-        <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+      <table className="table min-w-[640px]">
+        <thead>
           <tr>
-            <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
-            <th className="text-left py-2 px-3">Proveedor</th>
-            <th className="text-left py-2 px-3">Artículo</th>
-            <th className="text-right py-2 px-3 whitespace-nowrap">CIF</th>
-            <th className="text-right py-2 px-3 whitespace-nowrap">Gravamen</th>
-            <th className="text-right py-2 px-3 whitespace-nowrap">ITBIS imp.</th>
-            <th className="text-right py-2 px-3 whitespace-nowrap">Costo destino</th>
-            <th className="text-right py-2 px-3 whitespace-nowrap">C. unit.</th>
+            <th className="whitespace-nowrap">Fecha</th>
+            <th>Proveedor</th>
+            <th>Artículo</th>
+            <th className="text-right whitespace-nowrap">CIF</th>
+            <th className="text-right whitespace-nowrap">Gravamen</th>
+            <th className="text-right whitespace-nowrap">ITBIS imp.</th>
+            <th className="text-right whitespace-nowrap">Costo destino</th>
+            <th className="text-right whitespace-nowrap">C. unit.</th>
           </tr>
         </thead>
         <tbody>
           {list.rows.map(({ liq: l, supplier, item, landed, unitCost }) => (
-            <tr key={l.id} className="border-t border-ink-50">
-              <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(l.liquidatedAt)}</td>
-              <td className="py-1.5 px-3 min-w-0">{supplier?.name || '—'}</td>
-              <td className="py-1.5 px-3 min-w-0">{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</td>
-              <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.cif)}</td>
-              <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.duty)}</td>
-              <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(l.importItbis)}</td>
-              <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(landed)}</td>
-              <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(unitCost)}</td>
+            <tr key={l.id}>
+              <td className="text-ink-500 whitespace-nowrap">{formatDate(l.liquidatedAt)}</td>
+              <td className="min-w-0">{supplier?.name || '—'}</td>
+              <td className="min-w-0">{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</td>
+              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.cif)}</td>
+              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.duty)}</td>
+              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.importItbis)}</td>
+              <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(landed)}</td>
+              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(unitCost)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t border-ink-200 font-semibold">
-            <td className="py-2 px-3" colSpan={3}>{list.count} liquidaciones</td>
-            <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.cif)}</td>
-            <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.duty)}</td>
-            <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.importItbis)}</td>
-            <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.landed)}</td>
-            <td className="py-2 px-3"></td>
+            <td colSpan={3}>{list.count} liquidaciones</td>
+            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.cif)}</td>
+            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.duty)}</td>
+            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.importItbis)}</td>
+            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.landed)}</td>
+            <td></td>
           </tr>
         </tfoot>
       </table>
