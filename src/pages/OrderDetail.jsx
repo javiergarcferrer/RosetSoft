@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
   FileText, CheckCircle2, Package, DollarSign, Wallet,
-  AlertCircle,
+  AlertCircle, FileDown, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
@@ -23,6 +23,8 @@ import {
 } from '../lib/containerTracking.js';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 import { resolveOrderDetail } from '../core/quote/views/detail.js';
+import { resolveOrderRegistration } from '../core/quote/views/registration.js';
+import { safeDynamicImport } from '../lib/dynamicImport.js';
 
 /**
  * One order's detail view — the operational dashboard that ties accepted
@@ -91,6 +93,13 @@ export default function OrderDetail() {
   // Lines drive the per-quote grand-total roll-up.
   const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
 
+  // Professionals label each quote's decorator on the LR registration doc.
+  const professionals = useLiveQuery(
+    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+
   // The ViewModel: per-quote totals (attached + the unattached attach-picker
   // candidates), the customer index, the order-wide total, the dispatch-
   // threshold figures and the stage machine (current/next/prev + the advance
@@ -109,6 +118,38 @@ export default function OrderDetail() {
   );
 
   const [picker, setPicker] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  // "Registro LR" — the simple reference·product·qty document (grouped per
+  // quote with customer/decorator/seller) the dealer uses to register this
+  // pedido with Ligne Roset. Pure projection (resolveOrderRegistration) +
+  // the code-split PDF renderer; explicitly NOT an invoice.
+  async function exportRegistration() {
+    if (registering) return;
+    setRegistering(true);
+    try {
+      const { generateOrderRegistrationPdf, downloadBlob } = await safeDynamicImport(
+        () => import('../pdf/order/index.js'),
+      );
+      const data = resolveOrderRegistration({
+        order, quotes, lines: allLines, customers, professionals, profiles,
+      });
+      if (data.rowCount === 0) {
+        alert('No hay artículos para registrar — añade cotizaciones con líneas al pedido.');
+        return;
+      }
+      const blob = await generateOrderRegistrationPdf({
+        companyName: settings?.companyName || '',
+        ...data,
+      });
+      await downloadBlob(blob, `Registro LR Pedido ${order?.number ? `#${order.number}` : ''}`.trim() + '.pdf');
+    } catch (e) {
+      console.error('[OrderDetail] registration export failed:', e);
+      alert(e?.message || 'No se pudo generar el documento de registro.');
+    } finally {
+      setRegistering(false);
+    }
+  }
 
   if (!order) {
     return (
@@ -223,11 +264,27 @@ export default function OrderDetail() {
           </span>
         }
         actions={
-          <OrderOverflow
-            cancelled={isCancelled}
-            onCancel={cancelOrder}
-            onUncancel={uncancel}
-          />
+          <>
+            <button
+              type="button"
+              onClick={exportRegistration}
+              disabled={registering || quotes.length === 0}
+              className="btn-secondary"
+              title={quotes.length === 0
+                ? 'Añade cotizaciones al pedido primero'
+                : 'Documento para registrar el pedido con Ligne Roset (sin precios)'}
+            >
+              {registering
+                ? <Loader2 size={14} className="animate-spin" />
+                : <FileDown size={14} />}
+              Registro LR
+            </button>
+            <OrderOverflow
+              cancelled={isCancelled}
+              onCancel={cancelOrder}
+              onUncancel={uncancel}
+            />
+          </>
         }
       />
 

@@ -43,3 +43,4 @@ export { resolveLineItem } from './views/lineItem.js';
 export { resolveDashboard } from './views/dashboard.js';
 export { resolveQuotesList, resolveOrdersList } from './views/lists.js';
 export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';
+export { resolveOrderRegistration } from './views/registration.js';
