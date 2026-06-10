@@ -191,8 +191,10 @@ test('absorb: simple line into a modular → one module, total preserved, option
   assert.equal(c.moduleOptional, true);
   // margin/discount folded: 1000 × 1.10 × 0.95 = 1045 per unit
   assert.equal(c.unitPrice, 1045);
-  // the catalog descriptor survives as the component description
-  assert.equal(c.description, 'STANDARD SEAT');
+  // the catalog descriptor rides in the component's read-only productDescription,
+  // separate from the editable description (never polluted) — just like the line
+  assert.equal(c.productDescription, 'STANDARD SEAT');
+  assert.equal(c.description, '');
   // the priced contribution is identical before and after the move
   assert.equal(c.unitPrice * c.qty, lineTotal({ ...line, isOptional: false }));
 });

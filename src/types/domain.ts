@@ -655,6 +655,17 @@ export interface LineComponent {
   subtype?: string;
   dimensions?: string;
   description?: string;
+  /**
+   * The catalog's "Description 2" (the model's finish/variant, e.g. "STANDARD
+   * SEAT") for this sub-piece — the component twin of the line-level
+   * `productDescription`. A READ-ONLY secondary identifier shown under the name
+   * on every surface (quote pane, client preview, public link, PDF), kept
+   * SEPARATE from the editable `description` so the catalog text never pollutes
+   * the dealer's own field. Auto-filled when a product is picked into the
+   * component; absent on a hand-typed one. Lives inline on the JSONB component
+   * shape — no DB column.
+   */
+  productDescription?: string;
   qty?: number;
   unitPrice?: number;
   /**

@@ -327,6 +327,7 @@ function ComponentRow({
                 {c.dimensions && <Text style={s.lineRef}>DIM. {c.dimensions}</Text>}
               </View>
             )}
+            {c.productDescription && <Text style={s.lineDesc}>{c.productDescription}</Text>}
             {c.description && <Text style={s.lineDesc}>{c.description}</Text>}
           </View>
         </View>

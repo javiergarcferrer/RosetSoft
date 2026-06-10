@@ -314,9 +314,11 @@ export function absorbLineAsComponents(
       reference: line.reference || '',
       subtype: line.subtype || '',
       dimensions: line.dimensions || '',
-      // The dealer's text wins; fall back to the catalog descriptor so the
-      // line's second identity line survives the move.
-      description: line.description || line.productDescription || '',
+      description: line.description || '',
+      // Carry the catalog "Description 2" into the component's own read-only
+      // identity field — separate from the editable description, exactly as it
+      // lives on the line — so the move never pollutes the dealer's field.
+      productDescription: line.productDescription || '',
       qty: safeNum(line.qty, 1),
       unitPrice: fold(line.unitPrice),
       priceMin: foldRange(line.priceMin),
@@ -383,6 +385,7 @@ export interface ExtractedLine {
     subtype?: string;
     dimensions?: string;
     description?: string;
+    productDescription?: string;
     qty?: number;
     unitPrice?: number;
     priceMin?: number | null;
@@ -428,6 +431,7 @@ export function extractComponentsAsLine(
         subtype: c.subtype || '',
         dimensions: c.dimensions || '',
         description: c.description || '',
+        productDescription: c.productDescription || '',
         qty: safeNum(c.qty, 1),
         unitPrice: safeNum(c.unitPrice),
         priceMin: c.priceMin ?? null,

@@ -306,7 +306,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         subtype: s.subtype || '',
         dimensions: s.dimensions || '',
         description: s.description || '',
-        productDescription: '',
+        productDescription: s.productDescription || '',
         pageRef: '',
         imageId: null,
         swatchImageId: s.swatchImageId ?? null,

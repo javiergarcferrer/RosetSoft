@@ -167,6 +167,7 @@ export default function QuoteLineItem({
       reference: s.reference || '',
       dimensions: s.dimensions || '',
       subtype: s.subtype || '',
+      productDescription: s.productDescription || '',
       qty: 1,
       unitPrice: s.unitPrice || 0,
       swatchImageId: s.swatchImageId ?? null,
@@ -341,6 +342,10 @@ export default function QuoteLineItem({
       subtype: line.subtype || '',
       dimensions: line.dimensions || '',
       description: line.description || '',
+      // The catalog Description 2 follows the single product down into the
+      // first component — it has no place on a compound parent (no single
+      // product), so move it rather than strand it.
+      productDescription: line.productDescription || '',
       qty: line.qty ?? 1,
       unitPrice: line.unitPrice ?? 0,
     });
@@ -350,6 +355,7 @@ export default function QuoteLineItem({
       subtype: '',
       dimensions: '',
       description: '',
+      productDescription: '',
       qty: 1,
       unitPrice: 0,
     });
@@ -370,6 +376,7 @@ export default function QuoteLineItem({
       subtype: first?.subtype || line.subtype || '',
       dimensions: first?.dimensions || line.dimensions || '',
       description: first?.description || line.description || '',
+      productDescription: first?.productDescription || line.productDescription || '',
       qty: first?.qty ?? line.qty ?? 1,
       unitPrice: first?.unitPrice ?? line.unitPrice ?? 0,
     });
@@ -560,6 +567,7 @@ function makeBlankComponent(overrides = {}) {
     subtype: '',
     dimensions: '',
     description: '',
+    productDescription: '',
     qty: 1,
     unitPrice: 0,
     ...overrides,
@@ -2097,6 +2105,9 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
       name: seed.name,
       dimensions: seed.dimensions,
       subtype: seed.subtype,
+      // The model's catalog Description 2 — the read-only secondary identity,
+      // kept separate from the editable description, exactly as on a line.
+      productDescription: seed.productDescription ?? '',
       unitPrice: seed.unitPrice,
       swatchImageId: seed.swatchImageId ?? null,
       priceMin: seed.priceMin ?? null,
@@ -2239,6 +2250,15 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
           <PackageSearch size={15} />
         </button>
       </div>
+
+      {/* Catalog Description 2 (finish/variant) for this sub-piece — read-only
+          product identity parked right under the name, just like the product
+          line. Separate from the editable Descripción (in LineNotes below). */}
+      {component.productDescription && (
+        <p className="text-xs leading-snug text-ink-500 whitespace-pre-line break-words">
+          {component.productDescription}
+        </p>
+      )}
 
       <SpecStrip
         reference={component.reference}

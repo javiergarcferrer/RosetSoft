@@ -64,12 +64,15 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
   }
 
   // Seed one family at the chosen grade (or a price range when grade is blank).
-  // Non-graded models (a table, a base) keep their own catalog subtype and price
-  // regardless of the grade, so a grade letter never gets stamped on them.
+  // The catalog "Description 2" (the model's finish/variant) always rides in
+  // `productDescription` — the read-only secondary identity — mirroring the
+  // single-add CatalogPicker, so the `subtype` slot only ever holds the fabric
+  // (graded) or stays empty (non-graded / range); a grade letter is never
+  // stamped on a non-graded model.
   function seedFor(fam) {
     if (!fam.graded) {
       const p = productForGrade(fam, '');
-      return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
+      return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: '', productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
     }
     if (!grade) {
       const lo = productForGrade(fam, fam.grades[0]);
@@ -77,10 +80,10 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
       if (!lo || !hi) return null;
       const min = Number(lo.priceUsd) || 0;
       const max = Number(hi.priceUsd) || 0;
-      return { name: lo.name || fam.name, reference: lo.reference, dimensions: lo.dimensions, subtype: '', unitPrice: min, priceMin: min, priceMax: max, swatchImageId: null };
+      return { name: lo.name || fam.name, reference: lo.reference, dimensions: lo.dimensions, subtype: '', productDescription: lo.subtype || '', unitPrice: min, priceMin: min, priceMax: max, swatchImageId: null };
     }
     const p = productForGrade(fam, grade);
-    return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: composeSubtype(grade, ''), unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
+    return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: composeSubtype(grade, ''), productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
   }
 
   function add() {
