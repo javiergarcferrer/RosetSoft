@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, ArrowRight, Send, CheckCircle2, FileEdit, Clock, Package, Trophy, UserPlus,
@@ -14,6 +14,7 @@ import { formatMoney } from '../lib/format.js';
 import { displayRatesFor, readExchangeRate } from '../lib/exchangeRate.js';
 import { orderStatusPill } from '../lib/statusPill.js';
 import { resolveDashboard } from '../core/quote/views/dashboard.js';
+import { useContainerEtas } from '../core/tracking/index.js';
 
 /**
  * Seller home — a quoting-activity workspace, not an admin report. Built
@@ -37,7 +38,8 @@ import { resolveDashboard } from '../core/quote/views/dashboard.js';
  *      customer still owes ("falta …"), most-pending first — and
  *      Borradores · continuar, stacked in the narrow column.
  *   5. Pedidos en curso — the team's active LR orders with their logistics
- *      stage and how long they've sat in it, so the seller sees where the
+ *      stage, how long they've sat in it, and the live Hapag-Lloyd ETA of
+ *      their containers (useContainerEtas), so the seller sees where the
  *      goods are (and what's stuck) without leaving home.
  *
  * The money shown is pipeline/collection value the SELLER acts on (what's
@@ -86,6 +88,12 @@ export default function Dashboard() {
   const loaded = allQuotesQ.loaded && allCustomersQ.loaded && allLinesQ.loaded
     && allOrdersQ.loaded && allContainersQ.loaded;
 
+  // Live arrival estimates for the orders the strip actually shows. First
+  // render resolves with no ETAs (the strip paints immediately); the codes it
+  // exposes feed the tracking hook, and the ETAs hydrate in on the re-render.
+  const [visibleCodes, setVisibleCodes] = useState([]);
+  const etaByCode = useContainerEtas(visibleCodes);
+
   // Derivation lives in the Model (core/quote/views/dashboard); the page passes
   // the data + the resolved scope flag and renders the result.
   const derived = useMemo(
@@ -97,9 +105,20 @@ export default function Dashboard() {
       containers: allContainersQ.data,
       scopeIsTeam: effectiveScope === SCOPE_TEAM,
       meId,
+      etaByCode,
     }),
-    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, effectiveScope, meId],
+    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, effectiveScope, meId, etaByCode],
   );
+
+  // Track only what's on screen (the capped strip), not the whole order book.
+  const codesOnScreen = derived.activeOrders
+    .slice(0, ORDERS_CAP)
+    .flatMap((a) => a.containerCodes)
+    .sort()
+    .join(',');
+  useEffect(() => {
+    setVisibleCodes(codesOnScreen ? codesOnScreen.split(',') : []);
+  }, [codesOnScreen]);
 
   const firstName = (currentProfile?.name || '').trim().split(/\s+/)[0];
   const money = (q, amount = derived.totalByQuote.get(q.id) || 0) =>
@@ -107,6 +126,8 @@ export default function Dashboard() {
   // Aggregate values (KPI hints) are USD-base sums across quotes — no
   // per-quote rate applies, so they render as plain USD.
   const usd = (v) => formatMoney(v, 'USD', { USD: 1 });
+  // "15 jun" — compact day for the ETA chip on the orders strip.
+  const shortDate = (ts) => new Date(ts).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' });
   const customerName = (q) => {
     const c = derived.customersById.get(q.customerId);
     return c?.company || c?.name || 'Sin cliente';
@@ -250,14 +271,14 @@ export default function Dashboard() {
                 {showAccepted && (
                   <section className="card overflow-hidden">
                     <header className="card-header">
-                      <h2 className="flex items-center gap-2">
+                      <h2 className="flex items-center gap-2 whitespace-nowrap">
                         <CheckCircle2 size={14} className="text-emerald-600" />
-                        Aceptadas · en proceso
+                        Aceptadas
                         {loaded && (
                           <span className="badge">{derived.accepted.length}</span>
                         )}
                       </h2>
-                      <Link to={quotesLink('accepted')} className="card-header-action">
+                      <Link to={quotesLink('accepted')} className="card-header-action whitespace-nowrap">
                         Ver todas <ArrowRight size={12} />
                       </Link>
                     </header>
@@ -270,9 +291,14 @@ export default function Dashboard() {
                             <Link to={`/quotes/${q.id}`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-ink-50 transition-colors">
                               <div className="min-w-0 flex-1">
                                 <div className="text-sm truncate">{customerName(q)}</div>
-                                <div className="text-[11px] text-ink-500 truncate tabular-nums">
-                                  #{q.number || '—'} · {money(q)}
-                                  {due > 0 && <span className="text-amber-700"> · falta {money(q, due)}</span>}
+                                {/* ONE money figure — the actionable one. Both
+                                    (total + falta) overflow the narrow column
+                                    and the truncation eats the "falta". */}
+                                <div className="text-[11px] truncate tabular-nums">
+                                  <span className="text-ink-500">#{q.number || '—'} · </span>
+                                  {due > 0
+                                    ? <span className="text-amber-700">falta {money(q, due)}</span>
+                                    : <span className="text-ink-500">{money(q)}</span>}
                                 </div>
                               </div>
                               <span className={`status-pill ${step.cls} flex-shrink-0`}>{step.label}</span>
@@ -288,12 +314,12 @@ export default function Dashboard() {
                 {loaded && showDrafts && (
                   <section className="card overflow-hidden">
                     <header className="card-header">
-                      <h2 className="flex items-center gap-2">
+                      <h2 className="flex items-center gap-2 whitespace-nowrap">
                         <FileEdit size={14} className="text-ink-500" />
-                        Borradores · continuar
+                        Borradores
                         <span className="badge">{derived.drafts.length}</span>
                       </h2>
-                      <Link to={quotesLink('draft')} className="card-header-action">
+                      <Link to={quotesLink('draft')} className="card-header-action whitespace-nowrap">
                         Ver todas <ArrowRight size={12} />
                       </Link>
                     </header>
@@ -331,7 +357,7 @@ export default function Dashboard() {
                 </Link>
               </header>
               <ul className="divide-y divide-ink-100">
-                {derived.activeOrders.slice(0, ORDERS_CAP).map(({ order: o, stage, stageAt, customerLabel, quoteCount, containerCount, total }) => {
+                {derived.activeOrders.slice(0, ORDERS_CAP).map(({ order: o, stage, stageAt, eta, customerLabel, quoteCount, containerCount, total }) => {
                   const pill = orderStatusPill(stage);
                   return (
                     <li key={o.id}>
@@ -344,6 +370,9 @@ export default function Dashboard() {
                           </div>
                           <div className="text-[11px] text-ink-500 truncate tabular-nums">
                             {quoteCount} cot. · {containerCount} cont.{total > 0 ? ` · ${usd(total)}` : ''}
+                            {eta?.at != null && (
+                              <span className="text-ink-700 font-medium"> · ETA {shortDate(eta.at)}{eta.location ? ` · ${eta.location}` : ''}</span>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-0.5 flex-shrink-0">

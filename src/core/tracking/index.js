@@ -17,4 +17,4 @@ export {
 } from '../../lib/containerTracking.js';
 export { resolveTrackableContainers } from './containers.js';
 export { resolveVoyageHud } from './voyage.js';
-export { useContainerTracking } from './useContainerTracking.js';
+export { useContainerTracking, useContainerEtas } from './useContainerTracking.js';

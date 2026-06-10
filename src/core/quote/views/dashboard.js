@@ -10,6 +10,7 @@ import { computeTotals, lineForTotals } from '../../../lib/pricing.js';
 import { isPricedLine } from '../../../lib/constants.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../../lib/orderStages.js';
 import { quoteOutstanding } from '../../../lib/quoteMilestones.js';
+import { normalizeContainerNo, isValidContainerNo } from '../../../lib/containerTracking.js';
 
 // A sent quote waiting longer than this nudges a follow-up.
 export const STALE_DAYS = 7;
@@ -31,6 +32,10 @@ function acceptedNextStep(q) {
 
 export function resolveDashboard({
   quotes, customers, lines, orders, containers, scopeIsTeam, meId, now = Date.now(),
+  // Map<containerNo, { etaAt, etaLocation }> from useContainerEtas — optional;
+  // absent/empty just leaves every order's `eta` null (the strip renders
+  // immediately, ETAs hydrate in when the tracking calls land).
+  etaByCode = null,
 }) {
   const qs = Array.isArray(quotes) ? quotes : [];
 
@@ -113,9 +118,17 @@ export function resolveDashboard({
     }
   }
   const containerCountByOrder = new Map();
+  // Trackable (valid ISO 6346) container numbers per order — what the page
+  // feeds useContainerEtas, and what the ETA rollup below reads back.
+  const codesByOrder = new Map();
   for (const c of containers || []) {
     if (!c.orderId) continue;
     containerCountByOrder.set(c.orderId, (containerCountByOrder.get(c.orderId) || 0) + 1);
+    const code = normalizeContainerNo(c.code);
+    if (isValidContainerNo(code)) {
+      if (!codesByOrder.has(c.orderId)) codesByOrder.set(c.orderId, []);
+      codesByOrder.get(c.orderId).push(code);
+    }
   }
   const activeOrders = (orders || [])
     .filter((o) => !ORDER_DONE_STAGES.has(currentOrderStage(o)))
@@ -126,10 +139,22 @@ export function resolveDashboard({
       // When the order ENTERED its current stage — the strip shows how long
       // it's been sitting there (a stuck "en aduanas" should read as stuck).
       const stampField = ORDER_STAGE_BY_KEY[stage]?.timestampField;
+      const containerCodes = codesByOrder.get(o.id) || [];
+      // Completion ETA: an order is fully landed when its LAST container
+      // arrives, so several tracked containers roll up to the LATEST estimate.
+      let eta = null;
+      for (const code of containerCodes) {
+        const e = etaByCode?.get?.(code);
+        if (e?.etaAt != null && (!eta || e.etaAt > eta.at)) {
+          eta = { at: e.etaAt, location: e.etaLocation || null, code };
+        }
+      }
       return {
         order: o,
         stage,
         stageAt: (stampField && o[stampField]) || null,
+        containerCodes,
+        eta,
         customerLabel: (direct && (direct.company || direct.name)) || customerLabelByOrder.get(o.id) || null,
         quoteCount: quoteCountByOrder.get(o.id) || 0,
         containerCount: containerCountByOrder.get(o.id) || 0,

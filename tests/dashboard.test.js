@@ -145,3 +145,46 @@ test('resolveDashboard stamps active orders with when they entered their stage',
   assert.equal(byId.get('o2').stageAt, null); // draft has no stage timestamp
   assert.equal(byId.has('o3'), false);
 });
+
+test('resolveDashboard rolls container ETAs up to the LATEST per order, valid codes only', async () => {
+  const { iso6346CheckDigit } = await import('../src/lib/containerTracking.js');
+  const codeA = 'HLCU123456' + iso6346CheckDigit('HLCU123456');
+  const codeB = 'MSCU123456' + iso6346CheckDigit('MSCU123456');
+  const etaA = NOW + 3 * 86400000;
+  const etaB = NOW + 9 * 86400000;
+
+  const d = resolveDashboard({
+    quotes: [], customers: [], lines: [],
+    orders: [{ id: 'o1', status: 'in_transit', inTransitAt: NOW - 1, updatedAt: NOW }],
+    containers: [
+      { id: 'c1', orderId: 'o1', code: codeA },
+      { id: 'c2', orderId: 'o1', code: ` ${codeB.toLowerCase()} ` }, // normalizes
+      { id: 'c3', orderId: 'o1', code: 'NOT-A-CONTAINER' },          // dropped
+    ],
+    scopeIsTeam: true, meId: null, now: NOW,
+    etaByCode: new Map([
+      [codeA, { etaAt: etaA, etaLocation: 'Caucedo' }],
+      [codeB, { etaAt: etaB, etaLocation: 'Rio Haina' }],
+    ]),
+  });
+
+  const [a] = d.activeOrders;
+  // Only the two valid ISO 6346 numbers are exposed for tracking.
+  assert.deepEqual(a.containerCodes, [codeA, codeB]);
+  // The order is fully landed with its LAST container → the later estimate wins.
+  assert.equal(a.eta.at, etaB);
+  assert.equal(a.eta.location, 'Rio Haina');
+  assert.equal(a.eta.code, codeB);
+});
+
+test('resolveDashboard leaves eta null when no ETAs are known (yet)', () => {
+  const d = resolveDashboard({
+    quotes: [], customers: [], lines: [],
+    orders: [{ id: 'o1', status: 'in_transit', inTransitAt: NOW - 1, updatedAt: NOW }],
+    containers: [{ id: 'c1', orderId: 'o1', code: 'HLCU1234568' }],
+    scopeIsTeam: true, meId: null, now: NOW,
+    // no etaByCode at all — first render, tracking still in flight
+  });
+  assert.equal(d.activeOrders[0].eta, null);
+  assert.deepEqual(d.activeOrders[0].containerCodes, ['HLCU1234568']);
+});

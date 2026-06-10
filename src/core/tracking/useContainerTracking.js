@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../db/supabaseClient.js';
-import { summarizeTracking, buildTrackingRoute, summarizeVoyage } from '../../lib/containerTracking.js';
+import {
+  summarizeTracking, buildTrackingRoute, summarizeVoyage,
+  normalizeContainerNo, isValidContainerNo,
+} from '../../lib/containerTracking.js';
 
 /**
  * ViewModel hook for a single container's live Hapag-Lloyd tracking.
@@ -66,4 +69,67 @@ export function useContainerTracking(containerNo, shareToken) {
   }, [route]);
 
   return { status, summary, error, fetchedAt, route, voyage, milestoneStop, reload: load };
+}
+
+/* ----------------------- fleet ETA (dashboard) ----------------------- */
+
+// Tracking moves on the scale of days; 10 minutes keeps the home screen
+// fresh without re-hitting Hapag-Lloyd on every navigation back to it.
+const ETA_TTL_MS = 10 * 60 * 1000;
+// containerNo → { fetchedAt, eta: { etaAt, etaLocation } | null }. Module
+// level on purpose: the cache outlives the hook so revisiting the page
+// within the TTL renders instantly. Failures cache as null so a broken
+// number can't retry-loop.
+const etaCache = new Map();
+
+/**
+ * ViewModel hook for MANY containers' arrival estimates at once — the
+ * lightweight sibling of {@link useContainerTracking} for list surfaces
+ * (the dashboard's Pedidos en curso strip). Fetches each container's
+ * Hapag-Lloyd events in parallel, keeps only the derived ETA milestone,
+ * and returns `Map<containerNo, { etaAt, etaLocation }>`.
+ *
+ * Quiet by design: a container that fails to track or has no estimated
+ * arrival simply has no entry — an ETA is an enhancement, never an error
+ * state on the home screen.
+ */
+export function useContainerEtas(containerNos) {
+  // Normalized, validated, deduped, order-independent — the effect keys on
+  // this string so re-renders with the same fleet don't refetch.
+  const codesKey = useMemo(
+    () => [...new Set((containerNos || []).map(normalizeContainerNo).filter(isValidContainerNo))].sort().join(','),
+    [containerNos],
+  );
+  const [etaByCode, setEtaByCode] = useState(() => new Map());
+
+  useEffect(() => {
+    const codes = codesKey ? codesKey.split(',') : [];
+    if (codes.length === 0) { setEtaByCode(new Map()); return undefined; }
+    let cancelled = false;
+    (async () => {
+      const next = new Map();
+      await Promise.all(codes.map(async (code) => {
+        const hit = etaCache.get(code);
+        if (hit && Date.now() - hit.fetchedAt < ETA_TTL_MS) {
+          if (hit.eta) next.set(code, hit.eta);
+          return;
+        }
+        try {
+          const { data, error } = await supabase.functions.invoke('hl-track', { body: { containerNo: code } });
+          const summary = (!error && !data?.error) ? summarizeTracking(data?.events) : null;
+          const eta = summary?.eta?.at != null
+            ? { etaAt: summary.eta.at, etaLocation: summary.eta.location || null }
+            : null;
+          etaCache.set(code, { fetchedAt: Date.now(), eta });
+          if (eta) next.set(code, eta);
+        } catch {
+          etaCache.set(code, { fetchedAt: Date.now(), eta: null });
+        }
+      }));
+      if (!cancelled) setEtaByCode(next);
+    })();
+    return () => { cancelled = true; };
+  }, [codesKey]);
+
+  return etaByCode;
 }
