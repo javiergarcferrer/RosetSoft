@@ -46,6 +46,16 @@ Deno.serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'server not configured' }, 500);
+
+  // The anon key passes the gateway's verify_jwt (it's a valid JWT) — require
+  // a real signed-in team member before touching the Shopify Admin token.
+  const authClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') || '', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
+  });
+  const { data: auth } = await authClient.auth.getUser();
+  if (!auth?.user) return json({ error: 'No autorizado.' }, 401);
+
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
   // Shopify credentials (write-only table; service role reads).
