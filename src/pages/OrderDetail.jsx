@@ -6,6 +6,7 @@ import {
   AlertCircle, FileDown, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import Dropdown, { DropdownItem } from '../components/primitives/Dropdown.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
 import { DebouncedInput } from '../components/DebouncedInput.jsx';
@@ -510,6 +511,7 @@ function ContainerRow({ container }) {
             <button
               type="button"
               onClick={toggleFilled}
+              aria-pressed={filled}
               className={`inline-flex items-center gap-1.5 px-3 min-h-9 coarse:min-h-11 rounded-md text-xs font-medium transition-all active:scale-[0.98] ${
                 filled
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
@@ -620,25 +622,24 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
             {' · '}Act. {formatDateTime(quote.updatedAt)}
           </div>
         </Link>
-        <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
+        <div className="text-sm font-medium tabular-nums whitespace-nowrap text-ink-900">
           {formatMoney(total, quote.currencyCode || 'USD', displayRatesFor(quote, settings))}
         </div>
+        <Link
+          to={`/quotes/${quote.id}`}
+          className="btn-ghost text-xs flex-shrink-0"
+          title="Abrir cotización"
+        >
+          <ExternalLink size={13} aria-hidden /> Abrir
+        </Link>
         <button
           onClick={onDetach}
-          className="btn-icon-danger"
+          className="btn-icon-danger flex-shrink-0"
           title="Quitar del pedido"
           aria-label="Quitar del pedido"
         >
           <X size={14} />
         </button>
-        <Link
-          to={`/quotes/${quote.id}`}
-          className="btn-icon text-ink-300 group-hover:text-brand-500 hover:text-brand-600"
-          title="Abrir cotización"
-          aria-label="Abrir cotización"
-        >
-          <ExternalLink size={14} />
-        </Link>
       </div>
 
       {/* Milestone strip — three pills shown in chronological order.
@@ -706,6 +707,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
         type="button"
         onClick={onToggle}
         title="Clic para desmarcar"
+        aria-pressed={true}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium border transition-colors active:scale-[0.97] ${doneClass}`}
       >
         <CheckCircle2 size={12} />
@@ -734,6 +736,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
       type="button"
       onClick={onToggle}
       title={`Marcar ${label.toLowerCase()}`}
+      aria-pressed={false}
       className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
     >
       <Icon size={12} />
@@ -766,7 +769,7 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
           <div className="flex-1 min-w-0">
             <div className="eyebrow tracking-wide mb-1">Mínimo de despacho</div>
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
-              <div className="text-sm font-semibold text-ink-900">
+              <div className="text-sm font-medium text-ink-900">
                 {containerCount === 1
                   ? '1 contenedor'
                   : `${containerCount} contenedores`}
@@ -836,7 +839,7 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
                 <span className="text-[11px] text-ink-400">{formatDateTime(q.updatedAt)}</span>
               </div>
             </div>
-            <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
+            <div className="text-sm font-medium tabular-nums whitespace-nowrap text-ink-900">
               {formatMoney(totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
             </div>
           </button>
@@ -848,44 +851,34 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
 }
 
 function OrderOverflow({ cancelled, onCancel, onUncancel }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="btn-icon"
-        aria-label="Más acciones"
-        aria-haspopup="menu"
-      >
-        <MoreHorizontal size={16} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div role="menu" className="dropdown-pop absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-48 max-w-[calc(100vw-2rem)] rounded-md border border-ink-200 bg-white shadow-pop py-1 z-40">
-            {cancelled ? (
-              <button
-                type="button"
-                onClick={() => { onUncancel(); setOpen(false); }}
-                className="w-full text-left px-3 py-2 min-h-9 coarse:min-h-11 text-sm hover:bg-ink-50 active:bg-ink-100 transition-colors inline-flex items-center gap-2"
-              >
-                <Plus size={14} className="text-ink-500" />
-                Reactivar pedido
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { onCancel(); setOpen(false); }}
-                className="w-full text-left px-3 py-2 min-h-9 coarse:min-h-11 text-sm hover:bg-rose-50 active:bg-rose-100 text-rose-600 transition-colors inline-flex items-center gap-2"
-              >
-                <Ban size={14} />
-                Cancelar pedido
-              </button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+    <Dropdown
+      chevron={false}
+      ariaLabel="Más acciones"
+      label={<MoreHorizontal size={14} aria-hidden />}
+      className="!px-1.5"
+      align="right"
+    >
+      {({ close }) => (cancelled ? (
+        <DropdownItem onSelect={() => { close(); onUncancel(); }}>
+          <Plus size={14} className="mt-0.5 text-ink-500 flex-shrink-0" aria-hidden />
+          <span className="min-w-0">
+            <span className="block font-medium">Reactivar pedido</span>
+            <span className="block text-xs text-ink-500">Vuelve al estado Borrador.</span>
+          </span>
+        </DropdownItem>
+      ) : (
+        <DropdownItem
+          onSelect={() => { close(); onCancel(); }}
+          className="!text-red-600 hover:!bg-red-50 focus:!bg-red-50"
+        >
+          <Ban size={14} className="mt-0.5 flex-shrink-0" aria-hidden />
+          <span className="min-w-0">
+            <span className="block font-medium">Cancelar pedido</span>
+            <span className="block text-xs text-ink-500">Las cotizaciones quedan libres; no se eliminan.</span>
+          </span>
+        </DropdownItem>
+      ))}
+    </Dropdown>
   );
 }

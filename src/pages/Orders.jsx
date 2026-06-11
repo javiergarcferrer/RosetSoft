@@ -202,7 +202,7 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
       <Link to={`/orders/${o.id}`} className="block">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-semibold tabular-nums">
+            <div className="text-sm font-medium tabular-nums">
               #{o.number || '—'}{o.name ? <span className="font-normal text-ink-500"> · {o.name}</span> : ''}
             </div>
             {/* customerLabel is derived in the parent: direct
@@ -223,7 +223,7 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
         </div>
       </Link>
       <div className="flex items-center justify-end mt-1">
-        <button onClick={onDelete} className="btn-icon-danger -mr-1.5" aria-label="Eliminar">
+        <button onClick={onDelete} className="btn-icon-danger -mr-1.5" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>

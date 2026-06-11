@@ -89,6 +89,7 @@ export default function Comisiones() {
           <button
             type="button"
             onClick={() => setMode('current')}
+            aria-pressed={mode === 'current'}
             className={mode === 'current'
               ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
               : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}
@@ -98,6 +99,7 @@ export default function Comisiones() {
           <button
             type="button"
             onClick={() => setMode('previous')}
+            aria-pressed={mode === 'previous'}
             className={mode === 'previous'
               ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
               : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}

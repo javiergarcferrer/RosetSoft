@@ -233,7 +233,7 @@ export default function Professionals() {
                       >
                         Editar
                       </button>
-                      <span className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
+                      <span aria-hidden="true" className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
                     </td>
                   </tr>
                 ))}

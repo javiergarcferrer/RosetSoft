@@ -208,7 +208,7 @@ export default function Suppliers() {
                       {[s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'}
                     </td>
                     <td className="py-1.5 px-3 text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="btn-icon text-ink-400" title="Editar proveedor" aria-label="Editar proveedor"><Pencil size={14} /></button>
+                      <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar proveedor"><Pencil size={13} /> Editar</button>
                     </td>
                   </tr>
                 ))}

@@ -269,7 +269,7 @@ function StatusGroup({ status, entries }) {
               to={`/quotes/${e.quote.id}`}
               className="flex-1 min-w-0 basis-36 group-hover:text-brand-700 transition-colors"
             >
-              <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
+              <div className="text-sm font-medium truncate text-ink-900 group-hover:text-brand-700 transition-colors">
                 #{e.quote.number || '—'}
                 {e.customer ? <span className="text-ink-500 font-normal group-hover:text-brand-500"> · {e.customer.company || e.customer.name}</span> : null}
               </div>
@@ -298,11 +298,10 @@ function StatusGroup({ status, entries }) {
             </div>
             <Link
               to={`/quotes/${e.quote.id}`}
-              className="btn-icon flex-shrink-0 text-ink-300 group-hover:text-brand-500 hover:text-brand-600"
+              className="btn-ghost text-xs flex-shrink-0"
               title="Abrir cotización"
-              aria-label="Abrir cotización"
             >
-              <ExternalLink size={14} />
+              <ExternalLink size={13} aria-hidden /> Abrir
             </Link>
           </li>
         ))}

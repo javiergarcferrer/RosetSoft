@@ -97,12 +97,12 @@ export default function Empleados() {
               <div key={e.id} className="px-3 py-3 space-y-1">
                 <div className="flex items-start justify-between gap-2 min-w-0">
                   <div className="min-w-0">
-                    <span className="font-medium text-ink-900 block break-words">{e.name}</span>
+                    <span className="font-semibold text-ink-900 block break-words">{e.name}</span>
                     <span className="text-xs text-ink-500 block break-words">{e.position || '—'}{e.cedula ? <> · <span className="tabular-nums whitespace-nowrap">{e.cedula}</span></> : ''}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`status-pill ${e.active !== false ? 'status-pill-active' : 'status-pill-inactive'}`}>{e.active !== false ? 'Activo' : 'Inactivo'}</span>
-                    <button type="button" onClick={() => openEdit(e)} className="btn-icon text-ink-400" title="Editar" aria-label="Editar empleado"><Pencil size={14} /></button>
+                    <button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors" title="Editar empleado"><Pencil size={13} /> Editar</button>
                   </div>
                 </div>
                 <div className="text-sm tabular-nums font-medium text-ink-700">{formatDop(e.monthlySalary)}</div>
@@ -123,7 +123,7 @@ export default function Empleados() {
                     <td className="text-ink-600">{e.position || '—'}</td>
                     <td className="text-right tabular-nums whitespace-nowrap">{formatDop(e.monthlySalary)}</td>
                     <td><span className={`status-pill ${e.active !== false ? 'status-pill-active' : 'status-pill-inactive'}`}>{e.active !== false ? 'Activo' : 'Inactivo'}</span></td>
-                    <td className="text-right"><button type="button" onClick={() => openEdit(e)} className="btn-icon text-ink-400" title="Editar" aria-label="Editar empleado"><Pencil size={14} /></button></td>
+                    <td className="text-right"><button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar empleado"><Pencil size={13} /> Editar</button></td>
                   </tr>
                 ))}
               </tbody>

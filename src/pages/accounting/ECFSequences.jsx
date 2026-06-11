@@ -141,7 +141,7 @@ export default function ECFSequences() {
                     <td className="text-ink-600 whitespace-nowrap">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
                     <td className="whitespace-nowrap"><span className={`status-pill ${pill}`}>{status}</span></td>
                     <td className="text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="btn-icon text-ink-400" title="Editar" aria-label="Editar secuencia"><Pencil size={14} /></button>
+                      <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar secuencia"><Pencil size={13} /> Editar</button>
                     </td>
                   </tr>
                 );

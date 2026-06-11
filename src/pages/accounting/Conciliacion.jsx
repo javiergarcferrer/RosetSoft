@@ -113,7 +113,9 @@ export default function Conciliacion() {
                             <td>
                               <button type="button" onClick={() => toggle(row)} disabled={busy === row.line.id}
                                 className={`w-6 h-6 coarse:w-11 coarse:h-11 rounded border inline-flex items-center justify-center transition-colors coarse:rounded-lg ${row.reconciled ? 'bg-emerald-600 border-emerald-600 text-white active:bg-emerald-700' : 'border-ink-300 text-transparent hover:border-ink-500 active:bg-ink-100'}`}
-                                title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}>
+                                title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
+                                aria-label={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
+                                aria-pressed={row.reconciled}>
                                 <Check size={13} />
                               </button>
                             </td>

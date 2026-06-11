@@ -66,11 +66,11 @@ export default function ShipmentTracking({
           type="button"
           onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
           aria-expanded={open}
-          className="inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1 min-h-8 coarse:min-h-11 text-[11px] font-medium text-ink-600 hover:border-ink-400 hover:text-ink-900 active:bg-ink-50 transition-colors"
+          className="chip-action min-h-8"
         >
-          <Ship size={12} />
+          <Ship size={12} aria-hidden />
           Rastrear envío{trackable.length > 1 ? ` · ${trackable.length}` : ''}
-          <ChevronDown size={13} className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={13} aria-hidden className={`text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && <div className="mt-2">{panels}</div>}
       </div>

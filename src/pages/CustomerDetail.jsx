@@ -216,7 +216,7 @@ export default function CustomerDetail() {
                           to={`/quotes/${q.id}`}
                           className="group flex items-center gap-3 px-2 py-3 -mx-2 rounded-md hover:bg-brand-50/60 hover:shadow-xs active:scale-[0.99] transition-all duration-150"
                         >
-                          <div className="text-sm font-semibold tabular-nums w-16 flex-shrink-0 text-ink-800 group-hover:text-brand-700 transition-colors">
+                          <div className="text-sm font-medium tabular-nums w-16 flex-shrink-0 text-ink-800 group-hover:text-brand-700 transition-colors">
                             #{q.number || '—'}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -227,7 +227,7 @@ export default function CustomerDetail() {
                           <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
                             {formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
                           </div>
-                          <ExternalLink size={12} className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
+                          <ExternalLink size={12} aria-hidden className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
                         </Link>
                       </li>
                     ))}
@@ -282,7 +282,7 @@ export default function CustomerDetail() {
                         Act. {formatDateTime(o.updatedAt)}
                       </div>
                     </div>
-                    <ExternalLink size={12} className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
+                    <ExternalLink size={12} aria-hidden className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
                   </Link>
                 </li>
               );

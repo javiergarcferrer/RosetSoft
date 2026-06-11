@@ -148,7 +148,7 @@ export default function Customers() {
                     {initialsFor(c) || <Users size={16} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm text-ink-900 truncate">{c.name}</div>
+                    <div className="font-semibold text-sm text-ink-900 truncate">{c.name}</div>
                     {c.company && (
                       <div className="text-[11px] text-ink-500 truncate">{c.company}</div>
                     )}
@@ -208,7 +208,7 @@ export default function Customers() {
                       >
                         Editar
                       </button>
-                      <span className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
+                      <span aria-hidden="true" className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
                     </td>
                   </tr>
                 ))}

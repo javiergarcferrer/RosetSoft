@@ -360,7 +360,7 @@ export default function Facturacion() {
                     <span className="text-sm text-ink-500 whitespace-nowrap">
                       {q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}
                     </span>
-                    <span className="text-sm tabular-nums whitespace-nowrap sm:ml-auto">{formatDop(book.total)} <span className="text-ink-400">({formatMoney(book.usdTotal, 'USD')})</span></span>
+                    <span className="text-sm tabular-nums whitespace-nowrap sm:ml-auto font-semibold text-ink-900">{formatDop(book.total)} <span className="text-ink-400 font-normal">({formatMoney(book.usdTotal, 'USD')})</span></span>
                   </div>
                   <div className="text-xs text-ink-500 mb-3 tabular-nums break-words">
                     Base {formatDop(book.base)} · ITBIS {formatDop(book.itbis)}
@@ -373,7 +373,7 @@ export default function Facturacion() {
                         className="input w-36" />
                       <button type="button" onClick={() => lookupFor(q)}
                         disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
-                        className="btn-icon shrink-0" title="Buscar nombre en el registro DGII">
+                        className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
                         {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                       </button>
                     </div>
@@ -440,8 +440,8 @@ export default function Facturacion() {
                                 {p?.trackId && (
                                   <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
                                     title="Consultar estado en la DGII"
-                                    className="btn-icon text-ink-400">
-                                    {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                                    className="btn-ghost text-xs whitespace-nowrap">
+                                    {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Consultar
                                   </button>
                                 )}
                               </span>
@@ -456,8 +456,8 @@ export default function Facturacion() {
                               </button>
                             )}
                             <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
-                              title="Imprimir factura" className="btn-icon text-ink-400">
-                              {printing === r.id ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                              title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
+                              {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
                             </button>
                           </div>
                         </td>

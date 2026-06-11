@@ -109,7 +109,7 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
               onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
               className="input w-28 text-right tabular-nums" />
             <button type="button" onClick={() => setLines((arr) => arr.length > 2 ? arr.filter((_, idx) => idx !== i) : arr)}
-              className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50" title="Eliminar línea"><Trash2 size={15} /></button>
+              className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
@@ -282,8 +282,9 @@ export default function Ledger() {
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 whitespace-nowrap">Reversión</span>
                   ) : (
                     <button type="button" onClick={() => reverse(entry, lines)} disabled={reversing === entry.id}
-                      className="text-ink-400 hover:text-rose-600 disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center" title="Reversar asiento">
-                      {reversing === entry.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                      className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-rose-700 hover:bg-rose-50 active:bg-rose-100 transition-colors disabled:opacity-40 whitespace-nowrap"
+                      title="Reversar asiento — crea un asiento espejo">
+                      {reversing === entry.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Reversar
                     </button>
                   )}
                 </div>

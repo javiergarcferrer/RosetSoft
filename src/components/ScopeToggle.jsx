@@ -20,10 +20,10 @@ export default function ScopeToggle({ scope, onChange }) {
       : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors';
   return (
     <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
-      <button type="button" onClick={() => onChange(SCOPE_MINE)} className={cls(scope === SCOPE_MINE)}>
+      <button type="button" onClick={() => onChange(SCOPE_MINE)} aria-pressed={scope === SCOPE_MINE} className={cls(scope === SCOPE_MINE)}>
         Mías
       </button>
-      <button type="button" onClick={() => onChange(SCOPE_TEAM)} className={cls(scope === SCOPE_TEAM)}>
+      <button type="button" onClick={() => onChange(SCOPE_TEAM)} aria-pressed={scope === SCOPE_TEAM} className={cls(scope === SCOPE_TEAM)}>
         Equipo
       </button>
     </div>

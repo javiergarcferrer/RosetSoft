@@ -360,7 +360,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
       <Link to={`/quotes/${qu.id}`} className="block">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-sm font-semibold tabular-nums">#{qu.number || '—'}</div>
+            <div className="text-sm font-medium tabular-nums">#{qu.number || '—'}</div>
             <div className="flex items-center gap-1 min-w-0">
               <span className="text-xs text-ink-500 truncate">{client?.name || 'Sin cliente'}</span>
               {client?.isProfessional && <ProfessionalTag />}
@@ -370,7 +370,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
             )}
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-medium tabular-nums">{formatMoney(total, qu.currencyCode || 'USD', rates)}</div>
+            <div className="text-sm font-semibold tabular-nums">{formatMoney(total, qu.currencyCode || 'USD', rates)}</div>
             <div className="text-[10px] text-ink-400 tabular-nums">{formatDateTime(qu.updatedAt)}</div>
           </div>
         </div>
@@ -381,7 +381,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
         </div>
-        <button onClick={del} className="btn-icon-danger -mr-1.5" aria-label="Eliminar">
+        <button onClick={del} className="btn-icon-danger -mr-1.5" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={16} />
         </button>
       </div>
@@ -420,7 +420,7 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
         </div>
       </td>
       <td className="hidden lg:table-cell text-ink-400 tabular-nums whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-medium tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
+      <td className="text-right font-semibold tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
       <td className="text-right w-12">
         <button onClick={del} className="btn-icon-danger" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={14} />

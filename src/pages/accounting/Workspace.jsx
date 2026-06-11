@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import Dropdown, { DropdownItem } from '../../components/primitives/Dropdown.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
@@ -405,36 +406,61 @@ export default function AccountingWorkspace() {
         title="Contabilidad"
         subtitle={`Ciclo ${formatCycle(cycle)}`}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <ExportButton
-              icon={UsersIcon}
-              label="Clientes"
-              busy={exportBusy === 'customers'}
-              disabled={!loaded || customersQ.data.length === 0}
-              onClick={withBusy('customers', exportCustomers)}
-            />
-            <ExportButton
-              icon={FileCheck}
-              label="Facturas"
-              busy={exportBusy === 'invoices'}
-              disabled={!loaded}
-              onClick={withBusy('invoices', exportInvoices)}
-            />
-            <ExportButton
-              icon={Wallet}
-              label="Comisiones"
-              busy={exportBusy === 'commissions'}
-              disabled={!loaded}
-              onClick={withBusy('commissions', exportCommissions)}
-            />
-            <ExportButton
-              icon={Briefcase}
-              label="Com. profesionales"
-              busy={exportBusy === 'pro-commissions'}
-              disabled={!loaded || !derived.entries.some((e) => e.professional && e.mode === 'commission' && e.proOwed)}
-              onClick={withBusy('pro-commissions', exportProCommissions)}
-            />
-          </div>
+          /* The four Odoo exports are one-shot commands — ONE menu instead of
+             four buttons crowding (and wrapping) the page header. */
+          <Dropdown
+            align="right"
+            ariaLabel="Exportar CSV para Odoo"
+            panelClassName="w-72"
+            label={exportBusy
+              ? <><Loader2 size={14} className="animate-spin" aria-hidden /> Exportar</>
+              : <><Download size={14} aria-hidden /> Exportar</>}
+          >
+            {({ close }) => (
+              <>
+                <DropdownItem
+                  disabled={!loaded || customersQ.data.length === 0}
+                  onSelect={() => { close(); withBusy('customers', exportCustomers)(); }}
+                >
+                  <UsersIcon size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                  <span>
+                    <span className="block font-medium">Clientes</span>
+                    <span className="block text-xs text-ink-500">CSV de clientes para Odoo</span>
+                  </span>
+                </DropdownItem>
+                <DropdownItem
+                  disabled={!loaded}
+                  onSelect={() => { close(); withBusy('invoices', exportInvoices)(); }}
+                >
+                  <FileCheck size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                  <span>
+                    <span className="block font-medium">Facturas</span>
+                    <span className="block text-xs text-ink-500">Todas las cotizaciones aceptadas</span>
+                  </span>
+                </DropdownItem>
+                <DropdownItem
+                  disabled={!loaded}
+                  onSelect={() => { close(); withBusy('commissions', exportCommissions)(); }}
+                >
+                  <Wallet size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                  <span>
+                    <span className="block font-medium">Comisiones</span>
+                    <span className="block text-xs text-ink-500">Vendedores · ciclo seleccionado</span>
+                  </span>
+                </DropdownItem>
+                <DropdownItem
+                  disabled={!loaded || !derived.entries.some((e) => e.professional && e.mode === 'commission' && e.proOwed)}
+                  onSelect={() => { close(); withBusy('pro-commissions', exportProCommissions)(); }}
+                >
+                  <Briefcase size={14} className="mt-0.5 flex-shrink-0 text-ink-400" aria-hidden />
+                  <span>
+                    <span className="block font-medium">Com. profesionales</span>
+                    <span className="block text-xs text-ink-500">Profesionales · ciclo seleccionado</span>
+                  </span>
+                </DropdownItem>
+              </>
+            )}
+          </Dropdown>
         }
       />
 
@@ -642,7 +668,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold tabular-nums whitespace-nowrap text-ink-900">#{quote.number || '—'}</span>
+              <span className="font-medium tabular-nums whitespace-nowrap text-ink-600">#{quote.number || '—'}</span>
               <span className="text-ink-700 truncate min-w-0">{customerName}</span>
             </div>
             <div className="text-[11px] text-ink-500 truncate">
@@ -911,26 +937,12 @@ function TotalLine({ label, value, strong }) {
   );
 }
 
-function ExportButton({ icon: Icon, label, busy, disabled, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy || disabled}
-      className="btn-secondary disabled:cursor-not-allowed"
-    >
-      {busy
-        ? <><Loader2 size={14} className="animate-spin" /> {label}</>
-        : <><Download size={14} /> {label}</>}
-    </button>
-  );
-}
-
 function CyclePill({ label, sub, active, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`text-left rounded-md border px-3 py-2 min-h-11 transition-all active:scale-[0.98] select-none ${
         active
           ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
