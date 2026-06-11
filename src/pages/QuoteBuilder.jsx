@@ -792,7 +792,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           >
             <Plus size={17} />
           </button>
-          {/* Two separate sources, icon-only: Catálogo (Ligne Roset supplier
+          {/* Two separate sources, labeled: Catálogo (Ligne Roset supplier
               catalog) and Inventario (our stock on hand). */}
           <AddSourceButtons onOpenCatalog={onOpenCatalog} onOpenInventory={onOpenInventory} />
         </div>
