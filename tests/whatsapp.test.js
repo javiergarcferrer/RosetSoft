@@ -207,3 +207,36 @@ test('resolveCampaignsList — live rollup with stage precedence; frozen fallbac
   // No campaign-tagged messages yet → the counters frozen at send time.
   assert.deepEqual({ sent: rows[1].sent, failed: rows[1].failed }, { sent: 2, failed: 1 });
 });
+
+/* --------------------- thread affordances (reactions, replies) ---------------------
+ * Pinned: a reaction row decorates its TARGET bubble (matched by wamid) and
+ * never renders as its own row; removing the reaction (empty emoji) clears it;
+ * a reaction to a message we never logged stays visible as a row. A reply
+ * (Meta `context`) resolves into the quoted snippet.
+ */
+test('resolveThread — reactions fold onto their target; removal clears; replies quote', () => {
+  const phone = '18095550100';
+  const messages = [
+    { id: 'a', phone, direction: 'out', waId: 'wamid.A', body: 'Su cotización está lista', createdAt: 1000 },
+    { id: 'b', phone, direction: 'in', waId: 'wamid.B', kind: 'reaction', body: '👍',
+      payload: { reaction: { message_id: 'wamid.A', emoji: '👍' } }, createdAt: 2000 },
+    { id: 'c', phone, direction: 'in', waId: 'wamid.C', kind: 'text', body: 'Gracias, ¿incluye envío?',
+      payload: { context: { id: 'wamid.A' } }, createdAt: 3000 },
+    // Reaction to a message outside our log → stays as its own row.
+    { id: 'd', phone, direction: 'in', waId: 'wamid.D', kind: 'reaction', body: '❤️',
+      payload: { reaction: { message_id: 'wamid.UNKNOWN', emoji: '❤️' } }, createdAt: 4000 },
+  ];
+  const t = resolveThread(messages, { key: '8095550100', now: 5000 });
+  assert.deepEqual(t.items.map((m) => m.id), ['a', 'c', 'd']); // 'b' folded into 'a'
+  assert.deepEqual(t.items[0].reactions, ['👍']);
+  assert.equal(t.items[1].quoted.direction, 'out');
+  assert.equal(t.items[1].quoted.body, 'Su cotización está lista');
+
+  // The user removes the reaction → the decoration clears.
+  const removed = [...messages,
+    { id: 'e', phone, direction: 'in', waId: 'wamid.E', kind: 'reaction', body: '',
+      payload: { reaction: { message_id: 'wamid.A', emoji: '' } }, createdAt: 4500 },
+  ];
+  const t2 = resolveThread(removed, { key: '8095550100', now: 5000 });
+  assert.equal(t2.items.find((m) => m.id === 'a').reactions ?? null, null);
+});

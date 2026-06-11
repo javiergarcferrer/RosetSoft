@@ -10,6 +10,8 @@ import QuickCreate from './QuickCreate.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
 import { navForRole } from '../lib/access.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
+import { useLiveQuery } from '../db/hooks.js';
+import { db } from '../db/database.js';
 
 // Persisted preference for the desktop "hide sidebar" toggle (see Layout).
 const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
@@ -19,8 +21,17 @@ const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
 // its slice; admins see both cores in one place.
 
 export default function Layout() {
-  const { settings, currentProfile, isAdmin, isAccounting } = useApp();
+  const { settings, currentProfile, isAdmin, isAccounting, profileId } = useApp();
   const navGroups = navForRole(currentProfile?.role);
+  // Unread WhatsApp badge on the nav entry — inbound messages not yet opened
+  // in the inbox. Rides the same live-query invalidation as the rest of the
+  // app, so opening a thread (which stamps readAt) clears it everywhere.
+  const waMessages = useLiveQuery(
+    () => db.waMessages.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const waUnread = waMessages.reduce((n, m) => n + (m.direction === 'in' && !m.readAt ? 1 : 0), 0);
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   // Desktop-only: hide the static sidebar to reclaim horizontal space. Persisted
@@ -234,6 +245,11 @@ export default function Layout() {
                   >
                     <Icon size={16} />
                     {label}
+                    {to === '/chats' && waUnread > 0 && (
+                      <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+                        {waUnread > 99 ? '99+' : waUnread}
+                      </span>
+                    )}
                   </NavLink>
                 );
               })}

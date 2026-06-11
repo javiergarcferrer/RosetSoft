@@ -551,6 +551,12 @@ function Bubble({ m, prev }) {
           {m.templateName && (
             <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-0.5">Plantilla · {m.templateName}</div>
           )}
+          {m.quoted && (
+            <div className="border-l-2 border-emerald-500/60 bg-black/5 rounded-r-md pl-2 pr-2.5 py-1 mb-1">
+              <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
+              <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
+            </div>
+          )}
           {m.mediaPath && <MediaAttachment m={m} />}
           {m.body && !isDocChip
             ? m.body
@@ -561,6 +567,13 @@ function Bubble({ m, prev }) {
           </div>
           {m.status === 'failed' && m.error && (
             <div className="text-[11px] mt-1 text-red-700">{m.error}</div>
+          )}
+          {m.reactions?.length > 0 && (
+            <div className={`-mb-3 ${out ? 'text-left' : 'text-right'}`}>
+              <span className="inline-flex items-center rounded-full bg-white border border-ink-100 shadow-xs px-1.5 py-0.5 text-sm leading-none">
+                {m.reactions.join(' ')}
+              </span>
+            </div>
           )}
         </div>
       </div>
