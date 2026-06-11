@@ -25,6 +25,7 @@ import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.j
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
+import QuoteChatCard from '../components/quote-builder/QuoteChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import PrintPdfModal from '../components/PrintPdfModal.jsx';
@@ -486,7 +487,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const {
     exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
-    exportPdf, printPdf, shareQuote,
+    exportPdf, printPdf, shareQuote, generatePdf,
     printDoc, closePrint,
   } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote });
 
@@ -581,6 +582,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         canRedo={canRedo}
         savedAt={savedAt}
         saving={saving}
+        buildPdf={generatePdf}
       />
 
       {/* Surface PDF export failures inline. The export button used to
@@ -702,6 +704,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           <ProjectPaletteCard />
           </ProjectPaletteContext.Provider>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
+          {/* The customer's WhatsApp conversation, in the editor — read and
+              answer the client being quoted without leaving the workspace.
+              Renders only with a customer phone + the Business API connected. */}
+          <QuoteChatCard quote={quote} customer={customer} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
           {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}

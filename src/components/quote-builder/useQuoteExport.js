@@ -189,6 +189,9 @@ export function useQuoteExport({
     exporting, printing, exportError, setExportError,
     sharing, shareMsg, setShareMsg, exportErrorRef,
     exportPdf, printPdf, shareQuote,
+    // The raw blob builder, for callers that deliver the PDF themselves
+    // (the WhatsApp send modal ships it as a document via wa-send).
+    generatePdf,
     printDoc, closePrint,
   };
 }

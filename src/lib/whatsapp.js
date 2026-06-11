@@ -217,6 +217,20 @@ export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
 }
 
 /**
+ * Send the quote's PDF as a WhatsApp document from the business number. The
+ * blob comes from the same generator Exportar uses (the caller builds it), so
+ * what lands in the chat is byte-for-byte the exported file; wa-send uploads
+ * it to Meta, mirrors it into Storage for our own thread, and logs it tagged
+ * with the quote. Documents are free-form media — they only deliver inside
+ * the 24h customer-service window (the link path covers outside it via the
+ * approved template).
+ */
+export async function sendQuotePdf({ to, blob, filename, customer, quoteId }) {
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  return sendWhatsappMedia({ to, file, customerId: customer?.id, quoteId });
+}
+
+/**
  * Mark a thread's inbound messages as read (the unread badge source). Fire and
  * forget from the chat view; failures only delay the badge.
  */

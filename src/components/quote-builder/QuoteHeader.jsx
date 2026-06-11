@@ -35,6 +35,7 @@ export default function QuoteHeader({
   canRedo,
   savedAt,
   saving,
+  buildPdf,
 }) {
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
   // Look up the quote's creator from the AppContext profiles list. The
@@ -108,7 +109,7 @@ export default function QuoteHeader({
         aria-label="Datos de la cotización"
       >
         <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-        <WhatsAppChip customer={customer} quote={quote} onUpdateQuote={onUpdateQuote} />
+        <WhatsAppChip customer={customer} quote={quote} onUpdateQuote={onUpdateQuote} buildPdf={buildPdf} />
         <ProfessionalChip
           quote={quote}
           professional={professional}
