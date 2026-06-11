@@ -7,6 +7,7 @@
 // state, and the leaf label maps (status pills, money formatting).
 
 import { currentQuoteStage } from '../../lib/quoteStages.js';
+import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
 
 /** Max rows shown per group; the remainder surfaces as a quiet "N más…". */
 export const SEARCH_GROUP_CAP = 5;
@@ -184,7 +185,9 @@ export function resolveGlobalSearch({
     toItem: (p) => ({
       key: `product:${p.id}`,
       type: 'product',
-      to: '/admin/catalog',
+      // Deep-link to the row's own brand-catalog page (the search spans every
+      // brand); rows imported before the brand column default to Ligne Roset.
+      to: p.brand === BRAND_LIFESTYLEGARDEN ? '/admin/catalog/lifestylegarden' : '/admin/catalog/roset',
       primary: p.name || p.reference || '—',
       secondary: [p.reference, p.family].filter(Boolean).join(' · '),
       priceUsd: p.priceUsd ?? null,

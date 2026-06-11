@@ -3,8 +3,9 @@ import { BookOpen, Boxes } from 'lucide-react';
 /**
  * The two product-source buttons for the editor — LABELED. They are
  * deliberately SEPARATE because the two sources are fundamentally different:
- *   • Catálogo  → the Ligne Roset supplier catalog (CatalogPicker): a SKU/model
- *                 priced by grade + fabric, ordered from the manufacturer.
+ *   • Catálogo  → the brand catalogs (CatalogPicker), spanning every brand:
+ *                 a Ligne Roset SKU/model priced by grade + fabric, or a
+ *                 LifestyleGarden piece — ordered from the manufacturer.
  *   • Inventario → our own stock on hand (InventoryPicker): a physical unit
  *                 already received into the warehouse, at its selling price.
  *
@@ -27,7 +28,7 @@ export default function AddSourceButtons({ onOpenCatalog, onOpenInventory, varia
         type="button"
         onClick={onOpenCatalog}
         className={cls}
-        title="Agregar desde el catálogo Ligne Roset"
+        title="Agregar desde los catálogos de marca (Ligne Roset, LifestyleGarden)"
       >
         <BookOpen size={size} aria-hidden /> Catálogo
       </button>

@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight, AlertTriangle } from 'lucide-react';
-import { useLiveQuery, useLiveQueryStatus } from '../../db/hooks.js';
+import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
+import { BRAND_LIGNE_ROSET } from '../../lib/constants.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -44,17 +45,16 @@ export default function Catalog() {
 
   // Browse: every category up-front (one cheap aggregate), each lazy-loaded on
   // open. Loaded regardless of search so toggling search ↔ browse is instant.
+  // Brand-scoped: this page is the Ligne Roset catalog; other brands live on
+  // their own pages under the Catálogos section.
   const { data: categories, loaded: catsLoaded, error: catsError } = useLiveQueryStatus(
-    () => (profileId ? catalogCategories(profileId) : Promise.resolve([])),
+    () => (profileId ? catalogCategories(profileId, BRAND_LIGNE_ROSET) : Promise.resolve([])),
     [profileId],
     [],
   );
-  // Cheap HEAD count for the header total (not a full fetch).
-  const total = useLiveQuery(
-    () => (profileId ? db.products.where('profileId').equals(profileId).count() : Promise.resolve(0)),
-    [profileId],
-    0,
-  );
+  // Header total = the brand's SKUs, summed from the category aggregate (no
+  // extra count round-trip, and it can't leak other brands' rows).
+  const total = useMemo(() => categories.reduce((n, c) => n + c.count, 0), [categories]);
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => sortCat(a.category, b.category)),
@@ -97,6 +97,7 @@ export default function Catalog() {
       const upserts = parsed.map((p) => ({
         id: p.reference,
         profileId,
+        brand: BRAND_LIGNE_ROSET,
         reference: p.reference,
         name: p.name,
         subtype: p.subtype,
@@ -399,7 +400,7 @@ function CategoryCard({ profileId, category, count }) {
  *  groups them into models and renders them behind the refine toolbar. */
 function CategoryModels({ profileId, category }) {
   const { data: products, loaded, error } = useLiveQueryStatus(
-    () => productsByCategory(profileId, category),
+    () => productsByCategory(profileId, category, BRAND_LIGNE_ROSET),
     [profileId, category],
     [],
   );
@@ -462,7 +463,7 @@ function FilteredOutNotice({ onClear }) {
  */
 function SearchResults({ profileId, term }) {
   const { data: rows, loaded } = useLiveQueryStatus(
-    () => searchProducts(profileId, term, SEARCH_LIMIT),
+    () => searchProducts(profileId, term, SEARCH_LIMIT, BRAND_LIGNE_ROSET),
     [profileId, term],
     [],
   );

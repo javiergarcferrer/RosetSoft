@@ -20,6 +20,7 @@
 // can't import it; the rule is trivial and kept equivalent on purpose).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { mapShopifyCatalog, LSG_BRAND, type ShopifyCatalogProduct } from './catalogImport.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -91,7 +92,7 @@ Deno.serve(async (req: Request) => {
     return b.data as T;
   }
 
-  let body: { itemIds?: string[]; test?: boolean } = {};
+  let body: { itemIds?: string[]; test?: boolean; importCatalog?: boolean } = {};
   try { body = await req.json(); } catch { /* empty body = sync all */ }
   const itemIds = Array.isArray(body?.itemIds) ? body.itemIds : null;
 
@@ -115,6 +116,75 @@ Deno.serve(async (req: Request) => {
       return json({ configured: true, ok: true, shop: shop.name, domain: shop.myshopifyDomain, missingScopes });
     } catch (e) {
       return json({ configured: true, ok: false, error: `Shopify rechazó el token: ${(e as Error).message}` }, 502);
+    }
+  }
+
+  // Catalog import — the REVERSE direction: pull the store's LifestyleGarden
+  // catalog (active products = what lifestylegarden.do shows) into `products`,
+  // brand 'lifestylegarden'. The mapping lives in catalogImport.ts (pure,
+  // pinned by tests/lsgCatalog.test.js); this branch fetches, upserts, then
+  // sweeps LSG rows the import didn't touch (left the store) by updated_at.
+  if (body?.importCatalog === true) {
+    const syncStartIso = new Date().toISOString();
+    try {
+      const products: ShopifyCatalogProduct[] = [];
+      let after: string | null = null;
+      for (let page = 0; page < 60; page++) {
+        const r = await gql<{ products: {
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+          nodes: ShopifyCatalogProduct[];
+        } }>(
+          `query($after: String) {
+            products(first: 50, after: $after, query: "status:active") {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                id title handle productType status
+                collections(first: 10) { nodes { title } }
+                variants(first: 100) {
+                  nodes { id title sku price inventoryItem { unitCost { amount } } }
+                }
+              }
+            }
+          }`,
+          { after },
+        );
+        products.push(...r.products.nodes);
+        if (!r.products.pageInfo.hasNextPage) break;
+        after = r.products.pageInfo.endCursor;
+      }
+
+      const { rows, summary } = mapShopifyCatalog(products, {
+        profileId: TEAM,
+        nowIso: new Date().toISOString(),
+      });
+      const errors: string[] = [];
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await admin.from('products').upsert(rows.slice(i, i + 200));
+        if (error) errors.push(error.message);
+      }
+      // Stale sweep only when every chunk landed — a partial import must not
+      // delete rows whose refresh merely failed.
+      let removed = 0;
+      if (!errors.length) {
+        const { data: stale } = await admin
+          .from('products')
+          .delete()
+          .eq('profile_id', TEAM)
+          .eq('brand', LSG_BRAND)
+          .lt('updated_at', syncStartIso)
+          .select('id');
+        removed = stale?.length ?? 0;
+      }
+      return json({
+        configured: true,
+        ok: errors.length === 0,
+        products: summary.products,
+        skus: rows.length,
+        removed,
+        ...(errors.length ? { error: errors.join('; ') } : {}),
+      }, errors.length ? 502 : 200);
+    } catch (e) {
+      return json({ configured: true, ok: false, error: `No se pudo importar el catálogo: ${(e as Error).message}` }, 502);
     }
   }
 

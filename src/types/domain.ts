@@ -912,14 +912,18 @@ export interface QuoteLine {
 }
 
 /**
- * A catalog product imported from the Ligne Roset price-list CSV. The
- * searchable catalog behind "Agregar artículo": picking one autofills the
- * quote line and snapshots `cost` onto it for the margin view. `priceUsd` is
- * the list (Retail) price; `cost` is the real wholesale cost.
+ * A catalog product — one priced SKU of a BRAND catalog. The searchable
+ * catalog behind "Agregar artículo": picking one autofills the quote line and
+ * snapshots `cost` onto it for the margin view. `priceUsd` is the list
+ * (Retail) price; `cost` is the real wholesale cost. Each brand imports in its
+ * own manner (see PRODUCT_BRANDS in lib/constants): Ligne Roset from the
+ * price-list CSV, LifestyleGarden from the team's Shopify store.
  */
 export interface Product {
   id: string;
   profileId: string;
+  /** Brand catalog this row belongs to — a PRODUCT_BRANDS id. */
+  brand?: string;
   reference: string;
   name?: string;
   subtype?: string;

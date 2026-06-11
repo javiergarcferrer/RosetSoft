@@ -20,7 +20,9 @@ import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
 import AdminMaterials from './pages/admin/Materials.jsx';
+import AdminCatalogs from './pages/admin/Catalogs.jsx';
 import AdminCatalog from './pages/admin/Catalog.jsx';
+import AdminCatalogLifestyleGarden from './pages/admin/CatalogLifestyleGarden.jsx';
 import AccountingWorkspace from './pages/accounting/Workspace.jsx';
 import AccountingDashboard from './pages/accounting/Dashboard.jsx';
 import AccountingLedger from './pages/accounting/Ledger.jsx';
@@ -231,7 +233,13 @@ function ProtectedApp() {
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
-            <Route path="admin/catalog" element={<AdminCatalog />} />
+            {/* Catálogos — the brand-catalog section: an index of brands, each
+                with its own page + import manner. /admin/catalog (the old
+                Roset-only URL) is the index now; old bookmarks land one click
+                from the Roset page. */}
+            <Route path="admin/catalog" element={<AdminCatalogs />} />
+            <Route path="admin/catalog/roset" element={<AdminCatalog />} />
+            <Route path="admin/catalog/lifestylegarden" element={<AdminCatalogLifestyleGarden />} />
             {/* Accounting surface — a single workspace page that
                 rolls cotizaciones aceptadas, comisiones por pagar, and
                 the Odoo CSV exports into one table-first view. The

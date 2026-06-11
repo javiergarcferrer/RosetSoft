@@ -1,0 +1,362 @@
+import { memo, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Check, ChevronRight, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
+import { useLiveQueryStatus } from '../../db/hooks.js';
+import { searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
+import { useApp } from '../../context/AppContext.jsx';
+import PageHeader from '../../components/PageHeader.jsx';
+import EmptyState from '../../components/EmptyState.jsx';
+import ListLoading from '../../components/ListLoading.jsx';
+import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import { formatMoney } from '../../lib/format.js';
+import { importLifestyleGardenCatalog } from '../../lib/shopifySync.js';
+import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
+
+/**
+ * Catálogo LifestyleGarden — the second brand catalog. Its particular import
+ * manner is a one-click SYNC from the team's own Shopify store
+ * (www.lifestylegarden.do): the shopify-sync Edge Function pulls every ACTIVE
+ * product (what the public site shows) and upserts it into `products` with
+ * brand 'lifestylegarden'; products that left the store are removed.
+ *
+ * Browse mirrors the Roset catalog page (category cards, lazy-loaded), but the
+ * MODEL grouping differs by nature of the source: a model = one Shopify
+ * PRODUCT (grouped by its handle in `familyCode`) and its members are the
+ * store VARIANTS — there are no fabric grades here.
+ */
+export default function CatalogLifestyleGarden() {
+  const { profileId, isAdmin } = useApp();
+  const [q, setQ] = useState('');
+  const [dq, setDq] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDq(q.trim()), 200);
+    return () => clearTimeout(id);
+  }, [q]);
+  const searching = dq.length > 0;
+
+  // refresh ticks after a sync so the live queries refetch the new rows.
+  const [refresh, setRefresh] = useState(0);
+  const { data: categories, loaded: catsLoaded, error: catsError } = useLiveQueryStatus(
+    () => (profileId ? catalogCategories(profileId, BRAND_LIFESTYLEGARDEN) : Promise.resolve([])),
+    [profileId, refresh],
+    [],
+  );
+  const total = useMemo(() => categories.reduce((n, c) => n + c.count, 0), [categories]);
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => sortCat(a.category, b.category)),
+    [categories],
+  );
+
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+
+  if (!isAdmin) {
+    return (
+      <>
+        <PageHeader title="Catálogo LifestyleGarden" subtitle=" " />
+        <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo de productos." />
+      </>
+    );
+  }
+
+  async function onSync() {
+    setBusy(true);
+    setError('');
+    setResult('');
+    try {
+      const r = await importLifestyleGardenCatalog();
+      if (r?.configured === false) {
+        setError('Shopify no está conectado. Conéctalo en Configuración → Shopify y vuelve a sincronizar.');
+      } else if (r?.ok === false || r?.error) {
+        setError(r?.error || 'No se pudo sincronizar el catálogo.');
+      } else {
+        const removed = Number(r?.removed) || 0;
+        setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${removed ? ` · ${removed} retirados` : ''}.`);
+        setRefresh((n) => n + 1);
+      }
+    } catch (e) {
+      console.error('[CatalogLifestyleGarden] sync failed:', e);
+      setError(e?.message || 'No se pudo sincronizar el catálogo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const emptyCatalog = !searching && catsLoaded && !catsError && total === 0;
+
+  return (
+    <>
+      <PageHeader
+        title="Catálogo LifestyleGarden"
+        subtitle={total > 0 ? `${total} producto(s)` : ' '}
+        actions={(
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={busy}
+            className="btn-primary disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Sincronizar desde Shopify
+          </button>
+        )}
+      />
+
+      {(result || error) && (
+        <div role={error ? 'alert' : 'status'} className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
+          error
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+        }`}>
+          {error ? <AlertTriangle size={14} className="flex-shrink-0" /> : <Check size={14} className="flex-shrink-0" />}
+          {error || result}
+        </div>
+      )}
+
+      {emptyCatalog ? (
+        <EmptyState
+          icon={PackageSearch}
+          title="Catálogo vacío"
+          description="Sincroniza la tienda Shopify de LifestyleGarden para tener su catálogo buscable al cotizar."
+          action={<button type="button" onClick={onSync} disabled={busy} className="btn-primary"><RefreshCw size={14} /> Sincronizar desde Shopify</button>}
+        />
+      ) : (
+        <>
+          <ListSearchHeader
+            searchValue={q}
+            onSearchChange={setQ}
+            searchPlaceholder="Buscar por referencia, nombre o colección…"
+            resultCount={searching ? undefined : sortedCategories.length}
+            resultNoun={['colección', 'colecciones']}
+          />
+
+          {searching ? (
+            <SearchResults profileId={profileId} term={dq} />
+          ) : !catsLoaded ? (
+            <div className="card overflow-hidden"><ListLoading rows={6} /></div>
+          ) : catsError ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No se pudo cargar el catálogo"
+              description="La columna de marca aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga."
+            />
+          ) : (
+            <div className="space-y-3">
+              {sortedCategories.map((c) => (
+                <CategoryCard
+                  key={c.category || NONE_KEY}
+                  profileId={profileId}
+                  category={c.category}
+                  count={c.count}
+                  refresh={refresh}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
+const NO_CATEGORY = 'Sin colección';
+const NONE_KEY = '__none__';
+const SEARCH_LIMIT = 1000;
+
+function sortCat(a, b) {
+  if (!a && b) return 1;
+  if (a && !b) return -1;
+  return (a || '').localeCompare(b || '', 'es', { sensitivity: 'base' });
+}
+
+/**
+ * The Shopify-product title behind a row — the row's `name` minus the
+ * " · variant" suffix the import appends (subtype carries the variant alone),
+ * so a multi-variant product folds back into ONE model header.
+ */
+function modelTitleOf(p) {
+  const name = p.name || p.reference || '—';
+  const v = p.subtype || '';
+  return v && name.endsWith(` · ${v}`) ? name.slice(0, name.length - v.length - 3) : name;
+}
+
+/** Group rows into MODELS — one per Shopify product (familyCode = handle). */
+function groupModels(products) {
+  const byHandle = new Map();
+  for (const p of products || []) {
+    const key = p.familyCode || p.id;
+    const m = byHandle.get(key);
+    if (m) m.members.push(p);
+    else byHandle.set(key, { key, name: modelTitleOf(p), members: [p] });
+  }
+  const models = [...byHandle.values()];
+  for (const m of models) {
+    m.members.sort((a, b) => (Number(a.priceUsd) || 0) - (Number(b.priceUsd) || 0));
+  }
+  return models.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+}
+
+/** "$X" for one price, "$lo – $hi" across a model's variants. */
+function priceRangeLabel(model) {
+  const prices = model.members.map((p) => Number(p.priceUsd) || 0).filter((n) => n > 0);
+  if (!prices.length) return '—';
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  return lo === hi ? usd(lo) : `${usd(lo)} – ${usd(hi)}`;
+}
+
+/** One CATEGORY (collection) card — collapsed; first open lazy-loads its rows. */
+function CategoryCard({ profileId, category, count, refresh }) {
+  const [everOpened, setEverOpened] = useState(false);
+  const label = category || NO_CATEGORY;
+  return (
+    <details
+      className="card overflow-clip group/cat"
+      onToggle={(e) => { if (e.currentTarget.open) setEverOpened(true); }}
+    >
+      <summary className="card-header cursor-pointer list-none select-none transition-colors hover:bg-ink-50 active:bg-ink-100">
+        <span className="flex items-center gap-2 min-w-0">
+          <ChevronRight
+            size={15}
+            className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
+            aria-hidden
+          />
+          <span className="font-semibold text-sm text-ink-900 truncate" title={label}>{label}</span>
+        </span>
+        <span className="eyebrow-xs flex-shrink-0">{count} SKU</span>
+      </summary>
+      {everOpened && <CategoryModels profileId={profileId} category={category} refresh={refresh} />}
+    </details>
+  );
+}
+
+function CategoryModels({ profileId, category, refresh }) {
+  const { data: products, loaded, error } = useLiveQueryStatus(
+    () => productsByCategory(profileId, category, BRAND_LIFESTYLEGARDEN),
+    [profileId, category, refresh],
+    [],
+  );
+  const models = useMemo(() => groupModels(products), [products]);
+
+  if (!loaded) {
+    return (
+      <div className="px-5 py-6 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
+        <Loader2 size={15} className="animate-spin" /> Cargando…
+      </div>
+    );
+  }
+  if (error) {
+    return <div className="px-5 py-4 text-sm text-red-700">No se pudieron cargar los productos.</div>;
+  }
+  if (models.length === 0) {
+    return <div className="px-5 py-4 text-sm text-ink-500">Sin productos en esta colección.</div>;
+  }
+  return <ModelList models={models} />;
+}
+
+function SearchResults({ profileId, term }) {
+  const { data: rows, loaded } = useLiveQueryStatus(
+    () => searchProducts(profileId, term, SEARCH_LIMIT, BRAND_LIFESTYLEGARDEN),
+    [profileId, term],
+    [],
+  );
+  const sections = useMemo(() => {
+    const byCategory = new Map();
+    for (const p of rows || []) {
+      const key = (p.category || '').trim();
+      const bucket = byCategory.get(key);
+      if (bucket) bucket.push(p);
+      else byCategory.set(key, [p]);
+    }
+    return [...byCategory.entries()]
+      .map(([category, items]) => ({ category, count: items.length, models: groupModels(items) }))
+      .sort((a, b) => sortCat(a.category, b.category));
+  }, [rows]);
+
+  if (!loaded) {
+    return <div className="card overflow-hidden"><ListLoading rows={6} /></div>;
+  }
+  if (sections.length === 0) {
+    return <div className="card px-4 py-10 text-center text-sm text-ink-400">Sin coincidencias para esa búsqueda.</div>;
+  }
+  return (
+    <>
+      <p className="mb-3 text-xs text-ink-500" aria-live="polite">
+        {rows.length === 1 ? '1 producto' : `${rows.length} productos`}
+      </p>
+      <div className="space-y-3">
+        {sections.map((s) => (
+          <details open key={s.category || NONE_KEY} className="card overflow-hidden group/cat">
+            <summary className="card-header cursor-pointer list-none select-none transition-colors hover:bg-ink-50 active:bg-ink-100">
+              <span className="flex items-center gap-2 min-w-0">
+                <ChevronRight
+                  size={15}
+                  className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
+                  aria-hidden
+                />
+                <span className="font-semibold text-sm text-ink-900 truncate" title={s.category || NO_CATEGORY}>
+                  {s.category || NO_CATEGORY}
+                </span>
+              </span>
+              <span className="eyebrow-xs flex-shrink-0">{s.models.length} modelo(s) · {s.count} SKU</span>
+            </summary>
+            <ModelList models={s.models} />
+          </details>
+        ))}
+      </div>
+      {rows.length >= SEARCH_LIMIT && (
+        <div className="px-4 py-2 text-[11px] text-ink-500">
+          Mostrando los primeros {SEARCH_LIMIT}. Afina la búsqueda para ver más.
+        </div>
+      )}
+    </>
+  );
+}
+
+function ModelList({ models }) {
+  return (
+    <div className="divide-y divide-ink-100">
+      {models.map((m) => (
+        <ModelRow key={m.key} model={m} />
+      ))}
+    </div>
+  );
+}
+
+/** One MODEL (Shopify product) row; expanding lists its variant SKUs. */
+const ModelRow = memo(function ModelRow({ model }) {
+  return (
+    <details className="group/model [content-visibility:auto] [contain-intrinsic-size:auto_42px]">
+      <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 coarse:py-3 flex items-center justify-between gap-2 hover:bg-ink-50 active:bg-ink-100 transition-colors min-w-0">
+        <span className="flex items-center gap-2 min-w-0 flex-1">
+          <ChevronRight
+            size={13}
+            className="text-ink-400 flex-shrink-0 transition-transform duration-150 group-open/model:rotate-90"
+            aria-hidden
+          />
+          <span className="font-medium text-sm text-ink-800 truncate" title={model.name}>{model.name}</span>
+          <span className="eyebrow-xs flex-shrink-0 hidden sm:inline">
+            {model.members.length} {model.members.length === 1 ? 'SKU' : 'SKUs'}
+          </span>
+        </span>
+        <span className="text-sm tabular-nums font-medium text-ink-700 whitespace-nowrap flex-shrink-0">
+          {priceRangeLabel(model)}
+        </span>
+      </summary>
+      <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-8 sm:pl-10 pr-3 sm:pr-4 pb-1.5">
+        {model.members.map((p) => (
+          <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm hover:bg-ink-100/40 rounded transition-colors -mx-1 px-1 min-w-0">
+            <span className="font-mono text-xs text-ink-500 flex-shrink-0 w-24 min-[400px]:w-32 truncate" title={p.reference}>
+              {p.reference}
+            </span>
+            <span className="text-ink-500 text-xs truncate flex-1 min-w-0 hidden min-[400px]:inline" title={p.subtype || ''}>
+              {p.subtype || ''}
+            </span>
+            <span className="tabular-nums text-right flex-shrink-0 font-medium text-ink-800 ml-auto">{usd(p.priceUsd)}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+});

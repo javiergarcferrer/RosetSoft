@@ -1,0 +1,170 @@
+/**
+ * Tests for supabase/functions/shopify-sync/catalogImport.ts — the pure
+ * mapping from the team's Shopify store (www.lifestylegarden.do) to
+ * `products` rows, brand 'lifestylegarden'. Pins the data-integrity rules the
+ * import must keep: the inventory-mirror products this same function PUBLISHES
+ * never feed back in, only ACTIVE products import, references stay unique, and
+ * category/family come from the range collection named in the title.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { mapShopifyCatalog, rangeOf, LSG_BRAND } from '../supabase/functions/shopify-sync/catalogImport.ts';
+
+const CTX = { profileId: 'team', nowIso: '2026-06-11T12:00:00.000Z' };
+
+const collections = (...titles) => ({ nodes: titles.map((title) => ({ title })) });
+
+function product(over = {}) {
+  return {
+    id: 'gid://shopify/Product/7278853587046',
+    title: 'Garnet Lounge Chair - Copen Blue',
+    handle: 'garnet-lounge-chair-copen-blue',
+    productType: '',
+    status: 'ACTIVE',
+    collections: collections('Garnet', 'Plazas', 'Sets'),
+    variants: { nodes: [defaultVariant()] },
+    ...over,
+  };
+}
+
+function defaultVariant(over = {}) {
+  return {
+    id: 'gid://shopify/ProductVariant/41476206493798',
+    title: 'Default Title',
+    sku: '7166540001, 8104379000',
+    price: '988.20',
+    inventoryItem: { unitCost: null },
+    ...over,
+  };
+}
+
+/* --------------------------------- mapping --------------------------------- */
+
+test('maps an active default-variant product to one catalog row', () => {
+  const { rows, summary } = mapShopifyCatalog([product()], CTX);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0], {
+    id: 'lsg-41476206493798',
+    profile_id: 'team',
+    brand: LSG_BRAND,
+    reference: '7166540001, 8104379000',
+    name: 'Garnet Lounge Chair - Copen Blue',
+    subtype: '',
+    dimensions: '',
+    family: 'Garnet',
+    family_code: 'garnet-lounge-chair-copen-blue',
+    category: 'Garnet',
+    price_usd: 988.2,
+    cost: null,
+    active: true,
+    updated_at: CTX.nowIso,
+  });
+  assert.equal(summary.products, 1);
+});
+
+test('a real variant joins the name and fills the subtype slot', () => {
+  const { rows } = mapShopifyCatalog([product({
+    variants: { nodes: [
+      defaultVariant({ id: 'gid://shopify/ProductVariant/1', title: 'Teak', sku: 'A-1' }),
+      defaultVariant({ id: 'gid://shopify/ProductVariant/2', title: 'White', sku: 'A-2', price: '1000' }),
+    ] },
+  })], CTX);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].name, 'Garnet Lounge Chair - Copen Blue · Teak');
+  assert.equal(rows[0].subtype, 'Teak');
+  assert.equal(rows[1].id, 'lsg-2');
+  assert.equal(rows[1].price_usd, 1000);
+  // Both variants share the product's handle → one model in the catalog page.
+  assert.equal(rows[0].family_code, rows[1].family_code);
+});
+
+test('parses the wholesale cost when Shopify carries one', () => {
+  const { rows } = mapShopifyCatalog([product({
+    variants: { nodes: [defaultVariant({ inventoryItem: { unitCost: { amount: '512.34' } } })] },
+  })], CTX);
+  assert.equal(rows[0].cost, 512.34);
+});
+
+test('a missing SKU falls back to a stable variant-id reference', () => {
+  const { rows } = mapShopifyCatalog([product({
+    variants: { nodes: [defaultVariant({ sku: '  ' })] },
+  })], CTX);
+  assert.equal(rows[0].reference, 'LSG-41476206493798');
+});
+
+test('squishes whitespace runs like the LR CSV import does', () => {
+  const { rows } = mapShopifyCatalog([product({
+    title: '  Garnet   Lounge  Chair ',
+    collections: collections('Garnet'),
+    variants: { nodes: [defaultVariant({ sku: ' 7166540001,  8104379000 ' })] },
+  })], CTX);
+  assert.equal(rows[0].name, 'Garnet Lounge Chair');
+  assert.equal(rows[0].reference, '7166540001, 8104379000');
+});
+
+/* ----------------------------- exclusion rules ----------------------------- */
+
+test('NEVER imports the inventory-mirror products the sync publishes (inv-*)', () => {
+  const { rows, summary } = mapShopifyCatalog([
+    product({ handle: 'inv-abc123', title: 'Togo Fireside Chair' }),
+    product(),
+  ], CTX);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].family_code, 'garnet-lounge-chair-copen-blue');
+  assert.equal(summary.skippedInventory, 1);
+});
+
+test('only ACTIVE products import — drafts are out-of-assortment', () => {
+  const { rows, summary } = mapShopifyCatalog([
+    product({ status: 'DRAFT' }),
+    product({ status: 'ARCHIVED' }),
+    product(),
+  ], CTX);
+  assert.equal(rows.length, 1);
+  assert.equal(summary.skippedInactive, 2);
+  assert.equal(summary.products, 1);
+});
+
+test('duplicate references keep the FIRST row (unique per profile with LR SKUs)', () => {
+  const { rows, summary } = mapShopifyCatalog([
+    product(),
+    product({ id: 'gid://shopify/Product/2', handle: 'other', variants: { nodes: [defaultVariant({ id: 'gid://shopify/ProductVariant/99', price: '1.00' })] } }),
+  ], CTX);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, 'lsg-41476206493798');
+  assert.equal(summary.duplicateRefs, 1);
+});
+
+/* ------------------------------ range / category ------------------------------ */
+
+test('rangeOf picks the LONGEST collection title found in the product title', () => {
+  assert.equal(rangeOf({
+    title: 'Panama Dark Corner Sofa',
+    collections: collections('Sofas', 'Panama', 'Panama Dark'),
+  }), 'Panama Dark');
+});
+
+test('type-only collections (not in the title) are not a range', () => {
+  assert.equal(rangeOf({ title: 'Folding Tray', collections: collections('Mesas', 'Otros') }), '');
+});
+
+test('category falls back: range → productType → first collection → empty', () => {
+  const base = { variants: { nodes: [defaultVariant()] } };
+  const pick = (p) => mapShopifyCatalog([product({ ...base, ...p })], CTX).rows[0];
+  // No range match, productType present → productType.
+  assert.equal(
+    pick({ title: 'Folding Tray', productType: 'Accesorios', collections: collections('Otros') }).category,
+    'Accesorios',
+  );
+  // No range, no productType → first collection.
+  assert.equal(
+    pick({ title: 'Folding Tray', collections: collections('Otros', 'Mesas') }).category,
+    'Otros',
+  );
+  // Nothing at all → empty ("Sin colección" bucket), family empty too.
+  const bare = pick({ title: 'Folding Tray', collections: { nodes: [] } });
+  assert.equal(bare.category, '');
+  assert.equal(bare.family, '');
+});

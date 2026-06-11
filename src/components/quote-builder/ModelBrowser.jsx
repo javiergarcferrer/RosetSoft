@@ -202,7 +202,7 @@ function PickerBrowse({ profileId, onPick }) {
   if (error || sorted.length === 0) {
     return (
       <div className="px-3 py-10 text-center text-sm text-ink-500">
-        Catálogo vacío. Impórtalo en <b>Administración › Catálogo Roset</b>.
+        Catálogo vacío. Impórtalo en <b>Administración › Catálogos</b>.
       </div>
     );
   }

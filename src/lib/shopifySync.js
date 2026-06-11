@@ -72,6 +72,16 @@ export async function syncShopify(itemIds) {
 }
 
 /**
+ * Pull the LifestyleGarden catalog (the store's ACTIVE products — what
+ * lifestylegarden.do shows) into `products`, brand 'lifestylegarden'. Returns
+ * the function's summary ({ ok, products, skus, removed } or
+ * { configured:false } / { ok:false, error }).
+ */
+export async function importLifestyleGardenCatalog() {
+  return invokeShopify({ importCatalog: true });
+}
+
+/**
  * Verify the saved connection: does the token reach the store, and was the
  * custom app granted every scope the sync needs? Returns
  * { configured:false } when no token is saved, { ok:true, shop, missingScopes }

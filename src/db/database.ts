@@ -464,9 +464,14 @@ export const db: Db = Object.fromEntries(
  * term returns the first `limit` rows by name — a bounded browse set. Names are
  * whitespace-normalized at import (priceListCsv.squish) so a single-space query
  * matches a double-spaced source name.
+ *
+ * `brand` (optional — a products.brand id, lib/constants) narrows to ONE brand
+ * catalog; omitted, the search spans every brand (the quote builder quotes
+ * them all). Same contract on catalogCategories / productsByCategory.
  */
-export async function searchProducts(profileId: string, term: string, limit = 400): Promise<Product[]> {
+export async function searchProducts(profileId: string, term: string, limit = 400, brand?: string): Promise<Product[]> {
   let q = supabase.from('products').select('*').eq('profile_id', profileId);
+  if (brand) q = q.eq('brand', brand);
   const needle = term.trim();
   if (needle) {
     // PostgREST or() is a comma-separated list and ilike treats % as the
@@ -509,8 +514,13 @@ export interface CatalogCategory {
  * column and dedupes client-side: slower, but it works under the existing
  * team-read RLS so the page degrades gracefully instead of breaking.
  */
-export async function catalogCategories(profileId: string): Promise<CatalogCategory[]> {
-  const { data, error } = await supabase.rpc('catalog_categories', { p_profile_id: profileId });
+export async function catalogCategories(profileId: string, brand?: string): Promise<CatalogCategory[]> {
+  // p_brand is passed only when filtering, so the call still matches the old
+  // single-arg function signature on a DB the brand migration hasn't reached.
+  const { data, error } = await supabase.rpc(
+    'catalog_categories',
+    brand ? { p_profile_id: profileId, p_brand: brand } : { p_profile_id: profileId },
+  );
   if (!error && Array.isArray(data)) {
     return (data as Array<{ category?: string | null; sku_count?: number | string }>).map((r) => ({
       category: (r.category || '').trim(),
@@ -518,17 +528,19 @@ export async function catalogCategories(profileId: string): Promise<CatalogCateg
     }));
   }
   if (error) console.warn('[catalog] catalog_categories RPC unavailable, falling back:', error.message);
-  return catalogCategoriesFallback(profileId);
+  return catalogCategoriesFallback(profileId, brand);
 }
 
-async function catalogCategoriesFallback(profileId: string): Promise<CatalogCategory[]> {
+async function catalogCategoriesFallback(profileId: string, brand?: string): Promise<CatalogCategory[]> {
   const PAGE = 1000;
   const counts = new Map<string, number>();
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+    let q = supabase
       .from('products')
       .select('category')
-      .eq('profile_id', profileId)
+      .eq('profile_id', profileId);
+    if (brand) q = q.eq('brand', brand);
+    const { data, error } = await q
       .order('id')
       .range(from, from + PAGE - 1);
     if (error) throw error;
@@ -548,11 +560,12 @@ async function catalogCategoriesFallback(profileId: string): Promise<CatalogCate
  * category (Upholstery) comes back whole; an empty `category` matches the
  * null/blank bucket. The caller groups these into models via `groupFamilies`.
  */
-export async function productsByCategory(profileId: string, category: string): Promise<Product[]> {
+export async function productsByCategory(profileId: string, category: string, brand?: string): Promise<Product[]> {
   const PAGE = 1000;
   let out: unknown[] = [];
   for (let from = 0; ; from += PAGE) {
     let q = supabase.from('products').select('*').eq('profile_id', profileId);
+    if (brand) q = q.eq('brand', brand);
     q = category ? q.eq('category', category) : q.or('category.is.null,category.eq.');
     const { data, error } = await q.order('name').order('id').range(from, from + PAGE - 1);
     if (error) throw error;

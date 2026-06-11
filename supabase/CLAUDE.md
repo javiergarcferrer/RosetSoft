@@ -66,6 +66,12 @@ quote_lines · containers · materials`. Field-by-field shapes are in
 - **images** metadata for objects in Storage; `kind` + `owner_id` tag the owner
   (e.g. `quote-line-swatch`/`material-color`). Bytes via `saveImage` /
   `downloadImageBytes`.
+- **products** the BRAND catalogs behind the quote builder's picker; one row per
+  priced SKU. `brand` ∈ `ligne-roset` (price-list CSV import, `id` = SKU) |
+  `lifestylegarden` (pulled from the team's Shopify store by `shopify-sync`'s
+  `importCatalog` mode, `id` = `lsg-<variantId>`). Unique `(profile_id,
+  reference)` ACROSS brands. Category aggregate via the `catalog_categories`
+  SQL fn (optional `p_brand` filter).
 
 ## Cross-cutting
 - **RLS:** single-tenant "team can write" — most tables: `for all to

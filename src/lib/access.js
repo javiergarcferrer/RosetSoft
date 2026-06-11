@@ -39,7 +39,7 @@ const ADMIN_GROUP = {
   items: [
     { to: '/admin/users', label: 'Usuarios', icon: Shield },
     { to: '/admin/materials', label: 'Materiales', icon: Layers },
-    { to: '/admin/catalog', label: 'Catálogo Roset', icon: PackageSearch },
+    { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
     { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
   ],
 };

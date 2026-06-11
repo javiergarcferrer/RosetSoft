@@ -131,3 +131,18 @@ export const QUOTE_STATUS_SENT:     QuoteStatus = 'sent';
 export const QUOTE_STATUS_ACCEPTED: QuoteStatus = 'accepted';
 export const QUOTE_STATUS_DECLINED: QuoteStatus = 'declined';
 export const QUOTE_STATUS_ARCHIVED: QuoteStatus = 'archived';
+
+/* ----------------------------------- brand catalogs ----------------------------------- */
+
+/**
+ * `products.brand` discriminator — which BRAND catalog a product row belongs
+ * to. Each brand imports in its own manner; the admin Catálogos section has
+ * one page per brand:
+ *   • ligne-roset      — the supplier price-list CSV upload.
+ *   • lifestylegarden  — pulled from the team's Shopify store
+ *     (www.lifestylegarden.do) by the shopify-sync Edge Function's
+ *     importCatalog mode (the Deno side duplicates the literal on purpose —
+ *     code never crosses the wall).
+ */
+export const BRAND_LIGNE_ROSET = 'ligne-roset';
+export const BRAND_LIFESTYLEGARDEN = 'lifestylegarden';
