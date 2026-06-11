@@ -43,6 +43,9 @@ export interface CatalogFamily {
   /** Display name (Description 1 of the members). */
   name: string;
   family: string;
+  /** Brand catalog the members belong to (products.brand; '' when unknown).
+   *  Members never span brands — the root IS a brand's reference. */
+  brand: string;
   /** Grade letters this model is offered in, in price order (asc). */
   grades: string[];
   /** grade letter → the product (SKU variant) for that grade. */
@@ -61,10 +64,11 @@ export function groupFamilies(products: readonly Product[] | null | undefined): 
     const { root, grade } = splitSkuGrade(p.reference);
     let fam = families.get(root);
     if (!fam) {
-      fam = { root, name: p.name || '', family: p.family || '', grades: [], byGrade: new Map(), graded: false };
+      fam = { root, name: p.name || '', family: p.family || '', brand: p.brand || '', grades: [], byGrade: new Map(), graded: false };
       families.set(root, fam);
     }
     if (!fam.name && p.name) fam.name = p.name;
+    if (!fam.brand && p.brand) fam.brand = p.brand;
     // Key by grade letter, or '' for a truly ungraded SKU.
     fam.byGrade.set(grade || '', p);
   }

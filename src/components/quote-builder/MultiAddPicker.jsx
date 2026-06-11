@@ -8,6 +8,7 @@ import { searchProducts } from '../../db/database.js';
 import { groupFamilies, productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 import { formatMoney } from '../../lib/format.js';
+import { brandName } from '../../lib/constants.js';
 
 /**
  * Multi-add — the fast path for assembling a modular composition from its
@@ -186,8 +187,10 @@ function MultiRow({ fam, grade, checked, onToggle }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-ink-900 truncate">{fam.name || fam.root}</span>
+        {/* Search spans every brand catalog — lead with the brand so a Roset
+            element and a LifestyleGarden piece can't be confused mid-tick. */}
         <span className="block text-[11px] text-ink-500 truncate">
-          {[fam.family, fam.graded ? `${fam.grades.length} grados` : null].filter(Boolean).join(' · ')}
+          {[brandName(fam.brand), fam.family, fam.graded ? `${fam.grades.length} grados` : null].filter(Boolean).join(' · ')}
         </span>
       </span>
       <span className="text-xs tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">{priceLabel}</span>

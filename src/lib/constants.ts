@@ -146,3 +146,17 @@ export const QUOTE_STATUS_ARCHIVED: QuoteStatus = 'archived';
  */
 export const BRAND_LIGNE_ROSET = 'ligne-roset';
 export const BRAND_LIFESTYLEGARDEN = 'lifestylegarden';
+
+/** Every brand catalog, in display order — what a brand switcher iterates. */
+export const ALL_BRANDS: string[] = [BRAND_LIGNE_ROSET, BRAND_LIFESTYLEGARDEN];
+
+/** brand id → human name (chips, tabs, page titles). */
+export const BRAND_NAMES: Record<string, string> = {
+  [BRAND_LIGNE_ROSET]: 'Ligne Roset',
+  [BRAND_LIFESTYLEGARDEN]: 'LifestyleGarden',
+};
+
+/** Human name for a brand id; falls back to the raw id so an unknown/legacy
+ *  value still renders something identifiable rather than a blank. */
+export const brandName = (brand: string | null | undefined): string =>
+  (brand && (BRAND_NAMES[brand] || brand)) || '';
