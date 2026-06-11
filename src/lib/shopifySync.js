@@ -19,12 +19,16 @@ export const SHOPIFY_STORE_ALCOVER = 'alcover';
 export const SHOPIFY_STORE_LSG = 'lifestylegarden';
 
 /**
- * Save (or replace) one store's Shopify connection. The token goes to the
- * write-only shopify_config table via `save_shopify_config`; domain +
- * connected-at land on that store's settings mirror so the UI can show
- * "connected" without ever reading the token back.
+ * Save (or replace) one store's Shopify connection. Two credential shapes:
+ *   • Dev Dashboard app (the CURRENT Shopify flow): `clientId` + `clientSecret`
+ *     from the app's Settings page — the Edge Function exchanges them for a
+ *     short-lived token on every call (client credentials grant).
+ *   • Legacy in-admin custom app: a static Admin `token` (shpat_…).
+ * Either goes to the write-only shopify_config table via `save_shopify_config`;
+ * domain + connected-at land on that store's settings mirror so the UI can
+ * show "connected" without ever reading the secret back.
  */
-export async function saveShopifyConfig({ domain, token, store = SHOPIFY_STORE_ALCOVER, profileId = TEAM_PROFILE_ID }) {
+export async function saveShopifyConfig({ domain, token, clientId, clientSecret, store = SHOPIFY_STORE_ALCOVER, profileId = TEAM_PROFILE_ID }) {
   const d = String(domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
   if (!d) throw new Error('Ingresa el dominio .myshopify.com de tu tienda (Shopify → Configuración → Dominios).');
   // The Admin API only answers on the canonical *.myshopify.com host — a
@@ -34,15 +38,24 @@ export async function saveShopifyConfig({ domain, token, store = SHOPIFY_STORE_A
     throw new Error('Ese no es un dominio .myshopify.com. Cópialo exacto de Shopify → Configuración → Dominios (p. ej. alcoversdq.myshopify.com — no tu dominio público alcover.do / lifestylegarden.do).');
   }
   const t = String(token || '').trim();
-  if (!t) throw new Error('Ingresa el Admin API access token (shpat_…).');
-  // The custom-app Admin API access token always starts with `shpat_`. The
-  // similarly-named API key (`shpck_`/hex) and API secret key (`shpss_`) sit
-  // right next to it on the credentials page and are the usual wrong paste —
-  // catch them here with a clear message instead of a Shopify 401 later.
-  if (!/^shpat_/.test(t)) {
-    throw new Error('Eso no es un Admin API access token. Debe empezar con “shpat_”. En tu app personalizada de Shopify: Credenciales de API → Admin API access token (no la API key ni la API secret key shpss_…).');
+  const cid = String(clientId || '').trim();
+  const csec = String(clientSecret || '').trim();
+  if (cid || csec) {
+    if (!cid || !csec) throw new Error('Ingresa el Client ID y el Client secret de la app (Dev Dashboard → tu app → Settings).');
+  } else {
+    if (!t) throw new Error('Ingresa el Client ID + Client secret de la app del Dev Dashboard, o un Admin API access token (shpat_…) de una app personalizada clásica.');
+    // The legacy custom-app Admin API access token always starts with `shpat_`.
+    // The similarly-named API key (`shpck_`/hex) and API secret key (`shpss_`)
+    // sit right next to it on the credentials page and are the usual wrong
+    // paste — catch them here instead of as a Shopify 401 later.
+    if (!/^shpat_/.test(t)) {
+      throw new Error('Eso no es un Admin API access token (debe empezar con “shpat_”). Si tu app es del Dev Dashboard, usa el modo Client ID + Client secret.');
+    }
   }
-  const { error } = await supabase.rpc('save_shopify_config', { p_domain: d, p_token: t, p_store: store });
+  const { error } = await supabase.rpc('save_shopify_config', {
+    p_domain: d, p_token: cid ? null : t, p_store: store,
+    p_client_id: cid || null, p_client_secret: csec || null,
+  });
   if (error) throw new Error(error.message || 'No se pudo guardar la conexión con Shopify.');
   await updateSettings(profileId, store === SHOPIFY_STORE_LSG
     ? { shopifyLsgDomain: d, shopifyLsgConnectedAt: Date.now() }

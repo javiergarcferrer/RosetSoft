@@ -578,6 +578,12 @@ function ShopifyCard({ settings, store }) {
   const cfg = SHOPIFY_STORES[store];
   const savedDomain = settings?.[cfg.domainField] || '';
   const [domain, setDomain] = useState(savedDomain || cfg.defaultDomain);
+  // Credential mode: 'dashboard' = the CURRENT Shopify flow (a Dev Dashboard
+  // app's Client ID + Client secret; the server mints short-lived tokens) —
+  // 'token' = the legacy in-admin custom app's static shpat_ token.
+  const [mode, setMode] = useState('dashboard');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [token, setToken] = useState('');
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
   const [msg, setMsg] = useState('');
@@ -590,8 +596,11 @@ function ShopifyCard({ settings, store }) {
     setStatus('saving');
     setMsg('');
     try {
-      await saveShopifyConfig({ domain, token, store });
+      await saveShopifyConfig(mode === 'dashboard'
+        ? { domain, clientId, clientSecret, store }
+        : { domain, token, store });
       setToken('');
+      setClientSecret('');
       // Verify the token actually reaches the store before claiming success —
       // a bad or under-scoped credential is caught here, not later as "0 published".
       const ping = await pingShopify(store);
@@ -599,7 +608,7 @@ function ShopifyCard({ settings, store }) {
         const missing = ping.missingScopes || [];
         setStatus(missing.length ? 'error' : 'saved');
         setMsg(missing.length
-          ? `Conectado a ${ping.shop}, pero la app no tiene estos permisos: ${missing.join(', ')}. Añádelos en tu app de Shopify y vuelve a pegar el token.`
+          ? `Conectado a ${ping.shop}, pero la app no tiene estos permisos: ${missing.join(', ')}. Añádelos a la app en Shopify (y reinstálala en la tienda) y vuelve a guardar.`
           : `Conectado a ${ping.shop}. ✓`);
       } else {
         setStatus('error');
@@ -645,21 +654,50 @@ function ShopifyCard({ settings, store }) {
       <p className="text-xs text-ink-500 mb-4">
         {cfg.description}{' '}
         Usa el dominio <code>.myshopify.com</code> de ESA tienda (p. ej. <code>{cfg.defaultDomain}</code>,
-        no el dominio público) y el <strong>Admin API access token</strong> (<code>shpat_…</code>) de la
-        app personalizada creada en ESA tienda.
+        no el dominio público). Crea la app en el <strong>Dev Dashboard</strong> (dev.shopify.com),
+        instálala en la tienda con los permisos necesarios, y pega aquí el <strong>Client ID</strong> y
+        el <strong>Client secret</strong> de su página Settings — el sistema obtiene los tokens por sí
+        solo. (¿App personalizada clásica con token <code>shpat_…</code>? Cambia el modo abajo.)
       </p>
+      <div className="mb-3 inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
+        {[['dashboard', 'App del Dev Dashboard'], ['token', 'Token clásico (shpat_)']].map(([m, label]) => (
+          <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}
+            className={mode === m
+              ? 'px-3 py-1.5 min-h-8 coarse:min-h-11 bg-ink-900 text-ink-50'
+              : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label" htmlFor={`shopify-domain-${store}`}>Dominio</label>
           <input id={`shopify-domain-${store}`} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder={cfg.defaultDomain}
             className="input mt-1" />
         </div>
-        <div>
-          <label className="label" htmlFor={`shopify-token-${store}`}>Admin API token</label>
-          <input id={`shopify-token-${store}`} type="password" value={token} onChange={(e) => setToken(e.target.value)}
-            placeholder={connectedAt ? '•••••••• (guardado)' : 'shpat_…'}
-            className="input mt-1" />
-        </div>
+        {mode === 'dashboard' ? (
+          <>
+            <div>
+              <label className="label" htmlFor={`shopify-client-id-${store}`}>Client ID</label>
+              <input id={`shopify-client-id-${store}`} value={clientId} onChange={(e) => setClientId(e.target.value)}
+                placeholder="p. ej. 8b13…"
+                className="input mt-1" />
+            </div>
+            <div>
+              <label className="label" htmlFor={`shopify-client-secret-${store}`}>Client secret</label>
+              <input id={`shopify-client-secret-${store}`} type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={connectedAt ? '•••••••• (guardado)' : 'Secret de la app'}
+                className="input mt-1" />
+            </div>
+          </>
+        ) : (
+          <div>
+            <label className="label" htmlFor={`shopify-token-${store}`}>Admin API access token</label>
+            <input id={`shopify-token-${store}`} type="password" value={token} onChange={(e) => setToken(e.target.value)}
+              placeholder={connectedAt ? '•••••••• (guardado)' : 'shpat_…'}
+              className="input mt-1" />
+          </div>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">

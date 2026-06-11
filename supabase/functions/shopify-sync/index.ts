@@ -78,13 +78,43 @@ Deno.serve(async (req: Request) => {
     ? 'lifestylegarden'
     : 'alcover';
 
-  // That store's credentials (write-only table; service role reads).
+  // That store's credentials (write-only table; service role reads). A
+  // connection is EITHER a static Admin token (legacy in-admin custom app) OR
+  // a Dev Dashboard app's client id + secret, exchanged here for a 24-hour
+  // token (client credentials grant) on every call — no caching, the extra
+  // round-trip is nothing next to the sync itself.
   const { data: cfg } = await admin
-    .from('shopify_config').select('domain, access_token')
+    .from('shopify_config').select('domain, access_token, client_id, client_secret')
     .eq('profile_id', TEAM).eq('store', store).maybeSingle();
-  const domain = (cfg as { domain?: string } | null)?.domain;
-  const token = (cfg as { access_token?: string } | null)?.access_token;
-  if (!domain || !token) return json({ configured: false, store, message: 'Shopify no conectado' });
+  const c = cfg as { domain?: string; access_token?: string; client_id?: string; client_secret?: string } | null;
+  const domain = c?.domain;
+  let token = c?.access_token || '';
+  if (!domain || (!token && !(c?.client_id && c?.client_secret))) {
+    return json({ configured: false, store, message: 'Shopify no conectado' });
+  }
+  if (!token) {
+    const r = await fetch(`https://${domain}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: c!.client_id as string,
+        client_secret: c!.client_secret as string,
+      }),
+    });
+    const grant = await r.json().catch(() => null) as { access_token?: string; error?: string; error_description?: string } | null;
+    if (!r.ok || !grant?.access_token) {
+      // shop_not_permitted is the classic trip-up: the app and the store must
+      // sit in the SAME Dev Dashboard organization, and the app must be
+      // installed on the store.
+      const reason = grant?.error_description || grant?.error || `HTTP ${r.status}`;
+      return json({
+        configured: true, ok: false, store,
+        error: `Shopify rechazó las credenciales de la app para ${domain}: ${reason}. Verifica que la app del Dev Dashboard esté en la MISMA organización que la tienda y que esté instalada en ella.`,
+      }, 502);
+    }
+    token = grant.access_token;
+  }
 
   // GraphQL call that turns the two classic setup mistakes into their OWN
   // messages instead of a generic "invalid token": a wrong domain (the store

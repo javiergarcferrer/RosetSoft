@@ -73,8 +73,12 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   reference)` ACROSS brands. Category aggregate via the `catalog_categories`
   SQL fn (optional `p_brand` filter).
 - **shopify_config** WRITE-ONLY (no client policies; service role reads, the
-  `save_shopify_config(domain, token, store)` SECURITY DEFINER RPC writes). PK
-  `(profile_id, store)` — the team runs TWO Shopify stores, one row each:
+  `save_shopify_config(domain, token, store, client_id, client_secret)`
+  SECURITY DEFINER RPC writes). A row's credential is EITHER `access_token`
+  (legacy in-admin custom app, static `shpat_`) OR `client_id`+`client_secret`
+  (Dev Dashboard app — `shopify-sync` mints a 24h token per call via the
+  client-credentials grant; the app+store must share one Dev Dashboard org).
+  PK `(profile_id, store)` — the team runs TWO Shopify stores, one row each:
   `store='alcover'` (alcover.do = `alcoversdq.myshopify.com`, the inventory
   mirror `shopify-sync` PUBLISHES to) and `store='lifestylegarden'`
   (lifestylegarden.do = `alcoversrl.myshopify.com`, the catalog the
