@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, ExternalLink, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
+import ImageView from '../../components/ImageView.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -71,7 +72,8 @@ export default function CatalogLifestyleGarden() {
         setError(r?.error || 'No se pudo sincronizar el catálogo.');
       } else {
         const removed = Number(r?.removed) || 0;
-        setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${removed ? ` · ${removed} retirados` : ''}.`);
+        const images = Number(r?.images) || 0;
+        setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${images ? ` · ${images} fotos nuevas` : ''}${removed ? ` · ${removed} retirados` : ''}.`);
         setRefresh((n) => n + 1);
       }
     } catch (e) {
@@ -314,49 +316,89 @@ function SearchResults({ profileId, term }) {
   );
 }
 
+/** The card grid a category (or search section) renders its models in. */
 function ModelList({ models }) {
   return (
-    <div className="divide-y divide-ink-100">
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-3 sm:p-4">
       {models.map((m) => (
-        <ModelRow key={m.key} model={m} />
+        <ModelCard key={m.key} model={m} />
       ))}
     </div>
   );
 }
 
-/** One MODEL (Shopify product) row; expanding lists its variant SKUs. */
-const ModelRow = memo(function ModelRow({ model }) {
+/**
+ * One MODEL (Shopify product) as a CARD: the store photo, the full identity
+ * (name, range, references, variant axis), the price (range across variants)
+ * and the wholesale cost when Shopify carries one — plus the product's own
+ * page on lifestylegarden.do. Multi-variant models expand their SKU list in
+ * place.
+ */
+const ModelCard = memo(function ModelCard({ model }) {
+  const lead = model.members[0] || {};
+  const single = model.members.length === 1;
+  const storeUrl = lead.familyCode ? `https://www.lifestylegarden.do/products/${lead.familyCode}` : null;
   return (
-    <details className="group/model [content-visibility:auto] [contain-intrinsic-size:auto_42px]">
-      <summary className="cursor-pointer list-none select-none pl-6 sm:pl-8 pr-3 sm:pr-5 py-2.5 coarse:py-3 flex items-center justify-between gap-2 hover:bg-ink-50 active:bg-ink-100 transition-colors min-w-0">
-        <span className="flex items-center gap-2 min-w-0 flex-1">
-          <ChevronRight
-            size={13}
-            className="text-ink-400 flex-shrink-0 transition-transform duration-150 group-open/model:rotate-90"
-            aria-hidden
-          />
-          <span className="font-medium text-sm text-ink-800 truncate" title={model.name}>{model.name}</span>
-          <span className="eyebrow-xs flex-shrink-0 hidden sm:inline">
-            {model.members.length} {model.members.length === 1 ? 'SKU' : 'SKUs'}
-          </span>
-        </span>
-        <span className="text-sm tabular-nums font-medium text-ink-700 whitespace-nowrap flex-shrink-0">
-          {priceRangeLabel(model)}
-        </span>
-      </summary>
-      <ul className="divide-y divide-ink-100/60 bg-ink-50/40 pl-8 sm:pl-10 pr-3 sm:pr-4 pb-1.5">
-        {model.members.map((p) => (
-          <li key={p.id} className="flex items-center gap-2 py-1.5 text-sm hover:bg-ink-100/40 rounded transition-colors -mx-1 px-1 min-w-0">
-            <span className="font-mono text-xs text-ink-500 flex-shrink-0 w-24 min-[400px]:w-32 truncate" title={p.reference}>
-              {p.reference}
+    <div className="rounded-lg border border-ink-100 bg-white overflow-hidden flex flex-col shadow-xs [content-visibility:auto] [contain-intrinsic-size:auto_280px]">
+      <ImageView
+        id={lead.imageId}
+        fallbackUrl={lead.imageSrc || null}
+        alt={model.name}
+        hoverPreview
+        className="w-full aspect-[4/3] object-cover bg-ink-50"
+        placeholderClassName="w-full aspect-[4/3] bg-ink-50"
+      />
+      <div className="p-3 flex flex-col gap-1 flex-1 min-w-0">
+        {lead.family && <span className="eyebrow-xs truncate">{lead.family}</span>}
+        <span className="text-sm font-medium text-ink-900 leading-snug line-clamp-2" title={model.name}>{model.name}</span>
+        {single ? (
+          <span className="font-mono text-[11px] text-ink-500 truncate" title={lead.reference}>{lead.reference}</span>
+        ) : (
+          <span className="text-[11px] text-ink-500">{model.members.length} variantes</span>
+        )}
+        <div className="mt-auto pt-1 flex items-baseline justify-between gap-2">
+          <span className="text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap">{priceRangeLabel(model)}</span>
+          {lead.cost != null && single && (
+            <span className="text-[11px] tabular-nums text-ink-400 whitespace-nowrap" title="Costo mayorista (Shopify)">
+              costo {usd(lead.cost)}
             </span>
-            <span className="text-ink-500 text-xs truncate flex-1 min-w-0 hidden min-[400px]:inline" title={p.subtype || ''}>
-              {p.subtype || ''}
-            </span>
-            <span className="tabular-nums text-right flex-shrink-0 font-medium text-ink-800 ml-auto">{usd(p.priceUsd)}</span>
-          </li>
-        ))}
-      </ul>
-    </details>
+          )}
+        </div>
+        {!single && (
+          <details className="group/vars -mx-1">
+            <summary className="cursor-pointer list-none select-none px-1 py-1 text-[11px] font-medium text-ink-600 hover:text-ink-900 inline-flex items-center gap-1 transition-colors">
+              <ChevronRight size={11} className="transition-transform group-open/vars:rotate-90" aria-hidden />
+              Ver variantes
+            </summary>
+            <ul className="divide-y divide-ink-100/70 px-1 pb-1">
+              {model.members.map((p) => (
+                <li key={p.id} className="py-1.5 text-[11px] min-w-0">
+                  <div className="flex items-baseline justify-between gap-2 min-w-0">
+                    <span className="text-ink-700 truncate" title={p.subtype || p.reference}>{p.subtype || '—'}</span>
+                    <span className="tabular-nums font-medium text-ink-900 whitespace-nowrap">{usd(p.priceUsd)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2 min-w-0">
+                    <span className="font-mono text-ink-400 truncate" title={p.reference}>{p.reference}</span>
+                    {p.cost != null && (
+                      <span className="tabular-nums text-ink-400 whitespace-nowrap" title="Costo mayorista (Shopify)">costo {usd(p.cost)}</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {storeUrl && (
+          <a
+            href={storeUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-brand-700 hover:text-brand-900 hover:underline inline-flex items-center gap-1 transition-colors"
+          >
+            <ExternalLink size={11} aria-hidden /> Ver en lifestylegarden.do
+          </a>
+        )}
+      </div>
+    </div>
   );
 });

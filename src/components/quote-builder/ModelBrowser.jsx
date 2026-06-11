@@ -5,6 +5,7 @@ import { searchProducts, catalogCategories, productsByCategory } from '../../db/
 import { groupFamilies, productForGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { ALL_BRANDS, BRAND_LIGNE_ROSET, brandName } from '../../lib/constants.js';
+import ImageView from '../ImageView.jsx';
 
 /**
  * Headless body for finding a catalog MODEL (a family of SKUs sharing the
@@ -325,15 +326,27 @@ function ModelButton({ model, onPick, showBrand = false }) {
   // the same across grades); take the leading grade's product as the sample.
   const sample = productForGrade(model, model.grades?.[0] || '');
   const description = [sample?.subtype, sample?.dimensions].filter(Boolean).join(' · ');
+  const hasPhoto = !!(sample?.imageId || sample?.imageSrc);
   return (
     <button
       type="button"
       onClick={() => onPick(model)}
       className="w-full text-left rounded-md px-3 py-2.5 min-h-11 flex items-center gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors"
     >
-      <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-ink-100 text-ink-500 flex-shrink-0">
-        <PackageSearch size={15} />
-      </span>
+      {hasPhoto ? (
+        // The catalog's own photo (LSG); LR rows have none and keep the glyph.
+        <ImageView
+          id={sample.imageId}
+          fallbackUrl={sample.imageSrc || null}
+          alt=""
+          className="w-9 h-9 rounded-md object-cover bg-ink-100 flex-shrink-0"
+          placeholderClassName="w-9 h-9 rounded-md bg-ink-100 flex-shrink-0"
+        />
+      ) : (
+        <span className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-ink-100 text-ink-500 flex-shrink-0">
+          <PackageSearch size={15} />
+        </span>
+      )}
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-ink-900 truncate">{model.name || model.root}</span>
         <span className="block text-[11px] text-ink-500 truncate">

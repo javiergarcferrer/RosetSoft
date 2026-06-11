@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapShopifyCatalog, rangeOf, LSG_BRAND } from '../supabase/functions/shopify-sync/catalogImport.ts';
+import { mapShopifyCatalog, rangeOf, imageSrcOf, LSG_BRAND } from '../supabase/functions/shopify-sync/catalogImport.ts';
 
 const CTX = { profileId: 'team', nowIso: '2026-06-11T12:00:00.000Z' };
 
@@ -58,10 +58,37 @@ test('maps an active default-variant product to one catalog row', () => {
     category: 'Garnet',
     price_usd: 988.2,
     cost: null,
+    image_src: '',
     active: true,
     updated_at: CTX.nowIso,
   });
   assert.equal(summary.products, 1);
+});
+
+/* ---------------------------------- photos ---------------------------------- */
+
+const media = (url) => ({ nodes: [{ preview: { image: { url } } }] });
+
+test('a variant’s own photo wins; the product featured one is the fallback', () => {
+  const featured = { preview: { image: { url: 'https://cdn.shopify.com/p/featured.jpg' } } };
+  // Variant carries its own media → that photo.
+  assert.equal(
+    imageSrcOf({ featuredMedia: featured }, { media: media('https://cdn.shopify.com/v/own.jpg') }),
+    'https://cdn.shopify.com/v/own.jpg',
+  );
+  // No variant media → the product's featured photo.
+  assert.equal(imageSrcOf({ featuredMedia: featured }, { media: { nodes: [] } }), 'https://cdn.shopify.com/p/featured.jpg');
+  // No photos anywhere → empty (the card shows the placeholder).
+  assert.equal(imageSrcOf({ featuredMedia: null }, {}), '');
+});
+
+test('mapped rows carry image_src but NEVER image_id (the mirror pass owns it)', () => {
+  const { rows } = mapShopifyCatalog([product({
+    featuredMedia: { preview: { image: { url: 'https://cdn.shopify.com/p/garnet.jpg' } } },
+  })], CTX);
+  assert.equal(rows[0].image_src, 'https://cdn.shopify.com/p/garnet.jpg');
+  // An upsert with image_id present would clobber the mirrored pointer.
+  assert.ok(!('image_id' in rows[0]));
 });
 
 test('a real variant joins the name and fills the subtype slot', () => {

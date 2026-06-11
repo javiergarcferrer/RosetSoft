@@ -92,6 +92,9 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       productDescription: product.subtype || '',
       unitPrice: product.priceUsd,
       unitCost: product.cost,
+      // The catalog's own photo (LSG mirror) rides along, so the line lands
+      // fully illustrated with zero extra steps; LR rows carry none.
+      imageId: product.imageId ?? null,
       swatchImageId: color?.imageId ?? null,
     });
     onClose();
@@ -127,6 +130,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       productDescription: lo.subtype || '',
       unitPrice: min,
       unitCost: lo.cost,
+      imageId: lo.imageId ?? null,
       swatchImageId: null,
       priceMin: min,
       priceMax: max,

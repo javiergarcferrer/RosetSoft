@@ -20,11 +20,17 @@
 
 export const LSG_BRAND = 'lifestylegarden';
 
+export interface ShopifyMediaPreview {
+  preview?: { image?: { url?: string | null } | null } | null;
+}
+
 export interface ShopifyCatalogVariant {
   id: string;
   title?: string | null;
   sku?: string | null;
   price?: string | number | null;
+  /** The variant's own media (first node), when the store assigns one. */
+  media?: { nodes?: ShopifyMediaPreview[] | null } | null;
   inventoryItem?: { unitCost?: { amount?: string | number | null } | null } | null;
 }
 
@@ -34,6 +40,7 @@ export interface ShopifyCatalogProduct {
   handle?: string | null;
   productType?: string | null;
   status?: string | null;
+  featuredMedia?: ShopifyMediaPreview | null;
   collections?: { nodes?: Array<{ title?: string | null }> | null } | null;
   variants?: { nodes?: ShopifyCatalogVariant[] | null } | null;
 }
@@ -53,6 +60,10 @@ export interface LsgProductRow {
   category: string;
   price_usd: number | null;
   cost: number | null;
+  /** The store's CDN photo URL — the variant's own image, else the product's
+   *  featured one. index.ts mirrors it into our images bucket (`image_id` is
+   *  set THERE, never here, so an upsert can't clobber an existing mirror). */
+  image_src: string;
   active: boolean;
   updated_at: string;
 }
@@ -76,6 +87,20 @@ const numOrNull = (v: unknown): number | null => {
 
 /** Numeric tail of a Shopify GID (gid://shopify/ProductVariant/123 → "123"). */
 const gidTail = (gid: string): string => String(gid || '').split('/').pop() || '';
+
+/**
+ * The photo URL for a variant row: the variant's OWN media when the store
+ * assigns one (multi-color products), else the product's featured media.
+ * Empty when the product has no photo at all.
+ */
+export function imageSrcOf(
+  p: Pick<ShopifyCatalogProduct, 'featuredMedia'>,
+  v: Pick<ShopifyCatalogVariant, 'media'> | null | undefined,
+): string {
+  const variantUrl = v?.media?.nodes?.[0]?.preview?.image?.url;
+  const productUrl = p?.featuredMedia?.preview?.image?.url;
+  return squish(variantUrl || productUrl || '');
+}
 
 /**
  * The product's RANGE: the longest of its collection titles that appears
@@ -141,6 +166,7 @@ export function mapShopifyCatalog(
         category,
         price_usd: numOrNull(v.price),
         cost: numOrNull(v.inventoryItem?.unitCost?.amount),
+        image_src: imageSrcOf(p, v),
         active: true,
         updated_at: ctx.nowIso,
       });

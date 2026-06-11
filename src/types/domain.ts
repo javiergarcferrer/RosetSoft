@@ -1008,6 +1008,12 @@ export interface Product {
   category?: string;
   priceUsd?: number;
   cost?: number;
+  /** Mirrored product photo (→ images.id) — LSG rows, set by the import's
+   *  mirror pass; quote lines snapshot it on insert. Null for LR rows. */
+  imageId?: string | null;
+  /** The brand store's own CDN photo URL — the render fallback while a mirror
+   *  is pending (ImageView fallbackUrl). */
+  imageSrc?: string;
   active?: boolean;
   createdAt?: number;
   updatedAt?: number;

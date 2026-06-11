@@ -73,7 +73,7 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
   function seedFor(fam) {
     if (!fam.graded) {
       const p = productForGrade(fam, '');
-      return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: '', productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
+      return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: '', productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, imageId: p.imageId ?? null, swatchImageId: null } : null;
     }
     if (!grade) {
       const lo = productForGrade(fam, fam.grades[0]);
@@ -81,10 +81,10 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
       if (!lo || !hi) return null;
       const min = Number(lo.priceUsd) || 0;
       const max = Number(hi.priceUsd) || 0;
-      return { name: lo.name || fam.name, reference: lo.reference, dimensions: lo.dimensions, subtype: '', productDescription: lo.subtype || '', unitPrice: min, priceMin: min, priceMax: max, swatchImageId: null };
+      return { name: lo.name || fam.name, reference: lo.reference, dimensions: lo.dimensions, subtype: '', productDescription: lo.subtype || '', unitPrice: min, priceMin: min, priceMax: max, imageId: lo.imageId ?? null, swatchImageId: null };
     }
     const p = productForGrade(fam, grade);
-    return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: composeSubtype(grade, ''), productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, swatchImageId: null } : null;
+    return p ? { name: p.name || fam.name, reference: p.reference, dimensions: p.dimensions, subtype: composeSubtype(grade, ''), productDescription: p.subtype || '', unitPrice: Number(p.priceUsd) || 0, imageId: p.imageId ?? null, swatchImageId: null } : null;
   }
 
   function add() {
