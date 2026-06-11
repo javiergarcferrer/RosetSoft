@@ -66,7 +66,7 @@ export default function Login() {
           <div className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-grad shadow-soft mb-4">
             <span className="font-wordmark text-white text-lg leading-none select-none">R</span>
           </div>
-          <div className="font-wordmark text-2xl tracking-wide text-ink-900 mb-1.5">Alcover</div>
+          <div className="font-wordmark text-2xl tracking-wide text-ink-900 mb-1.5">ALCOVER</div>
           <h1 className="text-sm font-semibold text-ink-700">Iniciar sesión</h1>
           <p className="text-xs text-ink-400 mt-1 leading-relaxed">
             Correo y contraseña de tu equipo.
