@@ -108,7 +108,7 @@ export default function QuoteHeader({
         aria-label="Datos de la cotización"
       >
         <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-        <WhatsAppChip customer={customer} />
+        <WhatsAppChip customer={customer} quote={quote} onUpdateQuote={onUpdateQuote} />
         <ProfessionalChip
           quote={quote}
           professional={professional}

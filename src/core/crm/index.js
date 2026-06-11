@@ -1,0 +1,11 @@
+// CRM core barrel — the conversations (WhatsApp inbox) Model/ViewModels.
+// Sits beside core/quote / core/tracking / core/store on the CRM side of the
+// CRM↔Accounting barrier (enforced in tests/architecture.test.js).
+
+export {
+  WA_WINDOW_MS,
+  resolveConversations,
+  resolveThread,
+  resolveNewChatContacts,
+} from './views/inbox.js';
+export { waDigits, phoneKey, displayPhone } from '../../lib/phone.js';

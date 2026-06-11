@@ -185,6 +185,50 @@ export interface Settings {
   /** Recipient for the monthly Ligne Roset sales report (the supplier's email).
    *  Prefills the "send to Ligne Roset" draft; null ⇒ draft opens with no To. */
   lrReportEmail?: string | null;
+  /** WhatsApp Business (Cloud API) — non-sensitive connection status. The
+   *  access token / app secret live in the write-only whatsapp_config table,
+   *  never here. */
+  whatsappConnectedAt?: number | null;
+  /** Webhook handshake string shown in Settings to paste into the Meta portal
+   *  (not a secret — it only gates webhook REGISTRATION; payloads are
+   *  authenticated by the app-secret HMAC signature). */
+  whatsappVerifyToken?: string;
+  /** The connected number as Meta displays it (e.g. "+1 809-555-0100"). */
+  whatsappDisplayNumber?: string;
+  whatsappVerifiedName?: string;
+  /** Approved Meta template used to send a quote link to a client who hasn't
+   *  written in the last 24h (one {{1}} body parameter = the link). Empty ⇒
+   *  quote sends go as free-form text (only works inside the 24h window). */
+  whatsappQuoteTemplate?: string;
+}
+
+/**
+ * One WhatsApp message, inbound or outbound — the CRM conversation log.
+ * Threads group by `phone` (normalized digits, country code included);
+ * customer/professional links are resolved by phone match at write time.
+ */
+export interface WaMessage {
+  id: string;
+  profileId: string;
+  direction: 'in' | 'out';
+  /** Meta's message id (wamid.…) — dedupe + delivery-status join key. */
+  waId?: string | null;
+  phone: string;
+  /** The sender's WhatsApp display name (inbound only). */
+  profileName?: string | null;
+  customerId?: string | null;
+  professionalId?: string | null;
+  quoteId?: string | null;
+  kind?: string;
+  body?: string;
+  templateName?: string | null;
+  /** in: received · out: accepted → sent → delivered → read, or failed. */
+  status?: string;
+  error?: string | null;
+  payload?: unknown;
+  readAt?: number | null;
+  statusAt?: number | null;
+  createdAt?: number;
 }
 
 /**

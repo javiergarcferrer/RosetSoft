@@ -108,10 +108,10 @@ function layeringViolations() {
 
       // The osmotic barrier: the two cores never import each other.
       if (inDir(self, 'core/accounting')
-          && (inDir(t, 'core/quote') || inDir(t, 'core/tracking') || inDir(t, 'core/store'))) {
+          && (inDir(t, 'core/quote') || inDir(t, 'core/tracking') || inDir(t, 'core/store') || inDir(t, 'core/crm'))) {
         add(file, spec, 'accounting core imports the CRM core — cross at core/bridge');
       }
-      if ((inDir(self, 'core/quote') || inDir(self, 'core/tracking') || inDir(self, 'core/store'))
+      if ((inDir(self, 'core/quote') || inDir(self, 'core/tracking') || inDir(self, 'core/store') || inDir(self, 'core/crm'))
           && (inDir(t, 'core/accounting') || inDir(t, 'lib/accounting'))) {
         add(file, spec, 'CRM core imports accounting — cross at core/bridge');
       }
