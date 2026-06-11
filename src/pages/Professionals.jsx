@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, UserSquare2, ArrowRight, Mail, Phone, ChevronDown, ExternalLink, FileText } from 'lucide-react';
+import {
+  Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Trash2,
+} from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
-import { db } from '../db/database.js';
+import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -57,28 +58,70 @@ const STATUS_LABELS = {
   archived: 'Archivadas',
 };
 
-// Two-letter initial pair for the avatar circle. Picks the first letter
-// of the name, then the first letter of the company (if any) or of the
-// second word in the name as a fallback. Uppercased; empty when nothing
-// usable. Mirrors the helper on the Customers page so the visual
-// vocabulary is identical across the two address-book modules.
-function initialsFor(p) {
-  const name = (p?.name || '').trim();
-  const company = (p?.company || '').trim();
-  const first = name.charAt(0);
-  const second = company.charAt(0) || name.split(/\s+/)[1]?.charAt(0) || '';
-  return (first + second).toUpperCase();
+// Borderless input that reads exactly like the cell text until focused —
+// the "viewing IS editing" core of the sheet.
+const CELL_CLS = 'w-full bg-transparent text-sm text-ink-900 placeholder:text-ink-300 '
+  + 'px-1 py-0.5 -mx-1 rounded-md border-0 focus:outline-none focus:bg-white '
+  + 'focus:ring-2 focus:ring-brand-400/70 focus:shadow-sm transition-shadow';
+
+/** Move focus to the same column on another row (Enter / Shift+Enter). */
+function focusCell(row, col) {
+  const el = document.querySelector(`[data-cell="${row}:${col}"]`);
+  if (el) { el.focus(); el.select?.(); }
 }
 
 /**
- * Professionals list — architects, decorators, etc. that bring deals to
- * the showroom and earn a commission. Structurally close to the
- * Customers list (search box + responsive table/cards + edit modal),
- * but each row EXPANDS in place: tapping a professional drops down their
- * assigned quotes grouped by status (aceptadas / enviadas / borradores /
- * …), so the dealer can scan the whole roster's pipelines without
- * leaving the table. The full financial roll-up (commission math,
- * trade-discount split) still lives on the detail page each row links to.
+ * One spreadsheet cell. Holds its own draft while focused (so a live-query
+ * repaint can't clobber typing), commits on blur when the value actually
+ * changed, reverts on Escape, and hops rows on Enter. `onCommit` may return
+ * false to reject the edit (e.g. blank name) — the draft snaps back.
+ */
+function Cell({ value, onCommit, row, col, type = 'text', inputMode, placeholder, align = '', label }) {
+  const [draft, setDraft] = useState(value ?? '');
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+
+  async function commit() {
+    setFocused(false);
+    if (String(draft) === String(value ?? '')) return;
+    const ok = await onCommit(draft);
+    if (ok === false) setDraft(value ?? '');
+  }
+
+  return (
+    <input
+      data-cell={row != null ? `${row}:${col}` : undefined}
+      type={type}
+      inputMode={inputMode}
+      className={`${CELL_CLS} ${align}`}
+      value={draft}
+      placeholder={placeholder}
+      aria-label={label}
+      onFocus={(e) => { setFocused(true); e.target.select(); }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const next = row + (e.shiftKey ? -1 : 1);
+          e.currentTarget.blur();
+          if (row != null) focusCell(next, col);
+        } else if (e.key === 'Escape') {
+          const el = e.currentTarget;
+          setDraft(value ?? '');
+          requestAnimationFrame(() => el.blur());
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * Professionals — an Excel-like sheet. Every cell is editable in place
+ * (no modal): click and type, blur or Enter commits, Esc reverts,
+ * Enter/Shift+Enter walk the column. The chevron drops down that
+ * professional's quotes grouped by status, and the bottom row is a
+ * permanently-open blank: type a name and the professional exists.
  */
 export default function Professionals() {
   const { profileId } = useApp();
@@ -94,8 +137,7 @@ export default function Professionals() {
 
   // The rows behind the per-professional dropdown: every team quote (the
   // VM buckets them by professionalId), their lines (needed for each
-  // quote's grand total — compound lines carry their math in
-  // `components`), and the customers that label each quote row.
+  // quote's grand total) and the customers that label each quote row.
   const quotes = useLiveQuery(
     () => db.quotes.where('profileId').equals(profileId || '').toArray(),
     [profileId],
@@ -108,16 +150,11 @@ export default function Professionals() {
     [],
   );
 
-  // Search-header query state. The parent owns it all (the header is
-  // presentational): `q` is the search needle, `filters` holds the
-  // secondary commission-band selection as { commission: <value> }, and
-  // `sort` defaults to name A–Z. No status dimension here, so no tabs.
   const [q, setQ] = useState('');
-  const [editing, setEditing] = useState(null);
   const [filters, setFilters] = useState({}); // { commission: '1-5' | … }
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
   // Which rows are dropped open. A Set so several professionals can be
-  // compared side by side; toggled by the row click.
+  // compared side by side; toggled by the chevron (cells own the click).
   const [expanded, setExpanded] = useState(() => new Set());
 
   function toggleExpanded(id) {
@@ -129,9 +166,6 @@ export default function Professionals() {
     });
   }
 
-  // The ViewModel: per professional, their quotes grouped (and sorted) by
-  // status with each quote's grand total precomputed, plus the count and
-  // value roll-ups the collapsed row shows.
   const { rollupByProfessionalId } = useMemo(
     () => resolveProfessionalsList({ professionals: pros, quotes, lines: allLines, customers }),
     [pros, quotes, allLines, customers],
@@ -150,9 +184,6 @@ export default function Professionals() {
       );
     });
 
-    // Sort. 'name' / 'company' are locale string compares; 'commission'
-    // rides the same clamped % the cells render; 'quotes' the assigned-
-    // quote count from the rollup. Direction multiplier flips asc/desc.
     const mul = sort.dir === 'asc' ? 1 : -1;
     return [...rows].sort((a, b) => {
       if (sort.key === 'commission') {
@@ -166,18 +197,84 @@ export default function Professionals() {
       if (sort.key === 'company') {
         return (a.company || '').toLowerCase().localeCompare((b.company || '').toLowerCase()) * mul;
       }
-      // name
       return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
     });
   }, [pros, q, filters, sort, rollupByProfessionalId]);
+
+  // ── Sheet writes ───────────────────────────────────────────────────────────
+  // One field per commit, straight to the row. The live query repaints the
+  // sheet; the focused cell keeps its own draft so typing never glitches.
+  async function commitField(p, field, raw) {
+    if (field === 'name') {
+      const name = String(raw).trim();
+      if (!name) return false; // a professional can't be nameless — revert
+      await db.professionals.update(p.id, { name, updatedAt: Date.now() });
+      return true;
+    }
+    if (field === 'defaultCommissionPct') {
+      await db.professionals.update(p.id, {
+        defaultCommissionPct: clampCommissionPct(raw),
+        updatedAt: Date.now(),
+      });
+      return true;
+    }
+    await db.professionals.update(p.id, { [field]: String(raw).trim(), updatedAt: Date.now() });
+    return true;
+  }
+
+  async function removePro(p) {
+    if (!confirm(`¿Eliminar a "${p.name}"? Las cotizaciones asignadas conservan el % pero pierden la referencia al profesional.`)) return;
+    await db.professionals.delete(p.id);
+  }
+
+  // The blank bottom row: drafts live here until the name lands, then the
+  // professional is created with whatever else was already typed (same
+  // race-safe numbering the modal used).
+  async function createFromDraft(draft) {
+    const name = String(draft.name || '').trim();
+    if (!name) return false;
+    const now = Date.now();
+    const core = {
+      id: newId(),
+      profileId,
+      name,
+      company: String(draft.company || '').trim(),
+      email: String(draft.email || '').trim(),
+      phone: String(draft.phone || '').trim(),
+      notes: '',
+      defaultCommissionPct: clampCommissionPct(draft.pct === '' || draft.pct == null ? 10 : draft.pct),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await assignSequenceNumber({
+      table: 'professionals',
+      profileId,
+      start: 1,
+      build: (number) => ({ ...core, number }),
+    });
+    return true;
+  }
+
+  function focusNewRow() {
+    // Two new-row name inputs exist (desktop sheet / mobile card); focus the
+    // one that's actually laid out.
+    const els = document.querySelectorAll('[data-newrow-name]');
+    for (const el of els) {
+      if (el.offsetParent !== null) {
+        el.scrollIntoView({ block: 'center' });
+        el.focus();
+        return;
+      }
+    }
+  }
 
   return (
     <>
       <PageHeader
         title="Profesionales"
-        subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'}` : ' '}
+        subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'} · edita directamente en la tabla` : ' '}
         actions={
-          <button onClick={() => setEditing({})} className="btn-brand">
+          <button onClick={focusNewRow} className="btn-brand">
             <Plus size={14} /> Agregar profesional
           </button>
         }
@@ -185,154 +282,116 @@ export default function Professionals() {
 
       {!loaded ? (
         <div className="card overflow-hidden"><ListLoading rows={5} /></div>
-      ) : pros.length === 0 ? (
-        <EmptyState
-          icon={UserSquare2}
-          title="Sin profesionales"
-          description="Arquitectos, decoradores u otros profesionales que te traen ventas. Asigna uno a cada cotización y la app calcula la comisión por ti."
-          action={<button onClick={() => setEditing({})} className="btn-brand">Agregar profesional</button>}
-        />
       ) : (
         <>
-          <ListSearchHeader
-            searchValue={q}
-            onSearchChange={setQ}
-            searchPlaceholder="Buscar profesionales…"
-            filters={[COMMISSION_FILTER]}
-            activeFilters={filters}
-            onFiltersChange={setFilters}
-            sortOptions={SORT_OPTIONS}
-            sort={sort}
-            onSortChange={setSort}
-            resultCount={filtered.length}
-            resultNoun={['profesional', 'profesionales']}
-          />
+          {pros.length > 0 && (
+            <ListSearchHeader
+              searchValue={q}
+              onSearchChange={setQ}
+              searchPlaceholder="Buscar profesionales…"
+              filters={[COMMISSION_FILTER]}
+              activeFilters={filters}
+              onFiltersChange={setFilters}
+              sortOptions={SORT_OPTIONS}
+              sort={sort}
+              onSortChange={setSort}
+              resultCount={filtered.length}
+              resultNoun={['profesional', 'profesionales']}
+            />
+          )}
+          {pros.length === 0 && (
+            <div className="mb-3">
+              <EmptyState
+                icon={UserSquare2}
+                title="Sin profesionales"
+                description="Arquitectos, decoradores u otros profesionales que te traen ventas. Escribe el primer nombre en la fila vacía de abajo — sin formularios."
+              />
+            </div>
+          )}
 
-          {/* Mobile cards — tapping a card drops down the professional's
-              quotes by status (same panel the desktop table uses); the
-              detail page stays one tap away via the "Ver perfil" link
-              inside the panel. Avatar + meta strip layout matches the
-              Customers page so dealers learn one pattern. The right-
-              hand column keeps the commission % — that's the unique
-              piece of information for professionals vs. customers. */}
+          {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops the
+              quotes panel. Same commit semantics as the desktop grid. */}
           <div className="md:hidden space-y-2">
-            {filtered.map((p) => {
-              const rollup = rollupByProfessionalId.get(p.id);
-              const isOpen = expanded.has(p.id);
-              return (
-                <div key={p.id} className="card overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => toggleExpanded(p.id)}
-                    className="w-full text-left transition-colors active:bg-ink-50"
-                    aria-expanded={isOpen}
-                  >
-                    <div className="flex items-center gap-3 p-3">
-                      <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 ring-1 ring-inset ring-brand-100">
-                        {initialsFor(p) || <UserSquare2 size={16} />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-sm text-ink-900 truncate">{p.name}</div>
-                        {p.company && (
-                          <div className="text-[11px] text-ink-500 truncate">{p.company}</div>
-                        )}
-                        <MetaStrip p={p} />
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="eyebrow-xs text-ink-400">Cotiz.</div>
-                        <div className="text-sm font-semibold tabular-nums text-ink-800">{rollup?.count || 0}</div>
-                      </div>
-                      <ChevronDown
-                        size={16}
-                        className={`text-ink-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                      />
-                    </div>
-                  </button>
-                  {isOpen && <ProQuotesPanel pro={p} rollup={rollup} />}
-                </div>
-              );
-            })}
-            {filtered.length === 0 && (
-              <div className="card card-pad flex flex-col items-center gap-3 py-12 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 ring-1 ring-inset ring-black/5">
-                  <UserSquare2 size={20} className="text-ink-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-ink-600">Sin coincidencias</p>
-                  <p className="mt-0.5 text-xs text-ink-400">Intenta cambiar el filtro o el término de búsqueda.</p>
-                </div>
-              </div>
-            )}
+            {filtered.map((p) => (
+              <MobileRow
+                key={p.id}
+                p={p}
+                rollup={rollupByProfessionalId.get(p.id)}
+                isOpen={expanded.has(p.id)}
+                onToggle={() => toggleExpanded(p.id)}
+                onCommit={(field, v) => commitField(p, field, v)}
+                onRemove={() => removePro(p)}
+              />
+            ))}
+            <MobileNewCard onCreate={createFromDraft} />
           </div>
 
-          {/* Desktop table — the row click drops down the professional's
-              quotes grouped by status; the edit button and the profile
-              arrow stop propagation so contact updates / the financial
-              detail page stay one click away. */}
+          {/* Desktop sheet */}
           <div className="hidden md:block card overflow-hidden">
             <table className="table">
               <thead>
                 <tr>
+                  <th className="w-8"></th>
                   <th>Nombre</th>
                   <th>Empresa</th>
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
                   <th className="text-right">Cotizaciones</th>
                   <th className="text-right">Comisión ref.</th>
-                  <th></th>
+                  <th className="w-10"></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
-                  const rollup = rollupByProfessionalId.get(p.id);
-                  const isOpen = expanded.has(p.id);
-                  return (
-                    <FragmentRow
-                      key={p.id}
-                      p={p}
-                      rollup={rollup}
-                      isOpen={isOpen}
-                      onToggle={() => toggleExpanded(p.id)}
-                      onEdit={() => setEditing(p)}
-                    />
-                  );
-                })}
+                {filtered.map((p, i) => (
+                  <SheetRow
+                    key={p.id}
+                    p={p}
+                    row={i}
+                    rollup={rollupByProfessionalId.get(p.id)}
+                    isOpen={expanded.has(p.id)}
+                    onToggle={() => toggleExpanded(p.id)}
+                    onCommit={(field, v) => commitField(p, field, v)}
+                    onRemove={() => removePro(p)}
+                  />
+                ))}
+                <NewSheetRow row={filtered.length} onCreate={createFromDraft} />
               </tbody>
             </table>
           </div>
         </>
       )}
-
-      <ProfessionalModal
-        professional={editing}
-        onClose={() => setEditing(null)}
-        profileId={profileId}
-      />
     </>
   );
 }
 
-// One desktop table row + (when open) its full-width dropdown row.
-function FragmentRow({ p, rollup, isOpen, onToggle, onEdit }) {
+/** One professional as a sheet row + (when open) its quotes dropdown row. */
+function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
   return (
     <>
-      <tr
-        className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-      >
-        <td className="font-medium truncate max-w-[200px]" title={p.name}>
-          <span className="inline-flex items-center gap-1.5">
-            <ChevronDown
-              size={13}
-              className={`text-ink-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            />
-            <span className="truncate">{p.name}</span>
-          </span>
+      <tr className="group/row hover:bg-ink-50/40 transition-colors">
+        <td className="!pr-0">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="p-1 rounded text-ink-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+            title={isOpen ? 'Ocultar cotizaciones' : 'Ver cotizaciones'}
+            aria-expanded={isOpen}
+          >
+            <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
         </td>
-        <td className="text-ink-700 truncate max-w-[200px]" title={p.company || ''}>{p.company || '—'}</td>
-        <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={p.email || ''}>{p.email || '—'}</td>
-        <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{p.phone || '—'}</td>
+        <td className="font-medium max-w-[220px]">
+          <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+        </td>
+        <td className="max-w-[200px]">
+          <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
+        </td>
+        <td className="hidden lg:table-cell max-w-[220px]">
+          <Cell value={p.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${p.name}`} />
+        </td>
+        <td className="hidden lg:table-cell max-w-[150px]">
+          <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${p.name}`} />
+        </td>
         <td className="text-right tabular-nums whitespace-nowrap text-ink-800">
           {rollup?.count || 0}
           {rollup?.acceptedTotal > 0 && (
@@ -341,30 +400,42 @@ function FragmentRow({ p, rollup, isOpen, onToggle, onEdit }) {
             </span>
           )}
         </td>
-        <td className="text-right tabular-nums whitespace-nowrap font-semibold text-ink-800">
-          {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
+        <td className="text-right">
+          <span className="inline-flex items-center justify-end gap-0.5 font-semibold text-ink-800">
+            <Cell
+              value={commissionOf(p)}
+              onCommit={(v) => onCommit('defaultCommissionPct', v)}
+              row={row} col="pct"
+              type="number" inputMode="decimal"
+              align="text-right w-12 tabular-nums"
+              label={`Comisión de ${p.name}`}
+            />
+            <span className="text-xs text-ink-400">%</span>
+          </span>
         </td>
-        <td className="text-right w-24">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            className="inline-flex items-center rounded-md px-2 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
-          >
-            Editar
-          </button>
-          <Link
-            to={`/professionals/${p.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-ink-300 hover:text-brand-600 ml-2 transition-colors"
-            title="Ver perfil"
-          >
-            <ArrowRight size={12} className="inline" />
-          </Link>
+        <td className="!pl-0 text-right">
+          <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
+            <Link
+              to={`/professionals/${p.id}`}
+              className="p-1.5 rounded text-ink-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+              title="Ver perfil y comisiones"
+            >
+              <ArrowRight size={13} />
+            </Link>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="p-1.5 rounded text-ink-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+              title="Eliminar profesional"
+            >
+              <Trash2 size={13} />
+            </button>
+          </span>
         </td>
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={7} className="!p-0 bg-ink-50/50">
+          <td colSpan={8} className="!p-0 bg-ink-50/50">
             <ProQuotesPanel pro={p} rollup={rollup} />
           </td>
         </tr>
@@ -373,14 +444,148 @@ function FragmentRow({ p, rollup, isOpen, onToggle, onEdit }) {
   );
 }
 
+/**
+ * The permanently-open blank row at the bottom of the sheet. Drafts are
+ * local; committing a non-empty NAME creates the professional with whatever
+ * else was typed, then the row resets for the next one.
+ */
+function NewSheetRow({ row, onCreate }) {
+  const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '', pct: '' });
+  const creating = useRef(false);
+
+  async function maybeCreate(patch) {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    if (!String(next.name).trim() || creating.current) return true;
+    creating.current = true;
+    try {
+      const ok = await onCreate(next);
+      if (ok) setDraft({ name: '', company: '', email: '', phone: '', pct: '' });
+      return ok;
+    } finally {
+      creating.current = false;
+    }
+  }
+
+  const cell = (field, props = {}) => (
+    <Cell
+      value={draft[field]}
+      onCommit={(v) => maybeCreate({ [field]: v })}
+      row={row}
+      col={field === 'defaultCommissionPct' ? 'pct' : field}
+      {...props}
+    />
+  );
+
+  return (
+    <tr className="bg-brand-50/30">
+      <td className="!pr-0 text-ink-300"><Plus size={14} className="ml-1" /></td>
+      <td className="max-w-[220px]">
+        <input
+          data-newrow-name
+          data-cell={`${row}:name`}
+          className={CELL_CLS}
+          value={draft.name}
+          placeholder="Nuevo profesional…"
+          aria-label="Nombre del nuevo profesional"
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          onBlur={() => maybeCreate({})}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+        />
+      </td>
+      <td className="max-w-[200px]">{cell('company', { placeholder: 'Empresa' })}</td>
+      <td className="hidden lg:table-cell max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
+      <td className="hidden lg:table-cell max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
+      <td className="text-right text-[11px] text-ink-300">—</td>
+      <td className="text-right">
+        <span className="inline-flex items-center justify-end gap-0.5">
+          {cell('pct', { placeholder: '10', type: 'number', inputMode: 'decimal', align: 'text-right w-12 tabular-nums' })}
+          <span className="text-xs text-ink-400">%</span>
+        </span>
+      </td>
+      <td></td>
+    </tr>
+  );
+}
+
+/** Mobile: a card whose fields are the same in-place cells, stacked. */
+function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center gap-2 p-3">
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+          <div className="grid grid-cols-2 gap-x-2">
+            <Cell value={p.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${p.name}`} align="text-[12px] text-ink-500" />
+            <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${p.name}`} align="text-[12px] text-ink-500" />
+          </div>
+          <Cell value={p.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${p.name}`} align="text-[12px] text-ink-500" />
+        </div>
+        <div className="text-right shrink-0">
+          <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums text-ink-800">
+            <Cell
+              value={commissionOf(p)}
+              onCommit={(v) => onCommit('defaultCommissionPct', v)}
+              col="pct" type="number" inputMode="decimal"
+              align="text-right w-10 tabular-nums"
+              label={`Comisión de ${p.name}`}
+            />
+            <span className="text-xs text-ink-400">%</span>
+          </span>
+          <div className="eyebrow-xs text-ink-400 mt-0.5">{rollup?.count || 0} cotiz.</div>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="p-2 -mr-1 rounded text-ink-300 hover:text-brand-600 transition-colors shrink-0"
+          aria-expanded={isOpen}
+          aria-label="Ver cotizaciones"
+        >
+          <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {isOpen && (
+        <div className="border-t border-ink-100">
+          <ProQuotesPanel pro={p} rollup={rollup} onRemove={onRemove} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Mobile: the blank "type a name" card — the new-row, stacked. */
+function MobileNewCard({ onCreate }) {
+  const [name, setName] = useState('');
+  async function commit() {
+    if (!name.trim()) return;
+    const ok = await onCreate({ name });
+    if (ok) setName('');
+  }
+  return (
+    <div className="card bg-brand-50/30 p-3 flex items-center gap-2">
+      <Plus size={15} className="text-ink-300 shrink-0" />
+      <input
+        data-newrow-name
+        className={CELL_CLS}
+        value={name}
+        placeholder="Nuevo profesional…"
+        aria-label="Nombre del nuevo profesional"
+        onChange={(e) => setName(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+      />
+    </div>
+  );
+}
+
 // The dropdown body — the professional's quotes grouped by status, each
 // group under its status pill with the quote rows reading #number ·
 // customer · last-touched · total. Shared by the mobile card and the
-// desktop table row so both surfaces stay identical.
-function ProQuotesPanel({ pro, rollup }) {
+// desktop sheet row so both surfaces stay identical.
+function ProQuotesPanel({ pro, rollup, onRemove }) {
   const groups = rollup?.groups || [];
   return (
-    <div className="border-t border-ink-100 px-4 py-3 space-y-3">
+    <div className="px-4 py-3 space-y-3">
       {groups.length === 0 ? (
         <div className="flex items-center gap-2 py-2 text-xs text-ink-400">
           <FileText size={13} className="flex-shrink-0" />
@@ -426,39 +631,23 @@ function ProQuotesPanel({ pro, rollup }) {
           </div>
         ))
       )}
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <Link
           to={`/professionals/${pro.id}`}
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
         >
           Ver perfil y comisiones <ArrowRight size={12} aria-hidden />
         </Link>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+          >
+            <Trash2 size={12} aria-hidden /> Eliminar
+          </button>
+        )}
       </div>
-    </div>
-  );
-}
-
-// Meta strip — Mail · Phone. Each piece only renders if the underlying
-// field has a value; the · separator is drawn between rendered pieces,
-// never trailing. Mirrors the helper on the Customers page (sans the
-// city row, which professionals don't carry as a column).
-function MetaStrip({ p }) {
-  const parts = [];
-  if (p.email) parts.push({ icon: Mail, value: p.email, key: 'email' });
-  if (p.phone) parts.push({ icon: Phone, value: p.phone, key: 'phone' });
-  if (parts.length === 0) return null;
-  return (
-    <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-1 min-w-0">
-      {parts.map((part, i) => {
-        const Icon = part.icon;
-        return (
-          <span key={part.key} className="inline-flex items-center gap-1 min-w-0">
-            {i > 0 && <span aria-hidden="true" className="text-ink-300">·</span>}
-            <Icon size={11} className="text-ink-400 flex-shrink-0" />
-            <span className="truncate">{part.value}</span>
-          </span>
-        );
-      })}
     </div>
   );
 }
