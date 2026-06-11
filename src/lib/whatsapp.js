@@ -114,6 +114,93 @@ export async function sendWhatsappTemplate({ to, template, params, lang, custome
 }
 
 /**
+ * Send a media message (image / video / audio / any file as document). Same
+ * 24h-window rule as free text. `file` is a browser File/Blob — it rides to
+ * `wa-send` as base64, which uploads it to Meta AND mirrors it into Storage so
+ * the chat renders what was sent. Returns { ok, id } or { ok:false, error }.
+ */
+export async function sendWhatsappMedia({ to, file, caption, customerId, professionalId, quoteId }) {
+  if (!file) return { ok: false, error: 'Falta el archivo.' };
+  if (file.size > 24 * 1024 * 1024) return { ok: false, error: 'El archivo supera el límite de 24 MB.' };
+  const base64 = await blobToBase64(file);
+  return invokeWaSend({
+    to: waDigits(to),
+    media: { base64, mime: file.type || 'application/octet-stream', filename: file.name || '', caption: caption || '' },
+    customerId, professionalId, quoteId,
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    // result = "data:<mime>;base64,<payload>" — strip the prefix.
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * List the WABA's message templates (name, status, category, language, body
+ * text, variable count). Live from Meta — the picker and the Difusión page
+ * always show the current approval state. { ok, templates } or
+ * { ok:false, error, needWaba? }.
+ */
+export async function listWaTemplates() {
+  return invokeWaSend({ listTemplates: true });
+}
+
+/**
+ * Submit a new template for Meta review. Body text carries {{1}}, {{2}}…
+ * variables; `exampleParams` give Meta reviewers a filled-in sample (required
+ * when variables are present — wa-send defaults them if omitted). Approval is
+ * asynchronous: the template lands as PENDING and flips to APPROVED/REJECTED
+ * in the list. Categories: MARKETING (promos — the "ads" lever) or UTILITY.
+ */
+export async function createWaTemplate({ name, category, language, headerText, bodyText, footerText, exampleParams }) {
+  return invokeWaSend({ createTemplate: { name, category, language, headerText, bodyText, footerText, exampleParams } });
+}
+
+/** Delete a template by name (all its languages). */
+export async function deleteWaTemplate(name) {
+  return invokeWaSend({ deleteTemplate: { name } });
+}
+
+/**
+ * Send the customer-side read receipt (their ticks turn blue) for the thread's
+ * latest inbound message. Fire-and-forget from the chat view — an expired
+ * wamid on an old thread is normal and not worth surfacing.
+ */
+export async function sendWhatsappReadReceipt(messageId) {
+  if (!messageId) return { ok: false };
+  return invokeWaSend({ markRead: { messageId } }).catch(() => ({ ok: false }));
+}
+
+/**
+ * Send one approved template to many recipients as a named campaign
+ * (Difusión). `recipients` = [{ to, params?, customerId?, professionalId? }].
+ * The server creates the wa_campaigns row, sends sequentially, logs each
+ * attempt into wa_messages (campaign-tagged) and returns
+ * { ok, campaignId, sent, failed, errors }.
+ */
+export async function sendWhatsappBroadcast({ name, template, lang, audience, recipients }) {
+  return invokeWaSend({ broadcast: { name, template, lang, audience, recipients } });
+}
+
+/**
+ * Resolve a wa/<uuid> Storage path into an object URL the chat can render
+ * (img/video/audio src or download link). Goes through the authenticated
+ * Storage download like every other image in the app; the caller owns the
+ * object URL lifecycle (revoke on unmount).
+ */
+export async function fetchWaMediaUrl(path) {
+  if (!path) return null;
+  const { data, error } = await supabase.storage.from('images').download(path);
+  if (error || !data) return null;
+  return URL.createObjectURL(data);
+}
+
+/**
  * Send a quote's public client link over the business number. Uses the
  * approved template configured in Settings (whatsappQuoteTemplate, one {{1}} =
  * the link) so it works outside the 24h window; with no template configured it

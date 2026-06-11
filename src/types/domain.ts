@@ -226,9 +226,36 @@ export interface WaMessage {
   status?: string;
   error?: string | null;
   payload?: unknown;
+  /** Storage path (images bucket, wa/<uuid>.<ext>) of the message's media —
+   *  persisted at delivery time by wa-webhook (in) / wa-send (out). */
+  mediaPath?: string | null;
+  mediaMime?: string | null;
+  /** Difusión: the wa_campaigns row this outbound template send belongs to. */
+  campaignId?: string | null;
   readAt?: number | null;
   statusAt?: number | null;
   createdAt?: number;
+}
+
+/**
+ * A WhatsApp broadcast campaign (Difusión) — one approved template sent to a
+ * chosen audience. Header row only; the per-recipient sends live in
+ * wa_messages (joined by campaignId) so delivery/read rollups always reflect
+ * the live webhook truth rather than a frozen snapshot.
+ */
+export interface WaCampaign {
+  id: string;
+  profileId: string;
+  name: string;
+  templateName: string;
+  templateLang?: string;
+  /** Human label of the audience picked ("Profesionales", "12 contactos", …). */
+  audience?: string;
+  recipientCount?: number;
+  sentCount?: number;
+  failedCount?: number;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 /**

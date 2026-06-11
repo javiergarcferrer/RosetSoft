@@ -20,6 +20,26 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const TEAM = 'team';
+const GRAPH = 'https://graph.facebook.com/v23.0';
+const IMAGES_BUCKET = 'images';
+// Inbound media above this size is left as a text-only log row (the bucket is
+// for chat-sized payloads, not 100MB documents).
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp',
+  'audio/aac': 'aac', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/amr': 'amr', 'audio/ogg': 'ogg',
+  'application/pdf': 'pdf',
+};
+
+/** The media reference of an inbound message ({ id, mime }) or null. */
+function inboundMedia(msg: Record<string, any>): { id: string; mime: string } | null {
+  const m = msg[msg.type as string];
+  if (!m || typeof m !== 'object' || !m.id) return null;
+  if (!['image', 'video', 'audio', 'document', 'sticker'].includes(msg.type)) return null;
+  return { id: String(m.id), mime: String(m.mime_type || 'application/octet-stream').split(';')[0] };
+}
 
 /** Matching key: the LAST 10 digits (mirrors src/lib/phone.js phoneKey — the
  *  Deno↔Vite wall means we can't import it; the rule is trivial and kept
@@ -86,8 +106,9 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
   const raw = await req.text();
-  const { data: cfg } = await admin.from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle();
+  const { data: cfg } = await admin.from('whatsapp_config').select('app_secret, access_token').eq('profile_id', TEAM).maybeSingle();
   const secret = (cfg as { app_secret?: string } | null)?.app_secret || '';
+  const accessToken = (cfg as { access_token?: string } | null)?.access_token || '';
   if (!(await validSignature(raw, req.headers.get('x-hub-signature-256'), secret))) {
     return new Response('invalid signature', { status: 401 });
   }
@@ -108,6 +129,34 @@ Deno.serve(async (req: Request) => {
     if (c) return { customer_id: c.id, professional_id: null };
     const p = professionals!.find((r) => phoneKey(r.phone) === key);
     return { customer_id: null, professional_id: p ? p.id : null };
+  }
+
+  // Persist a message's media into Storage and stamp the row. Meta's media
+  // URL expires minutes after issue, so this runs inside the webhook delivery,
+  // not lazily from the UI. Guarded by media_path IS NULL so a Meta retry of
+  // an already-processed message doesn't store the bytes twice.
+  async function persistMedia(waId: string, media: { id: string; mime: string }): Promise<void> {
+    if (!accessToken) return;
+    try {
+      const metaRes = await fetch(`${GRAPH}/${media.id}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const meta = await metaRes.json().catch(() => ({}));
+      const url = (meta as { url?: string }).url;
+      const size = Number((meta as { file_size?: number }).file_size) || 0;
+      if (!metaRes.ok || !url || size > MAX_MEDIA_BYTES) return;
+      const binRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!binRes.ok) return;
+      const bytes = new Uint8Array(await binRes.arrayBuffer());
+      const ext = EXT_BY_MIME[media.mime] || 'bin';
+      const path = `wa/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await admin.storage.from(IMAGES_BUCKET)
+        .upload(path, bytes, { contentType: media.mime, upsert: false });
+      if (upErr) { console.error('[wa-webhook] media upload failed:', upErr.message); return; }
+      await admin.from('wa_messages')
+        .update({ media_path: path, media_mime: media.mime })
+        .eq('wa_id', waId).is('media_path', null);
+    } catch (e) {
+      console.error('[wa-webhook] media persist failed:', (e as Error).message);
+    }
   }
 
   try {
@@ -138,6 +187,8 @@ Deno.serve(async (req: Request) => {
             created_at: new Date(tsMs).toISOString(),
           }, { onConflict: 'wa_id', ignoreDuplicates: true });
           if (error) console.error('[wa-webhook] inbound insert failed:', error.message);
+          const media = inboundMedia(msg);
+          if (!error && media && msg.id) await persistMedia(msg.id, media);
         }
 
         // Delivery-status updates → the matching outbound row.

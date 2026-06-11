@@ -125,3 +125,85 @@ test('resolveNewChatContacts — phone-bearing contacts not already in a thread'
   assert.equal(fresh[0].customerId, 'c2');
   assert.equal(fresh[0].key, '8095550400');
 });
+
+/* ----------------------------- Difusión (campaigns) -----------------------------
+ * Pinned invariants for the broadcast pipeline (core/crm/views/campaigns):
+ *   • ONE send per phone — WhatsApp delivers to the number; duplicate contact
+ *     cards (or a contact present as both customer and professional) must
+ *     collapse to a single recipient.
+ *   • template parameters are never empty — Meta rejects empty {{n}} values,
+ *     so every variable source falls back (company → name → '—').
+ *   • the campaign rollup reads the LIVE webhook statuses with stage
+ *     precedence (read ⊂ delivered ⊂ sent), failures separate.
+ */
+import {
+  resolveBroadcastAudience, buildBroadcastRecipients, fillTemplateBody, resolveCampaignsList,
+} from '../src/core/crm/index.js';
+
+test('resolveBroadcastAudience — dedupes by phone across lists, skips phone-less', () => {
+  const customers = [
+    { id: 'c1', name: 'Ana Pérez', phone: '809-555-0100' },
+    { id: 'c2', name: 'Sin Teléfono' },
+  ];
+  const professionals = [
+    { id: 'p1', name: 'Ana P. (estudio)', phone: '+1 809 555 0100' }, // same number as c1
+    { id: 'p2', name: 'Berta Gómez', phone: '829-555-0200' },
+  ];
+  const all = resolveBroadcastAudience(customers, professionals, { kind: 'all' });
+  assert.equal(all.length, 2); // Ana collapsed, Sin Teléfono dropped
+  const keys = all.map((c) => c.key).sort();
+  assert.deepEqual(keys, ['8095550100', '8295550200']);
+
+  const pros = resolveBroadcastAudience(customers, professionals, { kind: 'professionals' });
+  assert.deepEqual(pros.map((c) => c.professionalId).sort(), ['p1', 'p2']);
+});
+
+test('buildBroadcastRecipients — one send per phone, params never empty', () => {
+  const contacts = [
+    { phone: '809-555-0100', name: 'Ana Pérez García', company: '', customerId: 'c1', professionalId: null },
+    { phone: '+1 (809) 555-0100', name: 'Ana dup', company: '', customerId: 'c9', professionalId: null }, // dup phone
+    { phone: '829-555-0200', name: 'Berta Gómez', company: 'Estudio BG', customerId: null, professionalId: 'p2' },
+  ];
+  const recipients = buildBroadcastRecipients(contacts, [
+    { source: 'firstName' },
+    { source: 'company' },
+    { source: 'fixed', text: '10%' },
+  ]);
+  assert.equal(recipients.length, 2);
+  // Ana: first name; empty company falls back to her name (never an empty param).
+  assert.deepEqual(recipients[0].params, ['Ana', 'Ana Pérez García', '10%']);
+  assert.deepEqual(recipients[1].params, ['Berta', 'Estudio BG', '10%']);
+  assert.equal(recipients[0].to, '8095550100');
+  assert.equal(recipients[1].customerId, null);
+  assert.equal(recipients[1].professionalId, 'p2');
+});
+
+test('fillTemplateBody — fills {{n}}, leaves missing params visible', () => {
+  assert.equal(fillTemplateBody('Hola {{1}}, oferta {{2}}', ['Ana', '10%']), 'Hola Ana, oferta 10%');
+  assert.equal(fillTemplateBody('Hola {{1}}, oferta {{2}}', ['Ana']), 'Hola Ana, oferta {{2}}');
+  assert.equal(fillTemplateBody('', []), '');
+});
+
+test('resolveCampaignsList — live rollup with stage precedence; frozen fallback', () => {
+  const campaigns = [
+    { id: 'k1', name: 'Promo', recipientCount: 4, sentCount: 4, failedCount: 0, createdAt: 2000 },
+    { id: 'k0', name: 'Vieja sin mensajes', recipientCount: 3, sentCount: 2, failedCount: 1, createdAt: 1000 },
+  ];
+  const messages = [
+    { campaignId: 'k1', status: 'read' },      // counts as sent+delivered+read
+    { campaignId: 'k1', status: 'delivered' }, // sent+delivered
+    { campaignId: 'k1', status: 'accepted' },  // sent only
+    { campaignId: 'k1', status: 'failed' },    // failed only
+    { campaignId: 'other', status: 'read' },   // another campaign — ignored
+    { status: 'read' },                        // not campaign-tagged — ignored
+  ];
+  const rows = resolveCampaignsList({ campaigns, messages });
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].campaign.id, 'k1'); // newest first
+  assert.deepEqual(
+    { sent: rows[0].sent, delivered: rows[0].delivered, read: rows[0].read, failed: rows[0].failed },
+    { sent: 3, delivered: 2, read: 1, failed: 1 },
+  );
+  // No campaign-tagged messages yet → the counters frozen at send time.
+  assert.deepEqual({ sent: rows[1].sent, failed: rows[1].failed }, { sent: 2, failed: 1 });
+});

@@ -7,5 +7,13 @@ export {
   resolveConversations,
   resolveThread,
   resolveNewChatContacts,
+  resolveReferral,
 } from './views/inbox.js';
+export {
+  VAR_SOURCES,
+  resolveBroadcastAudience,
+  buildBroadcastRecipients,
+  fillTemplateBody,
+  resolveCampaignsList,
+} from './views/campaigns.js';
 export { waDigits, phoneKey, displayPhone } from '../../lib/phone.js';
