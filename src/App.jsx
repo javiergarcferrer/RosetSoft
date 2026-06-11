@@ -16,6 +16,7 @@ import QuoteBuilder from './pages/QuoteBuilder.jsx';
 import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
 import Comisiones from './pages/Comisiones.jsx';
+import Chats from './pages/Chats.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import AdminUsers from './pages/admin/Users.jsx';
@@ -213,6 +214,7 @@ function ProtectedApp() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<RoleHome />} />
+            <Route path="chats" element={<Chats />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />

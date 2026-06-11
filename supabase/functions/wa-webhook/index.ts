@@ -1,0 +1,163 @@
+// wa-webhook — Meta's webhook for the WhatsApp Business Cloud API.
+//
+// Two jobs, both public (Meta calls this, not the browser — verify_jwt must
+// be off):
+//   GET  — the one-time registration handshake: echo hub.challenge when
+//          hub.verify_token matches settings.whatsapp_verify_token.
+//   POST — inbound traffic: client messages land in wa_messages (linked to a
+//          customer/professional by phone match), and delivery-status updates
+//          (sent/delivered/read/failed) update the matching outbound row.
+//
+// POST payloads are authenticated by the X-Hub-Signature-256 header — an
+// HMAC-SHA256 of the raw body with the app's App Secret (whatsapp_config,
+// service-role read). No valid signature → 401; without the secret saved we
+// can't authenticate Meta, so inbound processing stays off until it's pasted
+// in Configuración.
+//
+// Always answer 2xx once authenticated, even on partial failures — Meta
+// retries non-2xx with backoff and eventually disables the webhook.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+
+const TEAM = 'team';
+
+/** Matching key: the LAST 10 digits (mirrors src/lib/phone.js phoneKey — the
+ *  Deno↔Vite wall means we can't import it; the rule is trivial and kept
+ *  equivalent on purpose). */
+function phoneKey(phone: string | null | undefined): string {
+  const d = String(phone || '').replace(/\D/g, '');
+  return d.length > 10 ? d.slice(-10) : d;
+}
+
+async function validSignature(raw: string, header: string | null, secret: string): Promise<boolean> {
+  if (!header || !header.startsWith('sha256=') || !secret) return false;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const given = header.slice('sha256='.length).toLowerCase();
+  // Constant-time-ish compare (same length, XOR accumulate).
+  if (given.length !== hex.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+/** The renderable text of an inbound message, per Meta message type. */
+function inboundBody(msg: Record<string, any>): string {
+  switch (msg.type) {
+    case 'text': return msg.text?.body || '';
+    case 'button': return msg.button?.text || '';
+    case 'interactive':
+      return msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
+    case 'reaction': return msg.reaction?.emoji || '';
+    case 'image': return msg.image?.caption || '';
+    case 'video': return msg.video?.caption || '';
+    case 'document': return msg.document?.caption || msg.document?.filename || '';
+    case 'location': {
+      const l = msg.location || {};
+      return l.name || (l.latitude != null ? `${l.latitude}, ${l.longitude}` : '');
+    }
+    default: return '';
+  }
+}
+
+Deno.serve(async (req: Request) => {
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return new Response('server not configured', { status: 500 });
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  // ── Registration handshake ────────────────────────────────────────────────
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const mode = url.searchParams.get('hub.mode');
+    const token = url.searchParams.get('hub.verify_token');
+    const challenge = url.searchParams.get('hub.challenge') || '';
+    const { data } = await admin.from('settings').select('whatsapp_verify_token').eq('profile_id', TEAM).maybeSingle();
+    const expected = (data as { whatsapp_verify_token?: string } | null)?.whatsapp_verify_token || '';
+    if (mode === 'subscribe' && expected && token === expected) {
+      return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    }
+    return new Response('verification failed', { status: 403 });
+  }
+
+  if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
+
+  const raw = await req.text();
+  const { data: cfg } = await admin.from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle();
+  const secret = (cfg as { app_secret?: string } | null)?.app_secret || '';
+  if (!(await validSignature(raw, req.headers.get('x-hub-signature-256'), secret))) {
+    return new Response('invalid signature', { status: 401 });
+  }
+
+  let body: Record<string, any> = {};
+  try { body = JSON.parse(raw); } catch { return new Response('bad json', { status: 200 }); }
+
+  // Contact links resolved once per delivery (both tables are small).
+  let customers: { id: string; phone: string | null }[] | null = null;
+  let professionals: { id: string; phone: string | null }[] | null = null;
+  async function linkFor(phone: string): Promise<{ customer_id: string | null; professional_id: string | null }> {
+    if (!customers) {
+      customers = ((await admin.from('customers').select('id, phone').eq('profile_id', TEAM)).data as typeof customers) || [];
+      professionals = ((await admin.from('professionals').select('id, phone').eq('profile_id', TEAM)).data as typeof professionals) || [];
+    }
+    const key = phoneKey(phone);
+    const c = customers!.find((r) => phoneKey(r.phone) === key);
+    if (c) return { customer_id: c.id, professional_id: null };
+    const p = professionals!.find((r) => phoneKey(r.phone) === key);
+    return { customer_id: null, professional_id: p ? p.id : null };
+  }
+
+  try {
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value || {};
+        const contacts: Record<string, any>[] = value.contacts || [];
+
+        // Inbound messages → wa_messages (dedupe on wa_id: Meta retries).
+        for (const msg of value.messages || []) {
+          const phone = String(msg.from || '').replace(/\D/g, '');
+          if (!phone) continue;
+          const contact = contacts.find((c) => phoneKey(c.wa_id) === phoneKey(phone));
+          const link = await linkFor(phone);
+          const tsMs = Number(msg.timestamp) ? Number(msg.timestamp) * 1000 : Date.now();
+          const { error } = await admin.from('wa_messages').upsert({
+            id: crypto.randomUUID(),
+            profile_id: TEAM,
+            direction: 'in',
+            wa_id: msg.id || null,
+            phone,
+            profile_name: contact?.profile?.name || null,
+            ...link,
+            kind: msg.type || 'unknown',
+            body: inboundBody(msg),
+            status: 'received',
+            payload: msg,
+            created_at: new Date(tsMs).toISOString(),
+          }, { onConflict: 'wa_id', ignoreDuplicates: true });
+          if (error) console.error('[wa-webhook] inbound insert failed:', error.message);
+        }
+
+        // Delivery-status updates → the matching outbound row.
+        for (const st of value.statuses || []) {
+          if (!st.id || !st.status) continue;
+          const patch: Record<string, unknown> = {
+            status: st.status,
+            status_at: new Date((Number(st.timestamp) || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+          };
+          const errMsg = st.errors?.[0]?.message || st.errors?.[0]?.title;
+          if (errMsg) patch.error = errMsg;
+          const { error } = await admin.from('wa_messages').update(patch).eq('wa_id', st.id);
+          if (error) console.error('[wa-webhook] status update failed:', error.message);
+        }
+      }
+    }
+  } catch (e) {
+    // Answer 200 anyway — a parse hiccup must not make Meta disable the webhook.
+    console.error('[wa-webhook] processing error:', (e as Error).message);
+  }
+
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+});

@@ -30,6 +30,7 @@ import type {
   FiscalPeriod,
   Employee,
   PayrollRun,
+  WaMessage,
 } from '../types/domain.ts';
 
 /**
@@ -93,6 +94,7 @@ const TABLES = {
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
+  waMessages:         { db: 'wa_messages',         pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -132,6 +134,7 @@ export interface TableRowMap {
   fiscalPeriods: FiscalPeriod;
   employees: Employee;
   payrollRuns: PayrollRun;
+  waMessages: WaMessage;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

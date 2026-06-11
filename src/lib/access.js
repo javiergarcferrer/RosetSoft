@@ -12,6 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
+  MessageCircle,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -25,6 +26,7 @@ const CRM_GROUP = {
   items: [
     { to: '/quotes', label: 'Cotizaciones', icon: FileText },
     { to: '/orders', label: 'Pedidos', icon: Package },
+    { to: '/chats', label: 'WhatsApp', icon: MessageCircle },
     { to: '/customers', label: 'Clientes', icon: Users },
     { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
   ],

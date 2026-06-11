@@ -8,6 +8,7 @@ import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
 import { saveShopifyConfig, syncShopify, pingShopify, SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
+import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
@@ -205,6 +206,9 @@ export default function Settings() {
 
         {/* Public storefront */}
         <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
+
+        {/* WhatsApp Business (Cloud API) */}
+        <WhatsAppCard settings={settings} saveSettings={saveSettings} />
 
         {/* Shopify connections — one per store. */}
         <ShopifyCard settings={settings} store={SHOPIFY_STORE_ALCOVER} />

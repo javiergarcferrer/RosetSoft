@@ -1,0 +1,153 @@
+// Client helpers for the WhatsApp Business (Cloud API) integration.
+//
+// Mirrors the Shopify pattern (lib/shopifySync.js): the Meta credentials are
+// saved through a SECURITY DEFINER RPC into the WRITE-ONLY whatsapp_config
+// table (the browser never reads them back) and used server-side by the
+// `wa-send` Edge Function. Inbound traffic arrives via the public `wa-webhook`
+// function (Meta → Supabase, HMAC-verified). Only non-sensitive status
+// (connected-at, display number, verify token) lands on `settings` for the UI.
+
+import { supabase } from '../db/supabaseClient.js';
+import { updateSettings, db, newId } from '../db/database.js';
+import { waDigits } from './phone.js';
+
+const TEAM_PROFILE_ID = 'team';
+
+const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
+
+/** The callback URL to paste into Meta → WhatsApp → Configuración → Webhook. */
+export function waWebhookUrl() {
+  return `${SUPABASE_URL}/functions/v1/wa-webhook`;
+}
+
+/**
+ * Save (or replace) the WhatsApp connection. Credentials go to the write-only
+ * whatsapp_config table via `save_whatsapp_config`; the webhook verify token is
+ * minted once (it's a handshake string Meta echoes back, not a secret) and
+ * lands on settings together with connected-at so the UI can show state
+ * without ever reading the token back.
+ */
+export async function saveWhatsappConfig({ accessToken, phoneNumberId, wabaId, appSecret, settings, profileId = TEAM_PROFILE_ID }) {
+  const token = String(accessToken || '').trim();
+  if (!token) throw new Error('Pega el token de acceso (empieza con "EAA…"). Meta → tu app → WhatsApp → API Setup.');
+  const phoneId = String(phoneNumberId || '').trim();
+  if (!phoneId) throw new Error('Pega el Phone Number ID (Meta → WhatsApp → API Setup, debajo del número).');
+  // The classic wrong paste: the phone NUMBER instead of its ID. The ID is a
+  // long numeric Meta identifier; a "+", spaces, or a 10/11-digit NANP shape
+  // means the dealer copied the number itself.
+  if (!/^\d{10,20}$/.test(phoneId) || /^1?8(09|29|49)\d{7}$/.test(phoneId)) {
+    throw new Error('Eso parece el número de teléfono, no el Phone Number ID. El ID es el código numérico largo que aparece DEBAJO del número en Meta → WhatsApp → API Setup.');
+  }
+  const waba = String(wabaId || '').trim();
+  const secret = String(appSecret || '').trim();
+  if (secret && !/^[0-9a-f]{32}$/i.test(secret)) {
+    throw new Error('El App Secret es un código de 32 caracteres hexadecimales (Meta → tu app → App settings → Basic → App Secret → Show).');
+  }
+
+  const { error } = await supabase.rpc('save_whatsapp_config', {
+    p_access_token: token, p_phone_number_id: phoneId, p_waba_id: waba, p_app_secret: secret,
+  });
+  if (error) throw new Error(error.message || 'No se pudo guardar la conexión con WhatsApp.');
+
+  // Mint the webhook verify token once; keep it stable across re-saves so a
+  // webhook already registered in the Meta portal doesn't break.
+  const verifyToken = settings?.whatsappVerifyToken || newVerifyToken();
+  await updateSettings(profileId, { whatsappConnectedAt: Date.now(), whatsappVerifyToken: verifyToken });
+}
+
+function newVerifyToken() {
+  try {
+    return crypto.randomUUID().replace(/-/g, '');
+  } catch {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
+/**
+ * Invoke the `wa-send` Edge Function and return its JSON body. Non-2xx
+ * responses carry the real reason in a JSON body; supabase-js hides it behind
+ * a generic message, so read it back (same recovery as invokeShopify).
+ */
+async function invokeWaSend(body) {
+  const { data, error } = await supabase.functions.invoke('wa-send', { body });
+  if (!error) return data;
+  const ctx = error.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { return await ctx.json(); } catch { /* not a JSON body — fall through */ }
+  }
+  throw new Error(error.message || 'No se pudo contactar con WhatsApp.');
+}
+
+/**
+ * Verify the saved connection against the Graph API. Returns
+ * { configured:false } when nothing is saved, { ok:true, displayNumber,
+ * verifiedName, quality } when the token reaches the number, or
+ * { ok:false, error } when Meta rejects it.
+ */
+export async function pingWhatsapp() {
+  return invokeWaSend({ test: true });
+}
+
+/**
+ * Send a free-form text message. Only delivers inside the 24h customer-service
+ * window (the recipient wrote within the last 24h); outside it Meta rejects
+ * with re-engagement error 131047 — `wa-send` translates that to a clear
+ * Spanish message. Returns { ok, id } or { ok:false, error }.
+ */
+export async function sendWhatsappText({ to, text, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), text, customerId, professionalId, quoteId });
+}
+
+/**
+ * Send a pre-approved template message (the only way to INITIATE a
+ * conversation). `params` fill the template's {{1}}, {{2}}… body variables.
+ */
+export async function sendWhatsappTemplate({ to, template, params, lang, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), template, params, lang, customerId, professionalId, quoteId });
+}
+
+/**
+ * Send a quote's public client link over the business number. Uses the
+ * approved template configured in Settings (whatsappQuoteTemplate, one {{1}} =
+ * the link) so it works outside the 24h window; with no template configured it
+ * falls back to free-form text (24h window only).
+ */
+export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
+  const template = (settings?.whatsappQuoteTemplate || '').trim();
+  if (template) {
+    return sendWhatsappTemplate({ to, template, params: [url], customerId: customer?.id, quoteId });
+  }
+  const name = (customer?.name || '').trim().split(/\s+/)[0];
+  const text = `Hola${name ? ` ${name}` : ''}, aquí está su cotización de ${settings?.companyName || 'Alcover'}: ${url}`;
+  return sendWhatsappText({ to, text, customerId: customer?.id, quoteId });
+}
+
+/**
+ * Mark a thread's inbound messages as read (the unread badge source). Fire and
+ * forget from the chat view; failures only delay the badge.
+ */
+export async function markThreadRead(messages) {
+  const unread = (messages || []).filter((m) => m.direction === 'in' && !m.readAt);
+  const now = Date.now();
+  await Promise.all(unread.map((m) => db.waMessages.update(m.id, { readAt: now })));
+}
+
+/**
+ * Optimistic outbound row for the chat view (the server writes the durable
+ * one; this renders instantly while wa-send round-trips).
+ */
+export function draftOutboundMessage({ phone, text, customerId, professionalId, profileId = TEAM_PROFILE_ID }) {
+  return {
+    id: newId(),
+    profileId,
+    direction: 'out',
+    phone: waDigits(phone),
+    customerId: customerId || null,
+    professionalId: professionalId || null,
+    kind: 'text',
+    body: text,
+    status: 'sending',
+    createdAt: Date.now(),
+  };
+}
