@@ -43,10 +43,11 @@ export async function saveShopifyConfig({ domain, clientId, clientSecret, store 
   if (!cid || !csec) {
     throw new Error('Ingresa el Client ID y el Client secret de la app (Dev Dashboard → tu app → Settings).');
   }
-  // A pasted shpat_/shpss_ value means the user grabbed a TOKEN, not the
-  // client credentials — catch the mix-up here instead of as an OAuth error.
-  if (/^shp(at|ca|ss|ck)_/.test(csec)) {
-    throw new Error('Eso parece un token (shp…_), no el Client secret. Copia el Client secret de la página Settings de tu app en el Dev Dashboard.');
+  // Shopify prefixes are documented: the app secret key (= client_secret) is
+  // `shpss_…`; ACCESS TOKENS are `shpat_`/`shpca_`/`shppa_`. Only a pasted
+  // access token is the wrong-credential mix-up worth catching here.
+  if (/^shp(at|ca|pa)_/.test(csec)) {
+    throw new Error('Eso es un access token (shpat_/shpca_/shppa_…), no el Client secret. Copia el Client secret (shpss_…) de la página Settings de tu app en el Dev Dashboard.');
   }
   const { error } = await supabase.rpc('save_shopify_config', {
     p_domain: d, p_store: store, p_client_id: cid, p_client_secret: csec,
