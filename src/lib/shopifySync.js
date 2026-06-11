@@ -5,9 +5,10 @@
 //     in-stock items to (and archives sold-out ones from).
 //   • 'lifestylegarden' — lifestylegarden.do: the brand catalog the import
 //     PULLS into `products`.
-// The app saves each store's Admin token through a SECURITY DEFINER RPC
-// (write-only — the browser never reads it back) and triggers the
-// `shopify-sync` Edge Function. Tokens stay server-side; only the
+// Auth is the Dev Dashboard app flow ONLY: the app saves each store's Client
+// ID + Client secret through a SECURITY DEFINER RPC (write-only — the browser
+// never reads them back); the `shopify-sync` Edge Function mints and caches
+// the short-lived tokens server-side (client credentials grant). Only the
 // non-sensitive domain + connected-at land on `settings` for the UI.
 
 import { supabase } from '../db/supabaseClient.js';
@@ -19,16 +20,16 @@ export const SHOPIFY_STORE_ALCOVER = 'alcover';
 export const SHOPIFY_STORE_LSG = 'lifestylegarden';
 
 /**
- * Save (or replace) one store's Shopify connection. Two credential shapes:
- *   • Dev Dashboard app (the CURRENT Shopify flow): `clientId` + `clientSecret`
- *     from the app's Settings page — the Edge Function exchanges them for a
- *     short-lived token on every call (client credentials grant).
- *   • Legacy in-admin custom app: a static Admin `token` (shpat_…).
- * Either goes to the write-only shopify_config table via `save_shopify_config`;
- * domain + connected-at land on that store's settings mirror so the UI can
- * show "connected" without ever reading the secret back.
+ * Save (or replace) one store's Shopify connection: the Dev Dashboard app's
+ * `clientId` + `clientSecret` (its Settings page). The Edge Function exchanges
+ * them for short-lived tokens (client credentials grant) and owns the token
+ * cache — the client never sees a token. Credentials go to the write-only
+ * shopify_config table via `save_shopify_config`; domain + connected-at land
+ * on that store's settings mirror so the UI can show "connected" without ever
+ * reading the secret back. One Dev Dashboard app installed on both stores can
+ * serve both connections (same credentials, different domain).
  */
-export async function saveShopifyConfig({ domain, token, clientId, clientSecret, store = SHOPIFY_STORE_ALCOVER, profileId = TEAM_PROFILE_ID }) {
+export async function saveShopifyConfig({ domain, clientId, clientSecret, store = SHOPIFY_STORE_ALCOVER, profileId = TEAM_PROFILE_ID }) {
   const d = String(domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
   if (!d) throw new Error('Ingresa el dominio .myshopify.com de tu tienda (Shopify → Configuración → Dominios).');
   // The Admin API only answers on the canonical *.myshopify.com host — a
@@ -37,24 +38,18 @@ export async function saveShopifyConfig({ domain, token, clientId, clientSecret,
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(d)) {
     throw new Error('Ese no es un dominio .myshopify.com. Cópialo exacto de Shopify → Configuración → Dominios (p. ej. alcoversdq.myshopify.com — no tu dominio público alcover.do / lifestylegarden.do).');
   }
-  const t = String(token || '').trim();
   const cid = String(clientId || '').trim();
   const csec = String(clientSecret || '').trim();
-  if (cid || csec) {
-    if (!cid || !csec) throw new Error('Ingresa el Client ID y el Client secret de la app (Dev Dashboard → tu app → Settings).');
-  } else {
-    if (!t) throw new Error('Ingresa el Client ID + Client secret de la app del Dev Dashboard, o un Admin API access token (shpat_…) de una app personalizada clásica.');
-    // The legacy custom-app Admin API access token always starts with `shpat_`.
-    // The similarly-named API key (`shpck_`/hex) and API secret key (`shpss_`)
-    // sit right next to it on the credentials page and are the usual wrong
-    // paste — catch them here instead of as a Shopify 401 later.
-    if (!/^shpat_/.test(t)) {
-      throw new Error('Eso no es un Admin API access token (debe empezar con “shpat_”). Si tu app es del Dev Dashboard, usa el modo Client ID + Client secret.');
-    }
+  if (!cid || !csec) {
+    throw new Error('Ingresa el Client ID y el Client secret de la app (Dev Dashboard → tu app → Settings).');
+  }
+  // A pasted shpat_/shpss_ value means the user grabbed a TOKEN, not the
+  // client credentials — catch the mix-up here instead of as an OAuth error.
+  if (/^shp(at|ca|ss|ck)_/.test(csec)) {
+    throw new Error('Eso parece un token (shp…_), no el Client secret. Copia el Client secret de la página Settings de tu app en el Dev Dashboard.');
   }
   const { error } = await supabase.rpc('save_shopify_config', {
-    p_domain: d, p_token: cid ? null : t, p_store: store,
-    p_client_id: cid || null, p_client_secret: csec || null,
+    p_domain: d, p_store: store, p_client_id: cid, p_client_secret: csec,
   });
   if (error) throw new Error(error.message || 'No se pudo guardar la conexión con Shopify.');
   await updateSettings(profileId, store === SHOPIFY_STORE_LSG

@@ -21,8 +21,10 @@
 //
 // The app calls this (authed) after inventory changes — a liquidation lands
 // stock, a sale empties it, an item's price/photo is edited — plus a manual
-// "Sincronizar". Each store's Admin token is read from the write-only
-// shopify_config table via the service role; it never reaches the browser.
+// "Sincronizar". Auth: each store's Dev Dashboard app credentials (client
+// credentials grant; 24h tokens cached on the config row) are read from the
+// write-only shopify_config table via the service role; nothing secret ever
+// reaches the browser.
 //
 // Mapping mirrors src/lib/inventoryShopify.ts (the Deno↔Vite wall means we
 // can't import it; the rule is trivial and kept equivalent on purpose).
@@ -38,7 +40,8 @@ const CORS = {
 const json = (b: unknown, s = 200): Response =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-const API_VERSION = '2026-01';
+// Latest stable Admin API version (2026-04 GA'd April 2026).
+const API_VERSION = '2026-04';
 const TEAM = 'team';
 const COLLECTION_TITLE = 'Ligne Roset Inventory';
 const COLLECTION_HANDLE = 'ligne-roset-inventory';
@@ -78,21 +81,29 @@ Deno.serve(async (req: Request) => {
     ? 'lifestylegarden'
     : 'alcover';
 
-  // That store's credentials (write-only table; service role reads). A
-  // connection is EITHER a static Admin token (legacy in-admin custom app) OR
-  // a Dev Dashboard app's client id + secret, exchanged here for a 24-hour
-  // token (client credentials grant) on every call — no caching, the extra
-  // round-trip is nothing next to the sync itself.
+  // That store's connection (write-only table; service role reads). Auth is
+  // the Dev Dashboard app's client credentials grant — per shopify.dev, the
+  // minted token lives 24h and should be CACHED and refreshed before expiry
+  // (and on a 401, e.g. after a secret rotation). The cache is the row's own
+  // access_token/token_expires_at, written only here.
   const { data: cfg } = await admin
-    .from('shopify_config').select('domain, access_token, client_id, client_secret')
+    .from('shopify_config').select('domain, access_token, token_expires_at, client_id, client_secret')
     .eq('profile_id', TEAM).eq('store', store).maybeSingle();
-  const c = cfg as { domain?: string; access_token?: string; client_id?: string; client_secret?: string } | null;
+  const c = cfg as { domain?: string; access_token?: string | null; token_expires_at?: string | null; client_id?: string; client_secret?: string } | null;
   const domain = c?.domain;
-  let token = c?.access_token || '';
-  if (!domain || (!token && !(c?.client_id && c?.client_secret))) {
+  if (!domain || !c?.client_id || !c?.client_secret) {
     return json({ configured: false, store, message: 'Shopify no conectado' });
   }
-  if (!token) {
+
+  // Refresh ahead of the deadline so a token can't die mid-sync.
+  const EXPIRY_SKEW_MS = 5 * 60 * 1000;
+  const cacheValid = !!c.access_token && !!c.token_expires_at &&
+    Date.parse(c.token_expires_at) - Date.now() > EXPIRY_SKEW_MS;
+  let token = cacheValid ? (c.access_token as string) : '';
+
+  /** Mint a fresh 24h token (client credentials grant) and persist it as the
+   *  row's cache (best-effort — a failed cache write only costs a re-mint). */
+  async function mintToken(): Promise<string> {
     const r = await fetch(`https://${domain}/admin/oauth/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -102,25 +113,33 @@ Deno.serve(async (req: Request) => {
         client_secret: c!.client_secret as string,
       }),
     });
-    const grant = await r.json().catch(() => null) as { access_token?: string; error?: string; error_description?: string } | null;
+    const grant = await r.json().catch(() => null) as { access_token?: string; expires_in?: number; error?: string; error_description?: string } | null;
     if (!r.ok || !grant?.access_token) {
       // shop_not_permitted is the classic trip-up: the app and the store must
       // sit in the SAME Dev Dashboard organization, and the app must be
       // installed on the store.
       const reason = grant?.error_description || grant?.error || `HTTP ${r.status}`;
-      return json({
-        configured: true, ok: false, store,
-        error: `Shopify rechazó las credenciales de la app para ${domain}: ${reason}. Verifica que la app del Dev Dashboard esté en la MISMA organización que la tienda y que esté instalada en ella.`,
-      }, 502);
+      throw new Error(`Shopify rechazó las credenciales de la app para ${domain}: ${reason}. Verifica que la app del Dev Dashboard esté en la MISMA organización que la tienda y que esté instalada en ella.`);
     }
-    token = grant.access_token;
+    const expiresAt = new Date(Date.now() + (Number(grant.expires_in) || 86399) * 1000).toISOString();
+    await admin.from('shopify_config')
+      .update({ access_token: grant.access_token, token_expires_at: expiresAt })
+      .eq('profile_id', TEAM).eq('store', store);
+    return grant.access_token;
   }
 
-  // GraphQL call that turns the two classic setup mistakes into their OWN
+  if (!token) {
+    try { token = await mintToken(); } catch (e) {
+      return json({ configured: true, ok: false, store, error: (e as Error).message }, 502);
+    }
+  }
+
+  // GraphQL call that turns the classic setup mistakes into their OWN
   // messages instead of a generic "invalid token": a wrong domain (the store
-  // answers 404/HTML — the token may be fine) vs a rejected token (401/403 on
-  // the right store).
-  async function gql<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  // answers 404/HTML) vs rejected auth (401/403 on the right store). A 401/403
+  // on a CACHED token gets ONE re-mint + retry — the cache may simply be a
+  // token revoked by a secret rotation.
+  async function gql<T = any>(query: string, variables: Record<string, unknown> = {}, retried = false): Promise<T> {
     const r = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token as string },
@@ -128,7 +147,11 @@ Deno.serve(async (req: Request) => {
     });
     if (r.status === 401 || r.status === 403) {
       await r.body?.cancel();
-      throw new Error(`token inválido o sin permisos para ${domain} (HTTP ${r.status}). Genera el Admin API access token en la app personalizada de ESA tienda.`);
+      if (!retried) {
+        token = await mintToken(); // throws the descriptive credential error
+        return gql(query, variables, true);
+      }
+      throw new Error(`la app no tiene acceso a ${domain} (HTTP ${r.status}). Revisa los permisos (scopes) de la app del Dev Dashboard y que esté instalada en ESA tienda.`);
     }
     if (r.status === 404) {
       await r.body?.cancel();
@@ -142,11 +165,11 @@ Deno.serve(async (req: Request) => {
     return b.data as T;
   }
 
-  // Connection check — verify the token reaches the store and that the custom
+  // Connection check — verify the credentials reach the store and that the
   // app was granted every scope that store's direction needs (the catalog
   // import only READS; the inventory mirror also writes). The Settings screen
-  // calls this right after saving a token so a bad/under-scoped credential is
-  // caught at connect time (not silently as "0 published" later).
+  // calls this right after saving so a bad/under-scoped credential is caught
+  // at connect time (not silently as "0 published" later).
   if (body?.test === true) {
     const REQUIRED = store === 'lifestylegarden'
       ? ['read_products', 'read_inventory']

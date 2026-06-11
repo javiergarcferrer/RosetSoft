@@ -73,12 +73,14 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   reference)` ACROSS brands. Category aggregate via the `catalog_categories`
   SQL fn (optional `p_brand` filter).
 - **shopify_config** WRITE-ONLY (no client policies; service role reads, the
-  `save_shopify_config(domain, token, store, client_id, client_secret)`
-  SECURITY DEFINER RPC writes). A row's credential is EITHER `access_token`
-  (legacy in-admin custom app, static `shpat_`) OR `client_id`+`client_secret`
-  (Dev Dashboard app — `shopify-sync` mints a 24h token per call via the
-  client-credentials grant; the app+store must share one Dev Dashboard org).
-  PK `(profile_id, store)` — the team runs TWO Shopify stores, one row each:
+  `save_shopify_config(domain, store, client_id, client_secret)` SECURITY
+  DEFINER RPC writes). Auth is the Dev Dashboard app flow ONLY:
+  `client_id`+`client_secret` (NOT NULL) are the credential;
+  `access_token`+`token_expires_at` are `shopify-sync`'s SERVER-OWNED cache of
+  the minted 24h token (client-credentials grant; refreshed before expiry and
+  on 401; the app+store must share one Dev Dashboard org). No static-token
+  path. PK `(profile_id, store)` — the team runs TWO Shopify stores, one row
+  each:
   `store='alcover'` (alcover.do = `alcoversdq.myshopify.com`, the inventory
   mirror `shopify-sync` PUBLISHES to) and `store='lifestylegarden'`
   (lifestylegarden.do = `alcoversrl.myshopify.com`, the catalog the
