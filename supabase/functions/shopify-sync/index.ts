@@ -1,6 +1,14 @@
-// shopify-sync — mirror IN-STOCK inventory into the Shopify catalog.
+// shopify-sync — the app's two-way bridge to the team's TWO Shopify stores.
 //
-// The store catalog = in-stock pieces. For each inventory item this function:
+// Connections live in shopify_config, ONE PER STORE (keyed profile_id+store):
+//   • store 'alcover' (alcover.do = alcoversdq.myshopify.com) — the inventory
+//     mirror. The default mode PUBLISHES in-stock pieces there.
+//   • store 'lifestylegarden' (lifestylegarden.do = alcoversrl.myshopify.com)
+//     — the brand catalog. importCatalog PULLS its active products into
+//     `products`, brand 'lifestylegarden'.
+//
+// Inventory mirror (default mode, alcover store): the store catalog =
+// in-stock pieces. For each inventory item this function:
 //   • in stock (qty > 0) AND priced (selling_price > 0) → upsert an ACTIVE
 //     Shopify product (one listing per item, keyed by the stable handle
 //     inv-<id>), set its price, on-hand quantity and photo, and place it in
@@ -13,7 +21,7 @@
 //
 // The app calls this (authed) after inventory changes — a liquidation lands
 // stock, a sale empties it, an item's price/photo is edited — plus a manual
-// "Sincronizar". The Shopify Admin token is read from the write-only
+// "Sincronizar". Each store's Admin token is read from the write-only
 // shopify_config table via the service role; it never reaches the browser.
 //
 // Mapping mirrors src/lib/inventoryShopify.ts (the Deno↔Vite wall means we
@@ -59,12 +67,24 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // Shopify credentials (write-only table; service role reads).
+  let body: { itemIds?: string[]; test?: boolean; importCatalog?: boolean; store?: string } = {};
+  try { body = await req.json(); } catch { /* empty body = sync all */ }
+  const itemIds = Array.isArray(body?.itemIds) ? body.itemIds : null;
+
+  // Which store this call talks to: the catalog import reads the
+  // LifestyleGarden store; everything else (inventory publish) writes the
+  // Alcover store. `test` checks whichever store the caller names.
+  const store = body?.importCatalog === true || body?.store === 'lifestylegarden'
+    ? 'lifestylegarden'
+    : 'alcover';
+
+  // That store's credentials (write-only table; service role reads).
   const { data: cfg } = await admin
-    .from('shopify_config').select('domain, access_token').eq('profile_id', TEAM).maybeSingle();
+    .from('shopify_config').select('domain, access_token')
+    .eq('profile_id', TEAM).eq('store', store).maybeSingle();
   const domain = (cfg as { domain?: string } | null)?.domain;
   const token = (cfg as { access_token?: string } | null)?.access_token;
-  if (!domain || !token) return json({ configured: false, message: 'Shopify no conectado' });
+  if (!domain || !token) return json({ configured: false, store, message: 'Shopify no conectado' });
 
   // GraphQL call that turns the two classic setup mistakes into their OWN
   // messages instead of a generic "invalid token": a wrong domain (the store
@@ -92,19 +112,18 @@ Deno.serve(async (req: Request) => {
     return b.data as T;
   }
 
-  let body: { itemIds?: string[]; test?: boolean; importCatalog?: boolean } = {};
-  try { body = await req.json(); } catch { /* empty body = sync all */ }
-  const itemIds = Array.isArray(body?.itemIds) ? body.itemIds : null;
-
   // Connection check — verify the token reaches the store and that the custom
-  // app was granted every scope the sync needs. The Settings screen calls this
-  // right after saving a token so a bad/under-scoped credential is caught at
-  // connect time (not silently as "0 published" later).
+  // app was granted every scope that store's direction needs (the catalog
+  // import only READS; the inventory mirror also writes). The Settings screen
+  // calls this right after saving a token so a bad/under-scoped credential is
+  // caught at connect time (not silently as "0 published" later).
   if (body?.test === true) {
-    const REQUIRED = [
-      'read_products', 'write_products', 'read_locations',
-      'read_inventory', 'write_inventory',
-    ];
+    const REQUIRED = store === 'lifestylegarden'
+      ? ['read_products', 'read_inventory']
+      : [
+        'read_products', 'write_products', 'read_locations',
+        'read_inventory', 'write_inventory',
+      ];
     try {
       const shop = (await gql<{ shop: { name: string; myshopifyDomain: string } }>(
         `{ shop { name myshopifyDomain } }`,

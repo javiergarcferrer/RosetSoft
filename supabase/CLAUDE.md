@@ -72,6 +72,15 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   `importCatalog` mode, `id` = `lsg-<variantId>`). Unique `(profile_id,
   reference)` ACROSS brands. Category aggregate via the `catalog_categories`
   SQL fn (optional `p_brand` filter).
+- **shopify_config** WRITE-ONLY (no client policies; service role reads, the
+  `save_shopify_config(domain, token, store)` SECURITY DEFINER RPC writes). PK
+  `(profile_id, store)` — the team runs TWO Shopify stores, one row each:
+  `store='alcover'` (alcover.do = `alcoversdq.myshopify.com`, the inventory
+  mirror `shopify-sync` PUBLISHES to) and `store='lifestylegarden'`
+  (lifestylegarden.do = `alcoversrl.myshopify.com`, the catalog the
+  `importCatalog` mode PULLS from). Admin tokens are store-scoped — one store's
+  token 401s on the other. Non-sensitive mirrors on settings:
+  `shopify_domain/connected_at` (alcover), `shopify_lsg_*` (LSG).
 
 ## Cross-cutting
 - **RLS:** single-tenant "team can write" — most tables: `for all to

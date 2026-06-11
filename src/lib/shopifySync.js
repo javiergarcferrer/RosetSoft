@@ -1,9 +1,13 @@
-// Client helpers for the inventory → Shopify catalog sync.
+// Client helpers for the app's two Shopify connections.
 //
-// The store catalog mirrors in-stock inventory. The app saves the Shopify Admin
-// token through a SECURITY DEFINER RPC (write-only — the browser never reads it
-// back) and triggers the `shopify-sync` Edge Function, which publishes in-stock
-// items and archives sold-out ones. The token stays server-side; only the
+// TWO stores, one connection each (shopify_config rows keyed by store):
+//   • 'alcover'         — alcover.do: the inventory mirror the sync PUBLISHES
+//     in-stock items to (and archives sold-out ones from).
+//   • 'lifestylegarden' — lifestylegarden.do: the brand catalog the import
+//     PULLS into `products`.
+// The app saves each store's Admin token through a SECURITY DEFINER RPC
+// (write-only — the browser never reads it back) and triggers the
+// `shopify-sync` Edge Function. Tokens stay server-side; only the
 // non-sensitive domain + connected-at land on `settings` for the UI.
 
 import { supabase } from '../db/supabaseClient.js';
@@ -11,19 +15,23 @@ import { updateSettings } from '../db/database.js';
 
 const TEAM_PROFILE_ID = 'team';
 
+export const SHOPIFY_STORE_ALCOVER = 'alcover';
+export const SHOPIFY_STORE_LSG = 'lifestylegarden';
+
 /**
- * Save (or replace) the Shopify connection. The token goes to the write-only
- * shopify_config table via `save_shopify_config`; domain + connected-at land on
- * settings so the UI can show "connected" without ever reading the token back.
+ * Save (or replace) one store's Shopify connection. The token goes to the
+ * write-only shopify_config table via `save_shopify_config`; domain +
+ * connected-at land on that store's settings mirror so the UI can show
+ * "connected" without ever reading the token back.
  */
-export async function saveShopifyConfig({ domain, token, profileId = TEAM_PROFILE_ID }) {
+export async function saveShopifyConfig({ domain, token, store = SHOPIFY_STORE_ALCOVER, profileId = TEAM_PROFILE_ID }) {
   const d = String(domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
   if (!d) throw new Error('Ingresa el dominio .myshopify.com de tu tienda (Shopify → Configuración → Dominios).');
   // The Admin API only answers on the canonical *.myshopify.com host — a
   // public/custom domain (alcover.do) or a misremembered store name is the
   // usual wrong paste, and it surfaces later as a misleading "token inválido".
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(d)) {
-    throw new Error('Ese no es un dominio .myshopify.com. Cópialo exacto de Shopify → Configuración → Dominios (suele ser un código aleatorio, p. ej. fg9gaq-3c.myshopify.com — no tu dominio público).');
+    throw new Error('Ese no es un dominio .myshopify.com. Cópialo exacto de Shopify → Configuración → Dominios (p. ej. alcoversdq.myshopify.com — no tu dominio público alcover.do / lifestylegarden.do).');
   }
   const t = String(token || '').trim();
   if (!t) throw new Error('Ingresa el Admin API access token (shpat_…).');
@@ -34,9 +42,11 @@ export async function saveShopifyConfig({ domain, token, profileId = TEAM_PROFIL
   if (!/^shpat_/.test(t)) {
     throw new Error('Eso no es un Admin API access token. Debe empezar con “shpat_”. En tu app personalizada de Shopify: Credenciales de API → Admin API access token (no la API key ni la API secret key shpss_…).');
   }
-  const { error } = await supabase.rpc('save_shopify_config', { p_domain: d, p_token: t });
+  const { error } = await supabase.rpc('save_shopify_config', { p_domain: d, p_token: t, p_store: store });
   if (error) throw new Error(error.message || 'No se pudo guardar la conexión con Shopify.');
-  await updateSettings(profileId, { shopifyDomain: d, shopifyConnectedAt: Date.now() });
+  await updateSettings(profileId, store === SHOPIFY_STORE_LSG
+    ? { shopifyLsgDomain: d, shopifyLsgConnectedAt: Date.now() }
+    : { shopifyDomain: d, shopifyConnectedAt: Date.now() });
 }
 
 /**
@@ -82,11 +92,11 @@ export async function importLifestyleGardenCatalog() {
 }
 
 /**
- * Verify the saved connection: does the token reach the store, and was the
- * custom app granted every scope the sync needs? Returns
+ * Verify one store's saved connection: does the token reach the store, and was
+ * the custom app granted every scope that store's direction needs? Returns
  * { configured:false } when no token is saved, { ok:true, shop, missingScopes }
  * when reachable, or { ok:false, error } when Shopify rejects the token.
  */
-export async function pingShopify() {
-  return invokeShopify({ test: true });
+export async function pingShopify(store = SHOPIFY_STORE_ALCOVER) {
+  return invokeShopify({ test: true, store });
 }

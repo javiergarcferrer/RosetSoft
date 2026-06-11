@@ -168,10 +168,14 @@ export interface Settings {
    * delete). See `supabase/functions/store` + `core/store`.
    */
   storeCustomerId?: string | null;
-  /** Shopify catalog sync — store domain + last connection time (the Admin
-   *  token lives in the write-only shopify_config table, never here). */
+  /** Shopify connections — domain + last connection time per store (the Admin
+   *  tokens live in the write-only shopify_config table, never here).
+   *  shopify* = the alcover.do inventory-mirror store; shopifyLsg* = the
+   *  lifestylegarden.do brand-catalog store. */
   shopifyDomain?: string;
   shopifyConnectedAt?: number | null;
+  shopifyLsgDomain?: string;
+  shopifyLsgConnectedAt?: number | null;
   /** Issuer (emisor) RNC for e-CF / 607. */
   companyRnc?: string;
   /** Non-sensitive e-CF cert status (the .p12 itself lives in ecf_credentials). */

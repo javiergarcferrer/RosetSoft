@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
-import { saveShopifyConfig, syncShopify, pingShopify } from '../lib/shopifySync.js';
+import { saveShopifyConfig, syncShopify, pingShopify, SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
@@ -206,8 +206,9 @@ export default function Settings() {
         {/* Public storefront */}
         <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
 
-        {/* Shopify catalog sync */}
-        <ShopifyCard settings={settings} />
+        {/* Shopify connections — one per store. */}
+        <ShopifyCard settings={settings} store={SHOPIFY_STORE_ALCOVER} />
+        <ShopifyCard settings={settings} store={SHOPIFY_STORE_LSG} />
       </div>
     </>
   );
@@ -543,30 +544,57 @@ function RateCard({ local, set, saveSettings }) {
 }
 
 /**
- * Catálogo Shopify — connect the store and run a full sync. The Admin token is
- * saved through a write-only RPC (never read back); only the domain + a
- * "connected" timestamp surface here. "Sincronizar todo" reconciles the whole
- * catalog with current inventory (publish in-stock, archive sold-out).
+ * One Shopify connection card — the app talks to TWO stores, each with its own
+ * custom app + Admin token:
+ *   • alcover         — alcover.do, where the inventory sync PUBLISHES
+ *     in-stock pieces ("Sincronizar todo" reconciles it).
+ *   • lifestylegarden — lifestylegarden.do, where the brand catalog import
+ *     PULLS from (the sync button lives on its Catálogos page).
+ * The Admin token is saved through a write-only RPC (never read back); only
+ * the domain + a "connected" timestamp surface here.
  */
-function ShopifyCard({ settings }) {
-  const [domain, setDomain] = useState(settings?.shopifyDomain || '');
+const SHOPIFY_STORES = {
+  [SHOPIFY_STORE_ALCOVER]: {
+    title: 'Shopify — Alcover (inventario)',
+    domainField: 'shopifyDomain',
+    connectedField: 'shopifyConnectedAt',
+    defaultDomain: 'alcoversdq.myshopify.com',
+    description: <>Cada artículo en inventario con precio y foto se añade automáticamente a la tienda
+      de <strong>alcover.do</strong> dentro de la colección <strong>Ligne Roset Inventory</strong>; al
+      agotarse, se retira. Las ventas se pueden manejar desde Shopify o desde el cotizador.</>,
+  },
+  [SHOPIFY_STORE_LSG]: {
+    title: 'Shopify — LifestyleGarden (catálogo)',
+    domainField: 'shopifyLsgDomain',
+    connectedField: 'shopifyLsgConnectedAt',
+    defaultDomain: 'alcoversrl.myshopify.com',
+    description: <>La tienda de <strong>lifestylegarden.do</strong> es la fuente del catálogo
+      LifestyleGarden del cotizador. Conéctala aquí y sincroniza el catálogo
+      desde <strong>Administración › Catálogos › LifestyleGarden</strong>.</>,
+  },
+};
+
+function ShopifyCard({ settings, store }) {
+  const cfg = SHOPIFY_STORES[store];
+  const savedDomain = settings?.[cfg.domainField] || '';
+  const [domain, setDomain] = useState(savedDomain || cfg.defaultDomain);
   const [token, setToken] = useState('');
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
   const [msg, setMsg] = useState('');
   const [syncing, setSyncing] = useState(false);
-  const connectedAt = settings?.shopifyConnectedAt;
+  const connectedAt = settings?.[cfg.connectedField];
 
-  useEffect(() => { setDomain(settings?.shopifyDomain || ''); }, [settings?.shopifyDomain]);
+  useEffect(() => { setDomain(savedDomain || cfg.defaultDomain); }, [savedDomain, cfg.defaultDomain]);
 
   async function save() {
     setStatus('saving');
     setMsg('');
     try {
-      await saveShopifyConfig({ domain, token });
+      await saveShopifyConfig({ domain, token, store });
       setToken('');
       // Verify the token actually reaches the store before claiming success —
       // a bad or under-scoped credential is caught here, not later as "0 published".
-      const ping = await pingShopify();
+      const ping = await pingShopify(store);
       if (ping?.ok) {
         const missing = ping.missingScopes || [];
         setStatus(missing.length ? 'error' : 'saved');
@@ -612,25 +640,23 @@ function ShopifyCard({ settings }) {
   return (
     <div className="card card-pad">
       <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold">Catálogo Shopify</h2>
+        <h2 className="font-semibold">{cfg.title}</h2>
       </div>
       <p className="text-xs text-ink-500 mb-4">
-        Cada artículo en inventario con precio y foto se añade automáticamente a Shopify dentro de la
-        colección <strong>Ligne Roset Inventory</strong>; al agotarse, se retira. Las ventas se pueden
-        manejar desde Shopify o desde el cotizador. Usa el dominio <code>.myshopify.com</code> de tu
-        tienda (suele ser un código aleatorio, p. ej. <code>fg9gaq-3c.myshopify.com</code>, no tu
-        dominio público) y el <strong>Admin API access token</strong> (<code>shpat_…</code>) de tu app
-        personalizada.
+        {cfg.description}{' '}
+        Usa el dominio <code>.myshopify.com</code> de ESA tienda (p. ej. <code>{cfg.defaultDomain}</code>,
+        no el dominio público) y el <strong>Admin API access token</strong> (<code>shpat_…</code>) de la
+        app personalizada creada en ESA tienda.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="label" htmlFor="shopify-domain">Dominio</label>
-          <input id="shopify-domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="fg9gaq-3c.myshopify.com"
+          <label className="label" htmlFor={`shopify-domain-${store}`}>Dominio</label>
+          <input id={`shopify-domain-${store}`} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder={cfg.defaultDomain}
             className="input mt-1" />
         </div>
         <div>
-          <label className="label" htmlFor="shopify-token">Admin API token</label>
-          <input id="shopify-token" type="password" value={token} onChange={(e) => setToken(e.target.value)}
+          <label className="label" htmlFor={`shopify-token-${store}`}>Admin API token</label>
+          <input id={`shopify-token-${store}`} type="password" value={token} onChange={(e) => setToken(e.target.value)}
             placeholder={connectedAt ? '•••••••• (guardado)' : 'shpat_…'}
             className="input mt-1" />
         </div>
@@ -639,9 +665,11 @@ function ShopifyCard({ settings }) {
         <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
           {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
         </button>
-        <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-          {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar todo
-        </button>
+        {store === SHOPIFY_STORE_ALCOVER && (
+          <button type="button" onClick={syncAll} disabled={syncing} className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+            {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Sincronizar todo
+          </button>
+        )}
         {connectedAt ? <span className="text-[11px] text-ink-400 min-w-0 truncate">Conectado · {formatDateTime(connectedAt)}</span> : null}
       </div>
       {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
