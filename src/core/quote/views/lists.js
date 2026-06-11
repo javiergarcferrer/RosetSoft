@@ -232,6 +232,69 @@ export function resolveQuotesList({
   };
 }
 
+// Status display order for the per-professional quote dropdown — committed
+// first, then the live pipeline, then the dead/parked statuses. Mirrors the
+// section order on ProfessionalDetail so the two surfaces read the same way.
+export const PROFESSIONAL_QUOTE_STATUS_ORDER = ['accepted', 'sent', 'draft', 'declined', 'archived'];
+
+// ViewModel for pages/Professionals.jsx — the per-row dropdown that shows each
+// professional's quotes grouped by status. Pure projection: for every
+// professional it rolls their assigned quotes into ordered status groups
+// (entries carry the quote, its customer and its grand total) plus the
+// count / all-time / accepted figures the collapsed row shows. Money routes
+// through the shared totals helpers so these figures agree to the cent with
+// ProfessionalDetail and the quotes list.
+export function resolveProfessionalsList({ professionals, quotes, lines, customers }) {
+  const customerById = new Map();
+  for (const c of customers || []) customerById.set(c.id, c);
+
+  // Quotes bucketed by their assigned professional (unassigned quotes simply
+  // don't appear on this page).
+  const quotesByPro = new Map();
+  for (const q of quotes || []) {
+    if (!q.professionalId) continue;
+    if (!quotesByPro.has(q.professionalId)) quotesByPro.set(q.professionalId, []);
+    quotesByPro.get(q.professionalId).push(q);
+  }
+
+  const linesByQuote = linesByQuoteId(lines);
+  const rollupByProfessionalId = new Map();
+  for (const p of professionals || []) {
+    const qs = quotesByPro.get(p.id) || [];
+    const byStatus = new Map();
+    let allTimeTotal = 0;
+    let acceptedTotal = 0;
+    for (const q of qs) {
+      const total = quoteGrandTotal(q, linesByQuote.get(q.id) || []);
+      const status = q.status || 'draft';
+      if (!byStatus.has(status)) byStatus.set(status, []);
+      byStatus.get(status).push({
+        quote: q,
+        customer: q.customerId ? customerById.get(q.customerId) : null,
+        total,
+      });
+      allTimeTotal += total;
+      if (status === 'accepted') acceptedTotal += total;
+    }
+    // Ordered, non-empty groups; freshest deal first inside each group.
+    const groups = [];
+    for (const status of PROFESSIONAL_QUOTE_STATUS_ORDER) {
+      const entries = byStatus.get(status);
+      if (!entries || entries.length === 0) continue;
+      entries.sort((a, b) => (b.quote.updatedAt || 0) - (a.quote.updatedAt || 0));
+      groups.push({ status, entries });
+    }
+    rollupByProfessionalId.set(p.id, {
+      count: qs.length,
+      groups,
+      allTimeTotal,
+      acceptedTotal,
+    });
+  }
+
+  return { rollupByProfessionalId };
+}
+
 // ViewModel for pages/Orders.jsx. Pure projection off the raw rows: the
 // customer label each order shows, plus the per-order rollups (total, quote
 // count, container count) the list reads straight through.

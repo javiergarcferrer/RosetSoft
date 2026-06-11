@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, UserSquare2, ArrowRight, Mail, Phone, ChevronRight } from 'lucide-react';
-import { useLiveQueryStatus } from '../db/hooks.js';
+import { Plus, UserSquare2, ArrowRight, Mail, Phone, ChevronDown, ExternalLink, FileText } from 'lucide-react';
+import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
@@ -10,6 +10,8 @@ import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { clampCommissionPct } from '../lib/commissions.js';
+import { formatDateTime, formatMoney } from '../lib/format.js';
+import { resolveProfessionalsList } from '../core/quote/views/lists.js';
 
 // The reference commission % a row displays — a non-binding note (the real
 // rate is the quote's order-type rate, Piso 15% / Especial 20%), clamped into
@@ -40,9 +42,20 @@ const COMMISSION_FILTER = {
 
 const SORT_OPTIONS = [
   { key: 'name', label: 'Nombre A–Z' },
+  { key: 'quotes', label: 'Cotizaciones' },
   { key: 'commission', label: 'Comisión %' },
   { key: 'company', label: 'Empresa' },
 ];
+
+// Section labels for the per-row quote dropdown — plural, mirroring
+// ProfessionalDetail's sections so the two surfaces read the same way.
+const STATUS_LABELS = {
+  draft: 'Borradores',
+  sent: 'Enviadas',
+  accepted: 'Aceptadas',
+  declined: 'Rechazadas',
+  archived: 'Archivadas',
+};
 
 // Two-letter initial pair for the avatar circle. Picks the first letter
 // of the name, then the first letter of the company (if any) or of the
@@ -61,10 +74,11 @@ function initialsFor(p) {
  * Professionals list — architects, decorators, etc. that bring deals to
  * the showroom and earn a commission. Structurally close to the
  * Customers list (search box + responsive table/cards + edit modal),
- * but each row links into a detail page that shows the professional's
- * pipeline and accrued commissions. The Customers list doesn't have
- * that kind of detail page because customers don't have a financial
- * roll-up — but professionals do, and that's the value of this module.
+ * but each row EXPANDS in place: tapping a professional drops down their
+ * assigned quotes grouped by status (aceptadas / enviadas / borradores /
+ * …), so the dealer can scan the whole roster's pipelines without
+ * leaving the table. The full financial roll-up (commission math,
+ * trade-discount split) still lives on the detail page each row links to.
  */
 export default function Professionals() {
   const { profileId } = useApp();
@@ -78,6 +92,22 @@ export default function Professionals() {
     [],
   );
 
+  // The rows behind the per-professional dropdown: every team quote (the
+  // VM buckets them by professionalId), their lines (needed for each
+  // quote's grand total — compound lines carry their math in
+  // `components`), and the customers that label each quote row.
+  const quotes = useLiveQuery(
+    () => db.quotes.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const allLines = useLiveQuery(() => db.quoteLines.toArray(), [], []);
+  const customers = useLiveQuery(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+
   // Search-header query state. The parent owns it all (the header is
   // presentational): `q` is the search needle, `filters` holds the
   // secondary commission-band selection as { commission: <value> }, and
@@ -86,6 +116,26 @@ export default function Professionals() {
   const [editing, setEditing] = useState(null);
   const [filters, setFilters] = useState({}); // { commission: '1-5' | … }
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+  // Which rows are dropped open. A Set so several professionals can be
+  // compared side by side; toggled by the row click.
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  function toggleExpanded(id) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // The ViewModel: per professional, their quotes grouped (and sorted) by
+  // status with each quote's grand total precomputed, plus the count and
+  // value roll-ups the collapsed row shows.
+  const { rollupByProfessionalId } = useMemo(
+    () => resolveProfessionalsList({ professionals: pros, quotes, lines: allLines, customers }),
+    [pros, quotes, allLines, customers],
+  );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -101,12 +151,17 @@ export default function Professionals() {
     });
 
     // Sort. 'name' / 'company' are locale string compares; 'commission'
-    // rides the same clamped % the cells render. Direction multiplier
-    // flips asc/desc.
+    // rides the same clamped % the cells render; 'quotes' the assigned-
+    // quote count from the rollup. Direction multiplier flips asc/desc.
     const mul = sort.dir === 'asc' ? 1 : -1;
     return [...rows].sort((a, b) => {
       if (sort.key === 'commission') {
         return (commissionOf(a) - commissionOf(b)) * mul;
+      }
+      if (sort.key === 'quotes') {
+        const ac = rollupByProfessionalId.get(a.id)?.count || 0;
+        const bc = rollupByProfessionalId.get(b.id)?.count || 0;
+        return (ac - bc) * mul;
       }
       if (sort.key === 'company') {
         return (a.company || '').toLowerCase().localeCompare((b.company || '').toLowerCase()) * mul;
@@ -114,7 +169,7 @@ export default function Professionals() {
       // name
       return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
     });
-  }, [pros, q, filters, sort]);
+  }, [pros, q, filters, sort, rollupByProfessionalId]);
 
   return (
     <>
@@ -153,40 +208,50 @@ export default function Professionals() {
             resultNoun={['profesional', 'profesionales']}
           />
 
-          {/* Mobile cards — whole card navigates to the detail page;
-              no inline edit affordance (the detail page has its own
-              "Editar" button). Avatar + meta strip layout matches the
+          {/* Mobile cards — tapping a card drops down the professional's
+              quotes by status (same panel the desktop table uses); the
+              detail page stays one tap away via the "Ver perfil" link
+              inside the panel. Avatar + meta strip layout matches the
               Customers page so dealers learn one pattern. The right-
               hand column keeps the commission % — that's the unique
               piece of information for professionals vs. customers. */}
           <div className="md:hidden space-y-2">
-            {filtered.map((p) => (
-              <Link
-                key={p.id}
-                to={`/professionals/${p.id}`}
-                className="card card-interactive block transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-3 p-3">
-                  <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 ring-1 ring-inset ring-brand-100">
-                    {initialsFor(p) || <UserSquare2 size={16} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm text-ink-900 truncate">{p.name}</div>
-                    {p.company && (
-                      <div className="text-[11px] text-ink-500 truncate">{p.company}</div>
-                    )}
-                    <MetaStrip p={p} />
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="eyebrow-xs text-ink-400">Com. ref.</div>
-                    <div className="text-sm font-semibold tabular-nums text-ink-800">
-                      {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
+            {filtered.map((p) => {
+              const rollup = rollupByProfessionalId.get(p.id);
+              const isOpen = expanded.has(p.id);
+              return (
+                <div key={p.id} className="card overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpanded(p.id)}
+                    className="w-full text-left transition-colors active:bg-ink-50"
+                    aria-expanded={isOpen}
+                  >
+                    <div className="flex items-center gap-3 p-3">
+                      <div className="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-semibold flex-shrink-0 ring-1 ring-inset ring-brand-100">
+                        {initialsFor(p) || <UserSquare2 size={16} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm text-ink-900 truncate">{p.name}</div>
+                        {p.company && (
+                          <div className="text-[11px] text-ink-500 truncate">{p.company}</div>
+                        )}
+                        <MetaStrip p={p} />
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="eyebrow-xs text-ink-400">Cotiz.</div>
+                        <div className="text-sm font-semibold tabular-nums text-ink-800">{rollup?.count || 0}</div>
+                      </div>
+                      <ChevronDown
+                        size={16}
+                        className={`text-ink-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      />
                     </div>
-                  </div>
-                  <ChevronRight size={16} className="text-ink-300 flex-shrink-0" />
+                  </button>
+                  {isOpen && <ProQuotesPanel pro={p} rollup={rollup} />}
                 </div>
-              </Link>
-            ))}
+              );
+            })}
             {filtered.length === 0 && (
               <div className="card card-pad flex flex-col items-center gap-3 py-12 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 ring-1 ring-inset ring-black/5">
@@ -200,9 +265,10 @@ export default function Professionals() {
             )}
           </div>
 
-          {/* Desktop table — the row click goes to the detail page; the
-              edit button stops propagation so the dealer can update
-              contact info without leaving the list. */}
+          {/* Desktop table — the row click drops down the professional's
+              quotes grouped by status; the edit button and the profile
+              arrow stop propagation so contact updates / the financial
+              detail page stay one click away. */}
           <div className="hidden md:block card overflow-hidden">
             <table className="table">
               <thead>
@@ -211,32 +277,26 @@ export default function Professionals() {
                   <th>Empresa</th>
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
+                  <th className="text-right">Cotizaciones</th>
                   <th className="text-right">Comisión ref.</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100" onClick={() => { window.location.hash = `#/professionals/${p.id}`; }}>
-                    <td className="font-medium truncate max-w-[200px]" title={p.name}>{p.name}</td>
-                    <td className="text-ink-700 truncate max-w-[200px]" title={p.company || ''}>{p.company || '—'}</td>
-                    <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={p.email || ''}>{p.email || '—'}</td>
-                    <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{p.phone || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap font-semibold text-ink-800">
-                      {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
-                    </td>
-                    <td className="text-right w-24">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setEditing(p); }}
-                        className="inline-flex items-center rounded-md px-2 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
-                      >
-                        Editar
-                      </button>
-                      <span aria-hidden="true" className="text-ink-200 ml-2"><ArrowRight size={12} className="inline" /></span>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((p) => {
+                  const rollup = rollupByProfessionalId.get(p.id);
+                  const isOpen = expanded.has(p.id);
+                  return (
+                    <FragmentRow
+                      key={p.id}
+                      p={p}
+                      rollup={rollup}
+                      isOpen={isOpen}
+                      onToggle={() => toggleExpanded(p.id)}
+                      onEdit={() => setEditing(p)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -249,6 +309,132 @@ export default function Professionals() {
         profileId={profileId}
       />
     </>
+  );
+}
+
+// One desktop table row + (when open) its full-width dropdown row.
+function FragmentRow({ p, rollup, isOpen, onToggle, onEdit }) {
+  return (
+    <>
+      <tr
+        className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+      >
+        <td className="font-medium truncate max-w-[200px]" title={p.name}>
+          <span className="inline-flex items-center gap-1.5">
+            <ChevronDown
+              size={13}
+              className={`text-ink-300 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            />
+            <span className="truncate">{p.name}</span>
+          </span>
+        </td>
+        <td className="text-ink-700 truncate max-w-[200px]" title={p.company || ''}>{p.company || '—'}</td>
+        <td className="hidden lg:table-cell text-ink-700 truncate max-w-[200px]" title={p.email || ''}>{p.email || '—'}</td>
+        <td className="hidden lg:table-cell text-ink-700 whitespace-nowrap">{p.phone || '—'}</td>
+        <td className="text-right tabular-nums whitespace-nowrap text-ink-800">
+          {rollup?.count || 0}
+          {rollup?.acceptedTotal > 0 && (
+            <span className="text-[11px] text-emerald-700 ml-1.5">
+              {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
+            </span>
+          )}
+        </td>
+        <td className="text-right tabular-nums whitespace-nowrap font-semibold text-ink-800">
+          {clampCommissionPct(p.defaultCommissionPct ?? 10)}%
+        </td>
+        <td className="text-right w-24">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="inline-flex items-center rounded-md px-2 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-500 hover:text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
+          >
+            Editar
+          </button>
+          <Link
+            to={`/professionals/${p.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-ink-300 hover:text-brand-600 ml-2 transition-colors"
+            title="Ver perfil"
+          >
+            <ArrowRight size={12} className="inline" />
+          </Link>
+        </td>
+      </tr>
+      {isOpen && (
+        <tr>
+          <td colSpan={7} className="!p-0 bg-ink-50/50">
+            <ProQuotesPanel pro={p} rollup={rollup} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// The dropdown body — the professional's quotes grouped by status, each
+// group under its status pill with the quote rows reading #number ·
+// customer · last-touched · total. Shared by the mobile card and the
+// desktop table row so both surfaces stay identical.
+function ProQuotesPanel({ pro, rollup }) {
+  const groups = rollup?.groups || [];
+  return (
+    <div className="border-t border-ink-100 px-4 py-3 space-y-3">
+      {groups.length === 0 ? (
+        <div className="flex items-center gap-2 py-2 text-xs text-ink-400">
+          <FileText size={13} className="flex-shrink-0" />
+          Sin cotizaciones asignadas.
+        </div>
+      ) : (
+        groups.map(({ status, entries }) => (
+          <div key={status}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`status-pill status-pill-${status}`}>
+                {STATUS_LABELS[status] || status}
+              </span>
+              <span className="eyebrow-xs text-ink-400 tabular-nums">
+                {entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}
+              </span>
+            </div>
+            <ul className="divide-y divide-ink-100 rounded-lg bg-white ring-1 ring-inset ring-ink-100 overflow-hidden">
+              {entries.map((e) => (
+                <li key={e.quote.id}>
+                  <Link
+                    to={`/quotes/${e.quote.id}`}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-brand-50/60 transition-colors group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate text-ink-900 group-hover:text-brand-700 transition-colors">
+                        #{e.quote.number || '—'}
+                        {e.customer ? (
+                          <span className="text-ink-500 font-normal"> · {e.customer.company || e.customer.name}</span>
+                        ) : null}
+                      </div>
+                      <div className="text-[11px] text-ink-500 mt-0.5">
+                        Act. {formatDateTime(e.quote.updatedAt)}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
+                      {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                    </div>
+                    <ExternalLink size={13} className="text-ink-300 group-hover:text-brand-600 flex-shrink-0 transition-colors" aria-hidden />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+      <div>
+        <Link
+          to={`/professionals/${pro.id}`}
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
+        >
+          Ver perfil y comisiones <ArrowRight size={12} aria-hidden />
+        </Link>
+      </div>
+    </div>
   );
 }
 
