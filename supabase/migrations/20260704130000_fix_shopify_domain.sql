@@ -1,3 +1,7 @@
+-- (Renamed from 20260703120000 — that version collided with ecf_txn_rpcs.sql,
+-- and a duplicate version jams the whole pending migration chain. Re-running
+-- is safe: both updates are scoped to the known-bad value.)
+--
 -- One-time data fix: the Shopify connection was saved with the store's old /
 -- misremembered domain (alcoversdq.myshopify.com). The real store (ALCOVER)
 -- answers at fg9gaq-3c.myshopify.com — verified live against the connected
