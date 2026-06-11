@@ -58,7 +58,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       </div>
       <p className="text-xs text-ink-500 mb-4">
         Conecta tu app de WhatsApp Business (Cloud API) para enviar cotizaciones y chatear con
-        clientes desde Alcover, con el número del negocio. Empieza con el <strong>número de prueba</strong> de
+        clientes desde ALCOVER, con el número del negocio. Empieza con el <strong>número de prueba</strong> de
         Meta; cuando el flujo esté validado, migra tu número real (ojo: al conectarlo a la API, ese
         número se desconecta de la app WhatsApp Business del teléfono).
       </p>

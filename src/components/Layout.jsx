@@ -30,7 +30,7 @@ export default function Layout() {
     () => typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
   );
   const isMobile = !useMediaQuery('(min-width: 768px)');
-  const company = settings?.companyName || 'Alcover';
+  const company = settings?.companyName || 'ALCOVER';
   // Global ⌘K search palette — opened from the topbar/sidebar triggers or the
   // keyboard shortcut; the overlay itself owns Escape-to-close.
   const [searchOpen, setSearchOpen] = useState(false);
@@ -88,7 +88,7 @@ export default function Layout() {
         </div>
         {/* Brand block — the dealer's typographic logo (an SVG, usually a
             wordmark) rendered in white over the dark bar, with a small
-            "Alcover" eyebrow beneath. No background box, no rounded
+            "ALCOVER" eyebrow beneath. No background box, no rounded
             chrome — the logo IS the brand mark and shouldn't sit inside
             a styled container. `filter: brightness(0) invert(1)` tints any
             single-color SVG to pure white regardless of its source color
@@ -107,7 +107,7 @@ export default function Layout() {
           ) : (
             <div className="font-wordmark text-base truncate leading-tight" title={company}>{company}</div>
           )}
-          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">Alcover</div>
+          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">ALCOVER</div>
         </div>
         {/* Spacer mirrors the left button group (menu + search) so the brand
             block stays visually centered between them. */}
@@ -135,7 +135,7 @@ export default function Layout() {
         aria-label="Navegación principal"
       >
         <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between gap-3">
-          {/* Brand block — typographic logo over "Alcover" eyebrow.
+          {/* Brand block — typographic logo over "ALCOVER" eyebrow.
               See the mobile topbar's matching block for the rationale on
               the white-tint filter and the lack of a background box. */}
           <div className="min-w-0 flex flex-col items-start gap-1.5">
@@ -152,7 +152,7 @@ export default function Layout() {
                 {company}
               </div>
             )}
-            <div className="eyebrow-xs font-normal tracking-widest text-ink-400">Alcover</div>
+            <div className="eyebrow-xs font-normal tracking-widest text-ink-400">ALCOVER</div>
           </div>
           <div className="flex items-center -mr-2 -my-2">
             {/* Desktop: collapse the sidebar out of the way (it reappears via the

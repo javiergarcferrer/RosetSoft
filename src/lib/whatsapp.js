@@ -119,7 +119,7 @@ export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
     return sendWhatsappTemplate({ to, template, params: [url], customerId: customer?.id, quoteId });
   }
   const name = (customer?.name || '').trim().split(/\s+/)[0];
-  const text = `Hola${name ? ` ${name}` : ''}, aquí está su cotización de ${settings?.companyName || 'Alcover'}: ${url}`;
+  const text = `Hola${name ? ` ${name}` : ''}, aquí está su cotización de ${settings?.companyName || 'ALCOVER'}: ${url}`;
   return sendWhatsappText({ to, text, customerId: customer?.id, quoteId });
 }
 

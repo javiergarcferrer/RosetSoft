@@ -268,7 +268,7 @@ function StoreCard({ settings, saveSettings, customers }) {
       </div>
       <p className="text-xs text-ink-500 mb-4">
         La tienda muestra los productos de las cotizaciones cuyo cliente sea la
-        cuenta de la casa (Alcover). Elige ese cliente y comparte el enlace —
+        cuenta de la casa (ALCOVER). Elige ese cliente y comparte el enlace —
         cualquiera puede verlo sin iniciar sesión.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -559,7 +559,7 @@ function RateCard({ local, set, saveSettings }) {
  */
 const SHOPIFY_STORES = {
   [SHOPIFY_STORE_ALCOVER]: {
-    title: 'Shopify — Alcover (inventario)',
+    title: 'Shopify — ALCOVER (inventario)',
     domainField: 'shopifyDomain',
     connectedField: 'shopifyConnectedAt',
     defaultDomain: 'alcoversdq.myshopify.com',
