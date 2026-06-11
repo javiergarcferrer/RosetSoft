@@ -8,7 +8,7 @@
 //   • only ACTIVE products import — drafts are the out-of-assortment pool and
 //     the public site doesn't show them.
 //   • the inventory-mirror products this same function PUBLISHES (handle
-//     `inv-…`, see index.ts pieceHandle) must never feed back into the catalog.
+//     `inv-…`, see stores.ts pieceHandle) must never feed back into the catalog.
 //   • category/family come from the store's COLLECTIONS: LifestyleGarden
 //     organizes by range (Garnet, Nassau, Panama Dark, …) and the range name is
 //     written into each product title — so the longest collection title found
