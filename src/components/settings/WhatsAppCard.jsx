@@ -74,12 +74,12 @@ export default function WhatsAppCard({ settings, saveSettings }) {
         <div>
           <label className="label" htmlFor="wa-phone-id">Phone Number ID</label>
           <input id="wa-phone-id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
-            placeholder="p. ej. 123456789012345" className="input mt-1" inputMode="numeric" />
+            placeholder={connectedAt ? '(guardado)' : 'p. ej. 123456789012345'} className="input mt-1" inputMode="numeric" />
         </div>
         <div>
           <label className="label" htmlFor="wa-waba-id">WhatsApp Business Account ID</label>
           <input id="wa-waba-id" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
-            placeholder="p. ej. 109876543210987" className="input mt-1" inputMode="numeric" />
+            placeholder={connectedAt ? '(guardado)' : 'p. ej. 109876543210987'} className="input mt-1" inputMode="numeric" />
         </div>
         <div className="sm:col-span-2">
           <label className="label" htmlFor="wa-secret">App Secret (para recibir mensajes)</label>
@@ -101,6 +101,11 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           </span>
         ) : null}
       </div>
+      {connectedAt && (
+        <p className="text-[11px] text-ink-400 mt-1.5">
+          La conexión queda guardada — los deploys no la tocan. Para cambiar un solo valor (p. ej. un token nuevo), pega solo ese campo: los vacíos conservan lo guardado.
+        </p>
+      )}
       {msg && (
         <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>
       )}

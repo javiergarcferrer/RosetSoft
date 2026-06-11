@@ -22,27 +22,33 @@ export function waWebhookUrl() {
 }
 
 /**
- * Save (or replace) the WhatsApp connection. Credentials go to the write-only
- * whatsapp_config table via `save_whatsapp_config`; the webhook verify token is
- * minted once (it's a handshake string Meta echoes back, not a secret) and
- * lands on settings together with connected-at so the UI can show state
- * without ever reading the token back.
+ * Save (or update) the WhatsApp connection. Credentials go to the write-only
+ * whatsapp_config table via `save_whatsapp_config`, which MERGES: an empty
+ * field means "keep what's saved", so re-pasting one value (a fresh token)
+ * never blanks the others. Only the very first connect requires the token +
+ * Phone Number ID. The webhook verify token is minted once (it's a handshake
+ * string Meta echoes back, not a secret) and lands on settings together with
+ * connected-at so the UI can show state without ever reading the token back.
  */
 export async function saveWhatsappConfig({ accessToken, phoneNumberId, wabaId, appSecret, settings, profileId = TEAM_PROFILE_ID }) {
+  const connected = !!settings?.whatsappConnectedAt;
   const token = String(accessToken || '').trim();
-  if (!token) throw new Error('Pega el token de acceso (empieza con "EAA…"). Meta → tu app → WhatsApp → API Setup.');
+  if (!token && !connected) throw new Error('Pega el token de acceso (empieza con "EAA…"). Meta → tu app → WhatsApp → API Setup.');
   const phoneId = String(phoneNumberId || '').trim();
-  if (!phoneId) throw new Error('Pega el Phone Number ID (Meta → WhatsApp → API Setup, debajo del número).');
+  if (!phoneId && !connected) throw new Error('Pega el Phone Number ID (Meta → WhatsApp → API Setup, debajo del número).');
   // The classic wrong paste: the phone NUMBER instead of its ID. The ID is a
   // long numeric Meta identifier; a "+", spaces, or a 10/11-digit NANP shape
   // means the dealer copied the number itself.
-  if (!/^\d{10,20}$/.test(phoneId) || /^1?8(09|29|49)\d{7}$/.test(phoneId)) {
+  if (phoneId && (!/^\d{10,20}$/.test(phoneId) || /^1?8(09|29|49)\d{7}$/.test(phoneId))) {
     throw new Error('Eso parece el número de teléfono, no el Phone Number ID. El ID es el código numérico largo que aparece DEBAJO del número en Meta → WhatsApp → API Setup.');
   }
   const waba = String(wabaId || '').trim();
   const secret = String(appSecret || '').trim();
   if (secret && !/^[0-9a-f]{32}$/i.test(secret)) {
     throw new Error('El App Secret es un código de 32 caracteres hexadecimales (Meta → tu app → App settings → Basic → App Secret → Show).');
+  }
+  if (connected && !token && !phoneId && !waba && !secret) {
+    throw new Error('No hay nada que actualizar — los campos vacíos conservan lo guardado.');
   }
 
   const { error } = await supabase.rpc('save_whatsapp_config', {
