@@ -12,11 +12,19 @@ function inWindow(t, start, end) {
 /**
  * Formato 607 — ventas de bienes y servicios. One row per posted sale in the
  * window, with the customer's RNC/cédula (snapshot or current) + NCF + ITBIS.
+ * `query` free-text-filters across customer, RNC and NCF; totals follow it
+ * (the DGII TXT export should be built WITHOUT a query — full period).
  */
-export function resolveSales607({ salesPostings, customersById, start, end } = {}) {
+export function resolveSales607({ salesPostings, customersById, start, end, query } = {}) {
   const custById = customersById || new Map();
+  const q = (query || '').trim().toLowerCase();
   const rows = (salesPostings || [])
     .filter((p) => inWindow(p.postedAt, start, end))
+    .filter((p) => {
+      if (!q) return true;
+      const c = p.customerId ? custById.get(p.customerId) : null;
+      return [c?.name, p.rnc, p.ncf].some((v) => (v || '').toLowerCase().includes(q));
+    })
     .map((p) => {
       const c = p.customerId ? custById.get(p.customerId) : null;
       return {

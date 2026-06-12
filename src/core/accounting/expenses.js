@@ -10,11 +10,13 @@ function inWindow(t, start, end) {
 
 /**
  * The Gastos list joined with supplier + account names, newest-first, plus
- * window totals.
+ * window totals. `query` free-text-filters across supplier, description, NCF
+ * and account name (the list page's search box); totals follow the filter.
  */
-export function resolveExpensesList({ expenses, suppliers, accounts, start, end } = {}) {
+export function resolveExpensesList({ expenses, suppliers, accounts, start, end, query } = {}) {
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
   const nameByCode = new Map((accounts || []).map((a) => [a.code, a.name]));
+  const q = (query || '').trim().toLowerCase();
   const rows = (expenses || [])
     .filter((e) => inWindow(e.expenseAt, start, end))
     .map((e) => ({
@@ -24,6 +26,8 @@ export function resolveExpensesList({ expenses, suppliers, accounts, start, end 
       total: round2((e.base || 0) + (e.itbis || 0)),
       net: round2((e.base || 0) + (e.itbis || 0) - (e.retentionIsr || 0) - (e.retentionItbis || 0)),
     }))
+    .filter((r) => !q || [r.supplier?.name, r.expense.description, r.expense.ncf, r.accountName]
+      .some((v) => (v || '').toLowerCase().includes(q)))
     .sort((a, b) => (b.expense.expenseAt || 0) - (a.expense.expenseAt || 0));
 
   const totals = rows.reduce((acc, r) => ({

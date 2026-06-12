@@ -6,6 +6,32 @@ import { resolveItbisLiquidation } from './sales607.js';
 import { resolveIncomeStatement, accountRawBalances, resolveJournal } from './ledger.js';
 import { buildChartIndex, leafCodesUnder, chartRoots } from '../../lib/accounting/chart.js';
 import { naturalBalance, round2 } from '../../lib/accounting/ledger.js';
+import { pickSequence, sequenceState, ecfTypeLabel } from '../../lib/accounting/ecf.js';
+
+/**
+ * e-NCF range health for the types the team issues (31/32) — running out of
+ * authorized sequence numbers HALTS invoicing, so the panel warns ahead:
+ *   • 'none'     — ranges exist for the type but none is usable any more.
+ *   • 'low'      — the usable range has ≤ `lowAt` numbers left.
+ *   • 'expiring' — the usable range dies within `soonDays`.
+ * Types with no configured ranges at all stay silent (pre-e-CF operation).
+ */
+export function resolveEcfSequenceAlerts(sequences, { now = Date.now(), lowAt = 10, soonDays = 30 } = {}) {
+  const alerts = [];
+  for (const type of ['31', '32']) {
+    const ofType = (sequences || []).filter((s) => s.ecfType === type);
+    if (ofType.length === 0) continue;
+    const usable = pickSequence(ofType, type, now);
+    if (!usable) { alerts.push({ type, label: ecfTypeLabel(type), kind: 'none' }); continue; }
+    const st = sequenceState(usable, now);
+    if (st.remaining <= lowAt) {
+      alerts.push({ type, label: ecfTypeLabel(type), kind: 'low', remaining: st.remaining });
+    } else if (usable.expiresAt != null && usable.expiresAt - now < soonDays * 86_400_000) {
+      alerts.push({ type, label: ecfTypeLabel(type), kind: 'expiring', expiresAt: usable.expiresAt });
+    }
+  }
+  return alerts;
+}
 
 const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const CASH_ROOT = '1-01-001-00-00-00'; // Cajas y Bancos, in the seeded catálogo.
@@ -49,7 +75,7 @@ function subtreeBalance(index, raw, code) {
  */
 export function resolveAccountingDashboard({
   accounts, entries, lines, salesPostings, purchases, expenses, payments, imports, expedientes,
-  customersById, suppliersById, monthStart, monthEnd,
+  ecfSequences, customersById, suppliersById, monthStart, monthEnd,
 } = {}) {
   const end = monthEnd ?? Date.now();
   const cxc = resolveReceivables({ salesPostings, payments, customersById });
@@ -133,6 +159,8 @@ export function resolveAccountingDashboard({
   const ecfPending = (salesPostings || [])
     .filter((s) => /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
 
+  const ecfSeqAlerts = resolveEcfSequenceAlerts(ecfSequences, { now: end });
+
   const recent = resolveJournal({ entries, lines, limit: 8 });
 
   return {
@@ -148,6 +176,7 @@ export function resolveAccountingDashboard({
     utilidadMonth: income.netIncome,
     itbis,
     ecfPending,
+    ecfSeqAlerts,
     monthsSeries: series,
     expenseDonut,
     cxcTop: cxc.rows.slice(0, 5),

@@ -110,6 +110,7 @@ export default function AccountingDashboard() {
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
+  const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && salesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
@@ -127,9 +128,9 @@ export default function AccountingDashboard() {
     accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data,
     salesPostings: salesQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
     payments: paymentsQ.data, imports: importsQ.data, expedientes: expedientesQ.data,
-    customersById, suppliersById,
+    ecfSequences: ecfSeqQ.data, customersById, suppliersById,
     monthStart: period.start, monthEnd: period.end,
-  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, customersById, suppliersById, period]);
+  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, ecfSeqQ.data, customersById, suppliersById, period]);
 
   // Comparative layer: KPIs vs período anterior + vs año pasado.
   const kpis = useMemo(() => resolveComparativeKpis({
@@ -193,8 +194,16 @@ export default function AccountingDashboard() {
             ))}
           </div>
           {/* Urgent flags float to the top. */}
-          {(d.ecfPending > 0 || d.overdue > 0) && (
+          {(d.ecfPending > 0 || d.overdue > 0 || d.ecfSeqAlerts.length > 0) && (
             <div className="flex flex-wrap gap-2">
+              {d.ecfSeqAlerts.map((a) => (
+                <Link key={a.type} to="/accounting/ecf" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
+                  <FileWarning size={14} className="shrink-0" />
+                  {a.kind === 'none' && `Sin secuencia e-NCF utilizable para ${a.label} — autoriza un rango`}
+                  {a.kind === 'low' && `Quedan ${a.remaining} e-NCF de ${a.label}`}
+                  {a.kind === 'expiring' && `La secuencia e-NCF de ${a.label} vence el ${formatDate(a.expiresAt)}`}
+                </Link>
+              ))}
               {d.ecfPending > 0 && (
                 <Link to="/accounting/facturacion" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
                   <FileWarning size={14} className="shrink-0" /> {d.ecfPending} e-CF pendientes de transmitir a la DGII

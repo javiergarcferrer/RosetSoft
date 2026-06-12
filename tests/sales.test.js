@@ -102,3 +102,12 @@ test('resolveItbisLiquidation: crédito > débito ⇒ saldo a favor', () => {
   assert.equal(r.aPagar, 0);
   assert.equal(r.aFavor, 700);
 });
+
+test('resolveSales607 query filters rows + totals (exports use no query)', () => {
+  const byNcf = resolveSales607({ salesPostings: POSTINGS, customersById: CUSTOMERS, query: 'b0200000002' });
+  assert.equal(byNcf.count, 1);
+  assert.equal(byNcf.rows[0].ncf, 'B0200000002');
+  const byName = resolveSales607({ salesPostings: POSTINGS, customersById: CUSTOMERS, query: 'eduardo' });
+  assert.equal(byName.count, 1);
+  assert.equal(byName.totals.total, 11800);
+});

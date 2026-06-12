@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Receipt, Plus, Loader2, Check, X, Download } from 'lucide-react';
+import { Receipt, Plus, Loader2, Check, X, Download, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -55,10 +55,11 @@ export default function Expenses() {
   const [to, setTo] = useState(() => isoDate(today.getTime()));
   const [showForm, setShowForm] = useState(!!params.get('new'));
   const [txtErr, setTxtErr] = useState('');
+  const [listQuery, setListQuery] = useState('');
 
   const win = periodWindow(from, to);
-  const list = useMemo(() => resolveExpensesList({ expenses: expensesQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, ...win }),
-    [expensesQ.data, suppliersQ.data, accountsQ.data, from, to]);
+  const list = useMemo(() => resolveExpensesList({ expenses: expensesQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, query: listQuery, ...win }),
+    [expensesQ.data, suppliersQ.data, accountsQ.data, listQuery, from, to]);
   const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, purchases: purchasesQ.data, expedientes: expedientesQ.data, suppliers: suppliersQ.data, ...win }),
     [expensesQ.data, purchasesQ.data, expedientesQ.data, suppliersQ.data, from, to]);
 
@@ -88,7 +89,16 @@ export default function Expenses() {
           className="btn-primary"><Plus size={15} /> Nuevo gasto</button>} />
 
       <TabPills tabs={[{ key: 'list', label: 'Gastos' }, { key: '606', label: '606' }]} active={tab} onChange={setTab} />
-      <PeriodPicker from={from} to={to} onChange={({ from, to }) => { setFrom(from); setTo(to); }} />
+      <div className="flex flex-wrap items-start gap-2">
+        <PeriodPicker from={from} to={to} onChange={({ from, to }) => { setFrom(from); setTo(to); }} />
+        {tab === 'list' && (
+          <div className="relative sm:ml-auto">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
+            <input value={listQuery} onChange={(e) => setListQuery(e.target.value)}
+              placeholder="Buscar proveedor, NCF, cuenta…" className="input py-1.5 pl-8 text-sm w-60" />
+          </div>
+        )}
+      </div>
 
       {showForm && loaded && (
         <NewExpenseForm

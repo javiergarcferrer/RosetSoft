@@ -268,8 +268,14 @@ export default function Facturacion() {
     end: today.getTime(),
   }), [today]);
 
+  const [q607, setQ607] = useState('');
   const sales607 = useMemo(() => resolveSales607({ salesPostings: postingsQ.data, customersById, ...win }),
     [postingsQ.data, customersById, win]);
+  // The on-screen 607 honors the search box; the CSV/TXT exports must stay the
+  // FULL period (a filtered fiscal file would underreport), so they read
+  // `sales607` above.
+  const sales607View = useMemo(() => resolveSales607({ salesPostings: postingsQ.data, customersById, query: q607, ...win }),
+    [postingsQ.data, customersById, q607, win]);
   const itbis = useMemo(() => resolveItbisLiquidation({
     salesPostings: postingsQ.data, expenses: expensesQ.data,
     purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
@@ -445,15 +451,22 @@ export default function Facturacion() {
         )
       ) : tab === '607' ? (
         <>
-          <div className="flex flex-wrap justify-end gap-2 mb-3">
-            <button type="button" onClick={export607} disabled={sales607.count === 0}
-              className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
-            <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
-              className="btn-primary"><Download size={14} /> TXT DGII (607)</button>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
+              <input value={q607} onChange={(e) => setQ607(e.target.value)}
+                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-56" />
+            </div>
+            <div className="flex flex-wrap gap-2 sm:ml-auto">
+              <button type="button" onClick={export607} disabled={sales607.count === 0}
+                className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
+              <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
+                className="btn-primary"><Download size={14} /> TXT DGII (607)</button>
+            </div>
           </div>
-          {sales607.count === 0 ? (
-            <EmptyState icon={FileText} title="Sin ventas en el mes"
-              description="Las ventas facturadas del mes aparecen aquí." />
+          {sales607View.count === 0 ? (
+            <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin ventas en el mes'}
+              description={q607 ? 'Ninguna venta del período coincide con la búsqueda.' : 'Las ventas facturadas del mes aparecen aquí.'} />
           ) : (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
@@ -471,7 +484,7 @@ export default function Facturacion() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sales607.rows.map((r) => {
+                    {sales607View.rows.map((r) => {
                       const p = postingById.get(r.id);
                       const status = p?.ecfStatus || '';
                       const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
@@ -521,10 +534,10 @@ export default function Facturacion() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-ink-200 font-semibold">
-                      <td className="whitespace-nowrap" colSpan={4}>{sales607.count} ventas</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.itbis)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607.totals.total)}</td>
+                      <td className="whitespace-nowrap" colSpan={4}>{sales607View.count} ventas</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.base)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.itbis)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.total)}</td>
                       <td></td>
                     </tr>
                   </tfoot>

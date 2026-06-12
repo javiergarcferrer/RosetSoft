@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveAccountingDashboard } from '../src/core/accounting/dashboard.js';
+import { resolveAccountingDashboard, resolveEcfSequenceAlerts } from '../src/core/accounting/dashboard.js';
 import { resolveDashboard } from '../src/core/quote/views/dashboard.js';
 
 const ACCOUNTS = [
@@ -187,4 +187,38 @@ test('resolveDashboard leaves eta null when no ETAs are known (yet)', () => {
   });
   assert.equal(d.activeOrders[0].eta, null);
   assert.deepEqual(d.activeOrders[0].containerCodes, ['HLCU1234568']);
+});
+
+/* ----------------------- e-NCF sequence alerts -------------------------- */
+
+const DAY = 86_400_000;
+const SEQ_NOW = Date.parse('2026-06-12T12:00:00');
+
+test('resolveEcfSequenceAlerts: silent without configured ranges, warns when dry/low/expiring', () => {
+  // No ranges at all → pre-e-CF operation, no noise.
+  assert.equal(resolveEcfSequenceAlerts([], { now: SEQ_NOW }).length, 0);
+
+  const seq = (over) => ({
+    ecfType: '31', seqFrom: 1, seqTo: 100, nextSeq: 1, active: true,
+    expiresAt: SEQ_NOW + 365 * DAY, ...over,
+  });
+
+  // Ranges exist for 31 but all are exhausted → 'none'.
+  const dry = resolveEcfSequenceAlerts([seq({ nextSeq: 101 })], { now: SEQ_NOW });
+  assert.equal(dry.length, 1);
+  assert.equal(dry[0].kind, 'none');
+  assert.equal(dry[0].type, '31');
+
+  // Few numbers left → 'low' with the remaining count.
+  const low = resolveEcfSequenceAlerts([seq({ nextSeq: 95 })], { now: SEQ_NOW });
+  assert.equal(low[0].kind, 'low');
+  assert.equal(low[0].remaining, 6);
+
+  // Plenty left but the range dies within 30 days → 'expiring'.
+  const expiring = resolveEcfSequenceAlerts([seq({ expiresAt: SEQ_NOW + 10 * DAY })], { now: SEQ_NOW });
+  assert.equal(expiring[0].kind, 'expiring');
+  assert.equal(expiring[0].expiresAt, SEQ_NOW + 10 * DAY);
+
+  // Healthy range → silent.
+  assert.equal(resolveEcfSequenceAlerts([seq()], { now: SEQ_NOW }).length, 0);
 });

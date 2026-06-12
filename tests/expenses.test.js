@@ -156,3 +156,16 @@ test('resolveExpensesList joins supplier + account names, newest first', () => {
   assert.equal(r.rows[0].accountName, 'TELEFONO E INTERNET');
   assert.equal(r.totals.total, 2360);
 });
+
+test('resolveExpensesList query filters across supplier / NCF / account name', () => {
+  const accounts = [{ code: '6-02-007-01-03-00', name: 'TELEFONO E INTERNET' }];
+  const withAcct = EXPENSES.map((e) => ({ ...e, accountCode: '6-02-007-01-03-00', paymentMethod: 'bank' }));
+  const bySupplier = resolveExpensesList({ expenses: withAcct, suppliers: SUPPLIERS, accounts, query: 'claro' });
+  assert.equal(bySupplier.count, 1);
+  assert.equal(bySupplier.rows[0].supplier.name, 'Claro');
+  assert.equal(bySupplier.totals.total, 1180);
+  const byNcf = resolveExpensesList({ expenses: withAcct, suppliers: SUPPLIERS, accounts, query: 'B0100000002' });
+  assert.equal(byNcf.count, 1);
+  const byAccount = resolveExpensesList({ expenses: withAcct, suppliers: SUPPLIERS, accounts, query: 'internet' });
+  assert.equal(byAccount.count, 2);
+});
