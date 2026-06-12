@@ -1,7 +1,10 @@
 # RosetSoft — agent bootstrap
 
-React/Vite quoting app (Ligne Roset furniture, Dominican Republic). Prices in
-USD, displayed in DOP via a live exchange rate. Single-tenant Supabase backend.
+React/Vite back-office for a Ligne Roset dealer (Dominican Republic): quoting,
+orders + container tracking, full accounting (ledger, DGII 606/607, e-CF,
+payroll, imports), WhatsApp CRM (inbox + campaigns), a public storefront, and
+the JARVIS ops dashboard. Prices in USD, displayed in DOP via a live exchange
+rate. Single-tenant Supabase backend.
 This file is the fast-start; trust it, don't re-derive what's here. Reply in the
 user's language; keep code/comments/commits in English.
 
@@ -59,8 +62,10 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 ### Pinned invariants (the tests ARE the durable memory)
 State worth keeping across sessions lives in a test or in this file — never in
 conversation. Two kinds:
-- **Money/parsing/data-integrity tests**:
-  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,lsgCatalogBook,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats,ogImage}.test.js`.
+- **Money/parsing/data-integrity tests**: ~40 files in `tests/` — nearly every
+  `lib`/`core` module has a same-named test (pricing, commissions, ledger,
+  payroll, ecf, imports, inventory, whatsapp, store, jarvisPulse, …); match the
+  module by name and run just that one. Special pins worth knowing:
   `lsgCatalogBook` pins the client catalog PDF's in-stock gate (only
   stockQty > 0 prints; all-null stock flags `hasStockData` instead of
   rendering an empty book).
@@ -85,15 +90,29 @@ conversation. Two kinds:
   - `tests/quotePickParity.test.js` pins the two quote-pick reducers equivalent
     across the Deno↔Vite wall (see Traps) — edit one layer → edit the other;
     this test goes red if they drift.
+  - `tests/credentialDurability.test.js` scans every migration: any NEW
+    migration that UPDATEs/DELETEs/TRUNCATEs/DROPs a credential table
+    (`shopify_config`, `whatsapp_config`, `ecf_credentials`) fails — a deploy
+    must never erase what the dealer pasted into Configuración. Evolve those
+    schemas additively; need to migrate credential DATA? Don't — add a column.
 
 ## Architecture = MVVM (Model → ViewModel → View; the View derives NOTHING)
 - **Model** — pure logic+data, no React/Supabase/pdf-lib. `src/lib/*` (pricing,
-  commissions, exchangeRate, containerTracking, subtype, catalog, …), surfaced via
-  `src/core/*` barrels. Import the Model from the barrel: `core/quote`,
-  `core/tracking`, `core/accounting`.
+  commissions, exchangeRate, containerTracking, subtype, catalog,
+  `lib/accounting/*`, …), surfaced via `src/core/*` barrels. Import the Model
+  from the barrel, never the file: `core/quote`, `core/tracking`, `core/crm`
+  (WhatsApp inbox/campaigns), `core/store` (public storefront), `core/catalog`
+  (brand catalog books), `core/search` (⌘K palette), `core/jarvis` (ops
+  dashboard), `core/accounting`.
+- **Two cores, one bridge** — the CRM core (`core/{quote,tracking,store,crm}`)
+  and the Accounting core (`core/accounting` + `lib/accounting`) NEVER import
+  each other; every cross-core translation lives in `core/bridge`
+  (`quoteToSale`: USD quote → DOP sale figures + e-CF type; `quoteFloorSaleRows`:
+  priced lines → LR sell-through rows). Accounting never prices a quote line
+  itself. Enforced by `tests/architecture.test.js`.
 - **ViewModel** — pure projection `resolveX(rows, params)` → exactly what one
   surface renders. No React/`db`/`supabase` inside a `resolveX`. Lives in
-  `src/core/quote/views/*`, `core/accounting/sales.js`, `core/tracking/*`. Lone
+  `core/*/views/*` and the modules each `core/*` barrel re-exports. Lone
   exception: hook VM `useContainerTracking` owns its (effectful) fetch.
 - **View** — `src/pages/*`, `src/components/*`, `src/pdf/*`. Fetches via `db`
   hooks, holds UI state (search/tab/sort), calls a `resolveX` in `useMemo`,
@@ -112,10 +131,12 @@ conversation. Two kinds:
   `useContainerTracking` = all tracking surfaces (quote list, client link, order).
 - `applyAction` (`core/quote/actions.js`) = optimistic client pick reducer (see
   Deno↔Vite trap).
-- Per-page VMs: `views/{editor:resolveLineList, lineItem:resolveLineItem,
-  dashboard:resolveDashboard, lists:resolveQuotesList+resolveOrdersList,
-  detail:resolveOrderDetail+resolveCustomerDetail+resolveProfessionalDetail}`;
-  `accounting/sales.js: resolveSales`.
+- Per-page VMs: every other surface has its own `resolveX` — quote
+  editor/lists/detail/registration in `core/quote/views/*`; the Contabilidad
+  pages via `core/accounting` (sales/commissions, ledger, expenses+606,
+  imports, inventory, payments, payroll, reconciliation, analytics, lrSales);
+  WhatsApp via `core/crm`; storefront via `core/store`; JARVIS via
+  `core/jarvis`. Grep the barrel's exports to find a page's resolver.
 
 ## Data layer
 Supabase Postgres + Storage, one shared `'team'` profile (`TEAM_PROFILE_ID`) + RLS.
@@ -125,6 +146,14 @@ NOT browser IndexedDB. `db/rowMapping.ts` auto-converts camelCase↔snake_case a
 JS-ms↔ISO `timestamptz` (any `*At` field) — a new field works end-to-end once its
 column exists. Types: `src/types/domain.ts` (camelCase). **Full schema + domain
 facts: `supabase/CLAUDE.md` — read it before DB work.**
+
+Server side = Deno Edge Functions (`supabase/functions/*`): public surfaces
+`quote-share` (client quote link + picks) and `store` (storefront data);
+integrations `shopify-sync` (inventory mirror + LSG catalog import),
+`wa-send`/`wa-webhook` (WhatsApp), `meta-social`, `ecf-send` (DGII e-CF),
+`bpd-rate` (USD→DOP rate), `hl-track` (container tracking), `lr-catalog`,
+`rnc-lookup`, `swatch-proxy`, `claude-chat` (JARVIS chat), `invite-user`,
+`delete-user`. See the Deno↔Vite wall in Traps before touching them.
 
 Pricing model (the complex part): a `quote_line` may be compound (`components[]`),
 optional (`isOptional`, excluded from total), pick-one (`alternativeGroup` +
@@ -176,7 +205,7 @@ ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
   `index.ts` is the thin shell). Both are pure Models, pinned equivalent by
   `tests/quotePickParity.test.js`. Don't "DRY" by importing across the wall
   (impossible + breaks the deploy).
-- **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.js`)
+- **Code-split imports go through `safeDynamicImport`** (`src/lib/dynamicImport.ts`)
   always — PDF, Leaflet, etc. A raw `import()` strands stale-deploy users on
   "failed to fetch dynamically imported module"; the helper reloads once and recovers.
 - **New Edge Function won't deploy** until declared in `supabase/config.toml`
