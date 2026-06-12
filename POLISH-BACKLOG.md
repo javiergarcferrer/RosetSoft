@@ -151,8 +151,10 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
 - [ ] Wrap raw RPC/invoke calls in lib (pattern: `ecfSequence.js`):
       `Facturacion.jsx` ecf-send ×3 + `post_sale`, `Jarvis.jsx` ×5,
       `Materials.jsx:711`.
-- [ ] Pin missing money tests: `tests/commissionCycle.test.js` (16th→15th
+- [x] Pin missing money tests: `tests/commissionCycle.test.js` (16th→15th
       window + year wrap), small direct test for `lib/quoteGroups.ts`.
+      (i22 — 8 new pins: day-15/16 rollover, year wrap, cycle contiguity,
+      ISO helpers; pick-one/heal invariants + lone-set collapse.)
 - [x] Migration-ordering fitness test (style of credentialDurability): fail any
       migration filename timestamp older than the repo's current maximum.
       (i21 — tests/migrationOrder.test.js: per-file git addition time
