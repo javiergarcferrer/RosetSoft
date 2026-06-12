@@ -233,7 +233,10 @@ Deno.serve(async (req: Request) => {
         { headers: graphHeaders },
       );
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+      if (!r.ok) {
+        console.error('[wa-send] listTemplates failed:', JSON.stringify(data));
+        return json({ ok: false, error: metaError(data, r.status) }, 502);
+      }
       type RawTpl = {
         name?: string; status?: string; category?: string; language?: string;
         components?: { type?: string; text?: string; format?: string }[];
@@ -286,7 +289,10 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({ name, language, category, components }),
       });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+      if (!r.ok) {
+        console.error('[wa-send] createTemplate failed:', JSON.stringify(data));
+        return json({ ok: false, error: metaError(data, r.status) }, 502);
+      }
       const d = data as { id?: string; status?: string };
       return json({ ok: true, id: d.id || null, status: (d.status || 'PENDING').toUpperCase(), name });
     }
@@ -298,7 +304,10 @@ Deno.serve(async (req: Request) => {
       method: 'DELETE', headers: graphHeaders,
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    if (!r.ok) {
+      console.error('[wa-send] deleteTemplate failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
     return json({ ok: true });
   }
 

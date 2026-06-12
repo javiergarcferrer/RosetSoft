@@ -543,7 +543,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
   const [actionError, setActionError] = useState(null);
 
   async function remove(t) {
-    if (!confirm(`¿Eliminar la plantilla "${t.name}"? Se elimina en todos los idiomas y no se puede deshacer en Meta.`)) return;
+    if (!confirm(`¿Eliminar la plantilla "${t.name}"? Se elimina en todos los idiomas, no se puede deshacer, y Meta reserva el nombre 30 días (no podrás reutilizarlo).`)) return;
     setDeleting(t.name);
     setActionError(null);
     const res = await deleteWaTemplate(t.name).catch((e) => ({ ok: false, error: e?.message }));
@@ -592,7 +592,11 @@ function TemplatesTab({ templates, templatesError, onReload }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {templates.map((t) => (
+          {templates.map((t) => {
+            // Meta's pre-provided samples (hello_world, sample_*) can't be
+            // deleted — the API rejects it by design. Don't offer the button.
+            const isMetaSample = t.name === 'hello_world' || t.name.startsWith('sample_');
+            return (
             <div key={`${t.name}:${t.language}`} className="card card-pad">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -603,23 +607,31 @@ function TemplatesTab({ templates, templatesError, onReload }) {
                     <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${STATUS_TONE[t.status] || 'bg-ink-100 text-ink-500'}`}>
                       {STATUS_LABEL[t.status] || t.status}
                     </span>
+                    {isMetaSample && (
+                      <span className="text-[10px] font-medium rounded px-1.5 py-0.5 bg-ink-100 text-ink-500" title="Plantilla de ejemplo provista por Meta">
+                        Ejemplo de Meta
+                      </span>
+                    )}
                   </div>
                   {t.headerText && <p className="text-xs font-semibold text-ink-700 mt-1.5">{t.headerText}</p>}
                   <p className="text-xs text-ink-600 mt-1 whitespace-pre-wrap">{t.bodyText}</p>
                   {t.footerText && <p className="text-[11px] text-ink-400 mt-1">{t.footerText}</p>}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(t)}
-                  disabled={deleting === t.name}
-                  className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
-                  title="Eliminar plantilla"
-                >
-                  {deleting === t.name ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                </button>
+                {!isMetaSample && (
+                  <button
+                    type="button"
+                    onClick={() => remove(t)}
+                    disabled={deleting === t.name}
+                    className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
+                    title="Eliminar plantilla"
+                  >
+                    {deleting === t.name ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </button>
+                )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
