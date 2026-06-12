@@ -4,6 +4,7 @@ import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
 } from '../../lib/whatsapp.js';
+import SettingsSection from './SettingsSection.jsx';
 
 /**
  * WhatsApp Business (Cloud API) — connect the Meta app, register the webhook,
@@ -75,12 +76,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
   }
 
   return (
-    <div className="card card-pad">
-      <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold inline-flex items-center gap-2">
-          <MessageCircle size={16} className="text-emerald-600" aria-hidden /> WhatsApp Business
-        </h2>
-      </div>
+    <SettingsSection title={<><MessageCircle size={16} className="text-emerald-600" aria-hidden /> WhatsApp Business</>}>
       <p className="text-xs text-ink-500 mb-4">
         Conecta tu app de WhatsApp Business (Cloud API) para enviar cotizaciones y chatear con
         clientes desde ALCOVER, con el número del negocio. Empieza con el <strong>número de prueba</strong> de
@@ -187,7 +183,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           <TestSendRow />
         </>
       ) : null}
-    </div>
+    </SettingsSection>
   );
 }
 

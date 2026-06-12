@@ -9,6 +9,7 @@ import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
 import { saveShopifyConfig, syncShopify, pingShopify, SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
+import SettingsSection from '../components/settings/SettingsSection.jsx';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 import { db } from '../db/database.js';
@@ -96,10 +97,7 @@ export default function Settings() {
           a second column. */}
       <div className="space-y-5">
           {/* Company */}
-          <div className="card card-pad">
-            <div className="card-header -mx-5 -mt-5 mb-4">
-              <h2 className="font-semibold">Empresa</h2>
-            </div>
+          <SettingsSection title="Empresa">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-4">
                 <ImageDrop
@@ -171,16 +169,13 @@ export default function Settings() {
                 <p className="text-xs text-ink-500 mt-1">Destinatario del reporte mensual de ventas de piso (Ventas → Ventas Ligne Roset).</p>
               </div>
             </div>
-          </div>
+          </SettingsSection>
 
           {/* Currency (DR-focused) */}
           <RateCard local={local} set={set} saveSettings={saveSettings} />
 
           {/* Defaults */}
-          <div className="card card-pad">
-            <div className="card-header -mx-5 -mt-5 mb-4">
-              <h2 className="font-semibold">Predeterminados de cotización</h2>
-            </div>
+          <SettingsSection title="Predeterminados de cotización">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="label">Descuento por defecto %</div>
@@ -199,7 +194,7 @@ export default function Settings() {
                 <input className="input" value={local.quoteFooter || ''} onChange={(e) => set('quoteFooter', e.target.value)} />
               </div>
             </div>
-          </div>
+          </SettingsSection>
 
         {/* Orders */}
         <OrdersCard local={local} set={set} />
@@ -262,10 +257,7 @@ function StoreCard({ settings, saveSettings, customers }) {
   }
 
   return (
-    <div className="card card-pad">
-      <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold">Tienda pública</h2>
-      </div>
+    <SettingsSection title="Tienda pública">
       <p className="text-xs text-ink-500 mb-4">
         La tienda muestra los productos de las cotizaciones cuyo cliente sea la
         cuenta de la casa (ALCOVER). Elige ese cliente y comparte el enlace —
@@ -323,16 +315,13 @@ function StoreCard({ settings, saveSettings, customers }) {
           </p>
         </div>
       </div>
-    </div>
+    </SettingsSection>
   );
 }
 
 function OrdersCard({ local, set }) {
   return (
-    <div className="card card-pad">
-      <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold">Pedidos</h2>
-      </div>
+    <SettingsSection title="Pedidos">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="label">Monto mínimo para despacho (USD)</div>
@@ -351,7 +340,7 @@ function OrdersCard({ local, set }) {
           </p>
         </div>
       </div>
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -403,10 +392,7 @@ function RateCard({ local, set, saveSettings }) {
   const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toFixed(2));
 
   return (
-    <div className="card card-pad">
-      <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold">Tasa de cambio USD → DOP</h2>
-      </div>
+    <SettingsSection title="Tasa de cambio USD → DOP">
       <p className="text-xs text-ink-500 mb-4">
         Los precios del catálogo están en USD (lista oficial Ligne Roset). La tasa la publica Banco Popular Dominicano: tráela con el botón “Actualizar ahora”, o ajústala manualmente más abajo. {EXCHANGE_RATE_PULL_ENABLED
           ? 'Además se actualiza sola al abrir la app cada día.'
@@ -543,7 +529,7 @@ function RateCard({ local, set, saveSettings }) {
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
-    </div>
+    </SettingsSection>
   );
 }
 
@@ -646,10 +632,7 @@ function ShopifyCard({ settings, store }) {
   }
 
   return (
-    <div className="card card-pad">
-      <div className="card-header -mx-5 -mt-5 mb-4">
-        <h2 className="font-semibold">{cfg.title}</h2>
-      </div>
+    <SettingsSection title={cfg.title}>
       <p className="text-xs text-ink-500 mb-4">
         {cfg.description}{' '}
         Usa el dominio <code>.myshopify.com</code> de ESA tienda (p. ej. <code>{cfg.defaultDomain}</code>,
@@ -689,6 +672,6 @@ function ShopifyCard({ settings, store }) {
         {connectedAt ? <span className="text-[11px] text-ink-400 min-w-0 truncate">Conectado · {formatDateTime(connectedAt)}</span> : null}
       </div>
       {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
-    </div>
+    </SettingsSection>
   );
 }

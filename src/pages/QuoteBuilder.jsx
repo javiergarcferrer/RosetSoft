@@ -703,11 +703,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           </QuoteActionsContext.Provider>
           <ProjectPaletteCard />
           </ProjectPaletteContext.Provider>
-          <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           {/* The customer's WhatsApp conversation, in the editor — read and
               answer the client being quoted without leaving the workspace.
-              Renders only with a customer phone + the Business API connected. */}
+              Sits right under the line items (above Notas) so it's in reach
+              while quoting. Renders only with a customer phone + the
+              Business API connected. */}
           <QuoteChatCard quote={quote} customer={customer} />
+          <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
           {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}
