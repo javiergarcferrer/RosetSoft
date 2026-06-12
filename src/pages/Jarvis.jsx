@@ -395,29 +395,40 @@ export default function Jarvis() {
     if (socialLinked) loadSocial();
   }, [socialLinked, loadSocial]);
 
-  const [metaToken, setMetaToken] = useState('');
+  // No token to paste — the link ALWAYS reuses the WhatsApp system user's
+  // token (already in write-only whatsapp_config). It runs by itself the
+  // first time the page sees WhatsApp connected but Social not yet linked.
   const [metaLinking, setMetaLinking] = useState(false);
   const [metaLinkError, setMetaLinkError] = useState(null);
+  const metaBusy = useRef(false);
   const linkMeta = useCallback(async () => {
-    if (metaLinking) return;
-    // Empty token → the function reuses the WhatsApp system user's token.
-    const token = metaToken.trim();
+    if (metaBusy.current) return;
+    metaBusy.current = true;
     setMetaLinking(true);
     setMetaLinkError(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { link: token ? { token } : {} },
+        body: { link: {} },
       });
       if (error) throw new Error(error.message || 'sin respuesta');
       if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
-      setMetaToken('');
       await refreshSettings();
     } catch (e) {
       setMetaLinkError(e?.message || 'No se pudo vincular');
     } finally {
+      metaBusy.current = false;
       setMetaLinking(false);
     }
-  }, [metaToken, metaLinking, refreshSettings]);
+  }, [refreshSettings]);
+
+  const whatsappLinked = !!settings?.whatsappConnectedAt;
+  const metaAutoTried = useRef(false);
+  useEffect(() => {
+    if (!socialLinked && whatsappLinked && !metaAutoTried.current) {
+      metaAutoTried.current = true;
+      linkMeta();
+    }
+  }, [socialLinked, whatsappLinked, linkMeta]);
 
   // ── ⌘K command palette ───────────────────────────────────────────────
   const navigate = useNavigate();
@@ -550,10 +561,10 @@ export default function Jarvis() {
         </div>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_1fr_300px]">
-        {/* ── left column: reactor + stats ─────────────────────────── */}
-        <div className="space-y-4">
-          <section className="jv-panel p-4">
+      <div className="grid gap-3 xl:grid-cols-[280px_1fr_300px]">
+        {/* ── left rail: reactor + stats + integration status list ──── */}
+        <div className="flex flex-col gap-3 min-h-0">
+          <section className="jv-panel p-3">
             <div className="jv-gauge">
               <svg viewBox="0 0 120 120" aria-hidden="true">
                 <circle className="track" cx="60" cy="60" r="52" />
@@ -570,7 +581,7 @@ export default function Jarvis() {
                 <span>Integridad</span>
               </div>
             </div>
-            <p className="jv-mono text-center text-xs mt-3" style={{ color: 'var(--jv-muted)' }}>
+            <p className="jv-mono text-center text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
               {board.filter((c) => c.status === 'online').length} sistemas en línea ·{' '}
               {board.filter((c) => c.status === 'fail' || c.status === 'offline').length} fuera
             </p>
@@ -578,17 +589,51 @@ export default function Jarvis() {
 
           <section className="jv-panel">
             <div className="jv-panel-head"><Activity size={12} /> Telemetría</div>
-            <div className="grid grid-cols-2 gap-3 p-4">
+            <div className="grid grid-cols-2 gap-2 p-3">
               <div className="jv-stat"><b>{nQuotes}</b><span>Cotizaciones</span></div>
               <div className="jv-stat"><b>{nOrders}</b><span>Pedidos</span></div>
               <div className="jv-stat"><b>{nCustomers}</b><span>Clientes</span></div>
               <div className="jv-stat"><b>{nProducts}</b><span>Productos</span></div>
             </div>
           </section>
+
+          {/* Dense status rail — one row per integration; the panel grows to
+              the column's full height so nothing trails ragged below it. */}
+          <section className="jv-panel flex-1 flex flex-col min-h-0">
+            <div className="jv-panel-head justify-between">
+              <span className="flex items-center gap-2"><Satellite size={12} /> Integraciones</span>
+              <button
+                type="button"
+                className="jv-btn"
+                style={{ minHeight: '1.7rem', fontSize: '0.7rem' }}
+                onClick={runDiagnostics}
+                disabled={scanning}
+              >
+                {scanning ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
+                {scanning ? 'Escaneando' : 'Diagnóstico'}
+              </button>
+            </div>
+            <div className="jv-int-list flex-1 min-h-0 overflow-y-auto">
+              {board.map((c) => (
+                <div
+                  key={c.id}
+                  className={`jv-int-row ${c.status === 'scanning' ? 'is-scanning' : ''}`}
+                  title={`${c.name} — ${c.statusLabel} · ${c.desc}`}
+                >
+                  <span className={`idot jv-${c.status}`} aria-label={c.statusLabel} />
+                  <span className="iname jv-mono">{c.name}</span>
+                  <span className="imeta jv-mono">
+                    {c.latencyMs != null ? `${c.latencyMs} ms` : c.ago || c.statusLabel}
+                  </span>
+                  {c.detail ? <span className="idetail">{c.detail}</span> : null}
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
 
-        {/* ── center: business pulse + integration grid ────────────── */}
-        <div className="space-y-4">
+        {/* ── center: business pulse + social ──────────────────────── */}
+        <div className="flex flex-col gap-3 min-h-0">
         <section className="jv-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
@@ -717,37 +762,8 @@ export default function Jarvis() {
           )}
         </section>
 
-        <section className="jv-panel">
-          <div className="jv-panel-head justify-between">
-            <span className="flex items-center gap-2"><Satellite size={12} /> Integraciones</span>
-            <button type="button" className="jv-btn" onClick={runDiagnostics} disabled={scanning}>
-              {scanning ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
-              {scanning ? 'Escaneando' : 'Diagnóstico'}
-            </button>
-          </div>
-          <div className="grid gap-2.5 p-3 sm:grid-cols-2">
-            {board.map((c) => (
-              <div key={c.id} className={`jv-card ${c.status === 'scanning' ? 'is-scanning' : ''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="jv-mono text-sm" style={{ color: 'var(--jv-fg)' }}>{c.name}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--jv-muted)' }}>{c.desc}</div>
-                  </div>
-                  <StatusChip status={c.status} label={c.statusLabel} />
-                </div>
-                <div className="jv-mono text-xs mt-2 flex items-center justify-between" style={{ color: 'var(--jv-muted)' }}>
-                  <span>{c.detail}</span>
-                  <span style={{ color: 'var(--jv-muted)' }}>
-                    {c.latencyMs != null ? `${c.latencyMs} ms` : c.ago || ''}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* ── social: Instagram + Facebook + Ads (Meta Graph) ──────── */}
-        <section className="jv-panel">
+        <section className="jv-panel flex-1">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><Share2 size={12} /> Social · Meta</span>
             {socialLinked ? (
@@ -768,36 +784,29 @@ export default function Jarvis() {
 
           {!socialLinked ? (
             <div className="p-4">
-              <p className="text-xs mb-3" style={{ color: 'var(--jv-muted)' }}>
-                Conecta la página de Facebook y el Instagram del negocio (y la
-                cuenta publicitaria, si existe) para ver alcance, resultados de
-                anuncios y publicaciones programadas aquí. Se usa el mismo
-                usuario del sistema que la integración de WhatsApp — solo
-                asegúrate en Meta Business de asignarle la página, el Instagram
-                y la cuenta publicitaria. El enlace los descubre automáticamente.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkMeta} disabled={metaLinking}>
-                  {metaLinking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
-                  {metaToken.trim() ? 'Vincular con este token' : 'Vincular con el sistema de WhatsApp'}
-                </button>
-                <input
-                  className="jv-input"
-                  style={{ flex: '1 1 14rem', width: 'auto' }}
-                  type="password"
-                  value={metaToken}
-                  onChange={(e) => setMetaToken(e.target.value)}
-                  placeholder="(opcional) otro token de Meta Business — EAA…"
-                  autoComplete="new-password"
-                  spellCheck={false}
-                />
-              </div>
-              {metaLinkError && (
-                <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{metaLinkError}</div>
+              {metaLinking ? (
+                <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
+                      <Skeleton w="55%" h="0.6rem" />
+                      <Skeleton w="70%" h="1.3rem" />
+                    </div>
+                  ))}
+                </div>
+              ) : metaLinkError ? (
+                <>
+                  <div className="text-xs" style={{ color: 'var(--jv-danger)' }}>{metaLinkError}</div>
+                  <button type="button" className="jv-btn mt-3" onClick={linkMeta}>
+                    <RefreshCw size={12} /> Reintentar
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs" style={{ color: 'var(--jv-muted)' }}>
+                  {whatsappLinked
+                    ? 'Vinculando con el usuario del sistema de WhatsApp…'
+                    : 'Se conecta solo: en cuanto WhatsApp esté vinculado, este panel usa su mismo usuario del sistema para leer la página, el Instagram y los anuncios.'}
+                </p>
               )}
-              <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
-                El token vive en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
-              </p>
             </div>
           ) : socialError ? (
             <div className="p-4">
@@ -963,7 +972,7 @@ export default function Jarvis() {
         </div>
 
         {/* ── right column: radar + live feeds ─────────────────────── */}
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3 min-h-0">
           <section className="jv-panel p-3">
             <div className="jv-panel-head -m-3 mb-2"><Radar size={12} /> Mapa de estado</div>
             <svg viewBox="0 0 100 100" className="jv-radar w-full">
@@ -1015,9 +1024,9 @@ export default function Jarvis() {
             </div>
           </section>
 
-          <section className="jv-panel">
+          <section className="jv-panel flex-1 flex flex-col min-h-0">
             <div className="jv-panel-head"><Cpu size={12} /> Cambios en vigor</div>
-            <div className="jv-feed jv-mono p-3 max-h-72 overflow-y-auto">
+            <div className="jv-feed jv-mono p-3 flex-1 min-h-0 overflow-y-auto" style={{ maxHeight: '20rem' }}>
               {BUILD.builtAt ? (
                 <div className="item">
                   <span className="tag">deploy</span>
@@ -1044,7 +1053,7 @@ export default function Jarvis() {
       </div>
 
       {/* ── Claude uplink console ─────────────────────────────────────── */}
-      <section className="jv-panel mt-4">
+      <section className="jv-panel mt-3">
         <div className="jv-panel-head justify-between">
           <span className="flex items-center gap-2"><Bot size={12} /> Enlace Claude</span>
           <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>

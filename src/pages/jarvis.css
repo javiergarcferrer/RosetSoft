@@ -138,22 +138,44 @@
 .jv-fail { color: var(--jv-danger); }
 .jv-scanning { color: var(--jv-scan); }
 
-/* ── integration cards — interaction raises contrast, nothing moves ─── */
-.jv-card {
-  border: 1px solid var(--jv-border);
-  border-radius: 6px;
-  padding: 0.7rem 0.8rem;
-  background: var(--jv-card);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+/* ── integration status rail — dense two-line rows, no cards ─────────── */
+.jv-int-list { padding: 0.15rem 0; }
+.jv-int-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.74rem;
+  transition: background-color 0.15s ease;
 }
-.jv-card:hover {
-  border-color: var(--jv-border-strong);
-  background: #161616;
+.jv-int-row:hover { background: rgba(255, 255, 255, 0.03); }
+.jv-int-row:last-child { border-bottom: 0; }
+.jv-int-row .idot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: currentColor;
+  align-self: center;
+}
+.jv-int-row .iname {
+  color: var(--jv-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jv-int-row .imeta { font-size: 0.64rem; color: var(--jv-faint); }
+.jv-int-row .idetail {
+  grid-column: 2 / 4;
+  font-size: 0.68rem;
+  color: var(--jv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* In-flight probe (a response to pressing Diagnóstico). */
-.jv-card.is-scanning {
-  border-color: rgba(191, 122, 240, 0.45);
-}
+.jv-int-row.is-scanning .idot { color: var(--jv-scan); }
 
 /* ── status map (radar without the theatrics) ────────────────────────── */
 .jv-radar circle.grid-ring {
