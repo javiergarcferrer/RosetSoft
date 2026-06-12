@@ -136,6 +136,85 @@ export function resolveSales({ quotes, cycle, customerById, profileById, profess
   return { entries, vendedorRows, profRows };
 }
 
+function creatorDisplay(creator) {
+  if (!creator) return '';
+  if (creator.name && creator.name.trim()) return creator.name.trim();
+  if (creator.email) return creator.email.split('@')[0];
+  return '';
+}
+
+/**
+ * The workspace's refinement over one cycle's entries — deposit tab, vendedor
+ * filter, free-text needle and sort — plus the tab counts and the
+ * distinct-creator options the search header renders. Extracted from the
+ * Workspace View because the commission sort encodes a MONEY rule: a sale
+ * whose deposit fell in the cycle ranks by what it actually EARNS
+ * (frozen-if-paid), one without ranks by its live potential.
+ *
+ * Tab counts span the whole cycle (independent of needle/vendedor filter) so
+ * each tab reads "how many would I see there".
+ *
+ * @returns {{ rows: object[], tabs: object[], creatorOptions: object[] }}
+ */
+export function resolveWorkspaceEntries({
+  entries, q = '', tab = 'all', creator = null, sort = { key: 'accepted', dir: 'desc' },
+}) {
+  const all = entries || [];
+
+  let recibido = 0;
+  for (const e of all) if (e.quote.depositReceivedAt) recibido += 1;
+  const tabs = [
+    { key: 'all', label: 'Todas', count: all.length },
+    { key: 'recibido', label: 'Recibido', count: recibido },
+    { key: 'pendiente', label: 'Pendiente', count: all.length - recibido },
+  ];
+
+  const seen = new Map();
+  for (const e of all) {
+    const id = e.creator?.id;
+    if (!id || seen.has(id)) continue;
+    const label = creatorDisplay(e.creator);
+    if (label) seen.set(id, label);
+  }
+  const creatorOptions = [...seen.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const needle = q.trim().toLowerCase();
+  const filtered = all
+    .filter((e) => {
+      if (tab === 'recibido') return Boolean(e.quote.depositReceivedAt);
+      if (tab === 'pendiente') return !e.quote.depositReceivedAt;
+      return true;
+    })
+    .filter((e) => (creator ? e.creator?.id === creator : true))
+    .filter((e) => {
+      if (!needle) return true;
+      const num = String(e.quote.number || '');
+      const cust = (e.customer?.company || e.customer?.name || '').toLowerCase();
+      const vend = (e.creator?.name || e.creator?.email || '').toLowerCase();
+      return num.includes(needle) || cust.includes(needle) || vend.includes(needle);
+    });
+
+  const mul = sort.dir === 'asc' ? 1 : -1;
+  const rows = [...filtered].sort((a, b) => {
+    if (sort.key === 'total') return (a.grandTotal - b.grandTotal) * mul;
+    if (sort.key === 'commission') {
+      const ac = a.depositIn ? a.earnedCommission : a.potentialCommission;
+      const bc = b.depositIn ? b.earnedCommission : b.potentialCommission;
+      return (ac - bc) * mul;
+    }
+    if (sort.key === 'customer') {
+      const an = (a.customer?.company || a.customer?.name || '').toLowerCase();
+      const bn = (b.customer?.company || b.customer?.name || '').toLowerCase();
+      return an.localeCompare(bn) * mul;
+    }
+    return ((a.quote.acceptedAt || 0) - (b.quote.acceptedAt || 0)) * mul;
+  });
+
+  return { rows, tabs, creatorOptions };
+}
+
 /**
  * Company-wide roll-up of one cycle's `resolveSales` result — the admin's
  * full-scope header: both commission streams summed (seller + professional),

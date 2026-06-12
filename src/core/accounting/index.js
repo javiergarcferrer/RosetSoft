@@ -7,7 +7,7 @@
 // reach into lib/accounting directly.
 
 // ── per-sale commission + payout projections (the original accounting surface)
-export { resolveSales, resolveCommissionsOverview } from './sales.js';
+export { resolveSales, resolveCommissionsOverview, resolveWorkspaceEntries } from './sales.js';
 
 // ── general-ledger ViewModels
 export {

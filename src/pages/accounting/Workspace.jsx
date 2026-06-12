@@ -27,7 +27,8 @@ import {
   commissionAmount, commissionBreakdown, decoratorBilling,
   commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
-import { resolveSales } from '../../core/accounting/sales.js';
+import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sales.js';
+import RowCards from '../../components/RowCards.jsx';
 
 /**
  * Contabilidad — single-pane accounting workspace, organized around the
@@ -191,43 +192,19 @@ export default function AccountingWorkspace() {
   const [filters, setFilters] = useState({}); // { creator: <profileId> }
   const [sort, setSort] = useState({ key: 'accepted', dir: 'desc' });
 
-  // Deposit tabs — a Recibido / Pendiente dimension off depositReceivedAt,
-  // counted across the whole cycle's entries (independent of the search
-  // needle / vendedor filter, so each tab reads "how many would I see").
-  const tabs = useMemo(() => {
-    let recibido = 0;
-    for (const e of derived.entries) {
-      if (e.quote.depositReceivedAt) recibido += 1;
-    }
-    return [
-      { key: 'all', label: 'Todas', count: derived.entries.length },
-      { key: 'recibido', label: 'Recibido', count: recibido },
-      { key: 'pendiente', label: 'Pendiente', count: derived.entries.length - recibido },
-    ];
-  }, [derived.entries]);
-
-  // Secondary filter: vendedor (the quote's creator). Options are the
-  // distinct creators actually present in the cycle's entries, so the
-  // dropdown never lists someone with nothing in the window.
-  const creatorFilter = useMemo(() => {
-    const seen = new Map();
-    for (const e of derived.entries) {
-      const id = e.creator?.id;
-      if (!id || seen.has(id)) continue;
-      const label = creatorDisplay(e.creator);
-      if (label) seen.set(id, label);
-    }
-    const options = [...seen.entries()]
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    return {
-      key: 'creator',
-      label: 'Vendedor',
-      type: 'select',
-      placeholder: 'Todos',
-      options,
-    };
-  }, [derived.entries]);
+  // Refinement (deposit tabs, vendedor filter, needle, sort) lives in the
+  // Model — resolveWorkspaceEntries — because the commission sort encodes a
+  // money rule. The View keeps only the control state.
+  const workspace = useMemo(
+    () => resolveWorkspaceEntries({ entries: derived.entries, q, tab, creator: filters.creator, sort }),
+    [derived.entries, q, tab, filters, sort],
+  );
+  const filteredEntries = workspace.rows;
+  const tabs = workspace.tabs;
+  const creatorFilter = {
+    key: 'creator', label: 'Vendedor', type: 'select', placeholder: 'Todos',
+    options: workspace.creatorOptions,
+  };
 
   const sortOptions = [
     { key: 'accepted', label: 'Aceptada' },
@@ -235,48 +212,6 @@ export default function AccountingWorkspace() {
     { key: 'commission', label: 'Comisión' },
     { key: 'customer', label: 'Cliente A–Z' },
   ];
-
-  const filteredEntries = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const creator = filters.creator;
-    const rows = derived.entries
-      .filter((e) => {
-        if (tab === 'recibido') return Boolean(e.quote.depositReceivedAt);
-        if (tab === 'pendiente') return !e.quote.depositReceivedAt;
-        return true;
-      })
-      .filter((e) => (creator ? e.creator?.id === creator : true))
-      .filter((e) => {
-        if (!needle) return true;
-        const num = String(e.quote.number || '');
-        const cust = (e.customer?.company || e.customer?.name || '').toLowerCase();
-        const vend = (e.creator?.name || e.creator?.email || '').toLowerCase();
-        return num.includes(needle) || cust.includes(needle) || vend.includes(needle);
-      });
-
-    // Sort. derived.entries already comes acceptedAt-desc; re-sorting here
-    // keeps the direction toggle honest. Direction multiplier flips asc/desc;
-    // 'customer' uses localeCompare for A–Z.
-    const mul = sort.dir === 'asc' ? 1 : -1;
-    const sorted = [...rows].sort((a, b) => {
-      if (sort.key === 'total') {
-        return (a.grandTotal - b.grandTotal) * mul;
-      }
-      if (sort.key === 'commission') {
-        const ac = a.depositIn ? a.earnedCommission : a.potentialCommission;
-        const bc = b.depositIn ? b.earnedCommission : b.potentialCommission;
-        return (ac - bc) * mul;
-      }
-      if (sort.key === 'customer') {
-        const an = (a.customer?.company || a.customer?.name || '').toLowerCase();
-        const bn = (b.customer?.company || b.customer?.name || '').toLowerCase();
-        return an.localeCompare(bn) * mul;
-      }
-      // accepted
-      return ((a.quote.acceptedAt || 0) - (b.quote.acceptedAt || 0)) * mul;
-    });
-    return sorted;
-  }, [derived.entries, q, tab, filters, sort]);
 
   // Export busy state — one key at a time, three buttons.
   const [exportBusy, setExportBusy] = useState(null);
@@ -771,7 +706,21 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
         </div>
         <span className="badge">{rows.length}</span>
       </header>
-      <div className="overflow-x-auto">
+      <RowCards inCard
+        rows={rows.map((r) => ({
+          key: keyOf(r),
+          title: nameOf(r),
+          sub: subOf(r),
+          right: formatMoney(r.commission, 'USD', { USD: 1 }),
+          kv: [
+            ['# ventas', r.count],
+            ['Pagado', <span className="text-emerald-700">{formatMoney(r.paid, 'USD', { USD: 1 })}</span>],
+            ['Pendiente', <span className="font-medium text-amber-700">{formatMoney(r.pending, 'USD', { USD: 1 })}</span>],
+          ],
+        }))}
+        footer={[['Pendiente total', formatMoney(pendingTotal, 'USD', { USD: 1 })]]}
+      />
+      <div className="hidden md:block overflow-x-auto">
         <table className="table">
           <thead>
             <tr>

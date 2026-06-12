@@ -30,9 +30,13 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (i3-i4 — components/RowCards.jsx: title/right + sub + kv grid + totals
       footer, rows support to/onClick; applied to all 8 tables across the 5
       pages incl. 606, statement, histórico and kardex stock list.)
-- [ ] Ventas y comisiones workspace cards: `accounting/Workspace.jsx` 11-col
+- [x] Ventas y comisiones workspace cards: `accounting/Workspace.jsx` 11-col
       table → card rows < md (keep desktop table). Pre-req: consider extracting
       the inline filter/sort into `resolveSales` first (see Consistency below).
+      (i5 — filter/sort/tab-counts extracted to `resolveWorkspaceEntries`
+      (core/accounting/sales.js, pinned in tests/commissions.test.js); the
+      per-sale list was already responsive — the two SummaryTable payout
+      rollups got RowCards inCard fallbacks.)
 - [ ] Facturación action row: `accounting/Facturacion.jsx:427-446` RNC/NCF
       inputs + button stack full-width < sm; pin 607 tfoot totals outside the
       scroll container (:471-545).
@@ -88,7 +92,8 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
 - [ ] Extract View-inlined money derivations into resolvers (one per
       iteration): party statements (`CuentasCobrarPagar.jsx:53-69` →
       `core/accounting/receivables`), workspace filter/sort/commission
-      comparator (`Workspace.jsx:239-279` → `resolveSales`), client-preview
+      comparator (`Workspace.jsx:239-279` → `resolveSales`) ✓ done in i5,
+      client-preview
       priced shapes (`ClientPreview.jsx:560-589` → `resolveQuoteView`),
       compound repricing (`QuoteLineItem.jsx:217-241` → pure
       `repriceComponentsAtGrade` in `lib/pricing`), COGS click-handler math
