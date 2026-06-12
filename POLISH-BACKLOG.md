@@ -98,13 +98,20 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       `resolveOrderRegistration` rows (`accounting/ExpedienteForm.jsx`).
       (i14 — button under the Pedido select; reference/name/qty seeded, FOB
       left for the invoice; confirm before replacing non-empty lines.)
-- [ ] JARVIS deep links: ops-feed entries + funnel rows become `Link`s with row
+- [x] JARVIS deep links: ops-feed entries + funnel rows become `Link`s with row
       id / status-filtered list URLs (`src/pages/Jarvis.jsx`).
-- [ ] Global search groups: conversations (reuse `resolveConversations` →
+      (i15 — resolvers emit `to`; view renders Links; pinned shapes intact.)
+- [x] Global search groups: conversations (reuse `resolveConversations` →
       `/chats?chat=`), containers by number → `/orders/:id`; role-gated
       suppliers/NCF for accounting (`core/search`, `GlobalSearch.jsx`).
-- [ ] Customer 360: role-gated "Cuenta" card on CustomerDetail (receivable
+      (i16 — containers + role-gated suppliers groups added. Conversations
+      SKIPPED on purpose: would need the whole wa_messages table client-side;
+      customers/professionals results already deep-link into their chat.)
+- [x] Customer 360: role-gated "Cuenta" card on CustomerDetail (receivable
       balance + link to prefiltered statement) via a bridge resolver.
+      (i17 — `resolveCustomerAccount` in core/bridge (pinned in
+      tests/bridge.test.js); StatCard links to Banca, and CxC now honors
+      ?statement=<partyId> to auto-open the estado de cuenta.)
 - [ ] e-CF: auto-transmit after posting when cert+sequence configured (manual
       button stays as fallback); pending-transmission badge on the 607 tab
       (`accounting/Facturacion.jsx`).

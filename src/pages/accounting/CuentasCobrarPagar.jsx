@@ -48,7 +48,11 @@ export default function CuentasCobrarPagar() {
   const urlTab = params.get('tab');
   const [tab, setTab] = useState(urlTab === 'cxc' || urlTab === 'cxp' ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
   const [showForm, setShowForm] = useState(!!params.get('new'));
-  const [selected, setSelected] = useState(null); // { type, id }
+  // ?statement=<partyId> deep-links straight into a party's estado de cuenta
+  // (the CustomerDetail "Cuenta" card uses it).
+  const [selected, setSelected] = useState(() => (params.get('statement')
+    ? { type: tab === 'cxp' ? 'supplier' : 'customer', id: params.get('statement') }
+    : null)); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
 
   const statement = useMemo(() => {

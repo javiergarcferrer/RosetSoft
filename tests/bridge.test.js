@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { quoteToSale, resolveQuoteInvoiceStatus } from '../src/core/bridge/index.js';
+import { quoteToSale, resolveQuoteInvoiceStatus, resolveCustomerAccount } from '../src/core/bridge/index.js';
 import { computeTotals, lineForTotals } from '../src/lib/pricing.js';
 import { isPricedLine } from '../src/lib/constants.js';
 
@@ -47,4 +47,21 @@ test('resolveQuoteInvoiceStatus: one stamp per quote, latest posting wins, no qu
   assert.deepEqual(m.get('q1'), { ncf: 'E310000000007', ecfStatus: 'sent', postedAt: 200 });
   assert.deepEqual(m.get('q2'), { ncf: '', ecfStatus: '', postedAt: 50 });
   assert.equal(resolveQuoteInvoiceStatus(null).size, 0);
+});
+
+test('resolveCustomerAccount: invoiced (net of deposit applied) − cobros = balance', () => {
+  const postings = [
+    { customerId: 'c1', total: 11800, depositApplied: 3000 },
+    { customerId: 'c1', total: 5900, depositApplied: 0 },
+    { customerId: 'c2', total: 999, depositApplied: 0 }, // other party
+  ];
+  const payments = [
+    { direction: 'in', partyType: 'customer', partyId: 'c1', amount: 5000 },
+    { direction: 'out', partyType: 'supplier', partyId: 'c1', amount: 100 }, // never counted
+    { direction: 'in', partyType: 'customer', partyId: 'c2', amount: 10 },
+  ];
+  const a = resolveCustomerAccount({ postings, payments, customerId: 'c1' });
+  assert.deepEqual(a, { invoiced: 14700, paid: 5000, balance: 9700 });
+  assert.deepEqual(resolveCustomerAccount({ postings: null, payments: null, customerId: 'x' }),
+    { invoiced: 0, paid: 0, balance: 0 });
 });
