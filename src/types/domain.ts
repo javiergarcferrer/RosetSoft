@@ -227,6 +227,9 @@ export interface Settings {
    *  to open Meta's hosted onboarding dialog (QR scan from the phone app). */
   whatsappAppId?: string;
   whatsappConfigId?: string;
+  /** Manual Commerce-catalog id override for the chat's product picker.
+   *  Empty ⇒ wa-send auto-discovers the catalog from the token. */
+  whatsappCatalogId?: string;
 }
 
 /**

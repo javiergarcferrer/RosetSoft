@@ -115,6 +115,8 @@ function friendlyMetaError(code: number | undefined, message: string): string {
       return 'Meta limitó el envío de marketing a este número por ahora (límites de spam / experiencia del usuario). Intenta más tarde.';
     case 100:
       return `Meta rechazó la petición: ${message}. Revisa que el Phone Number ID sea el ID (no el número) y que el token tenga permiso whatsapp_business_messaging.`;
+    case 200:
+      return `Meta rechazó por permisos (#200): ${message}. Suele faltar asignar el activo (catálogo, página…) al System User del token, o marcar el permiso al generar el token.`;
     default:
       return message;
   }
@@ -356,39 +358,100 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
-  // The catalog id is resolved fresh per request — one cheap Graph call, no
-  // state to go stale when the team reconnects a different catalog.
-  // Three sources, because Graph SILENTLY FILTERS objects the token can't
-  // see (an empty list does NOT mean "no catalog connected" — usually it
-  // means the System User wasn't assigned the catalog asset):
+  // The catalog id is resolved fresh per request — cheap Graph calls, no
+  // state to go stale when the team reconnects a different catalog. A manual
+  // override (Configuración → WhatsApp → "ID del catálogo", stored on
+  // settings.whatsapp_catalog_id) short-circuits discovery — the escape hatch
+  // when Meta hides the catalog from the token.
+  // Discovery tries FIVE sources, because Graph SILENTLY FILTERS objects the
+  // token can't see (an empty list does NOT mean "no catalog connected" —
+  // usually it means the System User wasn't assigned the catalog asset):
   //   1. the WABA's product_catalogs edge,
   //   2. the number's whatsapp_commerce_settings (carries catalog_id),
-  //   3. the token's own catalog_management granular scope (debug_token).
-  // Every miss is logged so the real Meta answer is in the function logs.
+  //   3. the token's own catalog_management granular scope (debug_token),
+  //   4. the System User's assigned catalogs (me/assigned_product_catalogs),
+  //   5. the token's businesses → each one's owned_product_catalogs.
+  // Every probe's outcome is collected and RETURNED in the error (and logged),
+  // and debug_token's scope list decides which instruction leads — so the UI
+  // says exactly which Meta grant is missing (regenerate the token vs. assign
+  // the catalog asset) instead of one generic guess.
   async function connectedCatalogId(): Promise<{ id: string | null; error: string | null }> {
-    if (!wabaId) return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA).' };
-    const r = await fetch(`${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, { headers: graphHeaders });
-    const data = await r.json().catch(() => ({}));
-    let id = r.ok ? ((data as { data?: { id?: string }[] }).data?.[0]?.id || null) : null;
-    if (!id) {
-      console.error('[wa-send] product_catalogs gave no catalog:', r.status, JSON.stringify(data));
-      const cs = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings?fields=catalog_id`, { headers: graphHeaders });
-      const csData = await cs.json().catch(() => ({}));
-      id = cs.ok ? ((csData as { data?: { catalog_id?: string }[] }).data?.[0]?.catalog_id || null) : null;
-      if (!id) console.error('[wa-send] whatsapp_commerce_settings gave no catalog:', cs.status, JSON.stringify(csData));
+    const { data: st } = await admin.from('settings').select('whatsapp_catalog_id').eq('profile_id', TEAM).maybeSingle();
+    const manual = String((st as { whatsapp_catalog_id?: string } | null)?.whatsapp_catalog_id || '').replace(/\D/g, '');
+    if (manual) return { id: manual, error: null };
+
+    type Edge = { data?: { id?: string; catalog_id?: string; name?: string }[]; error?: { code?: number; message?: string } };
+    const probes: string[] = [];
+    // One discovery probe: fetch, pick the id out of the JSON, record misses
+    // (with Meta's own error when there is one) for the diagnosis tail.
+    async function probe(label: string, url: string, pick: (d: Edge) => string | null | undefined): Promise<string | null> {
+      try {
+        const r = await fetch(url, { headers: graphHeaders });
+        const data = await r.json().catch(() => ({})) as Edge;
+        if (!r.ok) {
+          probes.push(`${label}: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
+          console.error(`[wa-send] catalog probe "${label}" failed:`, r.status, JSON.stringify(data));
+          return null;
+        }
+        const id = pick(data) || null;
+        if (!id) probes.push(`${label}: sin resultados`);
+        return id;
+      } catch (e) {
+        probes.push(`${label}: ${String(e)}`);
+        return null;
+      }
     }
+
+    if (!wabaId) {
+      return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA). Pégalo en Configuración → WhatsApp y prueba la conexión.' };
+    }
+    let id = await probe('catálogos del WABA', `${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
+    if (!id) {
+      id = await probe('commerce settings del número', `${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings?fields=catalog_id`, (d) => d.data?.[0]?.catalog_id);
+    }
+
+    // debug_token: the granular catalog_management scope can carry the id
+    // directly, and the `scopes` list says whether the token has the
+    // permission AT ALL — that decides which instruction the error leads with.
+    let scopes: string[] | null = null;
     if (!id) {
       const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
       const dd = await dbg.json().catch(() => ({})) as
-        { data?: { granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+        { data?: { scopes?: string[]; granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+      scopes = Array.isArray(dd.data?.scopes) ? (dd.data?.scopes as string[]) : null;
       id = (dd.data?.granular_scopes || [])
         .find((s) => s.scope === 'catalog_management')?.target_ids?.[0] || null;
-      if (!id) console.error('[wa-send] catalog_management scope gave no catalog:', JSON.stringify(dd.data?.granular_scopes || []));
+      if (!id) probes.push(scopes ? `permisos del token: ${scopes.join(', ') || '(ninguno)'}` : 'debug_token: sin datos');
     }
-    return {
-      id,
-      error: id ? null : 'No se pudo ver el catálogo con el token guardado. Suele faltar uno de estos: (1) asignar el CATÁLOGO como activo al System User del token (Business Manager → System users → Add assets → Catálogos) y que el token tenga el permiso catalog_management, o (2) conectar el catálogo a la cuenta de WhatsApp (WhatsApp Manager → Catálogo). Tras corregirlo, vuelve a intentar.',
-    };
+
+    if (!id) {
+      id = await probe('catálogos asignados al System User', `${GRAPH}/me/assigned_product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
+    }
+    if (!id) {
+      try {
+        const r = await fetch(`${GRAPH}/me/businesses?fields=id,name`, { headers: graphHeaders });
+        const data = await r.json().catch(() => ({})) as Edge;
+        if (!r.ok) {
+          probes.push(`negocios del token: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
+        } else {
+          const bizs = (data.data || []).filter((b) => b.id).slice(0, 5);
+          if (!bizs.length) probes.push('negocios del token: sin resultados');
+          for (const b of bizs) {
+            id = await probe(`catálogos de ${b.name || b.id}`, `${GRAPH}/${b.id}/owned_product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
+            if (id) break;
+          }
+        }
+      } catch (e) {
+        probes.push(`negocios del token: ${String(e)}`);
+      }
+    }
+    if (id) return { id, error: null };
+
+    const missingScope = scopes !== null && !scopes.includes('catalog_management');
+    const head = missingScope
+      ? 'El token guardado NO tiene el permiso catalog_management — un token no gana los permisos que se añadan a la app después de generarlo. Genera un token NUEVO del System User (Business Manager → Usuarios del sistema → Generar token) marcando whatsapp_business_messaging, whatsapp_business_management y catalog_management, pégalo en Configuración → WhatsApp y vuelve a intentar.'
+      : 'El token tiene catalog_management pero Meta no le muestra ningún catálogo. Falta uno de estos: (1) asignar el CATÁLOGO como activo al System User del token (Business Manager → Usuarios del sistema → Asignar activos → Catálogos, control total), o (2) conectar el catálogo a la cuenta de WhatsApp (WhatsApp Manager → Catálogo). Alternativa inmediata: pega el ID del catálogo (Commerce Manager → tu catálogo, el número de la URL) en Configuración → WhatsApp → ID del catálogo.';
+    return { id: null, error: `${head}\n\nDiagnóstico de Meta: ${probes.join(' · ')}` };
   }
 
   if (body.listCatalog) {
