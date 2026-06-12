@@ -57,6 +57,10 @@ export default function InventoryPicker({ open, onClose, onInsert }) {
       reference: item.sku || '',
       unitPrice: Number(item.sellingPrice) || 0,
       qty: 1,
+      // Keep the link to the kardex item — quoting still moves no stock, but
+      // invoicing can now offer the salida prefilled instead of forgetting
+      // which item was sold.
+      inventoryItemId: item.id,
     });
     onClose();
   }

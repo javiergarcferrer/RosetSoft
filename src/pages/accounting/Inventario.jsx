@@ -34,19 +34,21 @@ export default function Inventario() {
   const loaded = itemsQ.loaded && movesQ.loaded;
 
   const inv = useMemo(() => resolveInventory({ items: itemsQ.data, movements: movesQ.data }), [itemsQ.data, movesQ.data]);
-  const [selectedId, setSelectedId] = useState('');
+  const [params] = useSearchParams();
+  // ?item=&qty= deep-link (the salida handoff from Facturación) preselects
+  // the kardex and fills the out quantity — confirming stays manual.
+  const [selectedId, setSelectedId] = useState(() => params.get('item') || '');
   const kardex = useMemo(
     () => (selectedId ? resolveItemKardex({ movements: movesQ.data, itemId: selectedId }) : null),
     [selectedId, movesQ.data],
   );
   const selectedItem = useMemo(() => itemsQ.data.find((i) => i.id === selectedId) || null, [itemsQ.data, selectedId]);
 
-  const [params] = useSearchParams();
   const [showItem, setShowItem] = useState(!!params.get('new'));
   const [itemForm, setItemForm] = useState({ sku: '', name: '', unit: 'unidad' });
   const [savingItem, setSavingItem] = useState(false);
 
-  const [outQty, setOutQty] = useState('');
+  const [outQty, setOutQty] = useState(() => params.get('qty') || '');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
   const [syncing, setSyncing] = useState(false);

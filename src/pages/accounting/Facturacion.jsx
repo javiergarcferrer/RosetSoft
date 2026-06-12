@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { toRow } from '../../db/rowMapping.js';
@@ -484,6 +484,24 @@ export default function Facturacion() {
                     </button>
                     {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
                   </div>
+                  {/* Stock-sourced lines (inventoryItemId stamped at quoting
+                      time) → offer the kardex salida prefilled; the sale's
+                      stock move stays a human act in Inventario. */}
+                  {(() => {
+                    const stocked = (linesByQuote.get(q.id) || []).filter((l) => l.inventoryItemId);
+                    if (!stocked.length) return null;
+                    const first = stocked[0];
+                    return (
+                      <Link
+                        to={`/accounting/inventario?item=${first.inventoryItemId}&qty=${Number(first.qty) || 1}`}
+                        className="btn-ghost text-xs mt-2"
+                        title="Registrar la salida de almacén de los artículos vendidos de stock"
+                      >
+                        <Boxes size={12} aria-hidden /> Salida de inventario
+                        {stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
+                      </Link>
+                    );
+                  })()}
                 </div>
               );
             })}

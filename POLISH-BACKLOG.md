@@ -82,12 +82,18 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (i11 — once a stream is marked paid, a "Gasto" link opens Gastos with
       monto (USD→DOP at today's rate), ITBIS 0 and the description seeded;
       NewExpenseForm accepts ?amount&itbis&desc.)
-- [ ] HL arrival nudge: suggestion chip on OrderDetail when the voyage summary
+- [x] HL arrival nudge: suggestion chip on OrderDetail when the voyage summary
       reports arrival ("¿marcar En aduanas/Recibido?") — human confirms, no
       auto-advance (`core/tracking/voyage.js` summary already computes it).
-- [ ] Inventory link: stamp `inventoryItemId` on lines inserted from
+      (i12 — arrivalAction slot in ContainerTracking's summary band, only
+      rendered when voyage.arrived; OrderDetail supplies the stage-advance
+      button gated by the existing canAdvance rules.)
+- [x] Inventory link: stamp `inventoryItemId` on lines inserted from
       `InventoryPicker`; on invoice/delivery offer prefilled kardex salida +
       COGS (uses existing `registerSalida` path in `Inventario.jsx`).
+      (i13 — migration 20260718130000 adds quote_lines.inventory_item_id;
+      picker stamps it; Facturación deliverable cards link "Salida de
+      inventario" → Inventario ?item&qty preselects kardex + out qty.)
 - [ ] Expediente seed: "Sembrar desde el pedido" prefills embarque lines from
       `resolveOrderRegistration` rows (`accounting/ExpedienteForm.jsx`).
 - [ ] JARVIS deep links: ops-feed entries + funnel rows become `Link`s with row
