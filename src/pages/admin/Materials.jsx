@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
@@ -460,7 +461,7 @@ function MaterialEditor({ material, profileId, onClose }) {
       await db.materials.put(row);
       onClose();
     } catch (e) {
-      setError(e?.message || 'No se pudo guardar.');
+      setError(userMessageFor(e));
       setBusy(false);
     }
   }
@@ -773,7 +774,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
       });
       setPreview({ rows, deleteIds, summary, siteFailed });
     } catch (e) {
-      setError(e?.message || 'No se pudo procesar el PDF.');
+      setError(userMessageFor(e));
     } finally {
       setBusy(null);
       setStep('');
@@ -792,7 +793,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
       if (preview.rows.length) await db.materials.bulkPut(preview.rows);
       setDone(preview.summary);
     } catch (e) {
-      setError(e?.message || 'No se pudieron guardar los cambios.');
+      setError(userMessageFor(e));
       setBusy(null);
     }
   }

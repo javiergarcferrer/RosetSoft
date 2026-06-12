@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import { formatDate } from '../../lib/format.js';
 import { POSTING_ROLES, resolveAccountingConfig, postableAccounts } from '../../core/accounting/index.js';
 import { saveEcfCredentials } from '../../lib/ecfCert.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 const ECF_ENVS = [
   { value: 'cert', label: 'CerteCF (certificación)' },
@@ -99,7 +100,7 @@ export default function AccountingSettings() {
       setCertPassword('');
       setCertMsg('✓ Certificado guardado de forma segura.');
     } catch (e) {
-      setCertMsg(e?.message || 'No se pudo guardar el certificado.');
+      setCertMsg(userMessageFor(e));
     } finally {
       setCertSaving(false);
     }

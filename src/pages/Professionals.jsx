@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -116,7 +117,7 @@ export default function Professionals() {
       setWriteError('');
       return true;
     } catch (e) {
-      setWriteError(`No se pudo guardar el cambio: ${e?.message || e}`);
+      setWriteError(`No se pudo guardar el cambio: ${userMessageFor(e)}`);
       return false;
     }
   }
@@ -155,7 +156,7 @@ export default function Professionals() {
       setWriteError('');
       return true;
     } catch (e) {
-      setWriteError(`No se pudo crear el profesional: ${e?.message || e}`);
+      setWriteError(`No se pudo crear el profesional: ${userMessageFor(e)}`);
       return false;
     }
   }

@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ShoppingCart, Plus, Loader2, Check, X } from 'lucide-react';
@@ -176,7 +177,7 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
       }
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

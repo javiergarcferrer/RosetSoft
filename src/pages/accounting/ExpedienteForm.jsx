@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Check, X, Plus, Trash2, FileText, Upload, Ship, Receipt, History, Sparkles } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -186,7 +187,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       const matched = seeded.filter((l) => l.itemId).length;
       setPdfNote({ fid, matched, toCreate: seeded.length - matched });
     } catch (e) {
-      setErr(e?.message || 'No se pudo leer el PDF.');
+      setErr(userMessageFor(e));
     } finally {
       setParsing('');
     }
@@ -285,7 +286,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ }
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -281,7 +282,7 @@ export default function Jarvis() {
         const r = await run();
         setProbe(key, { state: 'ok', ...r });
       } catch (e) {
-        setProbe(key, { state: 'fail', note: e?.message || 'fallo' });
+        setProbe(key, { state: 'fail', note: userMessageFor(e) });
       }
     }));
     setScanning(false);
@@ -330,7 +331,7 @@ export default function Jarvis() {
         setDraft('');
       }
     } catch (e) {
-      setUplinkError(e?.message || 'Fallo de transmisión');
+      setUplinkError(userMessageFor(e));
     } finally {
       setSending(false);
     }
@@ -358,7 +359,7 @@ export default function Jarvis() {
       setApiKey('');
       await refreshSettings();
     } catch (e) {
-      setLinkError(e?.message || 'No se pudo guardar la llave');
+      setLinkError(userMessageFor(e));
     } finally {
       setLinking(false);
     }
@@ -385,7 +386,7 @@ export default function Jarvis() {
       if (data?.configured === false || data?.error) throw new Error(data?.error || 'sin respuesta');
       setSocialRaw(data);
     } catch (e) {
-      setSocialError(e?.message || 'No se pudo leer Meta');
+      setSocialError(userMessageFor(e));
     } finally {
       socialBusy.current = false;
       setSocialLoading(false);
@@ -414,7 +415,7 @@ export default function Jarvis() {
       if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
       await refreshSettings();
     } catch (e) {
-      setMetaLinkError(e?.message || 'No se pudo vincular');
+      setMetaLinkError(userMessageFor(e));
     } finally {
       metaBusy.current = false;
       setMetaLinking(false);

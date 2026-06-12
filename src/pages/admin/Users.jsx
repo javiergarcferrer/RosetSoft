@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Shield, Users as UsersIcon, Check, X, Mail, UserPlus, Loader2, Trash2, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -412,7 +413,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
         setSavedField((cur) => (cur === field ? null : cur));
       }, 1600);
     } catch (e) {
-      setError(e?.message || 'No se pudo guardar el cambio.');
+      setError(userMessageFor(e));
     }
   }
 
@@ -471,7 +472,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
       // every list, count, and dropdown on the page within one tick.
       onChanged?.();
     } catch (e) {
-      setError(e?.message || 'No se pudo eliminar el usuario.');
+      setError(userMessageFor(e));
       setBusy(false);
     }
   }
@@ -756,7 +757,7 @@ function InviteModal({ open, onClose, session, onInvited }) {
       // before the modal disappears.
       setTimeout(() => { onClose?.(); reset(); }, 1400);
     } catch (e) {
-      setError(e?.message || 'No se pudo enviar la invitación.');
+      setError(userMessageFor(e));
     } finally {
       setBusy(false);
     }

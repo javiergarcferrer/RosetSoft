@@ -385,7 +385,7 @@ function RateCard({ local, set, saveSettings }) {
       await saveSettings({ exchangeRate: { buy, sell, updatedAt: Date.now() } });
       setManualOk(true);
     } catch (e) {
-      setManualErr(e?.message || 'No se pudo guardar la tasa.');
+      setManualErr(userMessageFor(e));
     } finally {
       setSavingManual(false);
     }
@@ -615,7 +615,7 @@ function ShopifyCard({ settings, store }) {
       setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -638,7 +638,7 @@ function ShopifyCard({ settings, store }) {
       }
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo sincronizar.');
+      setMsg(userMessageFor(e));
     } finally {
       setSyncing(false);
     }

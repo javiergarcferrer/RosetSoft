@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -146,7 +147,7 @@ export default function OrderDetail() {
       await downloadBlob(blob, `Registro LR Pedido ${order?.number ? `#${order.number}` : ''}`.trim() + '.pdf');
     } catch (e) {
       console.error('[OrderDetail] registration export failed:', e);
-      alert(e?.message || 'No se pudo generar el documento de registro.');
+      alert(userMessageFor(e));
     } finally {
       setRegistering(false);
     }

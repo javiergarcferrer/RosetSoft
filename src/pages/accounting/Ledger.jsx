@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw, Download } from 'lucide-react';
@@ -79,7 +80,7 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
       await db.journalLines.bulkPut(built.lines);
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

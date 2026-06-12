@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, ChevronRight, ExternalLink, FileDown, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
 import ImageView from '../../components/ImageView.jsx';
@@ -81,7 +82,7 @@ export default function CatalogLifestyleGarden() {
       }
     } catch (e) {
       console.error('[CatalogLifestyleGarden] sync failed:', e);
-      setError(e?.message || 'No se pudo sincronizar el catálogo.');
+      setError(userMessageFor(e));
     } finally {
       setBusy(false);
     }
@@ -112,7 +113,7 @@ export default function CatalogLifestyleGarden() {
       setResult(`Catálogo listo: ${book.models} modelo(s) en existencia.`);
     } catch (e) {
       console.error('[CatalogLifestyleGarden] catalog pdf failed:', e);
-      setError(e?.message || 'No se pudo generar el catálogo PDF.');
+      setError(userMessageFor(e));
     } finally {
       setPdfBusy(false);
     }

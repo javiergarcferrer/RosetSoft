@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -57,7 +58,7 @@ export default function Difusion() {
       if (!alive) return;
       if (res?.ok) setTemplates(res.templates || []);
       else { setTemplates([]); setTemplatesError(res?.error || 'No se pudieron cargar las plantillas.'); }
-    }).catch((e) => { if (alive) { setTemplates([]); setTemplatesError(e?.message || 'Error de red.'); } });
+    }).catch((e) => { if (alive) { setTemplates([]); setTemplatesError(userMessageFor(e)); } });
     return () => { alive = false; };
   }, [reloadKey]);
 

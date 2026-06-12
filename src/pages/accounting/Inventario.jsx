@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
@@ -96,7 +97,7 @@ export default function Inventario() {
       syncShopify([selectedItem.id]).catch(() => {});
       setOutQty('');
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
     } finally {
       setPosting(false);
     }
@@ -109,7 +110,7 @@ export default function Inventario() {
       const res = await syncShopify();
       if (res?.configured === false) setErr('Conecta Shopify en Configuración para publicar el inventario.');
     } catch (e) {
-      setErr(e?.message || 'No se pudo sincronizar con Shopify.');
+      setErr(userMessageFor(e));
     } finally {
       setSyncing(false);
     }
@@ -302,7 +303,7 @@ function CatalogBlock({ item }) {
       if (r.ok) setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 

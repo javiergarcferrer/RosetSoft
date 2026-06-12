@@ -26,6 +26,7 @@ import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { sendEcf, checkEcfStatus } from '../../lib/ecfSend.js';
 import { postSaleTx } from '../../lib/salePosting.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 function ymd(ts) {
   const d = new Date(ts);
@@ -109,7 +110,7 @@ export default function Facturacion() {
       });
       setPrintDoc({ blob, title: `Factura ${p.ncf}` });
     } catch (e) {
-      setErr(e?.message || 'No se pudo generar la factura.');
+      setErr(userMessageFor(e));
     } finally {
       setPrinting(null);
     }
@@ -164,7 +165,7 @@ export default function Facturacion() {
         fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
       });
     } catch (e) {
-      setErr(e?.message || 'Error transmitiendo el e-CF.');
+      setErr(userMessageFor(e));
     } finally {
       setTransmitting(null);
     }
@@ -190,7 +191,7 @@ export default function Facturacion() {
         setErr(`DGII — ${p.ncf}: ${estado || 'en proceso'}`);
       }
     } catch (e) {
-      setErr(e?.message || 'Error consultando el estado.');
+      setErr(userMessageFor(e));
     } finally {
       setChecking(null);
     }
@@ -286,7 +287,7 @@ export default function Facturacion() {
       if (r.found) setDraft(quote.id, { rnc: r.rnc, msg: `✓ ${r.name}` });
       else setDraft(quote.id, { msg: r.message || 'No encontrado.' });
     } catch (e) {
-      setDraft(quote.id, { msg: e?.message || 'Error consultando.' });
+      setDraft(quote.id, { msg: userMessageFor(e) });
     } finally {
       setLookingId(null);
     }
@@ -362,7 +363,7 @@ export default function Facturacion() {
         }).catch(() => { /* surfaced via setErr inside; badge keeps the count */ });
       }
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
     } finally {
       setPosting(null);
     }

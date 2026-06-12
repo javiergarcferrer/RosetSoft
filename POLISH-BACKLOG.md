@@ -136,9 +136,13 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       pedido (pinned in tests/store.test.js); Ver tienda → link added.)
 
 ## Consistency / structure debt (from the structure review)
-- [ ] Route all error catches through `userMessageFor` (`lib/errorMessages.ts`)
+- [x] Route all error catches through `userMessageFor` (`lib/errorMessages.ts`)
       — 22 files render raw `e?.message`; batch by area (accounting, CRM,
       admin), one area per iteration.
+      (i24 — every direct render site (setErr/alert/inline) across accounting
+      (10 files), CRM, admin and components now calls userMessageFor;
+      `{ ok, error: e?.message }` RESULT payloads (Chats/Difusion send
+      results) intentionally untouched — they're data shapes, not renders.)
 - [ ] Extract View-inlined money derivations into resolvers (one per
       iteration): party statements (`CuentasCobrarPagar.jsx:53-69` →
       `core/accounting/receivables`), workspace filter/sort/commission

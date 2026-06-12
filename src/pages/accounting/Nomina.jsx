@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig } from '../../core/accounting/index.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -55,7 +56,7 @@ export default function Nomina() {
         }),
       });
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
     } finally {
       setPosting(false);
     }

@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
@@ -91,7 +92,7 @@ export default function CuentasCobrarPagar() {
       });
       setPrintDoc({ blob, title: 'Estado de cuenta' });
     } catch (e) {
-      window.alert(e?.message || 'No se pudo generar el estado de cuenta.');
+      window.alert(userMessageFor(e));
     } finally {
       setPrintingSt(false);
     }
@@ -329,7 +330,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, initial, 
       });
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }
