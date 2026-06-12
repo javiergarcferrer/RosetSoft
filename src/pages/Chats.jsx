@@ -14,7 +14,7 @@ import {
 import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
-  markThreadRead, draftOutboundMessage,
+  sendWhatsappReaction, sendWhatsappInteractive, markThreadRead, draftOutboundMessage,
 } from '../lib/whatsapp.js';
 
 /**
@@ -174,7 +174,7 @@ export default function Chats() {
               thread={thread}
               connected={connected}
               onBack={() => setSelectedKey(null)}
-              onSend={async (text) => {
+              onSend={async (text, replyTo) => {
                 const draft = draftOutboundMessage({
                   phone: selected.phone, text,
                   customerId: selected.customerId, professionalId: selected.professionalId,
@@ -182,15 +182,15 @@ export default function Chats() {
                 });
                 setPending((rows) => [...rows, draft]);
                 const res = await sendWhatsappText({
-                  to: selected.phone, text,
+                  to: selected.phone, text, replyTo,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
                 return res;
               }}
-              onSendMedia={async (file, caption) => {
+              onSendMedia={async (file, caption, replyTo) => {
                 const res = await sendWhatsappMedia({
-                  to: selected.phone, file, caption,
+                  to: selected.phone, file, caption, replyTo,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -199,6 +199,22 @@ export default function Chats() {
               onSendTemplate={async ({ template, params, lang }) => {
                 const res = await sendWhatsappTemplate({
                   to: selected.phone, template, params, lang,
+                  customerId: selected.customerId, professionalId: selected.professionalId,
+                }).catch((e) => ({ ok: false, error: e?.message }));
+                invalidate();
+                return res;
+              }}
+              onReact={async (m, emoji) => {
+                const res = await sendWhatsappReaction({
+                  to: selected.phone, messageId: m.waId, emoji,
+                  customerId: selected.customerId, professionalId: selected.professionalId,
+                }).catch((e) => ({ ok: false, error: e?.message }));
+                invalidate();
+                return res;
+              }}
+              onSendInteractive={async ({ text, buttons }) => {
+                const res = await sendWhatsappInteractive({
+                  to: selected.phone, text, buttons,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();

@@ -8,7 +8,7 @@ import { resolveThread } from '../../core/crm/index.js';
 import { phoneKey, displayPhone } from '../../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
-  markThreadRead, draftOutboundMessage,
+  sendWhatsappReaction, sendWhatsappInteractive, markThreadRead, draftOutboundMessage,
 } from '../../lib/whatsapp.js';
 
 /**
@@ -139,25 +139,37 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
             thread={thread}
             connected={connected}
             showHeader={false}
-            onSend={async (text) => {
+            onSend={async (text, replyTo) => {
               const draft = draftOutboundMessage({
                 phone: contact.phone, text, profileId,
                 customerId: link.customerId, professionalId: link.professionalId,
               });
               setPending((rows) => [...rows, draft]);
-              const res = await sendWhatsappText({ to: contact.phone, text, ...link })
+              const res = await sendWhatsappText({ to: contact.phone, text, replyTo, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;
             }}
-            onSendMedia={async (file, caption) => {
-              const res = await sendWhatsappMedia({ to: contact.phone, file, caption, ...link })
+            onSendMedia={async (file, caption, replyTo) => {
+              const res = await sendWhatsappMedia({ to: contact.phone, file, caption, replyTo, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;
             }}
             onSendTemplate={async ({ template, params, lang }) => {
               const res = await sendWhatsappTemplate({ to: contact.phone, template, params, lang, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
+              invalidate();
+              return res;
+            }}
+            onReact={async (m, emoji) => {
+              const res = await sendWhatsappReaction({ to: contact.phone, messageId: m.waId, emoji, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
+              invalidate();
+              return res;
+            }}
+            onSendInteractive={async ({ text, buttons }) => {
+              const res = await sendWhatsappInteractive({ to: contact.phone, text, buttons, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;

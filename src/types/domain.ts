@@ -197,9 +197,17 @@ export interface Settings {
   whatsappDisplayNumber?: string;
   whatsappVerifiedName?: string;
   /** Approved Meta template used to send a quote link to a client who hasn't
-   *  written in the last 24h (one {{1}} body parameter = the link). Empty ⇒
-   *  quote sends go as free-form text (only works inside the 24h window). */
+   *  written in the last 24h. Empty ⇒ quote sends go as free-form text (only
+   *  works inside the 24h window). Picked (not typed) in Settings, which also
+   *  stores the metadata sendQuoteLink needs to build the send: */
   whatsappQuoteTemplate?: string;
+  /** …its language code (e.g. 'es'), */
+  whatsappQuoteTemplateLang?: string;
+  /** …its body-variable count ({{n}}), */
+  whatsappQuoteTemplateVars?: number | null;
+  /** …and whether the link rides a URL BUTTON's {{1}} suffix instead of a
+   *  body variable. */
+  whatsappQuoteTemplateButton?: boolean | null;
 }
 
 /**

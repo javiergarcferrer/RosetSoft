@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
-  FileText, Download,
+  FileText, Download, Reply, SmilePlus, SquareMenu, X,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
@@ -19,21 +19,26 @@ import { listWaTemplates, fetchWaMediaUrl } from '../../lib/whatsapp.js';
  * (QuoteChatCard) — one surface, no drift.
  *
  * Pure View: the parent owns the data (a `resolveThread` result + the contact)
- * and the send side-effects (`onSend` / `onSendMedia` / `onSendTemplate`, each
- * returning wa-send's `{ ok, error? }`). `onBack` is optional — when given, a
- * back affordance shows on phones (the inbox's list↔thread navigation).
- * `showHeader:false` drops the contact header for hosts that already carry
- * their own (the quote editor's collapsible card).
+ * and the send side-effects (`onSend(body, replyTo)` / `onSendMedia(file,
+ * caption, replyTo)` / `onSendTemplate` / `onReact(m, emoji)` /
+ * `onSendInteractive({ text, buttons })`, each returning wa-send's
+ * `{ ok, error? }`; `replyTo` is the quoted message's wamid or null). `onBack`
+ * is optional — when given, a back affordance shows on phones (the inbox's
+ * list↔thread navigation). `showHeader:false` drops the contact header for
+ * hosts that already carry their own (the quote editor's collapsible card).
  */
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, showHeader = true }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, showHeader = true }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [interactiveOpen, setInteractiveOpen] = useState(false);
+  // Message being quoted in the composer (set from a bubble's "Responder").
+  const [replyTo, setReplyTo] = useState(null);
   const fileRef = useRef(null);
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [thread.items.length, contact.key]);
-  useEffect(() => { setText(''); setError(null); }, [contact.key]);
+  useEffect(() => { setText(''); setError(null); setReplyTo(null); }, [contact.key]);
 
   async function submit() {
     const body = text.trim();
@@ -41,9 +46,18 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setSending(true);
     setError(null);
     setText('');
-    const res = await onSend(body);
+    const res = await onSend(body, replyTo?.waId || null);
+    setReplyTo(null);
     setSending(false);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+  }
+
+  // Reactions fire straight from a bubble; failures surface on the shared
+  // error strip (there's no per-bubble composer to anchor them to).
+  async function react(m, emoji) {
+    setError(null);
+    const res = await onReact(m, emoji);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar la reacción.');
   }
 
   // Attach: any picked file ships as media (image/video/audio inline,
@@ -56,7 +70,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setError(null);
     const caption = text.trim();
     setText('');
-    const res = await onSendMedia(file, caption);
+    const res = await onSendMedia(file, caption, replyTo?.waId || null);
+    setReplyTo(null);
     setSending(false);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar el archivo.');
   }
@@ -94,7 +109,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 bg-ink-50/40">
         {thread.items.map((m, i) => (
-          <Bubble key={m.id} m={m} prev={thread.items[i - 1]} />
+          <Bubble key={m.id} m={m} prev={thread.items[i - 1]} onReply={setReplyTo} onReact={onReact ? react : null} />
         ))}
         {!thread.items.length && (
           <p className="text-xs text-ink-400 text-center py-8">
@@ -120,6 +135,24 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
         </div>
       )}
+      {/* Quoted-reply preview — same visual language as the in-bubble quote. */}
+      {replyTo && (
+        <div className="flex items-center gap-2 px-3 py-2 border-t border-ink-100 bg-white">
+          <div className="min-w-0 flex-1 border-l-2 border-emerald-500/60 bg-ink-50 rounded-r-md pl-2 pr-2.5 py-1">
+            <div className="text-[10px] font-semibold text-emerald-700">{replyTo.direction === 'out' ? 'Tú' : 'Cliente'}</div>
+            <div className="text-xs text-ink-500 truncate">{replyTo.body || `(${replyTo.kind || 'mensaje'})`}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            className="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0"
+            title="Cancelar respuesta"
+            aria-label="Cancelar respuesta"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-white">
         <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
         <button
@@ -143,6 +176,16 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           aria-label="Enviar plantilla"
         >
           <LayoutTemplate size={17} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setInteractiveOpen(true)}
+          disabled={!connected || sending}
+          className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+          title="Botones de respuesta rápida"
+          aria-label="Botones de respuesta rápida"
+        >
+          <SquareMenu size={17} />
         </button>
         <textarea
           className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
@@ -175,6 +218,17 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
         onSend={async (spec) => {
           const res = await onSendTemplate(spec);
           if (res?.ok) setTemplateOpen(false);
+          return res;
+        }}
+      />
+
+      <InteractiveSendModal
+        open={interactiveOpen}
+        onClose={() => setInteractiveOpen(false)}
+        windowOpen={thread.windowOpen}
+        onSend={async (spec) => {
+          const res = await onSendInteractive(spec);
+          if (res?.ok) setInteractiveOpen(false);
           return res;
         }}
       />
@@ -289,7 +343,86 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
   );
 }
 
-function Bubble({ m, prev }) {
+/**
+ * Compose a quick-reply buttons message: body text + up to 3 tappable answers
+ * (20 chars max each — the Cloud API limit). Free-form interactive, so it
+ * obeys the same 24h-window rule as plain text; the client's tap arrives back
+ * as a normal inbound message carrying the button title.
+ */
+function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
+  const [text, setText] = useState('');
+  const [buttons, setButtons] = useState(['', '', '']);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setText('');
+    setButtons(['', '', '']);
+    setError(null);
+  }, [open]);
+
+  async function submit() {
+    if (sending) return;
+    const body = text.trim();
+    const titles = buttons.map((b) => b.trim()).filter(Boolean);
+    if (!body) { setError('Escribe el mensaje.'); return; }
+    if (!titles.length) { setError('Agrega al menos un botón.'); return; }
+    setSending(true);
+    setError(null);
+    const res = await onSend({ text: body, buttons: titles });
+    setSending(false);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Botones de respuesta rápida" size="sm">
+      <div className="space-y-3">
+        <div>
+          <div className="label">Mensaje</div>
+          <textarea
+            className="input text-sm min-h-[72px]"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="¿Le interesa esta propuesta?"
+          />
+        </div>
+        {buttons.map((b, i) => (
+          <div key={i}>
+            <div className="label">Botón {i + 1}{i > 0 ? ' (opcional)' : ''}</div>
+            <input
+              className="input text-sm"
+              maxLength={20}
+              value={b}
+              onChange={(e) => setButtons((bs) => bs.map((x, j) => (j === i ? e.target.value : x)))}
+            />
+          </div>
+        ))}
+        <p className="text-[11px] text-ink-400">
+          El cliente toca un botón y su respuesta llega aquí como un mensaje.
+        </p>
+        {!windowOpen && (
+          <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <Clock size={12} className="mt-0.5 shrink-0" />
+            <span>Ventana de 24 h cerrada: igual que el texto libre, es probable que no se entregue hasta que el cliente vuelva a escribir.</span>
+          </p>
+        )}
+        {error && (
+          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
+          </p>
+        )}
+        <div className="flex justify-end pt-1">
+          <button type="button" onClick={submit} disabled={sending} className="btn-primary text-sm inline-flex items-center gap-1.5">
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Bubble({ m, prev, onReply, onReact }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
   const showDay = !prev || dayLabel(prev.createdAt) !== day;
@@ -297,6 +430,9 @@ function Bubble({ m, prev }) {
   // A non-inline attachment renders as a chip that already carries m.body
   // (the filename/caption) — don't repeat it as text below.
   const isDocChip = !!m.mediaPath && !/^(image|video|audio)\//.test(m.mediaMime || '');
+  // Reply/react address the message by wamid — without one (an optimistic
+  // draft, a failed send) there is nothing to act on.
+  const canAct = !!m.waId && !!(onReply || onReact);
   return (
     <>
       {showDay && (
@@ -304,8 +440,10 @@ function Bubble({ m, prev }) {
           <span className="text-[10px] font-medium text-ink-400 bg-white border border-ink-100 rounded-full px-2.5 py-0.5">{day}</span>
         </div>
       )}
-      <div className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs break-words whitespace-pre-wrap ${
+      <div className={`group flex items-center gap-1 ${out ? 'justify-end' : 'justify-start'}`}>
+        {out && canAct && <BubbleActions m={m} onReply={onReply} onReact={onReact} />}
+        {/* tabIndex: a tap focuses the bubble, revealing the actions on touch. */}
+        <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs break-words whitespace-pre-wrap focus:outline-none ${
           out
             ? m.status === 'failed' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-brand-100 text-ink-900'
             : 'bg-white border border-ink-100 text-ink-900'
@@ -329,6 +467,14 @@ function Bubble({ m, prev }) {
           {m.body && !isDocChip
             ? m.body
             : !m.mediaPath && !m.body && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}
+          {/* Quick-reply buttons WE sent — non-clickable chips showing what the client saw. */}
+          {m.payload?.interactive?.buttons?.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {m.payload.interactive.buttons.map((b, i) => (
+                <span key={i} className="rounded-full bg-white/70 border border-ink-200 px-2.5 py-0.5 text-xs text-ink-700">{b}</span>
+              ))}
+            </div>
+          )}
           <div className={`flex items-center gap-1 mt-0.5 ${out ? 'justify-end' : ''}`}>
             <span className="text-[10px] opacity-50 tabular-nums">{timeOfDay(m.createdAt)}</span>
             {out && <StatusTicks status={m.status} />}
@@ -344,8 +490,77 @@ function Bubble({ m, prev }) {
             </div>
           )}
         </div>
+        {!out && canAct && <BubbleActions m={m} onReply={onReply} onReact={onReact} />}
       </div>
     </>
+  );
+}
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🙏'];
+
+/**
+ * The reply/react cluster beside a bubble. Hidden until the row is hovered
+ * (desktop) or anything in it is focused — the bubble itself is tabbable, so
+ * on touch a tap on the bubble reveals it. "Reaccionar" swaps the cluster for
+ * a tiny emoji row (✕ removes our existing reaction).
+ */
+function BubbleActions({ m, onReply, onReact }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  return (
+    <div className="self-center flex items-center gap-0.5 shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity">
+      {pickerOpen && onReact ? (
+        <div className="flex items-center gap-0.5 rounded-full bg-white border border-ink-100 shadow-sm px-1.5 py-1">
+          {REACTION_EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => { setPickerOpen(false); onReact(m, e); }}
+              className="px-0.5 text-base leading-none hover:scale-125 transition-transform"
+              title={`Reaccionar con ${e}`}
+              aria-label={`Reaccionar con ${e}`}
+            >
+              {e}
+            </button>
+          ))}
+          {m.reactions?.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { setPickerOpen(false); onReact(m, ''); }}
+              className="p-0.5 text-ink-400 hover:text-red-600 transition-colors"
+              title="Quitar reacción"
+              aria-label="Quitar reacción"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {onReply && (
+            <button
+              type="button"
+              onClick={() => onReply(m)}
+              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-white transition-colors"
+              title="Responder"
+              aria-label="Responder"
+            >
+              <Reply size={14} />
+            </button>
+          )}
+          {onReact && (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-white transition-colors"
+              title="Reaccionar"
+              aria-label="Reaccionar"
+            >
+              <SmilePlus size={14} />
+            </button>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw } from 'lucide-react';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
+  listWaTemplates, getWaBusinessProfile, saveWaBusinessProfile,
 } from '../../lib/whatsapp.js';
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
@@ -177,6 +178,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
         <>
           <WebhookRow settings={settings} />
           <TemplateRow settings={settings} saveSettings={saveSettings} />
+          <BusinessProfileRow />
           <TestSendRow />
         </>
       ) : null}
@@ -278,27 +280,69 @@ function CopyField({ label, value }) {
 }
 
 /**
- * The approved template used to SEND A QUOTE outside the 24h window. Auto-saves
- * on blur (same rationale as StoreCard: page-level Guardar races the realtime
- * settings refresh).
+ * The approved template used to SEND A QUOTE outside the 24h window. A picker
+ * over the WABA's live template list (no more typing the exact name): choosing
+ * one persists the template's name + language + variable count + URL-button
+ * flag in ONE settings write, so sendQuoteLink knows whether the link rides a
+ * body {{1}} or the button's URL suffix. Auto-saves on change (same rationale
+ * as StoreCard: page-level Guardar races the realtime settings refresh).
  */
 function TemplateRow({ settings, saveSettings }) {
   const [value, setValue] = useState(settings?.whatsappQuoteTemplate || '');
+  const [templates, setTemplates] = useState(null); // null = loading
+  const [loadError, setLoadError] = useState('');
   const [state, setState] = useState('idle'); // idle | saving | saved | error
+  // Re-sync to the persisted value when it changes elsewhere / after a save.
   useEffect(() => { setValue(settings?.whatsappQuoteTemplate || ''); }, [settings?.whatsappQuoteTemplate]);
 
-  async function persist() {
-    const next = value.trim();
-    if (next === (settings?.whatsappQuoteTemplate || '')) return;
+  async function load() {
+    setTemplates(null);
+    setLoadError('');
+    try {
+      const res = await listWaTemplates();
+      if (res?.ok) {
+        setTemplates((res.templates || []).filter((t) => t.status === 'APPROVED'));
+      } else {
+        setTemplates([]);
+        setLoadError(res?.error || 'No se pudieron cargar las plantillas.');
+      }
+    } catch (e) {
+      setTemplates([]);
+      setLoadError(e?.message || 'No se pudieron cargar las plantillas.');
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function pick(name) {
+    const t = (templates || []).find((x) => x.name === name) || null;
+    setValue(name); // optimistic — the select reflects the choice now
     setState('saving');
     try {
-      await saveSettings({ whatsappQuoteTemplate: next });
+      // One write — the four fields travel together so sendQuoteLink never
+      // sees a half-updated template descriptor.
+      await saveSettings(t ? {
+        whatsappQuoteTemplate: t.name,
+        whatsappQuoteTemplateLang: t.language || '',
+        whatsappQuoteTemplateVars: Number(t.varCount) || 0,
+        whatsappQuoteTemplateButton: !!t.buttonUrlVar,
+      } : {
+        whatsappQuoteTemplate: '',
+        whatsappQuoteTemplateLang: '',
+        whatsappQuoteTemplateVars: null,
+        whatsappQuoteTemplateButton: false,
+      });
       setState('saved');
       setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000);
     } catch {
       setState('error');
     }
   }
+
+  const selected = (templates || []).find((t) => t.name === value) || null;
+  // The saved template may have vanished from the approved list (deleted or
+  // un-approved in Meta) — keep it visible instead of silently snapping the
+  // select to "free text".
+  const savedMissing = !!value && templates !== null && !selected;
 
   return (
     <div className="mt-3">
@@ -308,15 +352,160 @@ function TemplateRow({ settings, saveSettings }) {
         {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
         {state === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
       </div>
-      <input className="input sm:max-w-[320px]" value={value} placeholder="p. ej. cotizacion"
-        onChange={(e) => setValue(e.target.value)} onBlur={persist}
-        autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-      <p className="text-[11px] text-ink-500 mt-1.5">
-        Nombre exacto de una plantilla aprobada en WhatsApp Manager con una variable
-        {' '}<code>{'{{1}}'}</code> en el cuerpo (el enlace de la cotización). Vacío ⇒ la cotización se
-        envía como texto libre, que solo llega si el cliente escribió en las últimas 24 h.
-      </p>
+      {templates === null ? (
+        <p className="text-xs text-ink-400 inline-flex items-center gap-1.5">
+          <Loader2 size={13} className="animate-spin" /> Cargando plantillas…
+        </p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <select className="input sm:max-w-[320px]" value={value} onChange={(e) => pick(e.target.value)}
+            aria-label="Plantilla para enviar cotizaciones">
+            <option value="">— texto libre (solo ventana de 24 h) —</option>
+            {savedMissing && <option value={value}>{value} (no encontrada)</option>}
+            {templates.map((t) => (
+              <option key={`${t.name}:${t.language}`} value={t.name}>
+                {t.name} · {t.language}{t.buttonUrlVar ? ' · botón' : ''}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={load} title="Recargar plantillas" aria-label="Recargar plantillas"
+            className="btn-ghost text-xs shrink-0">
+            <RefreshCw size={12} />
+          </button>
+        </div>
+      )}
+      {loadError && <p className="text-[11px] text-rose-600 mt-1.5">{loadError}</p>}
+      {selected?.buttonUrlVar ? (
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          El enlace viaja en el botón «{selected.buttonText || 'Ver cotización'}»; llega aunque el cliente no haya escrito.
+        </p>
+      ) : selected ? (
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          El enlace de la cotización viaja en la variable <code>{'{{1}}'}</code> del cuerpo; llega
+          aunque el cliente no haya escrito.
+        </p>
+      ) : (
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          Sin plantilla, la cotización se envía como texto libre — solo llega si el cliente
+          escribió en las últimas 24 h.
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * The number's PUBLIC business profile (what the client sees when opening the
+ * chat). Collapsed by default like SetupGuide; the profile is fetched from
+ * Meta on first open only — no Graph round-trip for dealers who never expand
+ * it. The profile photo can't be set through this API surface, hence the
+ * WhatsApp Manager pointer.
+ */
+function BusinessProfileRow() {
+  const [fetched, setFetched] = useState(false); // first-open fetch guard
+  const [loading, setLoading] = useState(false);
+  const [about, setAbout] = useState('');
+  const [description, setDescription] = useState('');
+  const [address, setAddress] = useState('');
+  const [email, setEmail] = useState('');
+  const [website, setWebsite] = useState('');
+  const [state, setState] = useState('idle'); // idle | saving | saved | error
+  const [msg, setMsg] = useState('');
+
+  async function loadOnFirstOpen(e) {
+    if (!e.currentTarget.open || fetched) return;
+    setFetched(true);
+    setLoading(true);
+    try {
+      const res = await getWaBusinessProfile();
+      if (res?.ok && res.profile) {
+        setAbout(res.profile.about || '');
+        setDescription(res.profile.description || '');
+        setAddress(res.profile.address || '');
+        setEmail(res.profile.email || '');
+        setWebsite((res.profile.websites || [])[0] || '');
+      }
+    } catch { /* fields stay blank — still editable, save round-trips anyway */ }
+    setLoading(false);
+  }
+
+  async function save() {
+    if (state === 'saving') return;
+    setState('saving');
+    setMsg('');
+    try {
+      const res = await saveWaBusinessProfile({ about, address, description, email, websites: [website] });
+      if (res?.ok) {
+        setState('saved');
+        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+      } else {
+        setState('error');
+        setMsg(res?.error || 'No se pudo guardar el perfil.');
+      }
+    } catch (e) {
+      setState('error');
+      setMsg(e?.message || 'No se pudo guardar el perfil.');
+    }
+  }
+
+  return (
+    <details className="group mt-4 rounded-lg border border-ink-100 overflow-hidden" onToggle={loadOnFirstOpen}>
+      <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 min-h-11 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
+        <span>Perfil del negocio (lo que ve el cliente)</span>
+        <ChevronDown size={14} className="disclosure-chevron text-ink-400" aria-hidden />
+      </summary>
+      <div className="px-4 pb-4 pt-3 border-t border-ink-100 bg-ink-50/40">
+        {loading ? (
+          <p className="text-xs text-ink-400 inline-flex items-center gap-1.5">
+            <Loader2 size={13} className="animate-spin" /> Cargando perfil…
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="wa-profile-about">Descripción corta</label>
+                <input id="wa-profile-about" className="input mt-1" value={about} maxLength={139}
+                  onChange={(e) => setAbout(e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="wa-profile-description">Descripción</label>
+                <textarea id="wa-profile-description" className="input mt-1" rows={3} value={description} maxLength={512}
+                  onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div>
+                <label className="label" htmlFor="wa-profile-address">Dirección</label>
+                <input id="wa-profile-address" className="input mt-1" value={address} maxLength={256}
+                  onChange={(e) => setAddress(e.target.value)} />
+              </div>
+              <div>
+                <label className="label" htmlFor="wa-profile-email">Correo</label>
+                <input id="wa-profile-email" className="input mt-1" type="email" value={email} maxLength={128}
+                  onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="wa-profile-website">Sitio web</label>
+                <input id="wa-profile-website" className="input mt-1" type="url" value={website} maxLength={256}
+                  onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <button type="button" onClick={save} disabled={state === 'saving'}
+                className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+                {state === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar perfil
+              </button>
+              {state === 'saved' && (
+                <span className="text-[11px] text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>
+              )}
+              {state === 'error' && <span className="text-[11px] text-rose-600">{msg || 'No se pudo guardar el perfil.'}</span>}
+            </div>
+          </>
+        )}
+        <p className="text-[11px] text-ink-500 mt-3">
+          Este perfil aparece cuando el cliente abre el chat del negocio en WhatsApp. La foto de
+          perfil se cambia en Meta → WhatsApp Manager.
+        </p>
+      </div>
+    </details>
   );
 }
 

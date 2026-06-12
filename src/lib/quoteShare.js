@@ -27,6 +27,16 @@ export function shareLinkUrl(token, slug) {
   return `${origin}/#/q/${path}`;
 }
 
+/**
+ * The static prefix every share link starts with — the URL BASE a WhatsApp
+ * template's URL button registers (Meta appends the button's {{1}} variable
+ * to it, which sendQuoteLink fills with the `slug/token` suffix).
+ */
+export function shareLinkBase() {
+  const origin = typeof location !== 'undefined' ? location.origin : '';
+  return `${origin}/#/q/`;
+}
+
 // The function endpoint, with the public anon key as a query param (not a
 // header) so the request stays gateway-acceptable without forcing a custom
 // header on every call. The anon key is already public in the bundle.

@@ -47,16 +47,33 @@ type SendBody = {
     name?: string; category?: string; language?: string;
     headerText?: string; bodyText?: string; footerText?: string;
     exampleParams?: string[];
+    // Optional URL button: Meta appends the button's {{1}} variable to
+    // buttonUrlBase — how a quote template carries a tappable "Ver cotización"
+    // instead of a bare link in the body.
+    buttonText?: string; buttonUrlBase?: string;
   };
   deleteTemplate?: { name?: string };
   markRead?: { messageId?: string; typing?: boolean };
+  getBusinessProfile?: boolean;
+  setBusinessProfile?: {
+    about?: string; address?: string; description?: string; email?: string;
+    vertical?: string; websites?: string[];
+  };
   broadcast?: { name?: string; template?: string; lang?: string; audience?: string; recipients?: Recipient[] };
   to?: string;
   text?: string;
   template?: string;
   params?: string[];
+  /** Fills a template URL button's {{1}} (the path suffix Meta appends). */
+  buttonParams?: string[];
   lang?: string;
   media?: { base64?: string; mime?: string; filename?: string; caption?: string };
+  /** wamid of the message being replied to (WhatsApp's quoted-reply context). */
+  replyTo?: string;
+  /** React to a message: empty emoji removes the reaction. */
+  reaction?: { messageId?: string; emoji?: string };
+  /** Quick-reply buttons message (free-form — 24h window rules apply). */
+  interactive?: { text?: string; buttons?: string[] };
   customerId?: string | null;
   professionalId?: string | null;
   quoteId?: string | null;
@@ -218,6 +235,34 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // ── Business profile (what clients see when they open the chat) ──────────
+  if (body.getBusinessProfile) {
+    const r = await fetch(
+      `${GRAPH}/${phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,vertical,websites`,
+      { headers: graphHeaders },
+    );
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    return json({ ok: true, profile: (data as { data?: unknown[] }).data?.[0] || {} });
+  }
+  if (body.setBusinessProfile) {
+    const p = body.setBusinessProfile;
+    const payload: Record<string, unknown> = { messaging_product: 'whatsapp' };
+    for (const k of ['about', 'address', 'description', 'email', 'vertical'] as const) {
+      if (typeof p[k] === 'string') payload[k] = p[k];
+    }
+    if (Array.isArray(p.websites)) payload.websites = p.websites.map((w) => String(w || '').trim()).filter(Boolean).slice(0, 2);
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_business_profile`, {
+      method: 'POST', headers: graphJson, body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[wa-send] setBusinessProfile failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    return json({ ok: true });
+  }
+
   // ── Template management (needs the WABA id) ───────────────────────────────
   if (body.listTemplates || body.createTemplate || body.deleteTemplate) {
     if (!wabaId) {
@@ -239,7 +284,7 @@ Deno.serve(async (req: Request) => {
       }
       type RawTpl = {
         name?: string; status?: string; category?: string; language?: string;
-        components?: { type?: string; text?: string; format?: string }[];
+        components?: { type?: string; text?: string; format?: string; buttons?: { type?: string; text?: string; url?: string }[] }[];
         quality_score?: { score?: string };
       };
       const templates = (((data as { data?: RawTpl[] }).data) || []).map((t) => {
@@ -247,6 +292,9 @@ Deno.serve(async (req: Request) => {
         const bodyText = find('BODY')?.text || '';
         // {{1}}, {{2}}… in the body — how many parameters a send must supply.
         const varCount = new Set([...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map((m) => m[1])).size;
+        // A URL button whose url carries {{1}} takes the link as its SUFFIX
+        // (buttonParams in a send) — the quote-template picker keys on this.
+        const urlBtn = (find('BUTTONS')?.buttons || []).find((b) => (b.type || '').toUpperCase() === 'URL');
         return {
           name: t.name || '',
           status: (t.status || '').toUpperCase(),
@@ -256,6 +304,8 @@ Deno.serve(async (req: Request) => {
           bodyText,
           footerText: find('FOOTER')?.text || '',
           varCount,
+          buttonText: urlBtn?.text || '',
+          buttonUrlVar: !!urlBtn && /\{\{1\}\}/.test(urlBtn.url || ''),
           quality: t.quality_score?.score || null,
         };
       });
@@ -283,6 +333,21 @@ Deno.serve(async (req: Request) => {
       components.push({ type: 'BODY', text: bodyText, ...(example ? { example } : {}) });
       if (String(t.footerText || '').trim()) {
         components.push({ type: 'FOOTER', text: String(t.footerText).trim() });
+      }
+      // Optional URL button — Meta appends the {{1}} suffix to buttonUrlBase
+      // at send time. Reviewers need a filled-in sample URL.
+      const btnText = String(t.buttonText || '').trim();
+      const btnUrlBase = String(t.buttonUrlBase || '').trim();
+      if (btnText && btnUrlBase) {
+        components.push({
+          type: 'BUTTONS',
+          buttons: [{
+            type: 'URL',
+            text: btnText.slice(0, 25),
+            url: `${btnUrlBase}{{1}}`,
+            example: [`${btnUrlBase}cliente-cotizacion-1001/a1b2c3d4`],
+          }],
+        });
       }
       const r = await fetch(`${GRAPH}/${wabaId}/message_templates`, {
         method: 'POST', headers: graphJson,
@@ -335,6 +400,10 @@ Deno.serve(async (req: Request) => {
     payload: Record<string, unknown>;
     logKind: string;
     logBody: string;
+    /** Extra structure the thread renders from (quoted-reply context, the
+     *  reaction target, interactive buttons) — same column wa-webhook fills
+     *  for inbound, so resolveThread reads one shape for both directions. */
+    logPayload?: Record<string, unknown> | null;
     templateName?: string | null;
     mediaPath?: string | null;
     mediaMime?: string | null;
@@ -368,6 +437,7 @@ Deno.serve(async (req: Request) => {
       template_name: spec.templateName || null,
       media_path: spec.mediaPath || null,
       media_mime: spec.mediaMime || null,
+      payload: spec.logPayload || null,
       status: ok ? 'accepted' : 'failed',
       error: errorMsg,
       created_at: new Date().toISOString(),
@@ -376,7 +446,22 @@ Deno.serve(async (req: Request) => {
     return { ok, id: waId, error: errorMsg };
   }
 
-  function templatePayload(to: string, template: string, lang: string | undefined, params: string[] | undefined): Record<string, unknown> {
+  function templatePayload(
+    to: string, template: string, lang: string | undefined,
+    params: string[] | undefined, buttonParams?: string[],
+  ): Record<string, unknown> {
+    const components: Record<string, unknown>[] = [];
+    if (Array.isArray(params) && params.length) {
+      components.push({ type: 'body', parameters: params.map((p) => ({ type: 'text', text: String(p) })) });
+    }
+    // Dynamic URL button: the param fills the {{1}} suffix Meta appends to
+    // the URL registered on the template's button.
+    if (Array.isArray(buttonParams) && buttonParams.length) {
+      components.push({
+        type: 'button', sub_type: 'url', index: '0',
+        parameters: buttonParams.map((p) => ({ type: 'text', text: String(p) })),
+      });
+    }
     return {
       messaging_product: 'whatsapp',
       to,
@@ -384,9 +469,7 @@ Deno.serve(async (req: Request) => {
       template: {
         name: template,
         language: { code: lang || 'es' },
-        ...(Array.isArray(params) && params.length
-          ? { components: [{ type: 'body', parameters: params.map((p) => ({ type: 'text', text: String(p) })) }] }
-          : {}),
+        ...(components.length ? { components } : {}),
       },
     };
   }
@@ -445,6 +528,57 @@ Deno.serve(async (req: Request) => {
   // ── Single sends ───────────────────────────────────────────────────────────
   const to = String(body.to || '').replace(/\D/g, '');
   if (!to) return json({ ok: false, error: 'Falta el número de destino.' }, 400);
+  const replyTo = String(body.replyTo || '').trim();
+  const contextPart = replyTo ? { context: { message_id: replyTo } } : {};
+  const contextLog = replyTo ? { context: { id: replyTo } } : null;
+
+  // React to a message (their bubble shows the emoji; empty emoji removes it).
+  if (body.reaction) {
+    const messageId = String(body.reaction.messageId || '').trim();
+    const emoji = String(body.reaction.emoji ?? '');
+    if (!messageId) return json({ ok: false, error: 'Falta el mensaje al que reaccionar.' }, 400);
+    const res = await sendOne({
+      to,
+      payload: { messaging_product: 'whatsapp', to, type: 'reaction', reaction: { message_id: messageId, emoji } },
+      logKind: 'reaction',
+      logBody: emoji,
+      // Same shape wa-webhook stores for inbound reactions, so resolveThread
+      // folds ours onto the target bubble identically.
+      logPayload: { reaction: { message_id: messageId, emoji } },
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
+
+  // Quick-reply buttons (free-form interactive — 24h window rules apply).
+  if (body.interactive) {
+    const text = String(body.interactive.text || '').trim();
+    const titles = (Array.isArray(body.interactive.buttons) ? body.interactive.buttons : [])
+      .map((t) => String(t || '').trim().slice(0, 20)).filter(Boolean).slice(0, 3);
+    if (!text || !titles.length) return json({ ok: false, error: 'Faltan el texto o los botones de respuesta.' }, 400);
+    const res = await sendOne({
+      to,
+      payload: {
+        messaging_product: 'whatsapp', to, type: 'interactive', ...contextPart,
+        interactive: {
+          type: 'button',
+          body: { text },
+          action: { buttons: titles.map((t, i) => ({ type: 'reply', reply: { id: `qr_${i + 1}`, title: t } })) },
+        },
+      },
+      logKind: 'interactive',
+      logBody: text,
+      logPayload: { ...(contextLog || {}), interactive: { text, buttons: titles } },
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
 
   if (body.media) {
     const mime = String(body.media.mime || '').split(';')[0].trim();
@@ -486,9 +620,10 @@ Deno.serve(async (req: Request) => {
     if (kind === 'document') mediaObj.filename = filename;
     const res = await sendOne({
       to,
-      payload: { messaging_product: 'whatsapp', to, type: kind, [kind]: mediaObj },
+      payload: { messaging_product: 'whatsapp', to, type: kind, [kind]: mediaObj, ...contextPart },
       logKind: kind,
       logBody: caption || (kind === 'document' ? filename : ''),
+      logPayload: contextLog,
       mediaPath,
       mediaMime: mime,
       customerId: body.customerId || null,
@@ -502,7 +637,7 @@ Deno.serve(async (req: Request) => {
   if (body.template) {
     const res = await sendOne({
       to,
-      payload: templatePayload(to, body.template, body.lang, body.params),
+      payload: templatePayload(to, body.template, body.lang, body.params, body.buttonParams),
       logKind: 'template',
       logBody: Array.isArray(body.params) ? body.params.join(' · ') : '',
       templateName: body.template,
@@ -519,9 +654,10 @@ Deno.serve(async (req: Request) => {
     const logBody = body.text.trim();
     const res = await sendOne({
       to,
-      payload: { messaging_product: 'whatsapp', to, type: 'text', text: { body: logBody, preview_url: true } },
+      payload: { messaging_product: 'whatsapp', to, type: 'text', text: { body: logBody, preview_url: true }, ...contextPart },
       logKind: 'text',
       logBody,
+      logPayload: contextLog,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,

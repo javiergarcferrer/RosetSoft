@@ -105,18 +105,49 @@ export async function pingWhatsapp() {
  * Send a free-form text message. Only delivers inside the 24h customer-service
  * window (the recipient wrote within the last 24h); outside it Meta rejects
  * with re-engagement error 131047 — `wa-send` translates that to a clear
- * Spanish message. Returns { ok, id } or { ok:false, error }.
+ * Spanish message. `replyTo` (a wamid) sends it as a quoted reply. Returns
+ * { ok, id } or { ok:false, error }.
  */
-export async function sendWhatsappText({ to, text, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), text, customerId, professionalId, quoteId });
+export async function sendWhatsappText({ to, text, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), text, replyTo, customerId, professionalId, quoteId });
 }
 
 /**
  * Send a pre-approved template message (the only way to INITIATE a
- * conversation). `params` fill the template's {{1}}, {{2}}… body variables.
+ * conversation). `params` fill the template's {{1}}, {{2}}… body variables;
+ * `buttonParams` fill a URL button's {{1}} suffix (the part Meta appends to
+ * the URL registered on the template).
  */
-export async function sendWhatsappTemplate({ to, template, params, lang, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), template, params, lang, customerId, professionalId, quoteId });
+export async function sendWhatsappTemplate({ to, template, params, buttonParams, lang, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), template, params, buttonParams, lang, customerId, professionalId, quoteId });
+}
+
+/**
+ * React to a message (the emoji decorates their bubble, like in the phone
+ * app). An empty emoji removes the reaction. `messageId` is the target wamid.
+ */
+export async function sendWhatsappReaction({ to, messageId, emoji, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), reaction: { messageId, emoji: emoji || '' }, customerId, professionalId, quoteId });
+}
+
+/**
+ * Send a quick-reply buttons message: body text + up to 3 tappable replies
+ * (e.g. "Me interesa" / "Tengo preguntas"). Free-form interactive — same 24h
+ * window rule as text. The client's tap arrives as a normal inbound message
+ * carrying the button title.
+ */
+export async function sendWhatsappInteractive({ to, text, buttons, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), interactive: { text, buttons }, replyTo, customerId, professionalId, quoteId });
+}
+
+/** Read the number's public business profile (about, address, email, web…). */
+export async function getWaBusinessProfile() {
+  return invokeWaSend({ getBusinessProfile: true });
+}
+
+/** Update the number's public business profile. Only the passed fields change. */
+export async function saveWaBusinessProfile(profile) {
+  return invokeWaSend({ setBusinessProfile: profile });
 }
 
 /**
@@ -125,14 +156,14 @@ export async function sendWhatsappTemplate({ to, template, params, lang, custome
  * `wa-send` as base64, which uploads it to Meta AND mirrors it into Storage so
  * the chat renders what was sent. Returns { ok, id } or { ok:false, error }.
  */
-export async function sendWhatsappMedia({ to, file, caption, customerId, professionalId, quoteId }) {
+export async function sendWhatsappMedia({ to, file, caption, replyTo, customerId, professionalId, quoteId }) {
   if (!file) return { ok: false, error: 'Falta el archivo.' };
   if (file.size > 24 * 1024 * 1024) return { ok: false, error: 'El archivo supera el límite de 24 MB.' };
   const base64 = await blobToBase64(file);
   return invokeWaSend({
     to: waDigits(to),
     media: { base64, mime: file.type || 'application/octet-stream', filename: file.name || '', caption: caption || '' },
-    customerId, professionalId, quoteId,
+    replyTo, customerId, professionalId, quoteId,
   });
 }
 
@@ -162,9 +193,11 @@ export async function listWaTemplates() {
  * when variables are present — wa-send defaults them if omitted). Approval is
  * asynchronous: the template lands as PENDING and flips to APPROVED/REJECTED
  * in the list. Categories: MARKETING (promos — the "ads" lever) or UTILITY.
+ * `buttonText` + `buttonUrlBase` add a tappable URL button whose link is
+ * buttonUrlBase + a {{1}} suffix filled at send time (the quote-link button).
  */
-export async function createWaTemplate({ name, category, language, headerText, bodyText, footerText, exampleParams }) {
-  return invokeWaSend({ createTemplate: { name, category, language, headerText, bodyText, footerText, exampleParams } });
+export async function createWaTemplate({ name, category, language, headerText, bodyText, footerText, exampleParams, buttonText, buttonUrlBase }) {
+  return invokeWaSend({ createTemplate: { name, category, language, headerText, bodyText, footerText, exampleParams, buttonText, buttonUrlBase } });
 }
 
 /** Delete a template by name (all its languages). */
@@ -208,16 +241,31 @@ export async function fetchWaMediaUrl(path) {
 
 /**
  * Send a quote's public client link over the business number. Uses the
- * approved template configured in Settings (whatsappQuoteTemplate, one {{1}} =
- * the link) so it works outside the 24h window; with no template configured it
- * falls back to free-form text (24h window only).
+ * approved template picked in Settings so it works outside the 24h window;
+ * with no template configured it falls back to free-form text (24h window
+ * only). Two template shapes, told apart by the metadata the picker stored:
+ *   • body-variable — {{1}} in the body carries the full link.
+ *   • URL button    — the link rides the button's {{1}} as the share-path
+ *     suffix (everything after `/#/q/`); the body's {{1}}, if any, gets the
+ *     client's first name.
  */
 export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
   const template = (settings?.whatsappQuoteTemplate || '').trim();
-  if (template) {
-    return sendWhatsappTemplate({ to, template, params: [url], customerId: customer?.id, quoteId });
-  }
   const name = (customer?.name || '').trim().split(/\s+/)[0];
+  if (template) {
+    const lang = (settings?.whatsappQuoteTemplateLang || '').trim() || 'es';
+    if (settings?.whatsappQuoteTemplateButton) {
+      const suffix = url.split('/#/q/')[1] || url;
+      const varCount = Number(settings?.whatsappQuoteTemplateVars) || 0;
+      return sendWhatsappTemplate({
+        to, template, lang,
+        params: varCount > 0 ? [name || 'cliente'] : [],
+        buttonParams: [suffix],
+        customerId: customer?.id, quoteId,
+      });
+    }
+    return sendWhatsappTemplate({ to, template, lang, params: [url], customerId: customer?.id, quoteId });
+  }
   const text = `Hola${name ? ` ${name}` : ''}, aquí está su cotización de ${settings?.companyName || 'ALCOVER'}: ${url}`;
   return sendWhatsappText({ to, text, customerId: customer?.id, quoteId });
 }

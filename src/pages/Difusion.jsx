@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
-  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check,
+  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -17,6 +17,7 @@ import {
 import {
   listWaTemplates, createWaTemplate, deleteWaTemplate, sendWhatsappBroadcast,
 } from '../lib/whatsapp.js';
+import { shareLinkBase } from '../lib/quoteShare.js';
 import { formatDateTime } from '../lib/format.js';
 
 // wa-send caps one broadcast call; bigger audiences ship in sequential chunks.
@@ -378,20 +379,34 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
             </p>
           )}
           <div className="max-h-[50vh] overflow-y-auto space-y-1">
-            {approved.map((t) => (
-              <button
-                key={`${t.name}:${t.language}`}
-                type="button"
-                onClick={() => chooseTemplate(t)}
-                className="w-full text-left px-3 py-2.5 rounded-lg ring-1 ring-inset ring-ink-100 hover:bg-brand-50/60 hover:ring-brand-200 transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-ink-900 truncate">{t.name}</span>
-                  <CategoryPill category={t.category} />
-                </span>
-                <span className="block text-xs text-ink-500 mt-0.5 line-clamp-2">{t.bodyText}</span>
-              </button>
-            ))}
+            {approved.map((t) => {
+              // A dynamic-URL button takes a per-recipient {{1}} suffix, which
+              // campaigns can't fill (buildBroadcastRecipients only maps body
+              // vars) — those templates belong to the quote-link flow instead.
+              const dynamicButton = !!t.buttonUrlVar;
+              return (
+                <button
+                  key={`${t.name}:${t.language}`}
+                  type="button"
+                  disabled={dynamicButton}
+                  onClick={() => chooseTemplate(t)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg ring-1 ring-inset ring-ink-100 transition-colors ${
+                    dynamicButton ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-50/60 hover:ring-brand-200'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-ink-900 truncate">{t.name}</span>
+                    <CategoryPill category={t.category} />
+                  </span>
+                  <span className="block text-xs text-ink-500 mt-0.5 line-clamp-2">{t.bodyText}</span>
+                  {dynamicButton && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-ink-400 mt-1">
+                      <Link2 size={11} /> Botón dinámico — útil para cotizaciones, no para campañas
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -615,6 +630,14 @@ function TemplatesTab({ templates, templatesError, onReload }) {
                   </div>
                   {t.headerText && <p className="text-xs font-semibold text-ink-700 mt-1.5">{t.headerText}</p>}
                   <p className="text-xs text-ink-600 mt-1 whitespace-pre-wrap">{t.bodyText}</p>
+                  {t.buttonText && (
+                    <span
+                      className="inline-flex items-center gap-1 mt-1.5 rounded-full ring-1 ring-inset ring-ink-200 px-2 py-0.5 text-[11px] font-medium text-ink-600"
+                      title={`Botón de enlace${t.buttonUrlVar ? ' · enlace dinámico ({{1}})' : ''}`}
+                    >
+                      <Link2 size={11} /> {t.buttonText}
+                    </span>
+                  )}
                   {t.footerText && <p className="text-[11px] text-ink-400 mt-1">{t.footerText}</p>}
                 </div>
                 {!isMetaSample && (
@@ -647,6 +670,11 @@ function TemplatesTab({ templates, templatesError, onReload }) {
 function CreateTemplateModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', category: 'MARKETING', language: 'es', headerText: '', bodyText: '', footerText: '' });
   const [examples, setExamples] = useState({});
+  // Optional URL button: registers buttonUrlBase + {{1}} on the template, so
+  // sendQuoteLink can fill the per-quote share-path suffix at send time.
+  const [withButton, setWithButton] = useState(false);
+  const [buttonText, setButtonText] = useState('Ver cotización');
+  const [buttonUrlBase, setButtonUrlBase] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -654,6 +682,9 @@ function CreateTemplateModal({ open, onClose, onCreated }) {
     if (open) {
       setForm({ name: '', category: 'MARKETING', language: 'es', headerText: '', bodyText: '', footerText: '' });
       setExamples({});
+      setWithButton(false);
+      setButtonText('Ver cotización');
+      setButtonUrlBase(shareLinkBase());
       setSaving(false);
       setError(null);
     }
@@ -667,9 +698,13 @@ function CreateTemplateModal({ open, onClose, onCreated }) {
     if (!form.name.trim() || !form.bodyText.trim()) { setError('La plantilla necesita nombre y cuerpo.'); return; }
     setSaving(true);
     setError(null);
+    const button = withButton && buttonText.trim() && buttonUrlBase.trim()
+      ? { buttonText: buttonText.trim(), buttonUrlBase: buttonUrlBase.trim() }
+      : {};
     const res = await createWaTemplate({
       ...form,
       exampleParams: Array.from({ length: varCount }, (_, i) => examples[i] || ''),
+      ...button,
     }).catch((e) => ({ ok: false, error: e?.message }));
     setSaving(false);
     if (!res?.ok) { setError(res?.error || 'No se pudo crear la plantilla.'); return; }
@@ -753,6 +788,41 @@ function CreateTemplateModal({ open, onClose, onCreated }) {
         <div>
           <div className="label">Pie (opcional)</div>
           <input className="input text-sm" value={form.footerText} onChange={set('footerText')} />
+        </div>
+        <div>
+          <label className="flex items-center gap-2 text-sm text-ink-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={withButton}
+              onChange={(e) => setWithButton(e.target.checked)}
+              className="accent-brand-600"
+            />
+            Añadir botón con enlace a la cotización
+          </label>
+          {withButton && (
+            <div className="mt-2 space-y-2">
+              <div>
+                <div className="label">Texto del botón</div>
+                <input
+                  className="input text-sm"
+                  maxLength={25}
+                  value={buttonText}
+                  onChange={(e) => setButtonText(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="label">URL base</div>
+                <input
+                  className="input text-sm"
+                  value={buttonUrlBase}
+                  onChange={(e) => setButtonUrlBase(e.target.value)}
+                />
+                <p className="text-[11px] text-ink-400 mt-1">
+                  Al enviar, se añade automáticamente el sufijo del enlace de cada cotización ({'{{1}}'}). Usa la base tal cual para cotizaciones.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
         {error && (
           <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
