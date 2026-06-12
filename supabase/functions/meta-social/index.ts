@@ -11,6 +11,9 @@
 //                          Page (+ page token), its IG business account and
 //                          the ad account, persist everything, stamp settings.
 //   { test: true }       → verify the stored credentials still answer.
+//   { publish: {...} }   → post to the FB Page (now or scheduled 10min–30d)
+//                          and/or IG (image required, no scheduling) — one
+//                          result per target, partial success allowed.
 //   { snapshot: true }   → one consolidated read: profile counts, IG daily
 //                          reach (28d), recent IG posts, daily ad results
 //                          (28d) + per-campaign rollup, scheduled posts.
@@ -33,7 +36,26 @@ const GRAPH = 'https://graph.facebook.com/v23.0';
 const TEAM = 'team';
 
 type LinkBody = { token?: string; pageId?: string; adAccountId?: string };
-type Body = { link?: LinkBody; test?: boolean; snapshot?: boolean };
+type PublishBody = {
+  message?: string;
+  link?: string;
+  imageUrl?: string;
+  /** JS-ms timestamp; FB only (10 min – 30 days out). Absent = publish now. */
+  scheduleAt?: number;
+  /** Publish the IG side as a 24h Story (image only, no caption) instead of a feed post. */
+  igStory?: boolean;
+  targets?: Array<'facebook' | 'instagram'>;
+};
+type Body = {
+  link?: LinkBody;
+  test?: boolean;
+  snapshot?: boolean;
+  publish?: PublishBody;
+  /** Reply to an IG comment from the triage list. */
+  replyComment?: { commentId?: string; message?: string };
+  /** Pause/resume an ad campaign (Marketing page, behind an explicit confirm). */
+  setCampaignStatus?: { campaignId?: string; status?: string };
+};
 
 /** Translate Meta's token-death message into the action that fixes it. */
 function friendly(msg: string): string {
@@ -48,6 +70,20 @@ async function graph(path: string, token: string, params: Record<string, string>
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set('access_token', token);
   const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) {
+    throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+  }
+  return data;
+}
+
+/** POST a Graph endpoint (form-encoded); throws the API's error message. */
+async function graphPost(path: string, token: string, params: Record<string, string>) {
+  const res = await fetch(`${GRAPH}/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ ...params, access_token: token }),
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.error) {
     throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
@@ -203,6 +239,102 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── setCampaignStatus: pause/resume a campaign — REAL MONEY moves, so
+  // the UI gates this behind an explicit confirm; the server only accepts
+  // the two reversible states.
+  if (body.setCampaignStatus) {
+    const campaignId = String(body.setCampaignStatus.campaignId || '').trim();
+    const status = String(body.setCampaignStatus.status || '').toUpperCase();
+    if (!campaignId || !['ACTIVE', 'PAUSED'].includes(status)) {
+      return json({ ok: false, error: 'campaignId y status (ACTIVE|PAUSED) requeridos' }, 400);
+    }
+    try {
+      await graphPost(campaignId, userToken, { status });
+      return json({ ok: true, status });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── replyComment: answer an IG comment in-thread ──────────────────────
+  if (body.replyComment) {
+    const commentId = String(body.replyComment.commentId || '').trim();
+    const message = String(body.replyComment.message || '').trim();
+    if (!commentId || !message) return json({ ok: false, error: 'commentId y message requeridos' }, 400);
+    try {
+      const r = await graphPost(`${commentId}/replies`, pageToken, { message });
+      return json({ ok: true, id: r?.id });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── publish: FB Page post (now or scheduled) + optional IG image post ──
+  // Per-target results: one network failing doesn't waste the other's post.
+  if (body.publish) {
+    const message = String(body.publish.message || '').trim();
+    const targets = body.publish.targets?.length ? body.publish.targets : ['facebook' as const];
+    const link = String(body.publish.link || '').trim();
+    const imageUrl = String(body.publish.imageUrl || '').trim();
+    const scheduleAt = Number(body.publish.scheduleAt) || 0;
+    const igStory = !!body.publish.igStory;
+    // A Story carries no caption — an image-only IG Story is a valid publish
+    // with no message; everything else still requires text.
+    const storyOnly = igStory && !targets.includes('facebook');
+    if (!message && !(storyOnly && imageUrl)) return json({ ok: false, error: 'mensaje requerido' }, 400);
+
+    if (scheduleAt) {
+      const min = Date.now() + 10 * 60_000;
+      const max = Date.now() + 30 * 86_400_000;
+      if (scheduleAt < min || scheduleAt > max) {
+        return json({ ok: false, error: 'La programación debe quedar entre 10 minutos y 30 días desde ahora.' });
+      }
+    }
+
+    const results: Record<string, { ok: boolean; id?: string; error?: string }> = {};
+
+    if (targets.includes('facebook')) {
+      try {
+        const params: Record<string, string> = { message };
+        if (link) params.link = link;
+        if (scheduleAt) {
+          params.published = 'false';
+          params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
+        }
+        const r = await graphPost(`${cfg.page_id}/feed`, pageToken, params);
+        results.facebook = { ok: true, id: r?.id };
+      } catch (e) {
+        results.facebook = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
+      }
+    }
+
+    if (targets.includes('instagram')) {
+      // IG Content Publishing requires media and has no native scheduling.
+      if (!cfg.ig_user_id) {
+        results.instagram = { ok: false, error: 'Sin cuenta de Instagram vinculada' };
+      } else if (!imageUrl) {
+        results.instagram = { ok: false, error: 'Instagram requiere una imagen (URL pública)' };
+      } else if (scheduleAt) {
+        results.instagram = { ok: false, error: 'Instagram no admite programación por API — publícalo al momento' };
+      } else {
+        try {
+          // Feed post = image + caption; Story = image only, 24h, no caption.
+          const params = igStory
+            ? { media_type: 'STORIES', image_url: imageUrl }
+            : { image_url: imageUrl, caption: message };
+          const c = await graphPost(`${cfg.ig_user_id}/media`, pageToken, params);
+          const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: String(c?.id || '') });
+          results.instagram = { ok: true, id: p?.id };
+        } catch (e) {
+          results.instagram = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
+        }
+      }
+    }
+
+    const anyOk = Object.values(results).some((r) => r.ok);
+    return json({ ok: anyOk, results });
+  }
+
   if (body.snapshot) {
     const since = Math.floor((Date.now() - 28 * 86_400_000) / 1000);
     const until = Math.floor(Date.now() / 1000);
@@ -214,7 +346,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igMedia, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
+    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
       safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
       cfg.ig_user_id
         ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
@@ -224,33 +356,56 @@ Deno.serve(async (req) => {
           metric: 'reach', period: 'day', since: String(since), until: String(until),
         }))
         : Promise.resolve(null),
+      // Daily audience metrics — follower growth + profile views. Separate
+      // call: mixing metric families 400s the whole insights request.
+      cfg.ig_user_id
+        ? safe('igAudience', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
+          metric: 'follower_count,profile_views',
+          period: 'day', since: String(since), until: String(until),
+        }))
+        : Promise.resolve(null),
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
-          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink',
+          // comments ride along nested — recent triage without N+1 calls
+          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink,comments.limit(3){id,text,username,timestamp}',
           limit: '6',
         }))
         : Promise.resolve(null),
+      // Facebook Page daily engagement + unique reach (deprecation-prone
+      // metric family — fails independently; the panel just omits it).
+      safe('pageInsights', () => graph(`${cfg.page_id}/insights`, pageToken, {
+        metric: 'page_post_engagements,page_impressions_unique',
+        period: 'day', since: String(since), until: String(until),
+      })),
       cfg.ad_account_id
         ? safe('adAccount', () => graph(cfg.ad_account_id, userToken, { fields: 'name,currency' }))
         : Promise.resolve(null),
       cfg.ad_account_id
         ? safe('ads', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
           date_preset: 'last_28d', time_increment: '1', level: 'account',
-          fields: 'spend,impressions,clicks,reach,date_start',
+          fields: 'spend,impressions,clicks,reach,actions,date_start',
           limit: '40',
         }))
         : Promise.resolve(null),
+      // Campaigns via the campaigns edge (not insights): carries the id +
+      // live status the pause/resume control needs, with 28d insights nested.
       cfg.ad_account_id
-        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
-          date_preset: 'last_28d', level: 'campaign',
-          fields: 'campaign_name,spend,impressions,clicks',
-          limit: '10',
+        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/campaigns`, userToken, {
+          fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
+          limit: '15',
         }))
         : Promise.resolve(null),
       safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {
         fields: 'message,scheduled_publish_time', limit: '10',
       })),
     ]);
+
+    // Product catalogs owned by the business — visibility, not sync (Shopify's
+    // own Meta channel feeds them; we read counts so JARVIS can flag drift).
+    const catalogs = await safe('catalogs', () => graph('me/businesses', userToken, {
+      fields: 'name,owned_product_catalogs{name,product_count,vertical}',
+      limit: '5',
+    }));
 
     return json({
       ok: true,
@@ -263,10 +418,13 @@ Deno.serve(async (req) => {
       ig: igProfile,
       adAccount,
       igReach: igReach?.data || null,
+      igAudience: igAudience?.data || null,
       igMedia: igMedia?.data || null,
+      pageInsights: pageInsights?.data || null,
       adsDaily: adsDaily?.data || null,
       adCampaigns: adCampaigns?.data || null,
       scheduled: scheduled?.data || null,
+      businesses: catalogs?.data || null,
       errors,
     });
   }

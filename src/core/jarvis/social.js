@@ -9,8 +9,10 @@
  * timestamps; all of that normalizing lives here, not in the View.
  */
 import { agoLabel } from './board.js';
+import { weekStart } from './pulse.js';
 
 const DAY = 86_400_000;
+const WEEK = 7 * DAY;
 
 const num = (v) => {
   const n = Number(v);
@@ -47,6 +49,61 @@ function sumTail(rows, field, days, skip = 0) {
 
 const deltaPct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
 
+/** One action type's count from an ads row's `actions` array. */
+const actionCount = (row, type) =>
+  num(((row?.actions || []).find((a) => a.action_type === type) || {}).value);
+
+// What an ad "result" means here, in priority order: a furniture dealer's
+// Meta ads overwhelmingly optimize for WhatsApp/Messenger conversations;
+// leads and link clicks are the honest fallbacks. The FIRST type with any
+// activity in range wins and is labeled as such — never mixed.
+const RESULT_TYPES = [
+  ['onsite_conversion.messaging_conversation_started_7d', 'conversaciones'],
+  ['lead', 'leads'],
+  ['link_click', 'clics al enlace'],
+];
+
+/** Daily values of one metric from an insights payload (data array). */
+const metricRows = (insights, name) =>
+  ((insights || []).find((m) => m.name === name)?.values) || [];
+
+/**
+ * Marketing API `date_start` ("YYYY-MM-DD") as a LOCAL-midnight timestamp.
+ * `Date.parse` would read it as UTC midnight — in Santo Domingo (UTC-4)
+ * that lands on 8 PM of the PREVIOUS day and shifts week buckets.
+ */
+function localDayMs(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}
+
+/**
+ * The ads ↔ sales bridge: the last `weeks` Monday-aligned weeks with what
+ * was SPENT on Meta ads (account currency) next to what the pipeline DID
+ * (quotes created / accepted, same week rule as the business pulse). No
+ * shared y-axis trickery — plain numbers side by side; the reader judges
+ * the correlation.
+ */
+export function resolveAdsSalesWeeks({ adsDaily = [], quotes = [], now = Date.now(), weeks = 4 } = {}) {
+  const w0 = weekStart(now);
+  return Array.from({ length: weeks }, (_, i) => {
+    const start = w0 - (weeks - 1 - i) * WEEK;
+    const inWeek = (ts) => ts != null && ts >= start && ts < start + WEEK;
+    const spend = adsDaily.reduce(
+      (acc, r) => acc + (inWeek(localDayMs(r.date_start)) ? num(r.spend) : 0),
+      0,
+    );
+    return {
+      start,
+      label: new Date(start).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' }),
+      spend,
+      created: quotes.filter((q) => inWeek(q.createdAt)).length,
+      accepted: quotes.filter((q) => inWeek(q.acceptedAt)).length,
+    };
+  });
+}
+
 /**
  * The social pulse. `snapshot` is the meta-social function's payload (may be
  * partial — sections that errored arrive null and surface in `errors`).
@@ -66,19 +123,51 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const impressions7 = sumTail(adsDaily, 'impressions', 7);
 
   // IG daily reach values (insights metric rows → the `reach` series).
-  const reachRows = ((s.igReach || []).find((m) => m.name === 'reach')?.values) || [];
+  const reachRows = metricRows(s.igReach, 'reach');
   const reach7 = sumTail(reachRows, 'value', 7);
   const reach7Prev = sumTail(reachRows, 'value', 7, 7);
 
+  // IG audience: net new followers per day + profile views.
+  const followerRows = metricRows(s.igAudience, 'follower_count');
+  const profileViewRows = metricRows(s.igAudience, 'profile_views');
+  const profileViews7 = sumTail(profileViewRows, 'value', 7);
+  const newFollowers7 = sumTail(followerRows, 'value', 7);
+
+  // Facebook Page daily engagement + unique reach (when Meta still answers
+  // this metric family — absent otherwise).
+  const pageEngRows = metricRows(s.pageInsights, 'page_post_engagements');
+  const pageEngagement7 = sumTail(pageEngRows, 'value', 7);
+  const pageEngagement7Prev = sumTail(pageEngRows, 'value', 7, 7);
+
+  // Ad RESULTS: the first result type with activity in range (see above).
+  const resultType = RESULT_TYPES.find(([t]) => adsDaily.some((r) => actionCount(r, t) > 0)) || null;
+  const sumResults = (days, skip = 0) => {
+    if (!resultType) return 0;
+    const end = adsDaily.length - skip;
+    return adsDaily.slice(Math.max(0, end - days), Math.max(0, end))
+      .reduce((acc, r) => acc + actionCount(r, resultType[0]), 0);
+  };
+  const results7 = sumResults(7);
+
+  // Campaigns: the new shape is the campaigns edge (id + status + nested
+  // insights); rows from the old level=campaign insights call (flat, with
+  // campaign_name) still map so a stale function deploy can't blank the list.
   const campaigns = (s.adCampaigns || [])
     .map((c) => {
-      const spend = num(c.spend);
-      const clicks = num(c.clicks);
-      const impressions = num(c.impressions);
+      const ins = c.insights?.data?.[0] || c;
+      const spend = num(ins.spend);
+      const clicks = num(ins.clicks);
+      const impressions = num(ins.impressions);
+      const results = resultType ? actionCount(ins, resultType[0]) : null;
+      const status = c.effective_status || c.status || null;
       return {
-        name: c.campaign_name || '—',
+        id: c.id || null,
+        name: c.name || c.campaign_name || '—',
+        status,
+        active: status === 'ACTIVE',
         spend,
         clicks,
+        results,
         ctrPct: impressions > 0 ? (clicks / impressions) * 100 : null,
         cpc: clicks > 0 ? spend / clicks : null,
       };
@@ -101,6 +190,21 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     }))
     .map((m) => ({ ...m, ago: agoLabel(m.at, now) }));
 
+  // Recent comments flattened across the recent posts, newest first — the
+  // triage feed (what people are saying that may deserve a reply).
+  const recentComments = (s.igMedia || [])
+    .flatMap((m) => ((m.comments?.data) || []).map((c) => ({
+      id: c.id || null,
+      text: (c.text || '').slice(0, 100),
+      username: c.username || '',
+      at: toMs(c.timestamp),
+      postText: (m.caption || '').slice(0, 40) || `(${m.media_type || 'post'})`,
+      permalink: m.permalink || null,
+    })))
+    .sort((a, b) => (b.at || 0) - (a.at || 0))
+    .slice(0, 8)
+    .map((c) => ({ ...c, ago: agoLabel(c.at, now) }));
+
   return {
     pageName: s.page?.name || s.pageName || '',
     igUsername: s.ig?.username || s.igUsername || '',
@@ -118,12 +222,28 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       clicks7,
       cpc7: clicks7 > 0 ? spend7 / clicks7 : null,
       ctr7Pct: impressions7 > 0 ? (clicks7 / impressions7) * 100 : null,
+      results7,
+      resultsLabel: resultType ? resultType[1] : null,
+      costPerResult7: results7 > 0 ? spend7 / results7 : null,
+      profileViews7,
+      newFollowers7,
+      pageEngagement7,
+      pageEngagementDeltaPct: deltaPct(pageEngagement7, pageEngagement7Prev),
     },
     spendSeries: adsDaily.map((r) => num(r.spend)),
     reachSeries: reachRows.map((r) => num(r.value)),
+    followerSeries: followerRows.map((r) => num(r.value)),
     campaigns,
     scheduled,
     posts,
+    recentComments,
+    // Meta product catalogs across the business portfolios the token sees.
+    catalogs: (s.businesses || []).flatMap((b) => ((b.owned_product_catalogs?.data) || []).map((c) => ({
+      name: c.name || '—',
+      products: num(c.product_count),
+      vertical: c.vertical || '',
+      business: b.name || '',
+    }))),
     errors: s.errors || {},
     fetchedAt: s.fetchedAt || null,
   };

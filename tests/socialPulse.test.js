@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSocialPulse, inLabel } from '../src/core/jarvis/social.js';
+import { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from '../src/core/jarvis/social.js';
 
 const NOW = Date.parse('2026-06-10T12:00:00Z');
 const DAY = 86_400_000;
@@ -59,6 +59,53 @@ test('IG reach series reads the insights metric rows; campaigns sort by spend', 
   assert.deepEqual(campaigns.map((c) => c.name), ['A', 'B']);
 });
 
+test('ad results pick ONE action type by priority and never mix', () => {
+  const rows = [{
+    date_start: '2026-06-10',
+    spend: '60',
+    clicks: '30',
+    impressions: '1000',
+    actions: [
+      { action_type: 'link_click', value: '30' },
+      { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '12' },
+    ],
+  }];
+  const { kpis, campaigns } = resolveSocialPulse({
+    adsDaily: rows,
+    adCampaigns: [{ campaign_name: 'C', spend: '60', clicks: '30', impressions: '1000', actions: rows[0].actions }],
+  }, { now: NOW });
+  // conversations outrank link clicks
+  assert.equal(kpis.resultsLabel, 'conversaciones');
+  assert.equal(kpis.results7, 12);
+  assert.equal(kpis.costPerResult7, 5); // 60 / 12
+  assert.equal(campaigns[0].results, 12);
+});
+
+test('no actions at all → null results label and no cost per result', () => {
+  const { kpis } = resolveSocialPulse({
+    adsDaily: [{ date_start: '2026-06-10', spend: '50', clicks: '0', impressions: '100' }],
+  }, { now: NOW });
+  assert.equal(kpis.resultsLabel, null);
+  assert.equal(kpis.results7, 0);
+  assert.equal(kpis.costPerResult7, null);
+});
+
+test('IG audience and Page insights series sum the right metric rows', () => {
+  const igAudience = [
+    { name: 'follower_count', values: [{ value: 2 }, { value: 3 }] },
+    { name: 'profile_views', values: [{ value: 10 }, { value: 5 }] },
+  ];
+  const pageInsights = [
+    { name: 'page_post_engagements', values: Array.from({ length: 14 }, (_, i) => ({ value: i < 7 ? 1 : 4 })) },
+  ];
+  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, pageInsights }, { now: NOW });
+  assert.equal(kpis.newFollowers7, 5);
+  assert.equal(kpis.profileViews7, 15);
+  assert.deepEqual(followerSeries, [2, 3]);
+  assert.equal(kpis.pageEngagement7, 28);
+  assert.equal(kpis.pageEngagementDeltaPct, 300); // 28 vs 7
+});
+
 test('scheduled posts: ISO and unix-second timestamps both parse; past drops; soonest first', () => {
   const { scheduled } = resolveSocialPulse({
     scheduled: [
@@ -70,6 +117,90 @@ test('scheduled posts: ISO and unix-second timestamps both parse; past drops; so
   assert.deepEqual(scheduled.map((p) => p.text), ['soon', 'far']);
   assert.equal(scheduled[0].inLabel, 'en 2 h');
   assert.equal(scheduled[1].inLabel, 'en 3 d');
+});
+
+test('ads↔sales weeks bucket spend by LOCAL day next to quote counts', () => {
+  // NOW is Wednesday 2026-06-10 local; current week starts Monday 06-08.
+  const adsDaily = [
+    { date_start: '2026-06-08', spend: '10' }, // Monday this week — if parsed
+    // as UTC it would land Sunday 8 PM local and fall into the PREVIOUS week
+    { date_start: '2026-06-09', spend: '15' },
+    { date_start: '2026-06-01', spend: '40' }, // previous week
+  ];
+  const quotes = [
+    { id: 'q1', createdAt: new Date(2026, 5, 9).getTime() },
+    { id: 'q2', createdAt: new Date(2026, 5, 2).getTime(), acceptedAt: new Date(2026, 5, 3).getTime() },
+  ];
+  const wk = resolveAdsSalesWeeks({ adsDaily, quotes, now: NOW, weeks: 4 });
+  assert.equal(wk.length, 4);
+  const cur = wk[3];
+  const prev = wk[2];
+  assert.equal(cur.spend, 25); // 06-08 stays in THIS week (local parse)
+  assert.equal(cur.created, 1);
+  assert.equal(prev.spend, 40);
+  assert.equal(prev.created, 1);
+  assert.equal(prev.accepted, 1);
+  assert.ok(cur.label.length > 0);
+});
+
+test('recent IG comments flatten across posts, newest first, capped at 8', () => {
+  const igMedia = [
+    {
+      caption: 'Post A',
+      media_type: 'IMAGE',
+      comments: { data: [
+        { text: 'older', username: 'ana', timestamp: new Date(NOW - 2 * DAY).toISOString() },
+        { text: 'newest', username: 'luis', timestamp: new Date(NOW - 1000).toISOString() },
+      ] },
+    },
+    { caption: 'Post B', comments: { data: Array.from({ length: 10 }, (_, i) => ({ text: `c${i}`, username: 'x', timestamp: new Date(NOW - (i + 3) * DAY).toISOString() })) } },
+  ];
+  const { recentComments } = resolveSocialPulse({ igMedia }, { now: NOW });
+  assert.equal(recentComments.length, 8);
+  assert.equal(recentComments[0].text, 'newest');
+  assert.equal(recentComments[0].username, 'luis');
+  assert.equal(recentComments[0].postText, 'Post A');
+  assert.ok(recentComments[0].ago);
+});
+
+test('campaigns map the campaigns-edge shape (id + status + nested insights)', () => {
+  const adCampaigns = [
+    {
+      id: 'c2', name: 'Paused', effective_status: 'PAUSED',
+      insights: { data: [{ spend: '10', clicks: '5', impressions: '100' }] },
+    },
+    {
+      id: 'c1', name: 'Active', status: 'ACTIVE',
+      insights: { data: [{ spend: '90', clicks: '30', impressions: '1000' }] },
+    },
+    // campaign created but never delivered — no insights at all
+    { id: 'c3', name: 'New', status: 'PAUSED' },
+  ];
+  const { campaigns } = resolveSocialPulse({ adCampaigns }, { now: NOW });
+  assert.deepEqual(campaigns.map((c) => c.name), ['Active', 'Paused', 'New']);
+  assert.equal(campaigns[0].id, 'c1');
+  assert.equal(campaigns[0].active, true);
+  assert.equal(campaigns[1].active, false);
+  assert.equal(campaigns[0].spend, 90);
+  assert.equal(campaigns[2].spend, 0);
+});
+
+test('catalogs flatten across businesses with product counts', () => {
+  const businesses = [
+    { name: 'alcover', owned_product_catalogs: { data: [
+      { name: 'WhatsApp Product Catalog', product_count: '120', vertical: 'commerce' },
+      { name: 'Shopify Product Catalog', product_count: 300 },
+    ] } },
+  ];
+  const { catalogs, recentComments } = resolveSocialPulse({
+    businesses,
+    igMedia: [{ caption: 'P', comments: { data: [{ id: 'c1', text: 'hola', username: 'ana', timestamp: new Date(NOW - 1000).toISOString() }] } }],
+  }, { now: NOW });
+  assert.equal(catalogs.length, 2);
+  assert.equal(catalogs[0].products, 120); // string count normalized
+  assert.equal(catalogs[1].products, 300);
+  assert.equal(catalogs[0].business, 'alcover');
+  assert.equal(recentComments[0].id, 'c1'); // reply needs the id
 });
 
 test('inLabel covers minutes/hours/days and clamps the past to "ahora"', () => {

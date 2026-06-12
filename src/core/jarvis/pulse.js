@@ -24,7 +24,7 @@ export const FUNNEL_STAGES = [
 ];
 
 /** Monday 00:00 of the week containing `ts` (DR has no DST). */
-function weekStart(ts) {
+export function weekStart(ts) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -130,6 +130,30 @@ export function resolveActivityHeatmap({ quotes = [], orders = [], customers = [
       };
     }));
   return { cols, max };
+}
+
+/**
+ * WhatsApp activity brief — straight from the wa_messages rows the inbox
+ * already keeps: conversation volume last 7 days (in/out), inbound messages
+ * nobody has opened yet, and how long the newest inbound has been waiting.
+ */
+export function resolveWaBrief(messages = [], now = Date.now()) {
+  const since = now - 7 * DAY;
+  let in7 = 0;
+  let out7 = 0;
+  let unread = 0;
+  let lastInAt = null;
+  for (const m of messages || []) {
+    const at = m.createdAt || 0;
+    if (m.direction === 'in') {
+      if (at >= since) in7 += 1;
+      if (!m.readAt) unread += 1;
+      if (at > (lastInAt || 0)) lastInAt = at;
+    } else if (at >= since) {
+      out7 += 1;
+    }
+  }
+  return { in7, out7, unread, lastInAt, lastInAgo: agoLabel(lastInAt, now) };
 }
 
 /**

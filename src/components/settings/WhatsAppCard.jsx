@@ -4,7 +4,7 @@ import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, 
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
-  listWaTemplates, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
+  listWaTemplates, listWaCatalog, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
 } from '../../lib/whatsapp.js';
 import { runCoexistenceSignup } from '../../lib/waEmbeddedSignup.js';
 import SettingsSection from './SettingsSection.jsx';
@@ -191,6 +191,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
         <>
           <WebhookRow settings={settings} />
           <TemplateRow settings={settings} saveSettings={saveSettings} />
+          <CatalogRow settings={settings} saveSettings={saveSettings} />
           <BusinessProfileRow />
           <TestSendRow />
         </>
@@ -535,6 +536,99 @@ function TemplateRow({ settings, saveSettings }) {
         <p className="text-[11px] text-ink-500 mt-1.5">
           Sin plantilla, la cotización se envía como texto libre — solo llega si el cliente
           escribió en las últimas 24 h.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Commerce catalog — the product catalog the chat's product picker browses
+ * and sends from. Normally wa-send auto-discovers it from the token (WABA
+ * edge, the number's commerce settings, the token's scopes, the business'
+ * catalogs); when Meta hides the catalog from the token, the optional ID
+ * field pins it directly (Commerce Manager → your catalog — the number in
+ * the URL). "Probar catálogo" runs the same listCatalog the chat uses and
+ * surfaces wa-send's precise diagnosis (which Meta grant is missing), so the
+ * whole fix loop happens here instead of failing later mid-conversation.
+ */
+function CatalogRow({ settings, saveSettings }) {
+  const [value, setValue] = useState(settings?.whatsappCatalogId || '');
+  const [state, setState] = useState('idle'); // idle | saving | saved
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState(null); // null | { ok, msg }
+  useEffect(() => { setValue(settings?.whatsappCatalogId || ''); }, [settings?.whatsappCatalogId]);
+
+  const dirty = (value || '').trim() !== (settings?.whatsappCatalogId || '');
+
+  async function saveId() {
+    setState('saving');
+    try {
+      await saveSettings({ whatsappCatalogId: value.replace(/\D/g, '') });
+      setState('saved');
+      setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch {
+      setState('idle');
+    }
+  }
+
+  async function test() {
+    setTesting(true);
+    setResult(null);
+    try {
+      const res = await listWaCatalog({});
+      if (res?.ok) {
+        const n = (res.products || []).length;
+        setResult({
+          ok: true,
+          msg: n
+            ? `Catálogo conectado — ${n}${res.after ? '+' : ''} producto(s) visibles para el chat.`
+            : 'Catálogo conectado, pero aún sin productos visibles.',
+        });
+      } else {
+        setResult({ ok: false, msg: res?.error || 'No se pudo ver el catálogo.' });
+      }
+    } catch (e) {
+      setResult({ ok: false, msg: e?.message || 'No se pudo ver el catálogo.' });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="label">Catálogo de productos (chat)</div>
+      <p className="text-[11px] text-ink-500 mb-2">
+        El selector de productos del chat usa el catálogo conectado a tu WhatsApp. Se detecta solo;
+        si Meta no se lo muestra al token, pega aquí el <strong>ID del catálogo</strong> (Commerce
+        Manager → tu catálogo — el número de la URL). Vacío = detección automática.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="(automático)"
+          className="input max-w-56"
+          aria-label="ID del catálogo de productos"
+        />
+        {dirty && (
+          <button type="button" onClick={saveId} disabled={state === 'saving'} className="btn-ghost text-xs inline-flex items-center gap-1 disabled:opacity-40">
+            {state === 'saving' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar
+          </button>
+        )}
+        {state === 'saved' && <span className="text-[11px] text-emerald-700">Guardado.</span>}
+        <button type="button" onClick={test} disabled={testing} className="btn-ghost text-xs inline-flex items-center gap-1 disabled:opacity-40">
+          {testing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Probar catálogo
+        </button>
+      </div>
+      {result && (
+        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${result.ok ? 'text-emerald-700' : 'text-amber-700'}`}>
+          {result.ok
+            ? <Check size={12} className="mt-px shrink-0" />
+            : <AlertTriangle size={12} className="mt-px shrink-0" />}
+          <span className="min-w-0 break-words whitespace-pre-line">{result.msg}</span>
         </p>
       )}
     </div>

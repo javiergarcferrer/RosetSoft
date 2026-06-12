@@ -156,3 +156,58 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 ## Notes (found, already resolved — no action)
 - The `decorator_billing` migration comment said the trade-discount default was "15%" while
   `professionals.default_commission_pct` defaulted to 10%. The new floor rate (15%) reconciled this.
+
+---
+
+# Meta integration roadmap (JARVIS session — coordinating with the review loop)
+
+Owner: the jarvis-dynamic-react-ui session. Reviewers: please flag findings on
+these files via commits to main or notes here — this session reconciles on a
+recurring loop (fetch → merge → fix → continue).
+
+Surface: `supabase/functions/meta-social/index.ts` (Graph reads),
+`src/core/jarvis/social.js` (pure VM, pinned by tests/socialPulse.test.js),
+Social · Meta panel in `src/pages/Jarvis.jsx`.
+
+- [x] Pass 1 — analytics depth: IG follower/profile-view daily series, FB page
+  engagement (deprecation-tolerant), ad RESULTS (priority: messaging
+  conversations > leads > link clicks) + cost per result, per-campaign results.
+- [x] Pass 2 — ads↔sales bridge: "Ads ↔ ventas" weekly table in Pulso comercial
+  (spend by LOCAL-day bucketing of adsDaily next to quotes created/accepted,
+  same Monday weeks as the cadence; resolveAdsSalesWeeks, TZ-pinned test).
+- [x] Pass 3 — publishing: composer in the Social panel — FB Page posts now or
+  scheduled (10min-30d, Graph /feed), IG image posts immediate (container flow;
+  API has no IG scheduling). Per-target results, partial success allowed.
+- [x] Pass 4 — IG comment triage: recent comments ride nested on the media
+  snapshot call (no N+1), flattened newest-first in the panel. DM triage into
+  the CRM inbox deliberately NOT done — needs instagram_manage_messages advanced
+  access + webhooks; revisit if the business asks for it.
+- [ ] Blocked on user: regenerate system-user token with the page/IG/ads
+  scopes (use cases were just added) and paste it into the WhatsApp card —
+  the social panel self-links once the token has page visibility.
+
+## Meta full-feature loop v2 (continues the roadmap above)
+- [x] Cycle A — catalog visibility (owned_product_catalogs counts in the Social
+  panel; read-only on purpose — Shopify's Meta channel owns the feed, we only
+  surface drift) + reply-to-comment from the IG triage list (POST /replies).
+- [x] Cycle B — campaign pause/resume in MARKETING (post-restructure home):
+  campaigns edge now carries id+status+nested 28d insights; setCampaignStatus
+  mode accepts only ACTIVE|PAUSED; two-step confirm in the row UI.
+- [x] Cycle C — IG Stories from the Marketing composer (media_type=STORIES,
+  image-only 24h; story-only publishes don't demand a caption). FULL-FEATURE
+  LOOP COMPLETE — remaining Meta surface needs Advanced Access (DMs) or has a
+  better owner (catalog feeds = Shopify channel).
+- [x] Restructure — JARVIS is now the read-only BRIEFING surface (KPI brief +
+  sparks + ads↔ventas + WhatsApp 7d brief + link out); ACTING on Meta moved to
+  the new /marketing page (Ventas nav group): composer, comment replies,
+  campaigns, scheduled, posts, catalogs. Same VM spine (core/jarvis/social).
+- Coordination note (for claude/bold-euler-sog0s5): this session owns
+  src/pages/{Jarvis,Marketing}.jsx, src/core/jarvis/*, supabase/functions/
+  meta-social and their tests; it will NOT touch the accounting pages,
+  Difusion, QuoteBuilder, Materials, commissions tests, or supabase/CLAUDE.md
+  until your branch lands. Your CLAUDE.md "Live tables" rewrite and my earlier
+  meta_social_config bullet are in different hunks — merge should be clean.
+- Convergence (bold-euler i-series): your pulse.js `to` deep-links are good —
+  Jarvis's View now renders ops-feed rows and funnel labels as <Link> whenever
+  `to` is present (no-op until your branch lands; no shared hunks, merge stays
+  clean). This session keeps pulse.js untouched so your diff applies as-is.

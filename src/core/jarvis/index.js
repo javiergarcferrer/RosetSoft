@@ -12,7 +12,8 @@ export {
   resolveBusinessPulse,
   resolveOpsFeed,
   resolveActivityHeatmap,
+  resolveWaBrief,
   sparkPoints,
   FUNNEL_STAGES,
 } from './pulse.js';
-export { resolveSocialPulse, inLabel } from './social.js';
+export { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from './social.js';

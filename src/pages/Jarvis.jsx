@@ -2,8 +2,9 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Package,
-  Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp, Users, X, Zap,
+  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Megaphone,
+  Package, Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp,
+  Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -17,6 +18,8 @@ import {
   resolveOpsFeed,
   resolveActivityHeatmap,
   resolveSocialPulse,
+  resolveAdsSalesWeeks,
+  resolveWaBrief,
   systemIntegrity,
   radarPoints,
   sparkPoints,
@@ -188,17 +191,18 @@ export default function Jarvis() {
   // fresh across devices, same as the uplink thread.
   const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
-      const [quotes, orders, customers, products, quoteLines] = await Promise.all([
+      const [quotes, orders, customers, products, quoteLines, waMessages] = await Promise.all([
         db.quotes.where('profileId').equals(profileId || '').toArray(),
         db.orders.where('profileId').equals(profileId || '').toArray(),
         db.customers.where('profileId').equals(profileId || '').toArray(),
         db.products.where('profileId').equals(profileId || '').toArray(),
         db.quoteLines.toArray(),
+        db.waMessages.where('profileId').equals(profileId || '').toArray(),
       ]);
-      return { quotes, orders, customers, products, quoteLines };
+      return { quotes, orders, customers, products, quoteLines, waMessages };
     },
     [profileId, tick],
-    { quotes: [], orders: [], customers: [], products: [], quoteLines: [] },
+    { quotes: [], orders: [], customers: [], products: [], quoteLines: [], waMessages: [] },
   );
 
   // ── live diagnostics ─────────────────────────────────────────────────
@@ -490,9 +494,17 @@ export default function Jarvis() {
     }),
     [biz, nowMin],
   );
+  const waBrief = useMemo(() => resolveWaBrief(biz.waMessages, nowMin), [biz, nowMin]);
   const social = useMemo(
     () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
     [socialRaw, nowMin],
+  );
+  // Ads ↔ sales bridge — only meaningful once the ad rows are in.
+  const adsSales = useMemo(
+    () => (socialRaw?.adsDaily?.length
+      ? resolveAdsSalesWeeks({ adsDaily: socialRaw.adsDaily, quotes: biz.quotes, now: nowMin })
+      : null),
+    [socialRaw, biz, nowMin],
   );
 
   useEffect(() => {
@@ -595,6 +607,22 @@ export default function Jarvis() {
               <div className="jv-stat"><b>{nOrders}</b><span>Pedidos</span></div>
               <div className="jv-stat"><b>{nCustomers}</b><span>Clientes</span></div>
               <div className="jv-stat"><b>{nProducts}</b><span>Productos</span></div>
+            </div>
+          </section>
+
+          <section className="jv-panel">
+            <div className="jv-panel-head"><Send size={12} /> WhatsApp · 7 días</div>
+            <div className="grid grid-cols-2 gap-2 p-3">
+              <div className="jv-stat"><b>{waBrief.in7}</b><span>Recibidos</span></div>
+              <div className="jv-stat"><b>{waBrief.out7}</b><span>Enviados</span></div>
+              <div className="jv-stat">
+                <b style={{ color: waBrief.unread > 0 ? 'var(--jv-warning)' : undefined }}>{waBrief.unread}</b>
+                <span>Sin leer</span>
+              </div>
+              <div className="jv-stat">
+                <b style={{ fontSize: '0.85rem', lineHeight: '1.9rem' }}>{waBrief.lastInAgo || '—'}</b>
+                <span>Último entrante</span>
+              </div>
             </div>
           </section>
 
@@ -736,6 +764,26 @@ export default function Jarvis() {
                 </div>
               </div>
 
+              {/* ads ↔ sales: spend next to what the pipeline did, by week */}
+              {adsSales && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Ads ↔ ventas · por semana</div>
+                  <div className="jv-bridge jv-mono">
+                    <div className="brow head">
+                      <span>Semana</span><span>Inversión</span><span>Cotiz.</span><span>Acept.</span>
+                    </div>
+                    {adsSales.map((w) => (
+                      <div key={w.start} className="brow">
+                        <span>{w.label}</span>
+                        <span>{w.spend > 0 ? `${w.spend.toLocaleString('en-US', { maximumFractionDigits: 0 })}${social?.adCurrency ? ` ${social.adCurrency}` : ''}` : '—'}</span>
+                        <span>{w.created}</span>
+                        <span style={{ color: w.accepted > 0 ? 'var(--jv-success)' : undefined }}>{w.accepted}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* activity heatmap — one cell per real day, GitHub-style */}
               <div>
                 <div className="jv-kicker mb-1.5">Actividad · 12 semanas</div>
@@ -872,11 +920,48 @@ export default function Jarvis() {
                       : 'sin clics aún'}
                   </span>
                 </div>
-                <div className="jv-kpi">
-                  <span className="label">CTR · 7d</span>
-                  <b className="jv-mono">{social.kpis.ctr7Pct != null ? `${social.kpis.ctr7Pct.toFixed(2)}%` : '—'}</b>
-                  <span className="sub">clics / impresiones</span>
-                </div>
+                {social.kpis.resultsLabel ? (
+                  <div className="jv-kpi">
+                    <span className="label">Resultados ads · 7d</span>
+                    <b className="jv-mono">{social.kpis.results7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      {social.kpis.resultsLabel}
+                      {social.kpis.costPerResult7 != null
+                        ? ` · ${social.kpis.costPerResult7.toFixed(2)}${social.adCurrency ? ` ${social.adCurrency}` : ''} c/u`
+                        : ''}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="jv-kpi">
+                    <span className="label">CTR · 7d</span>
+                    <b className="jv-mono">{social.kpis.ctr7Pct != null ? `${social.kpis.ctr7Pct.toFixed(2)}%` : '—'}</b>
+                    <span className="sub">clics / impresiones</span>
+                  </div>
+                )}
+                {social.hasIg && (
+                  <div className="jv-kpi">
+                    <span className="label">Perfil IG · 7d</span>
+                    <b className="jv-mono">{social.kpis.profileViews7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      visitas · {social.kpis.newFollowers7 >= 0 ? '+' : ''}{social.kpis.newFollowers7} seguidores
+                    </span>
+                  </div>
+                )}
+                {social.kpis.pageEngagement7 > 0 && (
+                  <div className="jv-kpi">
+                    <span className="label">Interacción FB · 7d</span>
+                    <b className="jv-mono">{social.kpis.pageEngagement7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      {social.kpis.pageEngagementDeltaPct != null
+                        ? (
+                          <span className={`jv-delta ${social.kpis.pageEngagementDeltaPct >= 0 ? 'up' : 'down'}`}>
+                            {social.kpis.pageEngagementDeltaPct >= 0 ? '+' : ''}{social.kpis.pageEngagementDeltaPct}% vs 7d ant.
+                          </span>
+                        )
+                        : 'interacciones con publicaciones'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {(social.spendSeries.length > 1 || social.reachSeries.length > 1) && (
@@ -914,59 +999,16 @@ export default function Jarvis() {
                 </div>
               )}
 
-              {social.campaigns.length > 0 && (
-                <div>
-                  <div className="jv-kicker mb-1.5">Campañas · 28 días</div>
-                  <div className="space-y-1">
-                    {social.campaigns.slice(0, 5).map((c) => (
-                      <div key={c.name} className="jv-social-row">
-                        <span className="name">{c.name}</span>
-                        <span className="jv-mono stat">
-                          {c.spend.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                          {social.adCurrency ? ` ${social.adCurrency}` : ''}
-                        </span>
-                        <span className="jv-mono stat dim">
-                          {c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(social.scheduled.length > 0 || social.posts.length > 0) && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <div className="jv-kicker mb-1.5">Programado</div>
-                    {social.scheduled.length ? social.scheduled.slice(0, 4).map((p) => (
-                      <div key={p.at} className="jv-social-row">
-                        <span className="name">{p.text}</span>
-                        <span className="jv-mono stat dim">{p.inLabel}</span>
-                      </div>
-                    )) : (
-                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Nada programado.</div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="jv-kicker mb-1.5">Últimas publicaciones IG</div>
-                    {social.posts.slice(0, 4).map((p) => (
-                      <div key={p.permalink || p.at} className="jv-social-row">
-                        <span className="name">{p.text}</span>
-                        <span className="jv-mono stat dim">♥ {p.likes} · 💬 {p.comments}</span>
-                      </div>
-                    ))}
-                    {!social.posts.length && (
-                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Sin publicaciones recientes.</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {Object.keys(social.errors).length > 0 && (
                 <div className="text-xs" style={{ color: 'var(--jv-warning)' }}>
                   Secciones sin respuesta: {Object.keys(social.errors).join(', ')} — el resto es dato real.
                 </div>
               )}
+
+              {/* JARVIS briefs; acting on Meta lives in /marketing */}
+              <Link to="/marketing" className="jv-btn" style={{ alignSelf: 'flex-start' }}>
+                <Megaphone size={12} /> Abrir Marketing — publicar, responder, campañas
+              </Link>
             </div>
           )}
         </section>
@@ -1010,21 +1052,16 @@ export default function Jarvis() {
                   <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
                 </div>
               ))}
-              {opsFeed.map((e) => (
-                e.to ? (
-                  <Link key={e.id} to={e.to} className="trow" title="Abrir">
+              {opsFeed.map((e) => {
+                const Row = e.to ? Link : 'div';
+                return (
+                  <Row key={e.id} className="trow" {...(e.to ? { to: e.to } : {})}>
                     <span className={`tdot ${e.tone}`} />
                     <span className="ttext">{e.text}</span>
                     <span className="tago jv-mono">{e.ago || ''}</span>
-                  </Link>
-                ) : (
-                  <div key={e.id} className="trow">
-                    <span className={`tdot ${e.tone}`} />
-                    <span className="ttext">{e.text}</span>
-                    <span className="tago jv-mono">{e.ago || ''}</span>
-                  </div>
-                )
-              ))}
+                  </Row>
+                );
+              })}
               {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin actividad registrada todavía.
