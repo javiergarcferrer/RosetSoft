@@ -138,6 +138,30 @@ export default function Marketing() {
     }
   }, [replyText, replyTo, replyBusy]);
 
+  // ── campaign pause/resume — two-step confirm (real money moves) ──────
+  const [campArm, setCampArm] = useState(null); // campaign id awaiting confirm
+  const [campBusy, setCampBusy] = useState(null);
+  const [campErr, setCampErr] = useState(null);
+  const toggleCampaign = useCallback(async (c) => {
+    if (!c.id || campBusy) return;
+    if (campArm !== c.id) { setCampArm(c.id); setCampErr(null); return; }
+    setCampArm(null);
+    setCampBusy(c.id);
+    setCampErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { setCampaignStatus: { campaignId: c.id, status: c.active ? 'PAUSED' : 'ACTIVE' } },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo cambiar el estado');
+      await load();
+    } catch (e) {
+      setCampErr(e?.message || 'No se pudo cambiar el estado');
+    } finally {
+      setCampBusy(null);
+    }
+  }, [campArm, campBusy, load]);
+
   const money = (v, digits = 2) => `${Number(v).toLocaleString('en-US', { maximumFractionDigits: digits })}${m?.adCurrency ? ` ${m.adCurrency}` : ''}`;
 
   return (
@@ -264,7 +288,11 @@ export default function Marketing() {
                   <div className="card-header"><span className="font-medium">Campañas · 28 días</span></div>
                   <div className="divide-y divide-ink-100">
                     {m.campaigns.map((c) => (
-                      <div key={c.name} className="px-5 py-2.5 flex items-baseline gap-3 text-sm">
+                      <div key={c.id || c.name} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                        <span
+                          className={`flex-none w-2 h-2 rounded-full ${c.active ? 'bg-emerald-500' : 'bg-ink-300'}`}
+                          title={c.status || ''}
+                        />
                         <span className="min-w-0 truncate text-ink-800">{c.name}</span>
                         <span className="ml-auto tabular-nums text-ink-800">{money(c.spend)}</span>
                         <span className="tabular-nums text-ink-400 text-xs w-28 text-right">
@@ -272,8 +300,27 @@ export default function Marketing() {
                             ? `${c.results} ${m.kpis.resultsLabel}`
                             : c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
                         </span>
+                        {c.id && (
+                          <button
+                            type="button"
+                            className={`flex-none text-xs px-2 py-1 rounded border transition-colors ${
+                              campArm === c.id
+                                ? 'border-red-300 bg-red-50 text-red-700 font-medium'
+                                : 'border-ink-200 text-ink-500 hover:bg-ink-50'
+                            }`}
+                            onClick={() => toggleCampaign(c)}
+                            disabled={campBusy === c.id}
+                          >
+                            {campBusy === c.id
+                              ? '…'
+                              : campArm === c.id
+                                ? (c.active ? '¿Confirmar pausa?' : '¿Confirmar activar?')
+                                : (c.active ? 'Pausar' : 'Activar')}
+                          </button>
+                        )}
                       </div>
                     ))}
+                    {campErr && <div className="px-5 py-2 text-sm text-red-600">{campErr}</div>}
                   </div>
                 </div>
               )}

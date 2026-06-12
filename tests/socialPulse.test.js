@@ -163,6 +163,28 @@ test('recent IG comments flatten across posts, newest first, capped at 8', () =>
   assert.ok(recentComments[0].ago);
 });
 
+test('campaigns map the campaigns-edge shape (id + status + nested insights)', () => {
+  const adCampaigns = [
+    {
+      id: 'c2', name: 'Paused', effective_status: 'PAUSED',
+      insights: { data: [{ spend: '10', clicks: '5', impressions: '100' }] },
+    },
+    {
+      id: 'c1', name: 'Active', status: 'ACTIVE',
+      insights: { data: [{ spend: '90', clicks: '30', impressions: '1000' }] },
+    },
+    // campaign created but never delivered — no insights at all
+    { id: 'c3', name: 'New', status: 'PAUSED' },
+  ];
+  const { campaigns } = resolveSocialPulse({ adCampaigns }, { now: NOW });
+  assert.deepEqual(campaigns.map((c) => c.name), ['Active', 'Paused', 'New']);
+  assert.equal(campaigns[0].id, 'c1');
+  assert.equal(campaigns[0].active, true);
+  assert.equal(campaigns[1].active, false);
+  assert.equal(campaigns[0].spend, 90);
+  assert.equal(campaigns[2].spend, 0);
+});
+
 test('catalogs flatten across businesses with product counts', () => {
   const businesses = [
     { name: 'alcover', owned_product_catalogs: { data: [

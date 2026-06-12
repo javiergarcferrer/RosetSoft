@@ -190,10 +190,17 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [x] Cycle A — catalog visibility (owned_product_catalogs counts in the Social
   panel; read-only on purpose — Shopify's Meta channel owns the feed, we only
   surface drift) + reply-to-comment from the IG triage list (POST /replies).
-- [ ] Cycle B — campaign controls: pause/resume from JARVIS (POST campaign
-  status; needs an explicit confirm in the UI — it moves real money).
+- [x] Cycle B — campaign pause/resume in MARKETING (post-restructure home):
+  campaigns edge now carries id+status+nested 28d insights; setCampaignStatus
+  mode accepts only ACTIVE|PAUSED; two-step confirm in the row UI.
 - [ ] Cycle C — IG Stories publishing (media_type=STORIES) from the composer.
 - [x] Restructure — JARVIS is now the read-only BRIEFING surface (KPI brief +
   sparks + ads↔ventas + WhatsApp 7d brief + link out); ACTING on Meta moved to
   the new /marketing page (Ventas nav group): composer, comment replies,
   campaigns, scheduled, posts, catalogs. Same VM spine (core/jarvis/social).
+- Coordination note (for claude/bold-euler-sog0s5): this session owns
+  src/pages/{Jarvis,Marketing}.jsx, src/core/jarvis/*, supabase/functions/
+  meta-social and their tests; it will NOT touch the accounting pages,
+  Difusion, QuoteBuilder, Materials, commissions tests, or supabase/CLAUDE.md
+  until your branch lands. Your CLAUDE.md "Live tables" rewrite and my earlier
+  meta_social_config bullet are in different hunks — merge should be clean.

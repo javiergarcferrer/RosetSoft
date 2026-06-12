@@ -51,6 +51,8 @@ type Body = {
   publish?: PublishBody;
   /** Reply to an IG comment from the triage list. */
   replyComment?: { commentId?: string; message?: string };
+  /** Pause/resume an ad campaign (Marketing page, behind an explicit confirm). */
+  setCampaignStatus?: { campaignId?: string; status?: string };
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -235,6 +237,23 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── setCampaignStatus: pause/resume a campaign — REAL MONEY moves, so
+  // the UI gates this behind an explicit confirm; the server only accepts
+  // the two reversible states.
+  if (body.setCampaignStatus) {
+    const campaignId = String(body.setCampaignStatus.campaignId || '').trim();
+    const status = String(body.setCampaignStatus.status || '').toUpperCase();
+    if (!campaignId || !['ACTIVE', 'PAUSED'].includes(status)) {
+      return json({ ok: false, error: 'campaignId y status (ACTIVE|PAUSED) requeridos' }, 400);
+    }
+    try {
+      await graphPost(campaignId, userToken, { status });
+      return json({ ok: true, status });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
   // ── replyComment: answer an IG comment in-thread ──────────────────────
   if (body.replyComment) {
     const commentId = String(body.replyComment.commentId || '').trim();
@@ -358,11 +377,12 @@ Deno.serve(async (req) => {
           limit: '40',
         }))
         : Promise.resolve(null),
+      // Campaigns via the campaigns edge (not insights): carries the id +
+      // live status the pause/resume control needs, with 28d insights nested.
       cfg.ad_account_id
-        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
-          date_preset: 'last_28d', level: 'campaign',
-          fields: 'campaign_name,spend,impressions,clicks,actions',
-          limit: '10',
+        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/campaigns`, userToken, {
+          fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
+          limit: '15',
         }))
         : Promise.resolve(null),
       safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {

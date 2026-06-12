@@ -149,14 +149,22 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   };
   const results7 = sumResults(7);
 
+  // Campaigns: the new shape is the campaigns edge (id + status + nested
+  // insights); rows from the old level=campaign insights call (flat, with
+  // campaign_name) still map so a stale function deploy can't blank the list.
   const campaigns = (s.adCampaigns || [])
     .map((c) => {
-      const spend = num(c.spend);
-      const clicks = num(c.clicks);
-      const impressions = num(c.impressions);
-      const results = resultType ? actionCount(c, resultType[0]) : null;
+      const ins = c.insights?.data?.[0] || c;
+      const spend = num(ins.spend);
+      const clicks = num(ins.clicks);
+      const impressions = num(ins.impressions);
+      const results = resultType ? actionCount(ins, resultType[0]) : null;
+      const status = c.effective_status || c.status || null;
       return {
-        name: c.campaign_name || '—',
+        id: c.id || null,
+        name: c.name || c.campaign_name || '—',
+        status,
+        active: status === 'ACTIVE',
         spend,
         clicks,
         results,
