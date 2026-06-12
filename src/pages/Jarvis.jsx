@@ -399,13 +399,14 @@ export default function Jarvis() {
   const [metaLinking, setMetaLinking] = useState(false);
   const [metaLinkError, setMetaLinkError] = useState(null);
   const linkMeta = useCallback(async () => {
+    if (metaLinking) return;
+    // Empty token → the function reuses the WhatsApp system user's token.
     const token = metaToken.trim();
-    if (!token || metaLinking) return;
     setMetaLinking(true);
     setMetaLinkError(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { link: { token } },
+        body: { link: token ? { token } : {} },
       });
       if (error) throw new Error(error.message || 'sin respuesta');
       if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
@@ -770,30 +771,32 @@ export default function Jarvis() {
               <p className="text-xs mb-3" style={{ color: 'var(--jv-muted)' }}>
                 Conecta la página de Facebook y el Instagram del negocio (y la
                 cuenta publicitaria, si existe) para ver alcance, resultados de
-                anuncios y publicaciones programadas aquí. Pega un token de
-                usuario del sistema de Meta Business con permisos de páginas,
-                Instagram y ads — el enlace descubre la página, el IG y la
-                cuenta de anuncios automáticamente.
+                anuncios y publicaciones programadas aquí. Se usa el mismo
+                usuario del sistema que la integración de WhatsApp — solo
+                asegúrate en Meta Business de asignarle la página, el Instagram
+                y la cuenta publicitaria. El enlace los descubre automáticamente.
               </p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkMeta} disabled={metaLinking}>
+                  {metaLinking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
+                  {metaToken.trim() ? 'Vincular con este token' : 'Vincular con el sistema de WhatsApp'}
+                </button>
                 <input
                   className="jv-input"
+                  style={{ flex: '1 1 14rem', width: 'auto' }}
                   type="password"
                   value={metaToken}
                   onChange={(e) => setMetaToken(e.target.value)}
-                  placeholder="EAA…  (token de Meta Business)"
+                  placeholder="(opcional) otro token de Meta Business — EAA…"
                   autoComplete="new-password"
                   spellCheck={false}
                 />
-                <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkMeta} disabled={!metaToken.trim() || metaLinking}>
-                  {metaLinking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
-                </button>
               </div>
               {metaLinkError && (
                 <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{metaLinkError}</div>
               )}
               <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
-                El token se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
+                El token vive en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
               </p>
             </div>
           ) : socialError ? (

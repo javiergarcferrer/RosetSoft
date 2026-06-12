@@ -77,9 +77,24 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* empty body → handled below */ }
 
   // ── link: validate + discover + persist ──────────────────────────────
+  // With no token in the body, reuse the WhatsApp integration's system-user
+  // token (write-only whatsapp_config) — one Meta system user runs both;
+  // the Page/IG/ad account just have to be assigned to it in Meta Business.
   if (body.link) {
-    const token = String(body.link.token || '').trim();
-    if (!token) return json({ ok: false, error: 'token requerido' }, 400);
+    let token = String(body.link.token || '').trim();
+    let fromWhatsApp = false;
+    if (!token) {
+      const { data: wa } = await admin
+        .from('whatsapp_config')
+        .select('access_token')
+        .eq('profile_id', TEAM)
+        .maybeSingle();
+      token = wa?.access_token || '';
+      fromWhatsApp = true;
+      if (!token) {
+        return json({ ok: false, error: 'Sin token disponible: conecta WhatsApp primero (mismo usuario del sistema) o pega un token de Meta Business.' });
+      }
+    }
     try {
       // Pages the token can see, each with its page token + linked IG account.
       const pages = await graph('me/accounts', token, {
@@ -91,7 +106,12 @@ Deno.serve(async (req) => {
         instagram_business_account?: { id?: string; username?: string };
       }> = pages?.data || [];
       if (!list.length) {
-        return json({ ok: false, error: 'El token no administra ninguna página de Facebook — usa un token de usuario del sistema con permisos de páginas.' });
+        return json({
+          ok: false,
+          error: fromWhatsApp
+            ? 'El usuario del sistema de WhatsApp no administra ninguna página — en Meta Business, asígnale la página de Facebook (y la cuenta publicitaria) a ese usuario del sistema, o pega otro token.'
+            : 'El token no administra ninguna página de Facebook — usa un token de usuario del sistema con permisos de páginas.',
+        });
       }
       const page = (body.link.pageId && list.find((p) => p.id === body.link?.pageId)) || list[0];
 
