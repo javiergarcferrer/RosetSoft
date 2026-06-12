@@ -126,7 +126,12 @@ Deno.serve(async (req: Request) => {
     .from('whatsapp_config').select('access_token, phone_number_id, waba_id').eq('profile_id', TEAM).maybeSingle();
   const token = (cfg as { access_token?: string } | null)?.access_token;
   const phoneNumberId = (cfg as { phone_number_id?: string } | null)?.phone_number_id;
-  const wabaId = (cfg as { waba_id?: string } | null)?.waba_id || '';
+  // A WABA id is a long numeric Meta id — but the field has been hand-pasted
+  // with emails/phone numbers before. Treat a non-numeric value as ABSENT so
+  // every wabaId consumer gives its clear "missing WABA" guidance instead of
+  // a cryptic Graph error, and the connection check below can heal it.
+  const wabaRaw = (cfg as { waba_id?: string } | null)?.waba_id || '';
+  let wabaId = /^\d{10,20}$/.test(wabaRaw) ? wabaRaw : '';
   if (!token || !phoneNumberId) return json({ configured: false, message: 'WhatsApp no conectado' });
 
   let body: SendBody = {};
@@ -141,6 +146,20 @@ Deno.serve(async (req: Request) => {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return json({ configured: true, ok: false, error: metaError(data, r.status) }, 502);
     const d = data as { display_phone_number?: string; verified_name?: string; quality_rating?: string };
+    // No (valid) WABA id saved → resolve it from the token itself: a System
+    // User token carries the WABAs it manages in its granular scopes. Persist
+    // the healed id so templates / Difusión work on the next request too.
+    if (!wabaId) {
+      const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
+      const dd = await dbg.json().catch(() => ({})) as
+        { data?: { granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+      const ids = (dd.data?.granular_scopes || [])
+        .find((s) => s.scope === 'whatsapp_business_management')?.target_ids || [];
+      if (ids.length) {
+        wabaId = String(ids[0]);
+        await admin.from('whatsapp_config').update({ waba_id: wabaId }).eq('profile_id', TEAM);
+      }
+    }
     // Webhooks only flow once the app is SUBSCRIBED to the WABA — registering
     // the callback URL in the Meta portal is NOT enough; without this call
     // Meta delivers nothing (no inbound messages, no delivery statuses).
@@ -153,7 +172,9 @@ Deno.serve(async (req: Request) => {
       webhookSubscribed = sub.ok && !!(subData as { success?: boolean }).success;
       if (!webhookSubscribed) webhookError = metaError(subData, sub.status);
     } else {
-      webhookError = 'Falta el WhatsApp Business Account ID (WABA): sin él no se puede activar la recepción de mensajes. Pégalo en Configuración → WhatsApp.';
+      webhookError = wabaRaw
+        ? `El WhatsApp Business Account ID guardado ("${wabaRaw}") no es válido — es el código numérico largo que aparece en Meta → WhatsApp → API Setup. Pégalo de nuevo en Configuración → WhatsApp.`
+        : 'Falta el WhatsApp Business Account ID (WABA): sin él no se puede activar la recepción de mensajes. Pégalo en Configuración → WhatsApp.';
     }
     await admin.from('settings').update({
       whatsapp_display_number: d.display_phone_number || '',

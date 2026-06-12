@@ -43,6 +43,12 @@ export async function saveWhatsappConfig({ accessToken, phoneNumberId, wabaId, a
     throw new Error('Eso parece el número de teléfono, no el Phone Number ID. El ID es el código numérico largo que aparece DEBAJO del número en Meta → WhatsApp → API Setup.');
   }
   const waba = String(wabaId || '').trim();
+  // Same wrong-paste guard as the Phone Number ID: the WABA id is a long
+  // numeric Meta identifier — an email or a phone number here used to save
+  // fine and then break webhook subscription with a cryptic Graph error.
+  if (waba && !/^\d{10,20}$/.test(waba)) {
+    throw new Error('Eso no parece el WhatsApp Business Account ID — es el código numérico largo que aparece en Meta → WhatsApp → API Setup (no un correo ni un número de teléfono).');
+  }
   const secret = String(appSecret || '').trim();
   if (secret && !/^[0-9a-f]{32}$/i.test(secret)) {
     throw new Error('El App Secret es un código de 32 caracteres hexadecimales (Meta → tu app → App settings → Basic → App Secret → Show).');
