@@ -20,11 +20,16 @@
   --jv-scan: #bf7af0;
 
   color-scheme: dark;
-  min-height: 100%;
+  /* Full-screen command center: the page renders OUTSIDE the app shell
+     (no sidebar, no <main>), so it owns the whole pinned viewport and its
+     own scrolling — black edge to edge, no shell background leaking. */
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--jv-bg);
   color: var(--jv-fg);
   font-variant-numeric: tabular-nums;
-  padding: 1rem 1rem 5rem;
+  padding: 1rem 1rem calc(3rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── typography ──────────────────────────────────────────────────────── */

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Activity, Bot, Cpu, Radar, RefreshCw, Satellite, Send, ShieldAlert, Zap,
+  Activity, Bot, Cpu, Radar, RefreshCw, Satellite, Send, ShieldAlert, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -309,6 +310,9 @@ export default function Jarvis() {
           <p className="text-sm mt-2" style={{ color: 'var(--jv-muted)' }}>
             El núcleo JARVIS solo responde al administrador.
           </p>
+          <Link to="/" className="jv-btn mt-4">
+            <X size={14} /> Volver a la app
+          </Link>
         </div>
       </div>
     );
@@ -322,17 +326,22 @@ export default function Jarvis() {
           <div className="jv-kicker">Roset Ops Core · v{String(BUILD.sha || '').slice(0, 7) || 'dev'}</div>
           <h1 className="jv-title">JARVIS</h1>
         </div>
-        <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-muted)' }}>
-          <div style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
-            {clock.toLocaleTimeString('es-DO', { hour12: false })}
+        <div className="flex items-start gap-4">
+          <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-muted)' }}>
+            <div style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
+              {clock.toLocaleTimeString('es-DO', { hour12: false })}
+            </div>
+            <div>{clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+            <div className="mt-1">
+              <StatusChip
+                status={navigator.onLine ? 'online' : 'fail'}
+                label={navigator.onLine ? 'Enlace activo' : 'Sin red'}
+              />
+            </div>
           </div>
-          <div>{clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-          <div className="mt-1">
-            <StatusChip
-              status={navigator.onLine ? 'online' : 'fail'}
-              label={navigator.onLine ? 'Enlace activo' : 'Sin red'}
-            />
-          </div>
+          <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
+            <X size={14} /> Salir
+          </Link>
         </div>
       </header>
 

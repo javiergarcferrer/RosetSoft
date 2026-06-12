@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { RefreshCw, Hourglass, LogOut } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
@@ -221,6 +221,19 @@ function ProtectedApp() {
     <AppProvider>
       <Gate>
         <Routes>
+          {/* JARVIS — full-screen command center. Lives OUTSIDE Layout on
+              purpose: opening it hides the sidebar and app chrome entirely
+              (the page owns the whole viewport and its own scrolling); its
+              header carries the exit back to the app. Needs its own
+              Suspense — Layout's boundary doesn't wrap it. */}
+          <Route
+            path="jarvis"
+            element={(
+              <Suspense fallback={<div style={{ height: '100%', background: '#000' }} />}>
+                <Jarvis />
+              </Suspense>
+            )}
+          />
           <Route element={<Layout />}>
             <Route index element={<RoleHome />} />
             <Route path="chats" element={<Chats />} />
@@ -244,9 +257,6 @@ function ProtectedApp() {
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
-            {/* JARVIS — the admin ops HUD: integration health, deploy
-                telemetry and the Claude uplink console. */}
-            <Route path="jarvis" element={<Jarvis />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
             {/* Catálogos — the brand-catalog section: an index of brands, each
                 with its own page + import manner. /admin/catalog (the old
