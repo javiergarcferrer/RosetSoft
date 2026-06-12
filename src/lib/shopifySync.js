@@ -43,6 +43,10 @@ export async function saveShopifyConfig({ domain, clientId, clientSecret, store 
   if (!cid || !csec) {
     throw new Error('Ingresa el Client ID y el Client secret de la app (Dev Dashboard → tu app → Settings).');
   }
+  // Password-manager autofill once stored an EMAIL here (same incident as the WhatsApp WABA id): Client IDs are long alphanumeric strings, so '@'/whitespace means a wrong paste.
+  if (cid && /[@\s]/.test(cid)) {
+    throw new Error('Eso no parece el Client ID — es el código alfanumérico de la página Settings de tu app en el Dev Dashboard (dev.shopify.com), no un correo.');
+  }
   // Shopify prefixes are documented: the app secret key (= client_secret) is
   // `shpss_…`; ACCESS TOKENS are `shpat_`/`shpca_`/`shppa_`. Only a pasted
   // access token is the wrong-credential mix-up worth catching here.

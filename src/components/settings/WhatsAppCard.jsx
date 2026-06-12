@@ -5,6 +5,7 @@ import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
 } from '../../lib/whatsapp.js';
 import SettingsSection from './SettingsSection.jsx';
+import CredentialInput from './CredentialInput.jsx';
 
 /**
  * WhatsApp Business (Cloud API) — connect the Meta app, register the webhook,
@@ -103,29 +104,25 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="wa-token">Token de acceso (permanente)</label>
-          {/* autoComplete="new-password" — the only value browsers actually
-              honor here. With "off", the password manager reads token+ID as a
-              login form and autofills the user's saved email/password into
-              them, which then gets SAVED as credentials (a real incident: the
-              dealer's email landed in the WABA field and broke the webhook
-              subscription). */}
-          <input id="wa-token" name="wa-access-token" type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)}
-            placeholder={connectedAt ? '•••••••• (guardado)' : 'EAA…'} className="input mt-1" autoComplete="new-password" />
+          {/* Credential fields render through CredentialInput — the anti-autofill
+              measures (and the incident that motivated them) are documented there. */}
+          <CredentialInput secret id="wa-token" name="wa-access-token" value={accessToken} onChange={(e) => setAccessToken(e.target.value)}
+            placeholder={connectedAt ? '•••••••• (guardado)' : 'EAA…'} className="input mt-1" />
         </div>
         <div>
           <label className="label" htmlFor="wa-phone-id">Phone Number ID</label>
-          <input id="wa-phone-id" name="wa-phone-number-id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
-            placeholder={connectedAt ? '(guardado)' : 'p. ej. 123456789012345'} className="input mt-1" inputMode="numeric" autoComplete="off" />
+          <CredentialInput id="wa-phone-id" name="wa-phone-number-id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
+            placeholder={connectedAt ? '(guardado)' : 'p. ej. 123456789012345'} className="input mt-1" inputMode="numeric" />
         </div>
         <div>
           <label className="label" htmlFor="wa-waba-id">WhatsApp Business Account ID</label>
-          <input id="wa-waba-id" name="wa-waba-account-id" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
-            placeholder={connectedAt ? '(guardado)' : 'p. ej. 109876543210987'} className="input mt-1" inputMode="numeric" autoComplete="off" />
+          <CredentialInput id="wa-waba-id" name="wa-waba-account-id" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
+            placeholder={connectedAt ? '(guardado)' : 'p. ej. 109876543210987'} className="input mt-1" inputMode="numeric" />
         </div>
         <div className="sm:col-span-2">
           <label className="label" htmlFor="wa-secret">App Secret (para recibir mensajes)</label>
-          <input id="wa-secret" name="wa-app-secret" type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)}
-            placeholder={connectedAt ? '•••••••• (guardado)' : '32 caracteres hexadecimales'} className="input mt-1" autoComplete="new-password" />
+          <CredentialInput secret id="wa-secret" name="wa-app-secret" value={appSecret} onChange={(e) => setAppSecret(e.target.value)}
+            placeholder={connectedAt ? '•••••••• (guardado)' : '32 caracteres hexadecimales'} className="input mt-1" />
           <p className="text-[11px] text-ink-500 mt-1">
             Meta → tu app → App settings → Basic → App Secret → Show. Firma los mensajes entrantes; sin él no se recibe nada.
           </p>
