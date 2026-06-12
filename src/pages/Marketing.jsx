@@ -79,11 +79,13 @@ export default function Marketing() {
   const [pubImageUrl, setPubImageUrl] = useState('');
   const [pubAt, setPubAt] = useState('');
   const [pubIg, setPubIg] = useState(false);
+  const [pubIgMode, setPubIgMode] = useState('feed'); // 'feed' | 'story'
   const [pubBusy, setPubBusy] = useState(false);
   const [pubNote, setPubNote] = useState(null);
   const publish = useCallback(async () => {
     const message = pubText.trim();
-    if (!message || pubBusy) return;
+    const storyOnly = pubIg && pubIgMode === 'story' && pubImageUrl.trim();
+    if ((!message && !storyOnly) || pubBusy) return;
     setPubBusy(true);
     setPubNote(null);
     try {
@@ -93,6 +95,7 @@ export default function Marketing() {
             message,
             imageUrl: pubImageUrl.trim() || undefined,
             scheduleAt: pubAt ? new Date(pubAt).getTime() : undefined,
+            igStory: pubIg && pubIgMode === 'story',
             targets: pubIg ? ['facebook', 'instagram'] : ['facebook'],
           },
         },
@@ -111,7 +114,7 @@ export default function Marketing() {
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubImageUrl, pubAt, pubIg, pubBusy, load]);
+  }, [pubText, pubImageUrl, pubAt, pubIg, pubIgMode, pubBusy, load]);
 
   // ── inline comment reply ─────────────────────────────────────────────
   const [replyTo, setReplyTo] = useState(null);
@@ -258,23 +261,35 @@ export default function Marketing() {
                       aria-label="Programar (solo Facebook)"
                     />
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <label className="flex items-center gap-2 text-sm text-ink-500">
                       <input type="checkbox" checked={pubIg} onChange={(e) => setPubIg(e.target.checked)} />
                       También en Instagram
                     </label>
+                    {pubIg && (
+                      <select
+                        className="input w-auto py-1 text-sm"
+                        value={pubIgMode}
+                        onChange={(e) => setPubIgMode(e.target.value)}
+                        aria-label="Tipo de publicación en Instagram"
+                      >
+                        <option value="feed">Feed</option>
+                        <option value="story">Story (24 h)</option>
+                      </select>
+                    )}
                     <button
                       type="button"
                       className="btn-brand ml-auto"
                       onClick={publish}
-                      disabled={!pubText.trim() || pubBusy}
+                      disabled={(!pubText.trim() && !(pubIg && pubIgMode === 'story' && pubImageUrl.trim())) || pubBusy}
                     >
                       {pubBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                       {pubAt ? 'Programar' : 'Publicar'}
                     </button>
                   </div>
                   <p className="text-xs text-ink-400">
-                    Facebook admite programar (10 min – 30 días). Instagram publica al momento y requiere imagen.
+                    Facebook admite programar (10 min – 30 días). Instagram publica al momento y
+                    requiere imagen{pubIg && pubIgMode === 'story' ? '; la Story dura 24 h y no lleva texto' : ''}.
                   </p>
                   {pubNote && (
                     <div className={`text-sm ${pubNote.ok ? 'text-emerald-700' : 'text-red-600'}`}>{pubNote.text}</div>

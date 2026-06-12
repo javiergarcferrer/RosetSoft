@@ -42,6 +42,8 @@ type PublishBody = {
   imageUrl?: string;
   /** JS-ms timestamp; FB only (10 min – 30 days out). Absent = publish now. */
   scheduleAt?: number;
+  /** Publish the IG side as a 24h Story (image only, no caption) instead of a feed post. */
+  igStory?: boolean;
   targets?: Array<'facebook' | 'instagram'>;
 };
 type Body = {
@@ -271,11 +273,15 @@ Deno.serve(async (req) => {
   // Per-target results: one network failing doesn't waste the other's post.
   if (body.publish) {
     const message = String(body.publish.message || '').trim();
-    if (!message) return json({ ok: false, error: 'mensaje requerido' }, 400);
     const targets = body.publish.targets?.length ? body.publish.targets : ['facebook' as const];
     const link = String(body.publish.link || '').trim();
     const imageUrl = String(body.publish.imageUrl || '').trim();
     const scheduleAt = Number(body.publish.scheduleAt) || 0;
+    const igStory = !!body.publish.igStory;
+    // A Story carries no caption — an image-only IG Story is a valid publish
+    // with no message; everything else still requires text.
+    const storyOnly = igStory && !targets.includes('facebook');
+    if (!message && !(storyOnly && imageUrl)) return json({ ok: false, error: 'mensaje requerido' }, 400);
 
     if (scheduleAt) {
       const min = Date.now() + 10 * 60_000;
@@ -312,7 +318,11 @@ Deno.serve(async (req) => {
         results.instagram = { ok: false, error: 'Instagram no admite programación por API — publícalo al momento' };
       } else {
         try {
-          const c = await graphPost(`${cfg.ig_user_id}/media`, pageToken, { image_url: imageUrl, caption: message });
+          // Feed post = image + caption; Story = image only, 24h, no caption.
+          const params = igStory
+            ? { media_type: 'STORIES', image_url: imageUrl }
+            : { image_url: imageUrl, caption: message };
+          const c = await graphPost(`${cfg.ig_user_id}/media`, pageToken, params);
           const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: String(c?.id || '') });
           results.instagram = { ok: true, id: p?.id };
         } catch (e) {

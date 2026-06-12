@@ -193,7 +193,10 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [x] Cycle B — campaign pause/resume in MARKETING (post-restructure home):
   campaigns edge now carries id+status+nested 28d insights; setCampaignStatus
   mode accepts only ACTIVE|PAUSED; two-step confirm in the row UI.
-- [ ] Cycle C — IG Stories publishing (media_type=STORIES) from the composer.
+- [x] Cycle C — IG Stories from the Marketing composer (media_type=STORIES,
+  image-only 24h; story-only publishes don't demand a caption). FULL-FEATURE
+  LOOP COMPLETE — remaining Meta surface needs Advanced Access (DMs) or has a
+  better owner (catalog feeds = Shopify channel).
 - [x] Restructure — JARVIS is now the read-only BRIEFING surface (KPI brief +
   sparks + ads↔ventas + WhatsApp 7d brief + link out); ACTING on Meta moved to
   the new /marketing page (Ventas nav group): composer, comment replies,
