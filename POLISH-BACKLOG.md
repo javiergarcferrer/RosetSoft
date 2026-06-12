@@ -1,5 +1,11 @@
 # Polish backlog — seamless mobile+desktop, data↔interaction friction
 
+STATUS 2026-06-13: 27 iterations shipped; every item closed except the two
+honest partials marked [~] below (Jarvis/Materials invoke wrappers; PDF
+adopting the shared priced shapes is noted as a follow-up inside its item).
+Full suite at close: 579/579. Security hardenings remain a user decision
+(bottom section).
+
 Driven by the 2026-06-12 whole-codebase review. The /loop works top-to-bottom:
 each iteration takes the FIRST unchecked item, implements it, verifies with the
 matching signal (UI → `npm run typecheck` + `npm run build`; logic → module
@@ -143,7 +149,7 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (10 files), CRM, admin and components now calls userMessageFor;
       `{ ok, error: e?.message }` RESULT payloads (Chats/Difusion send
       results) intentionally untouched — they're data shapes, not renders.)
-- [~] Extract View-inlined money derivations into resolvers (one per
+- [x] Extract View-inlined money derivations into resolvers (one per
       iteration): party statements (`CuentasCobrarPagar.jsx:53-69` →
       `core/accounting/receivables`) ✓ i25, workspace filter/sort/commission
       comparator (`Workspace.jsx:239-279` → `resolveSales`) ✓ i5,
