@@ -139,8 +139,11 @@ export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf 
  *     window — the per-format hint below says so before the dealer sends.
  * Owns the in-flight/result state so the chip strip never has to lay out an
  * error message.
+ *
+ * Exported: the mobile chat mode (QuoteBuilder's ChatPaneCard) opens this
+ * same modal from its action strip, so the send flow has ONE implementation.
  */
-function SendQuoteModal({ open, onClose, customer, quote, settings, onUpdateQuote, buildPdf }) {
+export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpdateQuote, buildPdf }) {
   const [state, setState] = useState('idle'); // idle | sending | sent | error
   const [msg, setMsg] = useState('');
   const [format, setFormat] = useState('link'); // 'link' | 'pdf'

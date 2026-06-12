@@ -265,7 +265,10 @@ export default function TotalsDock({
     // field being typed into); `data-kb-keep` lifts the dock above the keyboard
     // instead when ITS OWN adjustment inputs (discount % / envío / courtesy) are
     // focused, so they stay visible while editing.
-    <div data-kb-keep className="fixed bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
+    // bottom-14 under md: the mobile ModeBar (compose / client / chat) owns
+    // the physical bottom edge there — the dock stacks directly above it.
+    // From md: up there is no ModeBar, so the dock returns to bottom-0.
+    <div data-kb-keep className="fixed bottom-14 md:bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
       {/* Safe-area apron — a white fill that spills BELOW the dock to the
           physical screen edge. If iOS lays the standalone viewport SHORT (a
           legacy / cached black-translucent install, before the status-bar=black
@@ -276,10 +279,11 @@ export default function TotalsDock({
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-24 bg-white" />
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
-          behind it in the PWA. pb-safe-standalone fills the home-indicator inset
-          with white ONLY when installed as a PWA — in a Safari tab the browser
-          toolbar owns that strip, so no padding is added there (no dead space). */}
-      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop pb-safe-standalone">
+          behind it in the PWA. md:pb-safe-standalone fills the home-indicator
+          inset with white ONLY when installed as a PWA AND the dock sits at the
+          physical bottom (md+) — under md the ModeBar below the dock carries
+          that inset instead, so padding here would just be dead space. */}
+      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop md:pb-safe-standalone">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}

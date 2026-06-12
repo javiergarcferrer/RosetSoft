@@ -319,7 +319,7 @@ function MainContent() {
   );
 }
 
-function useMediaQuery(query) {
+export function useMediaQuery(query) {
   const [matches, setMatches] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(query).matches : false
   );

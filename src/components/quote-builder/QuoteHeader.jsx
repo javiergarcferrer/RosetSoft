@@ -218,8 +218,11 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
 }
 
 function ViewToggle({ view, onChange }) {
+  // Hidden under md: the mobile bottom ModeBar owns mode switching there
+  // (compose / client / chat) — keeping this pair too would be a second,
+  // partial switcher fighting over the same state.
   return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
+    <div className="hidden md:inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
       <button
         type="button"
         onClick={() => onChange('compose')}

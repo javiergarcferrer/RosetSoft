@@ -29,15 +29,22 @@ import {
  *
  * `contact` is a customer or professional row; `contactKind` says which, so
  * the outbound log links the right CRM column.
+ *
+ * `variant`: 'card' (default) is the collapsible embed described above;
+ * 'pane' renders the SAME thread + send wiring as an always-open pane that
+ * fills its parent (no card chrome, no collapse header) — the mobile chat
+ * mode of the quote workspace. One component so the two surfaces can't
+ * drift in how they send / mark read.
  */
 const POLL_MS = 10000;
 
-export default function ContactChatCard({ contact, contactKind, quoteId = null }) {
+export default function ContactChatCard({ contact, contactKind, quoteId = null, variant = 'card' }) {
   const { profileId, settings } = useApp();
   const connected = !!settings?.whatsappConnectedAt;
   const key = phoneKey(contact?.phone);
+  const pane = variant === 'pane';
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(pane);
   // Optimistic outbound rows, dropped once the server-logged row arrives.
   const [pending, setPending] = useState([]);
 
@@ -104,6 +111,79 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
     ...link,
   };
 
+  // The thread + send wiring, shared verbatim by both variants.
+  const threadEl = thread && (
+    <ChatThread
+      contact={threadContact}
+      thread={thread}
+      connected={connected}
+      showHeader={false}
+      onSend={async (text, replyTo) => {
+        const draft = draftOutboundMessage({
+          phone: contact.phone, text, profileId,
+          customerId: link.customerId, professionalId: link.professionalId,
+        });
+        setPending((rows) => [...rows, draft]);
+        const res = await sendWhatsappText({ to: contact.phone, text, replyTo, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendMedia={async (file, caption, replyTo) => {
+        const res = await sendWhatsappMedia({ to: contact.phone, file, caption, replyTo, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendTemplate={async ({ template, params, lang }) => {
+        const res = await sendWhatsappTemplate({ to: contact.phone, template, params, lang, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onReact={async (m, emoji) => {
+        const res = await sendWhatsappReaction({ to: contact.phone, messageId: m.waId, emoji, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendInteractive={async (spec) => {
+        const res = await sendWhatsappInteractive({ to: contact.phone, ...spec, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendLocation={async (spec) => {
+        const res = await sendWhatsappLocation({ to: contact.phone, ...spec, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendContact={async (spec) => {
+        const res = await sendWhatsappContact({ to: contact.phone, ...spec, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSendProducts={async ({ items, names, text }) => {
+        const res = await sendWhatsappProducts({ to: contact.phone, items, names, text, ...link })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+      onSaveContact={async (spec) => {
+        const res = await saveChatContact({ ...spec, profileId })
+          .catch((e) => ({ ok: false, error: e?.message }));
+        invalidate();
+        return res;
+      }}
+    />
+  );
+
+  if (pane) {
+    return <div className="h-full min-h-0 flex flex-col">{threadEl}</div>;
+  }
+
   return (
     <div className="card overflow-hidden">
       <button
@@ -133,73 +213,9 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
         />
       </button>
 
-      {open && thread && (
+      {open && (
         <div className="flex flex-col h-[28rem] border-t border-ink-100">
-          <ChatThread
-            contact={threadContact}
-            thread={thread}
-            connected={connected}
-            showHeader={false}
-            onSend={async (text, replyTo) => {
-              const draft = draftOutboundMessage({
-                phone: contact.phone, text, profileId,
-                customerId: link.customerId, professionalId: link.professionalId,
-              });
-              setPending((rows) => [...rows, draft]);
-              const res = await sendWhatsappText({ to: contact.phone, text, replyTo, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendMedia={async (file, caption, replyTo) => {
-              const res = await sendWhatsappMedia({ to: contact.phone, file, caption, replyTo, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendTemplate={async ({ template, params, lang }) => {
-              const res = await sendWhatsappTemplate({ to: contact.phone, template, params, lang, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onReact={async (m, emoji) => {
-              const res = await sendWhatsappReaction({ to: contact.phone, messageId: m.waId, emoji, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendInteractive={async (spec) => {
-              const res = await sendWhatsappInteractive({ to: contact.phone, ...spec, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendLocation={async (spec) => {
-              const res = await sendWhatsappLocation({ to: contact.phone, ...spec, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendContact={async (spec) => {
-              const res = await sendWhatsappContact({ to: contact.phone, ...spec, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSendProducts={async ({ items, names, text }) => {
-              const res = await sendWhatsappProducts({ to: contact.phone, items, names, text, ...link })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-            onSaveContact={async (spec) => {
-              const res = await saveChatContact({ ...spec, profileId })
-                .catch((e) => ({ ok: false, error: e?.message }));
-              invalidate();
-              return res;
-            }}
-          />
+          {threadEl}
         </div>
       )}
     </div>

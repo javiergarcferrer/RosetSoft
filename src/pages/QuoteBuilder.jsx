@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Share2, Plus, Loader2 } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, Send } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -24,7 +24,11 @@ import { ProjectPaletteContext } from '../components/quote-builder/ProjectPalett
 import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.jsx';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
+import { displayPhone } from '../lib/phone.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
+import ModeBar from '../components/quote-builder/ModeBar.jsx';
+import { useMediaQuery } from '../components/Layout.jsx';
+import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
@@ -524,9 +528,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // the header, and the pdfjs-dist dependency itself. The quote
   // builder now stays focused on quote construction; price-list lookup
   // happens outside the app.
-  const [view, setView] = useState('compose'); // 'compose' | 'client'
+  const [view, setView] = useState('compose'); // 'compose' | 'client' | 'chat'
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+
+  // 'chat' is mobile-only (the bottom ModeBar's third tab — desktop has the
+  // inline chat card instead). If the viewport grows past md while chat is
+  // active, fall back to compose so the desktop layout never strands on a
+  // mode it has no switcher for.
+  const isMobile = !useMediaQuery('(min-width: 768px)');
+  useEffect(() => {
+    if (!isMobile && view === 'chat') setView('compose');
+  }, [isMobile, view]);
 
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
@@ -616,11 +629,23 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      <div className="mb-5">
-        <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
-      </div>
+      {/* The stepper steps aside in chat mode — on a phone every vertical
+          pixel there belongs to the conversation. */}
+      {view !== 'chat' && (
+        <div className="mb-5">
+          <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
+        </div>
+      )}
 
-      {view === 'client' ? (
+      {view === 'chat' ? (
+        <ChatPaneCard
+          quote={quote}
+          customer={customer}
+          settings={settings}
+          onUpdateQuote={hx(updateQuote)}
+          buildPdf={generatePdf}
+        />
+      ) : view === 'client' ? (
         <ClientPreview
           quote={quote}
           settings={settings}
@@ -707,8 +732,11 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               answer the client being quoted without leaving the workspace.
               Sits right under the line items (above Notas) so it's in reach
               while quoting. Renders only with a customer phone + the
-              Business API connected. */}
-          <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} />
+              Business API connected. Desktop-only: on a phone the bottom
+              ModeBar's WhatsApp tab owns the conversation full-screen. */}
+          <div className="hidden md:block">
+            <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} />
+          </div>
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
@@ -716,29 +744,38 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      {/* Bottom clearance for the fixed dock. The app shell (Layout MainContent)
-          already pads the page bottom by the home-indicator safe area + 1.5rem,
-          so this only adds the remaining dock height — NOT another safe-area
-          inset. (Re-adding it double-counted the home indicator, leaving a dead
-          gap under the bar.) Matches the collapsed bar: amount + DOP line. */}
-      <div className="h-12" aria-hidden />
+      {/* Bottom clearance for the fixed chrome. The app shell (Layout
+          MainContent) already pads the page bottom by the home-indicator safe
+          area + 1.5rem, so this only adds the remaining height — NOT another
+          safe-area inset. (Re-adding it double-counted the home indicator,
+          leaving a dead gap under the bar.) Under md the ModeBar (3.5rem)
+          stacks beneath the dock, so the clearance grows to dock + bar; in
+          chat mode the dock is hidden and only the bar needs clearing. */}
+      <div className={view === 'chat' ? 'h-14 md:h-0' : 'h-[6.5rem] md:h-12'} aria-hidden />
 
-      {/* Persistent totals dock — pinned to the bottom of the screen at every
-          width, replacing the old desktop right-rail and the mobile totals bar. */}
-      <TotalsDock
-        quote={quote}
-        rateLocked={rateState.locked}
-        totals={totals}
-        totalsRange={totalsRange}
-        professional={professional}
-        onUpdateQuote={hx(updateQuote)}
-        onExport={exportPdf}
-        exporting={exporting}
-        onPrint={printPdf}
-        printing={printing}
-        onShare={shareQuote}
-        sharing={sharing}
-      />
+      {/* Persistent totals dock — pinned above the ModeBar on phones, at the
+          screen bottom from md: up. Hidden in chat mode: the conversation's
+          composer owns the bottom edge there, and a money bar over a chat
+          would just crowd the keyboard. */}
+      {view !== 'chat' && (
+        <TotalsDock
+          quote={quote}
+          rateLocked={rateState.locked}
+          totals={totals}
+          totalsRange={totalsRange}
+          professional={professional}
+          onUpdateQuote={hx(updateQuote)}
+          onExport={exportPdf}
+          exporting={exporting}
+          onPrint={printPdf}
+          printing={printing}
+          onShare={shareQuote}
+          sharing={sharing}
+        />
+      )}
+
+      {/* Mobile mode switcher — compose / client preview / WhatsApp chat. */}
+      <ModeBar view={view} onChange={setView} customer={customer} />
 
       <CatalogPicker
         open={catalogOpen}
@@ -825,6 +862,78 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The mobile WhatsApp mode — the quote customer's conversation as the page's
+ * main surface (ModeBar's third tab). Reuses ContactChatCard's send wiring
+ * (variant="pane") so this surface and the desktop inline card can't drift,
+ * and tops it with the quote-specific action: "Enviar cotización" opens the
+ * SAME link-or-PDF modal as the header chip (one send implementation). When
+ * a prerequisite is missing (connection, customer, phone) the pane explains
+ * the next step instead of rendering dead air.
+ */
+function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
+  const [sendOpen, setSendOpen] = useState(false);
+  const connected = !!settings?.whatsappConnectedAt;
+  const phone = customer?.phone || '';
+
+  let hint = null;
+  if (!connected) {
+    hint = (
+      <>
+        WhatsApp Business no está conectado. Actívalo en{' '}
+        <Link to="/settings" className="underline font-medium text-ink-700">Configuración → WhatsApp</Link>{' '}
+        para chatear con el cliente desde aquí.
+      </>
+    );
+  } else if (!customer) {
+    hint = <>Asigna un cliente a la cotización (chip <strong>Cliente</strong>, arriba) para abrir su conversación de WhatsApp.</>;
+  } else if (!phone) {
+    hint = <>{customer.name || customer.company || 'El cliente'} no tiene número de WhatsApp. Agrégalo con el chip <strong>Agregar WhatsApp</strong> del encabezado.</>;
+  }
+
+  if (hint) {
+    return (
+      <div className="card card-pad min-h-[16rem] flex flex-col items-center justify-center text-center gap-2.5">
+        <MessageCircle size={22} className="text-emerald-600/60" aria-hidden />
+        <p className="text-sm text-ink-500 max-w-sm">{hint}</p>
+      </div>
+    );
+  }
+
+  return (
+    // Fills the viewport between the header above and the ModeBar below.
+    // 100dvh minus the fixed chrome (topbar + page padding + header + bar);
+    // the min-h floor keeps the composer usable on short landscape phones.
+    <div className="card overflow-hidden flex flex-col h-[calc(100dvh-21rem)] min-h-[24rem]">
+      <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-ink-400 min-w-0 truncate">
+          WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}
+        </span>
+        <button
+          type="button"
+          onClick={() => setSendOpen(true)}
+          className="btn-ghost text-xs shrink-0 text-emerald-700"
+          title="Enviar la cotización por WhatsApp (enlace o PDF)"
+        >
+          <Send size={12} /> Enviar cotización
+        </button>
+      </div>
+      <div className="flex-1 min-h-0">
+        <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} variant="pane" />
+      </div>
+      <SendQuoteModal
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        customer={customer}
+        quote={quote}
+        settings={settings}
+        onUpdateQuote={onUpdateQuote}
+        buildPdf={buildPdf}
+      />
     </div>
   );
 }
