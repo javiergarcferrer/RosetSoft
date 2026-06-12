@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, UserSquare2, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown,
-  ExternalLink, FileText, SearchX, Trash2, Megaphone,
+  Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Mail,
+  MessageCircle, Phone, SearchX, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
+import {
+  Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot,
+} from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { waDigits } from '../lib/phone.js';
 import { resolveProfessionalsList } from '../core/quote/views/lists.js';
 
 const SORT_OPTIONS = [
@@ -32,117 +36,6 @@ const STATUS_LABELS = {
   declined: 'Rechazadas',
   archived: 'Archivadas',
 };
-
-// Borderless input that reads exactly like the cell text until focused —
-// the "viewing IS editing" core of the sheet.
-const CELL_CLS = 'w-full bg-transparent text-sm text-ink-900 placeholder:text-ink-300 '
-  + 'px-1 py-0.5 -mx-1 rounded-md border-0 focus:outline-none focus:bg-white '
-  + 'focus:ring-2 focus:ring-brand-400/70 focus:shadow-sm transition-shadow';
-
-/** Move focus to the same column on another row (Enter / Shift+Enter). */
-function focusCell(row, col) {
-  const el = document.querySelector(`[data-cell="${row}:${col}"]`);
-  if (el) { el.focus(); el.select?.(); }
-}
-
-/**
- * One spreadsheet cell. Holds its own draft while focused (so a live-query
- * repaint can't clobber typing), commits on blur when the value actually
- * changed, reverts on Escape, and hops rows on Enter. `onCommit` may return
- * false to reject the edit (e.g. blank name) — the draft snaps back.
- */
-function Cell({ value, onCommit, row, col, type = 'text', inputMode, placeholder, align = '', label }) {
-  const [draft, setDraft] = useState(value ?? '');
-  const [focused, setFocused] = useState(false);
-  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
-
-  async function commit() {
-    setFocused(false);
-    if (String(draft) === String(value ?? '')) return;
-    const ok = await onCommit(draft);
-    if (ok === false) setDraft(value ?? '');
-  }
-
-  return (
-    <input
-      data-cell={row != null ? `${row}:${col}` : undefined}
-      type={type}
-      inputMode={inputMode}
-      className={`${CELL_CLS} ${align}`}
-      value={draft}
-      placeholder={placeholder}
-      aria-label={label}
-      onFocus={(e) => { setFocused(true); e.target.select(); }}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const next = row + (e.shiftKey ? -1 : 1);
-          e.currentTarget.blur();
-          if (row != null) focusCell(next, col);
-        } else if (e.key === 'Escape') {
-          const el = e.currentTarget;
-          setDraft(value ?? '');
-          requestAnimationFrame(() => el.blur());
-        }
-      }}
-    />
-  );
-}
-
-/**
- * Sortable column header. Clicking an inactive column sorts by it (text
- * columns ascending, numeric descending — "biggest first" is what you want
- * from a count); clicking the active one flips direction. Shares the SAME
- * sort state as the SortMenu in the search header, so the two affordances
- * can never disagree.
- */
-function SortableTh({ label, sortKey, sort, onSort, numeric = false, className = '' }) {
-  const active = sort.key === sortKey;
-  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <th
-      className={className}
-      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(active
-          ? { key: sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
-          : { key: sortKey, dir: numeric ? 'desc' : 'asc' })}
-        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
-          numeric ? 'w-full justify-end' : ''
-        } ${active ? 'text-ink-900' : ''}`}
-        title={`Ordenar por ${label}`}
-      >
-        {label}
-        <Icon
-          size={11}
-          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
-          aria-hidden
-        />
-      </button>
-    </th>
-  );
-}
-
-/** Amber dot the maintenance views key on: this row is missing contact data. */
-function ContactGapDot({ rollup }) {
-  if (!rollup?.incomplete) return null;
-  const missing = [
-    rollup.missingEmail ? 'correo' : null,
-    rollup.missingPhone ? 'teléfono' : null,
-  ].filter(Boolean).join(' y ');
-  return (
-    <span
-      className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
-      title={`Faltan datos de contacto: ${missing}`}
-      role="img"
-      aria-label={`Faltan datos de contacto: ${missing}`}
-    />
-  );
-}
 
 /**
  * Professionals — an Excel-like sheet over the full search/filter header.
@@ -214,7 +107,8 @@ export default function Professionals() {
       await db.professionals.update(p.id, { name, updatedAt: Date.now() });
       return true;
     }
-    await db.professionals.update(p.id, { [field]: String(raw).trim(), updatedAt: Date.now() });
+    const value = field === 'notes' ? String(raw) : String(raw).trim();
+    await db.professionals.update(p.id, { [field]: value, updatedAt: Date.now() });
     return true;
   }
 
@@ -237,6 +131,7 @@ export default function Professionals() {
       company: String(draft.company || '').trim(),
       email: String(draft.email || '').trim(),
       phone: String(draft.phone || '').trim(),
+      address: '',
       notes: '',
       createdAt: now,
       updatedAt: now,
@@ -586,41 +481,38 @@ function MobileNewCard({ onCreate }) {
   );
 }
 
-/**
- * In-place notes editor for the dropdown panel — same draft-while-focused /
- * commit-on-blur semantics as a sheet Cell, textarea-shaped. Notes were the
- * one Professional field the sheet couldn't reach.
- */
-function NotesArea({ value, onCommit, name }) {
-  const [draft, setDraft] = useState(value ?? '');
-  const [focused, setFocused] = useState(false);
-  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+/** tel: / mailto: / wa.me quick action — contacting the referrer IS the job. */
+function QuickAction({ href, icon: Icon, label, external }) {
   return (
-    <textarea
-      rows={2}
-      className="mt-1 w-full resize-y rounded-lg border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
-      placeholder="Notas internas — preferencias, acuerdos, contexto…"
-      aria-label={`Notas de ${name}`}
-      value={draft}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        setFocused(false);
-        if (String(draft) !== String(value ?? '')) onCommit(draft);
-      }}
-    />
+    <a
+      href={href}
+      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]"
+    >
+      <Icon size={13} aria-hidden /> {label}
+    </a>
   );
 }
 
-// The dropdown body — a quiet rollup band (counts, totals, last activity),
-// the professional's quotes grouped by status (each group under its status
-// pill with the quote rows reading #number · customer · last-touched ·
-// total), then the in-place notes editor. Shared by the mobile card and the
-// desktop sheet row so both surfaces stay identical.
+// The dropdown body — quick contact actions, a quiet rollup band (counts,
+// totals, last activity), the professional's quotes grouped by status (each
+// group under its status pill with the quote rows reading #number ·
+// customer · last-touched · total), then the in-place dirección + notes
+// fields. Shared by the mobile card and the desktop sheet row so both
+// surfaces stay identical.
 function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
   const groups = rollup?.groups || [];
+  const wa = waDigits(pro.phone);
   return (
     <div className="px-4 py-3 space-y-3">
+      {/* Quick actions — only the channels this professional actually has. */}
+      {(wa || pro.phone || pro.email) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {wa && <QuickAction href={`https://wa.me/${wa}`} icon={MessageCircle} label="WhatsApp" external />}
+          {pro.phone && <QuickAction href={`tel:${pro.phone}`} icon={Phone} label="Llamar" />}
+          {pro.email && <QuickAction href={`mailto:${pro.email}`} icon={Mail} label="Correo" />}
+        </div>
+      )}
       {groups.length === 0 ? (
         <div className="flex items-center gap-2 py-2 text-xs text-ink-400">
           <FileText size={13} className="flex-shrink-0" />
@@ -683,10 +575,16 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
           ))}
         </>
       )}
-      <div>
-        <span className="eyebrow-xs text-ink-400">Notas</span>
-        <NotesArea value={pro.notes} onCommit={(v) => onCommit('notes', v)} name={pro.name} />
-      </div>
+      {/* Dirección is a real field (the seed's DIRECCIÓN column now lives
+          here, not in notes); notes is for remarks only. */}
+      <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} />
+      <PanelTextArea
+        label="Notas"
+        value={pro.notes}
+        onCommit={(v) => onCommit('notes', v)}
+        placeholder="Notas internas — preferencias, acuerdos, contexto…"
+        name={pro.name}
+      />
       <div className="flex items-center justify-between gap-2">
         <Link
           to={`/professionals/${pro.id}`}

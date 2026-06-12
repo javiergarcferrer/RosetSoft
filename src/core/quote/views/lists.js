@@ -247,7 +247,7 @@ export const PROFESSIONAL_QUOTE_STATUS_ORDER = ['accepted', 'sent', 'draft', 'de
 //   tabs       — primary "saved views" strip with counts (activity + data
 //                completeness dimensions), counted off ALL professionals so
 //                each tab reads "how many would I see if I tapped this".
-//   filterDefs — secondary-filter config for FilterPopover/FilterChips
+//   filterDefs — secondary-filter config for the FilterBar pills
 //                (empresa, datos de contacto, última cotización, alta).
 //   rows       — the professionals that survive tab + filters + search, in
 //                sort order.
@@ -411,7 +411,7 @@ export function resolveProfessionalsList({
 
     if (!needle) return true;
     const corpus = [
-      p.name, p.company, p.email, p.phone, p.notes,
+      p.name, p.company, p.email, p.phone, p.address, p.notes,
       p.number != null ? `#${p.number}` : '',
     ].map((s) => String(s || '').toLowerCase()).join(' ');
     if (corpus.includes(needle)) return true;
@@ -439,6 +439,208 @@ export function resolveProfessionalsList({
   });
 
   return { rollupByProfessionalId, rows, tabs, filterDefs, totalCount: pros.length };
+}
+
+// ViewModel for pages/Customers.jsx — the seller-facing client directory.
+// Same projection contract as resolveProfessionalsList (raw rows + resolved
+// q/tab/filters/sort in; rollups, tabs, filterDefs and the result rows out),
+// but the dimensions are the ones a SELLER works by:
+//   • Pipeline abierto — clients with a live draft/sent quote: the follow-up
+//     list, with openTotal so the biggest deals on the table surface first.
+//   • Con compras — clients with accepted quotes (lifetime value): who has
+//     actually bought, for repeat business and preferential treatment.
+//   • Sin actividad — on file but never quoted: the outreach pool.
+//   • Datos incompletos — no email or phone: unreachable, fix before selling.
+//   • Fiscal (RNC) — a B01 e-CF needs the client's RNC; the filter shows who
+//     still needs it collected before invoicing.
+// Money routes through the shared totals helpers so figures agree to the
+// cent with CustomerDetail, the quotes list and the dashboard.
+export function resolveCustomersList({
+  customers, quotes, lines,
+  q = '', tab = 'all', filters = {}, sort = { key: 'name', dir: 'asc' },
+}) {
+  const quotesByCustomer = new Map();
+  for (const qu of quotes || []) {
+    if (!qu.customerId) continue;
+    if (!quotesByCustomer.has(qu.customerId)) quotesByCustomer.set(qu.customerId, []);
+    quotesByCustomer.get(qu.customerId).push(qu);
+  }
+
+  const rows0 = customers || [];
+  const linesByQuote = linesByQuoteId(lines);
+  const rollupByCustomerId = new Map();
+  for (const c of rows0) {
+    const qs = quotesByCustomer.get(c.id) || [];
+    const byStatus = new Map();
+    let openCount = 0;
+    let openTotal = 0;
+    let acceptedTotal = 0;
+    let lastActivityAt = 0;
+    for (const qu of qs) {
+      const total = quoteGrandTotal(qu, linesByQuote.get(qu.id) || []);
+      const status = qu.status || 'draft';
+      if (!byStatus.has(status)) byStatus.set(status, []);
+      byStatus.get(status).push({ quote: qu, total });
+      // "Open pipeline" = quotes still in play (draft or sent) — the deals a
+      // seller can still move; accepted/declined/archived are settled.
+      if (status === 'draft' || status === 'sent') {
+        openCount += 1;
+        openTotal += total;
+      }
+      if (status === 'accepted') acceptedTotal += total;
+      if ((qu.updatedAt || 0) > lastActivityAt) lastActivityAt = qu.updatedAt || 0;
+    }
+    const groups = [];
+    for (const status of PROFESSIONAL_QUOTE_STATUS_ORDER) {
+      const entries = byStatus.get(status);
+      if (!entries || entries.length === 0) continue;
+      entries.sort((a, b) => (b.quote.updatedAt || 0) - (a.quote.updatedAt || 0));
+      groups.push({ status, entries });
+    }
+    const missingEmail = !String(c.email || '').trim();
+    const missingPhone = !String(c.phone || '').trim();
+    rollupByCustomerId.set(c.id, {
+      count: qs.length,
+      groups,
+      openCount,
+      openTotal,
+      acceptedTotal,
+      lastActivityAt,
+      missingEmail,
+      missingPhone,
+      incomplete: missingEmail || missingPhone,
+      hasRnc: !!String(c.rnc || '').trim(),
+    });
+  }
+
+  let pipelineN = 0;
+  let buyersN = 0;
+  let idleN = 0;
+  let incompleteN = 0;
+  for (const c of rows0) {
+    const r = rollupByCustomerId.get(c.id);
+    if (r.openCount > 0) pipelineN += 1;
+    if (r.acceptedTotal > 0) buyersN += 1;
+    if (r.count === 0) idleN += 1;
+    if (r.incomplete) incompleteN += 1;
+  }
+  const tabs = [
+    { key: 'all', label: 'Todos', count: rows0.length },
+    { key: 'pipeline', label: 'Pipeline abierto', count: pipelineN },
+    { key: 'buyers', label: 'Con compras', count: buyersN },
+    { key: 'idle', label: 'Sin actividad', count: idleN },
+    { key: 'incomplete', label: 'Datos incompletos', count: incompleteN },
+  ];
+
+  // Ciudad options: distinct non-empty cities actually on file — sellers
+  // plan deliveries and visits by city, and the dropdown never lists a city
+  // nobody lives in.
+  const citySeen = new Map();
+  for (const c of rows0) {
+    const raw = String(c.city || '').trim();
+    if (!raw) continue;
+    const key = raw.toLowerCase();
+    if (!citySeen.has(key)) citySeen.set(key, raw);
+  }
+  const filterDefs = [
+    {
+      key: 'city',
+      label: 'Ciudad',
+      type: 'select',
+      placeholder: 'Todas',
+      options: [...citySeen.entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    },
+    {
+      key: 'contact',
+      label: 'Datos de contacto',
+      type: 'select',
+      placeholder: 'Todos',
+      options: [
+        { value: 'sin-correo', label: 'Sin correo' },
+        { value: 'sin-telefono', label: 'Sin teléfono' },
+        { value: 'incompleto', label: 'Faltan datos' },
+        { value: 'completo', label: 'Contacto completo' },
+      ],
+    },
+    {
+      key: 'fiscal',
+      label: 'Fiscal',
+      type: 'select',
+      placeholder: 'Todos',
+      options: [
+        { value: 'con-rnc', label: 'Con RNC' },
+        { value: 'sin-rnc', label: 'Sin RNC' },
+      ],
+    },
+    { key: 'activity', label: 'Última cotización', type: 'date-range' },
+    { key: 'created', label: 'Fecha de alta', type: 'date-range' },
+  ];
+
+  const parseRange = (r) => ({
+    from: r?.from ? Date.parse(`${r.from}T00:00:00`) : null,
+    to: r?.to ? Date.parse(`${r.to}T23:59:59.999`) : null,
+  });
+  const activity = parseRange(filters.activity);
+  const created = parseRange(filters.created);
+
+  const needle = String(q || '').trim().toLowerCase();
+  const needleDigits = needle.replace(/\D/g, '');
+
+  const matched = rows0.filter((c) => {
+    const r = rollupByCustomerId.get(c.id);
+    if (tab === 'pipeline' && r.openCount === 0) return false;
+    if (tab === 'buyers' && r.acceptedTotal <= 0) return false;
+    if (tab === 'idle' && r.count > 0) return false;
+    if (tab === 'incomplete' && !r.incomplete) return false;
+
+    if (filters.city && String(c.city || '').trim().toLowerCase() !== filters.city) return false;
+    if (filters.contact === 'sin-correo' && !r.missingEmail) return false;
+    if (filters.contact === 'sin-telefono' && !r.missingPhone) return false;
+    if (filters.contact === 'incompleto' && !r.incomplete) return false;
+    if (filters.contact === 'completo' && r.incomplete) return false;
+    if (filters.fiscal === 'con-rnc' && !r.hasRnc) return false;
+    if (filters.fiscal === 'sin-rnc' && r.hasRnc) return false;
+
+    if (activity.from != null || activity.to != null) {
+      if (!r.lastActivityAt) return false;
+      if (activity.from != null && r.lastActivityAt < activity.from) return false;
+      if (activity.to != null && r.lastActivityAt > activity.to) return false;
+    }
+    if (created.from != null && (c.createdAt || 0) < created.from) return false;
+    if (created.to != null && (c.createdAt || 0) > created.to) return false;
+
+    if (!needle) return true;
+    const corpus = [
+      c.name, c.company, c.contactName, c.email, c.phone,
+      c.rnc, c.address, c.city, c.notes,
+    ].map((s) => String(s || '').toLowerCase()).join(' ');
+    if (corpus.includes(needle)) return true;
+    if (needleDigits.length >= 3) {
+      const phoneDigits = String(c.phone || '').replace(/\D/g, '');
+      if (phoneDigits.includes(needleDigits)) return true;
+    }
+    return false;
+  });
+
+  const mul = sort.dir === 'asc' ? 1 : -1;
+  const rows = [...matched].sort((a, b) => {
+    const ra = rollupByCustomerId.get(a.id);
+    const rb = rollupByCustomerId.get(b.id);
+    if (sort.key === 'pipeline') return (ra.openTotal - rb.openTotal) * mul;
+    if (sort.key === 'lifetime') return (ra.acceptedTotal - rb.acceptedTotal) * mul;
+    if (sort.key === 'activity') return (ra.lastActivityAt - rb.lastActivityAt) * mul;
+    if (sort.key === 'created') return ((a.createdAt || 0) - (b.createdAt || 0)) * mul;
+    if (sort.key === 'company') {
+      return String(a.company || '').toLowerCase()
+        .localeCompare(String(b.company || '').toLowerCase()) * mul;
+    }
+    return String(a.name || '').toLowerCase()
+      .localeCompare(String(b.name || '').toLowerCase()) * mul;
+  });
+
+  return { rollupByCustomerId, rows, tabs, filterDefs, totalCount: rows0.length };
 }
 
 // ViewModel for pages/Orders.jsx. Pure projection off the raw rows: the

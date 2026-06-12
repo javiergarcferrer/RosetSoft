@@ -92,6 +92,32 @@ export default function SortMenu({ sortOptions, sort, onSortChange }) {
               </button>
             );
           })}
+
+          {/* Explicit direction control — tap-the-current-key-to-flip still
+              works, but this makes the direction discoverable instead of a
+              hidden gesture. */}
+          <div className="mt-1.5 border-t border-ink-100 px-2 pt-1.5 grid grid-cols-2 gap-1" role="group" aria-label="Dirección">
+            <button
+              type="button"
+              aria-pressed={dir === 'asc'}
+              onClick={() => { onSortChange({ key: current.key, dir: 'asc' }); setOpen(false); }}
+              className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                dir === 'asc' ? 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200' : 'text-ink-500 hover:bg-ink-50 hover:text-ink-800'
+              }`}
+            >
+              <ArrowUp size={12} /> Ascendente
+            </button>
+            <button
+              type="button"
+              aria-pressed={dir === 'desc'}
+              onClick={() => { onSortChange({ key: current.key, dir: 'desc' }); setOpen(false); }}
+              className={`inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                dir === 'desc' ? 'bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200' : 'text-ink-500 hover:bg-ink-50 hover:text-ink-800'
+              }`}
+            >
+              <ArrowDown size={12} /> Descendente
+            </button>
+          </div>
         </div>
       )}
     </div>

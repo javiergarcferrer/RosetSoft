@@ -745,6 +745,8 @@ export interface Professional {
   company?: string;
   email?: string;
   phone?: string;
+  /** Delivery/visit address — kept separate from freeform `notes`. */
+  address?: string;
   notes?: string;
   createdAt?: number;
   updatedAt?: number;

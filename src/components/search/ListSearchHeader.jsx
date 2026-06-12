@@ -1,8 +1,7 @@
 import { Search } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import FilterTabs from './FilterTabs.jsx';
-import FilterPopover from './FilterPopover.jsx';
-import FilterChips from './FilterChips.jsx';
+import FilterBar from './FilterBar.jsx';
 import SortMenu from './SortMenu.jsx';
 
 /**
@@ -16,18 +15,18 @@ import SortMenu from './SortMenu.jsx';
  *
  * Anatomy (top → bottom), each part rendered only if its config is supplied:
  *   1. Search field — debounced, leading search icon, enterKeyHint="search".
- *   2. Filtros button — opens a sheet (mobile) / popover (desktop) of
- *      secondary filters (select / date-range / text).
- *   3. Sort menu — pick the sort key + flip direction.
- *   4. Filter tabs — the primary status dimension as a scrollable segmented
+ *   2. Sort menu — pick the sort key + explicit asc/desc control.
+ *   3. Filter tabs — the primary status dimension as a scrollable segmented
  *      "saved views" strip (Todas / Borrador / …).
- *   5. Applied-filter chips — one removable token per active secondary
- *      filter + "Limpiar todo".
- *   6. Result count — quiet "N resultados" line.
+ *   4. Filter pills — ONE always-visible pill per secondary filter
+ *      (select / date-range / text), each opening its own popover (desktop)
+ *      or sheet (mobile). Changes apply INSTANTLY — no Aplicar step — and an
+ *      applied pill reads `Label: value ×` (see FilterBar).
+ *   5. Result count — quiet "N resultados" line.
  *
- * Layout: search grows to fill the row; Filtros + Sort sit to its right and
- * wrap below it on a narrow phone (flex-wrap), so nothing is ever clipped.
- * The tab strip lives on its own row beneath, scrollable on mobile.
+ * Layout: search grows to fill the row; Sort sits to its right and wraps
+ * below it on a narrow phone (flex-wrap), so nothing is ever clipped. The
+ * tab strip and the pills row live beneath, scrollable/wrapping on mobile.
  *
  * PROP API (the public surface — keep this stable for the other views):
  *
@@ -105,14 +104,6 @@ export default function ListSearchHeader({
           />
         </div>
 
-        {hasFilters && (
-          <FilterPopover
-            filters={filters}
-            activeFilters={activeFilters}
-            onFiltersChange={onFiltersChange}
-          />
-        )}
-
         {hasSort && (
           <SortMenu sortOptions={sortOptions} sort={sort} onSortChange={onSortChange} />
         )}
@@ -123,9 +114,9 @@ export default function ListSearchHeader({
         <FilterTabs tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />
       )}
 
-      {/* Row 3 — applied secondary-filter chips (renders nothing if none). */}
+      {/* Row 3 — per-filter pills, instant apply (renders nothing if none). */}
       {hasFilters && (
-        <FilterChips
+        <FilterBar
           filters={filters}
           activeFilters={activeFilters}
           onFiltersChange={onFiltersChange}
