@@ -175,8 +175,9 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [x] Pass 2 — ads↔sales bridge: "Ads ↔ ventas" weekly table in Pulso comercial
   (spend by LOCAL-day bucketing of adsDaily next to quotes created/accepted,
   same Monday weeks as the cadence; resolveAdsSalesWeeks, TZ-pinned test).
-- [ ] Pass 3 — publishing: schedule/publish FB+IG posts from JARVIS
-  (pages_manage_posts / instagram_content_publish are now on the app).
+- [x] Pass 3 — publishing: composer in the Social panel — FB Page posts now or
+  scheduled (10min-30d, Graph /feed), IG image posts immediate (container flow;
+  API has no IG scheduling). Per-target results, partial success allowed.
 - [ ] Pass 4 — IG comments/DM triage into the CRM inbox (instagram_manage_*).
 - [ ] Blocked on user: regenerate system-user token with the page/IG/ads
   scopes (use cases were just added) and paste it into the WhatsApp card —

@@ -11,6 +11,9 @@
 //                          Page (+ page token), its IG business account and
 //                          the ad account, persist everything, stamp settings.
 //   { test: true }       → verify the stored credentials still answer.
+//   { publish: {...} }   → post to the FB Page (now or scheduled 10min–30d)
+//                          and/or IG (image required, no scheduling) — one
+//                          result per target, partial success allowed.
 //   { snapshot: true }   → one consolidated read: profile counts, IG daily
 //                          reach (28d), recent IG posts, daily ad results
 //                          (28d) + per-campaign rollup, scheduled posts.
@@ -33,7 +36,15 @@ const GRAPH = 'https://graph.facebook.com/v23.0';
 const TEAM = 'team';
 
 type LinkBody = { token?: string; pageId?: string; adAccountId?: string };
-type Body = { link?: LinkBody; test?: boolean; snapshot?: boolean };
+type PublishBody = {
+  message?: string;
+  link?: string;
+  imageUrl?: string;
+  /** JS-ms timestamp; FB only (10 min – 30 days out). Absent = publish now. */
+  scheduleAt?: number;
+  targets?: Array<'facebook' | 'instagram'>;
+};
+type Body = { link?: LinkBody; test?: boolean; snapshot?: boolean; publish?: PublishBody };
 
 /** Translate Meta's token-death message into the action that fixes it. */
 function friendly(msg: string): string {
@@ -48,6 +59,20 @@ async function graph(path: string, token: string, params: Record<string, string>
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set('access_token', token);
   const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) {
+    throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+  }
+  return data;
+}
+
+/** POST a Graph endpoint (form-encoded); throws the API's error message. */
+async function graphPost(path: string, token: string, params: Record<string, string>) {
+  const res = await fetch(`${GRAPH}/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ ...params, access_token: token }),
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.error) {
     throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
@@ -201,6 +226,64 @@ Deno.serve(async (req) => {
     } catch (e) {
       return json({ configured: true, ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
+  }
+
+  // ── publish: FB Page post (now or scheduled) + optional IG image post ──
+  // Per-target results: one network failing doesn't waste the other's post.
+  if (body.publish) {
+    const message = String(body.publish.message || '').trim();
+    if (!message) return json({ ok: false, error: 'mensaje requerido' }, 400);
+    const targets = body.publish.targets?.length ? body.publish.targets : ['facebook' as const];
+    const link = String(body.publish.link || '').trim();
+    const imageUrl = String(body.publish.imageUrl || '').trim();
+    const scheduleAt = Number(body.publish.scheduleAt) || 0;
+
+    if (scheduleAt) {
+      const min = Date.now() + 10 * 60_000;
+      const max = Date.now() + 30 * 86_400_000;
+      if (scheduleAt < min || scheduleAt > max) {
+        return json({ ok: false, error: 'La programación debe quedar entre 10 minutos y 30 días desde ahora.' });
+      }
+    }
+
+    const results: Record<string, { ok: boolean; id?: string; error?: string }> = {};
+
+    if (targets.includes('facebook')) {
+      try {
+        const params: Record<string, string> = { message };
+        if (link) params.link = link;
+        if (scheduleAt) {
+          params.published = 'false';
+          params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
+        }
+        const r = await graphPost(`${cfg.page_id}/feed`, pageToken, params);
+        results.facebook = { ok: true, id: r?.id };
+      } catch (e) {
+        results.facebook = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
+      }
+    }
+
+    if (targets.includes('instagram')) {
+      // IG Content Publishing requires media and has no native scheduling.
+      if (!cfg.ig_user_id) {
+        results.instagram = { ok: false, error: 'Sin cuenta de Instagram vinculada' };
+      } else if (!imageUrl) {
+        results.instagram = { ok: false, error: 'Instagram requiere una imagen (URL pública)' };
+      } else if (scheduleAt) {
+        results.instagram = { ok: false, error: 'Instagram no admite programación por API — publícalo al momento' };
+      } else {
+        try {
+          const c = await graphPost(`${cfg.ig_user_id}/media`, pageToken, { image_url: imageUrl, caption: message });
+          const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: String(c?.id || '') });
+          results.instagram = { ok: true, id: p?.id };
+        } catch (e) {
+          results.instagram = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
+        }
+      }
+    }
+
+    const anyOk = Object.values(results).some((r) => r.ok);
+    return json({ ok: anyOk, results });
   }
 
   if (body.snapshot) {

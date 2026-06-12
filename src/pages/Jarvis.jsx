@@ -422,6 +422,50 @@ export default function Jarvis() {
     }
   }, [refreshSettings]);
 
+  // Publishing composer — posts to the Page (now/scheduled) and/or IG.
+  const [pubText, setPubText] = useState('');
+  const [pubImageUrl, setPubImageUrl] = useState('');
+  const [pubAt, setPubAt] = useState('');
+  const [pubIg, setPubIg] = useState(false);
+  const [pubBusy, setPubBusy] = useState(false);
+  const [pubNote, setPubNote] = useState(null); // { ok, text }
+  const publishPost = useCallback(async () => {
+    const message = pubText.trim();
+    if (!message || pubBusy) return;
+    setPubBusy(true);
+    setPubNote(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: {
+          publish: {
+            message,
+            imageUrl: pubImageUrl.trim() || undefined,
+            scheduleAt: pubAt ? new Date(pubAt).getTime() : undefined,
+            targets: pubIg ? ['facebook', 'instagram'] : ['facebook'],
+          },
+        },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      const results = data?.results || {};
+      const parts = Object.entries(results).map(([t, r]) => (
+        r.ok
+          ? `${t === 'facebook' ? 'FB' : 'IG'} ✓${pubAt && t === 'facebook' ? ' programado' : ''}`
+          : `${t === 'facebook' ? 'FB' : 'IG'}: ${r.error}`
+      ));
+      setPubNote({ ok: !!data?.ok, text: parts.join(' · ') || data?.error || 'sin respuesta' });
+      if (data?.ok) {
+        setPubText('');
+        setPubImageUrl('');
+        setPubAt('');
+        loadSocial(); // the scheduled list should reflect it
+      }
+    } catch (e) {
+      setPubNote({ ok: false, text: e?.message || 'Fallo al publicar' });
+    } finally {
+      setPubBusy(false);
+    }
+  }, [pubText, pubImageUrl, pubAt, pubIg, pubBusy, loadSocial]);
+
   const whatsappLinked = !!settings?.whatsappConnectedAt;
   const metaAutoTried = useRef(false);
   useEffect(() => {
@@ -1033,6 +1077,65 @@ export default function Jarvis() {
                   Secciones sin respuesta: {Object.keys(social.errors).join(', ')} — el resto es dato real.
                 </div>
               )}
+
+              {/* composer — publish to the Page now/scheduled, optionally IG */}
+              <div className="pt-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
+                <div className="jv-kicker mb-2">Publicar</div>
+                <div className="space-y-2">
+                  <input
+                    className="jv-input"
+                    value={pubText}
+                    onChange={(e) => setPubText(e.target.value)}
+                    placeholder="Texto de la publicación…"
+                    maxLength={2000}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      className="jv-input"
+                      style={{ flex: '2 1 12rem', width: 'auto' }}
+                      value={pubImageUrl}
+                      onChange={(e) => setPubImageUrl(e.target.value)}
+                      placeholder="URL de imagen (obligatoria para IG)"
+                      spellCheck={false}
+                    />
+                    <input
+                      className="jv-input"
+                      style={{ flex: '1 1 10rem', width: 'auto' }}
+                      type="datetime-local"
+                      value={pubAt}
+                      onChange={(e) => setPubAt(e.target.value)}
+                      aria-label="Programar (solo Facebook)"
+                    />
+                    <button
+                      type="button"
+                      className={`jv-btn flex-none ${pubIg ? 'jv-online' : ''}`}
+                      onClick={() => setPubIg((v) => !v)}
+                      aria-pressed={pubIg}
+                    >
+                      IG {pubIg ? '✓' : ''}
+                    </button>
+                    <button
+                      type="button"
+                      className="jv-btn jv-btn-primary flex-none"
+                      onClick={publishPost}
+                      disabled={!pubText.trim() || pubBusy}
+                    >
+                      {pubBusy ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                      {pubAt ? 'Programar' : 'Publicar'}
+                    </button>
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--jv-faint)' }}>
+                    Facebook admite programar (10 min – 30 días); Instagram publica al
+                    momento y requiere imagen. Siempre a la página {social.pageName || ''}
+                    {social.igUsername ? ` / @${social.igUsername}` : ''}.
+                  </p>
+                  {pubNote && (
+                    <div className="text-xs" style={{ color: pubNote.ok ? 'var(--jv-success)' : 'var(--jv-danger)' }}>
+                      {pubNote.text}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </section>
