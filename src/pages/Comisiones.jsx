@@ -204,6 +204,7 @@ export default function Comisiones() {
                 <thead>
                   <tr>
                     <th>Vendedor</th>
+                    <th className="text-right">%</th>
                     <th className="text-right whitespace-nowrap">Ventas</th>
                     <th className="text-right whitespace-nowrap">Base</th>
                     <th className="text-right whitespace-nowrap">Comisión</th>
@@ -213,10 +214,11 @@ export default function Comisiones() {
                 </thead>
                 <tbody>
                   {sales.vendedorRows.length === 0 ? (
-                    <tr><td colSpan={6} className="py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
+                    <tr><td colSpan={7} className="py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
                   ) : sales.vendedorRows.map((r) => (
                     <tr key={r.user.id} className="hover:bg-ink-50 transition-colors">
                       <td className="font-medium text-ink-900">{r.user.name}</td>
+                      <td className="text-right tabular-nums text-ink-500">{r.pct}%</td>
                       <td className="text-right tabular-nums">{r.count}</td>
                       <td className="text-right tabular-nums">{usd(r.base)}</td>
                       <td className="text-right tabular-nums font-semibold">{usd(r.commission)}</td>
