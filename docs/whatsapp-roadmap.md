@@ -5,17 +5,13 @@ features", inside ALCOVER's chat surfaces. This doc is the durable memory of
 that loop: what exists, what the API allows, what's queued. Update it every
 iteration (check items off, re-prioritize) — don't re-derive it.
 
-## Coordination rule (active)
-A parallel branch is doing a "complete WhatsApp implementation" (user notice,
-2026-06-12; not yet pushed). Until it lands in `main`:
-- **Do NOT edit**: `src/pages/Chats.jsx`, `src/pages/Difusion.jsx`,
-  `src/components/whatsapp/*`, `src/components/settings/WhatsAppCard.jsx`,
-  `src/lib/whatsapp.js`, `src/core/crm/*`, `supabase/functions/wa-*`,
-  `tests/whatsapp.test.js`, or add `wa_*` migrations.
-- Each iteration: `git fetch origin --prune`, diff remote branches for wa-file
-  changes, and re-audit `main` — the branch may land features below; check them
-  off instead of re-building them.
-- New-file-only work is safe meanwhile.
+## Coordination rule
+The parallel "complete WhatsApp implementation" branch **landed in `main` as
+`007c6fe`** (2026-06-12 03:29 UTC) — the hard file ban is lifted. Standing
+practice for every iteration (parallel sessions remain a fact here): `git
+fetch origin --prune`, scan unmerged remote branches for WhatsApp-file diffs
+before editing those files, and re-audit `main` first — land features by
+checking them off, not re-building them.
 
 ## Scopes we hold (constrain everything)
 - Cloud API token (System User): `whatsapp_business_messaging` +
@@ -46,20 +42,27 @@ A parallel branch is doing a "complete WhatsApp implementation" (user notice,
 - Webhook: HMAC-verified, all inbound types parsed, media persisted at
   delivery, async status errors translated, phone→customer/professional link,
   self-healing app+WABA subscription.
+- (007c6fe) Send **reactions** (emoji row on bubbles, remove supported) and
+  **quoted replies** (bubble action + composer preview, context on text/media).
+- (007c6fe) **Quick-reply button** messages (text + ≤3 buttons, 20 chars).
+- (007c6fe) **Business profile editor** in Settings (about/description/
+  address/email/website via wa-send).
+- (007c6fe) Quote templates with the link on a **URL button**; template picker
+  in Settings stores name+lang+vars+button metadata; dynamic-button templates
+  excluded from campaigns.
 
 ### 🟢 Buildable now (scopes suffice) — the backlog
 P1 — chat parity (per-message actions & composer):
-1. Send **reactions** (`type:reaction`, emoji on long-press/hover menu).
-2. Send **quoted replies** (`context.message_id`; needs reply-target state in
-   composer + `context` passthrough in wa-send).
+1. ~~Send reactions~~ ✅ 007c6fe.
+2. ~~Send quoted replies~~ ✅ 007c6fe.
 3. **Typing indicator + auto-read** on thread open/compose (wa-send already
    accepts `markRead.typing`; UI never sends it).
 4. **Voice notes**: record (MediaRecorder, audio/ogg;codecs=opus) → send as
    audio. Render side exists.
 5. **Stickers**: render inbound webp stickers properly (today: generic kind),
    send static stickers.
-6. **Interactive messages**: reply buttons (≤3), list menus (≤10), CTA-URL
-   buttons. Webhook already parses the replies — only the send side missing.
+6. **Interactive messages, rest**: list menus (≤10 rows) + CTA-URL free-form
+   messages (quick-reply buttons ✅ 007c6fe; webhook parses all replies).
 7. **Location**: send (map-pick or fixed store location); render inbound pin
    on a map link (today: text only).
 8. **Contacts (vCard)** send — e.g. share the assigned salesperson card.
@@ -68,10 +71,9 @@ P2 — business-app productivity:
 10. **Labels** on conversations + filter chips (new table; CRM-local — Cloud
     API has no label sync).
 11. **Archive / pin / mark-unread** conversation actions (local columns).
-12. **Business profile editor** in Settings (about, address, email, website,
-    vertical, photo — `/{phone-id}/whatsapp_business_profile`).
-13. Template richness: **media headers** (IMAGE/DOCUMENT) + **buttons**
-    (quick-reply / URL / phone / copy-code) in create + send.
+12. ~~Business profile editor~~ ✅ 007c6fe (photo + vertical still open).
+13. Template richness, rest: **media headers** (IMAGE/DOCUMENT) + quick-reply/
+    phone/copy-code buttons (URL buttons ✅ 007c6fe).
 14. **Greeting / away auto-replies** (webhook-side, business-hours aware —
     official app's "herramientas de mensajería").
 15. Global **message search** (today only conversation-name search).
@@ -98,3 +100,5 @@ P3 — growth & ops:
 
 ## Iteration log
 - 2026-06-12 · audit + this roadmap; code work deferred (coordination rule).
+- 2026-06-12 · 007c6fe landed mid-iteration — matrix updated, ban lifted. Next
+  iteration starts at P1 #3 (typing/auto-read) then #4 (voice notes).
