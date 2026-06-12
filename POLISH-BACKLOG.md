@@ -18,9 +18,10 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       renders there and back-navigation context is kept.
 
 ## Mobile/desktop (phone-first surfaces first)
-- [ ] Comisiones mobile cards: `src/pages/Comisiones.jsx` has 4 h-scroll
+- [x] Comisiones mobile cards: `src/pages/Comisiones.jsx` has 4 h-scroll
       tables and is THE employee surface. Add `md:hidden` per-sale card list
       mirroring the `Quotes.jsx` dual pattern; keep tables `hidden md:block`.
+      (i2 — all 4 tables; payout pills unified in SellerStatus/ProStatus.)
 - [ ] Shared responsive row primitive: extract `RowCards`/`ResponsiveTable`
       (components/) from the Quotes/Orders card pattern, then apply to
       `accounting/Expenses.jsx`, `CuentasCobrarPagar.jsx`, `Importaciones.jsx`,

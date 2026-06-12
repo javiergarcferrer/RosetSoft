@@ -16,6 +16,24 @@ import { resolveSales, resolveCommissionsOverview } from '../core/bridge/index.j
 /** How far back the cycle picker reaches (current + 5 closed cycles). */
 const CYCLE_HISTORY = 6;
 
+/** Seller-stream payout state — one source for the tables AND the mobile cards. */
+function SellerStatus({ e, className = '' }) {
+  return e.sellerPaid
+    ? <span className={`status-pill status-pill-active ${className}`}>Pagada</span>
+    : e.sellerPayable
+      ? <span className={`status-pill status-pill-deposito ${className}`}>Por pagar</span>
+      : <span className={`text-[11px] text-ink-400 italic ${className}`}>Tras depósito</span>;
+}
+
+/** Professional-stream payout state (non-trade). */
+function ProStatus({ e, className = '' }) {
+  return e.proPaid
+    ? <span className={`status-pill status-pill-active ${className}`}>Pagada</span>
+    : e.proOwed
+      ? <span className={`status-pill status-pill-deposito ${className}`}>Por pagar</span>
+      : <span className={`text-[11px] text-ink-400 italic ${className}`}>No exigible</span>;
+}
+
 /**
  * Comisiones — the bridge surface between a CRM sale and its accounting payout.
  * Role-adaptive: an employee sees only their own earned commissions; admins and
@@ -126,7 +144,24 @@ export default function Comisiones() {
           {myEntries.length === 0 ? (
             <EmptyState icon={Wallet} title="Sin comisiones en el ciclo" description="Tus ventas con comisión aparecerán aquí." />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            {/* Mobile: per-sale cards (same fields as the table). */}
+            <div className="md:hidden space-y-2">
+              {myEntries.map((e) => (
+                <div key={e.quote.id} className="card card-pad flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="tabular-nums font-medium text-ink-900">#{e.quote.number ?? '—'}</span>
+                    <SellerStatus e={e} />
+                  </div>
+                  <div className="text-sm text-ink-700 truncate">{e.customer?.name || '—'}</div>
+                  <div className="flex items-baseline justify-between text-sm tabular-nums">
+                    <span className="text-ink-500">{usd(e.base)} · {e.commissionPct}%</span>
+                    <span className="font-semibold text-ink-900">{usd(e.sellerReported)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -147,19 +182,14 @@ export default function Comisiones() {
                         <td className="text-right tabular-nums">{usd(e.base)}</td>
                         <td className="text-right tabular-nums">{e.commissionPct}%</td>
                         <td className="text-right tabular-nums font-semibold text-ink-900">{usd(e.sellerReported)}</td>
-                        <td>
-                          {e.sellerPaid
-                            ? <span className="status-pill status-pill-active">Pagada</span>
-                            : e.sellerPayable
-                              ? <span className="status-pill status-pill-deposito">Por pagar</span>
-                              : <span className="text-[11px] text-ink-400 italic">Tras depósito</span>}
-                        </td>
+                        <td><SellerStatus e={e} /></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       ) : (
@@ -199,7 +229,28 @@ export default function Comisiones() {
               <h2>Vendedores</h2>
               <span className="badge">{sales.vendedorRows.length}</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: one stacked row per seller. */}
+            <div className="md:hidden divide-y divide-ink-100">
+              {sales.vendedorRows.length === 0 ? (
+                <div className="px-4 py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</div>
+              ) : sales.vendedorRows.map((r) => (
+                <div key={r.user.id} className="px-4 py-3 flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-ink-900 truncate">{r.user.name}</span>
+                    <span className="text-xs text-ink-500 tabular-nums shrink-0">{r.pct}% · {r.count} venta{r.count === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm tabular-nums">
+                    <span className="text-ink-500">Base {usd(r.base)}</span>
+                    <span className="font-semibold text-ink-900">{usd(r.commission)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs tabular-nums">
+                    <span className="text-emerald-700">Pagado {usd(r.paid)}</span>
+                    <span className="font-medium text-amber-700">Pendiente {usd(r.pending)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="table">
                 <thead>
                   <tr>
@@ -237,7 +288,26 @@ export default function Comisiones() {
                 <h2>Profesionales</h2>
                 <span className="badge">{sales.profRows.length}</span>
               </div>
-              <div className="overflow-x-auto">
+              {/* Mobile: one stacked row per professional. */}
+              <div className="md:hidden divide-y divide-ink-100">
+                {sales.profRows.map((r) => (
+                  <div key={r.professional.id} className="px-4 py-3 flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-ink-900 truncate">{r.professional.name}</span>
+                      <span className="text-xs text-ink-500 tabular-nums shrink-0">{r.count} venta{r.count === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm tabular-nums">
+                      <span className="text-ink-500">Comisión</span>
+                      <span className="font-semibold text-ink-900">{usd(r.commission)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs tabular-nums">
+                      <span className="text-emerald-700">Pagado {usd(r.paid)}</span>
+                      <span className="font-medium text-amber-700">Pendiente {usd(r.pending)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
@@ -272,7 +342,45 @@ export default function Comisiones() {
               <h2>Detalle por venta</h2>
               <span className="badge">{sales.entries.length}</span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: per-sale cards with both commission streams. */}
+            <div className="md:hidden divide-y divide-ink-100">
+              {sales.entries.length === 0 ? (
+                <div className="px-4 py-8 text-center text-ink-400 text-sm">Sin ventas en el ciclo.</div>
+              ) : sales.entries.map((e) => (
+                <div key={e.quote.id} className="px-4 py-3 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link to={`/quotes/${e.quote.id}`} className="tabular-nums font-medium text-brand-600 hover:text-brand-700">
+                      #{e.quote.number ?? '—'}
+                    </Link>
+                    <span className="text-xs text-ink-500 tabular-nums">Base {usd(e.base)}</span>
+                  </div>
+                  <div className="text-sm text-ink-700 truncate">{e.customer?.name || '—'}</div>
+                  {e.creator && (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-ink-500 truncate">Vend. {e.creator.name}</span>
+                      <span className="whitespace-nowrap tabular-nums">
+                        <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
+                        <SellerStatus e={e} className="ml-2" />
+                      </span>
+                    </div>
+                  )}
+                  {e.professional && (e.trade ? (
+                    <div className="text-[11px] text-ink-500 italic">
+                      Prof. {e.professional.name} · Trade {e.decoratorPct}% ({usd(e.tradeDiscount)})
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-ink-500 truncate">Prof. {e.professional.name}</span>
+                      <span className="whitespace-nowrap tabular-nums">
+                        <span className="font-medium text-ink-900">{usd(e.proReported)}</span>
+                        <ProStatus e={e} className="ml-2" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
               <table className="table">
                 <thead>
                   <tr>
@@ -302,11 +410,7 @@ export default function Comisiones() {
                         {e.creator ? (
                           <>
                             <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
-                            {e.sellerPaid
-                              ? <span className="status-pill status-pill-active ml-2">Pagada</span>
-                              : e.sellerPayable
-                                ? <span className="status-pill status-pill-deposito ml-2">Por pagar</span>
-                                : <span className="text-[11px] text-ink-400 italic ml-2">Tras depósito</span>}
+                            <SellerStatus e={e} className="ml-2" />
                           </>
                         ) : <span className="text-ink-400">—</span>}
                       </td>
@@ -319,11 +423,7 @@ export default function Comisiones() {
                         ) : (
                           <>
                             <span className="font-medium text-ink-900">{usd(e.proReported)}</span>
-                            {e.proPaid
-                              ? <span className="status-pill status-pill-active ml-2">Pagada</span>
-                              : e.proOwed
-                                ? <span className="status-pill status-pill-deposito ml-2">Por pagar</span>
-                                : <span className="text-[11px] text-ink-400 italic ml-2">No exigible</span>}
+                            <ProStatus e={e} className="ml-2" />
                           </>
                         )}
                       </td>
