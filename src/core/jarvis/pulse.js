@@ -45,7 +45,8 @@ export function resolveBusinessPulse({ quotes = [], lines = [], now = Date.now()
 
   const funnel = FUNNEL_STAGES.map(({ key, label }) => {
     const qs = quotes.filter((q) => q.status === key);
-    return { key, label, count: qs.length, totalUsd: sumUsd(qs) };
+    // `to` deep-links the stage into the quotes list's status tab.
+    return { key, label, count: qs.length, totalUsd: sumUsd(qs), to: `/quotes?status=${key}` };
   });
   const maxUsd = Math.max(1, ...funnel.map((f) => f.totalUsd));
   for (const f of funnel) f.share = f.totalUsd / maxUsd;
@@ -157,9 +158,12 @@ export function resolveOpsFeed({ quotes = [], orders = [], customers = [], now =
 
   for (const q of quotes) {
     const name = quoteDisplayName(q, customersById.get(q.customerId) || null);
-    if (q.createdAt) events.push({ id: `q-new-${q.id}`, kind: 'quote', tone: 'muted', at: q.createdAt, text: `Cotización ${name} creada` });
-    if (q.sentAt) events.push({ id: `q-sent-${q.id}`, kind: 'sent', tone: 'accent', at: q.sentAt, text: `Cotización ${name} enviada` });
-    if (q.acceptedAt) events.push({ id: `q-acc-${q.id}`, kind: 'won', tone: 'success', at: q.acceptedAt, text: `Cotización ${name} aceptada` });
+    // `to` = the route the event reports on, so the feed is a drill-down,
+    // not a dead end.
+    const to = `/quotes/${q.id}`;
+    if (q.createdAt) events.push({ id: `q-new-${q.id}`, kind: 'quote', tone: 'muted', at: q.createdAt, text: `Cotización ${name} creada`, to });
+    if (q.sentAt) events.push({ id: `q-sent-${q.id}`, kind: 'sent', tone: 'accent', at: q.sentAt, text: `Cotización ${name} enviada`, to });
+    if (q.acceptedAt) events.push({ id: `q-acc-${q.id}`, kind: 'won', tone: 'success', at: q.acceptedAt, text: `Cotización ${name} aceptada`, to });
   }
   for (const o of orders) {
     if (o.createdAt) {
@@ -169,12 +173,13 @@ export function resolveOpsFeed({ quotes = [], orders = [], customers = [], now =
         tone: 'muted',
         at: o.createdAt,
         text: `Pedido ${o.name || (o.number != null ? `#${o.number}` : o.id)} abierto`,
+        to: `/orders/${o.id}`,
       });
     }
   }
   for (const c of customers) {
     if (c.createdAt) {
-      events.push({ id: `c-${c.id}`, kind: 'cliente', tone: 'muted', at: c.createdAt, text: `Cliente ${c.company || c.name || ''} registrado` });
+      events.push({ id: `c-${c.id}`, kind: 'cliente', tone: 'muted', at: c.createdAt, text: `Cliente ${c.company || c.name || ''} registrado`, to: `/customers/${c.id}` });
     }
   }
 

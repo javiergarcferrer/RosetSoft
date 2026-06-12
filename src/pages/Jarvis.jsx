@@ -687,14 +687,14 @@ export default function Jarvis() {
             {/* pipeline funnel — bar length is the money each stage holds */}
             <div className="space-y-1.5">
               {pulse.funnel.map((f) => (
-                <div key={f.key} className="jv-funnel-row">
+                <Link key={f.key} to={f.to} className="jv-funnel-row" title={`Abrir ${f.label.toLowerCase()} en Cotizaciones`}>
                   <span className="name">{f.label}</span>
                   <span className="n jv-mono">{f.count}</span>
                   <div className="bar">
                     <i className={f.key} style={{ width: `${Math.max(f.totalUsd > 0 ? 2 : 0, f.share * 100)}%` }} />
                   </div>
                   <span className="money jv-mono">{formatMoney(f.totalUsd)}</span>
-                </div>
+                </Link>
               ))}
             </div>
 
@@ -1010,11 +1010,19 @@ export default function Jarvis() {
                 </div>
               ))}
               {opsFeed.map((e) => (
-                <div key={e.id} className="trow">
-                  <span className={`tdot ${e.tone}`} />
-                  <span className="ttext">{e.text}</span>
-                  <span className="tago jv-mono">{e.ago || ''}</span>
-                </div>
+                e.to ? (
+                  <Link key={e.id} to={e.to} className="trow" title="Abrir">
+                    <span className={`tdot ${e.tone}`} />
+                    <span className="ttext">{e.text}</span>
+                    <span className="tago jv-mono">{e.ago || ''}</span>
+                  </Link>
+                ) : (
+                  <div key={e.id} className="trow">
+                    <span className={`tdot ${e.tone}`} />
+                    <span className="ttext">{e.text}</span>
+                    <span className="tago jv-mono">{e.ago || ''}</span>
+                  </div>
+                )
               ))}
               {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
