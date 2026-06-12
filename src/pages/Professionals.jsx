@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Trash2, Megaphone,
+  Plus, UserSquare2, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, ChevronDown,
+  ExternalLink, FileText, SearchX, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -15,8 +16,11 @@ import { resolveProfessionalsList } from '../core/quote/views/lists.js';
 
 const SORT_OPTIONS = [
   { key: 'name', label: 'Nombre A–Z' },
-  { key: 'quotes', label: 'Cotizaciones' },
   { key: 'company', label: 'Empresa' },
+  { key: 'quotes', label: 'Cotizaciones' },
+  { key: 'sales', label: 'Ventas aceptadas' },
+  { key: 'activity', label: 'Actividad reciente' },
+  { key: 'created', label: 'Fecha de alta' },
 ];
 
 // Section labels for the per-row quote dropdown — plural, mirroring
@@ -88,11 +92,66 @@ function Cell({ value, onCommit, row, col, type = 'text', inputMode, placeholder
 }
 
 /**
- * Professionals — an Excel-like sheet. Every cell is editable in place
- * (no modal): click and type, blur or Enter commits, Esc reverts,
- * Enter/Shift+Enter walk the column. The chevron drops down that
- * professional's quotes grouped by status, and the bottom row is a
- * permanently-open blank: type a name and the professional exists.
+ * Sortable column header. Clicking an inactive column sorts by it (text
+ * columns ascending, numeric descending — "biggest first" is what you want
+ * from a count); clicking the active one flips direction. Shares the SAME
+ * sort state as the SortMenu in the search header, so the two affordances
+ * can never disagree.
+ */
+function SortableTh({ label, sortKey, sort, onSort, numeric = false, className = '' }) {
+  const active = sort.key === sortKey;
+  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th
+      className={className}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(active
+          ? { key: sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: sortKey, dir: numeric ? 'desc' : 'asc' })}
+        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
+          numeric ? 'w-full justify-end' : ''
+        } ${active ? 'text-ink-900' : ''}`}
+        title={`Ordenar por ${label}`}
+      >
+        {label}
+        <Icon
+          size={11}
+          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
+          aria-hidden
+        />
+      </button>
+    </th>
+  );
+}
+
+/** Amber dot the maintenance views key on: this row is missing contact data. */
+function ContactGapDot({ rollup }) {
+  if (!rollup?.incomplete) return null;
+  const missing = [
+    rollup.missingEmail ? 'correo' : null,
+    rollup.missingPhone ? 'teléfono' : null,
+  ].filter(Boolean).join(' y ');
+  return (
+    <span
+      className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0"
+      title={`Faltan datos de contacto: ${missing}`}
+      role="img"
+      aria-label={`Faltan datos de contacto: ${missing}`}
+    />
+  );
+}
+
+/**
+ * Professionals — an Excel-like sheet over the full search/filter header.
+ * Every cell is editable in place (no modal): click and type, blur or Enter
+ * commits, Esc reverts, Enter/Shift+Enter walk the column. The header gives
+ * saved views (activity + data completeness), secondary filters (empresa /
+ * contacto / date ranges) and sort; the desktop column headers sort too.
+ * The chevron drops down that professional's quotes + notes, and the bottom
+ * row is a permanently-open blank: type a name and the professional exists.
  */
 export default function Professionals() {
   const { profileId } = useApp();
@@ -122,6 +181,8 @@ export default function Professionals() {
   );
 
   const [q, setQ] = useState('');
+  const [tab, setTab] = useState('all');
+  const [filters, setFilters] = useState({});
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
   // Which rows are dropped open. A Set so several professionals can be
   // compared side by side; toggled by the chevron (cells own the click).
@@ -136,35 +197,12 @@ export default function Professionals() {
     });
   }
 
-  const { rollupByProfessionalId } = useMemo(
-    () => resolveProfessionalsList({ professionals: pros, quotes, lines: allLines, customers }),
-    [pros, quotes, allLines, customers],
+  const { rollupByProfessionalId, rows, tabs, filterDefs } = useMemo(
+    () => resolveProfessionalsList({
+      professionals: pros, quotes, lines: allLines, customers, q, tab, filters, sort,
+    }),
+    [pros, quotes, allLines, customers, q, tab, filters, sort],
   );
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const rows = pros.filter((p) => {
-      if (!needle) return true;
-      return (
-        p.name?.toLowerCase().includes(needle) ||
-        p.company?.toLowerCase().includes(needle) ||
-        p.email?.toLowerCase().includes(needle)
-      );
-    });
-
-    const mul = sort.dir === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      if (sort.key === 'quotes') {
-        const ac = rollupByProfessionalId.get(a.id)?.count || 0;
-        const bc = rollupByProfessionalId.get(b.id)?.count || 0;
-        return (ac - bc) * mul;
-      }
-      if (sort.key === 'company') {
-        return (a.company || '').toLowerCase().localeCompare((b.company || '').toLowerCase()) * mul;
-      }
-      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
-    });
-  }, [pros, q, sort, rollupByProfessionalId]);
 
   // ── Sheet writes ───────────────────────────────────────────────────────────
   // One field per commit, straight to the row. The live query repaints the
@@ -225,6 +263,8 @@ export default function Professionals() {
     }
   }
 
+  const noMatches = loaded && pros.length > 0 && rows.length === 0;
+
   return (
     <>
       <PageHeader
@@ -256,11 +296,17 @@ export default function Professionals() {
             <ListSearchHeader
               searchValue={q}
               onSearchChange={setQ}
-              searchPlaceholder="Buscar profesionales…"
+              searchPlaceholder="Buscar por nombre, empresa, correo, teléfono o notas…"
+              tabs={tabs}
+              activeTab={tab}
+              onTabChange={setTab}
+              filters={filterDefs}
+              activeFilters={filters}
+              onFiltersChange={setFilters}
               sortOptions={SORT_OPTIONS}
               sort={sort}
               onSortChange={setSort}
-              resultCount={filtered.length}
+              resultCount={rows.length}
               resultNoun={['profesional', 'profesionales']}
             />
           )}
@@ -277,7 +323,8 @@ export default function Professionals() {
           {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops the
               quotes panel. Same commit semantics as the desktop grid. */}
           <div className="md:hidden space-y-2">
-            {filtered.map((p) => (
+            {noMatches && <NoMatchesCard />}
+            {rows.map((p) => (
               <MobileRow
                 key={p.id}
                 p={p}
@@ -297,16 +344,26 @@ export default function Professionals() {
               <thead>
                 <tr>
                   <th className="w-8"></th>
-                  <th>Nombre</th>
-                  <th>Empresa</th>
+                  <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={setSort} />
+                  <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
-                  <th className="text-right">Cotizaciones</th>
+                  <SortableTh label="Cotizaciones" sortKey="quotes" sort={sort} onSort={setSort} numeric className="text-right" />
                   <th className="w-10"></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p, i) => (
+                {noMatches && (
+                  <tr>
+                    <td colSpan={7}>
+                      <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
+                        <SearchX size={15} className="flex-shrink-0" aria-hidden />
+                        Sin resultados — ajusta la búsqueda o los filtros.
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {rows.map((p, i) => (
                   <SheetRow
                     key={p.id}
                     p={p}
@@ -318,13 +375,23 @@ export default function Professionals() {
                     onRemove={() => removePro(p)}
                   />
                 ))}
-                <NewSheetRow row={filtered.length} onCreate={createFromDraft} />
+                <NewSheetRow row={rows.length} onCreate={createFromDraft} />
               </tbody>
             </table>
           </div>
         </>
       )}
     </>
+  );
+}
+
+/** The "nothing survived the filters" hint, card-shaped for the mobile stack. */
+function NoMatchesCard() {
+  return (
+    <div className="card p-3 flex items-center gap-2 text-sm text-ink-400">
+      <SearchX size={15} className="flex-shrink-0" aria-hidden />
+      Sin resultados — ajusta la búsqueda o los filtros.
+    </div>
   );
 }
 
@@ -338,14 +405,17 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             type="button"
             onClick={onToggle}
             className="p-1 rounded text-ink-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
-            title={isOpen ? 'Ocultar cotizaciones' : 'Ver cotizaciones'}
+            title={isOpen ? 'Ocultar detalle' : 'Ver cotizaciones y notas'}
             aria-expanded={isOpen}
           >
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
         </td>
         <td className="font-medium max-w-[220px]">
-          <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+          <div className="flex items-center gap-1.5">
+            <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+            <ContactGapDot rollup={rollup} />
+          </div>
         </td>
         <td className="max-w-[200px]">
           <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
@@ -387,7 +457,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       {isOpen && (
         <tr>
           <td colSpan={7} className="!p-0 bg-ink-50/50">
-            <ProQuotesPanel pro={p} rollup={rollup} />
+            <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>
       )}
@@ -459,7 +529,10 @@ function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2 p-3">
         <div className="min-w-0 flex-1 space-y-0.5">
-          <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+          <div className="flex items-center gap-1.5">
+            <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+            <ContactGapDot rollup={rollup} />
+          </div>
           <div className="grid grid-cols-2 gap-x-2">
             <Cell value={p.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${p.name}`} align="text-[12px] text-ink-500" />
             <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${p.name}`} align="text-[12px] text-ink-500" />
@@ -474,14 +547,14 @@ function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
           onClick={onToggle}
           className="p-2 -mr-1 rounded text-ink-300 hover:text-brand-600 transition-colors shrink-0"
           aria-expanded={isOpen}
-          aria-label="Ver cotizaciones"
+          aria-label="Ver cotizaciones y notas"
         >
           <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
       {isOpen && (
         <div className="border-t border-ink-100">
-          <ProQuotesPanel pro={p} rollup={rollup} onRemove={onRemove} />
+          <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} onRemove={onRemove} />
         </div>
       )}
     </div>
@@ -513,11 +586,38 @@ function MobileNewCard({ onCreate }) {
   );
 }
 
-// The dropdown body — the professional's quotes grouped by status, each
-// group under its status pill with the quote rows reading #number ·
-// customer · last-touched · total. Shared by the mobile card and the
+/**
+ * In-place notes editor for the dropdown panel — same draft-while-focused /
+ * commit-on-blur semantics as a sheet Cell, textarea-shaped. Notes were the
+ * one Professional field the sheet couldn't reach.
+ */
+function NotesArea({ value, onCommit, name }) {
+  const [draft, setDraft] = useState(value ?? '');
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+  return (
+    <textarea
+      rows={2}
+      className="mt-1 w-full resize-y rounded-lg border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
+      placeholder="Notas internas — preferencias, acuerdos, contexto…"
+      aria-label={`Notas de ${name}`}
+      value={draft}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        if (String(draft) !== String(value ?? '')) onCommit(draft);
+      }}
+    />
+  );
+}
+
+// The dropdown body — a quiet rollup band (counts, totals, last activity),
+// the professional's quotes grouped by status (each group under its status
+// pill with the quote rows reading #number · customer · last-touched ·
+// total), then the in-place notes editor. Shared by the mobile card and the
 // desktop sheet row so both surfaces stay identical.
-function ProQuotesPanel({ pro, rollup, onRemove }) {
+function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
   const groups = rollup?.groups || [];
   return (
     <div className="px-4 py-3 space-y-3">
@@ -527,45 +627,66 @@ function ProQuotesPanel({ pro, rollup, onRemove }) {
           Sin cotizaciones asignadas.
         </div>
       ) : (
-        groups.map(({ status, entries }) => (
-          <div key={status}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`status-pill status-pill-${status}`}>
-                {STATUS_LABELS[status] || status}
+        <>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-500 tabular-nums">
+            <span>
+              <span className="font-semibold text-ink-700">{rollup.count}</span>
+              {' '}{rollup.count === 1 ? 'cotización' : 'cotizaciones'}
+            </span>
+            <span>Total {formatMoney(rollup.allTimeTotal, 'USD', { USD: 1 })}</span>
+            {rollup.acceptedTotal > 0 && (
+              <span className="text-emerald-700">
+                Aceptado {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
               </span>
-              <span className="eyebrow-xs text-ink-400 tabular-nums">
-                {entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}
-              </span>
-            </div>
-            <ul className="divide-y divide-ink-100 rounded-lg bg-white ring-1 ring-inset ring-ink-100 overflow-hidden">
-              {entries.map((e) => (
-                <li key={e.quote.id}>
-                  <Link
-                    to={`/quotes/${e.quote.id}`}
-                    className="flex items-center gap-3 px-3 py-2 hover:bg-brand-50/60 transition-colors group"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate text-ink-900 group-hover:text-brand-700 transition-colors">
-                        #{e.quote.number || '—'}
-                        {e.customer ? (
-                          <span className="text-ink-500 font-normal"> · {e.customer.company || e.customer.name}</span>
-                        ) : null}
-                      </div>
-                      <div className="text-[11px] text-ink-500 mt-0.5">
-                        Act. {formatDateTime(e.quote.updatedAt)}
-                      </div>
-                    </div>
-                    <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
-                      {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
-                    </div>
-                    <ExternalLink size={13} className="text-ink-300 group-hover:text-brand-600 flex-shrink-0 transition-colors" aria-hidden />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            )}
+            {rollup.lastActivityAt > 0 && (
+              <span>Últ. actividad {formatDateTime(rollup.lastActivityAt)}</span>
+            )}
           </div>
-        ))
+          {groups.map(({ status, entries }) => (
+            <div key={status}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`status-pill status-pill-${status}`}>
+                  {STATUS_LABELS[status] || status}
+                </span>
+                <span className="eyebrow-xs text-ink-400 tabular-nums">
+                  {entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}
+                </span>
+              </div>
+              <ul className="divide-y divide-ink-100 rounded-lg bg-white ring-1 ring-inset ring-ink-100 overflow-hidden">
+                {entries.map((e) => (
+                  <li key={e.quote.id}>
+                    <Link
+                      to={`/quotes/${e.quote.id}`}
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-brand-50/60 transition-colors group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate text-ink-900 group-hover:text-brand-700 transition-colors">
+                          #{e.quote.number || '—'}
+                          {e.customer ? (
+                            <span className="text-ink-500 font-normal"> · {e.customer.company || e.customer.name}</span>
+                          ) : null}
+                        </div>
+                        <div className="text-[11px] text-ink-500 mt-0.5">
+                          Act. {formatDateTime(e.quote.updatedAt)}
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
+                        {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                      </div>
+                      <ExternalLink size={13} className="text-ink-300 group-hover:text-brand-600 flex-shrink-0 transition-colors" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </>
       )}
+      <div>
+        <span className="eyebrow-xs text-ink-400">Notas</span>
+        <NotesArea value={pro.notes} onCommit={(v) => onCommit('notes', v)} name={pro.name} />
+      </div>
       <div className="flex items-center justify-between gap-2">
         <Link
           to={`/professionals/${pro.id}`}

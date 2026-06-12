@@ -237,44 +237,59 @@ export function resolveQuotesList({
 // section order on ProfessionalDetail so the two surfaces read the same way.
 export const PROFESSIONAL_QUOTE_STATUS_ORDER = ['accepted', 'sent', 'draft', 'declined', 'archived'];
 
-// ViewModel for pages/Professionals.jsx — the per-row dropdown that shows each
-// professional's quotes grouped by status. Pure projection: for every
-// professional it rolls their assigned quotes into ordered status groups
-// (entries carry the quote, its customer and its grand total) plus the
-// count / all-time / accepted figures the collapsed row shows. Money routes
-// through the shared totals helpers so these figures agree to the cent with
-// ProfessionalDetail and the quotes list.
-export function resolveProfessionalsList({ professionals, quotes, lines, customers }) {
+// ViewModel for pages/Professionals.jsx — the whole searchable directory.
+// Pure projection: the page passes the raw rows plus its resolved state
+// (q / tab / filters / sort) and reads everything straight through:
+//   rollupByProfessionalId — per-professional quote rollup for the dropdown:
+//     ordered status groups (quote + customer + grand total per entry), the
+//     count / all-time / accepted figures, last quote activity, and the
+//     contact-gap flags that drive the maintenance views.
+//   tabs       — primary "saved views" strip with counts (activity + data
+//                completeness dimensions), counted off ALL professionals so
+//                each tab reads "how many would I see if I tapped this".
+//   filterDefs — secondary-filter config for FilterPopover/FilterChips
+//                (empresa, datos de contacto, última cotización, alta).
+//   rows       — the professionals that survive tab + filters + search, in
+//                sort order.
+// Money routes through the shared totals helpers so these figures agree to
+// the cent with ProfessionalDetail and the quotes list.
+export function resolveProfessionalsList({
+  professionals, quotes, lines, customers,
+  q = '', tab = 'all', filters = {}, sort = { key: 'name', dir: 'asc' },
+}) {
   const customerById = new Map();
   for (const c of customers || []) customerById.set(c.id, c);
 
   // Quotes bucketed by their assigned professional (unassigned quotes simply
   // don't appear on this page).
   const quotesByPro = new Map();
-  for (const q of quotes || []) {
-    if (!q.professionalId) continue;
-    if (!quotesByPro.has(q.professionalId)) quotesByPro.set(q.professionalId, []);
-    quotesByPro.get(q.professionalId).push(q);
+  for (const qu of quotes || []) {
+    if (!qu.professionalId) continue;
+    if (!quotesByPro.has(qu.professionalId)) quotesByPro.set(qu.professionalId, []);
+    quotesByPro.get(qu.professionalId).push(qu);
   }
 
+  const pros = professionals || [];
   const linesByQuote = linesByQuoteId(lines);
   const rollupByProfessionalId = new Map();
-  for (const p of professionals || []) {
+  for (const p of pros) {
     const qs = quotesByPro.get(p.id) || [];
     const byStatus = new Map();
     let allTimeTotal = 0;
     let acceptedTotal = 0;
-    for (const q of qs) {
-      const total = quoteGrandTotal(q, linesByQuote.get(q.id) || []);
-      const status = q.status || 'draft';
+    let lastActivityAt = 0;
+    for (const qu of qs) {
+      const total = quoteGrandTotal(qu, linesByQuote.get(qu.id) || []);
+      const status = qu.status || 'draft';
       if (!byStatus.has(status)) byStatus.set(status, []);
       byStatus.get(status).push({
-        quote: q,
-        customer: q.customerId ? customerById.get(q.customerId) : null,
+        quote: qu,
+        customer: qu.customerId ? customerById.get(qu.customerId) : null,
         total,
       });
       allTimeTotal += total;
       if (status === 'accepted') acceptedTotal += total;
+      if ((qu.updatedAt || 0) > lastActivityAt) lastActivityAt = qu.updatedAt || 0;
     }
     // Ordered, non-empty groups; freshest deal first inside each group.
     const groups = [];
@@ -284,15 +299,146 @@ export function resolveProfessionalsList({ professionals, quotes, lines, custome
       entries.sort((a, b) => (b.quote.updatedAt || 0) - (a.quote.updatedAt || 0));
       groups.push({ status, entries });
     }
+    // Contact gaps drive the "Datos incompletos" tab, the contact filter and
+    // the row-level warning dot — one definition so they can never disagree.
+    const missingEmail = !String(p.email || '').trim();
+    const missingPhone = !String(p.phone || '').trim();
     rollupByProfessionalId.set(p.id, {
       count: qs.length,
       groups,
       allTimeTotal,
       acceptedTotal,
+      lastActivityAt,
+      missingEmail,
+      missingPhone,
+      incomplete: missingEmail || missingPhone,
     });
   }
 
-  return { rollupByProfessionalId };
+  // Primary tabs: pipeline activity + data completeness. Counts off the full
+  // directory, independent of search/filters (same convention as Quotes).
+  let activeN = 0;
+  let wonN = 0;
+  let idleN = 0;
+  let incompleteN = 0;
+  for (const p of pros) {
+    const r = rollupByProfessionalId.get(p.id);
+    if (r.count > 0) activeN += 1;
+    else idleN += 1;
+    if (r.acceptedTotal > 0) wonN += 1;
+    if (r.incomplete) incompleteN += 1;
+  }
+  const tabs = [
+    { key: 'all', label: 'Todos', count: pros.length },
+    { key: 'active', label: 'Con cotizaciones', count: activeN },
+    { key: 'won', label: 'Con ventas', count: wonN },
+    { key: 'idle', label: 'Sin actividad', count: idleN },
+    { key: 'incomplete', label: 'Datos incompletos', count: incompleteN },
+  ];
+
+  // Empresa options: the distinct companies actually on file (deduped
+  // case-insensitively, first-seen casing as the label) — the dropdown never
+  // lists a company nobody belongs to.
+  const companySeen = new Map();
+  for (const p of pros) {
+    const raw = String(p.company || '').trim();
+    if (!raw) continue;
+    const key = raw.toLowerCase();
+    if (!companySeen.has(key)) companySeen.set(key, raw);
+  }
+  const filterDefs = [
+    {
+      key: 'company',
+      label: 'Empresa',
+      type: 'select',
+      placeholder: 'Todas',
+      options: [...companySeen.entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    },
+    {
+      key: 'contact',
+      label: 'Datos de contacto',
+      type: 'select',
+      placeholder: 'Todos',
+      options: [
+        { value: 'sin-correo', label: 'Sin correo' },
+        { value: 'sin-telefono', label: 'Sin teléfono' },
+        { value: 'incompleto', label: 'Faltan datos' },
+        { value: 'completo', label: 'Contacto completo' },
+      ],
+    },
+    { key: 'activity', label: 'Última cotización', type: 'date-range' },
+    { key: 'created', label: 'Fecha de alta', type: 'date-range' },
+  ];
+
+  // Date-range filters arrive as {from,to} 'YYYY-MM-DD' strings; widen the
+  // "hasta" bound to end-of-day so picking the same day on both ends works.
+  const parseRange = (r) => ({
+    from: r?.from ? Date.parse(`${r.from}T00:00:00`) : null,
+    to: r?.to ? Date.parse(`${r.to}T23:59:59.999`) : null,
+  });
+  const activity = parseRange(filters.activity);
+  const created = parseRange(filters.created);
+
+  const needle = String(q || '').trim().toLowerCase();
+  // Digit-only view of the needle so a phone search hits regardless of how
+  // the number was typed/stored ("809-555…" finds "8095 55…").
+  const needleDigits = needle.replace(/\D/g, '');
+
+  const matched = pros.filter((p) => {
+    const r = rollupByProfessionalId.get(p.id);
+    if (tab === 'active' && r.count === 0) return false;
+    if (tab === 'won' && r.acceptedTotal <= 0) return false;
+    if (tab === 'idle' && r.count > 0) return false;
+    if (tab === 'incomplete' && !r.incomplete) return false;
+
+    if (filters.company && String(p.company || '').trim().toLowerCase() !== filters.company) return false;
+    if (filters.contact === 'sin-correo' && !r.missingEmail) return false;
+    if (filters.contact === 'sin-telefono' && !r.missingPhone) return false;
+    if (filters.contact === 'incompleto' && !r.incomplete) return false;
+    if (filters.contact === 'completo' && r.incomplete) return false;
+
+    // Activity range only matches professionals who HAVE activity — a pro
+    // with no quotes can't fall inside any date window.
+    if (activity.from != null || activity.to != null) {
+      if (!r.lastActivityAt) return false;
+      if (activity.from != null && r.lastActivityAt < activity.from) return false;
+      if (activity.to != null && r.lastActivityAt > activity.to) return false;
+    }
+    if (created.from != null && (p.createdAt || 0) < created.from) return false;
+    if (created.to != null && (p.createdAt || 0) > created.to) return false;
+
+    if (!needle) return true;
+    const corpus = [
+      p.name, p.company, p.email, p.phone, p.notes,
+      p.number != null ? `#${p.number}` : '',
+    ].map((s) => String(s || '').toLowerCase()).join(' ');
+    if (corpus.includes(needle)) return true;
+    if (needleDigits.length >= 3) {
+      const phoneDigits = String(p.phone || '').replace(/\D/g, '');
+      if (phoneDigits.includes(needleDigits)) return true;
+    }
+    return false;
+  });
+
+  const mul = sort.dir === 'asc' ? 1 : -1;
+  const rows = [...matched].sort((a, b) => {
+    const ra = rollupByProfessionalId.get(a.id);
+    const rb = rollupByProfessionalId.get(b.id);
+    if (sort.key === 'quotes') return (ra.count - rb.count) * mul;
+    if (sort.key === 'sales') return (ra.acceptedTotal - rb.acceptedTotal) * mul;
+    if (sort.key === 'activity') return (ra.lastActivityAt - rb.lastActivityAt) * mul;
+    if (sort.key === 'created') return ((a.createdAt || 0) - (b.createdAt || 0)) * mul;
+    if (sort.key === 'company') {
+      return String(a.company || '').toLowerCase()
+        .localeCompare(String(b.company || '').toLowerCase()) * mul;
+    }
+    return String(a.name || '').toLowerCase()
+      .localeCompare(String(b.name || '').toLowerCase()) * mul;
+  });
+
+  return { rollupByProfessionalId, rows, tabs, filterDefs, totalCount: pros.length };
 }
 
 // ViewModel for pages/Orders.jsx. Pure projection off the raw rows: the
