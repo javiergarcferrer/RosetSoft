@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Wallet, FileCheck, Users as UsersIcon, Download,
-  Loader2, Calendar, ChevronDown, Briefcase, Check,
+  Loader2, Calendar, ChevronDown, Briefcase, Check, Receipt,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -13,7 +14,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import Dropdown, { DropdownItem } from '../../components/primitives/Dropdown.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
-import { displayRatesFor } from '../../lib/exchangeRate.js';
+import { displayRatesFor, effectiveDopRate } from '../../lib/exchangeRate.js';
 import {
   computeTotals, applyLineAdjustments, lineForTotals, isCompoundLine,
 } from '../../lib/pricing.js';
@@ -635,11 +636,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                 ? `Pagada · ${fmtUsd(sellerReported)}`
                 : `Base ${fmtUsd(base)} · ${commissionPct}% = ${fmtUsd(potentialCommission)}`}
               action={sellerPayable ? (
-                <PaidToggle
-                  paid={sellerPaid}
-                  busy={savingPaid === `seller:${quote.id}`}
-                  onToggle={(n) => onSellerPaid(quote.id, n, potentialCommission)}
-                />
+                <span className="inline-flex items-center gap-1.5">
+                  <PaidToggle
+                    paid={sellerPaid}
+                    busy={savingPaid === `seller:${quote.id}`}
+                    onToggle={(n) => onSellerPaid(quote.id, n, potentialCommission)}
+                  />
+                  {sellerPaid && (
+                    <ExpenseLink
+                      amountUsd={sellerReported}
+                      desc={`Comisión vendedor ${creatorDisplay(creator) || ''} · cot. #${quote.number ?? ''}`.trim()}
+                      settings={settings}
+                    />
+                  )}
+                </span>
               ) : (
                 <span className="text-[11px] text-ink-400 italic whitespace-nowrap">Tras depósito</span>
               )}
@@ -652,11 +662,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                 badge={mode === 'trade_discount' ? 'Trade discount' : 'Comisión'}
                 detail={proDetail}
                 action={mode === 'trade_discount' ? null : (proPayable ? (
-                  <PaidToggle
-                    paid={proPaid}
-                    busy={savingPaid === `pro:${quote.id}`}
-                    onToggle={(n) => onProPaid(quote.id, n, proAmount)}
-                  />
+                  <span className="inline-flex items-center gap-1.5">
+                    <PaidToggle
+                      paid={proPaid}
+                      busy={savingPaid === `pro:${quote.id}`}
+                      onToggle={(n) => onProPaid(quote.id, n, proAmount)}
+                    />
+                    {proPaid && (
+                      <ExpenseLink
+                        amountUsd={proReported}
+                        desc={`Comisión profesional ${professional?.name || ''} · cot. #${quote.number ?? ''}`.trim()}
+                        settings={settings}
+                      />
+                    )}
+                  </span>
                 ) : (
                   <span className="text-[11px] text-ink-400 italic whitespace-nowrap">
                     Tras {quote.orderType === 'special' ? 'balance' : 'depósito'}
@@ -668,6 +687,26 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Payout → books handoff: once a commission is marked paid, offer Gastos a
+ * prefilled expense (DOP at today's effective rate, ITBIS 0 — it's a payout,
+ * not a vendor invoice). Booking it stays a human act in Gastos.
+ */
+function ExpenseLink({ amountUsd, desc, settings }) {
+  const rate = effectiveDopRate(settings);
+  if (!rate || !(amountUsd > 0)) return null;
+  const dop = Math.round(amountUsd * rate * 100) / 100;
+  return (
+    <Link
+      to={`/accounting/expenses?new=1&amount=${dop}&itbis=0&desc=${encodeURIComponent(desc)}`}
+      className="btn-ghost text-xs whitespace-nowrap"
+      title="Registrar el gasto de esta comisión (monto al tipo de cambio actual)"
+    >
+      <Receipt size={12} aria-hidden /> Gasto
+    </Link>
   );
 }
 

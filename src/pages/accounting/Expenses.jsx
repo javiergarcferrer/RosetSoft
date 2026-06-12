@@ -104,7 +104,13 @@ export default function Expenses() {
       {showForm && loaded && (
         <NewExpenseForm
           scope={scope} config={config} suppliers={suppliersQ.data} expenseAccounts={expenseAccounts}
-          suppliersById={suppliersById} onClose={() => setShowForm(false)} />
+          suppliersById={suppliersById}
+          initial={{
+            description: params.get('desc') || '',
+            base: params.get('amount') || '',
+            itbis: params.get('itbis') ?? '',
+          }}
+          onClose={() => setShowForm(false)} />
       )}
 
       {!loaded ? <ListLoading /> : tab === 'list' ? (
@@ -267,10 +273,13 @@ export default function Expenses() {
   );
 }
 
-function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersById, onClose }) {
+function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersById, initial, onClose }) {
+  // `initial` seeds handoffs (e.g. the commission-payout link from Ventas y
+  // comisiones: ?amount&itbis=0&desc) so figures aren't re-typed.
   const [form, setForm] = useState({
     supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '', accountCode: '',
-    description: '', base: '', itbis: '', retIsr: '', retItbis: '', paymentMethod: 'bank',
+    description: initial?.description || '', base: initial?.base || '',
+    itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');

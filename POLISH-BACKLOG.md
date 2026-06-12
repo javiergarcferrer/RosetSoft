@@ -77,8 +77,11 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       those params. The reverse stamp (cobro → balancePaidAt) NOT done:
       payments carry no quote linkage today — would need an allocations→
       posting→quote hop; revisit if wanted.)
-- [ ] Commission payout → books: mark-paid in `accounting/Workspace.jsx` offers
+- [x] Commission payout → books: mark-paid in `accounting/Workspace.jsx` offers
       "Registrar gasto de comisión" prefilled from resolved figures.
+      (i11 — once a stream is marked paid, a "Gasto" link opens Gastos with
+      monto (USD→DOP at today's rate), ITBIS 0 and the description seeded;
+      NewExpenseForm accepts ?amount&itbis&desc.)
 - [ ] HL arrival nudge: suggestion chip on OrderDetail when the voyage summary
       reports arrival ("¿marcar En aduanas/Recibido?") — human confirms, no
       auto-advance (`core/tracking/voyage.js` summary already computes it).
