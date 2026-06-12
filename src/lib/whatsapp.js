@@ -102,6 +102,17 @@ export async function pingWhatsapp() {
 }
 
 /**
+ * Complete a coexistence Embedded Signup: hand the one-time code (plus the
+ * ids the dialog reported) to wa-send, which exchanges it for a business
+ * token server-side, persists the connection, and registers the number for
+ * Cloud API messaging — while the phone app keeps working on it. Returns
+ * { ok, registered, registerError } or { ok:false, error }.
+ */
+export async function completeWaOnboarding({ code, appId, phoneNumberId, wabaId, pin }) {
+  return invokeWaSend({ onboard: { code, appId, phoneNumberId, wabaId, pin } });
+}
+
+/**
  * Send a free-form text message. Only delivers inside the 24h customer-service
  * window (the recipient wrote within the last 24h); outside it Meta rejects
  * with re-engagement error 131047 — `wa-send` translates that to a clear
