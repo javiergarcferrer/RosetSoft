@@ -17,6 +17,13 @@ const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
  * reads like the PDF it matches — `/#/q/eduardo-garcia-cotizacion-1042/<token>`
  * — instead of an opaque token alone. The token stays the real key (the route
  * ignores the slug), so links minted before this, or with no slug, still work.
+ *
+ * `?lp=2` (before the #, so crawlers see it) is a LINK-PREVIEW cache buster:
+ * WhatsApp — Meta's servers for Cloud-API sends AND each recipient's device —
+ * caches the preview card per URL STRING for weeks, so quote links crawled
+ * while og-image was broken kept showing the garbled card forever. Bump the
+ * number only if the preview must be re-crawled again; the SPA ignores the
+ * query (hash routing) and old links keep resolving.
  */
 export function shareLinkUrl(token, slug) {
   if (!token) return '';
@@ -24,7 +31,7 @@ export function shareLinkUrl(token, slug) {
   const path = slug
     ? `${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
     : encodeURIComponent(token);
-  return `${origin}/#/q/${path}`;
+  return `${origin}/?lp=2#/q/${path}`;
 }
 
 /**

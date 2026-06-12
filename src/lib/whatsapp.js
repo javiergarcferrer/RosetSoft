@@ -305,7 +305,9 @@ export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
   if (template) {
     const lang = (settings?.whatsappQuoteTemplateLang || '').trim() || 'es';
     if (settings?.whatsappQuoteTemplateButton) {
-      const suffix = url.split('/#/q/')[1] || url;
+      // '#/q/' (not '/#/q/'): the link may carry a pre-hash query (?lp=N,
+      // the preview cache buster) so '/' no longer precedes the '#'.
+      const suffix = url.split('#/q/')[1] || url;
       const varCount = Number(settings?.whatsappQuoteTemplateVars) || 0;
       return sendWhatsappTemplate({
         to, template, lang,
