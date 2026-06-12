@@ -326,3 +326,69 @@ test('reportedCommission: coerces a numeric-string snapshot (Postgres numeric)',
   // compare/format as a number.
   assert.equal(reportedCommission(12345, '180.50', 100), 180.5);
 });
+
+/* ── resolveSales + resolveCommissionsOverview (core/accounting/sales.js) ──
+ * The cycle projection the Comisiones page and the accounting workspace
+ * render: which accepted quotes count as sales in the window, the seller's
+ * deposit-gated earned commission, the professional's owed/paid split, and
+ * the company-wide overview roll-up the admin header shows. */
+import { resolveSales, resolveCommissionsOverview } from '../src/core/accounting/sales.js';
+
+const VS_CYCLE = { start: 1000, end: 2000 };
+const VS_SELLER = { id: 'u1', name: 'Ana', commissionPct: 5 };
+const VS_PRO = { id: 'p1', name: 'Deco SRL' };
+// totalsFor stub: every quote books a $1,000 taxable base, no discount.
+const vsTotalsFor = () => ({ taxableBase: 1000, discountAmt: 0, taxAmt: 180, grandTotal: 1180 });
+const vsMaps = {
+  customerById: new Map(),
+  profileById: new Map([[VS_SELLER.id, VS_SELLER]]),
+  professionalById: new Map([[VS_PRO.id, VS_PRO]]),
+};
+
+test('resolveSales: deposit-in-cycle earns the seller; accepted-only does not', () => {
+  const quotes = [
+    // Deposit landed in the window → seller earns 5% of 1,000 = 50, unpaid.
+    { id: 'q1', status: 'accepted', acceptedAt: 1100, depositReceivedAt: 1200, createdByUserId: 'u1' },
+    // Accepted in the window but no deposit yet → an entry, but no earned commission.
+    { id: 'q2', status: 'accepted', acceptedAt: 1300, createdByUserId: 'u1' },
+    // Outside the window entirely → not a sale of this cycle.
+    { id: 'q3', status: 'accepted', acceptedAt: 5000, createdByUserId: 'u1' },
+    // Not accepted → never a sale.
+    { id: 'q4', status: 'draft', acceptedAt: 1100, createdByUserId: 'u1' },
+  ];
+  const r = resolveSales({ quotes, cycle: VS_CYCLE, totalsFor: vsTotalsFor, ...vsMaps });
+  assert.equal(r.entries.length, 2);
+  assert.equal(r.vendedorRows.length, 1);
+  assert.equal(r.vendedorRows[0].commission, 50);
+  assert.equal(r.vendedorRows[0].paid, 0);
+  assert.equal(r.vendedorRows[0].pending, 50);
+});
+
+test('resolveCommissionsOverview: totals = seller + professional, paid + pending = commission', () => {
+  const quotes = [
+    // Seller commission earned (deposit in cycle) AND a floor-order pro
+    // commission owed on the same deposit; the pro side already paid out $140.
+    {
+      id: 'q1', status: 'accepted', acceptedAt: 1100, depositReceivedAt: 1200,
+      createdByUserId: 'u1', professionalId: 'p1', orderType: 'floor',
+      commissionPaidAt: 1500, commissionPaidAmount: 140,
+    },
+    // Seller-only sale, seller already paid a frozen $40 snapshot.
+    {
+      id: 'q2', status: 'accepted', acceptedAt: 1300, depositReceivedAt: 1400,
+      createdByUserId: 'u1', sellerCommissionPaidAt: 1600, sellerCommissionPaidAmount: 40,
+    },
+  ];
+  const r = resolveSales({ quotes, cycle: VS_CYCLE, totalsFor: vsTotalsFor, ...vsMaps });
+  const o = resolveCommissionsOverview(r);
+  assert.equal(o.salesCount, 2);
+  assert.equal(o.base, 2000);
+  assert.equal(o.seller.commission, 90);          // 50 live + 40 frozen
+  assert.equal(o.seller.paid, 40);
+  assert.equal(o.seller.pending, 50);
+  assert.equal(o.professional.commission, 140);   // frozen at payout (live would be 150)
+  assert.equal(o.professional.paid, 140);
+  assert.equal(o.professional.pending, 0);
+  assert.equal(o.total.commission, o.seller.commission + o.professional.commission);
+  assert.equal(o.total.paid + o.total.pending, o.total.commission);
+});

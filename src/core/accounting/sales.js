@@ -135,3 +135,38 @@ export function resolveSales({ quotes, cycle, customerById, profileById, profess
 
   return { entries, vendedorRows, profRows };
 }
+
+/**
+ * Company-wide roll-up of one cycle's `resolveSales` result — the admin's
+ * full-scope header: both commission streams summed (seller + professional),
+ * each split paid/pending, plus the sale count and taxable base behind them.
+ * Pure aggregation over the rollup rows, so it can never disagree with the
+ * per-person tables it sits above.
+ *
+ * @returns {{ salesCount, base, seller: {commission,paid,pending},
+ *   professional: {commission,paid,pending}, total: {commission,paid,pending} }}
+ */
+export function resolveCommissionsOverview({ entries, vendedorRows, profRows }) {
+  const sum = (rows, key) => rows.reduce((acc, r) => acc + (r[key] || 0), 0);
+  const seller = {
+    commission: sum(vendedorRows, 'commission'),
+    paid: sum(vendedorRows, 'paid'),
+    pending: sum(vendedorRows, 'pending'),
+  };
+  const professional = {
+    commission: sum(profRows, 'commission'),
+    paid: sum(profRows, 'paid'),
+    pending: sum(profRows, 'pending'),
+  };
+  return {
+    salesCount: entries.length,
+    base: sum(entries, 'base'),
+    seller,
+    professional,
+    total: {
+      commission: seller.commission + professional.commission,
+      paid: seller.paid + professional.paid,
+      pending: seller.pending + professional.pending,
+    },
+  };
+}

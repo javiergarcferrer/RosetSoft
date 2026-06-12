@@ -81,4 +81,4 @@ export function quoteFloorSaleRows({ lines } = {}) {
 // derived (not stored) by the accounting commission Model. It's a bridge
 // concern by nature — a CRM event (the sale) producing an accounting payout —
 // so it's surfaced here for both cores to consume.
-export { resolveSales } from '../accounting/sales.js';
+export { resolveSales, resolveCommissionsOverview } from '../accounting/sales.js';

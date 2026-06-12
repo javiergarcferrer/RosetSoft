@@ -11,7 +11,10 @@ import { formatMoney } from '../lib/format.js';
 import { cycleEnding, formatCycle } from '../lib/commissionCycle.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
-import { resolveSales } from '../core/bridge/index.js';
+import { resolveSales, resolveCommissionsOverview } from '../core/bridge/index.js';
+
+/** How far back the cycle picker reaches (current + 5 closed cycles). */
+const CYCLE_HISTORY = 6;
 
 /**
  * Comisiones — the bridge surface between a CRM sale and its accounting payout.
@@ -27,9 +30,12 @@ export default function Comisiones() {
   const ownOnly = role === 'employee';
 
   const today = useMemo(() => new Date(), []);
-  const cycles = useMemo(() => ({ curr: cycleEnding(today, 0), prev: cycleEnding(today, -1) }), [today]);
-  const [mode, setMode] = useState('current'); // 'current' | 'previous'
-  const cycle = mode === 'current' ? cycles.curr : cycles.prev;
+  const cycles = useMemo(
+    () => Array.from({ length: CYCLE_HISTORY }, (_, i) => cycleEnding(today, -i)),
+    [today],
+  );
+  const [cycleIdx, setCycleIdx] = useState(0); // 0 = current, 1 = previous, …
+  const cycle = cycles[cycleIdx];
 
   const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(profileId || '').toArray(), [profileId], []);
   const linesQ = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
@@ -56,6 +62,8 @@ export default function Comisiones() {
     [quotesQ.data, cycle, customerById, profileById, professionalById, linesByQuote],
   );
 
+  const overview = useMemo(() => resolveCommissionsOverview(sales), [sales]);
+
   const myEntries = useMemo(
     () => sales.entries.filter((e) => e.creator?.id === currentProfile?.id),
     [sales.entries, currentProfile],
@@ -81,33 +89,22 @@ export default function Comisiones() {
       <PageHeader title="Comisiones"
         subtitle={ownOnly ? 'Tus comisiones por ciclo' : 'Comisiones de vendedores y profesionales'} />
 
-      {/* Cycle picker — same segmented-control shape as the Mías/Equipo
-          ScopeToggle so the app has ONE two-state switch vocabulary. */}
+      {/* Cycle picker — a select over the payout history (current + the last
+          closed cycles), so the full-scope view isn't capped at two windows. */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         <Calendar size={15} className="text-ink-400 shrink-0" />
-        <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-sm font-medium select-none">
-          <button
-            type="button"
-            onClick={() => setMode('current')}
-            aria-pressed={mode === 'current'}
-            className={mode === 'current'
-              ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
-              : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}
-          >
-            Ciclo actual
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('previous')}
-            aria-pressed={mode === 'previous'}
-            className={mode === 'previous'
-              ? 'px-3 py-1.5 min-h-9 coarse:min-h-11 bg-ink-900 text-ink-50'
-              : 'px-3 py-1.5 min-h-9 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors'}
-          >
-            Anterior
-          </button>
-        </div>
-        <span className="text-sm text-ink-500 ml-1 tabular-nums">{formatCycle(cycle)}</span>
+        <select
+          className="input w-auto min-w-0"
+          value={cycleIdx}
+          onChange={(e) => setCycleIdx(Number(e.target.value))}
+          aria-label="Ciclo de comisiones"
+        >
+          {cycles.map((c, i) => (
+            <option key={c.end} value={i}>
+              {i === 0 ? `Ciclo actual · ${formatCycle(c)}` : formatCycle(c)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {!loaded ? <ListLoading /> : ownOnly ? (
@@ -167,6 +164,36 @@ export default function Comisiones() {
         </>
       ) : (
         <div className="space-y-4">
+          {/* Full-scope cycle header: both streams summed, paid vs pending. */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Ventas del ciclo</div>
+              <div className="text-xl font-semibold tabular-nums text-ink-900">{overview.salesCount}</div>
+              <div className="text-xs text-ink-500 tabular-nums">Base {usd(overview.base)}</div>
+            </div>
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Comisiones del ciclo</div>
+              <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(overview.total.commission)}</div>
+              <div className="text-xs text-ink-500 tabular-nums">
+                Vend. {usd(overview.seller.commission)} · Prof. {usd(overview.professional.commission)}
+              </div>
+            </div>
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Pagado</div>
+              <div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(overview.total.paid)}</div>
+              <div className="text-xs text-ink-500 tabular-nums">
+                Vend. {usd(overview.seller.paid)} · Prof. {usd(overview.professional.paid)}
+              </div>
+            </div>
+            <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
+              <div className="eyebrow-xs tracking-wide text-ink-500">Pendiente</div>
+              <div className="text-xl font-semibold tabular-nums text-amber-700">{usd(overview.total.pending)}</div>
+              <div className="text-xs text-ink-500 tabular-nums">
+                Vend. {usd(overview.seller.pending)} · Prof. {usd(overview.professional.pending)}
+              </div>
+            </div>
+          </div>
+
           <div className="card overflow-hidden">
             <div className="card-header">
               <h2>Vendedores</h2>
@@ -234,6 +261,76 @@ export default function Comisiones() {
               </div>
             </div>
           )}
+
+          {/* Per-sale detail — every sale in the cycle with BOTH commission
+              streams side by side, so the admin can trace each rollup figure
+              back to the quote that produced it. */}
+          <div className="card overflow-hidden">
+            <div className="card-header">
+              <h2>Detalle por venta</h2>
+              <span className="badge">{sales.entries.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Cotización</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th className="text-right whitespace-nowrap">Base</th>
+                    <th className="text-right whitespace-nowrap">Com. vendedor</th>
+                    <th>Profesional</th>
+                    <th className="text-right whitespace-nowrap">Com. profesional</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sales.entries.length === 0 ? (
+                    <tr><td colSpan={7} className="py-8 text-center text-ink-400 text-sm">Sin ventas en el ciclo.</td></tr>
+                  ) : sales.entries.map((e) => (
+                    <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
+                      <td className="tabular-nums font-medium">
+                        <Link to={`/quotes/${e.quote.id}`} className="text-brand-600 hover:text-brand-700">
+                          #{e.quote.number ?? '—'}
+                        </Link>
+                      </td>
+                      <td className="text-ink-700">{e.customer?.name || '—'}</td>
+                      <td className="text-ink-700">{e.creator?.name || '—'}</td>
+                      <td className="text-right tabular-nums">{usd(e.base)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {e.creator ? (
+                          <>
+                            <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
+                            {e.sellerPaid
+                              ? <span className="status-pill status-pill-active ml-2">Pagada</span>
+                              : e.sellerPayable
+                                ? <span className="status-pill status-pill-deposito ml-2">Por pagar</span>
+                                : <span className="text-[11px] text-ink-400 italic ml-2">Tras depósito</span>}
+                          </>
+                        ) : <span className="text-ink-400">—</span>}
+                      </td>
+                      <td className="text-ink-700">{e.professional?.name || '—'}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {!e.professional ? (
+                          <span className="text-ink-400">—</span>
+                        ) : e.trade ? (
+                          <span className="text-[11px] text-ink-500 italic">Trade {e.decoratorPct}% ({usd(e.tradeDiscount)})</span>
+                        ) : (
+                          <>
+                            <span className="font-medium text-ink-900">{usd(e.proReported)}</span>
+                            {e.proPaid
+                              ? <span className="status-pill status-pill-active ml-2">Pagada</span>
+                              : e.proOwed
+                                ? <span className="status-pill status-pill-deposito ml-2">Por pagar</span>
+                                : <span className="text-[11px] text-ink-400 italic ml-2">No exigible</span>}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {(role === 'admin' || role === 'accounting') && (
             <p className="text-xs text-ink-400">
