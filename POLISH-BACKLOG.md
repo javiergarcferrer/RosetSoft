@@ -46,12 +46,18 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (fecha+memo / debe+haber) < md; desktop density unchanged.
       (i7 — Mayor + Balanza (tap → mayor) and the dashboard's segmented +
       comparativo tables; Diario and Asientos recientes already fit.)
-- [ ] Difusion composer 375px pass: `src/pages/Difusion.jsx` variable-mapping
+- [x] Difusion composer 375px pass: `src/pages/Difusion.jsx` variable-mapping
       rows → stacked labels; verify audience picker at narrow widths.
-- [ ] Nómina: payroll-run 13-col table → per-employee cards < md
+      (i8 — audience pills wrap; fixed-text variable input drops to its own
+      full-width line < sm. Rest of the composer was already sheet-modal OK.)
+- [x] Nómina: payroll-run 13-col table → per-employee cards < md
       (`accounting/Nomina.jsx`); Empleados forms already grid OK.
-- [ ] Materials admin card fallback: `src/pages/admin/Materials.jsx` (zero
+      (i8 — already done in the codebase: both tables ship sm:hidden cards;
+      review item was stale. No change.)
+- [x] Materials admin card fallback: `src/pages/admin/Materials.jsx` (zero
       responsive classes today; reuse the shared primitive).
+      (i8 — bespoke md:hidden cards (thumbnail + pills + actions don't fit
+      RowCards' shape); table at md+.)
 - [ ] JARVIS phone pass: verify 3-pane HUD panel heights + radar SVG at 375px
       (`src/pages/Jarvis.jsx`, `jarvis.css`); admin-only, last.
 

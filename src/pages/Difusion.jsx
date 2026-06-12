@@ -414,7 +414,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
           {/* Audience */}
           <div>
             <div className="label">Audiencia</div>
-            <div className="flex items-center gap-1.5 mb-2">
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
               {AUDIENCE_KINDS.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -462,10 +462,10 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
               <div className="label">Variables de la plantilla</div>
               <div className="space-y-2">
                 {varSpecs.map((spec, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-ink-500 tabular-nums shrink-0 w-10">{'{{'}{i + 1}{'}}'}</span>
                     <select
-                      className="input text-sm flex-1"
+                      className="input text-sm flex-1 min-w-0"
                       value={spec.source}
                       onChange={(e) => setVarSpecs((ss) => ss.map((s, j) => (j === i ? { ...s, source: e.target.value } : s)))}
                     >
@@ -473,7 +473,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
                     </select>
                     {spec.source === 'fixed' && (
                       <input
-                        className="input text-sm flex-1"
+                        className="input text-sm w-full sm:w-auto sm:flex-1"
                         value={spec.text || ''}
                         placeholder="Texto…"
                         onChange={(e) => setVarSpecs((ss) => ss.map((s, j) => (j === i ? { ...s, text: e.target.value } : s)))}
