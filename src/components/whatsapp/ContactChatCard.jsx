@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, ChevronDown } from 'lucide-react';
-import ChatThread from '../whatsapp/ChatThread.jsx';
+import ChatThread from './ChatThread.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { db, invalidate } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
@@ -12,26 +12,29 @@ import {
 } from '../../lib/whatsapp.js';
 
 /**
- * The client's WhatsApp conversation, embedded in the quote workspace — so the
- * dealer reads and answers the client they're quoting without leaving the
- * editor. Same data path as the Chats inbox: the thread is resolveThread over
- * wa_messages keyed by the customer's phone (so it's the SAME conversation the
- * inbox shows), the pane is the shared ChatThread component, and sends go
- * through wa-send — here additionally stamped with the quote id, so the
- * message log records which quote the exchange was about.
+ * A contact's WhatsApp conversation as a collapsible card — embedded wherever
+ * the dealer is already working with that contact: the quote workspace (the
+ * quote's customer, sends tagged with the quote id), the customer detail page
+ * and the professional detail page. Same data path as the Chats inbox: the
+ * thread is resolveThread over wa_messages keyed by the contact's phone (so
+ * it IS the inbox conversation), the pane is the shared ChatThread, and sends
+ * go through wa-send stamped with the contact (and optional quote).
  *
- * Collapsed by default (a header row with the unread count); expanding fetches
- * fresh rows and polls while open, marks the thread read, and sends the
- * customer-side read receipt — exactly like opening the thread in the inbox.
- * Renders nothing without a customer phone or a WhatsApp connection (the
- * WhatsAppChip in the header owns prompting for both).
+ * Collapsed by default (a header row with the unread count); expanding polls
+ * while open, marks the thread read and sends the customer-side read receipt —
+ * exactly like opening the thread in the inbox. Renders nothing without a
+ * phone or a WhatsApp connection (the contact's own card owns prompting for
+ * those).
+ *
+ * `contact` is a customer or professional row; `contactKind` says which, so
+ * the outbound log links the right CRM column.
  */
 const POLL_MS = 10000;
 
-export default function QuoteChatCard({ quote, customer }) {
+export default function ContactChatCard({ contact, contactKind, quoteId = null }) {
   const { profileId, settings } = useApp();
   const connected = !!settings?.whatsappConnectedAt;
-  const key = phoneKey(customer?.phone);
+  const key = phoneKey(contact?.phone);
 
   const [open, setOpen] = useState(false);
   // Optimistic outbound rows, dropped once the server-logged row arrives.
@@ -69,7 +72,7 @@ export default function QuoteChatCard({ quote, customer }) {
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Expanding the conversation clears its unread badge — locally AND on the
-  // customer's side (read receipt), mirroring the inbox's open-thread effect.
+  // contact's side (read receipt), mirroring the inbox's open-thread effect.
   const lastReceiptFor = useRef(null);
   useEffect(() => {
     if (!open || !key) return;
@@ -83,17 +86,21 @@ export default function QuoteChatCard({ quote, customer }) {
     }
   }, [open, key, messages]);
 
-  // No customer phone / no connection → nothing to converse with. The header's
-  // WhatsAppChip is where the dealer adds the number or connects the API.
-  if (!customer || !key || !connected) return null;
+  // No phone / no connection → nothing to converse with.
+  if (!contact || !key || !connected) return null;
 
-  const contact = {
+  const isCustomer = contactKind === 'customer';
+  const link = {
+    customerId: isCustomer ? contact.id : null,
+    professionalId: isCustomer ? null : contact.id,
+    ...(quoteId ? { quoteId } : {}),
+  };
+  const threadContact = {
     key,
-    phone: customer.phone,
-    name: customer.name || customer.company || displayPhone(customer.phone),
-    contactKind: 'customer',
-    customerId: customer.id,
-    professionalId: null,
+    phone: contact.phone,
+    name: contact.name || contact.company || displayPhone(contact.phone),
+    contactKind,
+    ...link,
   };
 
   return (
@@ -106,9 +113,11 @@ export default function QuoteChatCard({ quote, customer }) {
       >
         <MessageCircle size={16} className="text-emerald-600 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-sm text-ink-900">Conversación con el cliente</span>
+          <span className="block font-semibold text-sm text-ink-900">
+            {isCustomer ? 'Conversación con el cliente' : 'Conversación con el profesional'}
+          </span>
           <span className="block text-[11px] text-ink-400 truncate">
-            WhatsApp · {contact.name} · {displayPhone(customer.phone)}
+            WhatsApp · {threadContact.name} · {displayPhone(contact.phone)}
           </span>
         </span>
         {!open && unread > 0 && (
@@ -126,32 +135,30 @@ export default function QuoteChatCard({ quote, customer }) {
       {open && thread && (
         <div className="flex flex-col h-[28rem] border-t border-ink-100">
           <ChatThread
-            contact={contact}
+            contact={threadContact}
             thread={thread}
             connected={connected}
             showHeader={false}
             onSend={async (text) => {
               const draft = draftOutboundMessage({
-                phone: customer.phone, text, customerId: customer.id, profileId,
+                phone: contact.phone, text, profileId,
+                customerId: link.customerId, professionalId: link.professionalId,
               });
               setPending((rows) => [...rows, draft]);
-              const res = await sendWhatsappText({
-                to: customer.phone, text, customerId: customer.id, quoteId: quote?.id,
-              }).catch((e) => ({ ok: false, error: e?.message }));
+              const res = await sendWhatsappText({ to: contact.phone, text, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;
             }}
             onSendMedia={async (file, caption) => {
-              const res = await sendWhatsappMedia({
-                to: customer.phone, file, caption, customerId: customer.id, quoteId: quote?.id,
-              }).catch((e) => ({ ok: false, error: e?.message }));
+              const res = await sendWhatsappMedia({ to: contact.phone, file, caption, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;
             }}
             onSendTemplate={async ({ template, params, lang }) => {
-              const res = await sendWhatsappTemplate({
-                to: customer.phone, template, params, lang, customerId: customer.id, quoteId: quote?.id,
-              }).catch((e) => ({ ok: false, error: e?.message }));
+              const res = await sendWhatsappTemplate({ to: contact.phone, template, params, lang, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;
             }}

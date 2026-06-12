@@ -9,6 +9,7 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveProfessionalDetail } from '../core/quote/views/detail.js';
+import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 
 /**
  * Detail view for one professional — the financial roll-up the
@@ -156,6 +157,12 @@ export default function ProfessionalDetail() {
           </div>
         </div>
       )}
+
+      {/* The professional's WhatsApp conversation, right on their card —
+          renders only with a phone + the Business API connected. */}
+      <div className="mb-5">
+        <ContactChatCard contact={pro} contactKind="professional" />
+      </div>
 
       {/* Roll-up cards: total pipeline + accepted (committed).
           Headline value is the base imponible — the amount commissions

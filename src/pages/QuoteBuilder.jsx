@@ -25,7 +25,7 @@ import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.j
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
-import QuoteChatCard from '../components/quote-builder/QuoteChatCard.jsx';
+import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import PrintPdfModal from '../components/PrintPdfModal.jsx';
@@ -708,7 +708,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               Sits right under the line items (above Notas) so it's in reach
               while quoting. Renders only with a customer phone + the
               Business API connected. */}
-          <QuoteChatCard quote={quote} customer={customer} />
+          <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} />
           <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}

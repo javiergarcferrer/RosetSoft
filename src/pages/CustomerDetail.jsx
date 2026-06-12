@@ -14,6 +14,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { resolveCustomerDetail } from '../core/quote/views/detail.js';
+import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 
 /**
  * One customer's detail view — the dealer asked for the customer card
@@ -141,6 +142,12 @@ export default function CustomerDetail() {
       />
 
       <ContactCard customer={customer} />
+
+      {/* The customer's WhatsApp conversation, right on their card — renders
+          only with a phone + the Business API connected. */}
+      <div className="mb-5">
+        <ContactChatCard contact={customer} contactKind="customer" />
+      </div>
 
       {/* Summary stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">

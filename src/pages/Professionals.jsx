@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Trash2,
+  Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -231,9 +231,20 @@ export default function Professionals() {
         title="Profesionales"
         subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'} · edita directamente en la tabla` : ' '}
         actions={
-          <button onClick={focusNewRow} className="btn-brand">
-            <Plus size={14} /> Agregar profesional
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Difusión, woven in where the audience lives: lands on the
+                campaign wizard already targeting the professionals list. */}
+            <Link
+              to="/chats/difusion?campana=profesionales"
+              className="btn-secondary"
+              title="Enviar una plantilla de WhatsApp a profesionales (Difusión)"
+            >
+              <Megaphone size={14} /> Difusión
+            </Link>
+            <button onClick={focusNewRow} className="btn-brand">
+              <Plus size={14} /> Agregar profesional
+            </button>
+          </div>
         }
       />
 

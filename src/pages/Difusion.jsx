@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
   CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check,
@@ -38,6 +38,11 @@ const CHUNK = 250;
 export default function Difusion() {
   const { profileId, settings } = useApp();
   const [tab, setTab] = useState('campaigns');
+  // ?campana=profesionales|clientes — deep link from the CRM lists (the
+  // Profesionales header's "Difusión" button): land with the campaign wizard
+  // already open on that audience.
+  const [search] = useSearchParams();
+  const campaignParam = search.get('campana');
 
   // Templates load live from Meta (approval state changes server-side).
   const [templates, setTemplates] = useState(null); // null = loading
@@ -113,6 +118,7 @@ export default function Difusion() {
           campaignRows={campaignRows}
           customers={customers}
           professionals={professionals}
+          autoOpenKind={campaignParam === 'clientes' ? 'customers' : campaignParam ? 'professionals' : null}
         />
       ) : (
         <TemplatesTab
@@ -141,8 +147,8 @@ function TabButton({ active, onClick, icon: Icon, label }) {
 
 /* ------------------------------- campaigns ------------------------------- */
 
-function CampaignsTab({ templates, templatesError, campaignRows, customers, professionals }) {
-  const [wizardOpen, setWizardOpen] = useState(false);
+function CampaignsTab({ templates, templatesError, campaignRows, customers, professionals, autoOpenKind }) {
+  const [wizardOpen, setWizardOpen] = useState(!!autoOpenKind);
   const approved = (templates || []).filter((t) => t.status === 'APPROVED');
 
   return (
@@ -211,6 +217,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
         approved={approved}
         customers={customers}
         professionals={professionals}
+        initialKind={autoOpenKind}
       />
     </div>
   );
@@ -234,9 +241,9 @@ const AUDIENCE_KINDS = [
 ];
 
 /** Template → audience → variables → send, in one modal. */
-function CampaignWizard({ open, onClose, approved, customers, professionals }) {
+function CampaignWizard({ open, onClose, approved, customers, professionals, initialKind }) {
   const [template, setTemplate] = useState(null);
-  const [kind, setKind] = useState('professionals');
+  const [kind, setKind] = useState(initialKind || 'professionals');
   const [needle, setNeedle] = useState('');
   const [picked, setPicked] = useState(() => new Set());
   const [varSpecs, setVarSpecs] = useState([]);
@@ -249,7 +256,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals }) {
   useEffect(() => {
     if (!open) return;
     setTemplate(null);
-    setKind('professionals');
+    setKind(initialKind || 'professionals');
     setNeedle('');
     setPicked(new Set());
     setVarSpecs([]);
