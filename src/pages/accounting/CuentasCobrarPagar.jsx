@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
@@ -121,7 +122,31 @@ export default function CuentasCobrarPagar() {
         <EmptyState icon={ArrowLeftRight} title={tab === 'cxc' ? 'Nada por cobrar' : 'Nada por pagar'}
           description={tab === 'cxc' ? 'Las facturas con saldo pendiente aparecen aquí.' : 'Las compras y gastos a crédito con saldo aparecen aquí.'} />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        <RowCards
+          rows={view.rows.map((r) => ({
+            key: r.partyId,
+            title: r.party?.name || '—',
+            right: formatDop(r.balance),
+            sub: <span className="inline-flex items-center gap-1"><FileText size={11} /> Estado de cuenta</span>,
+            onClick: () => setSelected({ type: tab === 'cxc' ? 'customer' : 'supplier', id: r.partyId }),
+            kv: [
+              ['0–30', formatDop(r.buckets.d0_30)],
+              ['31–60', formatDop(r.buckets.d31_60)],
+              ['61–90', formatDop(r.buckets.d61_90)],
+              ['+90', <span className={r.buckets.d90 > 0 ? 'text-rose-600' : ''}>{formatDop(r.buckets.d90)}</span>],
+            ],
+          }))}
+          footer={[
+            [partyLabel + 's', view.count],
+            ['Balance', formatDop(view.totals.balance)],
+            ['0–30', formatDop(view.totals.d0_30)],
+            ['31–60', formatDop(view.totals.d31_60)],
+            ['61–90', formatDop(view.totals.d61_90)],
+            ['+90', formatDop(view.totals.d90)],
+          ]}
+        />
+        <div className="hidden md:block card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table min-w-[640px]">
               <thead>
@@ -165,6 +190,7 @@ export default function CuentasCobrarPagar() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {statement && (
@@ -179,7 +205,20 @@ export default function CuentasCobrarPagar() {
               <button type="button" onClick={() => setSelected(null)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <RowCards
+            rows={statement.rows.map((r, i) => ({
+              key: i,
+              title: r.label,
+              right: formatDop(r.balance),
+              sub: r.ref || null,
+              kv: [
+                ['Fecha', formatDate(r.date)],
+                r.charge ? ['Cargo', formatDop(r.charge)] : null,
+                r.payment ? ['Abono', formatDop(r.payment)] : null,
+              ],
+            }))}
+          />
+          <div className="hidden md:block overflow-x-auto">
             <table className="table min-w-[560px]">
               <thead>
                 <tr>

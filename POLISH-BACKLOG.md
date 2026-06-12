@@ -22,11 +22,14 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       tables and is THE employee surface. Add `md:hidden` per-sale card list
       mirroring the `Quotes.jsx` dual pattern; keep tables `hidden md:block`.
       (i2 — all 4 tables; payout pills unified in SellerStatus/ProStatus.)
-- [ ] Shared responsive row primitive: extract `RowCards`/`ResponsiveTable`
+- [x] Shared responsive row primitive: extract `RowCards`/`ResponsiveTable`
       (components/) from the Quotes/Orders card pattern, then apply to
       `accounting/Expenses.jsx`, `CuentasCobrarPagar.jsx`, `Importaciones.jsx`,
       `Compras.jsx`, `Inventario.jsx` (one page per iteration after the
       primitive lands).
+      (i3-i4 — components/RowCards.jsx: title/right + sub + kv grid + totals
+      footer, rows support to/onClick; applied to all 8 tables across the 5
+      pages incl. 606, statement, histórico and kardex stock list.)
 - [ ] Ventas y comisiones workspace cards: `accounting/Workspace.jsx` 11-col
       table → card rows < md (keep desktop table). Pre-req: consider extracting
       the inline filter/sort into `resolveSales` first (see Consistency below).

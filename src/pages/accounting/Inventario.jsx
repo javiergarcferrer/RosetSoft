@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
@@ -148,7 +149,21 @@ export default function Inventario() {
         <EmptyState icon={Boxes} title="Sin artículos" description="Crea un artículo y regístralo desde Compras." />
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="card overflow-hidden">
+          <div className="min-w-0">
+          <RowCards
+            rows={inv.rows.map(({ item, qty, avgCost, value }) => ({
+              key: item.id,
+              title: <>{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</>,
+              right: formatDop(value),
+              onClick: () => { setSelectedId(item.id); setOutQty(''); setErr(''); },
+              kv: [
+                ['Existencia', `${qty} ${item.unit}`],
+                ['Costo prom.', formatDop(avgCost)],
+              ],
+            }))}
+            footer={[['Valor total', formatDop(inv.totalValue)]]}
+          />
+          <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
             <table className="table min-w-[320px]">
               <thead>
@@ -178,6 +193,7 @@ export default function Inventario() {
               </tfoot>
             </table>
             </div>
+          </div>
           </div>
 
           <div>

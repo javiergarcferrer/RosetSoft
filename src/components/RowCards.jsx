@@ -67,11 +67,16 @@ export default function RowCards({ rows, footer, empty = null, inCard = false })
   const rowClass = inCard ? 'block px-4 py-3' : 'block card card-pad';
   const items = rows.map((row) => {
     const body = <RowBody row={row} />;
-    return row.to ? (
-      <Link key={row.key} to={row.to} className={`${rowClass} hover:bg-ink-50 transition-colors`}>{body}</Link>
-    ) : (
-      <div key={row.key} className={rowClass}>{body}</div>
-    );
+    if (row.to) {
+      return <Link key={row.key} to={row.to} className={`${rowClass} hover:bg-ink-50 transition-colors`}>{body}</Link>;
+    }
+    if (row.onClick) {
+      return (
+        <button key={row.key} type="button" onClick={row.onClick}
+          className={`${rowClass} w-full text-left hover:bg-ink-50 transition-colors`}>{body}</button>
+      );
+    }
+    return <div key={row.key} className={rowClass}>{body}</div>;
   });
   return (
     <div className={inCard ? 'md:hidden divide-y divide-ink-100' : 'md:hidden space-y-2'}>
