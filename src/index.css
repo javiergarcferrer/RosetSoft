@@ -855,6 +855,18 @@
   .pb-safe-standalone { padding-bottom: 0; }
   html.is-standalone .pb-safe-standalone { padding-bottom: env(safe-area-inset-bottom); }
 
+  /* Bottom offset for fixed chrome stacked directly ABOVE the quote ModeBar
+     (phones only — the bar is md:hidden). The bar is 3.5rem of content plus,
+     in an installed PWA, the home-indicator inset it pads (pb-safe-standalone
+     above). Anything pinned on top of it must offset by that same SUM — a
+     plain bottom-14 leaves the dock's lower edge underneath the bar in
+     standalone, where the bar grows by the inset. Scoped to the bar's own
+     breakpoint so md+ keeps the caller's bottom-0. */
+  @media (max-width: 767.98px) {
+    .bottom-above-modebar { bottom: 3.5rem; }
+    html.is-standalone .bottom-above-modebar { bottom: calc(3.5rem + env(safe-area-inset-bottom)); }
+  }
+
   /* Constrain scroll chaining / momentum where it matters. */
   .overscroll-contain { overscroll-behavior: contain; }
   .overscroll-none    { overscroll-behavior: none; }

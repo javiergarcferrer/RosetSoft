@@ -265,10 +265,12 @@ export default function TotalsDock({
     // field being typed into); `data-kb-keep` lifts the dock above the keyboard
     // instead when ITS OWN adjustment inputs (discount % / envío / courtesy) are
     // focused, so they stay visible while editing.
-    // bottom-14 under md: the mobile ModeBar (compose / client / chat) owns
-    // the physical bottom edge there — the dock stacks directly above it.
-    // From md: up there is no ModeBar, so the dock returns to bottom-0.
-    <div data-kb-keep className="fixed bottom-14 md:bottom-0 left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
+    // Under md the mobile ModeBar (compose / client / chat) owns the physical
+    // bottom edge and the dock stacks directly above it — bottom-above-modebar
+    // (index.css) is the bar's true height: 3.5rem, PLUS the home-indicator
+    // inset the bar pads in an installed PWA. From md: up there is no ModeBar
+    // and the dock returns to bottom-0.
+    <div data-kb-keep className="fixed bottom-0 bottom-above-modebar left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
       {/* Safe-area apron — a white fill that spills BELOW the dock to the
           physical screen edge. If iOS lays the standalone viewport SHORT (a
           legacy / cached black-translucent install, before the status-bar=black
