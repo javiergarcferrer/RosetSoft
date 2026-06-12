@@ -195,6 +195,14 @@ export interface Settings {
   claudeConnectedAt?: number | null;
   /** Model the claude-chat function answers with (display mirror). */
   claudeModel?: string;
+  /** Meta social (Facebook Page + Instagram + Ads) — non-sensitive connection
+   *  status for the JARVIS social pulse. Tokens live in the write-only
+   *  meta_social_config table, never here. Written by the meta-social
+   *  Edge Function's link mode. */
+  metaSocialConnectedAt?: number | null;
+  /** Display mirrors of what the link discovered. */
+  metaSocialPageName?: string;
+  metaSocialIgUsername?: string;
   /** Webhook handshake string shown in Settings to paste into the Meta portal
    *  (not a secret — it only gates webhook REGISTRATION; payloads are
    *  authenticated by the app-secret HMAC signature). */

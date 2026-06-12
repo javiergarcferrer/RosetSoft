@@ -447,6 +447,33 @@
   font-size: 0.62rem;
 }
 
+/* ── social rows — campaign / scheduled / post lines ───────────────────── */
+.jv-social-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.22rem 0;
+  font-size: 0.74rem;
+}
+.jv-social-row .name {
+  color: var(--jv-fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jv-social-row .stat {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.68rem;
+  color: var(--jv-muted);
+}
+.jv-social-row .stat.dim {
+  margin-left: 0;
+  color: var(--jv-faint);
+}
+.jv-social-row .stat:first-of-type { margin-left: auto; }
+
 /* ── skeleton shimmer — blocks in the final layout's shape, no spinners ── */
 .jv-skeleton {
   display: block;
