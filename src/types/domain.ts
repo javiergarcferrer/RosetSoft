@@ -189,6 +189,12 @@ export interface Settings {
    *  access token / app secret live in the write-only whatsapp_config table,
    *  never here. */
   whatsappConnectedAt?: number | null;
+  /** Claude API (Anthropic) — non-sensitive connection status for the JARVIS
+   *  uplink. The API key lives in the write-only claude_config table, never
+   *  here. Written by the save_claude_config RPC. */
+  claudeConnectedAt?: number | null;
+  /** Model the claude-chat function answers with (display mirror). */
+  claudeModel?: string;
   /** Webhook handshake string shown in Settings to paste into the Meta portal
    *  (not a secret — it only gates webhook REGISTRATION; payloads are
    *  authenticated by the app-secret HMAC signature). */

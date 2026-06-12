@@ -70,6 +70,16 @@ export function resolveIntegrationBoard({ settings = {}, probes = {}, now = Date
       detail: 'Postgres + Realtime',
     },
     {
+      id: 'claude',
+      name: 'Claude API',
+      desc: 'Enlace IA · consola JARVIS',
+      status: settings.claudeConnectedAt ? 'online' : 'offline',
+      at: settings.claudeConnectedAt || null,
+      detail: settings.claudeConnectedAt
+        ? (settings.claudeModel || 'claude-opus-4-8')
+        : 'Sin llave API',
+    },
+    {
       id: 'bpd',
       name: 'Banco Popular',
       desc: 'Tasa USD→DOP diaria',
