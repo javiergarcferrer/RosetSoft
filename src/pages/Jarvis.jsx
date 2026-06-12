@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, Cpu, Radar, RefreshCw, Satellite, Send, ShieldAlert, X, Zap,
+  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Package,
+  Radar, RefreshCw, Satellite, Send, ShieldAlert, TrendingUp, Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -11,10 +12,16 @@ import {
   resolveIntegrationBoard,
   resolveUplinkFeed,
   resolveActivityFeed,
+  resolveBusinessPulse,
+  resolveOpsFeed,
+  resolveActivityHeatmap,
   systemIntegrity,
   radarPoints,
+  sparkPoints,
   agoLabel,
 } from '../core/jarvis/index.js';
+import { formatMoney } from '../lib/format.js';
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
 import './jarvis.css';
 
 // Deploy telemetry baked in at build time by vite.config.js — the commit this
@@ -78,6 +85,78 @@ function StatusChip({ status, label }) {
   );
 }
 
+/** Shimmering placeholder block in the final layout's shape (no spinners). */
+function Skeleton({ w = '100%', h = '0.8rem', className = '' }) {
+  return <span className={`jv-skeleton ${className}`} style={{ width: w, height: h }} aria-hidden="true" />;
+}
+
+/** ⌘K command palette — fuzzy-less filter over the page's actions. */
+function CommandPalette({ open, onClose, actions }) {
+  const [query, setQuery] = useState('');
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setSel(0);
+      // Focus after the dialog mounts.
+      const t = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [open]);
+  if (!open) return null;
+
+  const q = query.trim().toLowerCase();
+  const list = actions.filter((a) => !q
+    || a.label.toLowerCase().includes(q)
+    || (a.hint || '').toLowerCase().includes(q));
+  const cur = Math.min(sel, Math.max(0, list.length - 1));
+  const run = (a) => { onClose(); a.run(); };
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(Math.min(list.length - 1, cur + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(Math.max(0, cur - 1)); }
+    else if (e.key === 'Enter' && list[cur]) { e.preventDefault(); run(list[cur]); }
+    else if (e.key === 'Escape') onClose();
+  };
+
+  return (
+    <div className="jv-palette-scrim" onClick={onClose} role="presentation">
+      <div className="jv-palette" role="dialog" aria-label="Comandos" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          className="pin"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setSel(0); }}
+          onKeyDown={onKey}
+          placeholder="Comando o destino…"
+          spellCheck={false}
+        />
+        <div className="plist">
+          {list.map((a, i) => {
+            const Icon = a.icon;
+            return (
+              <button
+                type="button"
+                key={a.id}
+                className={`pitem ${i === cur ? 'is-sel' : ''}`}
+                onMouseEnter={() => setSel(i)}
+                onClick={() => run(a)}
+              >
+                <Icon size={13} />
+                <span className="plabel">{a.label}</span>
+                {a.hint && <span className="phint jv-mono">{a.hint}</span>}
+              </button>
+            );
+          })}
+          {!list.length && <div className="pempty">Sin coincidencias</div>}
+        </div>
+        <div className="pfoot jv-mono">↑↓ navegar · ↵ ejecutar · esc cerrar</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Jarvis() {
   const { profileId, settings, isAdmin, refreshSettings } = useApp();
 
@@ -102,23 +181,22 @@ export default function Jarvis() {
     [],
   );
 
-  const { data: counts } = useLiveQueryStatus(
+  // The business rows themselves (not just counts) — the pulse panel and the
+  // ops feed project honest figures straight from them. `tick` keeps them
+  // fresh across devices, same as the uplink thread.
+  const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
-      const [quotes, orders, customers, products] = await Promise.all([
+      const [quotes, orders, customers, products, quoteLines] = await Promise.all([
         db.quotes.where('profileId').equals(profileId || '').toArray(),
         db.orders.where('profileId').equals(profileId || '').toArray(),
         db.customers.where('profileId').equals(profileId || '').toArray(),
         db.products.where('profileId').equals(profileId || '').toArray(),
+        db.quoteLines.toArray(),
       ]);
-      return {
-        quotes: quotes.length,
-        orders: orders.length,
-        customers: customers.length,
-        products: products.length,
-      };
+      return { quotes, orders, customers, products, quoteLines };
     },
-    [profileId],
-    { quotes: 0, orders: 0, customers: 0, products: 0 },
+    [profileId, tick],
+    { quotes: [], orders: [], customers: [], products: [], quoteLines: [] },
   );
 
   // ── live diagnostics ─────────────────────────────────────────────────
@@ -211,6 +289,7 @@ export default function Jarvis() {
   const [sending, setSending] = useState(false);
   const [uplinkError, setUplinkError] = useState(null);
   const consoleEndRef = useRef(null);
+  const draftInputRef = useRef(null);
 
   const transmit = useCallback(async () => {
     const content = draft.trim();
@@ -251,7 +330,10 @@ export default function Jarvis() {
   }, [draft, sending, profileId, claudeLinked]);
 
   // One-time key link: the RPC writes the write-only claude_config table and
-  // stamps settings.claudeConnectedAt (the UI mirror).
+  // stamps settings.claudeConnectedAt (the UI mirror). OPTIONAL — the channel
+  // works without it as a directive queue answered by Claude Code sessions
+  // (the existing subscription); the key only buys instant in-app replies.
+  const [showKeyForm, setShowKeyForm] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState(null);
@@ -275,8 +357,38 @@ export default function Jarvis() {
     }
   }, [apiKey, linking, refreshSettings]);
 
+  // ── ⌘K command palette ───────────────────────────────────────────────
+  const navigate = useNavigate();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v), { ignoreInInput: false });
+  const paletteActions = useMemo(() => [
+    { id: 'diag', icon: Zap, label: 'Ejecutar diagnóstico', hint: 'integraciones', run: runDiagnostics },
+    {
+      id: 'transmit',
+      icon: Send,
+      label: 'Transmitir directiva a Claude',
+      hint: 'enlace',
+      run: () => draftInputRef.current?.focus(),
+    },
+    ...(!claudeLinked ? [{
+      id: 'key',
+      icon: KeyRound,
+      label: 'Vincular llave API (respuestas al instante)',
+      hint: 'opcional',
+      run: () => setShowKeyForm(true),
+    }] : []),
+    { id: 'dash', icon: LayoutDashboard, label: 'Ir al Dashboard', hint: '/', run: () => navigate('/') },
+    { id: 'quotes', icon: FileText, label: 'Ir a Cotizaciones', hint: '/quotes', run: () => navigate('/quotes') },
+    { id: 'orders', icon: Package, label: 'Ir a Pedidos', hint: '/orders', run: () => navigate('/orders') },
+    { id: 'customers', icon: Users, label: 'Ir a Clientes', hint: '/customers', run: () => navigate('/customers') },
+    { id: 'exit', icon: X, label: 'Salir de JARVIS', hint: 'esc', run: () => navigate('/') },
+  ], [claudeLinked, navigate, runDiagnostics]);
+
   // ── projections ──────────────────────────────────────────────────────
   const now = clock.getTime();
+  // Minute-resolution clock for the row-heavy projections — the money rollup
+  // shouldn't re-run on every second tick (ago labels are minute-grained).
+  const nowMin = Math.floor(now / 60_000) * 60_000;
   const board = useMemo(
     () => resolveIntegrationBoard({ settings: settings || {}, probes, now }),
     [settings, probes, now],
@@ -288,6 +400,22 @@ export default function Jarvis() {
     () => resolveActivityFeed({ commits: BUILD.log || [], messages, now }),
     [messages, now],
   );
+  const pulse = useMemo(
+    () => resolveBusinessPulse({ quotes: biz.quotes, lines: biz.quoteLines, now: nowMin }),
+    [biz, nowMin],
+  );
+  const heatmap = useMemo(
+    () => resolveActivityHeatmap({
+      quotes: biz.quotes, orders: biz.orders, customers: biz.customers, now: nowMin,
+    }),
+    [biz, nowMin],
+  );
+  const opsFeed = useMemo(
+    () => resolveOpsFeed({
+      quotes: biz.quotes, orders: biz.orders, customers: biz.customers, now: nowMin,
+    }),
+    [biz, nowMin],
+  );
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ block: 'end' });
@@ -296,10 +424,13 @@ export default function Jarvis() {
   const pendingCount = thread.filter((m) => m.role === 'user' && m.status === 'pending').length;
   const lastClaudeId = [...thread].reverse().find((m) => m.role === 'claude')?.id;
   const integrityShown = useCountUp(integrity);
-  const nQuotes = useCountUp(counts.quotes);
-  const nOrders = useCountUp(counts.orders);
-  const nCustomers = useCountUp(counts.customers);
-  const nProducts = useCountUp(counts.products);
+  const nQuotes = useCountUp(biz.quotes.length);
+  const nOrders = useCountUp(biz.orders.length);
+  const nCustomers = useCountUp(biz.customers.length);
+  const nProducts = useCountUp(biz.products.length);
+  const usdPipeline = useCountUp(Math.round(pulse.pipelineUsd));
+  const usdOutstanding = useCountUp(Math.round(pulse.outstandingUsd));
+  const usdWon = useCountUp(Math.round(pulse.wonMonth.totalUsd));
 
   if (!isAdmin) {
     return (
@@ -339,6 +470,14 @@ export default function Jarvis() {
               />
             </div>
           </div>
+          <button
+            type="button"
+            className="jv-btn flex-none"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Abrir paleta de comandos"
+          >
+            <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
+          </button>
           <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
             <X size={14} /> Salir
           </Link>
@@ -382,7 +521,136 @@ export default function Jarvis() {
           </section>
         </div>
 
-        {/* ── center: integration grid ─────────────────────────────── */}
+        {/* ── center: business pulse + integration grid ────────────── */}
+        <div className="space-y-4">
+        <section className="jv-panel">
+          <div className="jv-panel-head justify-between">
+            <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
+            <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>USD · datos reales en vivo</span>
+          </div>
+          {!bizLoaded ? (
+            // Skeleton in the final layout's shape — no spinners, no jumps.
+            <div className="p-4 space-y-4">
+              <div className="grid gap-2.5 sm:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
+                    <Skeleton w="55%" h="0.6rem" />
+                    <Skeleton w="70%" h="1.3rem" />
+                    <Skeleton w="85%" h="0.6rem" />
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => <Skeleton key={i} h="0.55rem" />)}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Skeleton h="72px" />
+                <Skeleton h="72px" />
+              </div>
+            </div>
+          ) : (
+          <div className="p-4 space-y-4">
+            {/* KPI strip — each figure traces to rows via core/quote/totals */}
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              <div className="jv-kpi">
+                <span className="label">En juego</span>
+                <b className="jv-mono">${usdPipeline.toLocaleString('en-US')}</b>
+                <span className="sub">
+                  {pulse.funnel.find((f) => f.key === 'sent')?.count || 0} enviadas esperando respuesta
+                </span>
+              </div>
+              <div className="jv-kpi">
+                <span className="label">Por cobrar</span>
+                <b className="jv-mono">${usdOutstanding.toLocaleString('en-US')}</b>
+                <span className="sub">saldo pendiente en aceptadas</span>
+              </div>
+              <div className="jv-kpi is-won">
+                <span className="label">
+                  Ganado · {clock.toLocaleDateString('es-DO', { month: 'long' })}
+                </span>
+                <b className="jv-mono">${usdWon.toLocaleString('en-US')}</b>
+                <span className="sub">{pulse.wonMonth.count} cotizaciones aceptadas</span>
+              </div>
+            </div>
+
+            {/* pipeline funnel — bar length is the money each stage holds */}
+            <div className="space-y-1.5">
+              {pulse.funnel.map((f) => (
+                <div key={f.key} className="jv-funnel-row">
+                  <span className="name">{f.label}</span>
+                  <span className="n jv-mono">{f.count}</span>
+                  <div className="bar">
+                    <i className={f.key} style={{ width: `${Math.max(f.totalUsd > 0 ? 2 : 0, f.share * 100)}%` }} />
+                  </div>
+                  <span className="money jv-mono">{formatMoney(f.totalUsd)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* weekly cadence — created vs accepted on ONE shared scale */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="jv-kicker">Cadencia · 12 semanas</span>
+                  {pulse.weekDelta.created.pct != null && (
+                    <span className={`jv-delta ${pulse.weekDelta.created.pct >= 0 ? 'up' : 'down'}`}>
+                      {pulse.weekDelta.created.pct >= 0 ? '+' : ''}{pulse.weekDelta.created.pct}% vs sem. ant.
+                    </span>
+                  )}
+                </div>
+                {(() => {
+                  const created = pulse.series.map((s) => s.created);
+                  const accepted = pulse.series.map((s) => s.accepted);
+                  const max = Math.max(1, ...created, ...accepted);
+                  const cPts = sparkPoints(created, 100, 28, 2, max);
+                  const aPts = sparkPoints(accepted, 100, 28, 2, max);
+                  return (
+                    <svg viewBox="0 0 100 28" className="jv-spark" preserveAspectRatio="none" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="jvSparkFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--jv-accent)" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="var(--jv-accent)" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      {cPts && <polygon fill="url(#jvSparkFill)" points={`2,26 ${cPts} 98,26`} />}
+                      {cPts && <polyline className="created" points={cPts} />}
+                      {aPts && <polyline className="accepted" points={aPts} />}
+                    </svg>
+                  );
+                })()}
+                <div className="jv-legend">
+                  <span><i className="created" /> creadas</span>
+                  <span><i className="accepted" /> aceptadas</span>
+                </div>
+              </div>
+
+              {/* activity heatmap — one cell per real day, GitHub-style */}
+              <div>
+                <div className="jv-kicker mb-1.5">Actividad · 12 semanas</div>
+                <div className="jv-heatmap" role="img" aria-label="Mapa de actividad diaria">
+                  {heatmap.cols.map((col) => (
+                    <div key={col[0].start} className="col">
+                      {col.map((c) => (
+                        <i
+                          key={c.start}
+                          className={c.future ? 'future' : `lv${c.level}`}
+                          title={`${new Date(c.start).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })} · ${c.count} evento${c.count === 1 ? '' : 's'}`}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="jv-legend mt-1.5">
+                  <span>menos</span>
+                  {[0, 1, 2, 3, 4].map((l) => <i key={l} className={`hm lv${l}`} />)}
+                  <span>más</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          )}
+        </section>
+
         <section className="jv-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><Satellite size={12} /> Integraciones</span>
@@ -411,8 +679,9 @@ export default function Jarvis() {
             ))}
           </div>
         </section>
+        </div>
 
-        {/* ── right column: radar + deploy feed ────────────────────── */}
+        {/* ── right column: radar + live feeds ─────────────────────── */}
         <div className="space-y-4">
           <section className="jv-panel p-3">
             <div className="jv-panel-head -m-3 mb-2"><Radar size={12} /> Mapa de estado</div>
@@ -439,6 +708,30 @@ export default function Jarvis() {
               ))}
               <circle cx="50" cy="50" r="2" fill="var(--jv-fg)" />
             </svg>
+          </section>
+
+          <section className="jv-panel">
+            <div className="jv-panel-head"><Activity size={12} /> Actividad comercial</div>
+            <div className="jv-timeline p-3 max-h-64 overflow-y-auto">
+              {!bizLoaded && [0, 1, 2, 3].map((i) => (
+                <div key={i} className="trow">
+                  <span className="tdot" />
+                  <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
+                </div>
+              ))}
+              {opsFeed.map((e) => (
+                <div key={e.id} className="trow">
+                  <span className={`tdot ${e.tone}`} />
+                  <span className="ttext">{e.text}</span>
+                  <span className="tago jv-mono">{e.ago || ''}</span>
+                </div>
+              ))}
+              {bizLoaded && !opsFeed.length && (
+                <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
+                  Sin actividad registrada todavía.
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="jv-panel">
@@ -477,8 +770,8 @@ export default function Jarvis() {
             {claudeLinked
               ? `Canal en vivo · ${settings?.claudeModel || 'claude-opus-4-8'} responde al instante`
               : pendingCount
-                ? `${pendingCount} directiva${pendingCount > 1 ? 's' : ''} en cola — vincula la llave API para respuestas en vivo`
-                : 'Canal en espera — vincula tu llave API de Anthropic para activar el enlace en vivo'}
+                ? `${pendingCount} directiva${pendingCount > 1 ? 's' : ''} en cola — Claude Code las atiende en su próxima sesión`
+                : 'Canal asíncrono — Claude Code atiende las directivas con tu cuenta actual, sin llave API'}
           </span>
         </div>
         <div className="jv-console p-4 max-h-80 overflow-y-auto">
@@ -488,7 +781,7 @@ export default function Jarvis() {
               <span className="body" style={{ color: 'var(--jv-muted)' }}>
                 {claudeLinked
                   ? 'Canal en vivo. Pregunta lo que necesites — respondo al instante.'
-                  : 'Canal de enlace establecido. Vincula tu llave API de Anthropic para activar respuestas en vivo.'}
+                  : 'Canal establecido. Transmite una directiva — queda registrada aquí y Claude Code la recoge en su próxima sesión, con tu cuenta actual. No requiere llave API.'}
               </span>
             </div>
           )}
@@ -522,39 +815,58 @@ export default function Jarvis() {
         </div>
         {!claudeLinked && (
           <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
-            <div className="jv-kicker mb-2">Vincular Claude API</div>
-            <div className="flex gap-2">
-              <input
-                className="jv-input"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-ant-…  (llave API de Anthropic)"
-                autoComplete="new-password"
-                spellCheck={false}
-              />
-              <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkClaude} disabled={!apiKey.trim() || linking}>
-                {linking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
+            {!showKeyForm ? (
+              <button
+                type="button"
+                className="jv-btn"
+                style={{ minHeight: '1.8rem', fontSize: '0.72rem' }}
+                onClick={() => setShowKeyForm(true)}
+              >
+                <KeyRound size={12} /> Respuestas al instante (opcional, llave API)
               </button>
-            </div>
-            {linkError && (
-              <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{linkError}</div>
+            ) : (
+              <>
+                <div className="jv-kicker mb-2">Enlace en vivo — opcional</div>
+                <p className="text-xs mb-2" style={{ color: 'var(--jv-muted)' }}>
+                  Tu suscripción de Claude no incluye acceso a la API: las respuestas al
+                  instante dentro de la app requieren una llave API de Anthropic (pago por
+                  uso). Sin llave, el canal funciona igual como cola de directivas.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    className="jv-input"
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-ant-…  (llave API de Anthropic)"
+                    autoComplete="new-password"
+                    spellCheck={false}
+                  />
+                  <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkClaude} disabled={!apiKey.trim() || linking}>
+                    {linking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
+                  </button>
+                </div>
+                {linkError && (
+                  <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{linkError}</div>
+                )}
+                <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
+                  La llave se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
+                </p>
+              </>
             )}
-            <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
-              La llave se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
-            </p>
           </div>
         )}
         <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
           <div className="flex gap-2">
             <input
+              ref={draftInputRef}
               className="jv-input"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') transmit(); }}
               placeholder={claudeLinked
                 ? 'Transmitir a Claude — p. ej. «¿cómo va la tasa hoy?» o «registra: filtro por marca en el catálogo»'
-                : 'Transmitir directiva — quedará en cola hasta vincular la llave API'}
+                : 'Transmitir directiva — p. ej. «agrega filtro por marca al catálogo»; Claude Code la atiende'}
               maxLength={2000}
             />
             <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={transmit} disabled={!draft.trim() || sending}>
@@ -566,6 +878,12 @@ export default function Jarvis() {
           )}
         </div>
       </section>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        actions={paletteActions}
+      />
     </div>
   );
 }

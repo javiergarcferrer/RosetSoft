@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw, QrCode } from 'lucide-react';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
-  listWaTemplates, getWaBusinessProfile, saveWaBusinessProfile,
+  listWaTemplates, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
 } from '../../lib/whatsapp.js';
+import { runCoexistenceSignup } from '../../lib/waEmbeddedSignup.js';
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 
@@ -49,6 +50,15 @@ export default function WhatsAppCard({ settings, saveSettings }) {
     return () => { alive = false; };
   }, [connectedAt]);
 
+  // Re-run the mount ping on demand (the coexistence flow just persisted a
+  // connection server-side — surface the webhook state without a reload).
+  async function refreshWebhook() {
+    try {
+      const res = await pingWhatsapp();
+      if (res?.ok) setWebhook({ subscribed: !!res.webhookSubscribed, error: res.webhookError || null });
+    } catch { /* the next mount ping retries */ }
+  }
+
   async function save() {
     setStatus('saving');
     setMsg('');
@@ -87,6 +97,8 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       </p>
 
       <SetupGuide settings={settings} />
+
+      <CoexistenceRow settings={settings} saveSettings={saveSettings} onConnected={refreshWebhook} />
 
       {locked ? (
         <div className="mt-4 rounded-lg border border-ink-100 bg-ink-50/60 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
@@ -237,6 +249,140 @@ function SetupGuide({ settings }) {
         </div>
       </div>
     </details>
+  );
+}
+
+/**
+ * Coexistence Embedded Signup — link the number to the Cloud API while the
+ * phone's WhatsApp Business app keeps working. The browser launches Meta's
+ * hosted dialog (QR scan from the phone) with two NON-secret launch ids saved
+ * here; the one-time code it returns is exchanged server-side by wa-send's
+ * `onboard` action, so no credential ever rides through this component.
+ */
+function CoexistenceRow({ settings, saveSettings, onConnected }) {
+  const [appId, setAppId] = useState(settings?.whatsappAppId || '');
+  const [configId, setConfigId] = useState(settings?.whatsappConfigId || '');
+  const [appIdState, setAppIdState] = useState('idle'); // idle | saving | saved | error
+  const [configIdState, setConfigIdState] = useState('idle');
+  const [pin, setPin] = useState(''); // local only — never persisted
+  const [state, setState] = useState('idle'); // idle | connecting | done | error
+  const [msg, setMsg] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  // Re-sync to the persisted values when they change elsewhere / after a save.
+  useEffect(() => { setAppId(settings?.whatsappAppId || ''); }, [settings?.whatsappAppId]);
+  useEffect(() => { setConfigId(settings?.whatsappConfigId || ''); }, [settings?.whatsappConfigId]);
+
+  async function persist(field, value, setFieldState) {
+    const v = value.trim();
+    if (v === (settings?.[field] || '')) return; // unchanged — no write
+    setFieldState('saving');
+    try {
+      await saveSettings({ [field]: v });
+      setFieldState('saved');
+      setTimeout(() => setFieldState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch {
+      setFieldState('error');
+    }
+  }
+
+  async function connect() {
+    if (state === 'connecting') return;
+    setState('connecting');
+    setMsg('');
+    setRegisterError('');
+    try {
+      const launch = { appId: appId.trim(), configId: configId.trim() };
+      const { code, phoneNumberId, wabaId } = await runCoexistenceSignup(launch);
+      const res = await completeWaOnboarding({ code, appId: launch.appId, phoneNumberId, wabaId, pin: pin.trim() });
+      if (res?.ok) {
+        setState('done');
+        setMsg('Número vinculado en coexistencia ✓ — la app del teléfono sigue funcionando.');
+        if (res.registered === false) {
+          setRegisterError(`No se pudo registrar el número para enviar: ${res.registerError || 'Meta rechazó el registro.'} Vuelve a intentar con el PIN correcto de verificación en dos pasos.`);
+        }
+        onConnected?.();
+      } else {
+        setState('error');
+        setMsg(res?.error || 'No se pudo completar la conexión con Meta.');
+      }
+    } catch (e) {
+      setState('error');
+      setMsg(e?.message || 'No se pudo completar la conexión con Meta.');
+    }
+  }
+
+  return (
+    <details className="group mt-4 rounded-lg border border-ink-100 overflow-hidden">
+      <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 min-h-11 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
+        <span>Conectar con coexistencia — mantén la app del teléfono</span>
+        <ChevronDown size={14} className="disclosure-chevron text-ink-400" aria-hidden />
+      </summary>
+      <div className="px-4 pb-4 pt-3 border-t border-ink-100 bg-ink-50/40">
+        <p className="text-xs text-ink-600 leading-relaxed">
+          La coexistencia vincula el número a la API <strong>sin desconectar</strong> la app WhatsApp
+          Business del teléfono: las llamadas y los grupos siguen funcionando ahí, lo que el equipo
+          envía desde el teléfono aparece en este CRM, y al conectar se sincronizan hasta ~6 meses de
+          historial de chats. Requisitos: la app de Meta necesita &ldquo;Facebook Login for Business&rdquo;
+          configurado y la Verificación del negocio, y el número debe estar activo en la app WhatsApp
+          Business (versión reciente).
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <LaunchIdField id="wa-coex-app-id" label="App ID" placeholder="p. ej. 1234567890123456"
+            value={appId} state={appIdState}
+            onChange={(e) => setAppId(e.target.value)}
+            onBlur={() => persist('whatsappAppId', appId, setAppIdState)} />
+          <LaunchIdField id="wa-coex-config-id" label="Configuration ID" placeholder="p. ej. 9876543210987654"
+            value={configId} state={configIdState}
+            onChange={(e) => setConfigId(e.target.value)}
+            onBlur={() => persist('whatsappConfigId', configId, setConfigIdState)} />
+        </div>
+        <p className="text-[11px] text-ink-500 mt-1.5">
+          App ID: Meta → tu app → App settings → Basic → App ID. Configuration ID: Facebook Login for
+          Business → Configurations → ID de la configuración. No son secretos — solo lanzan el diálogo.
+        </p>
+        <div className="mt-3">
+          <label className="label" htmlFor="wa-coex-pin">PIN de verificación (si el número tiene uno)</label>
+          <input id="wa-coex-pin" className="input mt-1 sm:max-w-[200px]" value={pin} inputMode="numeric"
+            autoComplete="off" maxLength={6} placeholder="6 dígitos"
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button type="button" onClick={connect} disabled={state === 'connecting'}
+            className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+            {state === 'connecting' ? <Loader2 size={15} className="animate-spin" /> : <QrCode size={15} />}
+            Conectar con Meta (escanear QR)
+          </button>
+        </div>
+        {msg && (
+          <p className={`text-xs mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>
+            {state === 'error' ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <Check size={13} className="mt-0.5 shrink-0" />}
+            <span className="min-w-0">{msg}</span>
+          </p>
+        )}
+        {registerError && (
+          <p className="text-xs text-amber-700 mt-1.5 flex items-start gap-1.5">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span className="min-w-0">{registerError}</span>
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** A coexistence launch id input with the inline auto-save badge (TemplateRow pattern). */
+function LaunchIdField({ id, label, placeholder, value, state, onChange, onBlur }) {
+  return (
+    <div>
+      <label className="label inline-flex items-center gap-2" htmlFor={id}>
+        {label}
+        {state === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
+        {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+        {state === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+      </label>
+      <input id={id} className="input mt-1" value={value} onChange={onChange} onBlur={onBlur}
+        placeholder={placeholder} autoComplete="off" inputMode="numeric" />
+    </div>
   );
 }
 

@@ -54,6 +54,8 @@ type SendBody = {
     buttonText?: string; buttonUrlBase?: string;
   };
   deleteTemplate?: { name?: string };
+  /** Coexistence onboarding: exchange the Embedded Signup code for a token. */
+  onboard?: { code?: string; appId?: string; phoneNumberId?: string; wabaId?: string; pin?: string };
   markRead?: { messageId?: string; typing?: boolean };
   getBusinessProfile?: boolean;
   setBusinessProfile?: {
@@ -166,10 +168,66 @@ Deno.serve(async (req: Request) => {
   // a cryptic Graph error, and the connection check below can heal it.
   const wabaRaw = (cfg as { waba_id?: string } | null)?.waba_id || '';
   let wabaId = /^\d{10,20}$/.test(wabaRaw) ? wabaRaw : '';
-  if (!token || !phoneNumberId) return json({ configured: false, message: 'WhatsApp no conectado' });
 
   let body: SendBody = {};
   try { body = await req.json(); } catch { /* empty body falls through to validation */ }
+
+  // ── Coexistence onboarding (Embedded Signup) ──────────────────────────────
+  // Runs BEFORE the connected guard: a first-time signup has no token yet.
+  // The browser ran Meta's hosted dialog (QR scan from the WhatsApp Business
+  // app) and hands us the one-time code + the ids the dialog reported; we
+  // exchange the code for a business token (needs the saved App Secret),
+  // persist everything, and register the number for Cloud API messaging —
+  // the phone app KEEPS working on the same number (that's the point).
+  if (body.onboard) {
+    const code = String(body.onboard.code || '').trim();
+    const appId = String(body.onboard.appId || '').trim();
+    const newPhoneId = String(body.onboard.phoneNumberId || '').trim();
+    const newWaba = String(body.onboard.wabaId || '').trim();
+    if (!code || !appId) return json({ ok: false, error: 'Faltan el código de Meta o el App ID.' }, 400);
+    if (!appSecret) {
+      return json({ ok: false, error: 'Falta el App Secret guardado (Configuración → WhatsApp): se necesita para canjear el código de Meta.' }, 400);
+    }
+    const ex = await fetch(
+      `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(code)}`,
+    );
+    const exData = await ex.json().catch(() => ({}));
+    const newToken = (exData as { access_token?: string }).access_token || '';
+    if (!ex.ok || !newToken) {
+      console.error('[wa-send] onboard token exchange failed:', JSON.stringify(exData));
+      return json({ ok: false, error: metaError(exData, ex.status) }, 502);
+    }
+    await admin.from('whatsapp_config').upsert({
+      profile_id: TEAM,
+      access_token: newToken,
+      ...(newPhoneId ? { phone_number_id: newPhoneId } : {}),
+      ...(newWaba ? { waba_id: newWaba } : {}),
+    }, { onConflict: 'profile_id' });
+    // Enable Cloud API messaging on the number. For coexistence numbers the
+    // pin is the two-step verification pin already set on the phone app (or
+    // sets one). A register failure is reported, not fatal — the token and
+    // ids are saved either way and the card guides the retry.
+    let registered = false;
+    let registerError: string | null = null;
+    if (newPhoneId) {
+      const pin = String(body.onboard.pin || '').trim() || '000000';
+      const reg = await fetch(`${GRAPH}/${newPhoneId}/register`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${newToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', pin }),
+      });
+      const regData = await reg.json().catch(() => ({}));
+      registered = reg.ok && !!(regData as { success?: boolean }).success;
+      if (!registered) {
+        registerError = metaError(regData, reg.status);
+        console.error('[wa-send] onboard register failed:', JSON.stringify(regData));
+      }
+    }
+    await admin.from('settings').update({ whatsapp_connected_at: new Date().toISOString() }).eq('profile_id', TEAM);
+    return json({ ok: true, registered, registerError });
+  }
+
+  if (!token || !phoneNumberId) return json({ configured: false, message: 'WhatsApp no conectado' });
 
   const graphHeaders = { Authorization: `Bearer ${token}` };
   const graphJson = { ...graphHeaders, 'Content-Type': 'application/json' };
@@ -227,7 +285,10 @@ Deno.serve(async (req: Request) => {
           object: 'whatsapp_business_account',
           callback_url: `${SUPABASE_URL}/functions/v1/wa-webhook`,
           verify_token: verifyToken,
-          fields: 'messages',
+          // messages = inbound + statuses; the smb_* / history fields are the
+          // COEXISTENCE feeds: echoes of what the team sends from the phone
+          // app, the chat-history sync at onboarding, and contact sync.
+          fields: 'messages,smb_message_echoes,history,smb_app_state_sync',
           access_token: `${appId}|${appSecret}`,
         }),
       });

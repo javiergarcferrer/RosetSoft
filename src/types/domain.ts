@@ -214,6 +214,11 @@ export interface Settings {
   /** …and whether the link rides a URL BUTTON's {{1}} suffix instead of a
    *  body variable. */
   whatsappQuoteTemplateButton?: boolean | null;
+  /** Embedded Signup (coexistence) launch ids — NON-secret: the Meta App ID
+   *  and the Facebook Login for Business Configuration ID the browser needs
+   *  to open Meta's hosted onboarding dialog (QR scan from the phone app). */
+  whatsappAppId?: string;
+  whatsappConfigId?: string;
 }
 
 /**

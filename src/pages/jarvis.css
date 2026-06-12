@@ -267,7 +267,283 @@
   color: var(--jv-faint);
 }
 
+/* ── one restrained glow accent behind the header zone (Raycast/Linear) ─ */
+.jarvis {
+  background-image: radial-gradient(
+    640px 220px at 18% 0%,
+    rgba(82, 168, 255, 0.09),
+    transparent 70%
+  );
+  background-repeat: no-repeat;
+}
+
+/* ── business pulse: KPI stat cards (label / big tabular number / sub) ── */
+.jv-kpi {
+  border: 1px solid var(--jv-border);
+  border-radius: 6px;
+  background: var(--jv-card);
+  padding: 0.65rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.jv-kpi .label {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--jv-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jv-kpi b {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--jv-fg);
+}
+.jv-kpi .sub {
+  font-size: 0.7rem;
+  color: var(--jv-muted);
+}
+.jv-kpi.is-won b { color: var(--jv-success); }
+
+/* ── pipeline funnel — bar length = the money the stage holds ─────────── */
+.jv-funnel-row {
+  display: grid;
+  grid-template-columns: 5.4rem 1.6rem 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.74rem;
+}
+.jv-funnel-row .name { color: var(--jv-muted); }
+.jv-funnel-row .n { text-align: right; color: var(--jv-faint); font-size: 0.7rem; }
+.jv-funnel-row .bar {
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.jv-funnel-row .bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.6s ease;
+  background: var(--jv-muted);
+}
+.jv-funnel-row .bar i.draft { background: var(--jv-faint); }
+.jv-funnel-row .bar i.sent { background: var(--jv-accent); }
+.jv-funnel-row .bar i.accepted { background: var(--jv-success); }
+.jv-funnel-row .money { color: var(--jv-fg); font-size: 0.72rem; }
+
+/* ── cadence sparkline — two series, ONE shared scale ─────────────────── */
+.jv-spark {
+  width: 100%;
+  height: 56px;
+  display: block;
+}
+.jv-spark polyline {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.jv-spark polyline.created { stroke: var(--jv-accent); }
+.jv-spark polyline.accepted { stroke: var(--jv-success); }
+
+.jv-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  color: var(--jv-faint);
+}
+.jv-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.jv-legend i {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--jv-muted);
+}
+.jv-legend i.created { background: var(--jv-accent); }
+.jv-legend i.accepted { background: var(--jv-success); }
+.jv-legend i.hm { width: 9px; height: 9px; border-radius: 2px; }
+
+/* honest week-over-week delta chip */
+.jv-delta {
+  font-size: 0.66rem;
+  font-weight: 500;
+  padding: 0.05rem 0.45rem;
+  border-radius: 9999px;
+}
+.jv-delta.up { color: var(--jv-success); background: rgba(76, 195, 138, 0.12); }
+.jv-delta.down { color: var(--jv-danger); background: rgba(255, 97, 102, 0.12); }
+
+/* ── activity heatmap — GitHub-style, one cell per real day ───────────── */
+.jv-heatmap {
+  display: flex;
+  gap: 3px;
+}
+.jv-heatmap .col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+.jv-heatmap i, .jv-legend i.hm {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.jv-heatmap i.future { background: transparent; }
+.jv-heatmap i.lv1, .jv-legend i.hm.lv1 { background: rgba(82, 168, 255, 0.25); }
+.jv-heatmap i.lv2, .jv-legend i.hm.lv2 { background: rgba(82, 168, 255, 0.45); }
+.jv-heatmap i.lv3, .jv-legend i.hm.lv3 { background: rgba(82, 168, 255, 0.7); }
+.jv-heatmap i.lv4, .jv-legend i.hm.lv4 { background: var(--jv-accent); }
+
+/* ── commercial activity — timeline with a left status-dot rail ───────── */
+.jv-timeline { position: relative; }
+.jv-timeline .trow {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding: 0.3rem 0 0.3rem 0.15rem;
+  font-size: 0.74rem;
+}
+.jv-timeline .trow:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: calc(0.15rem + 3px);
+  top: 1.1rem;
+  bottom: -0.45rem;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.jv-timeline .tdot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--jv-faint);
+  transform: translateY(-1px);
+}
+.jv-timeline .tdot.accent { background: var(--jv-accent); }
+.jv-timeline .tdot.success { background: var(--jv-success); }
+.jv-timeline .ttext {
+  color: var(--jv-fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jv-timeline .tago {
+  margin-left: auto;
+  flex: none;
+  color: var(--jv-faint);
+  font-size: 0.62rem;
+}
+
+/* ── skeleton shimmer — blocks in the final layout's shape, no spinners ── */
+.jv-skeleton {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #262626 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: jv-shimmer 1.5s ease infinite;
+}
+@keyframes jv-shimmer {
+  to { background-position: -200% 0; }
+}
+
+/* ── ⌘K command palette — centered dialog over a blurred scrim ─────────── */
+.jv-palette-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 14vh 1rem 0;
+}
+.jv-palette {
+  width: 100%;
+  max-width: 560px;
+  background: var(--jv-panel);
+  border: 1px solid var(--jv-border-strong);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.6),
+    0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.jv-palette .pin {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--jv-border);
+  color: var(--jv-fg);
+  font-size: 0.95rem;
+  padding: 0.8rem 1rem;
+  outline: none;
+}
+.jv-palette .pin::placeholder { color: var(--jv-faint); }
+.jv-palette .plist {
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+}
+.jv-palette .pitem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--jv-muted);
+  font-size: 0.82rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.jv-palette .pitem.is-sel {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--jv-fg);
+}
+.jv-palette .plabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jv-palette .phint {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.64rem;
+  color: var(--jv-faint);
+}
+.jv-palette .pempty {
+  padding: 0.9rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--jv-faint);
+}
+.jv-palette .pfoot {
+  border-top: 1px solid var(--jv-border);
+  padding: 0.45rem 1rem;
+  font-size: 0.62rem;
+  color: var(--jv-faint);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .jv-caret { animation: none; }
   .jv-gauge .value { transition: none; }
+  .jv-funnel-row .bar i { transition: none; }
+  .jv-skeleton { animation: none; }
 }
