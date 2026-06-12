@@ -291,12 +291,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       onAddMany: (picks) => {
         if (!Array.isArray(picks) || !picks.length) return;
         const next = [...lib];
-        const seen = new Set(lib.map((m) => `${m.grade} ${m.fabric}`));
+        const seen = new Set(lib.map((m) => `${m.grade}\u0000${m.fabric}`));
         for (const p of picks) {
           const grade = p?.grade || '';
           const fabric = p?.fabric || '';
           if (!grade && !fabric) continue;
-          const key = `${grade} ${fabric}`;
+          const key = `${grade}\u0000${fabric}`;
           if (seen.has(key)) continue;
           seen.add(key);
           next.push({ id: newId(), grade, fabric, swatchImageId: p?.swatchImageId ?? null });

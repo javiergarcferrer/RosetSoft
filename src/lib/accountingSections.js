@@ -48,6 +48,7 @@ export const ACCOUNTING_SECTIONS = [
   ] },
   { key: 'informes', label: 'Informes', icon: BarChart3, tabs: [
     { to: '/accounting/informes', label: 'Informes' },
+    { to: '/accounting/statements', label: 'Estados financieros' },
   ] },
   { key: 'contabilidad', label: 'Contabilidad', icon: BookOpen, tabs: [
     { to: '/accounting/ledger', label: 'Libro diario / mayor' },
