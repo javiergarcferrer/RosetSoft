@@ -119,8 +119,12 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       the posting object) when an e-NCF was assigned and cert+RNC exist; a
       failure stays 'pending' (same e-NCF retried via the button) and the
       607 tab badges "N por transmitir".)
-- [ ] Cross-core dashboard tiles: "N por facturar" on CRM Dashboard (admins) ↔
+- [x] Cross-core dashboard tiles: "N por facturar" on CRM Dashboard (admins) ↔
       quote links in accounting panels (bridge-shaped data only).
+      (i19 — readyToInvoice/invoiceReadyAt promoted to lib/quoteMilestones
+      (one rule for Facturación's queue + the tile); CRM Dashboard shows a
+      role-gated "Por facturar" StatCard → /accounting/facturacion. The
+      accounting→CRM direction already exists via CardHead links.)
 - [ ] Tienda availability: cross-check store cards against `inventory_items`
       by SKU in `resolveStore`/`store` function; qty ≤ 0 → "Bajo pedido". Add
       "Ver tienda" external link in Settings' Tienda header.

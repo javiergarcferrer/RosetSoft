@@ -13,7 +13,7 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
-import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
+import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
@@ -32,26 +32,8 @@ function ymd(ts) {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// A floor sale ("venta de piso") isn't tied to an import order — it's sold off
-// the floor, so there's no delivery cycle: the moment money changes hands (the
-// deposit) it's ready to bill.
-function isFloorSale(q) {
-  return !q.orderId;
-}
-
-// Ready to invoice = accepted, and either delivered (any order type) or — for a
-// floor sale — its deposit has been received. (Special/import orders still wait
-// for delivery.)
-function readyToInvoice(q) {
-  if (q.status !== QUOTE_STATUS_ACCEPTED) return false;
-  if (q.deliveredAt) return true;
-  return isFloorSale(q) && !!q.depositReceivedAt;
-}
-
-// The effective invoice date — delivery if known, else the deposit, else accept.
-function invoiceReadyAt(q) {
-  return q.deliveredAt || q.depositReceivedAt || q.acceptedAt || Date.now();
-}
+// The "ready to invoice" gate + effective invoice date are SHARED with the
+// CRM dashboard's "Por facturar" tile — one rule, lib/quoteMilestones.
 
 /**
  * Facturación — recognize sales at delivery, the 607 (ventas) and the monthly
