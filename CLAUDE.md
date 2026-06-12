@@ -60,7 +60,10 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 State worth keeping across sessions lives in a test or in this file — never in
 conversation. Two kinds:
 - **Money/parsing/data-integrity tests**:
-  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats}.test.js`.
+  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats,ogImage}.test.js`.
+  `ogImage` pins the link-preview image as a BASELINE jpeg — WhatsApp renders
+  progressive JPEGs as garbled noise; fixing it also requires a NEW filename
+  (WhatsApp caches the card per-URL for weeks).
   `dgiiFormats` pins the OFFICIAL DGII 606/607 TXT layouts (header + 23 pipe
   fields, code tables) — never relax it to match the app; fix the builder.
   New money/data invariant worth keeping → pin it here so future loops inherit
