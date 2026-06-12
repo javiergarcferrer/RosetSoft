@@ -122,3 +122,11 @@ verify_jwt = false
 # service role; the key never reaches the browser.
 [functions.claude-chat]
 verify_jwt = false
+
+# meta-social links + reads the team's Facebook Page / Instagram / Ads data
+# for the JARVIS social pulse. Verifies the caller ITSELF (auth.getUser on the
+# Authorization header) — gateway check off so the CORS preflight passes, same
+# as wa-send. It reads the Meta token from the write-only meta_social_config
+# table via the service role; the token never reaches the browser.
+[functions.meta-social]
+verify_jwt = false

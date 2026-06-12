@@ -112,6 +112,19 @@ export function resolveIntegrationBoard({ settings = {}, probes = {}, now = Date
       detail: 'Meta Graph API',
     },
     {
+      id: 'metaSocial',
+      name: 'Meta Social',
+      desc: 'Instagram · Facebook · Ads',
+      status: settings.metaSocialConnectedAt ? 'online' : 'offline',
+      at: settings.metaSocialConnectedAt || null,
+      detail: settings.metaSocialConnectedAt
+        ? [
+          settings.metaSocialIgUsername && `@${settings.metaSocialIgUsername}`,
+          settings.metaSocialPageName,
+        ].filter(Boolean).join(' · ') || 'Conectado'
+        : 'Sin token de Meta',
+    },
+    {
       id: 'ecf',
       name: 'DGII e-CF',
       desc: 'Facturación electrónica',

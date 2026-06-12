@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Package,
-  Radar, RefreshCw, Satellite, Send, ShieldAlert, TrendingUp, Users, X, Zap,
+  Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp, Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -15,6 +15,7 @@ import {
   resolveBusinessPulse,
   resolveOpsFeed,
   resolveActivityHeatmap,
+  resolveSocialPulse,
   systemIntegrity,
   radarPoints,
   sparkPoints,
@@ -266,6 +267,12 @@ export default function Jarvis() {
         if (!data?.ok) throw new Error(data?.error || 'token rechazado');
         return { note: 'Meta Graph responde' };
       })],
+      ['metaSocial', () => timed(async () => {
+        const data = await invoke('meta-social', { test: true });
+        if (data?.configured === false) return { soft: true, note: 'Sin token de Meta' };
+        if (!data?.ok) throw new Error(data?.error || 'token rechazado');
+        return { note: data.page || 'Graph responde' };
+      })],
     ];
 
     await Promise.all(checks.map(async ([key, run]) => {
@@ -357,6 +364,60 @@ export default function Jarvis() {
     }
   }, [apiKey, linking, refreshSettings]);
 
+  // ── Meta social (Instagram + Facebook + Ads) ─────────────────────────
+  // Linked via the meta-social Edge Function (the token never reaches the
+  // browser); once linked, the panel pulls one consolidated snapshot.
+  const socialLinked = !!settings?.metaSocialConnectedAt;
+  const [socialRaw, setSocialRaw] = useState(null);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [socialError, setSocialError] = useState(null);
+  const socialBusy = useRef(false);
+  const loadSocial = useCallback(async () => {
+    if (socialBusy.current) return;
+    socialBusy.current = true;
+    setSocialLoading(true);
+    setSocialError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { snapshot: true },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (data?.configured === false || data?.error) throw new Error(data?.error || 'sin respuesta');
+      setSocialRaw(data);
+    } catch (e) {
+      setSocialError(e?.message || 'No se pudo leer Meta');
+    } finally {
+      socialBusy.current = false;
+      setSocialLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (socialLinked) loadSocial();
+  }, [socialLinked, loadSocial]);
+
+  const [metaToken, setMetaToken] = useState('');
+  const [metaLinking, setMetaLinking] = useState(false);
+  const [metaLinkError, setMetaLinkError] = useState(null);
+  const linkMeta = useCallback(async () => {
+    const token = metaToken.trim();
+    if (!token || metaLinking) return;
+    setMetaLinking(true);
+    setMetaLinkError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { link: { token } },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
+      setMetaToken('');
+      await refreshSettings();
+    } catch (e) {
+      setMetaLinkError(e?.message || 'No se pudo vincular');
+    } finally {
+      setMetaLinking(false);
+    }
+  }, [metaToken, metaLinking, refreshSettings]);
+
   // ── ⌘K command palette ───────────────────────────────────────────────
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -415,6 +476,10 @@ export default function Jarvis() {
       quotes: biz.quotes, orders: biz.orders, customers: biz.customers, now: nowMin,
     }),
     [biz, nowMin],
+  );
+  const social = useMemo(
+    () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
+    [socialRaw, nowMin],
   );
 
   useEffect(() => {
@@ -678,6 +743,219 @@ export default function Jarvis() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ── social: Instagram + Facebook + Ads (Meta Graph) ──────── */}
+        <section className="jv-panel">
+          <div className="jv-panel-head justify-between">
+            <span className="flex items-center gap-2"><Share2 size={12} /> Social · Meta</span>
+            {socialLinked ? (
+              <button
+                type="button"
+                className="jv-btn"
+                style={{ minHeight: '1.8rem', fontSize: '0.72rem' }}
+                onClick={loadSocial}
+                disabled={socialLoading}
+              >
+                <RefreshCw size={12} className={socialLoading ? 'animate-spin' : ''} />
+                {socialLoading ? 'Leyendo' : 'Actualizar'}
+              </button>
+            ) : (
+              <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>Sin conectar</span>
+            )}
+          </div>
+
+          {!socialLinked ? (
+            <div className="p-4">
+              <p className="text-xs mb-3" style={{ color: 'var(--jv-muted)' }}>
+                Conecta la página de Facebook y el Instagram del negocio (y la
+                cuenta publicitaria, si existe) para ver alcance, resultados de
+                anuncios y publicaciones programadas aquí. Pega un token de
+                usuario del sistema de Meta Business con permisos de páginas,
+                Instagram y ads — el enlace descubre la página, el IG y la
+                cuenta de anuncios automáticamente.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  className="jv-input"
+                  type="password"
+                  value={metaToken}
+                  onChange={(e) => setMetaToken(e.target.value)}
+                  placeholder="EAA…  (token de Meta Business)"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                />
+                <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkMeta} disabled={!metaToken.trim() || metaLinking}>
+                  {metaLinking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
+                </button>
+              </div>
+              {metaLinkError && (
+                <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{metaLinkError}</div>
+              )}
+              <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
+                El token se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
+              </p>
+            </div>
+          ) : socialError ? (
+            <div className="p-4">
+              <div className="text-xs" style={{ color: 'var(--jv-danger)' }}>{socialError}</div>
+              <button type="button" className="jv-btn mt-3" onClick={loadSocial}>
+                <RefreshCw size={12} /> Reintentar
+              </button>
+            </div>
+          ) : !social ? (
+            <div className="p-4 grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
+                  <Skeleton w="55%" h="0.6rem" />
+                  <Skeleton w="70%" h="1.3rem" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 space-y-4">
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+                <div className="jv-kpi">
+                  <span className="label">Seguidores IG</span>
+                  <b className="jv-mono">{social.kpis.igFollowers != null ? social.kpis.igFollowers.toLocaleString('en-US') : '—'}</b>
+                  <span className="sub">{social.igUsername ? `@${social.igUsername}` : 'sin IG vinculado'}</span>
+                </div>
+                <div className="jv-kpi">
+                  <span className="label">Seguidores FB</span>
+                  <b className="jv-mono">{social.kpis.fbFollowers != null ? social.kpis.fbFollowers.toLocaleString('en-US') : '—'}</b>
+                  <span className="sub">{social.pageName || '—'}</span>
+                </div>
+                <div className="jv-kpi">
+                  <span className="label">Alcance IG · 7d</span>
+                  <b className="jv-mono">{social.kpis.reach7.toLocaleString('en-US')}</b>
+                  <span className="sub">
+                    {social.kpis.reachDeltaPct != null
+                      ? (
+                        <span className={`jv-delta ${social.kpis.reachDeltaPct >= 0 ? 'up' : 'down'}`}>
+                          {social.kpis.reachDeltaPct >= 0 ? '+' : ''}{social.kpis.reachDeltaPct}% vs 7d ant.
+                        </span>
+                      )
+                      : 'cuentas alcanzadas'}
+                  </span>
+                </div>
+                <div className="jv-kpi">
+                  <span className="label">Inversión ads · 7d</span>
+                  <b className="jv-mono">
+                    {social.kpis.spend7.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    {social.adCurrency ? ` ${social.adCurrency}` : ''}
+                  </b>
+                  <span className="sub">
+                    {social.kpis.spendDeltaPct != null
+                      ? `${social.kpis.spendDeltaPct >= 0 ? '+' : ''}${social.kpis.spendDeltaPct}% vs 7d ant.`
+                      : social.hasAds ? `28d: ${social.kpis.spend28.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : 'sin cuenta de ads'}
+                  </span>
+                </div>
+                <div className="jv-kpi">
+                  <span className="label">Clics ads · 7d</span>
+                  <b className="jv-mono">{social.kpis.clicks7.toLocaleString('en-US')}</b>
+                  <span className="sub">
+                    {social.kpis.cpc7 != null
+                      ? `CPC ${social.kpis.cpc7.toFixed(2)}${social.adCurrency ? ` ${social.adCurrency}` : ''}`
+                      : 'sin clics aún'}
+                  </span>
+                </div>
+                <div className="jv-kpi">
+                  <span className="label">CTR · 7d</span>
+                  <b className="jv-mono">{social.kpis.ctr7Pct != null ? `${social.kpis.ctr7Pct.toFixed(2)}%` : '—'}</b>
+                  <span className="sub">clics / impresiones</span>
+                </div>
+              </div>
+
+              {(social.spendSeries.length > 1 || social.reachSeries.length > 1) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {social.reachSeries.length > 1 && (
+                    <div>
+                      <div className="jv-kicker mb-1.5">Alcance IG · 28 días</div>
+                      <svg viewBox="0 0 100 28" className="jv-spark" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="jvReachFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--jv-success)" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="var(--jv-success)" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polygon fill="url(#jvReachFill)" points={`2,26 ${sparkPoints(social.reachSeries)} 98,26`} />
+                        <polyline className="accepted" points={sparkPoints(social.reachSeries)} />
+                      </svg>
+                    </div>
+                  )}
+                  {social.spendSeries.length > 1 && (
+                    <div>
+                      <div className="jv-kicker mb-1.5">Inversión ads · 28 días</div>
+                      <svg viewBox="0 0 100 28" className="jv-spark" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="jvSpendFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--jv-accent)" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="var(--jv-accent)" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polygon fill="url(#jvSpendFill)" points={`2,26 ${sparkPoints(social.spendSeries)} 98,26`} />
+                        <polyline className="created" points={sparkPoints(social.spendSeries)} />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {social.campaigns.length > 0 && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Campañas · 28 días</div>
+                  <div className="space-y-1">
+                    {social.campaigns.slice(0, 5).map((c) => (
+                      <div key={c.name} className="jv-social-row">
+                        <span className="name">{c.name}</span>
+                        <span className="jv-mono stat">
+                          {c.spend.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                          {social.adCurrency ? ` ${social.adCurrency}` : ''}
+                        </span>
+                        <span className="jv-mono stat dim">
+                          {c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(social.scheduled.length > 0 || social.posts.length > 0) && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <div className="jv-kicker mb-1.5">Programado</div>
+                    {social.scheduled.length ? social.scheduled.slice(0, 4).map((p) => (
+                      <div key={p.at} className="jv-social-row">
+                        <span className="name">{p.text}</span>
+                        <span className="jv-mono stat dim">{p.inLabel}</span>
+                      </div>
+                    )) : (
+                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Nada programado.</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="jv-kicker mb-1.5">Últimas publicaciones IG</div>
+                    {social.posts.slice(0, 4).map((p) => (
+                      <div key={p.permalink || p.at} className="jv-social-row">
+                        <span className="name">{p.text}</span>
+                        <span className="jv-mono stat dim">♥ {p.likes} · 💬 {p.comments}</span>
+                      </div>
+                    ))}
+                    {!social.posts.length && (
+                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Sin publicaciones recientes.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {Object.keys(social.errors).length > 0 && (
+                <div className="text-xs" style={{ color: 'var(--jv-warning)' }}>
+                  Secciones sin respuesta: {Object.keys(social.errors).join(', ')} — el resto es dato real.
+                </div>
+              )}
+            </div>
+          )}
         </section>
         </div>
 

@@ -90,6 +90,13 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   `importCatalog` mode PULLS from). Admin tokens are store-scoped — one store's
   token 401s on the other. Non-sensitive mirrors on settings:
   `shopify_domain/connected_at` (alcover), `shopify_lsg_*` (LSG).
+- **meta_social_config** WRITE-ONLY (no client policies; only the `meta-social`
+  Edge Function touches it with the service role — its `link` mode validates a
+  pasted Meta Business token, discovers the Page (+ page token), the linked IG
+  business account and the ad account, and persists them). Backs the JARVIS
+  "Social · Meta" panel (IG/FB analytics, ad results, scheduled posts).
+  Non-sensitive mirrors on settings: `meta_social_connected_at`,
+  `meta_social_page_name`, `meta_social_ig_username`.
 
 ## Cross-cutting
 - **RLS:** single-tenant "team can write" — most tables: `for all to
