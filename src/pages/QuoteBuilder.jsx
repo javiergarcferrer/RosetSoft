@@ -10,6 +10,7 @@ import {
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
+import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
 import { composeSubtype } from '../lib/subtype.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
@@ -182,6 +183,17 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
 function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const { settings, profileId, profiles } = useApp();
   const dbQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
+  // Accounting → CRM through the bridge: the "Facturada · NCF" stamp for the
+  // header once this quote has a sale posting in the books.
+  const quotePostings = useLiveQuery(
+    () => db.salesPostings.where('quoteId').equals(quoteId).toArray(),
+    [quoteId],
+    [],
+  );
+  const invoice = useMemo(
+    () => resolveQuoteInvoiceStatus(quotePostings).get(quoteId) || null,
+    [quotePostings, quoteId],
+  );
   const baseQuote = dbQuote || draftQuote || null;
   // Resolve the exchange rate the editor (and everything it feeds —
   // totals rail, line items, client preview, PDF export) renders with.
@@ -570,6 +582,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     <>
       <QuoteHeader
         quote={quote}
+        invoice={invoice}
         customers={customers}
         professionals={professionals}
         profileId={profileId}

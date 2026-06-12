@@ -48,6 +48,27 @@ export function quoteToSale({ quote, lines, rate, hasFiscalId }) {
 }
 
 /**
+ * PROCESS — Estado de factura: the accounting sale postings → the ONE fact the
+ * CRM side may know about a quote's invoicing: that it was invoiced, under
+ * which NCF, and where the e-CF stands. Read-only and one-directional (books →
+ * sales); no amounts, no asiento — just the stamp. Latest posting per quote
+ * wins. Pure.
+ *
+ * @returns {Map<string, { ncf: string, ecfStatus: string, postedAt: number }>}
+ */
+export function resolveQuoteInvoiceStatus(postings) {
+  const m = new Map();
+  for (const p of postings || []) {
+    if (!p?.quoteId) continue;
+    const prev = m.get(p.quoteId);
+    if (!prev || (p.postedAt || 0) > prev.postedAt) {
+      m.set(p.quoteId, { ncf: p.ncf || '', ecfStatus: p.ecfStatus || '', postedAt: p.postedAt || 0 });
+    }
+  }
+  return m;
+}
+
+/**
  * PROCESS — Ventas de piso: a CRM quote's priced lines → the per-product rows
  * the Ligne Roset sell-through report books, in USD. A compound article rolls
  * up to ONE row at its line total (qty 1); a normal line keeps its qty and

@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { quoteToSale } from '../src/core/bridge/index.js';
+import { quoteToSale, resolveQuoteInvoiceStatus } from '../src/core/bridge/index.js';
 import { computeTotals, lineForTotals } from '../src/lib/pricing.js';
 import { isPricedLine } from '../src/lib/constants.js';
 
@@ -33,4 +33,18 @@ test('quoteToSale picks the e-CF type from the buyer fiscal id', () => {
 test('quoteToSale: total reconciles to base + ITBIS when no shipping', () => {
   const sale = quoteToSale({ quote, lines, rate: 60, hasFiscalId: false });
   assert.equal(sale.total, r2(sale.base + sale.itbis));
+});
+
+test('resolveQuoteInvoiceStatus: one stamp per quote, latest posting wins, no quoteId → skipped', () => {
+  const m = resolveQuoteInvoiceStatus([
+    { quoteId: 'q1', ncf: 'B0200000001', ecfStatus: '', postedAt: 100 },
+    // A re-posting (e.g. corrected NCF) replaces the older stamp.
+    { quoteId: 'q1', ncf: 'E310000000007', ecfStatus: 'sent', postedAt: 200 },
+    { quoteId: null, ncf: 'B0200000009', postedAt: 300 }, // manual posting w/o quote
+    { quoteId: 'q2', ncf: '', postedAt: 50 },
+  ]);
+  assert.equal(m.size, 2);
+  assert.deepEqual(m.get('q1'), { ncf: 'E310000000007', ecfStatus: 'sent', postedAt: 200 });
+  assert.deepEqual(m.get('q2'), { ncf: '', ecfStatus: '', postedAt: 50 });
+  assert.equal(resolveQuoteInvoiceStatus(null).size, 0);
 });

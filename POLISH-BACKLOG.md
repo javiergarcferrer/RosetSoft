@@ -62,9 +62,12 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (`src/pages/Jarvis.jsx`, `jarvis.css`); admin-only, last.
 
 ## Data ↔ interaction seams (bridge-shaped; tests + typecheck)
-- [ ] Quote invoice status into CRM: `resolveQuoteInvoiceStatus(postings)` in
+- [x] Quote invoice status into CRM: `resolveQuoteInvoiceStatus(postings)` in
       `core/bridge`, NCF/Facturada pill on quote list row, QuoteBuilder header,
       CustomerDetail. Pin in `tests/bridge.test.js`.
+      (i9 — bridge resolver (latest posting wins) + shared InvoiceChip on the
+      quote table rows, mobile cards, builder header (with NCF) and the
+      customer's quote history. e-CF rechazado shows as a red chip.)
 - [ ] Deposit handoff: marking "Depósito" milestone offers a prefilled cobro
       (USD→DOP at the locked `quoteRateState`); allocating a cobro to a
       quote's posting offers stamping `balancePaidAt` (`OrderDetail.jsx`,
