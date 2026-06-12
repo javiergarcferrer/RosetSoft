@@ -66,6 +66,13 @@ export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';
 
+// ── panel analytics (comparative periods, segmentation, 360° roll-ups)
+export {
+  resolvePeriod, stepPeriodRef, deltaPct, resolveComparativeKpis,
+  resolveSalesSegmented, resolveMonthlyComparative, resolveExpenseComparative,
+  resolveImportPanel,
+} from './analytics.js';
+
 // ── conciliación bancaria
 export { resolveReconciliation } from './reconciliation.js';
 

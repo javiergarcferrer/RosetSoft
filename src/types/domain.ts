@@ -357,6 +357,11 @@ export interface SalePosting {
   usdTotal?: number | null;
   /* e-CF (comprobante fiscal electrónico) lifecycle. */
   ecfType?: string;
+  /** State machine: '' (manual NCF — never transmits) → 'pending' (e-NCF
+   *  assigned, not yet signed/sent) → 'sent' (DGII received it; async on their
+   *  side) → 'accepted' | 'rejected' (resolved via op:'status'). A failed send
+   *  stays 'pending' and is retried with the SAME e-NCF (assigned ranges burn
+   *  gaps, never reuse). */
   ecfStatus?: string;
   /** FechaVencimientoSecuencia of the range the e-NCF came from. */
   ecfExpiresAt?: number | null;

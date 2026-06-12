@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -19,7 +19,7 @@ import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, isValidFiscalId,
-  ecfQrUrl, formatEcfDate, dgii607Txt, dgiiPeriod, dgiiTxtFilename,
+  ecfQrUrl, formatEcfDate, parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -96,10 +96,16 @@ export default function Facturacion() {
     const p = postingById.get(rowId);
     if (!p || !p.ncf) return;
     setErr('');
+    const isEcf = /^E\d{2}/.test(p.ncf);
+    // The representación impresa of an e-CF MUST carry the timbre (QR +
+    // código de seguridad), which only exists after signing — transmit first.
+    if (isEcf && !p.securityCode) {
+      setErr(`Transmite ${p.ncf} a la DGII antes de imprimir — la representación impresa requiere el timbre (QR).`);
+      return;
+    }
     setPrinting(rowId);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
-      const isEcf = /^E\d{2}/.test(p.ncf);
       const qrUrl = (isEcf && p.securityCode) ? ecfQrUrl({
         environment: settings?.ecfEnvironment || 'cert', ecfType: p.ecfType || '31',
         rncEmisor: cleanRnc(settings?.companyRnc), rncComprador: p.rnc, eNcf: p.ncf,
@@ -130,6 +136,20 @@ export default function Facturacion() {
     const p = postingById.get(rowId);
     if (!p || !p.ncf) return;
     setErr('');
+    // Pre-flight: only a well-formed e-NCF can be signed (a manual NCF would
+    // burn a DGII rejection), and signing needs the cert + the emisor RNC.
+    if (!parseENcf(p.ncf)) {
+      setErr(`${p.ncf} no es un e-NCF — sólo los comprobantes electrónicos se transmiten a la DGII.`);
+      return;
+    }
+    if (!settings?.ecfCertUploadedAt) {
+      setErr('Sube el certificado digital (.p12) en Configuración contable antes de transmitir e-CF.');
+      return;
+    }
+    if (!cleanRnc(settings?.companyRnc)) {
+      setErr('Define el RNC del emisor en Configuración contable antes de transmitir e-CF.');
+      return;
+    }
     setTransmitting(rowId);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
@@ -191,6 +211,37 @@ export default function Facturacion() {
       setChecking(null);
     }
   }
+
+  // Auto-refresh DGII status: a transmitted e-CF sits in 'sent' until the DGII
+  // resolves it asynchronously — on load, silently re-ask for the oldest few
+  // pending trackIds so acceptances/rejections land without anyone clicking
+  // Consultar. One shot per visit; failures stay silent (the manual button
+  // remains the explicit path).
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (autoChecked.current || !postingsQ.loaded) return;
+    const pending = postingsQ.data
+      .filter((p) => p.ecfStatus === 'sent' && p.trackId)
+      .sort((a, b) => (a.postedAt || 0) - (b.postedAt || 0))
+      .slice(0, 5);
+    if (pending.length === 0) return;
+    autoChecked.current = true;
+    (async () => {
+      for (const p of pending) {
+        try {
+          const { data } = await supabase.functions.invoke('ecf-send', {
+            body: { op: 'status', trackId: p.trackId, profileId: scope },
+          });
+          const norm = String(data?.estado || '').toLowerCase();
+          if (data?.ok && norm.includes('acept')) {
+            await db.salesPostings.update(p.id, { ecfStatus: 'accepted' });
+          } else if (data?.ok && norm.includes('rechaz')) {
+            await db.salesPostings.update(p.id, { ecfStatus: 'rejected' });
+          }
+        } catch { /* silent — Consultar covers the manual path */ }
+      }
+    })();
+  }, [postingsQ.loaded, postingsQ.data, scope]);
 
   // USD totals + DOP conversion for a quote — the CRM→accounting money
   // translation is the bridge's job (quoteToSale); the page only supplies the

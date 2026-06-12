@@ -1,18 +1,24 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Shield, Wallet, ArrowDownCircle, ArrowUpCircle,
-  Receipt, FileWarning, AlertTriangle, BookOpen, Landmark,
+  Wallet, ArrowDownCircle, ArrowUpCircle,
+  Receipt, FileWarning, AlertTriangle, BookOpen, Landmark, Ship,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
+import SegmentBar from '../../components/accounting/SegmentBar.jsx';
 import { Donut, BarPairs, AreaChart, Legend } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { resolveAccountingDashboard } from '../../core/accounting/index.js';
+import {
+  resolveAccountingDashboard, resolvePeriod, resolveComparativeKpis,
+  resolveSalesSegmented, resolveMonthlyComparative, resolveExpenseComparative,
+  resolveImportPanel,
+} from '../../core/accounting/index.js';
 
 // Chart palette — drawn from the app's warm tokens (ink/brand) + a few accents.
 // Centralized here so the incoming design system can retune the dashboard hues
@@ -89,8 +95,7 @@ function Bar({ value, max, tone }) {
  * on accounting/admin.
  */
 export default function AccountingDashboard() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, profiles } = useApp();
   const scope = profileId || 'team';
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
@@ -104,43 +109,89 @@ export default function AccountingDashboard() {
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
+  const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && salesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
-  const monthStart = useMemo(() => new Date(today.getFullYear(), today.getMonth(), 1).getTime(), [today]);
+
+  // The whole panel is measured over ONE selected period (mes/trimestre/año,
+  // steppable) — every widget, comparison and table re-frames with it.
+  const [periodSel, setPeriodSel] = useState({ kind: 'month', ref: Date.now() });
+  const period = useMemo(() => resolvePeriod(periodSel), [periodSel]);
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
+  const profileById = useMemo(() => new Map((profiles || []).map((p) => [p.id, p])), [profiles]);
 
   const d = useMemo(() => resolveAccountingDashboard({
     accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data,
     salesPostings: salesQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
     payments: paymentsQ.data, imports: importsQ.data, expedientes: expedientesQ.data,
     customersById, suppliersById,
-    monthStart, monthEnd: today.getTime(),
-  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, customersById, suppliersById, monthStart, today]);
+    monthStart: period.start, monthEnd: period.end,
+  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, customersById, suppliersById, period]);
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Resumen del negocio" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
+  // Comparative layer: KPIs vs período anterior + vs año pasado.
+  const kpis = useMemo(() => resolveComparativeKpis({
+    salesPostings: salesQ.data, payments: paymentsQ.data, expenses: expensesQ.data,
+    purchases: purchasesQ.data, expedientes: expedientesQ.data, imports: importsQ.data,
+    accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, period,
+  }), [salesQ.data, paymentsQ.data, expensesQ.data, purchasesQ.data, expedientesQ.data, importsQ.data, accountsQ.data, entriesQ.data, linesQ.data, period]);
 
-  const monthLabel = today.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
-  const monthSales = d.monthsSeries.length ? d.monthsSeries[d.monthsSeries.length - 1].sales : 0;
+  const importPanel = useMemo(() => resolveImportPanel({
+    expedientes: expedientesQ.data, imports: importsQ.data,
+    accounts: accountsQ.data, lines: linesQ.data, period,
+  }), [expedientesQ.data, importsQ.data, accountsQ.data, linesQ.data, period]);
+
+  const expComp = useMemo(() => resolveExpenseComparative({
+    expenses: expensesQ.data, accounts: accountsQ.data, period,
+  }), [expensesQ.data, accountsQ.data, period]);
+
+  const monthly = useMemo(() => resolveMonthlyComparative({
+    salesPostings: salesQ.data, payments: paymentsQ.data, expenses: expensesQ.data,
+    expedientes: expedientesQ.data, imports: importsQ.data, months: 12, end: period.end,
+  }), [salesQ.data, paymentsQ.data, expensesQ.data, expedientesQ.data, importsQ.data, period]);
+
+  // Segmented sales (Odoo-style group-by + free-text filter).
+  const [groupBy, setGroupBy] = useState('customer');
+  const [segQuery, setSegQuery] = useState('');
+  const segmented = useMemo(() => resolveSalesSegmented({
+    salesPostings: salesQ.data, quotes: quotesQ.data, customersById, profileById,
+    start: period.start, end: period.end, groupBy, query: segQuery,
+  }), [salesQ.data, quotesQ.data, customersById, profileById, period, groupBy, segQuery]);
+
+  const monthLabel = period.label;
+  const ventasKpi = kpis.find((k) => k.key === 'ventas');
   const pnlMax = Math.max(d.ingresosMonth, d.egresosMonth, 1);
   const arTotal = Math.max(d.ar.unpaid, 1);
+  const segLabel = { customer: 'Cliente', seller: 'Vendedor', canal: 'Canal', ecfType: 'Comprobante' }[groupBy];
 
   return (
-    <>
-      <PageHeader title="Resumen del negocio" subtitle={`Posición al ${formatDate(today.getTime())} · ${monthLabel}`} />
+    <AccountingGate title="Resumen del negocio">
+      <PageHeader title="Resumen del negocio" subtitle={`Posición al ${formatDate(today.getTime())}`}
+        actions={<PeriodNav kind={periodSel.kind} refMs={periodSel.ref} onChange={setPeriodSel} />} />
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4 min-w-0">
+          {/* Comparative KPI scorecards — the monitor layer: the period's
+              headline figures, each against the previous period AND the same
+              period last year. */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0">
+            {kpis.map((k) => (
+              <div key={k.key} className="card p-3.5 min-w-0">
+                <div className="eyebrow-xs text-ink-500 truncate mb-1">{k.label}</div>
+                <div className={`text-lg font-semibold tabular-nums whitespace-nowrap ${k.key === 'utilidad' ? (k.current >= 0 ? 'text-emerald-700' : 'text-rose-700') : 'text-ink-900'}`}>
+                  {formatDop(k.current)}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <DeltaChip delta={k.deltaPrev} vs={period.prev.label} />
+                  <span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span>
+                  <DeltaChip delta={k.deltaYoy} vs={period.yoy.label} />
+                  <span className="text-[10px] text-ink-300 uppercase tracking-wide">vs año</span>
+                </div>
+              </div>
+            ))}
+          </div>
           {/* Urgent flags float to the top. */}
           {(d.ecfPending > 0 || d.overdue > 0) && (
             <div className="flex flex-wrap gap-2">
@@ -244,7 +295,7 @@ export default function AccountingDashboard() {
             {/* Ventas */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Ventas" note="6 meses" />
-              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(monthSales)}</div>
+              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(ventasKpi?.current || 0)}</div>
               <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
               <div className="mt-auto">
                 <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />
@@ -280,9 +331,130 @@ export default function AccountingDashboard() {
             <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
               sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
             <Kpi icon={ArrowUpCircle} label="Por pagar" value={formatDop(d.cxpBalance)} to="/accounting/cuentas" />
-            <Kpi icon={Receipt} label="ITBIS del mes"
+            <Kpi icon={Receipt} label="ITBIS del período"
               value={formatDop(d.itbis.aPagar > 0 ? d.itbis.aPagar : d.itbis.aFavor)}
               sub={d.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion" />
+          </div>
+
+          {/* Analysis layer — importaciones 360° + where spending moved. */}
+          <div className="grid lg:grid-cols-2 gap-4 min-w-0">
+            <div className="card p-4 min-w-0">
+              <CardHead title="Importaciones" to="/accounting/importaciones" action="Ver expedientes →" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <div className="eyebrow-xs text-ink-500 mb-0.5 inline-flex items-center gap-1"><Ship size={12} /> En tránsito</div>
+                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.inTransit)}</div>
+                  <div className="text-xs text-ink-400">mercancía en el agua</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="eyebrow-xs text-ink-500 mb-0.5">Importado · {monthLabel}</div>
+                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.landed)}</div>
+                  <div className="flex items-center gap-1.5"><DeltaChip delta={importPanel.landedDelta} vs={period.prev.label} /><span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span></div>
+                </div>
+                <div className="min-w-0">
+                  <div className="eyebrow-xs text-ink-500 mb-0.5">ITBIS aduanal</div>
+                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.itbisAduanal)}</div>
+                  <div className="text-xs text-ink-400">crédito fiscal del período</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="eyebrow-xs text-ink-500 mb-0.5">Factor de costo</div>
+                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{importPanel.landedFactor != null ? `× ${importPanel.landedFactor.toFixed(2)}` : '—'}</div>
+                  <div className="text-xs text-ink-400">{importPanel.expedientesCount} expediente{importPanel.expedientesCount === 1 ? '' : 's'} · destino ÷ CIF</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="card overflow-hidden min-w-0">
+              <div className="card-header">
+                <h2 className="eyebrow font-semibold text-ink-700">Gastos por categoría · {monthLabel}</h2>
+                <Link to="/accounting/expenses" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ver gastos →</Link>
+              </div>
+              {expComp.length === 0 ? (
+                <p className="text-sm text-ink-400 px-4 py-6 text-center">Sin gastos en el período.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead><tr><th>Categoría</th><th className="text-right">{monthLabel}</th><th className="text-right">{period.prev.label}</th><th className="text-right">Δ</th></tr></thead>
+                    <tbody>
+                      {expComp.slice(0, 7).map((r) => (
+                        <tr key={r.code} className="hover:bg-ink-50 transition-colors">
+                          <td className="text-ink-700 min-w-0 truncate max-w-48">{r.name}</td>
+                          <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.current)}</td>
+                          <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(r.previous)}</td>
+                          <td className="text-right whitespace-nowrap"><DeltaChip delta={r.delta} vs={period.prev.label} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Drill layer — segmented sales (Odoo-style group-by). */}
+          <div className="card p-4 min-w-0">
+            <CardHead title={`Ventas por ${segLabel.toLowerCase()} · ${monthLabel}`} to="/accounting/facturacion" action="Ver facturación →" />
+            <SegmentBar groupBy={groupBy} onGroupBy={setGroupBy} query={segQuery} onQuery={setSegQuery}
+              options={[
+                { key: 'customer', label: 'Cliente' }, { key: 'seller', label: 'Vendedor' },
+                { key: 'canal', label: 'Canal' }, { key: 'ecfType', label: 'Comprobante' },
+              ]} />
+            {segmented.rows.length === 0 ? (
+              <p className="text-sm text-ink-400 py-6 text-center">Sin ventas que coincidan en el período.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead><tr><th>{segLabel}</th><th className="text-right">Ventas</th><th className="text-right">Base</th><th className="text-right">ITBIS</th><th className="text-right">Total</th><th className="text-right">% del total</th></tr></thead>
+                  <tbody>
+                    {segmented.rows.slice(0, 10).map((s) => (
+                      <tr key={s.key} className="hover:bg-ink-50 transition-colors">
+                        <td className="text-ink-700 min-w-0 truncate max-w-56">{s.label}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{s.count}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(s.base)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(s.itbis)}</td>
+                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(s.total)}</td>
+                        <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{Math.round(s.share * 100)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-ink-200 font-semibold">
+                      <td>{segmented.rows.length} segmentos</td>
+                      <td className="text-right tabular-nums">{segmented.totals.count}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.base)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.itbis)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.total)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Comparativo mensual — 12 meses con su gemelo del año anterior. */}
+          <div className="card overflow-hidden min-w-0">
+            <div className="card-header">
+              <h2 className="eyebrow font-semibold text-ink-700">Comparativo mensual · últimos 12 meses</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead><tr><th>Mes</th><th className="text-right">Ventas</th><th className="text-right">Año anterior</th><th className="text-right">Δ año</th><th className="text-right">Cobrado</th><th className="text-right">Gastos</th><th className="text-right">Importado</th></tr></thead>
+                <tbody>
+                  {monthly.map((m) => (
+                    <tr key={m.key} className="hover:bg-ink-50 transition-colors">
+                      <td className="text-ink-700 whitespace-nowrap capitalize">{m.label}</td>
+                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(m.ventas)}</td>
+                      <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(m.ventasYoy)}</td>
+                      <td className="text-right whitespace-nowrap"><DeltaChip delta={m.deltaYoy} /></td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.cobrado)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.gastos)}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.importado)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Top debtors / creditors. */}
@@ -361,6 +533,6 @@ export default function AccountingDashboard() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

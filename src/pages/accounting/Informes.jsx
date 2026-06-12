@@ -32,13 +32,13 @@ const GROUPS = [
     { label: 'Ventas Ligne Roset', desc: 'Ventas de piso del mes para el proveedor', to: '/accounting/ligne-roset' },
     { label: 'Cuentas por cobrar', desc: 'Antigüedad y estados de cuenta', to: '/accounting/cuentas?tab=cxc' },
   ] },
-  { title: 'Gastos y proveedores', items: [
-    { label: 'Cuentas por pagar', desc: 'Antigüedad por proveedor', to: '/accounting/cuentas?tab=cxp' },
+  { title: 'Importaciones e inventario', items: [
     { label: 'Importaciones', desc: 'Expedientes, costo en destino e ITBIS aduanal', to: '/accounting/importaciones' },
-    { label: 'Conciliación bancaria', desc: 'Movimientos del banco vs. el mayor', to: '/accounting/conciliacion' },
-  ] },
-  { title: 'Inventario y nómina', items: [
     { label: 'Existencias y valuación', desc: 'Kardex y costo promedio', to: '/accounting/inventario' },
+  ] },
+  { title: 'Gastos, banca y nómina', items: [
+    { label: 'Cuentas por pagar', desc: 'Antigüedad por proveedor', to: '/accounting/cuentas?tab=cxp' },
+    { label: 'Conciliación bancaria', desc: 'Movimientos del banco vs. el mayor', to: '/accounting/conciliacion' },
     { label: 'Nómina', desc: 'Corridas mensuales — TSS, ISR y neto', to: '/accounting/nomina' },
   ] },
 ];

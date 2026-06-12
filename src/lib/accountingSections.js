@@ -1,14 +1,17 @@
 // Accounting navigation model — cloned from QuickBooks Online's structure:
-//   • a short set of top-level CENTERS in the sidebar (Panel, Ventas, Gastos,
-//     Banca, Inventario, Nómina, Impuestos, Informes, Contabilidad, Config),
+//   • a short set of top-level CENTERS in the sidebar, ordered for an importer:
+//     the trade cycle first (Ventas → Importaciones → Inventario), then the
+//     money-out centers (Gastos, Banca, Nómina), then fiscal + books + config,
 //   • each center's pages render as a horizontal secondary tab strip in-page
 //     (AccountingSubnav),
-//   • a "+ Nuevo" quick-create menu (Clientes / Proveedores / Empleados / Otros)
+//   • a "+ Nuevo" quick-create menu (Clientes / Proveedores / … / Otros)
 //     above the nav — QBO's signature create button.
-// Routes are unchanged; this is organization + hierarchy.
+// Importaciones is a first-class center, NOT a Gastos tab: for this business an
+// expediente capitalizes inventory (an asset) — it's the supply side of the
+// trade cycle, never an expense.
 import {
   Gauge, FileText, Receipt, Landmark, Boxes, Wallet, BookOpen, BarChart3,
-  Percent, SlidersHorizontal,
+  Percent, SlidersHorizontal, Ship,
 } from 'lucide-react';
 
 export const ACCOUNTING_SECTIONS = [
@@ -21,18 +24,20 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/ligne-roset', label: 'Ventas Ligne Roset' },
     { to: '/accounting/ventas', label: 'Ventas y comisiones' },
   ] },
+  { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
+    { to: '/accounting/importaciones', label: 'Expedientes' },
+  ] },
+  { key: 'inventario', label: 'Inventario', icon: Boxes, tabs: [
+    { to: '/accounting/inventario', label: 'Existencias' },
+  ] },
   { key: 'gastos', label: 'Gastos', icon: Receipt, tabs: [
     { to: '/accounting/expenses', label: 'Gastos' },
     { to: '/accounting/compras', label: 'Compras' },
-    { to: '/accounting/importaciones', label: 'Importaciones' },
     { to: '/accounting/suppliers', label: 'Proveedores' },
   ] },
   { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/conciliacion', label: 'Conciliación' },
-  ] },
-  { key: 'inventario', label: 'Inventario', icon: Boxes, tabs: [
-    { to: '/accounting/inventario', label: 'Existencias' },
   ] },
   { key: 'nomina', label: 'Nómina', icon: Wallet, tabs: [
     { to: '/accounting/nomina', label: 'Nómina' },
@@ -64,11 +69,13 @@ export const QUICK_CREATE = [
     { label: 'Factura', to: '/accounting/facturacion' },
     { label: 'Cobro', to: '/accounting/cuentas?new=in' },
   ] },
+  { group: 'Importaciones', items: [
+    { label: 'Expediente de importación', to: '/accounting/importaciones?new=1' },
+  ] },
   { group: 'Proveedores', items: [
     { label: 'Gasto', to: '/accounting/expenses?new=1' },
     { label: 'Compra', to: '/accounting/compras?new=1' },
     { label: 'Pago', to: '/accounting/cuentas?new=out' },
-    { label: 'Importación', to: '/accounting/importaciones?new=1' },
   ] },
   { group: 'Empleados', items: [
     { label: 'Nómina', to: '/accounting/nomina' },
