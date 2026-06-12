@@ -94,8 +94,10 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (i13 — migration 20260718130000 adds quote_lines.inventory_item_id;
       picker stamps it; Facturación deliverable cards link "Salida de
       inventario" → Inventario ?item&qty preselects kardex + out qty.)
-- [ ] Expediente seed: "Sembrar desde el pedido" prefills embarque lines from
+- [x] Expediente seed: "Sembrar desde el pedido" prefills embarque lines from
       `resolveOrderRegistration` rows (`accounting/ExpedienteForm.jsx`).
+      (i14 — button under the Pedido select; reference/name/qty seeded, FOB
+      left for the invoice; confirm before replacing non-empty lines.)
 - [ ] JARVIS deep links: ops-feed entries + funnel rows become `Link`s with row
       id / status-filtered list URLs (`src/pages/Jarvis.jsx`).
 - [ ] Global search groups: conversations (reuse `resolveConversations` →
