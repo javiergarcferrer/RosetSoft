@@ -137,22 +137,37 @@ export default function Chats() {
 
   return (
     <>
-      <PageHeader
-        title="WhatsApp"
-        subtitle={settings?.whatsappDisplayNumber ? `Número del negocio · ${settings.whatsappDisplayNumber}` : 'Conversaciones con clientes y profesionales'}
-        actions={
-          <div className="flex items-center gap-2">
-            <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5">
-              <Megaphone size={15} /> Difusión
-            </Link>
-            <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm inline-flex items-center gap-1.5">
-              <Plus size={15} /> Nuevo chat
-            </button>
-          </div>
-        }
-      />
+      {/* On a phone an OPEN thread takes the page over, WhatsApp-style: the
+          page header (whose actions — Difusión, Nuevo chat — are list-level,
+          not thread-level) steps aside and ChatThread's own header carries
+          Back. The inbox chrome returns with the list. Desktop keeps the
+          header always — the split pane shows list + thread together. */}
+      <div className={selectedKey ? 'hidden md:block' : undefined}>
+        <PageHeader
+          title="WhatsApp"
+          subtitle={settings?.whatsappDisplayNumber ? `Número del negocio · ${settings.whatsappDisplayNumber}` : 'Conversaciones con clientes y profesionales'}
+          actions={
+            <div className="flex items-center gap-2">
+              <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5">
+                <Megaphone size={15} /> Difusión
+              </Link>
+              <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm inline-flex items-center gap-1.5">
+                <Plus size={15} /> Nuevo chat
+              </button>
+            </div>
+          }
+        />
+      </div>
 
-      <div className="card overflow-hidden flex h-[calc(100dvh-230px)] min-h-[420px]">
+      {/* With the header gone, the open thread gets the full viewport minus
+          the app chrome (topbar + page padding; the safe-area insets ride
+          100dvh, so they're subtracted too). The fixed-px desktop height is
+          unchanged. */}
+      <div className={`card overflow-hidden flex min-h-[420px] ${
+        selectedKey
+          ? 'h-[calc(100dvh-8.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] md:h-[calc(100dvh-230px)]'
+          : 'h-[calc(100dvh-230px)]'
+      }`}>
         {/* Conversation list — full width on a phone until a thread is open. */}
         <div className={`${selectedKey ? 'hidden md:flex' : 'flex'} w-full md:w-[320px] lg:w-[360px] shrink-0 flex-col border-r border-ink-100`}>
           <div className="p-3 border-b border-ink-100">
