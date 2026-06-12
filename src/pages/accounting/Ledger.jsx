@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
@@ -303,7 +304,25 @@ export default function Ledger() {
             <EmptyState icon={BookOpen} title="Sin movimientos"
               description={`La cuenta ${mayor.account?.name || ''} no tiene movimientos.`} />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            <RowCards
+              rows={mayor.rows.map(({ line, balance }) => ({
+                key: line.id,
+                title: line.entryMemo || '—',
+                right: formatDop(balance),
+                kv: [
+                  ['Fecha', formatDate(line.postedAt)],
+                  line.debit ? ['Débito', formatDop(line.debit)] : null,
+                  line.credit ? ['Crédito', formatDop(line.credit)] : null,
+                ],
+              }))}
+              footer={[
+                ['Débito', formatDop(mayor.debit)],
+                ['Crédito', formatDop(mayor.credit)],
+                ['Saldo', formatDop(mayor.balance)],
+              ]}
+            />
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[420px]">
                 <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
@@ -337,6 +356,7 @@ export default function Ledger() {
               </table>
               </div>
             </div>
+            </>
           )}
         </>
       ) : (
@@ -344,7 +364,25 @@ export default function Ledger() {
           <EmptyState icon={BookOpen} title="Sin movimientos"
             description="No hay asientos que mostrar en la balanza." />
         ) : (
-          <div className="card overflow-hidden">
+          <>
+          <RowCards
+            rows={trial.rows.map((r) => ({
+              key: r.code,
+              title: <><code className="text-[11px] text-ink-400 mr-2 tabular-nums">{r.code}</code>{r.name}</>,
+              right: formatDop(r.balance),
+              onClick: () => { setTab('mayor'); setMayorCode(r.code); },
+              kv: [
+                ['Débito', formatDop(r.debit)],
+                ['Crédito', formatDop(r.credit)],
+              ],
+            }))}
+            footer={[
+              ['Totales', trial.balanced ? '✓ cuadrado' : 'descuadrado'],
+              ['Débito', formatDop(trial.totalDebit)],
+              ['Crédito', formatDop(trial.totalCredit)],
+            ]}
+          />
+          <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[360px]">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
@@ -379,6 +417,7 @@ export default function Ledger() {
             </table>
             </div>
           </div>
+          </>
         )
       )}
     </AccountingGate>

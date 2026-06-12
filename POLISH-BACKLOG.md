@@ -42,8 +42,10 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       scroll container (:471-545).
       (i6 — action row + 607 search stack < sm; 607 gets RowCards with a
       totals footer and a shared ecfActions renderer for cell + card.)
-- [ ] Ledger + accounting Dashboard read-mode: collapse to 2-line entry cards
+- [x] Ledger + accounting Dashboard read-mode: collapse to 2-line entry cards
       (fecha+memo / debe+haber) < md; desktop density unchanged.
+      (i7 — Mayor + Balanza (tap → mayor) and the dashboard's segmented +
+      comparativo tables; Diario and Asientos recientes already fit.)
 - [ ] Difusion composer 375px pass: `src/pages/Difusion.jsx` variable-mapping
       rows → stacked labels; verify audience picker at narrow widths.
 - [ ] Nómina: payroll-run 13-col table → per-employee cards < md
