@@ -37,7 +37,7 @@ export {
 export { applyAction, applyClientPick, reanchorMaterial } from './actions.js';
 
 // ---- ViewModels (per-view projections off the Model)
-export { resolveQuoteView } from './views/quoteView.js';
+export { resolveQuoteView, linePriced, componentPriced } from './views/quoteView.js';
 export { resolveLineList } from './views/editor.js';
 export { resolveLineItem } from './views/lineItem.js';
 export { resolveDashboard } from './views/dashboard.js';

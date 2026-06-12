@@ -16,7 +16,7 @@ import {
   isRangeComponent, componentSubtotalRange, lineHasRange, componentAlternativeGroupInfo,
 } from '../../lib/pricing.js';
 import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
-import { resolveQuoteView } from '../../core/quote/views/quoteView.js';
+import { resolveQuoteView, linePriced, componentPriced } from '../../core/quote/views/quoteView.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
@@ -555,38 +555,8 @@ function LinePriceCell({ priced, fmt }) {
   );
 }
 
-// Assemble the price numbers — a standalone/set-member line and a compound's
-// component use different pricing primitives but render through one shape.
-function linePriced(line) {
-  const qty = lineQty(line);
-  const listUnit = lineListUnit(line);
-  const ranged = isRangeLine(line);
-  return {
-    qty,
-    unit: applyLineAdjustments(lineBasePrice(line), line.lineMarginPct, line.lineDiscountPct),
-    listUnit,
-    total: lineTotal(line),
-    listTotal: listUnit * qty,
-    discount: clampPct(line.lineDiscountPct),
-    ranged,
-    range: ranged ? lineTotalRange(line) : null,
-  };
-}
-function componentPriced(component) {
-  const qty = Number(component.qty) || 0;
-  const unit = Number(component.unitPrice) || 0;
-  const ranged = isRangeComponent(component);
-  return {
-    qty,
-    unit,
-    listUnit: unit, // components carry no per-line discount
-    total: componentSubtotal(component),
-    listTotal: unit * qty,
-    discount: 0,
-    ranged,
-    range: ranged ? componentSubtotalRange(component) : null,
-  };
-}
+// The price shapes come from the SHARED quoteView module (one assembly for
+// preview, public link and PDF) — see linePriced/componentPriced there.
 
 // The shared content block: identity + specs + swatch/picker + options + price.
 // `mf` is the per-line margin factor the picker grade prices + option-chip

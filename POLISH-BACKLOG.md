@@ -149,8 +149,10 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       comparator (`Workspace.jsx:239-279` → `resolveSales`) ✓ i5,
       client-preview
       priced shapes (`ClientPreview.jsx:560-589` → `resolveQuoteView`)
-      ← REMAINING (touches the shared screen/paper tree; needs a careful
-      pass with quotePickParity + pricing tests),
+      ✓ i27 — linePriced/componentPriced now live in
+      core/quote/views/quoteView.js (exported via the barrel); ClientPreview
+      imports them. Follow-up idea: have src/pdf/quotePdf consume the same
+      shapes (today it formats off the same primitives),
       compound repricing (`QuoteLineItem.jsx:217-241` → pure
       `repriceComponentsAtGrade` in `lib/catalog`) ✓ i26 (pinned in
       tests/catalog.test.js), COGS click-handler math
