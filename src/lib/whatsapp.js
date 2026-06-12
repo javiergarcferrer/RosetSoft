@@ -158,6 +158,27 @@ export async function sendWhatsappContact({ to, name, phone, org, replyTo, custo
   return invokeWaSend({ to: waDigits(to), contact: { name, phone, org }, replyTo, customerId, professionalId, quoteId });
 }
 
+/**
+ * Browse the WABA's connected Commerce catalog. `q` filters by name (Meta-side
+ * i_contains), `after` pages. → { ok, products: [{ retailerId, name,
+ * description, price, imageUrl, availability }], after } or { ok:false, error }
+ * (a clear message when no catalog is connected).
+ */
+export async function listWaCatalog({ q, after } = {}) {
+  return invokeWaSend({ listCatalog: { q: q || '', after: after || '' } });
+}
+
+/**
+ * Send product card(s) from the connected catalog: one retailer id sends a
+ * single-product message, several send a browsable product list. The client
+ * can tap through and even start a cart — replies arrive as normal inbound
+ * messages. Free-form interactive, so the 24h window rule applies. `names`
+ * ride along only for our own chat log.
+ */
+export async function sendWhatsappProducts({ to, items, names, text, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), products: { items, names, text }, customerId, professionalId, quoteId });
+}
+
 /** Read the number's public business profile (about, address, email, web…). */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });

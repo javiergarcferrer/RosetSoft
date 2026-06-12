@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
-  FileText, Download, Reply, SmilePlus, SquareMenu, X, Mic, Trash2, ExternalLink,
-  MapPin, ContactRound,
+  FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
 import { displayPhone } from '../../lib/phone.js';
-import { listWaTemplates, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
+import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
 
 /**
  * The WhatsApp conversation thread — header (contact, linked to their CRM
@@ -22,8 +22,9 @@ import { listWaTemplates, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/
  * Pure View: the parent owns the data (a `resolveThread` result + the contact)
  * and the send side-effects (`onSend(body, replyTo)` / `onSendMedia(file,
  * caption, replyTo)` / `onSendTemplate` / `onReact(m, emoji)` /
- * `onSendInteractive({ text, buttons })`, each returning wa-send's
- * `{ ok, error? }`; `replyTo` is the quoted message's wamid or null). `onBack`
+ * `onSendInteractive({ text, buttons })` / `onSendProducts({ items, names,
+ * text })`, each returning wa-send's `{ ok, error? }`; `replyTo` is the
+ * quoted message's wamid or null). `onBack`
  * is optional — when given, a back affordance shows on phones (the inbox's
  * list↔thread navigation). `showHeader:false` drops the contact header for
  * hosts that already carry their own (the quote editor's collapsible card).
@@ -45,7 +46,7 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, showHeader = true }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, showHeader = true }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -53,6 +54,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [interactiveOpen, setInteractiveOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(false);
   // Message being quoted in the composer (set from a bubble's "Responder").
   const [replyTo, setReplyTo] = useState(null);
   // Voice-note recording in flight (state drives the UI; the ref lets
@@ -351,6 +353,18 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             >
               <SquareMenu size={17} />
             </button>
+            <button
+              type="button"
+              onClick={() => setProductsOpen(true)}
+              disabled={!connected || sending}
+              className={`p-2.5 min-h-[42px] rounded-lg disabled:opacity-40 transition-colors shrink-0 ${
+                thread.windowOpen ? 'text-ink-400 hover:text-brand-700 hover:bg-brand-50' : 'text-amber-600 hover:bg-amber-50'
+              }`}
+              title="Enviar productos del catálogo"
+              aria-label="Enviar productos del catálogo"
+            >
+              <ShoppingBag size={17} />
+            </button>
             <textarea
               className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
               rows={1}
@@ -424,6 +438,16 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           }}
         />
       )}
+      <ProductPickerModal
+        open={productsOpen}
+        onClose={() => setProductsOpen(false)}
+        windowOpen={thread.windowOpen}
+        onSend={async (spec) => {
+          const res = await onSendProducts(spec);
+          if (res?.ok) setProductsOpen(false);
+          return res;
+        }}
+      />
     </>
   );
 }
@@ -790,6 +814,186 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
   );
 }
 
+/**
+ * Browse the WABA's connected Commerce catalog and send product card(s):
+ * search-as-you-type (debounced) over listWaCatalog, cursor-paged "Cargar
+ * más", toggle products into a selection (one item sends a single product
+ * card, several a browsable list), optional accompanying message. Free-form
+ * interactive, so the same 24h-window rule as plain text applies.
+ */
+const MAX_PRODUCT_ITEMS = 30;
+
+function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
+  const [q, setQ] = useState('');
+  const [products, setProducts] = useState(null); // null = loading
+  const [after, setAfter] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  // retailerId → name; insertion order is the send order.
+  const [selected, setSelected] = useState(() => new Map());
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setQ('');
+    setSelected(new Map());
+    setText('');
+    setError(null);
+  }, [open]);
+
+  // Debounced search — also runs the initial load when the modal opens.
+  useEffect(() => {
+    if (!open) return undefined;
+    const id = setTimeout(async () => {
+      setProducts(null);
+      setAfter('');
+      setLoadError(null);
+      try {
+        const res = await listWaCatalog({ q: q.trim() });
+        if (res?.ok) { setProducts(res.products || []); setAfter(res.after || ''); }
+        else { setProducts([]); setLoadError(res?.error || 'No se pudo cargar el catálogo.'); }
+      } catch (e) {
+        setProducts([]);
+        setLoadError(e?.message || 'No se pudo cargar el catálogo.');
+      }
+    }, 350);
+    return () => clearTimeout(id);
+  }, [open, q]);
+
+  async function loadMore() {
+    if (!after || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await listWaCatalog({ q: q.trim(), after });
+      if (res?.ok) { setProducts((ps) => [...(ps || []), ...(res.products || [])]); setAfter(res.after || ''); }
+      else setLoadError(res?.error || 'No se pudieron cargar más productos.');
+    } catch (e) {
+      setLoadError(e?.message || 'No se pudieron cargar más productos.');
+    }
+    setLoadingMore(false);
+  }
+
+  function toggle(p) {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(p.retailerId)) next.delete(p.retailerId);
+      else if (next.size < MAX_PRODUCT_ITEMS) next.set(p.retailerId, p.name || '');
+      return next;
+    });
+  }
+
+  async function submit() {
+    if (sending || !selected.size) return;
+    setSending(true);
+    setError(null);
+    const items = [...selected.keys()];
+    const names = items.map((id) => selected.get(id) || '');
+    const res = await onSend({ items, names, text: text.trim() });
+    setSending(false);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Enviar productos del catálogo" size="md">
+      <div className="space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
+          <input
+            className="input pl-9 text-sm"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar producto por nombre…"
+            aria-label="Buscar producto"
+          />
+        </div>
+        {loadError && (
+          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{loadError}</p>
+        )}
+        <div className="max-h-[42vh] overflow-y-auto -mx-1 px-1">
+          {products === null && (
+            <div className="flex items-center justify-center py-10 text-ink-400"><Loader2 size={18} className="animate-spin" /></div>
+          )}
+          {products !== null && !loadError && !products.length && (
+            <p className="text-xs text-ink-400 text-center py-8">
+              {q.trim() ? 'Ningún producto coincide con la búsqueda.' : 'El catálogo no tiene productos.'}
+            </p>
+          )}
+          {(products || []).map((p) => {
+            const picked = selected.has(p.retailerId);
+            const soldOut = p.availability === 'out of stock';
+            return (
+              <button
+                key={p.retailerId}
+                type="button"
+                onClick={() => toggle(p)}
+                aria-pressed={picked}
+                className={`w-full text-left px-2 py-2 flex items-center gap-3 rounded-lg transition-colors ${picked ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-ink-50'}`}
+              >
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover bg-ink-100" />
+                ) : (
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-ink-300">
+                    <ShoppingBag size={16} aria-hidden />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-ink-900 truncate">{p.name || p.retailerId}</span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-ink-400">
+                    {p.price && <span>{p.price}</span>}
+                    {soldOut && (
+                      <span className="inline-flex items-center gap-1 text-red-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-hidden /> Agotado
+                      </span>
+                    )}
+                  </span>
+                </span>
+                {picked && <Check size={15} className="text-brand-700 shrink-0" aria-hidden />}
+              </button>
+            );
+          })}
+          {!!after && products !== null && (
+            <div className="text-center py-2">
+              <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-ghost text-xs inline-flex items-center gap-1.5">
+                {loadingMore && <Loader2 size={12} className="animate-spin" />} Cargar más
+              </button>
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="label">Mensaje (opcional)</div>
+          <input
+            className="input text-sm"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Mira estas opciones que te pueden interesar…"
+          />
+        </div>
+        {!windowOpen && (
+          <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <Clock size={12} className="mt-0.5 shrink-0" />
+            <span>Ventana de 24 h cerrada: igual que el texto libre, es probable que no se entregue hasta que el cliente vuelva a escribir.</span>
+          </p>
+        )}
+        {error && (
+          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-xs text-ink-500">
+            {selected.size} seleccionado{selected.size === 1 ? '' : 's'}{selected.size >= MAX_PRODUCT_ITEMS ? ` (máx. ${MAX_PRODUCT_ITEMS})` : ''}
+          </span>
+          <button type="button" onClick={submit} disabled={sending || !selected.size} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function Bubble({ m, prev, onReply, onReact }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
@@ -840,6 +1044,17 @@ function Bubble({ m, prev, onReply, onReact }) {
             </div>
           )}
           {m.mediaPath && <MediaAttachment m={m} />}
+          {/* Catalog products WE sent — compact chips showing what the client saw. */}
+          {m.payload?.products?.items?.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 mb-1">
+              <ShoppingBag size={12} className="shrink-0 opacity-60" aria-hidden />
+              {m.payload.products.items.map((id, i) => (
+                <span key={`${id}-${i}`} className="rounded-full bg-white/70 border border-ink-200 px-2 py-0.5 text-[11px] text-ink-700 max-w-[180px] truncate">
+                  {m.payload.products.names?.[i] || id}
+                </span>
+              ))}
+            </div>
+          )}
           {m.body && !isDocChip && !card
             ? m.body
             : !m.mediaPath && !m.body && !card && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}

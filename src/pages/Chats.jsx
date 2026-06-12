@@ -14,8 +14,12 @@ import {
 import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
+<<<<<<< HEAD
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
   markThreadRead, draftOutboundMessage,
+=======
+  sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappProducts, markThreadRead, draftOutboundMessage,
+>>>>>>> a0fae5a (feat(whatsapp): sell from the chat — Commerce catalog product messages)
 } from '../lib/whatsapp.js';
 
 /**
@@ -239,6 +243,7 @@ export default function Chats() {
                 invalidate();
                 return res;
               }}
+<<<<<<< HEAD
               onSendLocation={async (spec) => {
                 const res = await sendWhatsappLocation({
                   to: selected.phone, ...spec,
@@ -250,6 +255,11 @@ export default function Chats() {
               onSendContact={async (spec) => {
                 const res = await sendWhatsappContact({
                   to: selected.phone, ...spec,
+=======
+              onSendProducts={async ({ items, names, text }) => {
+                const res = await sendWhatsappProducts({
+                  to: selected.phone, items, names, text,
+>>>>>>> a0fae5a (feat(whatsapp): sell from the chat — Commerce catalog product messages)
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();

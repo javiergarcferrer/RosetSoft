@@ -9,7 +9,7 @@ import { phoneKey, displayPhone } from '../../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
-  markThreadRead, draftOutboundMessage,
+  sendWhatsappProducts, markThreadRead, draftOutboundMessage,
 } from '../../lib/whatsapp.js';
 
 /**
@@ -183,6 +183,12 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
             }}
             onSendContact={async (spec) => {
               const res = await sendWhatsappContact({ to: contact.phone, ...spec, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
+              invalidate();
+              return res;
+            }}
+            onSendProducts={async ({ items, names, text }) => {
+              const res = await sendWhatsappProducts({ to: contact.phone, items, names, text, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;

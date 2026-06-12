@@ -59,6 +59,11 @@ type SendBody = {
     about?: string; address?: string; description?: string; email?: string;
     vertical?: string; websites?: string[];
   };
+  /** Browse the WABA's connected Commerce catalog (paged; optional name search). */
+  listCatalog?: { q?: string; after?: string };
+  /** Send product(s) from the connected catalog — 1 item ⇒ single-product
+   *  message, 2+ ⇒ product_list. `names` ride along only for our chat log. */
+  products?: { items?: string[]; names?: string[]; text?: string };
   broadcast?: { name?: string; template?: string; lang?: string; audience?: string; recipients?: Recipient[] };
   to?: string;
   text?: string;
@@ -271,6 +276,56 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: metaError(data, r.status) }, 502);
     }
     return json({ ok: true });
+  }
+
+  // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
+  // The catalog id is resolved fresh per request — one cheap Graph call, no
+  // state to go stale when the team reconnects a different catalog.
+  async function connectedCatalogId(): Promise<{ id: string | null; error: string | null }> {
+    if (!wabaId) return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA).' };
+    const r = await fetch(`${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return { id: null, error: metaError(data, r.status) };
+    const id = (data as { data?: { id?: string }[] }).data?.[0]?.id || null;
+    return {
+      id,
+      error: id ? null : 'La cuenta de WhatsApp no tiene un catálogo conectado. Conéctalo en Meta → WhatsApp Manager → Catálogo.',
+    };
+  }
+
+  if (body.listCatalog) {
+    const cat = await connectedCatalogId();
+    if (!cat.id) return json({ ok: false, error: cat.error }, 502);
+    const q = String(body.listCatalog.q || '').trim();
+    const after = String(body.listCatalog.after || '').trim();
+    const params = new URLSearchParams({
+      fields: 'retailer_id,name,description,price,image_url,availability',
+      limit: '24',
+    });
+    if (q) params.set('filter', JSON.stringify({ name: { i_contains: q } }));
+    if (after) params.set('after', after);
+    const r = await fetch(`${GRAPH}/${cat.id}/products?${params}`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[wa-send] listCatalog failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    const d = data as {
+      data?: { retailer_id?: string; name?: string; description?: string; price?: string; image_url?: string; availability?: string }[];
+      paging?: { cursors?: { after?: string }; next?: string };
+    };
+    return json({
+      ok: true,
+      products: (d.data || []).map((p) => ({
+        retailerId: p.retailer_id || '',
+        name: p.name || '',
+        description: p.description || '',
+        price: p.price || '',
+        imageUrl: p.image_url || '',
+        availability: p.availability || '',
+      })).filter((p) => p.retailerId),
+      after: d.paging?.next ? (d.paging?.cursors?.after || '') : '',
+    });
   }
 
   // ── Template management (needs the WABA id) ───────────────────────────────
@@ -620,6 +675,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, id: res.id });
   }
 
+<<<<<<< HEAD
   // Location pin.
   if (body.location) {
     const lat = Number(body.location.latitude);
@@ -663,6 +719,41 @@ Deno.serve(async (req: Request) => {
       logKind: 'contacts',
       logBody: cName,
       logPayload: { ...(contextLog || {}), contact: { name: cName, phone: cPhone, org } },
+=======
+  // Product message(s) from the connected Commerce catalog. One item sends a
+  // single-product card; several send a product_list (one section). Free-form
+  // interactive — same 24h window rule as text.
+  if (body.products) {
+    const items = (Array.isArray(body.products.items) ? body.products.items : [])
+      .map((i) => String(i || '').trim()).filter(Boolean).slice(0, 30);
+    if (!items.length) return json({ ok: false, error: 'Faltan los productos a enviar.' }, 400);
+    const names = (Array.isArray(body.products.names) ? body.products.names : [])
+      .map((n) => String(n || '').trim());
+    const text = String(body.products.text || '').trim();
+    const cat = await connectedCatalogId();
+    if (!cat.id) return json({ ok: false, error: cat.error }, 502);
+    const interactive = items.length === 1
+      ? {
+          type: 'product',
+          ...(text ? { body: { text } } : {}),
+          action: { catalog_id: cat.id, product_retailer_id: items[0] },
+        }
+      : {
+          type: 'product_list',
+          header: { type: 'text', text: 'Selección de productos' },
+          body: { text: text || 'Mira esta selección de nuestro catálogo.' },
+          action: {
+            catalog_id: cat.id,
+            sections: [{ title: 'Productos', product_items: items.map((id) => ({ product_retailer_id: id })) }],
+          },
+        };
+    const res = await sendOne({
+      to,
+      payload: { messaging_product: 'whatsapp', to, type: 'interactive', interactive, ...contextPart },
+      logKind: 'product',
+      logBody: text || names.filter(Boolean).join(' · ') || `${items.length} producto(s)`,
+      logPayload: { ...(contextLog || {}), products: { items, names } },
+>>>>>>> a0fae5a (feat(whatsapp): sell from the chat — Commerce catalog product messages)
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
