@@ -60,6 +60,11 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // Contact being saved into the CRM ({ name, phone } from a received card
   // or the unknown-chatter header action), or null.
   const [saveTarget, setSaveTarget] = useState(null);
+  // File staged for sending (picked or pasted) + its caption — the preview
+  // step between choosing a file and it actually leaving.
+  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingUrl, setPendingUrl] = useState(null);
+  const [caption, setCaption] = useState('');
   // Message being quoted in the composer (set from a bubble's "Responder").
   const [replyTo, setReplyTo] = useState(null);
   // Voice-note recording in flight (state drives the UI; the ref lets
@@ -72,7 +77,14 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const fileRef = useRef(null);
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [thread.items.length, contact.key]);
-  useEffect(() => { setText(''); setError(null); setReplyTo(null); typingAt.current = 0; }, [contact.key]);
+  useEffect(() => { setText(''); setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0; }, [contact.key]);
+  // Object URL for the staged file's preview, revoked when it changes.
+  useEffect(() => {
+    if (!pendingFile) { setPendingUrl(null); return undefined; }
+    const url = URL.createObjectURL(pendingFile);
+    setPendingUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingFile]);
   // Switching threads or unmounting abandons an in-flight recording.
   useEffect(() => () => {
     recCancelled.current = true;
@@ -189,20 +201,52 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     if (!res?.ok) setError(res?.error || 'No se pudo enviar la nota de voz.');
   }
 
-  // Attach: any picked file ships as media (image/video/audio inline,
-  // everything else as a document). The current draft text rides as caption.
-  async function pickFile(e) {
+  // Attach: picking (or pasting) a file opens a PREVIEW with a caption box —
+  // nothing sends until the dealer confirms, like the official app. The
+  // current draft text moves into the caption (WhatsApp Web's behavior) and
+  // moves back to the composer if the preview is discarded.
+  function stageFile(file) {
+    if (!file || sending) return;
+    setError(null);
+    setPendingFile(file);
+    setCaption(text.trim());
+    setText('');
+  }
+
+  function pickFile(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || sending) return;
+    stageFile(file);
+  }
+
+  // Pasting a screenshot/file into the composer stages it too.
+  function pasteFile(e) {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.kind === 'file');
+    const file = item?.getAsFile?.();
+    if (!file) return; // plain text paste — let it through
+    e.preventDefault();
+    stageFile(file);
+  }
+
+  function discardPending() {
+    if (!pendingFile) return;
+    setText(caption); // hand the words back to the composer
+    setPendingFile(null);
+    setCaption('');
+  }
+
+  async function sendPending() {
+    if (!pendingFile || sending) return;
     setSending(true);
     setError(null);
-    const caption = text.trim();
-    setText('');
-    const res = await onSendMedia(file, caption, replyTo?.waId || null);
-    setReplyTo(null);
+    const isAudio = (pendingFile.type || '').startsWith('audio/');
+    const res = await onSendMedia(pendingFile, isAudio ? '' : caption.trim(), replyTo?.waId || null);
     setSending(false);
-    if (!res?.ok) setError(res?.error || 'No se pudo enviar el archivo.');
+    // Keep the staged file on failure so a retry is one tap, not a re-pick.
+    if (!res?.ok) { setError(res?.error || 'No se pudo enviar el archivo.'); return; }
+    setPendingFile(null);
+    setCaption('');
+    setReplyTo(null);
   }
 
   const detailLink = contact.customerId
@@ -302,8 +346,60 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </button>
         </div>
       )}
+      <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
+      {pendingFile ? (
+        <div className="border-t border-ink-100 bg-white px-3 py-3 space-y-2.5">
+          <div className="flex items-start gap-3">
+            <PendingPreview file={pendingFile} url={pendingUrl} />
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="text-sm font-medium text-ink-800 truncate">{pendingFile.name || 'Archivo'}</div>
+              <div className="text-[11px] text-ink-400">
+                {prettySize(pendingFile.size)}
+                {pendingFile.size > 24 * 1024 * 1024 ? ' · supera el límite de 24 MB' : ''}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={discardPending}
+              className="p-1.5 -mr-0.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0"
+              title="Descartar archivo"
+              aria-label="Descartar archivo"
+            >
+              <X size={15} />
+            </button>
+          </div>
+          <div className="flex items-end gap-1.5">
+            {(pendingFile.type || '').startsWith('audio/') ? (
+              <span className="flex-1 text-[11px] text-ink-400 self-center">Los audios se envían sin comentario.</span>
+            ) : (
+              <textarea
+                className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
+                rows={1}
+                autoFocus
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPending(); }
+                  if (e.key === 'Escape') { e.preventDefault(); discardPending(); }
+                }}
+                placeholder="Añade un comentario…"
+                aria-label="Comentario del archivo"
+              />
+            )}
+            <button
+              type="button"
+              onClick={sendPending}
+              disabled={sending || pendingFile.size > 24 * 1024 * 1024}
+              className="btn-primary !px-3 min-h-[42px] disabled:opacity-40 shrink-0"
+              title="Enviar archivo"
+              aria-label="Enviar archivo"
+            >
+              {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-white">
-        <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
         {rec ? (
           <>
             <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 border border-red-100 px-3">
@@ -395,6 +491,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               rows={1}
               value={text}
               onChange={(e) => { setText(e.target.value); notifyTyping(); }}
+              onPaste={pasteFile}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
               }}
@@ -429,6 +526,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         )}
       </div>
+      )}
 
       <TemplateSendModal
         open={templateOpen}
@@ -484,6 +582,32 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       )}
     </>
   );
+}
+
+/** The staged file's thumbnail — image/video/audio preview or a doc glyph. */
+function PendingPreview({ file, url }) {
+  const mime = file.type || '';
+  if (url && mime.startsWith('image/')) {
+    return <img src={url} alt="Vista previa" className="h-20 w-20 rounded-lg object-cover border border-ink-100 shrink-0" />;
+  }
+  if (url && mime.startsWith('video/')) {
+    return <video src={url} className="h-20 w-28 rounded-lg object-cover border border-ink-100 shrink-0" muted playsInline controls />;
+  }
+  if (url && mime.startsWith('audio/')) {
+    return <audio src={url} controls className="h-10 max-w-[220px] shrink-0" />;
+  }
+  return (
+    <span className="h-20 w-20 rounded-lg bg-ink-50 border border-ink-100 flex items-center justify-center shrink-0">
+      <FileText size={24} className="text-ink-400" />
+    </span>
+  );
+}
+
+function prettySize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
 }
 
 /** One row of the attach popover menu. */
