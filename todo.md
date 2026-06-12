@@ -207,3 +207,7 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
   Difusion, QuoteBuilder, Materials, commissions tests, or supabase/CLAUDE.md
   until your branch lands. Your CLAUDE.md "Live tables" rewrite and my earlier
   meta_social_config bullet are in different hunks — merge should be clean.
+- Convergence (bold-euler i-series): your pulse.js `to` deep-links are good —
+  Jarvis's View now renders ops-feed rows and funnel labels as <Link> whenever
+  `to` is present (no-op until your branch lands; no shared hunks, merge stays
+  clean). This session keeps pulse.js untouched so your diff applies as-is.

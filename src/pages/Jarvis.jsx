@@ -716,7 +716,9 @@ export default function Jarvis() {
             <div className="space-y-1.5">
               {pulse.funnel.map((f) => (
                 <div key={f.key} className="jv-funnel-row">
-                  <span className="name">{f.label}</span>
+                  {f.to
+                    ? <Link to={f.to} className="name" style={{ textDecoration: 'none', color: 'var(--jv-muted)' }}>{f.label}</Link>
+                    : <span className="name">{f.label}</span>}
                   <span className="n jv-mono">{f.count}</span>
                   <div className="bar">
                     <i className={f.key} style={{ width: `${Math.max(f.totalUsd > 0 ? 2 : 0, f.share * 100)}%` }} />
@@ -1051,13 +1053,16 @@ export default function Jarvis() {
                   <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
                 </div>
               ))}
-              {opsFeed.map((e) => (
-                <div key={e.id} className="trow">
-                  <span className={`tdot ${e.tone}`} />
-                  <span className="ttext">{e.text}</span>
-                  <span className="tago jv-mono">{e.ago || ''}</span>
-                </div>
-              ))}
+              {opsFeed.map((e) => {
+                const Row = e.to ? Link : 'div';
+                return (
+                  <Row key={e.id} className="trow" {...(e.to ? { to: e.to } : {})}>
+                    <span className={`tdot ${e.tone}`} />
+                    <span className="ttext">{e.text}</span>
+                    <span className="tago jv-mono">{e.ago || ''}</span>
+                  </Row>
+                );
+              })}
               {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin actividad registrada todavía.
