@@ -213,6 +213,11 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         productDescription: seed.productDescription || '',
         pageRef: seed.pageRef || '',
         imageId: seed.imageId || null,
+        // Catalog gallery (LSG CDN pointers) seeded by the picker — the rest
+        // of the store's photos beyond the cover.
+        extraImageIds: Array.isArray(seed.extraImageIds) && seed.extraImageIds.length
+          ? seed.extraImageIds
+          : null,
         swatchImageId: seed.swatchImageId ?? null,
         qty: seed.qty ?? 1,
         unitPrice: seed.unitPrice ?? 0,

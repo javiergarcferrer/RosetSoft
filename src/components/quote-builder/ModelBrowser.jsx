@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, PackageSearch, ChevronRight, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
-import { groupFamilies, productForGrade } from '../../lib/catalog.js';
+import { groupFamilies, productForGrade, familyStock } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 import { ALL_BRANDS, BRAND_LIGNE_ROSET, brandName } from '../../lib/constants.js';
 import ImageView from '../ImageView.jsx';
@@ -327,11 +327,19 @@ function ModelButton({ model, onPick, showBrand = false }) {
   const sample = productForGrade(model, model.grades?.[0] || '');
   const description = [sample?.subtype, sample?.dimensions].filter(Boolean).join(' · ');
   const hasPhoto = !!(sample?.imageId || sample?.imageSrc);
+  // Inventory gate — tracked models (LSG) show their live stock and an
+  // out-of-stock one cannot be picked at all (the store has nothing to sell).
+  const stock = familyStock(model);
+  const out = stock.tracked && stock.qty <= 0;
   return (
     <button
       type="button"
-      onClick={() => onPick(model)}
-      className="w-full text-left rounded-md px-3 py-2.5 min-h-11 flex items-center gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors"
+      onClick={() => { if (!out) onPick(model); }}
+      disabled={out}
+      title={out ? 'Agotado en LifestyleGarden — no se puede cotizar' : undefined}
+      className={`w-full text-left rounded-md px-3 py-2.5 min-h-11 flex items-center gap-3 transition-colors ${
+        out ? 'opacity-50 cursor-not-allowed' : 'hover:bg-ink-50 active:bg-ink-100'
+      }`}
     >
       {hasPhoto ? (
         // The catalog's own photo (LSG); LR rows have none and keep the glyph.
@@ -356,7 +364,14 @@ function ModelButton({ model, onPick, showBrand = false }) {
           <span className="block text-[11px] text-ink-400 truncate" title={description}>{description}</span>
         )}
       </span>
-      <span className="text-xs tabular-nums text-ink-700 whitespace-nowrap flex-shrink-0">{priceLabel(model)}</span>
+      <span className="flex flex-col items-end gap-0.5 flex-shrink-0">
+        <span className="text-xs tabular-nums text-ink-700 whitespace-nowrap">{priceLabel(model)}</span>
+        {stock.tracked && (
+          out
+            ? <span className="chip bg-red-50 text-red-700 border border-red-200">Agotado</span>
+            : <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">{stock.qty} en stock</span>
+        )}
+      </span>
     </button>
   );
 }

@@ -1055,14 +1055,22 @@ export interface Product {
   priceUsd?: number;
   cost?: number;
   /** LSG rows: sellable units in the store (Shopify inventoryQuantity),
-   *  refreshed on each catalog sync. Null = not tracked / pre-stock sync. */
+   *  refreshed on each catalog sync. Null = not tracked / pre-stock sync.
+   *  Gates the quote builder (out-of-stock can't be quoted) and the client
+   *  catalog PDF. */
   stockQty?: number | null;
-  /** Mirrored product photo (→ images.id) — LSG rows, set by the import's
-   *  mirror pass; quote lines snapshot it on insert. Null for LR rows. */
+  /** Cover photo (→ images.id) — LSG rows, a CDN POINTER row written by the
+   *  sync's pointer pass (external_url, no stored bytes); quote lines
+   *  snapshot it on insert. Null for LR rows. */
   imageId?: string | null;
-  /** The brand store's own CDN photo URL — the render fallback while a mirror
-   *  is pending (ImageView fallbackUrl). */
+  /** The brand store's own CDN cover URL (= imageSrcs[0]) — the render
+   *  fallback while a pointer is pending (ImageView fallbackUrl). */
   imageSrc?: string;
+  /** FULL CDN gallery, cover first — every product photo on the store. */
+  imageSrcs?: string[] | null;
+  /** Pointer ids for imageSrcs[1..] — copied onto a quote line's
+   *  extraImageIds on catalog insert so the client sees the whole gallery. */
+  extraImageIds?: string[] | null;
   active?: boolean;
   createdAt?: number;
   updatedAt?: number;
@@ -1278,9 +1286,16 @@ export interface ImageRecord {
   kind: string;
   ownerId?: string | null;
   label?: string;
-  contentType: string;
-  size: number;
-  storagePath: string;
+  contentType?: string | null;
+  size?: number | null;
+  /** Object path in the images bucket — null on a CDN pointer row. */
+  storagePath?: string | null;
+  /**
+   * Remote CDN url (LSG catalog photos, kind 'catalog-lsg'): the row is a
+   * POINTER — no bytes live in our bucket. Resolvers (ImageView,
+   * downloadImageBytes) serve straight from this url.
+   */
+  externalUrl?: string | null;
   createdAt?: number;
 }
 

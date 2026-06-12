@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -218,4 +218,44 @@ test('skuFillPatch resolves a non-graded SKU to its single product', () => {
 test('skuFillPatch leaves an unknown SKU (or null catalog) as just the reference', () => {
   assert.deepEqual(skuFillPatch(skuFams(), '99999999Z'), { reference: '99999999Z' });
   assert.deepEqual(skuFillPatch(null, '15420000G'), { reference: '15420000G' });
+});
+
+/* ------------------------------- stock gate ------------------------------- */
+// LSG rows carry stockQty (Shopify inventory, refreshed on sync); LR rows
+// never do. The gate is data-integrity: a TRACKED product with no sellable
+// units must not be quotable — pickers disable it and inserts hard-stop.
+
+test('productStock: stockQty null/absent = untracked (LR, pre-stock LSG)', () => {
+  assert.deepEqual(productStock({ stockQty: null }), { tracked: false, qty: 0 });
+  assert.deepEqual(productStock({}), { tracked: false, qty: 0 });
+  assert.deepEqual(productStock(null), { tracked: false, qty: 0 });
+});
+
+test('productStock: a tracked figure passes through, oversold stays negative', () => {
+  assert.deepEqual(productStock({ stockQty: 7 }), { tracked: true, qty: 7 });
+  assert.deepEqual(productStock({ stockQty: 0 }), { tracked: true, qty: 0 });
+  assert.deepEqual(productStock({ stockQty: -2 }), { tracked: true, qty: -2 });
+});
+
+test('isOutOfStock: only a TRACKED product with qty <= 0 is blocked', () => {
+  assert.equal(isOutOfStock({ stockQty: 0 }), true);
+  assert.equal(isOutOfStock({ stockQty: -1 }), true);
+  assert.equal(isOutOfStock({ stockQty: 3 }), false);
+  // Untracked (LR special order / pre-stock import) is NEVER blocked.
+  assert.equal(isOutOfStock({ stockQty: null }), false);
+  assert.equal(isOutOfStock({}), false);
+  assert.equal(isOutOfStock(null), false);
+});
+
+test('familyStock: an LSG single-member model carries its variant stock', () => {
+  const [fam] = groupFamilies([{ reference: 'LSG-1', name: 'Nassau Sofa', stockQty: 3 }]);
+  assert.deepEqual(familyStock(fam), { tracked: true, qty: 3 });
+  const [out] = groupFamilies([{ reference: 'LSG-2', name: 'Nassau Chair', stockQty: 0 }]);
+  assert.deepEqual(familyStock(out), { tracked: true, qty: 0 });
+});
+
+test('familyStock: graded LR models are untracked (special order, never gated)', () => {
+  const togo = groupFamilies(TOGO).find((f) => f.root === '15420000');
+  assert.deepEqual(familyStock(togo), { tracked: false, qty: 0 });
+  assert.deepEqual(familyStock(null), { tracked: false, qty: 0 });
 });

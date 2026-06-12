@@ -1,4 +1,5 @@
 import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
+import { isSharedCatalogImage, sizedExternalUrl, DOWNLOAD_IMG_WIDTH } from '../lib/catalogImages.js';
 import { snake, toRow, fromRow, fromRows, type Row } from './rowMapping.js';
 import type {
   Profile,
@@ -884,6 +885,9 @@ export async function saveImage({ kind, ownerId, file, label = '' }: SaveImageAr
 
 export async function deleteImage(id: string | null | undefined): Promise<void> {
   if (!id) return;
+  // Shared catalog pointers (LSG photos) are owned by the sync and referenced
+  // from many products/lines — never delete one on behalf of a single owner.
+  if (isSharedCatalogImage(id)) return;
   const rec = await db.images.get(id);
   if (rec?.storagePath) {
     await supabase.storage.from(IMAGES_BUCKET).remove([rec.storagePath]).catch(() => {});
@@ -897,6 +901,14 @@ export async function downloadImageBytes(
 ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   if (!id) return null;
   const rec = await db.images.get(id);
+  // CDN pointer row (LSG catalog photo): the bytes live on the store's CDN,
+  // never in our bucket — fetch them from there, width-capped for print.
+  if (rec?.externalUrl) {
+    const r = await fetch(sizedExternalUrl(rec.externalUrl, DOWNLOAD_IMG_WIDTH)).catch(() => null);
+    if (!r?.ok) return null;
+    const buf = await r.arrayBuffer();
+    return { bytes: new Uint8Array(buf), contentType: r.headers.get('content-type') || '' };
+  }
   if (!rec?.storagePath) return null;
   const { data, error } = await supabase.storage.from(IMAGES_BUCKET).download(rec.storagePath);
   if (error || !data) return null;

@@ -76,7 +76,7 @@ export default function CatalogLifestyleGarden() {
       } else {
         const removed = Number(r?.removed) || 0;
         const images = Number(r?.images) || 0;
-        setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${images ? ` · ${images} fotos nuevas` : ''}${removed ? ` · ${removed} retirados` : ''}.`);
+        setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${images ? ` · ${images} fotos enlazadas` : ''}${removed ? ` · ${removed} retirados` : ''}.`);
         setRefresh((n) => n + 1);
       }
     } catch (e) {
@@ -218,6 +218,21 @@ function sortCat(a, b) {
   return (a || '').localeCompare(b || '', 'es', { sensitivity: 'base' });
 }
 
+/** Stock across a model's variants: tracked when any member carries a figure
+ *  (Shopify inventory, refreshed on sync), qty summed over the members. */
+function modelStock(model) {
+  const tracked = model.members.some((p) => p.stockQty != null);
+  const qty = model.members.reduce((n, p) => n + (Number(p.stockQty) || 0), 0);
+  return { tracked, qty };
+}
+
+/** "N en stock" / "agotado" tail for a single variant row; '' when untracked. */
+function variantStockLabel(p) {
+  if (p.stockQty == null) return '';
+  const n = Number(p.stockQty) || 0;
+  return n > 0 ? `${n} en stock` : 'agotado';
+}
+
 /** "$X" for one price, "$lo – $hi" across a model's variants. */
 function priceRangeLabel(model) {
   const prices = model.members.map((p) => Number(p.priceUsd) || 0).filter((n) => n > 0);
@@ -357,6 +372,7 @@ const ModelCard = memo(function ModelCard({ model }) {
   const lead = model.members[0] || {};
   const single = model.members.length === 1;
   const storeUrl = lead.familyCode ? `https://www.lifestylegarden.do/products/${lead.familyCode}` : null;
+  const stock = modelStock(model);
   return (
     <div className="rounded-lg border border-ink-100 bg-white overflow-hidden flex flex-col shadow-xs [content-visibility:auto] [contain-intrinsic-size:auto_280px]">
       <ImageView
@@ -374,6 +390,15 @@ const ModelCard = memo(function ModelCard({ model }) {
           <span className="font-mono text-[11px] text-ink-500 truncate" title={lead.reference}>{lead.reference}</span>
         ) : (
           <span className="text-[11px] text-ink-500">{model.members.length} variantes</span>
+        )}
+        {/* Live store inventory (Shopify, refreshed on sync) — what gates the
+            quote builder and the client catalog PDF. */}
+        {stock.tracked && (
+          <span className="mt-0.5">
+            {stock.qty > 0
+              ? <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">{stock.qty} en stock</span>
+              : <span className="chip bg-red-50 text-red-700 border border-red-200">Agotado</span>}
+          </span>
         )}
         <div className="mt-auto pt-1 flex items-baseline justify-between gap-2">
           <span className="text-sm font-semibold tabular-nums text-ink-900 whitespace-nowrap">{priceRangeLabel(model)}</span>
@@ -398,9 +423,16 @@ const ModelCard = memo(function ModelCard({ model }) {
                   </div>
                   <div className="flex items-baseline justify-between gap-2 min-w-0">
                     <span className="font-mono text-ink-400 truncate" title={p.reference}>{p.reference}</span>
-                    {p.cost != null && (
-                      <span className="tabular-nums text-ink-400 whitespace-nowrap" title="Costo mayorista (Shopify)">costo {usd(p.cost)}</span>
-                    )}
+                    <span className="flex items-baseline gap-2 whitespace-nowrap">
+                      {variantStockLabel(p) && (
+                        <span className={`tabular-nums ${Number(p.stockQty) > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {variantStockLabel(p)}
+                        </span>
+                      )}
+                      {p.cost != null && (
+                        <span className="tabular-nums text-ink-400" title="Costo mayorista (Shopify)">costo {usd(p.cost)}</span>
+                      )}
+                    </span>
                   </div>
                 </li>
               ))}

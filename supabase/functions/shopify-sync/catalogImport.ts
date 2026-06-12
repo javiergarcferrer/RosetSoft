@@ -43,6 +43,8 @@ export interface ShopifyCatalogProduct {
   productType?: string | null;
   status?: string | null;
   featuredMedia?: ShopifyMediaPreview | null;
+  /** The product's full media gallery, in store order. */
+  media?: { nodes?: ShopifyMediaPreview[] | null } | null;
   collections?: { nodes?: Array<{ title?: string | null }> | null } | null;
   variants?: { nodes?: ShopifyCatalogVariant[] | null } | null;
 }
@@ -62,13 +64,19 @@ export interface LsgProductRow {
   category: string;
   price_usd: number | null;
   cost: number | null;
-  /** Shopify inventoryQuantity at sync time — the "en existencia" gate for the
-   *  client catalog PDF. Null when the store doesn't track the variant. */
+  /** Shopify inventoryQuantity at sync time — the stock gate for the quote
+   *  builder and the client catalog PDF. Null when the store doesn't track
+   *  the variant. */
   stock_qty: number | null;
   /** The store's CDN photo URL — the variant's own image, else the product's
-   *  featured one. index.ts mirrors it into our images bucket (`image_id` is
-   *  set THERE, never here, so an upsert can't clobber an existing mirror). */
+   *  featured one. Always image_srcs[0]; kept as its own column for the
+   *  surfaces that only need the cover (catalog PDF fallback). */
   image_src: string;
+  /** The FULL gallery, cover first: the variant's photo + every product media
+   *  url, deduped, in store order. catalogPull's pointer pass turns each url
+   *  into an `images` row (external_url, NO stored bytes) and sets `image_id`
+   *  + `extra_image_ids` THERE — never here, so an upsert can't clobber them. */
+  image_srcs: string[];
   active: boolean;
   updated_at: string;
 }
@@ -110,6 +118,29 @@ export function imageSrcOf(
   const variantUrl = v?.media?.nodes?.[0]?.preview?.image?.url;
   const productUrl = p?.featuredMedia?.preview?.image?.url;
   return squish(variantUrl || productUrl || '');
+}
+
+/** Most photos a variant row carries — cover + the product's gallery shots. */
+export const GALLERY_MAX = 10;
+
+/**
+ * The variant row's FULL photo gallery: its cover (`imageSrcOf` — the
+ * variant's own photo, else the featured one) followed by every product media
+ * url in store order, deduped, capped at GALLERY_MAX. A multi-color product
+ * thus leads with ITS color's shot and still carries the shared detail shots.
+ */
+export function galleryOf(
+  p: Pick<ShopifyCatalogProduct, 'featuredMedia' | 'media'>,
+  v: Pick<ShopifyCatalogVariant, 'media'> | null | undefined,
+): string[] {
+  const urls: string[] = [];
+  const push = (u: unknown): void => {
+    const s = squish(u);
+    if (s && !urls.includes(s) && urls.length < GALLERY_MAX) urls.push(s);
+  };
+  push(imageSrcOf(p, v));
+  for (const m of p?.media?.nodes || []) push(m?.preview?.image?.url);
+  return urls;
 }
 
 /**
@@ -160,6 +191,7 @@ export function mapShopifyCatalog(
       const reference = squish(v.sku) || `LSG-${vid}`;
       if (seenRefs.has(reference)) { summary.duplicateRefs++; continue; }
       seenRefs.add(reference);
+      const gallery = galleryOf(p, v);
       rows.push({
         id: `lsg-${vid}`,
         profile_id: ctx.profileId,
@@ -177,7 +209,8 @@ export function mapShopifyCatalog(
         price_usd: numOrNull(v.price),
         cost: numOrNull(v.inventoryItem?.unitCost?.amount),
         stock_qty: intOrNull(v.inventoryQuantity),
-        image_src: imageSrcOf(p, v),
+        image_src: gallery[0] || '',
+        image_srcs: gallery,
         active: true,
         updated_at: ctx.nowIso,
       });

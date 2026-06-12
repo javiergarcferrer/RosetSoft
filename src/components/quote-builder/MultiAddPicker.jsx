@@ -5,7 +5,7 @@ import Select from '../primitives/Select.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { searchProducts } from '../../db/database.js';
-import { groupFamilies, productForGrade } from '../../lib/catalog.js';
+import { groupFamilies, productForGrade, familyStock } from '../../lib/catalog.js';
 import { composeSubtype, GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 import { formatMoney } from '../../lib/format.js';
 import { brandName } from '../../lib/constants.js';
@@ -162,15 +162,19 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
 }
 
 /** One checkable model row — shows the price at the chosen grade, the range when
- *  none is chosen, or "no aplica" when the model isn't offered in that grade
- *  (then it can't be ticked). */
+ *  none is chosen, "no aplica" when the model isn't offered in that grade, or
+ *  "agotado" when a tracked (LSG) model has no stock (then it can't be ticked). */
 function MultiRow({ fam, grade, checked, onToggle }) {
-  const offered = grade ? !!productForGrade(fam, grade) : true;
-  const priceLabel = !grade
-    ? (fam.graded
-        ? `${usd(productForGrade(fam, fam.grades[0])?.priceUsd)} – ${usd(productForGrade(fam, fam.grades[fam.grades.length - 1])?.priceUsd)}`
-        : usd(productForGrade(fam, '')?.priceUsd))
-    : (offered ? usd(productForGrade(fam, grade)?.priceUsd) : 'no aplica');
+  const stock = familyStock(fam);
+  const out = stock.tracked && stock.qty <= 0;
+  const offered = (grade ? !!productForGrade(fam, grade) : true) && !out;
+  const priceLabel = out
+    ? 'agotado'
+    : !grade
+      ? (fam.graded
+          ? `${usd(productForGrade(fam, fam.grades[0])?.priceUsd)} – ${usd(productForGrade(fam, fam.grades[fam.grades.length - 1])?.priceUsd)}`
+          : usd(productForGrade(fam, '')?.priceUsd))
+      : (offered ? usd(productForGrade(fam, grade)?.priceUsd) : 'no aplica');
   return (
     <button
       type="button"

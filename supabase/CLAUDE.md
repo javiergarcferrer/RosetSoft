@@ -66,15 +66,27 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   separate table. The material's hero thumbnail = first color with an `imageId`.
 - **images** metadata for objects in Storage; `kind` + `owner_id` tag the owner
   (e.g. `quote-line-swatch`/`material-color`). Bytes via `saveImage` /
-  `downloadImageBytes`.
+  `downloadImageBytes`. A row with **`external_url`** set is a **CDN POINTER**
+  (LSG catalog photos, `kind='catalog-lsg'`, id `lsgimg-<sha1 of url>`): NO
+  bytes in our bucket — ImageView/`downloadImageBytes` resolve straight from
+  the Shopify CDN, width-capped (`lib/catalogImages.ts`). Pointer rows are
+  SHARED (products + any number of quote lines) — `deleteImage` refuses them.
 - **products** the BRAND catalogs behind the quote builder's picker; one row per
   priced SKU. `brand` ∈ `ligne-roset` (price-list CSV import, `id` = SKU) |
   `lifestylegarden` (pulled from the team's Shopify store by `shopify-sync`'s
   `importCatalog` mode, `id` = `lsg-<variantId>`). Unique `(profile_id,
   reference)` ACROSS brands. Category aggregate via the `catalog_categories`
-  SQL fn (optional `p_brand` filter). LSG rows also carry `stock_qty` (Shopify
-  `inventoryQuantity` at sync time; null = pre-stock import) — the "en
-  existencia" gate for the client catalog PDF (`core/catalog`).
+  SQL fn (optional `p_brand` filter). LSG rows also carry:
+  - `stock_qty` (Shopify `inventoryQuantity` at sync time; null = untracked /
+    pre-stock import) — the INVENTORY GATE: quote pickers disable + refuse
+    out-of-stock products (`lib/catalog: productStock/isOutOfStock/familyStock`,
+    pinned in tests/catalog.test.js), the editor warns when stock moved under
+    an existing line, and the client catalog PDF prints in-stock only.
+  - the photo gallery: `image_srcs` (jsonb, ordered CDN urls, cover first,
+    written by the mapper) + `image_id`/`extra_image_ids` (pointer ids,
+    written ONLY by the sync's pointer pass). A catalog insert copies the
+    pointers onto the quote line (`imageId` + `extraImageIds`) so every
+    surface shows the store photos — never stored locally.
 - **shopify_config** WRITE-ONLY (no client policies; service role reads, the
   `save_shopify_config(domain, store, client_id, client_secret)` SECURITY
   DEFINER RPC writes). Auth is the Dev Dashboard app flow ONLY:

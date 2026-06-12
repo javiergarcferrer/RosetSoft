@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink, ArrowUpRight, MoreHorizontal } from 'lucide-react';
+import { Trash2, ChevronDown, GripVertical, Copy, Tag, Layers, Plus, X, Palette, Check, Sparkles, GitFork, Boxes, Split, AlignLeft, StickyNote, PackageSearch, ImagePlus, Loader2, ExternalLink, ArrowUpRight, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import Thumbnail from '../primitives/Thumbnail.jsx';
 import ImageView from '../ImageView.jsx';
 import HeroInput from '../primitives/HeroInput.jsx';
@@ -23,7 +23,7 @@ import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription, familyStock } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine, healComponentAlternatives } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
@@ -846,6 +846,7 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           refInputRef={refInputRef}
         />
       )}
+      {!compound && <LineStockNotice line={line} />}
       {/* Ligne Roset link for THIS product line — restricts the material
           picker(s) to the model's offered fabrics. On a compound it governs
           every component within (the components inherit this link). */}
@@ -870,6 +871,38 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           onInsert={insertProductToLine}
         />
       )}
+    </div>
+  );
+}
+
+// Inventory advisory for a line that maps to a stock-TRACKED catalog product
+// (LSG — its stockQty refreshes on every Shopify sync). The picker already
+// blocks inserting an out-of-stock piece; this catches the stock moving UNDER
+// an existing line: sold out since it was quoted, or fewer units left than the
+// line quotes. Advisory only (mirrors SpecialOrderWarning) — the dealer may be
+// re-sending an old quote; blocking the editor would help nobody.
+function LineStockNotice({ line }) {
+  const families = useContext(FamiliesContext);
+  const fam = families?.get(splitSkuGrade(line.reference || '').root) || null;
+  const stock = familyStock(fam);
+  if (!stock.tracked) return null;
+  const qty = Number(line.qty) || 0;
+  if (stock.qty > 0 && stock.qty >= qty) return null;
+  return (
+    <div
+      className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+      role="status"
+    >
+      <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" aria-hidden />
+      <span>
+        {stock.qty <= 0 ? (
+          <><span className="font-semibold">Agotado en LifestyleGarden.</span>{' '}
+          La tienda ya no tiene existencia de esta pieza — verifica antes de enviar la cotización.</>
+        ) : (
+          <><span className="font-semibold">Existencia insuficiente.</span>{' '}
+          Cotizas {qty} y la tienda solo tiene {stock.qty} en existencia.</>
+        )}
+      </span>
     </div>
   );
 }

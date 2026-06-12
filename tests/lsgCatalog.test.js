@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mapShopifyCatalog, rangeOf, imageSrcOf, LSG_BRAND } from '../supabase/functions/shopify-sync/catalogImport.ts';
+import { mapShopifyCatalog, rangeOf, imageSrcOf, galleryOf, GALLERY_MAX, LSG_BRAND } from '../supabase/functions/shopify-sync/catalogImport.ts';
 
 const CTX = { profileId: 'team', nowIso: '2026-06-11T12:00:00.000Z' };
 
@@ -61,6 +61,7 @@ test('maps an active default-variant product to one catalog row', () => {
     cost: null,
     stock_qty: 4,
     image_src: '',
+    image_srcs: [],
     active: true,
     updated_at: CTX.nowIso,
   });
@@ -84,13 +85,61 @@ test('a variant’s own photo wins; the product featured one is the fallback', (
   assert.equal(imageSrcOf({ featuredMedia: null }, {}), '');
 });
 
-test('mapped rows carry image_src but NEVER image_id (the mirror pass owns it)', () => {
+test('mapped rows carry image_src(s) but NEVER pointer ids (the pointer pass owns them)', () => {
   const { rows } = mapShopifyCatalog([product({
     featuredMedia: { preview: { image: { url: 'https://cdn.shopify.com/p/garnet.jpg' } } },
   })], CTX);
   assert.equal(rows[0].image_src, 'https://cdn.shopify.com/p/garnet.jpg');
-  // An upsert with image_id present would clobber the mirrored pointer.
+  assert.deepEqual(rows[0].image_srcs, ['https://cdn.shopify.com/p/garnet.jpg']);
+  // An upsert with these present would clobber the CDN pointers.
   assert.ok(!('image_id' in rows[0]));
+  assert.ok(!('extra_image_ids' in rows[0]));
+});
+
+test('galleryOf: the variant cover leads, the product media follow, deduped', () => {
+  const p = {
+    featuredMedia: { preview: { image: { url: 'https://cdn.shopify.com/p/1.jpg' } } },
+    media: { nodes: [
+      { preview: { image: { url: 'https://cdn.shopify.com/p/1.jpg' } } },   // featured repeats in media
+      { preview: { image: { url: 'https://cdn.shopify.com/p/2.jpg' } } },
+      { preview: { image: { url: 'https://cdn.shopify.com/v/own.jpg' } } }, // the variant's shot, again
+      { preview: { image: { url: '' } } },                                  // empty url drops
+    ] },
+  };
+  assert.deepEqual(galleryOf(p, { media: media('https://cdn.shopify.com/v/own.jpg') }), [
+    'https://cdn.shopify.com/v/own.jpg',
+    'https://cdn.shopify.com/p/1.jpg',
+    'https://cdn.shopify.com/p/2.jpg',
+  ]);
+  // No variant shot → the featured one leads (= image_src parity).
+  assert.deepEqual(galleryOf(p, { media: { nodes: [] } }), [
+    'https://cdn.shopify.com/p/1.jpg',
+    'https://cdn.shopify.com/p/2.jpg',
+    'https://cdn.shopify.com/v/own.jpg',
+  ]);
+  // No photos at all → empty gallery (the card shows the placeholder).
+  assert.deepEqual(galleryOf({ featuredMedia: null, media: null }, {}), []);
+});
+
+test('galleryOf caps at GALLERY_MAX so a 40-shot product can’t bloat the row', () => {
+  const nodes = Array.from({ length: GALLERY_MAX + 5 }, (_, i) => (
+    { preview: { image: { url: `https://cdn.shopify.com/p/${i}.jpg` } } }
+  ));
+  const out = galleryOf({ featuredMedia: null, media: { nodes } }, {});
+  assert.equal(out.length, GALLERY_MAX);
+  assert.equal(out[0], 'https://cdn.shopify.com/p/0.jpg');
+});
+
+test('mapped rows: image_src is always image_srcs[0]', () => {
+  const { rows } = mapShopifyCatalog([product({
+    featuredMedia: { preview: { image: { url: 'https://cdn.shopify.com/p/cover.jpg' } } },
+    media: { nodes: [{ preview: { image: { url: 'https://cdn.shopify.com/p/extra.jpg' } } }] },
+  })], CTX);
+  assert.equal(rows[0].image_src, rows[0].image_srcs[0]);
+  assert.deepEqual(rows[0].image_srcs, [
+    'https://cdn.shopify.com/p/cover.jpg',
+    'https://cdn.shopify.com/p/extra.jpg',
+  ]);
 });
 
 test('a real variant joins the name and fills the subtype slot', () => {

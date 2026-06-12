@@ -6,6 +6,12 @@
 // store) by updated_at. The sweep is brand-scoped — it can never touch the
 // Ligne Roset rows — and runs only when every chunk landed, so a partial
 // import can't delete rows whose refresh merely failed.
+//
+// Photos are NEVER stored locally: every gallery url becomes an `images` row
+// that POINTS at the Shopify CDN (external_url, no bytes in our bucket).
+// Pointer ids are content-addressed from the url (lsgimg-<sha1>) — the same
+// scheme the retired byte-mirror used — so quote lines that snapshotted a
+// mirrored id keep resolving after the pointer pass overwrites that row.
 
 import { mapShopifyCatalog, LSG_BRAND, type ShopifyCatalogProduct } from './catalogImport.ts';
 import type { Gql } from './client.ts';
@@ -15,7 +21,7 @@ export interface CatalogPullResult {
   products: number;
   skus: number;
   removed: number;
-  /** Photos newly mirrored into the images bucket this run. */
+  /** Store photos linked (CDN pointers) after this run. */
   images: number;
   error?: string;
 }
@@ -37,6 +43,7 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
           nodes {
             id title handle productType status
             featuredMedia { preview { image { url } } }
+            media(first: 10) { nodes { preview { image { url } } } }
             collections(first: 10) { nodes { title } }
             variants(first: 100) {
               nodes {
@@ -75,13 +82,17 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
     removed = stale?.length ?? 0;
   }
 
-  // Mirror the store photos into our own bucket (quote lines snapshot the
-  // mirrored image_id, so the client link / PDF render through the existing
-  // pipeline). Best-effort: a failed mirror leaves image_id null and the UI
-  // still shows the photo via image_src (ImageView's fallbackUrl).
+  // Link every gallery photo as a CDN pointer (quote lines snapshot the
+  // pointer ids on insert, so client link / PDF render through the existing
+  // images pipeline — without a single byte stored on our side). Best-effort:
+  // a failed pass leaves image_id/extra_image_ids as they were and the UI
+  // still shows the cover via image_src (ImageView's fallbackUrl).
   let images = 0;
   if (!errors.length) {
-    try { images = await mirrorCatalogImages(admin, team); } catch (_) { /* next sync retries */ }
+    try {
+      images = await syncImagePointers(admin, team);
+      await removeMirroredBytes(admin);
+    } catch (_) { /* next sync retries */ }
   }
 
   return {
@@ -96,87 +107,99 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
 
 const IMG_KIND = 'catalog-lsg';
 const IMG_BUCKET = 'images';
-const MIRRORS_PER_RUN = 300;   // safety cap; a huge first import finishes over a couple of syncs
-const MIRROR_PARALLEL = 6;
+const WRITE_PARALLEL = 8;
 
-/** Deterministic id for a mirrored photo, from its source URL. */
+/** Deterministic id for a store photo, from its source URL. */
 async function imageIdFor(src: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(src));
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
   return `lsgimg-${hex.slice(0, 20)}`;
 }
 
+interface PointerProductRow {
+  id: string;
+  image_srcs: string[] | null;
+  image_id: string | null;
+  extra_image_ids: string[] | null;
+}
+
 /**
- * Ensure every LSG product's `image_src` has a mirrored copy in the images
- * bucket and its row points at it. Idempotent: the images row's `label` IS the
- * source URL, so an unchanged photo is never re-downloaded and a changed one
- * gets a fresh mirror; orphaned mirrors (photo replaced / product gone) are
- * cleaned up. Returns how many photos were newly mirrored.
+ * Ensure every LSG gallery url has an `images` POINTER row (external_url =
+ * the CDN url, no stored bytes) and every product row points at its pointers:
+ * `image_id` = the cover, `extra_image_ids` = the rest. Idempotent — ids are
+ * content-addressed from the url, the upsert rewrites unchanged rows in
+ * place, and product rows are only written when their pointers moved.
+ * Pointers whose url left the catalog (photo replaced / product gone) are
+ * deleted. Returns how many photos are linked.
  */
 // deno-lint-ignore no-explicit-any
-async function mirrorCatalogImages(admin: any, team: string): Promise<number> {
+async function syncImagePointers(admin: any, team: string): Promise<number> {
   const { data: prods } = await admin
-    .from('products').select('id, image_src, image_id')
-    .eq('profile_id', team).eq('brand', LSG_BRAND).neq('image_src', '');
-  const wanted = new Map<string, string[]>(); // src → product row ids
-  for (const p of (prods ?? []) as Array<{ id: string; image_src: string; image_id: string | null }>) {
-    const list = wanted.get(p.image_src);
-    if (list) list.push(p.id);
-    else wanted.set(p.image_src, [p.id]);
-  }
+    .from('products').select('id, image_srcs, image_id, extra_image_ids')
+    .eq('profile_id', team).eq('brand', LSG_BRAND);
+  const rows = (prods ?? []) as PointerProductRow[];
 
-  const { data: imgs } = await admin
-    .from('images').select('id, label').eq('kind', IMG_KIND);
-  const mirrored = new Map<string, string>(); // src (label) → images.id
-  for (const i of (imgs ?? []) as Array<{ id: string; label: string }>) mirrored.set(i.label, i.id);
-
-  // Download + store the missing ones, a few at a time.
-  const missing = [...wanted.keys()].filter((src) => !mirrored.has(src)).slice(0, MIRRORS_PER_RUN);
-  let added = 0;
-  for (let i = 0; i < missing.length; i += MIRROR_PARALLEL) {
-    await Promise.all(missing.slice(i, i + MIRROR_PARALLEL).map(async (src) => {
-      try {
-        // Shopify's CDN resizes on demand — 900px is plenty for cards/PDF.
-        const r = await fetch(src + (src.includes('?') ? '&' : '?') + 'width=900');
-        if (!r.ok) { await r.body?.cancel(); return; }
-        const bytes = new Uint8Array(await r.arrayBuffer());
-        const contentType = r.headers.get('content-type') || 'image/jpeg';
-        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-        const id = await imageIdFor(src);
-        const storagePath = `catalog-lsg/${id}.${ext}`;
-        const up = await admin.storage.from(IMG_BUCKET).upload(storagePath, bytes, { contentType, upsert: true });
-        if (up.error) return;
-        const ins = await admin.from('images').upsert({
-          id, kind: IMG_KIND, owner_id: 'lsg-catalog', label: src,
-          content_type: contentType, size: bytes.byteLength, storage_path: storagePath,
-        });
-        if (!ins.error) { mirrored.set(src, id); added++; }
-      } catch (_) { /* skip this photo; next sync retries */ }
-    }));
-  }
-
-  // Point the product rows at their mirrors (only the rows that don't already).
-  for (const src of wanted.keys()) {
-    const imageId = mirrored.get(src);
-    if (!imageId) continue;
-    const stale = ((prods ?? []) as Array<{ id: string; image_src: string; image_id: string | null }>)
-      .filter((p) => p.image_src === src && p.image_id !== imageId)
-      .map((p) => p.id);
-    if (stale.length) {
-      await admin.from('products').update({ image_id: imageId }).in('id', stale).eq('profile_id', team);
+  const wanted = new Map<string, string>(); // src url → pointer id
+  for (const p of rows) {
+    for (const src of p.image_srcs ?? []) {
+      if (src && !wanted.has(src)) wanted.set(src, await imageIdFor(src));
     }
   }
 
-  // Orphan sweep: mirrors whose source URL no longer appears in the catalog
-  // (photo replaced upstream, or the product left the store).
-  const orphans = ((imgs ?? []) as Array<{ id: string; label: string }>).filter((i) => !wanted.has(i.label));
-  if (orphans.length) {
-    const { data: rowsToDrop } = await admin
-      .from('images').select('id, storage_path').in('id', orphans.map((o) => o.id));
-    const paths = ((rowsToDrop ?? []) as Array<{ storage_path?: string }>).map((r) => r.storage_path).filter(Boolean);
-    if (paths.length) await admin.storage.from(IMG_BUCKET).remove(paths);
-    await admin.from('images').delete().in('id', orphans.map((o) => o.id));
+  // Upsert the pointers. Writing storage_path/content_type/size as null also
+  // converts any row the retired byte-mirror created (same id) into a pure
+  // pointer, freeing its bytes for the storage sweep below.
+  const pointers = [...wanted].map(([src, id]) => ({
+    id, kind: IMG_KIND, owner_id: 'lsg-catalog', label: src,
+    external_url: src, storage_path: null, content_type: null, size: null,
+  }));
+  for (let i = 0; i < pointers.length; i += 200) {
+    const { error } = await admin.from('images').upsert(pointers.slice(i, i + 200));
+    if (error) throw new Error(error.message);
   }
 
-  return added;
+  // Point each product row at its pointers (cover + extras), only on change.
+  const stale = rows.filter((p) => {
+    const ids = (p.image_srcs ?? []).map((s) => wanted.get(s)).filter(Boolean) as string[];
+    const extras = ids.slice(1);
+    const current = p.extra_image_ids ?? [];
+    return (p.image_id ?? null) !== (ids[0] ?? null)
+      || extras.length !== current.length
+      || extras.some((id, i) => id !== current[i]);
+  });
+  for (let i = 0; i < stale.length; i += WRITE_PARALLEL) {
+    await Promise.all(stale.slice(i, i + WRITE_PARALLEL).map((p) => {
+      const ids = (p.image_srcs ?? []).map((s) => wanted.get(s)).filter(Boolean) as string[];
+      return admin.from('products')
+        .update({ image_id: ids[0] ?? null, extra_image_ids: ids.length > 1 ? ids.slice(1) : null })
+        .eq('id', p.id).eq('profile_id', team);
+    }));
+  }
+
+  // Orphan sweep: pointers whose source url no longer appears in the catalog.
+  const { data: imgs } = await admin.from('images').select('id, label').eq('kind', IMG_KIND);
+  const orphans = ((imgs ?? []) as Array<{ id: string; label: string }>)
+    .filter((i) => !wanted.has(i.label)).map((i) => i.id);
+  for (let i = 0; i < orphans.length; i += 200) {
+    await admin.from('images').delete().in('id', orphans.slice(i, i + 200));
+  }
+
+  return wanted.size;
+}
+
+/**
+ * Storage cleanup: the retired byte-mirror stored downscaled copies under
+ * catalog-lsg/ in the images bucket. Pointers made those bytes dead weight —
+ * sweep the folder until empty. Idempotent and cheap once clean (one empty
+ * list call per sync).
+ */
+// deno-lint-ignore no-explicit-any
+async function removeMirroredBytes(admin: any): Promise<void> {
+  for (let page = 0; page < 30; page++) {
+    const { data: objs } = await admin.storage.from(IMG_BUCKET).list('catalog-lsg', { limit: 100 });
+    if (!objs?.length) return;
+    const paths = (objs as Array<{ name: string }>).map((o) => `catalog-lsg/${o.name}`);
+    const { error } = await admin.storage.from(IMG_BUCKET).remove(paths);
+    if (error) return; // next sync retries
+  }
 }

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '../db/database.js';
 import { publicImageUrl } from '../db/supabaseClient.js';
+import { sizedExternalUrl, SCREEN_IMG_WIDTH } from '../lib/catalogImages.js';
 import { ImageOff } from 'lucide-react';
 
 export interface ImageViewProps {
@@ -53,9 +54,13 @@ export default function ImageView({ id, fallbackUrl = null, alt = '', className 
       return () => { active = false; };
     }
     setMissing(false);
-    db.images.get(id).then((rec: { storagePath?: string } | null | undefined) => {
+    db.images.get(id).then((rec: { storagePath?: string | null; externalUrl?: string | null } | null | undefined) => {
       if (!active) return;
-      const u = (rec?.storagePath ? publicImageUrl(rec.storagePath) : null) || fallbackUrl;
+      // A CDN pointer row (LSG catalog photo) serves straight from the store's
+      // CDN — width-capped; bytes never live in our bucket.
+      const u = (rec?.externalUrl ? sizedExternalUrl(rec.externalUrl, SCREEN_IMG_WIDTH) : null)
+        || (rec?.storagePath ? publicImageUrl(rec.storagePath) : null)
+        || fallbackUrl;
       setUrl(u);
       setMissing(!u);
     }).catch(() => {

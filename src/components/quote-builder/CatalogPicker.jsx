@@ -7,7 +7,7 @@ import ModelLinkBar from './ModelLinkBar.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
-import { productForGrade } from '../../lib/catalog.js';
+import { productForGrade, isOutOfStock } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { formatMoney } from '../../lib/format.js';
 
@@ -73,6 +73,9 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
   // catalog subtype (the wood finish / variant text).
   function insertProduct(fam, product, grade, material, color) {
     if (!product) return;
+    // Inventory gate: a tracked product (LSG) with no sellable units can't be
+    // quoted. The picker row is already disabled — this is the hard stop.
+    if (isOutOfStock(product)) return;
     // The catalog's "Description 2" — the model's finish/variant text, e.g.
     // "STANDARD HEADBOARD" — parses into product.subtype. Keep it as the line's
     // read-only `productDescription` (its SECOND identifying line) so it SURVIVES
@@ -92,9 +95,13 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       productDescription: product.subtype || '',
       unitPrice: product.priceUsd,
       unitCost: product.cost,
-      // The catalog's own photo (LSG mirror) rides along, so the line lands
-      // fully illustrated with zero extra steps; LR rows carry none.
+      // The catalog's own photos (LSG CDN pointers) ride along — cover + the
+      // full store gallery — so the line lands fully illustrated with zero
+      // extra steps; LR rows carry none.
       imageId: product.imageId ?? null,
+      extraImageIds: Array.isArray(product.extraImageIds) && product.extraImageIds.length
+        ? product.extraImageIds
+        : null,
       swatchImageId: color?.imageId ?? null,
     });
     onClose();

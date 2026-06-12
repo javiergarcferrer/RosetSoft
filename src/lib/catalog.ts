@@ -94,6 +94,44 @@ export function availableGrades(family: CatalogFamily | null | undefined): strin
   return family && family.graded ? family.grades : [];
 }
 
+/* ------------------------------- stock gate ------------------------------- */
+
+export interface StockState {
+  /** True when the brand store tracks this product's inventory (LSG rows
+   *  carry stockQty from Shopify; LR rows are special-order → untracked). */
+  tracked: boolean;
+  /** Sellable units right now — meaningful only when tracked. */
+  qty: number;
+}
+
+/** Stock of one catalog product. `stockQty == null` ⇒ not tracked. */
+export function productStock(p: Pick<Product, 'stockQty'> | null | undefined): StockState {
+  const tracked = p?.stockQty != null;
+  return { tracked, qty: tracked ? Number(p!.stockQty) || 0 : 0 };
+}
+
+/** A TRACKED product with nothing sellable — the quote builder must not
+ *  insert it (the dealer can't promise a piece the store doesn't have). */
+export function isOutOfStock(p: Pick<Product, 'stockQty'> | null | undefined): boolean {
+  const s = productStock(p);
+  return s.tracked && s.qty <= 0;
+}
+
+/**
+ * Stock of a picker MODEL — tracked when any member is (LSG models are
+ * single-member families; graded LR models never are), qty summed over the
+ * members. Drives the picker rows' stock chip + the out-of-stock disable.
+ */
+export function familyStock(family: CatalogFamily | null | undefined): StockState {
+  let tracked = false;
+  let qty = 0;
+  for (const p of family ? family.byGrade.values() : []) {
+    const s = productStock(p);
+    if (s.tracked) { tracked = true; qty += s.qty; }
+  }
+  return { tracked, qty };
+}
+
 /**
  * Resolve a model + chosen grade to its specific SKU/product (price + cost).
  * For a non-graded standalone family, returns its sole member regardless of

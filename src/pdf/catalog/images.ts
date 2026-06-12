@@ -4,7 +4,7 @@ import { downloadImageBytes } from '../../db/database.js';
  * Pre-resolution pass for the catalog PDF: every model card's photo fetched
  * and normalized to a JPEG data URI react-pdf can embed. Two jobs the quote
  * resolver (pdf/react/images.ts) doesn't do, which is why this isn't a reuse:
- *   • the LSG mirrors can be WEBP (Shopify CDN's preferred format) and
+ *   • the LSG CDN photos can be WEBP (Shopify CDN's preferred format) and
  *     react-pdf embeds PNG/JPEG only → transcode through a browser canvas;
  *   • a full catalog is hundreds of photos → downscale to card resolution so
  *     the document stays WhatsApp-friendly in size.
@@ -39,21 +39,23 @@ export async function resolveCatalogImages(sources: CatalogImageSrc[]): Promise<
 }
 
 async function resolveOne(src: CatalogImageSrc): Promise<string | null> {
-  // Mirrored copy first (our bucket, authed download), store CDN as fallback —
-  // the same order ImageView resolves on screen.
-  if (src.imageId) {
-    const res = await downloadImageBytes(src.imageId).catch(() => null);
-    if (res?.bytes) {
-      const blob = new Blob([res.bytes as BlobPart], { type: res.contentType || 'image/jpeg' });
+  // The store CDN url first — it's the photo's home (image_id is a pointer at
+  // the same url) and the CDN downscales to card width on demand. The id path
+  // stays as the fallback for any row without a src.
+  if (src.imageSrc) {
+    const url = src.imageSrc + (src.imageSrc.includes('?') ? '&' : '?') + `width=${MAX_WIDTH}`;
+    const blob = await fetchBlob(url);
+    if (blob) {
       const uri = await toJpegDataUri(blob);
       if (uri) return uri;
     }
   }
-  if (src.imageSrc) {
-    // Shopify's CDN resizes on demand; ask for card width up front.
-    const url = src.imageSrc + (src.imageSrc.includes('?') ? '&' : '?') + `width=${MAX_WIDTH}`;
-    const blob = await fetchBlob(url);
-    if (blob) return toJpegDataUri(blob);
+  if (src.imageId) {
+    const res = await downloadImageBytes(src.imageId).catch(() => null);
+    if (res?.bytes) {
+      const blob = new Blob([res.bytes as BlobPart], { type: res.contentType || 'image/jpeg' });
+      return toJpegDataUri(blob);
+    }
   }
   return null;
 }

@@ -1,5 +1,6 @@
 import { downloadImageBytes, db } from '../../db/database.js';
 import { publicImageUrl } from '../../db/supabaseClient.js';
+import { sizedExternalUrl, DOWNLOAD_IMG_WIDTH } from '../../lib/catalogImages.js';
 import { isCompoundLine } from '../../lib/pricing.js';
 import { materialCells, swatchSrcFor } from './materialCells.js';
 import { coverKey, swatchKey } from './imageKeys.js';
@@ -81,10 +82,13 @@ async function resolveOne(src: Src, publicUrls: boolean): Promise<string | null>
   if (src.imageId) {
     // Public link (anonymous): the authed storage download isn't available, so
     // resolve through the public bucket URL — the same path ImageView uses
-    // (db.images.get works for anon; the bucket is public).
+    // (db.images.get works for anon; the bucket is public). A CDN pointer row
+    // (LSG catalog photo) fetches from the store's CDN either way.
     if (publicUrls) {
-      const rec = await db.images.get(src.imageId) as { storagePath?: string } | null | undefined;
-      const url = rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
+      const rec = await db.images.get(src.imageId) as { storagePath?: string | null; externalUrl?: string | null } | null | undefined;
+      const url = rec?.externalUrl
+        ? sizedExternalUrl(rec.externalUrl, DOWNLOAD_IMG_WIDTH)
+        : rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
       const bytes = url ? await fetchUrlBytes(url) : null;
       return bytes ? bytesToDataUri(bytes, '') : null;
     }

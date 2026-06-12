@@ -64,6 +64,10 @@ conversation. Two kinds:
   `lsgCatalogBook` pins the client catalog PDF's in-stock gate (only
   stockQty > 0 prints; all-null stock flags `hasStockData` instead of
   rendering an empty book).
+  `catalog` also pins the quote builder's LSG stock gate (a TRACKED product
+  with qty ≤ 0 is unquotable; untracked LR is never gated) and `lsgCatalog`
+  pins the full Shopify gallery mapping — LSG photos are CDN POINTER rows
+  (`images.external_url`), never bytes in our bucket.
   `ogImage` pins the link-preview image as a BASELINE jpeg — WhatsApp renders
   progressive JPEGs as garbled noise; fixing it also requires a NEW filename
   (WhatsApp caches the card per-URL for weeks).
