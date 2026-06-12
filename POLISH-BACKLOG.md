@@ -68,10 +68,15 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (i9 — bridge resolver (latest posting wins) + shared InvoiceChip on the
       quote table rows, mobile cards, builder header (with NCF) and the
       customer's quote history. e-CF rechazado shows as a red chip.)
-- [ ] Deposit handoff: marking "Depósito" milestone offers a prefilled cobro
+- [x] Deposit handoff: marking "Depósito" milestone offers a prefilled cobro
       (USD→DOP at the locked `quoteRateState`); allocating a cobro to a
       quote's posting offers stamping `balancePaidAt` (`OrderDetail.jsx`,
       `CuentasCobrarPagar.jsx`).
+      (i10 — "Registrar cobro" link on the deposit milestone (admin/
+      accounting, locked rate, ?party&amount&ref) + PaymentForm seeds from
+      those params. The reverse stamp (cobro → balancePaidAt) NOT done:
+      payments carry no quote linkage today — would need an allocations→
+      posting→quote hop; revisit if wanted.)
 - [ ] Commission payout → books: mark-paid in `accounting/Workspace.jsx` offers
       "Registrar gasto de comisión" prefilled from resolved figures.
 - [ ] HL arrival nudge: suggestion chip on OrderDetail when the voyage summary

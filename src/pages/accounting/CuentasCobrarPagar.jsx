@@ -115,6 +115,11 @@ export default function CuentasCobrarPagar() {
           direction={tab === 'cxc' ? 'in' : 'out'} scope={scope} config={config}
           parties={tab === 'cxc' ? customersQ.data : suppliersQ.data}
           docsByParty={docsByParty}
+          initial={{
+            partyId: params.get('party') || '',
+            amount: params.get('amount') || '',
+            reference: params.get('ref') || '',
+          }}
           onClose={() => setShowForm(false)} />
       )}
 
@@ -253,9 +258,12 @@ export default function CuentasCobrarPagar() {
   );
 }
 
-function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }) {
+function PaymentForm({ direction, scope, config, parties, docsByParty, initial, onClose }) {
+  // `initial` seeds the deposit→cobro handoff (?party&amount&ref from a quote
+  // milestone) so the accountant doesn't re-type what the CRM already knows.
   const [form, setForm] = useState({
-    partyId: '', date: new Date().toISOString().slice(0, 10), amount: '', method: 'bank', reference: '',
+    partyId: initial?.partyId || '', date: new Date().toISOString().slice(0, 10),
+    amount: initial?.amount || '', method: 'bank', reference: initial?.reference || '',
     commission: '', commissionItbis: '', itbisRetained: '', isrRetained: '',
   });
   const [alloc, setAlloc] = useState({}); // docId -> amount string
