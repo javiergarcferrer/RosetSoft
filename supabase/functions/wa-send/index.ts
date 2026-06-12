@@ -861,6 +861,22 @@ Deno.serve(async (req: Request) => {
 
   if (typeof body.text === 'string' && body.text.trim()) {
     const logBody = body.text.trim();
+    // Link previews ride Meta's url-object cache (keyed by the link AND its
+    // og:url canonical) — a stale object keeps serving a broken card for
+    // weeks no matter what the site serves now. Re-scrape the first URL in
+    // the message so the preview is built from a fresh crawl. Best-effort:
+    // a scrape failure must never block or delay the send for long.
+    const link = logBody.match(/https?:\/\/\S+/);
+    if (link) {
+      try {
+        const ac = new AbortController();
+        const tid = setTimeout(() => ac.abort(), 4000);
+        await fetch(`${GRAPH}/?id=${encodeURIComponent(link[0])}&scrape=true`, {
+          method: 'POST', headers: graphHeaders, signal: ac.signal,
+        });
+        clearTimeout(tid);
+      } catch { /* best-effort */ }
+    }
     const res = await sendOne({
       to,
       payload: { messaging_product: 'whatsapp', to, type: 'text', text: { body: logBody, preview_url: true }, ...contextPart },

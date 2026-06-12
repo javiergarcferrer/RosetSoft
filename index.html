@@ -42,11 +42,15 @@
          The image MUST be a BASELINE jpeg — WhatsApp renders progressive
          JPEGs as garbled noise in the preview card (tests/ogImage.test.js
          pins this). Renamed from og-claro.jpg when fixing that: WhatsApp
-         caches the card per-URL for weeks, so a fix must change the URL. -->
+         caches the card per-URL for weeks, so a fix must change the URL.
+         There is deliberately NO og:url tag: Meta's crawler keys its cached
+         link object by the og:url CANONICAL, so one stale canonical object
+         swallowed every quote link (any domain, any cache-buster) and kept
+         serving the broken card. Without it each fetched URL is its own
+         object (ogImage.test.js pins the absence too). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ALCOVER" />
     <meta property="og:locale" content="es_DO" />
-    <meta property="og:url" content="%VITE_PUBLIC_ORIGIN%/" />
     <meta property="og:title" content="Su propuesta de diseño · ALCOVER" />
     <meta property="og:description" content="Telas, dimensiones y total. Ábrela para cotizar en vivo." />
     <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-card.jpg" />

@@ -39,4 +39,7 @@ test('index.html references the og image that exists', () => {
   assert.match(html, /og:image" content="%VITE_PUBLIC_ORIGIN%\/og-card\.jpg"/);
   // No tag may still POINT at the old name (the comment may mention it).
   assert.ok(!/content="[^"]*og-claro/.test(html), 'a meta tag still points at og-claro.jpg');
+  // No og:url canonical: Meta's crawler keys its cached link object by the
+  // canonical, so one stale object would swallow every quote link again.
+  assert.ok(!/property="og:url"/.test(html), 'og:url canonical collapses the preview cache — keep it out');
 });
