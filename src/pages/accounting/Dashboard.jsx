@@ -12,7 +12,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
 import SegmentBar from '../../components/accounting/SegmentBar.jsx';
-import { Donut, BarPairs, AreaChart, Legend } from '../../components/charts/MiniCharts.jsx';
+import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   resolveAccountingDashboard, resolvePeriod, resolveComparativeKpis,
@@ -150,8 +150,22 @@ export default function AccountingDashboard() {
 
   const monthly = useMemo(() => resolveMonthlyComparative({
     salesPostings: salesQ.data, payments: paymentsQ.data, expenses: expensesQ.data,
-    expedientes: expedientesQ.data, imports: importsQ.data, months: 12, end: period.end,
-  }), [salesQ.data, paymentsQ.data, expensesQ.data, expedientesQ.data, importsQ.data, period]);
+    purchases: purchasesQ.data, expedientes: expedientesQ.data, imports: importsQ.data,
+    months: 12, end: period.end,
+  }), [salesQ.data, paymentsQ.data, expensesQ.data, purchasesQ.data, expedientesQ.data, importsQ.data, period]);
+
+  // Word-sized trend per KPI (Tufte sparklines): 12 months from the
+  // comparative series; utilidad rides the ledger's 6-month series.
+  const kpiSeries = useMemo(() => ({
+    ventas: monthly.map((m) => m.ventas),
+    cobrado: monthly.map((m) => m.cobrado),
+    gastos: monthly.map((m) => m.gastos),
+    compras: monthly.map((m) => m.compras),
+    importado: monthly.map((m) => m.importado),
+  }), [monthly]);
+  const utilidadSeries = useMemo(() => d.monthsSeries.map((m) => m.utilidad), [d.monthsSeries]);
+
+  const [compView, setCompView] = useState('chart'); // 'chart' | 'table'
 
   // Segmented sales (Odoo-style group-by + free-text filter).
   const [groupBy, setGroupBy] = useState('customer');
@@ -190,6 +204,12 @@ export default function AccountingDashboard() {
                   <DeltaChip delta={k.deltaYoy} vs={period.yoy.label} />
                   <span className="text-[10px] text-ink-300 uppercase tracking-wide">vs año</span>
                 </div>
+                {(() => {
+                  const series = k.key === 'utilidad' ? utilidadSeries : kpiSeries[k.key];
+                  return series?.some((v) => v !== 0) ? (
+                    <div className="mt-2 -mb-0.5"><Sparkline points={series} color={C.current} /></div>
+                  ) : null;
+                })()}
               </div>
             ))}
           </div>
@@ -381,20 +401,29 @@ export default function AccountingDashboard() {
               {expComp.length === 0 ? (
                 <p className="text-sm text-ink-400 px-4 py-6 text-center">Sin gastos en el período.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="table">
-                    <thead><tr><th>Categoría</th><th className="text-right">{monthLabel}</th><th className="text-right">{period.prev.label}</th><th className="text-right">Δ</th></tr></thead>
-                    <tbody>
-                      {expComp.slice(0, 7).map((r) => (
-                        <tr key={r.code} className="hover:bg-ink-50 transition-colors">
-                          <td className="text-ink-700 min-w-0 truncate max-w-48">{r.name}</td>
-                          <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.current)}</td>
-                          <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(r.previous)}</td>
-                          <td className="text-right whitespace-nowrap"><DeltaChip delta={r.delta} vs={period.prev.label} /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="px-4 py-3">
+                  {/* Bullet bars: one shared scale; the tick marks the previous
+                      period, so "above/below where it was" reads without a
+                      second column of numbers. */}
+                  <div className="space-y-3">
+                    {(() => {
+                      const shown = expComp.slice(0, 7);
+                      const max = Math.max(...shown.flatMap((x) => [x.current, x.previous]));
+                      return shown.map((r) => (
+                        <div key={r.code} className="min-w-0" title={`${r.name}: ${formatDop(r.current)} · ${period.prev.label} ${formatDop(r.previous)}`}>
+                          <div className="flex items-baseline justify-between gap-2 text-sm mb-1 min-w-0">
+                            <span className="truncate text-ink-700 min-w-0">{r.name}</span>
+                            <span className="shrink-0 inline-flex items-baseline gap-2">
+                              <span className="tabular-nums font-medium">{formatDop(r.current)}</span>
+                              <DeltaChip delta={r.delta} vs={period.prev.label} />
+                            </span>
+                          </div>
+                          <BulletBar value={r.current} marker={r.previous} max={max} color={C.sales} />
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                  <p className="text-[11px] text-ink-400 mt-3">barra = {monthLabel} · marca = {period.prev.label}</p>
                 </div>
               )}
             </div>
@@ -441,29 +470,69 @@ export default function AccountingDashboard() {
             )}
           </div>
 
-          {/* Comparativo mensual — 12 meses con su gemelo del año anterior. */}
+          {/* Comparativo mensual — the YoY ventas chart (this year solid over
+              last year's ghost) + small-multiple sparklines for the companion
+              metrics; the full table stays one toggle away. */}
           <div className="card overflow-hidden min-w-0">
             <div className="card-header">
               <h2 className="eyebrow font-semibold text-ink-700">Comparativo mensual · últimos 12 meses</h2>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setCompView('chart')}
+                  className={`btn text-xs ${compView === 'chart' ? 'tab-pill-active' : 'tab-pill'}`}>Gráfico</button>
+                <button type="button" onClick={() => setCompView('table')}
+                  className={`btn text-xs ${compView === 'table' ? 'tab-pill-active' : 'tab-pill'}`}>Tabla</button>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead><tr><th>Mes</th><th className="text-right">Ventas</th><th className="text-right">Año anterior</th><th className="text-right">Δ año</th><th className="text-right">Cobrado</th><th className="text-right">Gastos</th><th className="text-right">Importado</th></tr></thead>
-                <tbody>
-                  {monthly.map((m) => (
-                    <tr key={m.key} className="hover:bg-ink-50 transition-colors">
-                      <td className="text-ink-700 whitespace-nowrap capitalize">{m.label}</td>
-                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(m.ventas)}</td>
-                      <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(m.ventasYoy)}</td>
-                      <td className="text-right whitespace-nowrap"><DeltaChip delta={m.deltaYoy} /></td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.cobrado)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.gastos)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.importado)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {compView === 'chart' ? (
+              <div className="p-4 space-y-4">
+                <YoYColumns
+                  data={monthly.map((m) => ({ label: m.label, value: m.ventas, prev: m.ventasYoy }))}
+                  color={C.sales} format={formatDop} />
+                <Legend items={[
+                  { label: 'Ventas facturadas', color: C.sales },
+                  { label: 'Mismo mes, año anterior', color: '#e3e1da' },
+                ]} />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-ink-100">
+                  {[
+                    { key: 'cobrado', label: 'Cobrado', color: C.in },
+                    { key: 'gastos', label: 'Gastos', color: C.expense },
+                    { key: 'compras', label: 'Compras', color: '#878374' },
+                    { key: 'importado', label: 'Importado', color: C.out },
+                  ].map((m) => {
+                    const last = monthly[monthly.length - 1];
+                    return (
+                      <div key={m.key} className="min-w-0">
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <span className="eyebrow-xs text-ink-500 truncate">{m.label}</span>
+                          <span className="text-sm font-semibold tabular-nums whitespace-nowrap">{formatDop(last?.[m.key] || 0)}</span>
+                        </div>
+                        <Sparkline points={monthly.map((row) => row[m.key])} color={m.color} height={30} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead><tr><th>Mes</th><th className="text-right">Ventas</th><th className="text-right">Año anterior</th><th className="text-right">Δ año</th><th className="text-right">Cobrado</th><th className="text-right">Gastos</th><th className="text-right">Compras</th><th className="text-right">Importado</th></tr></thead>
+                  <tbody>
+                    {monthly.map((m) => (
+                      <tr key={m.key} className="hover:bg-ink-50 transition-colors">
+                        <td className="text-ink-700 whitespace-nowrap capitalize">{m.label}</td>
+                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(m.ventas)}</td>
+                        <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(m.ventasYoy)}</td>
+                        <td className="text-right whitespace-nowrap"><DeltaChip delta={m.deltaYoy} /></td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.cobrado)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.gastos)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.compras)}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.importado)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Top debtors / creditors. */}

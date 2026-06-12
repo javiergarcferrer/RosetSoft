@@ -132,6 +132,7 @@ test('resolveMonthlyComparative aligns each month with its YoY twin', () => {
       { postedAt: JUN, total: 1000 },
       { postedAt: new Date(2025, 5, 10).getTime(), total: 500 },
     ],
+    purchases: [{ purchaseAt: JUN, base: 250 }],
     months: 3,
     end: JUN,
   });
@@ -141,6 +142,7 @@ test('resolveMonthlyComparative aligns each month with its YoY twin', () => {
   assert.equal(jun.ventas, 1000);
   assert.equal(jun.ventasYoy, 500);
   assert.equal(jun.deltaYoy, 1);
+  assert.equal(jun.compras, 250);
 });
 
 /* ------------------------ expense comparison ---------------------------- */

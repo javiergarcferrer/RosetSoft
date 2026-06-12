@@ -189,12 +189,13 @@ export function resolveSalesSegmented({
 }
 
 /**
- * Trailing-months comparative table — one row per month (oldest first):
- * ventas + the same month LAST year (the YoY column every retail dashboard
- * leads with), cobrado, gastos, importado.
+ * Trailing-months comparative — one entry per month (oldest first): ventas +
+ * the same month LAST year (the YoY pairing every retail dashboard leads
+ * with), cobrado, gastos, compras, importado. Feeds both the comparative
+ * chart (bars + small-multiple sparklines) and its table view.
  */
 export function resolveMonthlyComparative({
-  salesPostings, payments, expenses, expedientes, imports, months = 12, end = Date.now(),
+  salesPostings, payments, expenses, purchases, expedientes, imports, months = 12, end = Date.now(),
 } = {}) {
   const cobros = (payments || []).filter((p) => p.direction === 'in' && p.partyType === 'customer');
   const endD = new Date(end);
@@ -215,6 +216,7 @@ export function resolveMonthlyComparative({
       deltaYoy: deltaPct(ventas, ventasYoy),
       cobrado: sumIn(cobros, 'paidAt', w, (r) => r.amount),
       gastos: sumIn(expenses, 'expenseAt', w, (r) => r.base),
+      compras: sumIn(purchases, 'purchaseAt', w, (r) => r.base),
       importado: landedIn(expedientes, imports, w),
     });
   }
