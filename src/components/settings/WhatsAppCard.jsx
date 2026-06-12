@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock } from 'lucide-react';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
@@ -20,8 +20,14 @@ export default function WhatsAppCard({ settings, saveSettings }) {
   const [appSecret, setAppSecret] = useState('');
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
   const [msg, setMsg] = useState('');
+  // Credentials are LOCKED while a connection is saved: the inputs aren't
+  // rendered at all (nothing in the DOM for a password manager to autofill,
+  // nothing to overwrite by accident) until the dealer explicitly clicks
+  // "Editar credenciales". First-time setup (nothing saved yet) shows them.
+  const [editing, setEditing] = useState(false);
 
   const connectedAt = settings?.whatsappConnectedAt;
+  const locked = !!connectedAt && !editing;
   const displayNumber = settings?.whatsappDisplayNumber;
   const verifiedName = settings?.whatsappVerifiedName;
 
@@ -47,6 +53,9 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       await saveWhatsappConfig({ accessToken, phoneNumberId, wabaId, appSecret, settings });
       setAccessToken('');
       setAppSecret('');
+      setPhoneNumberId('');
+      setWabaId('');
+      setEditing(false); // re-lock the fields
       // Verify against the Graph API before claiming success — a wrong ID or
       // an expired token is caught here, not later as a silent non-delivery.
       const ping = await pingWhatsapp();
@@ -81,6 +90,20 @@ export default function WhatsAppCard({ settings, saveSettings }) {
 
       <SetupGuide settings={settings} />
 
+      {locked ? (
+        <div className="mt-4 rounded-lg border border-ink-100 bg-ink-50/60 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-ink-600 flex items-start gap-2 min-w-0">
+            <Lock size={14} className="text-ink-400 shrink-0 mt-px" aria-hidden />
+            <span>
+              Credenciales guardadas y <strong>bloqueadas</strong> — token, Phone Number ID, WABA ID y App Secret.
+              No se muestran, no se autocompletan y no se pueden modificar sin desbloquear.
+            </span>
+          </div>
+          <button type="button" onClick={() => setEditing(true)} className="btn-ghost text-xs shrink-0">
+            Editar credenciales
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="wa-token">Token de acceso (permanente)</label>
@@ -112,11 +135,23 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           </p>
         </div>
       </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-          {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
-        </button>
+        {!locked && (
+          <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+            {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
+          </button>
+        )}
+        {!locked && connectedAt ? (
+          <button
+            type="button"
+            onClick={() => { setAccessToken(''); setPhoneNumberId(''); setWabaId(''); setAppSecret(''); setEditing(false); setMsg(''); setStatus('idle'); }}
+            className="btn-ghost text-sm"
+          >
+            Cancelar
+          </button>
+        ) : null}
         {connectedAt ? (
           <span className="text-[11px] text-ink-400 min-w-0 truncate">
             Conectado{displayNumber ? ` · ${displayNumber}` : ''}{verifiedName ? ` (${verifiedName})` : ''} · {formatDateTime(connectedAt)}
