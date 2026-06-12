@@ -1,4 +1,5 @@
 // wa-send — outbound WhatsApp via the Meta Cloud API.
+// (rev: catalog browsing + product sends — listCatalog / products handlers.)
 //
 // Called by a signed-in team member (Settings connection test, the quote
 // editor's "Enviar por WhatsApp", the CRM inbox composer, the Difusión
@@ -675,7 +676,6 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, id: res.id });
   }
 
-<<<<<<< HEAD
   // Location pin.
   if (body.location) {
     const lat = Number(body.location.latitude);
@@ -719,7 +719,14 @@ Deno.serve(async (req: Request) => {
       logKind: 'contacts',
       logBody: cName,
       logPayload: { ...(contextLog || {}), contact: { name: cName, phone: cPhone, org } },
-=======
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
+
   // Product message(s) from the connected Commerce catalog. One item sends a
   // single-product card; several send a product_list (one section). Free-form
   // interactive — same 24h window rule as text.
@@ -753,7 +760,6 @@ Deno.serve(async (req: Request) => {
       logKind: 'product',
       logBody: text || names.filter(Boolean).join(' · ') || `${items.length} producto(s)`,
       logPayload: { ...(contextLog || {}), products: { items, names } },
->>>>>>> a0fae5a (feat(whatsapp): sell from the chat — Commerce catalog product messages)
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
