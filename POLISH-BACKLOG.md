@@ -37,9 +37,11 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (core/accounting/sales.js, pinned in tests/commissions.test.js); the
       per-sale list was already responsive — the two SummaryTable payout
       rollups got RowCards inCard fallbacks.)
-- [ ] Facturación action row: `accounting/Facturacion.jsx:427-446` RNC/NCF
+- [x] Facturación action row: `accounting/Facturacion.jsx:427-446` RNC/NCF
       inputs + button stack full-width < sm; pin 607 tfoot totals outside the
       scroll container (:471-545).
+      (i6 — action row + 607 search stack < sm; 607 gets RowCards with a
+      totals footer and a shared ecfActions renderer for cell + card.)
 - [ ] Ledger + accounting Dashboard read-mode: collapse to 2-line entry cards
       (fecha+memo / debe+haber) < md; desktop density unchanged.
 - [ ] Difusion composer 375px pass: `src/pages/Difusion.jsx` variable-mapping

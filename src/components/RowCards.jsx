@@ -41,6 +41,9 @@ function RowBody({ row }) {
           {row.kv.filter(Boolean).map(([label, value], i) => <KV key={i} label={label}>{value}</KV>)}
         </div>
       )}
+      {row.actions != null && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">{row.actions}</div>
+      )}
     </>
   );
 }

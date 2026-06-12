@@ -10,6 +10,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
@@ -389,6 +390,45 @@ export default function Facturacion() {
     downloadText(dgiiTxtFilename('607', settings?.companyRnc, period), txt);
   }
 
+  // e-CF status + actions for one 607 row — shared by the desktop cell and
+  // the mobile card so the two variants can't drift.
+  function ecfActions(r) {
+    const p = postingById.get(r.id);
+    const status = p?.ecfStatus || '';
+    const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
+    return (
+      <div className="flex items-center gap-3">
+        {status === 'accepted' ? (
+          <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
+        ) : status === 'sent' ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
+            {p?.trackId && (
+              <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
+                title="Consultar estado en la DGII"
+                className="btn-ghost text-xs whitespace-nowrap">
+                {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Consultar
+              </button>
+            )}
+          </span>
+        ) : status === 'rejected' ? (
+          <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
+        ) : !isEcf ? (
+          <span className="text-xs text-ink-400">—</span>
+        ) : (
+          <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+            className="btn-ghost text-xs whitespace-nowrap">
+            {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+          </button>
+        )}
+        <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
+          title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
+          {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
+        </button>
+      </div>
+    );
+  }
+
   return (
     <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)" />
@@ -425,10 +465,10 @@ export default function Facturacion() {
                     {book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 w-full sm:w-auto">
                       <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
                         onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
-                        className="input w-36" />
+                        className="input flex-1 min-w-0 sm:flex-none sm:w-36" />
                       <button type="button" onClick={() => lookupFor(q)}
                         disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
                         className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
@@ -439,7 +479,7 @@ export default function Facturacion() {
                       onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
                       className="input w-full sm:w-52" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
-                      className="btn-primary">
+                      className="btn-primary w-full sm:w-auto justify-center">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
                     </button>
                     {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
@@ -452,10 +492,10 @@ export default function Facturacion() {
       ) : tab === '607' ? (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
               <input value={q607} onChange={(e) => setQ607(e.target.value)}
-                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-56" />
+                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-full sm:w-56" />
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-auto">
               <button type="button" onClick={export607} disabled={sales607.count === 0}
@@ -468,7 +508,28 @@ export default function Facturacion() {
             <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin ventas en el mes'}
               description={q607 ? 'Ninguna venta del período coincide con la búsqueda.' : 'Las ventas facturadas del mes aparecen aquí.'} />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            <RowCards
+              rows={sales607View.rows.map((r) => ({
+                key: r.id,
+                title: r.name || '—',
+                right: formatDop(r.total),
+                sub: <span className="tabular-nums">{r.rnc ? `${r.rnc} · ` : ''}{r.ncf || '—'}</span>,
+                kv: [
+                  ['Fecha', formatDate(r.date)],
+                  ['Base', formatDop(r.base)],
+                  ['ITBIS', formatDop(r.itbis)],
+                ],
+                actions: ecfActions(r),
+              }))}
+              footer={[
+                ['Ventas', sales607View.count],
+                ['Base', formatDop(sales607View.totals.base)],
+                ['ITBIS', formatDop(sales607View.totals.itbis)],
+                ['Total', formatDop(sales607View.totals.total)],
+              ]}
+            />
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -484,11 +545,7 @@ export default function Facturacion() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sales607View.rows.map((r) => {
-                      const p = postingById.get(r.id);
-                      const status = p?.ecfStatus || '';
-                      const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
-                      return (
+                    {sales607View.rows.map((r) => (
                       <tr key={r.id}>
                         <td className="tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
                         <td className="min-w-[120px]">{r.name || '—'}</td>
@@ -497,40 +554,9 @@ export default function Facturacion() {
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
                         <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            {status === 'accepted' ? (
-                              <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
-                            ) : status === 'sent' ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
-                                {p?.trackId && (
-                                  <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
-                                    title="Consultar estado en la DGII"
-                                    className="btn-ghost text-xs whitespace-nowrap">
-                                    {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Consultar
-                                  </button>
-                                )}
-                              </span>
-                            ) : status === 'rejected' ? (
-                              <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
-                            ) : !isEcf ? (
-                              <span className="text-xs text-ink-400">—</span>
-                            ) : (
-                              <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-                                className="btn-ghost text-xs whitespace-nowrap">
-                                {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
-                              </button>
-                            )}
-                            <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
-                              title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
-                              {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
-                            </button>
-                          </div>
-                        </td>
+                        <td>{ecfActions(r)}</td>
                       </tr>
-                      );
-                    })}
+                    ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-ink-200 font-semibold">
@@ -544,6 +570,7 @@ export default function Facturacion() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       ) : (
