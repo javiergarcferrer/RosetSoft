@@ -10,7 +10,9 @@ import EmptyState from '../components/EmptyState.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
-import { Cell, PanelField, PanelTextArea, SortableTh, ContactGapDot } from '../components/sheet/cells.jsx';
+import {
+  Cell, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+} from '../components/sheet/cells.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -74,6 +76,9 @@ export default function Customers() {
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
   const [creating, setCreating] = useState(null);
+  // Last failed write, surfaced in a banner — a cell reverting silently
+  // reads as data loss; this says WHY it didn't stick.
+  const [writeError, setWriteError] = useState('');
   // Which rows are dropped open. A Set so several clients can be compared
   // side by side; toggled by the chevron (cells own the click).
   const [expanded, setExpanded] = useState(() => new Set());
@@ -95,15 +100,21 @@ export default function Customers() {
   // One field per commit, straight to the row — same sheet semantics as
   // Profesionales. Notes keeps its inner whitespace (it's freeform).
   async function commitField(c, field, raw) {
-    if (field === 'name') {
-      const name = String(raw).trim();
-      if (!name) return false; // a client can't be nameless — revert
-      await db.customers.update(c.id, { name, updatedAt: Date.now() });
+    try {
+      if (field === 'name') {
+        const name = String(raw).trim();
+        if (!name) return false; // a client can't be nameless — revert
+        await db.customers.update(c.id, { name, updatedAt: Date.now() });
+      } else {
+        const value = field === 'notes' ? String(raw) : String(raw).trim();
+        await db.customers.update(c.id, { [field]: value, updatedAt: Date.now() });
+      }
+      setWriteError('');
       return true;
+    } catch (e) {
+      setWriteError(`No se pudo guardar el cambio: ${e?.message || e}`);
+      return false;
     }
-    const value = field === 'notes' ? String(raw) : String(raw).trim();
-    await db.customers.update(c.id, { [field]: value, updatedAt: Date.now() });
-    return true;
   }
 
   async function removeCustomer(c) {
@@ -153,6 +164,8 @@ export default function Customers() {
             resultNoun={['cliente', 'clientes']}
           />
 
+          <SheetErrorBanner message={writeError} onDismiss={() => setWriteError('')} />
+
           {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops
               the full record. Same commit semantics as the desktop grid. */}
           <div className="md:hidden space-y-2">
@@ -182,7 +195,9 @@ export default function Customers() {
                   <th className="hidden lg:table-cell">Teléfono</th>
                   <th className="hidden xl:table-cell">Ciudad</th>
                   <SortableTh label="Pipeline" sortKey="pipeline" sort={sort} onSort={setSort} numeric className="text-right" />
-                  <SortableTh label="Compras" sortKey="lifetime" sort={sort} onSort={setSort} numeric className="text-right" />
+                  {/* xl-only: at lg the column total exceeds the container and
+                      the squeeze clips the phone digits. */}
+                  <SortableTh label="Compras" sortKey="lifetime" sort={sort} onSort={setSort} numeric className="text-right hidden xl:table-cell" />
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -255,10 +270,12 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
         <td className="max-w-[180px]">
           <Cell value={c.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${c.name}`} />
         </td>
-        <td className="hidden lg:table-cell max-w-[200px]">
+        <td className="hidden lg:table-cell min-w-[9rem] max-w-[200px]">
           <Cell value={c.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${c.name}`} />
         </td>
-        <td className="hidden lg:table-cell max-w-[140px]">
+        {/* min-w: phone digits must never clip — name/empresa absorb the
+            squeeze instead (they truncate gracefully, numbers don't). */}
+        <td className="hidden lg:table-cell min-w-[8rem] max-w-[140px]">
           <Cell value={c.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${c.name}`} />
         </td>
         <td className="hidden xl:table-cell max-w-[140px]">
@@ -274,7 +291,7 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             <span className="text-ink-300">—</span>
           )}
         </td>
-        <td className="text-right tabular-nums whitespace-nowrap">
+        <td className="hidden xl:table-cell text-right tabular-nums whitespace-nowrap">
           {rollup?.acceptedTotal > 0 ? (
             <span className="text-emerald-700">{formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}</span>
           ) : (

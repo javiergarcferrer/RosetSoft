@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X } from 'lucide-react';
 
 // Shared primitives for the inline-editable "sheet" list pages
 // (Profesionales, Clientes). One home so the two sheets can't drift on
@@ -151,6 +151,30 @@ export function ContactGapDot({ rollup }) {
       role="img"
       aria-label={`Faltan datos de contacto: ${missing}`}
     />
+  );
+}
+
+/**
+ * Failed-write banner. A sheet cell that can't save reverts its draft — but
+ * a revert alone reads as "the app ate my edit". The page catches the DB
+ * error into one visible strip so a schema/permission problem is loud
+ * instead of silently undoing the dealer's work.
+ */
+export function SheetErrorBanner({ message, onDismiss }) {
+  if (!message) return null;
+  return (
+    <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden />
+      <span className="flex-1 min-w-0">{message}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Cerrar aviso"
+        className="shrink-0 rounded p-0.5 text-red-400 transition-colors hover:bg-red-100 hover:text-red-700"
+      >
+        <X size={13} />
+      </button>
+    </div>
   );
 }
 

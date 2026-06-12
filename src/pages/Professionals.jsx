@@ -10,7 +10,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import {
-  Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot,
+  Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
 } from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -77,6 +77,9 @@ export default function Professionals() {
   const [tab, setTab] = useState('all');
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+  // Last failed write, surfaced in a banner — a cell reverting silently
+  // reads as data loss; this says WHY it didn't stick.
+  const [writeError, setWriteError] = useState('');
   // Which rows are dropped open. A Set so several professionals can be
   // compared side by side; toggled by the chevron (cells own the click).
   const [expanded, setExpanded] = useState(() => new Set());
@@ -101,15 +104,21 @@ export default function Professionals() {
   // One field per commit, straight to the row. The live query repaints the
   // sheet; the focused cell keeps its own draft so typing never glitches.
   async function commitField(p, field, raw) {
-    if (field === 'name') {
-      const name = String(raw).trim();
-      if (!name) return false; // a professional can't be nameless — revert
-      await db.professionals.update(p.id, { name, updatedAt: Date.now() });
+    try {
+      if (field === 'name') {
+        const name = String(raw).trim();
+        if (!name) return false; // a professional can't be nameless — revert
+        await db.professionals.update(p.id, { name, updatedAt: Date.now() });
+      } else {
+        const value = field === 'notes' ? String(raw) : String(raw).trim();
+        await db.professionals.update(p.id, { [field]: value, updatedAt: Date.now() });
+      }
+      setWriteError('');
       return true;
+    } catch (e) {
+      setWriteError(`No se pudo guardar el cambio: ${e?.message || e}`);
+      return false;
     }
-    const value = field === 'notes' ? String(raw) : String(raw).trim();
-    await db.professionals.update(p.id, { [field]: value, updatedAt: Date.now() });
-    return true;
   }
 
   async function removePro(p) {
@@ -136,13 +145,19 @@ export default function Professionals() {
       createdAt: now,
       updatedAt: now,
     };
-    await assignSequenceNumber({
-      table: 'professionals',
-      profileId,
-      start: 1,
-      build: (number) => ({ ...core, number }),
-    });
-    return true;
+    try {
+      await assignSequenceNumber({
+        table: 'professionals',
+        profileId,
+        start: 1,
+        build: (number) => ({ ...core, number }),
+      });
+      setWriteError('');
+      return true;
+    } catch (e) {
+      setWriteError(`No se pudo crear el profesional: ${e?.message || e}`);
+      return false;
+    }
   }
 
   function focusNewRow() {
@@ -214,6 +229,8 @@ export default function Professionals() {
               />
             </div>
           )}
+
+          <SheetErrorBanner message={writeError} onDismiss={() => setWriteError('')} />
 
           {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops the
               quotes panel. Same commit semantics as the desktop grid. */}
@@ -315,10 +332,12 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
         <td className="max-w-[200px]">
           <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
         </td>
-        <td className="hidden lg:table-cell max-w-[220px]">
+        <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">
           <Cell value={p.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${p.name}`} />
         </td>
-        <td className="hidden lg:table-cell max-w-[150px]">
+        {/* min-w: phone digits must never clip — name/empresa absorb the
+            squeeze instead (they truncate gracefully, numbers don't). */}
+        <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">
           <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${p.name}`} />
         </td>
         <td className="text-right tabular-nums whitespace-nowrap text-ink-800">
@@ -410,8 +429,8 @@ function NewSheetRow({ row, onCreate }) {
         />
       </td>
       <td className="max-w-[200px]">{cell('company', { placeholder: 'Empresa' })}</td>
-      <td className="hidden lg:table-cell max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
-      <td className="hidden lg:table-cell max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
+      <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
+      <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
       <td className="text-right text-[11px] text-ink-300">—</td>
       <td></td>
     </tr>
