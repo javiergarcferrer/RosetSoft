@@ -98,16 +98,18 @@ export default function Customers() {
   );
 
   // One field per commit, straight to the row — same sheet semantics as
-  // Profesionales. Notes keeps its inner whitespace (it's freeform).
+  // Profesionales. No updatedAt in the payload: the DB touch trigger owns
+  // the stamp (customers_touch_updated_at), so saving never depends on the
+  // bookkeeping column existing. Notes keeps its inner whitespace.
   async function commitField(c, field, raw) {
     try {
       if (field === 'name') {
         const name = String(raw).trim();
         if (!name) return false; // a client can't be nameless — revert
-        await db.customers.update(c.id, { name, updatedAt: Date.now() });
+        await db.customers.update(c.id, { name });
       } else {
         const value = field === 'notes' ? String(raw) : String(raw).trim();
-        await db.customers.update(c.id, { [field]: value, updatedAt: Date.now() });
+        await db.customers.update(c.id, { [field]: value });
       }
       setWriteError('');
       return true;

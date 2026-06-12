@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X } from 'lucide-react';
 
 // Shared primitives for the inline-editable "sheet" list pages
@@ -6,6 +6,12 @@ import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X } from 'lucide-react'
 // commit semantics: draft-while-focused (a live-query repaint can't clobber
 // typing), commit on blur only when the value changed, revert on Escape,
 // and `onCommit` may return false to reject the edit (the draft snaps back).
+//
+// The draft is OPTIMISTIC across the save round-trip: it re-syncs from the
+// server value only when that value CHANGES while unfocused — never on the
+// blur itself. Resetting on blur made the typed text flash back to the old
+// value for the write+refetch window (~a second), which read as "my edit
+// disappeared". A failed commit reverts explicitly instead.
 
 // Borderless input that reads exactly like the cell text until focused —
 // the "viewing IS editing" core of the sheet.
@@ -22,11 +28,11 @@ export function focusCell(row, col) {
 /** One spreadsheet cell; Enter/Shift+Enter hop rows within the column. */
 export function Cell({ value, onCommit, row, col, type = 'text', inputMode, placeholder, align = '', label }) {
   const [draft, setDraft] = useState(value ?? '');
-  const [focused, setFocused] = useState(false);
-  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
 
   async function commit() {
-    setFocused(false);
+    focused.current = false;
     if (String(draft) === String(value ?? '')) return;
     const ok = await onCommit(draft);
     if (ok === false) setDraft(value ?? '');
@@ -41,7 +47,7 @@ export function Cell({ value, onCommit, row, col, type = 'text', inputMode, plac
       value={draft}
       placeholder={placeholder}
       aria-label={label}
-      onFocus={(e) => { setFocused(true); e.target.select(); }}
+      onFocus={(e) => { focused.current = true; e.target.select(); }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -68,8 +74,8 @@ export function Cell({ value, onCommit, row, col, type = 'text', inputMode, plac
  */
 export function PanelField({ label, value, onCommit, type = 'text', inputMode, placeholder, className = '' }) {
   const [draft, setDraft] = useState(value ?? '');
-  const [focused, setFocused] = useState(false);
-  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
   return (
     <div className={className}>
       <span className="eyebrow-xs text-ink-400">{label}</span>
@@ -80,10 +86,10 @@ export function PanelField({ label, value, onCommit, type = 'text', inputMode, p
         value={draft}
         placeholder={placeholder || '—'}
         aria-label={label}
-        onFocus={(e) => { setFocused(true); e.target.select(); }}
+        onFocus={(e) => { focused.current = true; e.target.select(); }}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={async () => {
-          setFocused(false);
+          focused.current = false;
           if (String(draft) === String(value ?? '')) return;
           const ok = await onCommit(draft);
           if (ok === false) setDraft(value ?? '');
@@ -181,8 +187,8 @@ export function SheetErrorBanner({ message, onDismiss }) {
 /** Multiline sibling of PanelField — the notes editor in the panel. */
 export function PanelTextArea({ label, value, onCommit, placeholder, name }) {
   const [draft, setDraft] = useState(value ?? '');
-  const [focused, setFocused] = useState(false);
-  useEffect(() => { if (!focused) setDraft(value ?? ''); }, [value, focused]);
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
   return (
     <div>
       <span className="eyebrow-xs text-ink-400">{label}</span>
@@ -192,11 +198,13 @@ export function PanelTextArea({ label, value, onCommit, placeholder, name }) {
         placeholder={placeholder}
         aria-label={name ? `${label} de ${name}` : label}
         value={draft}
-        onFocus={() => setFocused(true)}
+        onFocus={() => { focused.current = true; }}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          setFocused(false);
-          if (String(draft) !== String(value ?? '')) onCommit(draft);
+        onBlur={async () => {
+          focused.current = false;
+          if (String(draft) === String(value ?? '')) return;
+          const ok = await onCommit(draft);
+          if (ok === false) setDraft(value ?? '');
         }}
       />
     </div>
