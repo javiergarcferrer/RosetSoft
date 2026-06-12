@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, Cpu, KeyRound, Radar, RefreshCw, Satellite, Send, ShieldAlert,
-  TrendingUp, X, Zap,
+  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Package,
+  Radar, RefreshCw, Satellite, Send, ShieldAlert, TrendingUp, Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -21,6 +21,7 @@ import {
   agoLabel,
 } from '../core/jarvis/index.js';
 import { formatMoney } from '../lib/format.js';
+import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
 import './jarvis.css';
 
 // Deploy telemetry baked in at build time by vite.config.js — the commit this
@@ -84,6 +85,78 @@ function StatusChip({ status, label }) {
   );
 }
 
+/** Shimmering placeholder block in the final layout's shape (no spinners). */
+function Skeleton({ w = '100%', h = '0.8rem', className = '' }) {
+  return <span className={`jv-skeleton ${className}`} style={{ width: w, height: h }} aria-hidden="true" />;
+}
+
+/** ⌘K command palette — fuzzy-less filter over the page's actions. */
+function CommandPalette({ open, onClose, actions }) {
+  const [query, setQuery] = useState('');
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (open) {
+      setQuery('');
+      setSel(0);
+      // Focus after the dialog mounts.
+      const t = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [open]);
+  if (!open) return null;
+
+  const q = query.trim().toLowerCase();
+  const list = actions.filter((a) => !q
+    || a.label.toLowerCase().includes(q)
+    || (a.hint || '').toLowerCase().includes(q));
+  const cur = Math.min(sel, Math.max(0, list.length - 1));
+  const run = (a) => { onClose(); a.run(); };
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(Math.min(list.length - 1, cur + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(Math.max(0, cur - 1)); }
+    else if (e.key === 'Enter' && list[cur]) { e.preventDefault(); run(list[cur]); }
+    else if (e.key === 'Escape') onClose();
+  };
+
+  return (
+    <div className="jv-palette-scrim" onClick={onClose} role="presentation">
+      <div className="jv-palette" role="dialog" aria-label="Comandos" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={inputRef}
+          className="pin"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setSel(0); }}
+          onKeyDown={onKey}
+          placeholder="Comando o destino…"
+          spellCheck={false}
+        />
+        <div className="plist">
+          {list.map((a, i) => {
+            const Icon = a.icon;
+            return (
+              <button
+                type="button"
+                key={a.id}
+                className={`pitem ${i === cur ? 'is-sel' : ''}`}
+                onMouseEnter={() => setSel(i)}
+                onClick={() => run(a)}
+              >
+                <Icon size={13} />
+                <span className="plabel">{a.label}</span>
+                {a.hint && <span className="phint jv-mono">{a.hint}</span>}
+              </button>
+            );
+          })}
+          {!list.length && <div className="pempty">Sin coincidencias</div>}
+        </div>
+        <div className="pfoot jv-mono">↑↓ navegar · ↵ ejecutar · esc cerrar</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Jarvis() {
   const { profileId, settings, isAdmin, refreshSettings } = useApp();
 
@@ -111,7 +184,7 @@ export default function Jarvis() {
   // The business rows themselves (not just counts) — the pulse panel and the
   // ops feed project honest figures straight from them. `tick` keeps them
   // fresh across devices, same as the uplink thread.
-  const { data: biz } = useLiveQueryStatus(
+  const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
       const [quotes, orders, customers, products, quoteLines] = await Promise.all([
         db.quotes.where('profileId').equals(profileId || '').toArray(),
@@ -216,6 +289,7 @@ export default function Jarvis() {
   const [sending, setSending] = useState(false);
   const [uplinkError, setUplinkError] = useState(null);
   const consoleEndRef = useRef(null);
+  const draftInputRef = useRef(null);
 
   const transmit = useCallback(async () => {
     const content = draft.trim();
@@ -282,6 +356,33 @@ export default function Jarvis() {
       setLinking(false);
     }
   }, [apiKey, linking, refreshSettings]);
+
+  // ── ⌘K command palette ───────────────────────────────────────────────
+  const navigate = useNavigate();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v), { ignoreInInput: false });
+  const paletteActions = useMemo(() => [
+    { id: 'diag', icon: Zap, label: 'Ejecutar diagnóstico', hint: 'integraciones', run: runDiagnostics },
+    {
+      id: 'transmit',
+      icon: Send,
+      label: 'Transmitir directiva a Claude',
+      hint: 'enlace',
+      run: () => draftInputRef.current?.focus(),
+    },
+    ...(!claudeLinked ? [{
+      id: 'key',
+      icon: KeyRound,
+      label: 'Vincular llave API (respuestas al instante)',
+      hint: 'opcional',
+      run: () => setShowKeyForm(true),
+    }] : []),
+    { id: 'dash', icon: LayoutDashboard, label: 'Ir al Dashboard', hint: '/', run: () => navigate('/') },
+    { id: 'quotes', icon: FileText, label: 'Ir a Cotizaciones', hint: '/quotes', run: () => navigate('/quotes') },
+    { id: 'orders', icon: Package, label: 'Ir a Pedidos', hint: '/orders', run: () => navigate('/orders') },
+    { id: 'customers', icon: Users, label: 'Ir a Clientes', hint: '/customers', run: () => navigate('/customers') },
+    { id: 'exit', icon: X, label: 'Salir de JARVIS', hint: 'esc', run: () => navigate('/') },
+  ], [claudeLinked, navigate, runDiagnostics]);
 
   // ── projections ──────────────────────────────────────────────────────
   const now = clock.getTime();
@@ -369,6 +470,14 @@ export default function Jarvis() {
               />
             </div>
           </div>
+          <button
+            type="button"
+            className="jv-btn flex-none"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Abrir paleta de comandos"
+          >
+            <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
+          </button>
           <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
             <X size={14} /> Salir
           </Link>
@@ -419,6 +528,27 @@ export default function Jarvis() {
             <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
             <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>USD · datos reales en vivo</span>
           </div>
+          {!bizLoaded ? (
+            // Skeleton in the final layout's shape — no spinners, no jumps.
+            <div className="p-4 space-y-4">
+              <div className="grid gap-2.5 sm:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
+                    <Skeleton w="55%" h="0.6rem" />
+                    <Skeleton w="70%" h="1.3rem" />
+                    <Skeleton w="85%" h="0.6rem" />
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => <Skeleton key={i} h="0.55rem" />)}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Skeleton h="72px" />
+                <Skeleton h="72px" />
+              </div>
+            </div>
+          ) : (
           <div className="p-4 space-y-4">
             {/* KPI strip — each figure traces to rows via core/quote/totals */}
             <div className="grid gap-2.5 sm:grid-cols-3">
@@ -518,6 +648,7 @@ export default function Jarvis() {
               </div>
             </div>
           </div>
+          )}
         </section>
 
         <section className="jv-panel">
@@ -582,6 +713,12 @@ export default function Jarvis() {
           <section className="jv-panel">
             <div className="jv-panel-head"><Activity size={12} /> Actividad comercial</div>
             <div className="jv-timeline p-3 max-h-64 overflow-y-auto">
+              {!bizLoaded && [0, 1, 2, 3].map((i) => (
+                <div key={i} className="trow">
+                  <span className="tdot" />
+                  <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
+                </div>
+              ))}
               {opsFeed.map((e) => (
                 <div key={e.id} className="trow">
                   <span className={`tdot ${e.tone}`} />
@@ -589,7 +726,7 @@ export default function Jarvis() {
                   <span className="tago jv-mono">{e.ago || ''}</span>
                 </div>
               ))}
-              {!opsFeed.length && (
+              {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin actividad registrada todavía.
                 </div>
@@ -722,6 +859,7 @@ export default function Jarvis() {
         <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
           <div className="flex gap-2">
             <input
+              ref={draftInputRef}
               className="jv-input"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -740,6 +878,12 @@ export default function Jarvis() {
           )}
         </div>
       </section>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        actions={paletteActions}
+      />
     </div>
   );
 }
