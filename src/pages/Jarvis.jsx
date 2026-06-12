@@ -16,6 +16,7 @@ import {
   resolveOpsFeed,
   resolveActivityHeatmap,
   resolveSocialPulse,
+  resolveAdsSalesWeeks,
   systemIntegrity,
   radarPoints,
   sparkPoints,
@@ -493,6 +494,13 @@ export default function Jarvis() {
     () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
     [socialRaw, nowMin],
   );
+  // Ads ↔ sales bridge — only meaningful once the ad rows are in.
+  const adsSales = useMemo(
+    () => (socialRaw?.adsDaily?.length
+      ? resolveAdsSalesWeeks({ adsDaily: socialRaw.adsDaily, quotes: biz.quotes, now: nowMin })
+      : null),
+    [socialRaw, biz, nowMin],
+  );
 
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ block: 'end' });
@@ -734,6 +742,26 @@ export default function Jarvis() {
                   <span><i className="accepted" /> aceptadas</span>
                 </div>
               </div>
+
+              {/* ads ↔ sales: spend next to what the pipeline did, by week */}
+              {adsSales && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Ads ↔ ventas · por semana</div>
+                  <div className="jv-bridge jv-mono">
+                    <div className="brow head">
+                      <span>Semana</span><span>Inversión</span><span>Cotiz.</span><span>Acept.</span>
+                    </div>
+                    {adsSales.map((w) => (
+                      <div key={w.start} className="brow">
+                        <span>{w.label}</span>
+                        <span>{w.spend > 0 ? `${w.spend.toLocaleString('en-US', { maximumFractionDigits: 0 })}${social?.adCurrency ? ` ${social.adCurrency}` : ''}` : '—'}</span>
+                        <span>{w.created}</span>
+                        <span style={{ color: w.accepted > 0 ? 'var(--jv-success)' : undefined }}>{w.accepted}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* activity heatmap — one cell per real day, GitHub-style */}
               <div>

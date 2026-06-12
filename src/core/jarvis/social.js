@@ -9,8 +9,10 @@
  * timestamps; all of that normalizing lives here, not in the View.
  */
 import { agoLabel } from './board.js';
+import { weekStart } from './pulse.js';
 
 const DAY = 86_400_000;
+const WEEK = 7 * DAY;
 
 const num = (v) => {
   const n = Number(v);
@@ -64,6 +66,43 @@ const RESULT_TYPES = [
 /** Daily values of one metric from an insights payload (data array). */
 const metricRows = (insights, name) =>
   ((insights || []).find((m) => m.name === name)?.values) || [];
+
+/**
+ * Marketing API `date_start` ("YYYY-MM-DD") as a LOCAL-midnight timestamp.
+ * `Date.parse` would read it as UTC midnight — in Santo Domingo (UTC-4)
+ * that lands on 8 PM of the PREVIOUS day and shifts week buckets.
+ */
+function localDayMs(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}
+
+/**
+ * The ads ↔ sales bridge: the last `weeks` Monday-aligned weeks with what
+ * was SPENT on Meta ads (account currency) next to what the pipeline DID
+ * (quotes created / accepted, same week rule as the business pulse). No
+ * shared y-axis trickery — plain numbers side by side; the reader judges
+ * the correlation.
+ */
+export function resolveAdsSalesWeeks({ adsDaily = [], quotes = [], now = Date.now(), weeks = 4 } = {}) {
+  const w0 = weekStart(now);
+  return Array.from({ length: weeks }, (_, i) => {
+    const start = w0 - (weeks - 1 - i) * WEEK;
+    const inWeek = (ts) => ts != null && ts >= start && ts < start + WEEK;
+    const spend = adsDaily.reduce(
+      (acc, r) => acc + (inWeek(localDayMs(r.date_start)) ? num(r.spend) : 0),
+      0,
+    );
+    return {
+      start,
+      label: new Date(start).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' }),
+      spend,
+      created: quotes.filter((q) => inWeek(q.createdAt)).length,
+      accepted: quotes.filter((q) => inWeek(q.acceptedAt)).length,
+    };
+  });
+}
 
 /**
  * The social pulse. `snapshot` is the meta-social function's payload (may be

@@ -24,7 +24,7 @@ export const FUNNEL_STAGES = [
 ];
 
 /** Monday 00:00 of the week containing `ts` (DR has no DST). */
-function weekStart(ts) {
+export function weekStart(ts) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));

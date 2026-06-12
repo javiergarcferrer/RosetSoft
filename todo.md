@@ -172,8 +172,9 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [x] Pass 1 — analytics depth: IG follower/profile-view daily series, FB page
   engagement (deprecation-tolerant), ad RESULTS (priority: messaging
   conversations > leads > link clicks) + cost per result, per-campaign results.
-- [ ] Pass 2 — ads↔sales bridge: overlay ad spend vs quotes created in the
-  Pulso comercial cadence (needs a shared weekly bucketing of adsDaily).
+- [x] Pass 2 — ads↔sales bridge: "Ads ↔ ventas" weekly table in Pulso comercial
+  (spend by LOCAL-day bucketing of adsDaily next to quotes created/accepted,
+  same Monday weeks as the cadence; resolveAdsSalesWeeks, TZ-pinned test).
 - [ ] Pass 3 — publishing: schedule/publish FB+IG posts from JARVIS
   (pages_manage_posts / instagram_content_publish are now on the app).
 - [ ] Pass 4 — IG comments/DM triage into the CRM inbox (instagram_manage_*).

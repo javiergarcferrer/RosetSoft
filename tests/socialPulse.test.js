@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSocialPulse, inLabel } from '../src/core/jarvis/social.js';
+import { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from '../src/core/jarvis/social.js';
 
 const NOW = Date.parse('2026-06-10T12:00:00Z');
 const DAY = 86_400_000;
@@ -117,6 +117,30 @@ test('scheduled posts: ISO and unix-second timestamps both parse; past drops; so
   assert.deepEqual(scheduled.map((p) => p.text), ['soon', 'far']);
   assert.equal(scheduled[0].inLabel, 'en 2 h');
   assert.equal(scheduled[1].inLabel, 'en 3 d');
+});
+
+test('ads↔sales weeks bucket spend by LOCAL day next to quote counts', () => {
+  // NOW is Wednesday 2026-06-10 local; current week starts Monday 06-08.
+  const adsDaily = [
+    { date_start: '2026-06-08', spend: '10' }, // Monday this week — if parsed
+    // as UTC it would land Sunday 8 PM local and fall into the PREVIOUS week
+    { date_start: '2026-06-09', spend: '15' },
+    { date_start: '2026-06-01', spend: '40' }, // previous week
+  ];
+  const quotes = [
+    { id: 'q1', createdAt: new Date(2026, 5, 9).getTime() },
+    { id: 'q2', createdAt: new Date(2026, 5, 2).getTime(), acceptedAt: new Date(2026, 5, 3).getTime() },
+  ];
+  const wk = resolveAdsSalesWeeks({ adsDaily, quotes, now: NOW, weeks: 4 });
+  assert.equal(wk.length, 4);
+  const cur = wk[3];
+  const prev = wk[2];
+  assert.equal(cur.spend, 25); // 06-08 stays in THIS week (local parse)
+  assert.equal(cur.created, 1);
+  assert.equal(prev.spend, 40);
+  assert.equal(prev.created, 1);
+  assert.equal(prev.accepted, 1);
+  assert.ok(cur.label.length > 0);
 });
 
 test('inLabel covers minutes/hours/days and clamps the past to "ahora"', () => {
