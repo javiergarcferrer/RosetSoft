@@ -58,8 +58,11 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       responsive classes today; reuse the shared primitive).
       (i8 — bespoke md:hidden cards (thumbnail + pills + actions don't fit
       RowCards' shape); table at md+.)
-- [ ] JARVIS phone pass: verify 3-pane HUD panel heights + radar SVG at 375px
+- [x] JARVIS phone pass: verify 3-pane HUD panel heights + radar SVG at 375px
       (`src/pages/Jarvis.jsx`, `jarvis.css`); admin-only, last.
+      (i8 — verified clean by inspection: grid stacks < xl, panels are
+      responsive grids, radar scales by viewBox, feeds scroll internally,
+      fonts clamp. No change needed.)
 
 ## Data ↔ interaction seams (bridge-shaped; tests + typecheck)
 - [x] Quote invoice status into CRM: `resolveQuoteInvoiceStatus(postings)` in
@@ -150,8 +153,12 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       `Materials.jsx:711`.
 - [ ] Pin missing money tests: `tests/commissionCycle.test.js` (16th→15th
       window + year wrap), small direct test for `lib/quoteGroups.ts`.
-- [ ] Migration-ordering fitness test (style of credentialDurability): fail any
+- [x] Migration-ordering fitness test (style of credentialDurability): fail any
       migration filename timestamp older than the repo's current maximum.
+      (i21 — tests/migrationOrder.test.js: per-file git addition time
+      (--no-renames so a rename re-enters as an add) must be monotonic with
+      the filename timestamps; uncommitted files count as added now; the one
+      historical repair is grandfathered. Full suite 568/568.)
 - [ ] Shared RNC cleaning (`cleanRnc` everywhere; `CuentasCobrarPagar.jsx:81`)
       + shared `isDepositIn(quote)` selector (Workspace vs Facturación drift).
 
