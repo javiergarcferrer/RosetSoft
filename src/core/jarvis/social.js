@@ -182,6 +182,20 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     }))
     .map((m) => ({ ...m, ago: agoLabel(m.at, now) }));
 
+  // Recent comments flattened across the recent posts, newest first — the
+  // triage feed (what people are saying that may deserve a reply).
+  const recentComments = (s.igMedia || [])
+    .flatMap((m) => ((m.comments?.data) || []).map((c) => ({
+      text: (c.text || '').slice(0, 100),
+      username: c.username || '',
+      at: toMs(c.timestamp),
+      postText: (m.caption || '').slice(0, 40) || `(${m.media_type || 'post'})`,
+      permalink: m.permalink || null,
+    })))
+    .sort((a, b) => (b.at || 0) - (a.at || 0))
+    .slice(0, 8)
+    .map((c) => ({ ...c, ago: agoLabel(c.at, now) }));
+
   return {
     pageName: s.page?.name || s.pageName || '',
     igUsername: s.ig?.username || s.igUsername || '',
@@ -213,6 +227,7 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     campaigns,
     scheduled,
     posts,
+    recentComments,
     errors: s.errors || {},
     fetchedAt: s.fetchedAt || null,
   };

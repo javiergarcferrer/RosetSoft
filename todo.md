@@ -178,7 +178,10 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [x] Pass 3 — publishing: composer in the Social panel — FB Page posts now or
   scheduled (10min-30d, Graph /feed), IG image posts immediate (container flow;
   API has no IG scheduling). Per-target results, partial success allowed.
-- [ ] Pass 4 — IG comments/DM triage into the CRM inbox (instagram_manage_*).
+- [x] Pass 4 — IG comment triage: recent comments ride nested on the media
+  snapshot call (no N+1), flattened newest-first in the panel. DM triage into
+  the CRM inbox deliberately NOT done — needs instagram_manage_messages advanced
+  access + webhooks; revisit if the business asks for it.
 - [ ] Blocked on user: regenerate system-user token with the page/IG/ads
   scopes (use cases were just added) and paste it into the WhatsApp card —
   the social panel self-links once the token has page visibility.

@@ -1078,6 +1078,21 @@ export default function Jarvis() {
                 </div>
               )}
 
+              {/* IG comment triage — what people are saying, newest first */}
+              {social.recentComments.length > 0 && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Comentarios IG recientes</div>
+                  {social.recentComments.map((c) => (
+                    <div key={`${c.username}-${c.at}`} className="jv-social-row">
+                      <span className="name">
+                        <span style={{ color: 'var(--jv-accent)' }}>@{c.username}</span> {c.text}
+                      </span>
+                      <span className="jv-mono stat dim">{c.ago || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* composer — publish to the Page now/scheduled, optionally IG */}
               <div className="pt-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
                 <div className="jv-kicker mb-2">Publicar</div>

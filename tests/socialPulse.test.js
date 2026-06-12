@@ -143,6 +143,26 @@ test('ads↔sales weeks bucket spend by LOCAL day next to quote counts', () => {
   assert.ok(cur.label.length > 0);
 });
 
+test('recent IG comments flatten across posts, newest first, capped at 8', () => {
+  const igMedia = [
+    {
+      caption: 'Post A',
+      media_type: 'IMAGE',
+      comments: { data: [
+        { text: 'older', username: 'ana', timestamp: new Date(NOW - 2 * DAY).toISOString() },
+        { text: 'newest', username: 'luis', timestamp: new Date(NOW - 1000).toISOString() },
+      ] },
+    },
+    { caption: 'Post B', comments: { data: Array.from({ length: 10 }, (_, i) => ({ text: `c${i}`, username: 'x', timestamp: new Date(NOW - (i + 3) * DAY).toISOString() })) } },
+  ];
+  const { recentComments } = resolveSocialPulse({ igMedia }, { now: NOW });
+  assert.equal(recentComments.length, 8);
+  assert.equal(recentComments[0].text, 'newest');
+  assert.equal(recentComments[0].username, 'luis');
+  assert.equal(recentComments[0].postText, 'Post A');
+  assert.ok(recentComments[0].ago);
+});
+
 test('inLabel covers minutes/hours/days and clamps the past to "ahora"', () => {
   assert.equal(inLabel(NOW + 30 * 60_000, NOW), 'en 30 min');
   assert.equal(inLabel(NOW - 1, NOW), 'ahora');

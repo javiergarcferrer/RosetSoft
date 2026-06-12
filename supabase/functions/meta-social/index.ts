@@ -317,7 +317,8 @@ Deno.serve(async (req) => {
         : Promise.resolve(null),
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
-          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink',
+          // comments ride along nested — recent triage without N+1 calls
+          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink,comments.limit(3){text,username,timestamp}',
           limit: '6',
         }))
         : Promise.resolve(null),
