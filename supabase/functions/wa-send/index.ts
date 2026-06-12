@@ -141,11 +141,29 @@ Deno.serve(async (req: Request) => {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return json({ configured: true, ok: false, error: metaError(data, r.status) }, 502);
     const d = data as { display_phone_number?: string; verified_name?: string; quality_rating?: string };
+    // Webhooks only flow once the app is SUBSCRIBED to the WABA — registering
+    // the callback URL in the Meta portal is NOT enough; without this call
+    // Meta delivers nothing (no inbound messages, no delivery statuses).
+    // Idempotent, so the connection check simply ensures it every time.
+    let webhookSubscribed = false;
+    let webhookError: string | null = null;
+    if (wabaId) {
+      const sub = await fetch(`${GRAPH}/${wabaId}/subscribed_apps`, { method: 'POST', headers: graphHeaders });
+      const subData = await sub.json().catch(() => ({}));
+      webhookSubscribed = sub.ok && !!(subData as { success?: boolean }).success;
+      if (!webhookSubscribed) webhookError = metaError(subData, sub.status);
+    } else {
+      webhookError = 'Falta el WhatsApp Business Account ID (WABA): sin él no se puede activar la recepción de mensajes. Pégalo en Configuración → WhatsApp.';
+    }
     await admin.from('settings').update({
       whatsapp_display_number: d.display_phone_number || '',
       whatsapp_verified_name: d.verified_name || '',
     }).eq('profile_id', TEAM);
-    return json({ configured: true, ok: true, displayNumber: d.display_phone_number, verifiedName: d.verified_name, quality: d.quality_rating });
+    return json({
+      configured: true, ok: true,
+      displayNumber: d.display_phone_number, verifiedName: d.verified_name, quality: d.quality_rating,
+      webhookSubscribed, webhookError,
+    });
   }
 
   // ── Template management (needs the WABA id) ───────────────────────────────

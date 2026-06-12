@@ -25,6 +25,21 @@ export default function WhatsAppCard({ settings, saveSettings }) {
   const displayNumber = settings?.whatsappDisplayNumber;
   const verifiedName = settings?.whatsappVerifiedName;
 
+  // Webhook delivery state. The ping ENSURES the app is subscribed to the
+  // WABA (wa-send re-subscribes idempotently — without that subscription Meta
+  // delivers no webhooks at all, even with the callback URL verified), so
+  // pinging on open self-heals an install that registered the URL but was
+  // never subscribed.
+  const [webhook, setWebhook] = useState(null); // null | { subscribed, error }
+  useEffect(() => {
+    if (!connectedAt) return undefined;
+    let alive = true;
+    pingWhatsapp().then((res) => {
+      if (alive && res?.ok) setWebhook({ subscribed: !!res.webhookSubscribed, error: res.webhookError || null });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [connectedAt]);
+
   async function save() {
     setStatus('saving');
     setMsg('');
@@ -37,6 +52,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       const ping = await pingWhatsapp();
       if (ping?.ok) {
         setStatus('saved');
+        setWebhook({ subscribed: !!ping.webhookSubscribed, error: ping.webhookError || null });
         setMsg(`Conectado: ${ping.displayNumber || ''}${ping.verifiedName ? ` (${ping.verifiedName})` : ''}. ✓ Ahora registra el webhook (paso 3 de la guía).`);
       } else {
         setStatus('error');
@@ -105,6 +121,19 @@ export default function WhatsAppCard({ settings, saveSettings }) {
         <p className="text-[11px] text-ink-400 mt-1.5">
           La conexión queda guardada — los deploys no la tocan. Para cambiar un solo valor (p. ej. un token nuevo), pega solo ese campo: los vacíos conservan lo guardado.
         </p>
+      )}
+      {webhook && (
+        webhook.subscribed ? (
+          <p className="text-[11px] text-emerald-700 mt-1.5 flex items-start gap-1">
+            <Check size={12} className="mt-px shrink-0" />
+            Recepción activa: las respuestas del cliente y las confirmaciones de entrega llegan a la app.
+          </p>
+        ) : (
+          <p className="text-[11px] text-amber-700 mt-1.5 flex items-start gap-1">
+            <AlertTriangle size={12} className="mt-px shrink-0" />
+            <span>Recepción inactiva — Meta no está entregando mensajes a la app. {webhook.error}</span>
+          </p>
+        )
       )}
       {msg && (
         <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>

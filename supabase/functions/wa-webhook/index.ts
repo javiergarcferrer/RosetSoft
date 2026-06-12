@@ -33,6 +33,17 @@ const EXT_BY_MIME: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 
+/** Async delivery-failure codes → dealer-readable Spanish (the sync twin
+ *  lives in wa-send's friendlyMetaError — the Deno functions don't share
+ *  modules, and the status payload shape differs anyway). */
+const STATUS_ERRORS: Record<number, string> = {
+  131047: 'No entregado: fuera de la ventana de 24 horas. WhatsApp solo entrega texto libre si el cliente escribió en las últimas 24 h — envía una plantilla aprobada.',
+  131026: 'No entregado: el destinatario no puede recibir el mensaje (ventana cerrada, número sin WhatsApp o versión antigua).',
+  131048: 'No entregado: Meta limitó el envío a este número por ahora (límites de spam).',
+  131049: 'No entregado: Meta limitó la entrega de marketing a este número por ahora.',
+  131030: 'No entregado: el número no está en la lista de destinatarios permitidos del número de PRUEBA (Meta → WhatsApp → API Setup → "To").',
+};
+
 /** The media reference of an inbound message ({ id, mime }) or null. */
 function inboundMedia(msg: Record<string, any>): { id: string; mime: string } | null {
   const m = msg[msg.type as string];
@@ -191,14 +202,21 @@ Deno.serve(async (req: Request) => {
           if (!error && media && msg.id) await persistMedia(msg.id, media);
         }
 
-        // Delivery-status updates → the matching outbound row.
+        // Delivery-status updates → the matching outbound row. The Cloud API
+        // ACCEPTS many bad sends (returns a wamid) and only fails them here,
+        // asynchronously — most commonly 131047: free-form text outside the
+        // 24h window is silently dropped. Translate those codes so the chat
+        // bubble tells the dealer WHY the message never arrived.
         for (const st of value.statuses || []) {
           if (!st.id || !st.status) continue;
           const patch: Record<string, unknown> = {
             status: st.status,
             status_at: new Date((Number(st.timestamp) || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
           };
-          const errMsg = st.errors?.[0]?.message || st.errors?.[0]?.title;
+          const e0 = st.errors?.[0];
+          const errMsg = e0
+            ? (STATUS_ERRORS[Number(e0.code)] || e0.error_data?.details || e0.message || e0.title)
+            : null;
           if (errMsg) patch.error = errMsg;
           const { error } = await admin.from('wa_messages').update(patch).eq('wa_id', st.id);
           if (error) console.error('[wa-webhook] status update failed:', error.message);
