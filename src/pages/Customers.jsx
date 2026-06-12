@@ -396,54 +396,53 @@ function QuickAction({ href, to, icon: Icon, label }) {
   );
 }
 
-// The dropdown body — quick contact actions, the quote pipeline grouped by
-// status, then the FULL record: every Customer field that isn't a sheet
-// column (RNC, contacto, dirección, provincia, CP, país) plus notes, all
-// editable in place. Shared by the mobile card and the desktop sheet row so
-// both surfaces stay identical.
+// The dropdown body in three clearly divided sections: (1) contact actions
+// + the ficha link, (2) the quote pipeline grouped by status, (3) the FULL
+// record — every Customer field that isn't a sheet column (RNC, contacto,
+// dirección, provincia, CP, país) plus notes, all editable in place. One
+// compact figure per fact: the totals live in the section header, never
+// repeated in a band. Shared by the mobile card and the desktop sheet row
+// so both surfaces stay identical.
 function CustomerPanel({ c, rollup, onCommit, onRemove }) {
   const groups = rollup?.groups || [];
   const wa = waDigits(c.phone);
   return (
-    <div className="px-4 py-3 space-y-3">
-      {/* Quick actions — only the channels this client actually has. */}
-      <div className="flex flex-wrap items-center gap-1.5">
+    <div className="divide-y divide-ink-100">
+      {/* Contact bar — the channels this client actually has, ficha right. */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
         {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
         {c.phone && <QuickAction href={`tel:${c.phone}`} icon={Phone} label="Llamar" />}
         {c.email && <QuickAction href={`mailto:${c.email}`} icon={Mail} label="Correo" />}
+        <span className="flex-1" />
         <Link
           to={`/customers/${c.id}`}
-          className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100 active:scale-[0.98]"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 transition-colors hover:text-brand-700"
         >
           Ver ficha completa <ArrowRight size={12} aria-hidden />
         </Link>
       </div>
 
-      {groups.length === 0 ? (
-        <div className="flex items-center gap-2 py-1 text-xs text-ink-400">
-          <FileText size={13} className="flex-shrink-0" />
-          Sin cotizaciones asignadas.
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-500 tabular-nums">
-            <span>
-              <span className="font-semibold text-ink-700">{rollup.count}</span>
-              {' '}{rollup.count === 1 ? 'cotización' : 'cotizaciones'}
+      <section className="px-4 py-3 space-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
+          {(rollup?.openTotal > 0 || rollup?.acceptedTotal > 0) && (
+            <span className="flex flex-wrap justify-end gap-x-3 text-[11px] tabular-nums text-ink-500">
+              {rollup.openTotal > 0 && (
+                <span>Pipeline <span className="font-semibold text-ink-700">{formatMoney(rollup.openTotal, 'USD', { USD: 1 })}</span></span>
+              )}
+              {rollup.acceptedTotal > 0 && (
+                <span className="text-emerald-700">Comprado <span className="font-semibold">{formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}</span></span>
+              )}
             </span>
-            {rollup.openTotal > 0 && (
-              <span>Pipeline {formatMoney(rollup.openTotal, 'USD', { USD: 1 })}</span>
-            )}
-            {rollup.acceptedTotal > 0 && (
-              <span className="text-emerald-700">
-                Comprado {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
-              </span>
-            )}
-            {rollup.lastActivityAt > 0 && (
-              <span>Últ. actividad {formatDateTime(rollup.lastActivityAt)}</span>
-            )}
+          )}
+        </div>
+        {groups.length === 0 ? (
+          <div className="flex items-center gap-2 py-1 text-xs text-ink-400">
+            <FileText size={13} className="flex-shrink-0" />
+            Sin cotizaciones asignadas.
           </div>
-          {groups.map(({ status, entries }) => (
+        ) : (
+          groups.map(({ status, entries }) => (
             <div key={status}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`status-pill status-pill-${status}`}>
@@ -477,43 +476,45 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
                 ))}
               </ul>
             </div>
-          ))}
-        </>
-      )}
+          ))
+        )}
+      </section>
 
       {/* The rest of the record — every field the sheet columns don't carry,
           same in-place commit semantics. Dirección stays its own field;
           notes is for remarks only. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <PanelField label="RNC / Cédula" value={c.rnc} onCommit={(v) => onCommit('rnc', v)} inputMode="numeric" />
-        <PanelField label="Contacto" value={c.contactName} onCommit={(v) => onCommit('contactName', v)} className="col-span-1 sm:col-span-2" />
-        <PanelField label="Dirección" value={c.address} onCommit={(v) => onCommit('address', v)} className="col-span-2 sm:col-span-3" />
-        <PanelField label="Ciudad" value={c.city} onCommit={(v) => onCommit('city', v)} />
-        <PanelField label="Provincia" value={c.state} onCommit={(v) => onCommit('state', v)} />
-        <div className="grid grid-cols-2 gap-2">
-          <PanelField label="C.P." value={c.zip} onCommit={(v) => onCommit('zip', v)} inputMode="numeric" />
-          <PanelField label="País" value={c.country} onCommit={(v) => onCommit('country', v)} />
+      <section className="px-4 py-3 space-y-2.5">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del cliente</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <PanelField label="RNC / Cédula" value={c.rnc} onCommit={(v) => onCommit('rnc', v)} inputMode="numeric" />
+          <PanelField label="Contacto" value={c.contactName} onCommit={(v) => onCommit('contactName', v)} className="col-span-1 sm:col-span-2" />
+          <PanelField label="Dirección" value={c.address} onCommit={(v) => onCommit('address', v)} className="col-span-2 sm:col-span-3" />
+          <PanelField label="Ciudad" value={c.city} onCommit={(v) => onCommit('city', v)} />
+          <PanelField label="Provincia" value={c.state} onCommit={(v) => onCommit('state', v)} />
+          <div className="grid grid-cols-2 gap-2">
+            <PanelField label="C.P." value={c.zip} onCommit={(v) => onCommit('zip', v)} inputMode="numeric" />
+            <PanelField label="País" value={c.country} onCommit={(v) => onCommit('country', v)} />
+          </div>
         </div>
-      </div>
-      <PanelTextArea
-        label="Notas"
-        value={c.notes}
-        onCommit={(v) => onCommit('notes', v)}
-        placeholder="Notas internas — preferencias, acuerdos, contexto…"
-        name={c.name}
-      />
-
-      {onRemove && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onRemove}
-            className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
-          >
-            <Trash2 size={12} aria-hidden /> Eliminar
-          </button>
-        </div>
-      )}
+        <PanelTextArea
+          label="Notas"
+          value={c.notes}
+          onCommit={(v) => onCommit('notes', v)}
+          placeholder="Notas internas — preferencias, acuerdos, contexto…"
+          name={c.name}
+        />
+        {onRemove && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+            >
+              <Trash2 size={12} aria-hidden /> Eliminar
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

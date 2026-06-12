@@ -522,48 +522,51 @@ function QuickAction({ href, to, icon: Icon, label }) {
   );
 }
 
-// The dropdown body — quick contact actions, a quiet rollup band (counts,
-// totals, last activity), the professional's quotes grouped by status (each
+// The dropdown body in three clearly divided sections: (1) contact actions
+// + the perfil link, (2) the professional's quotes grouped by status (each
 // group under its status pill with the quote rows reading #number ·
-// customer · last-touched · total), then the in-place dirección + notes
-// fields. Shared by the mobile card and the desktop sheet row so both
-// surfaces stay identical.
+// customer · last-touched · total), (3) the record's in-place dirección +
+// notes fields. One compact figure per fact: the totals live in the section
+// header, never repeated in a band. Shared by the mobile card and the
+// desktop sheet row so both surfaces stay identical.
 function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
   const groups = rollup?.groups || [];
   const wa = waDigits(pro.phone);
   return (
-    <div className="px-4 py-3 space-y-3">
-      {/* Quick actions — only the channels this professional actually has. */}
-      {(wa || pro.phone || pro.email) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
-          {pro.phone && <QuickAction href={`tel:${pro.phone}`} icon={Phone} label="Llamar" />}
-          {pro.email && <QuickAction href={`mailto:${pro.email}`} icon={Mail} label="Correo" />}
-        </div>
-      )}
-      {groups.length === 0 ? (
-        <div className="flex items-center gap-2 py-2 text-xs text-ink-400">
-          <FileText size={13} className="flex-shrink-0" />
-          Sin cotizaciones asignadas.
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-500 tabular-nums">
-            <span>
-              <span className="font-semibold text-ink-700">{rollup.count}</span>
-              {' '}{rollup.count === 1 ? 'cotización' : 'cotizaciones'}
+    <div className="divide-y divide-ink-100">
+      {/* Contact bar — the channels this professional has, perfil right. */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
+        {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
+        {pro.phone && <QuickAction href={`tel:${pro.phone}`} icon={Phone} label="Llamar" />}
+        {pro.email && <QuickAction href={`mailto:${pro.email}`} icon={Mail} label="Correo" />}
+        <span className="flex-1" />
+        <Link
+          to={`/professionals/${pro.id}`}
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 transition-colors hover:text-brand-700"
+        >
+          Ver perfil y comisiones <ArrowRight size={12} aria-hidden />
+        </Link>
+      </div>
+
+      <section className="px-4 py-3 space-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
+          {rollup?.count > 0 && (
+            <span className="flex flex-wrap justify-end gap-x-3 text-[11px] tabular-nums text-ink-500">
+              <span>Total <span className="font-semibold text-ink-700">{formatMoney(rollup.allTimeTotal, 'USD', { USD: 1 })}</span></span>
+              {rollup.acceptedTotal > 0 && (
+                <span className="text-emerald-700">Aceptado <span className="font-semibold">{formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}</span></span>
+              )}
             </span>
-            <span>Total {formatMoney(rollup.allTimeTotal, 'USD', { USD: 1 })}</span>
-            {rollup.acceptedTotal > 0 && (
-              <span className="text-emerald-700">
-                Aceptado {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
-              </span>
-            )}
-            {rollup.lastActivityAt > 0 && (
-              <span>Últ. actividad {formatDateTime(rollup.lastActivityAt)}</span>
-            )}
+          )}
+        </div>
+        {groups.length === 0 ? (
+          <div className="flex items-center gap-2 py-1 text-xs text-ink-400">
+            <FileText size={13} className="flex-shrink-0" />
+            Sin cotizaciones asignadas.
           </div>
-          {groups.map(({ status, entries }) => (
+        ) : (
+          groups.map(({ status, entries }) => (
             <div key={status}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`status-pill status-pill-${status}`}>
@@ -600,36 +603,34 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
                 ))}
               </ul>
             </div>
-          ))}
-        </>
-      )}
+          ))
+        )}
+      </section>
+
       {/* Dirección is a real field (the seed's DIRECCIÓN column now lives
           here, not in notes); notes is for remarks only. */}
-      <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} />
-      <PanelTextArea
-        label="Notas"
-        value={pro.notes}
-        onCommit={(v) => onCommit('notes', v)}
-        placeholder="Notas internas — preferencias, acuerdos, contexto…"
-        name={pro.name}
-      />
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          to={`/professionals/${pro.id}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
-        >
-          Ver perfil y comisiones <ArrowRight size={12} aria-hidden />
-        </Link>
+      <section className="px-4 py-3 space-y-2.5">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del profesional</h4>
+        <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} />
+        <PanelTextArea
+          label="Notas"
+          value={pro.notes}
+          onCommit={(v) => onCommit('notes', v)}
+          placeholder="Notas internas — preferencias, acuerdos, contexto…"
+          name={pro.name}
+        />
         {onRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
-          >
-            <Trash2 size={12} aria-hidden /> Eliminar
-          </button>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+            >
+              <Trash2 size={12} aria-hidden /> Eliminar
+            </button>
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
