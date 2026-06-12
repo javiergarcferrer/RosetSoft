@@ -206,6 +206,69 @@ Deno.serve(async (req: Request) => {
           if (!error && media && msg.id) await persistMedia(msg.id, media);
         }
 
+        // COEXISTENCE: echoes of messages the team sends from the phone's
+        // WhatsApp Business app on the same number — logged as outbound rows
+        // so the CRM inbox shows BOTH cockpits' sides of the conversation.
+        // Dedupe on wa_id (Meta retries; and our own API sends never echo).
+        for (const echo of (value as Record<string, any>).message_echoes || []) {
+          const phone = String(echo.to || '').replace(/\D/g, '');
+          if (!phone || !echo.id) continue;
+          const link = await linkFor(phone);
+          const tsMs = Number(echo.timestamp) ? Number(echo.timestamp) * 1000 : Date.now();
+          const { error } = await admin.from('wa_messages').upsert({
+            id: crypto.randomUUID(),
+            profile_id: TEAM,
+            direction: 'out',
+            wa_id: echo.id,
+            phone,
+            ...link,
+            kind: echo.type || 'text',
+            body: inboundBody(echo),
+            status: 'sent',
+            payload: { ...echo, smbEcho: true },
+            created_at: new Date(tsMs).toISOString(),
+          }, { onConflict: 'wa_id', ignoreDuplicates: true });
+          if (error) console.error('[wa-webhook] echo insert failed:', error.message);
+          const echoMedia = inboundMedia(echo);
+          if (!error && echoMedia && echo.id) await persistMedia(echo.id, echoMedia);
+        }
+
+        // COEXISTENCE: chat-history sync — at onboarding Meta streams up to
+        // ~6 months of the phone app's conversations in chunks. Bulk-upsert
+        // per thread (dedupe on wa_id) and mark inbound history as READ so
+        // months of old chats don't explode the unread badges.
+        for (const h of (value as Record<string, any>).history || []) {
+          for (const th of h.threads || []) {
+            const phone = String(th.id || '').replace(/\D/g, '');
+            if (!phone) continue;
+            const link = await linkFor(phone);
+            const bizKey = phoneKey(value.metadata?.display_phone_number || '');
+            const rows = (th.messages || []).filter((m: Record<string, any>) => m?.id).map((m: Record<string, any>) => {
+              const fromMe = m.history_context?.from_me === true
+                || (bizKey && phoneKey(m.from) === bizKey);
+              const tsMs = Number(m.timestamp) ? Number(m.timestamp) * 1000 : Date.now();
+              return {
+                id: crypto.randomUUID(),
+                profile_id: TEAM,
+                direction: fromMe ? 'out' : 'in',
+                wa_id: m.id,
+                phone,
+                ...link,
+                kind: m.type || 'text',
+                body: inboundBody(m),
+                status: fromMe ? 'sent' : 'received',
+                read_at: fromMe ? null : new Date().toISOString(),
+                payload: { ...m, historySync: true },
+                created_at: new Date(tsMs).toISOString(),
+              };
+            });
+            if (!rows.length) continue;
+            const { error } = await admin.from('wa_messages')
+              .upsert(rows, { onConflict: 'wa_id', ignoreDuplicates: true });
+            if (error) console.error('[wa-webhook] history sync insert failed:', error.message);
+          }
+        }
+
         // Delivery-status updates → the matching outbound row. The Cloud API
         // ACCEPTS many bad sends (returns a wamid) and only fails them here,
         // asynchronously — most commonly 131047: free-form text outside the
