@@ -123,9 +123,10 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const { data: cfg } = await admin
-    .from('whatsapp_config').select('access_token, phone_number_id, waba_id').eq('profile_id', TEAM).maybeSingle();
+    .from('whatsapp_config').select('access_token, phone_number_id, waba_id, app_secret').eq('profile_id', TEAM).maybeSingle();
   const token = (cfg as { access_token?: string } | null)?.access_token;
   const phoneNumberId = (cfg as { phone_number_id?: string } | null)?.phone_number_id;
+  const appSecret = (cfg as { app_secret?: string } | null)?.app_secret || '';
   // A WABA id is a long numeric Meta id — but the field has been hand-pasted
   // with emails/phone numbers before. Treat a non-numeric value as ABSENT so
   // every wabaId consumer gives its clear "missing WABA" guidance instead of
@@ -146,13 +147,15 @@ Deno.serve(async (req: Request) => {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return json({ configured: true, ok: false, error: metaError(data, r.status) }, 502);
     const d = data as { display_phone_number?: string; verified_name?: string; quality_rating?: string };
-    // No (valid) WABA id saved → resolve it from the token itself: a System
-    // User token carries the WABAs it manages in its granular scopes. Persist
-    // the healed id so templates / Difusión work on the next request too.
+    // Resolve the app (and, if needed, the WABA) from the token itself —
+    // debug_token carries the app that minted it plus the WABAs a System
+    // User token manages. The healed WABA id persists so templates /
+    // Difusión work on the next request too.
+    const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
+    const dd = await dbg.json().catch(() => ({})) as
+      { data?: { app_id?: string; granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+    const appId = String(dd.data?.app_id || '');
     if (!wabaId) {
-      const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
-      const dd = await dbg.json().catch(() => ({})) as
-        { data?: { granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
       const ids = (dd.data?.granular_scopes || [])
         .find((s) => s.scope === 'whatsapp_business_management')?.target_ids || [];
       if (ids.length) {
@@ -160,21 +163,49 @@ Deno.serve(async (req: Request) => {
         await admin.from('whatsapp_config').update({ waba_id: wabaId }).eq('profile_id', TEAM);
       }
     }
-    // Webhooks only flow once the app is SUBSCRIBED to the WABA — registering
-    // the callback URL in the Meta portal is NOT enough; without this call
-    // Meta delivers nothing (no inbound messages, no delivery statuses).
-    // Idempotent, so the connection check simply ensures it every time.
+
+    // Webhooks only flow when BOTH halves are wired, so the connection check
+    // ensures both (idempotent) instead of trusting portal clicks:
+    //   1. APP level — the callback URL registered AND the `messages` field
+    //      subscribed. Verifying the URL in the portal alone subscribes NO
+    //      fields, and a missed toggle means Meta delivers nothing (the
+    //      observed failure: handshake 200 logged, zero POSTs ever after).
+    //      POST /{app-id}/subscriptions does both in one call, using the app
+    //      token (app_id|app_secret); Meta re-verifies our GET handshake
+    //      inline against settings.whatsapp_verify_token.
+    //   2. WABA level — the app subscribed to this account's events.
     let webhookSubscribed = false;
     let webhookError: string | null = null;
-    if (wabaId) {
-      const sub = await fetch(`${GRAPH}/${wabaId}/subscribed_apps`, { method: 'POST', headers: graphHeaders });
-      const subData = await sub.json().catch(() => ({}));
-      webhookSubscribed = sub.ok && !!(subData as { success?: boolean }).success;
-      if (!webhookSubscribed) webhookError = metaError(subData, sub.status);
-    } else {
+    if (!wabaId) {
       webhookError = wabaRaw
         ? `El WhatsApp Business Account ID guardado ("${wabaRaw}") no es válido — es el código numérico largo que aparece en Meta → WhatsApp → API Setup. Pégalo de nuevo en Configuración → WhatsApp.`
         : 'Falta el WhatsApp Business Account ID (WABA): sin él no se puede activar la recepción de mensajes. Pégalo en Configuración → WhatsApp.';
+    } else if (!appSecret) {
+      webhookError = 'Falta el App Secret (Meta → tu app → App settings → Basic): sin él no se puede activar ni autenticar la recepción de mensajes.';
+    } else if (!appId) {
+      webhookError = 'No se pudo identificar la app de Meta desde el token. Genera el token desde el System User de la app correcta y vuelve a guardarlo.';
+    } else {
+      const { data: st } = await admin.from('settings').select('whatsapp_verify_token').eq('profile_id', TEAM).maybeSingle();
+      const verifyToken = (st as { whatsapp_verify_token?: string } | null)?.whatsapp_verify_token || '';
+      const appSub = await fetch(`${GRAPH}/${appId}/subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          object: 'whatsapp_business_account',
+          callback_url: `${SUPABASE_URL}/functions/v1/wa-webhook`,
+          verify_token: verifyToken,
+          fields: 'messages',
+          access_token: `${appId}|${appSecret}`,
+        }),
+      });
+      const appSubData = await appSub.json().catch(() => ({}));
+      const appSubOk = appSub.ok && !!(appSubData as { success?: boolean }).success;
+      const wabaSub = await fetch(`${GRAPH}/${wabaId}/subscribed_apps`, { method: 'POST', headers: graphHeaders });
+      const wabaSubData = await wabaSub.json().catch(() => ({}));
+      const wabaSubOk = wabaSub.ok && !!(wabaSubData as { success?: boolean }).success;
+      webhookSubscribed = appSubOk && wabaSubOk;
+      if (!appSubOk) webhookError = metaError(appSubData, appSub.status);
+      else if (!wabaSubOk) webhookError = metaError(wabaSubData, wabaSub.status);
     }
     await admin.from('settings').update({
       whatsapp_display_number: d.display_phone_number || '',
