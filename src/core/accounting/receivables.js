@@ -132,5 +132,45 @@ export function resolvePartyStatement({ charges, payments } = {}) {
   return { rows, balance: bal };
 }
 
+/**
+ * One party's estado de cuenta assembled from the raw rows — the SAME money
+ * rules as the aging views above (customer charge = total − deposit applied;
+ * supplier charge = credit docs at base + ITBIS − retenciones), so the panel
+ * and the printed statement can never disagree with the aging table that
+ * opened them. `selected` = { type: 'customer'|'supplier', id }.
+ *
+ * @returns {{ name, rows, balance } | null}
+ */
+export function resolveStatementFor({
+  selected, salesPostings, payments, purchases, expenses, customersById, suppliersById,
+} = {}) {
+  if (!selected) return null;
+  if (selected.type === 'customer') {
+    const charges = (salesPostings || []).filter((s) => s.customerId === selected.id)
+      .map((s) => ({ date: s.postedAt, amount: round2((s.total || 0) - (s.depositApplied || 0)), label: 'Factura', ref: s.ncf || '' }))
+      .filter((c) => c.amount > 0.001);
+    const pays = (payments || []).filter((p) => p.direction === 'in' && p.partyId === selected.id)
+      .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Cobro', ref: p.reference || '' }));
+    return {
+      name: (customersById && customersById.get(selected.id)?.name) || 'Cliente',
+      ...resolvePartyStatement({ charges, payments: pays }),
+    };
+  }
+  const credit = (arr, dateField, label) => (arr || [])
+    .filter((d) => d.paymentMethod === 'credit' && d.supplierId === selected.id)
+    .map((d) => ({
+      date: d[dateField],
+      amount: round2((d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0)),
+      label, ref: d.ncf || '',
+    }));
+  const charges = [...credit(purchases, 'purchaseAt', 'Compra'), ...credit(expenses, 'expenseAt', 'Gasto')];
+  const pays = (payments || []).filter((p) => p.direction === 'out' && p.partyId === selected.id)
+    .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: p.reference || '' }));
+  return {
+    name: (suppliersById && suppliersById.get(selected.id)?.name) || 'Proveedor',
+    ...resolvePartyStatement({ charges, payments: pays }),
+  };
+}
+
 // Re-export so the page can show the deposited-net on a card cobro.
 export { paymentNet };

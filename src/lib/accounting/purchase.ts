@@ -80,6 +80,25 @@ export function buildPurchaseEntry({
 }
 
 /**
+ * The salida's money plan — validation + COGS at the running average + the
+ * post-move on-hand, extracted from the Inventario click handler so the
+ * figures that hit the ledger are a pure, testable rule. The caller does the
+ * writes (asiento via buildCogsEntry when cost > 0, the OUT movement, the
+ * item's qty update).
+ */
+export function planSalida({ qty, onHand, avgCost }: {
+  qty: number | string | null | undefined;
+  onHand: number;
+  avgCost: number | null | undefined;
+}): { ok: boolean; error?: string; qty: number; unitCost: number; cost: number; newQty: number } {
+  const q = Number(qty) || 0;
+  const avg = Number(avgCost) || 0;
+  if (q <= 0) return { ok: false, error: 'Indica una cantidad válida.', qty: q, unitCost: avg, cost: 0, newQty: onHand };
+  if (q > onHand) return { ok: false, error: 'No hay suficiente existencia.', qty: q, unitCost: avg, cost: 0, newQty: onHand };
+  return { ok: true, qty: q, unitCost: avg, cost: round2(q * avg), newQty: onHand - q };
+}
+
+/**
  * Cost-of-sale posting (salida de inventario): Debit Costo de venta / Credit
  * Inventario at the given total cost. Caller also records an OUT kardex movement.
  */

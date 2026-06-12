@@ -16,7 +16,7 @@ import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { cleanRnc } from '../../lib/rncLookup.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
-  resolveReceivables, resolvePayables, resolvePartyStatement,
+  resolveReceivables, resolvePayables, resolveStatementFor,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
 
@@ -57,23 +57,18 @@ export default function CuentasCobrarPagar() {
     : null)); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
 
-  const statement = useMemo(() => {
-    if (!selected) return null;
-    if (selected.type === 'customer') {
-      const charges = salesQ.data.filter((s) => s.customerId === selected.id)
-        .map((s) => ({ date: s.postedAt, amount: (s.total || 0) - (s.depositApplied || 0), label: 'Factura', ref: s.ncf || '' }))
-        .filter((c) => c.amount > 0.001);
-      const payments = paymentsQ.data.filter((p) => p.direction === 'in' && p.partyId === selected.id)
-        .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Cobro', ref: p.reference || '' }));
-      return { name: customersById.get(selected.id)?.name || 'Cliente', ...resolvePartyStatement({ charges, payments }) };
-    }
-    const credit = (arr, df) => arr.filter((d) => d.paymentMethod === 'credit' && d.supplierId === selected.id)
-      .map((d) => ({ date: d[df], amount: (d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0), label: df === 'purchaseAt' ? 'Compra' : 'Gasto', ref: d.ncf || '' }));
-    const charges = [...credit(purchasesQ.data, 'purchaseAt'), ...credit(expensesQ.data, 'expenseAt')];
-    const payments = paymentsQ.data.filter((p) => p.direction === 'out' && p.partyId === selected.id)
-      .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: p.reference || '' }));
-    return { name: suppliersById.get(selected.id)?.name || 'Proveedor', ...resolvePartyStatement({ charges, payments }) };
-  }, [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById]);
+  // The estado de cuenta is a Model projection (core/accounting/receivables:
+  // resolveStatementFor) — the same money rules as the aging views, so the
+  // panel and the printed PDF can't disagree with the table that opened them.
+  const statement = useMemo(
+    () => resolveStatementFor({
+      selected,
+      salesPostings: salesQ.data, payments: paymentsQ.data,
+      purchases: purchasesQ.data, expenses: expensesQ.data,
+      customersById, suppliersById,
+    }),
+    [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById],
+  );
 
   // In-app print preview state — the modal rasterizes the PDF and prints via
   // window.print() on our own page, so printing can never become a download.

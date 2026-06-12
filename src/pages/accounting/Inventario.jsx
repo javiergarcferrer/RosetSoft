@@ -14,7 +14,7 @@ import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import {
-  resolveInventory, resolveItemKardex, buildCogsEntry, resolveAccountingConfig,
+  resolveInventory, resolveItemKardex, buildCogsEntry, planSalida, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
 
 const TYPE_LABEL = { in: 'Entrada', out: 'Salida', adjust: 'Ajuste' };
@@ -71,28 +71,27 @@ export default function Inventario() {
 
   async function registerSalida() {
     setErr('');
-    const qty = Number(outQty) || 0;
-    if (!selectedItem || qty <= 0) { setErr('Indica una cantidad válida.'); return; }
-    if (kardex && qty > kardex.qty) { setErr('No hay suficiente existencia.'); return; }
-    const avg = kardex?.avgCost || 0;
-    const cost = Math.round(qty * avg * 100) / 100;
+    // The salida's MONEY rule (validation, COGS at average, new on-hand) is a
+    // pure Model helper; this handler only performs the writes it dictates.
+    const plan = planSalida({ qty: outQty, onHand: kardex?.qty || 0, avgCost: kardex?.avgCost });
+    if (!selectedItem || !plan.ok) { setErr(plan.error || 'Indica una cantidad válida.'); return; }
     setPosting(true);
     try {
       const moveId = newId();
-      if (cost > 0) {
-        const built = buildCogsEntry({ newId, config, cost, postedAt: Date.now(), refId: moveId, memo: `Salida ${selectedItem.name}` });
+      if (plan.cost > 0) {
+        const built = buildCogsEntry({ newId, config, cost: plan.cost, postedAt: Date.now(), refId: moveId, memo: `Salida ${selectedItem.name}` });
         await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
         await db.journalLines.bulkPut(built.lines);
         await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty, unitCost: avg,
+          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost,
           movedAt: Date.now(), memo: 'Costo de venta', journalEntryId: built.entry.id,
         });
       } else {
         await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty, unitCost: avg, movedAt: Date.now(),
+          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost, movedAt: Date.now(),
         });
       }
-      await db.inventoryItems.update(selectedItem.id, { qtyOnHand: (kardex?.qty || 0) - qty, avgCost: avg });
+      await db.inventoryItems.update(selectedItem.id, { qtyOnHand: plan.newQty, avgCost: plan.unitCost });
       // Stock changed → reflect it in the Shopify catalog (sold out → removed).
       syncShopify([selectedItem.id]).catch(() => {});
       setOutQty('');
