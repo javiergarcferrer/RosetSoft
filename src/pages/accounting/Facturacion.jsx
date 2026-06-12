@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
-import { toRow } from '../../db/rowMapping.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -25,7 +24,8 @@ import {
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { supabase } from '../../db/supabaseClient.js';
+import { sendEcf, checkEcfStatus } from '../../lib/ecfSend.js';
+import { postSaleTx } from '../../lib/salePosting.js';
 
 function ymd(ts) {
   const d = new Date(ts);
@@ -158,10 +158,7 @@ export default function Facturacion() {
         // Contado if the deposit covered the sale; crédito if a balance remains.
         tipoPago: (p.depositApplied || 0) >= p.total ? 1 : 2,
       });
-      const { data, error } = await supabase.functions.invoke('ecf-send', {
-        body: { payload, eNcf: p.ncf, profileId: scope },
-      });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error transmitiendo el e-CF.');
+      const data = await sendEcf({ payload, eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {
         trackId: data.trackId || '', securityCode: data.securityCode || '',
         fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
@@ -181,10 +178,7 @@ export default function Facturacion() {
     setErr('');
     setChecking(rowId);
     try {
-      const { data, error } = await supabase.functions.invoke('ecf-send', {
-        body: { op: 'status', trackId: p.trackId, profileId: scope },
-      });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error consultando el estado.');
+      const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
       const estado = String(data.estado || '');
       const norm = estado.toLowerCase();
       if (norm.includes('acept')) {
@@ -219,13 +213,11 @@ export default function Facturacion() {
     (async () => {
       for (const p of pending) {
         try {
-          const { data } = await supabase.functions.invoke('ecf-send', {
-            body: { op: 'status', trackId: p.trackId, profileId: scope },
-          });
+          const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
           const norm = String(data?.estado || '').toLowerCase();
-          if (data?.ok && norm.includes('acept')) {
+          if (norm.includes('acept')) {
             await db.salesPostings.update(p.id, { ecfStatus: 'accepted' });
-          } else if (data?.ok && norm.includes('rechaz')) {
+          } else if (norm.includes('rechaz')) {
             await db.salesPostings.update(p.id, { ecfStatus: 'rejected' });
           }
         } catch { /* silent — Consultar covers the manual path */ }
@@ -339,19 +331,18 @@ export default function Facturacion() {
       });
       // One transaction: asiento + lines + posting land together (numbers
       // assigned server-side) or not at all — no half-posted sale to re-book.
-      const { error } = await supabase.rpc('post_sale', {
-        p_entry: toRow(built.entry),
-        p_lines: built.lines.map(toRow),
-        p_posting: toRow({
+      await postSaleTx({
+        entry: built.entry,
+        lines: built.lines,
+        posting: {
           id, profileId: scope, quoteId: quote.id, customerId: quote.customerId,
           postedAt, ncf, rnc, ecfType,
           ecfStatus: assigned ? 'pending' : '',
           ecfExpiresAt: assigned?.expiresAt ?? null,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
-        }),
+        },
       });
-      if (error) throw new Error(error.message || 'No se pudo registrar la venta.');
       invalidate();
       // Persist the RNC back onto the customer so it's reused next time.
       if (customer && rnc && rnc !== cleanRnc(customer.rnc)) {

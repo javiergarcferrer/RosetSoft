@@ -148,9 +148,13 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       compound repricing (`QuoteLineItem.jsx:217-241` → pure
       `repriceComponentsAtGrade` in `lib/pricing`), COGS click-handler math
       (`Inventario.jsx:68-100` → helper beside `buildCogsEntry`).
-- [ ] Wrap raw RPC/invoke calls in lib (pattern: `ecfSequence.js`):
+- [~] Wrap raw RPC/invoke calls in lib (pattern: `ecfSequence.js`):
       `Facturacion.jsx` ecf-send ×3 + `post_sale`, `Jarvis.jsx` ×5,
       `Materials.jsx:711`.
+      (i23 — lib/ecfSend.js (sendEcf/checkEcfStatus) + lib/salePosting.js
+      (postSaleTx) replace all four raw calls in Facturación; the page no
+      longer touches supabase directly. REMAINING: Jarvis ×5 + Materials ×1
+      — lower-stakes status/one-shot invokes; wrap opportunistically.)
 - [x] Pin missing money tests: `tests/commissionCycle.test.js` (16th→15th
       window + year wrap), small direct test for `lib/quoteGroups.ts`.
       (i22 — 8 new pins: day-15/16 rollover, year wrap, cycle contiguity,
@@ -161,8 +165,12 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (--no-renames so a rename re-enters as an add) must be monotonic with
       the filename timestamps; uncommitted files count as added now; the one
       historical repair is grandfathered. Full suite 568/568.)
-- [ ] Shared RNC cleaning (`cleanRnc` everywhere; `CuentasCobrarPagar.jsx:81`)
+- [x] Shared RNC cleaning (`cleanRnc` everywhere; `CuentasCobrarPagar.jsx:81`)
       + shared `isDepositIn(quote)` selector (Workspace vs Facturación drift).
+      (i23 — statement emisor now uses cleanRnc. The deposit-predicate drift
+      was already dissolved by i5 (tab filter lives in
+      resolveWorkspaceEntries) + i19 (readyToInvoice in quoteMilestones) —
+      one encoding each, no extra selector needed.)
 
 ## Out of scope for the loop (user decision needed — from the security review)
 - Admin gate (`is_admin`) on `save_*` credential RPCs + `meta-social` link

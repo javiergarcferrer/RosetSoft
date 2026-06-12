@@ -12,6 +12,7 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { cleanRnc } from '../../lib/rncLookup.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
   resolveReceivables, resolvePayables, resolvePartyStatement,
@@ -83,7 +84,7 @@ export default function CuentasCobrarPagar() {
       const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
       const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
       const blob = await mod.generateStatementPdf({
-        emisor: { name: settings?.companyName || '', rnc: (settings?.companyRnc || '').replace(/\D/g, '') },
+        emisor: { name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc) },
         party: { name: statement.name, rnc: party?.rnc },
         title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
         rows: statement.rows, balance: statement.balance, asOf: Date.now(),
