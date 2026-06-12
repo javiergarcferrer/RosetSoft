@@ -125,9 +125,12 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (one rule for Facturación's queue + the tile); CRM Dashboard shows a
       role-gated "Por facturar" StatCard → /accounting/facturacion. The
       accounting→CRM direction already exists via CardHead links.)
-- [ ] Tienda availability: cross-check store cards against `inventory_items`
+- [x] Tienda availability: cross-check store cards against `inventory_items`
       by SKU in `resolveStore`/`store` function; qty ≤ 0 → "Bajo pedido". Add
       "Ver tienda" external link in Settings' Tienda header.
+      (i20 — store Edge Function ships sku+qtyOnHand (no costs cross);
+      resolveStore demotes a tracked sold-out sku from Disponible to Bajo
+      pedido (pinned in tests/store.test.js); Ver tienda → link added.)
 
 ## Consistency / structure debt (from the structure review)
 - [ ] Route all error catches through `userMessageFor` (`lib/errorMessages.ts`)

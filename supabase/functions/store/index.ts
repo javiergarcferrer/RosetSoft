@@ -129,11 +129,14 @@ async function buildCatalog(admin: Admin): Promise<Row> {
   const marginByQuote = new Map<unknown, number>();
   for (const q of quotes) marginByQuote.set(q.id, num(q.margin_pct));
 
-  const [linesRes, ordersRes] = await Promise.all([
+  const [linesRes, ordersRes, invRes] = await Promise.all([
     admin.from('quote_lines').select('*').in('quote_id', quoteIds),
     orderIds.length
       ? admin.from('orders').select('*').in('id', orderIds)
       : Promise.resolve({ data: [] as Row[] }),
+    // The kardex truth, so the storefront can demote pieces the books say are
+    // sold out. SKU + on-hand only — no costs cross.
+    admin.from('inventory_items').select('sku, qty_on_hand').eq('profile_id', TEAM_PROFILE_ID),
   ]);
 
   const lines = ((linesRes.data || []) as Row[]).map((row) => {
@@ -154,12 +157,17 @@ async function buildCatalog(admin: Admin): Promise<Row> {
     receivedAt: toMs(o.received_at),
   }));
 
+  const inventory = ((invRes.data || []) as Row[])
+    .filter((i) => i.sku)
+    .map((i) => ({ sku: String(i.sku), qtyOnHand: num(i.qty_on_hand) }));
+
   return {
     ...base,
     configured: true,
     quotes: quotes.map((q) => ({ id: q.id, orderId: q.order_id || null })),
     lines,
     orders,
+    inventory,
   };
 }
 

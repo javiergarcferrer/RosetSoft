@@ -262,7 +262,11 @@ function StoreCard({ settings, saveSettings, customers }) {
       <p className="text-xs text-ink-500 mb-4">
         La tienda muestra los productos de las cotizaciones cuyo cliente sea la
         cuenta de la casa (ALCOVER). Elige ese cliente y comparte el enlace —
-        cualquiera puede verlo sin iniciar sesión.
+        cualquiera puede verlo sin iniciar sesión.{' '}
+        <a href="#/tienda" target="_blank" rel="noopener"
+          className="text-brand-600 hover:text-brand-700 font-medium whitespace-nowrap">
+          Ver tienda →
+        </a>
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

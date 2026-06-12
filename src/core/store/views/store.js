@@ -118,7 +118,15 @@ function norm(s) {
 
 // Build the deduped product cards (pre-search) from the given quotes' priced
 // lines, plus the distinct family list for the filter dropdown.
-function buildProducts({ quotes, lines, orders }) {
+function buildProducts({ quotes, lines, orders, inventory }) {
+  // Kardex cross-check: sku → on-hand. A card whose reference the books say is
+  // SOLD OUT (tracked sku, qty ≤ 0) must not read "Disponible" — it demotes to
+  // Bajo pedido. Untracked references are never touched.
+  const qtyBySku = new Map();
+  for (const i of inventory || []) {
+    const sku = String(i.sku || '').trim().toUpperCase();
+    if (sku) qtyBySku.set(sku, Number(i.qtyOnHand) || 0);
+  }
   const orderById = new Map();
   for (const o of orders || []) orderById.set(o.id, o);
 
@@ -158,11 +166,22 @@ function buildProducts({ quotes, lines, orders }) {
   for (const g of groups.values()) {
     const rep = g.rep;
     const hasOrder = g.bestIdx >= 0;
-    const stageKey = hasOrder ? (STAGE_BY_INDEX[g.bestIdx] || 'draft') : null;
-    const bucket = hasOrder ? bucketForStage(stageKey) : 'on_order';
+    let stageKey = hasOrder ? (STAGE_BY_INDEX[g.bestIdx] || 'draft') : null;
+    let bucket = hasOrder ? bucketForStage(stageKey) : 'on_order';
     // An order-backed card borrows the precise stage pill (Recibido / En ruta /
     // …); an order-less one reads as made-to-order with a neutral pill.
-    const pill = hasOrder ? orderStatusPill(stageKey) : { cls: 'status-pill-draft', label: 'Bajo pedido' };
+    let pill = hasOrder ? orderStatusPill(stageKey) : { cls: 'status-pill-draft', label: 'Bajo pedido' };
+    // The kardex outranks the order stage for "Disponible": a tracked sku at
+    // qty ≤ 0 was sold — demote the card to Bajo pedido instead of showing a
+    // piece that's no longer on the floor.
+    if (bucket === 'available') {
+      const sku = String(rep.reference || '').trim().toUpperCase();
+      if (sku && qtyBySku.has(sku) && qtyBySku.get(sku) <= 0) {
+        bucket = 'on_order';
+        stageKey = null;
+        pill = { cls: 'status-pill-draft', label: 'Bajo pedido' };
+      }
+    }
 
     let imageId = lineCoverImageId(rep);
     if (!imageId) {
@@ -284,8 +303,8 @@ function applyProducts(cards, families, { q, tab, filters, sort }) {
  * }}
  */
 export function resolveStore({
-  quotes, lines, orders, q = '', tab = 'all', filters = {}, sort,
+  quotes, lines, orders, inventory, q = '', tab = 'all', filters = {}, sort,
 }) {
-  const { cards, families } = buildProducts({ quotes, lines, orders });
+  const { cards, families } = buildProducts({ quotes, lines, orders, inventory });
   return applyProducts(cards, families, { q, tab, filters, sort });
 }

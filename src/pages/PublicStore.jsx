@@ -54,6 +54,7 @@ export default function PublicStore() {
       quotes: bundle?.quotes || [],
       lines: bundle?.lines || [],
       orders: bundle?.orders || [],
+      inventory: bundle?.inventory || [],
       q, tab, filters, sort,
     }),
     [bundle, q, tab, filters, sort],
