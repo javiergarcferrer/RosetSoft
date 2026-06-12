@@ -84,8 +84,11 @@ const st = StyleSheet.create({
   sectionCount: { fontSize: FS.meta, color: C.inkMid },
 
   // ---- card grid ----
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  cardSlot: { width: '48.5%', marginBottom: 12, textDecoration: 'none' },
+  // Explicit 2-card rows, each wrap={false}: react-pdf's pagination ignores
+  // wrap={false} on children of a flexWrap container and slices cards at the
+  // page break, so the row (not the grid) is the unbreakable unit.
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  cardSlot: { width: '48.5%', textDecoration: 'none' },
   card: { borderWidth: 0.5, borderColor: C.inkLine2, borderRadius: 4, overflow: 'hidden', backgroundColor: C.white },
   imgBox: { width: '100%', height: 150, backgroundColor: C.bgSoft, alignItems: 'center', justifyContent: 'center' },
   img: { width: '100%', height: 150, objectFit: 'cover' },
@@ -113,6 +116,12 @@ const st = StyleSheet.create({
   },
   footerText: { fontSize: fs(8), color: C.inkMid },
 });
+
+const chunkPairs = <T,>(arr: T[]): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += 2) out.push(arr.slice(i, i + 2));
+  return out;
+};
 
 function Card({ model, images }: { model: BookModel; images?: CatalogImageMap }) {
   const uri = images?.get(model.key);
@@ -168,16 +177,21 @@ export function CatalogDocument({ book, images, generatedAt }: CatalogDocumentPr
 
         {book.sections.map((s) => (
           <View key={s.category || '__none__'} style={st.section}>
-            <View style={st.sectionHead} wrap={false} minPresenceAhead={120}>
+            {/* A full card row is ~260pt; anything less ahead and the first
+                row jumps pages, stranding the header — so it jumps along. */}
+            <View style={st.sectionHead} wrap={false} minPresenceAhead={260}>
               <View>
                 <Text style={st.sectionLabel}>{s.category || 'Otros'}</Text>
                 <View style={st.sectionTick} />
               </View>
               <Text style={st.sectionCount}>{s.models.length} modelo(s)</Text>
             </View>
-            <View style={st.grid}>
-              {s.models.map((m) => <Card key={m.key} model={m} images={images} />)}
-            </View>
+            {chunkPairs(s.models).map((pair) => (
+              <View key={pair[0].key} style={st.row} wrap={false}>
+                {pair.map((m) => <Card key={m.key} model={m} images={images} />)}
+                {pair.length === 1 && <View style={st.cardSlot} />}
+              </View>
+            ))}
           </View>
         ))}
 
