@@ -76,6 +76,18 @@ test('the same article on two quotes dedupes into one card with the best availab
   assert.equal(sofa.swatchImageId, 'sw1');
 });
 
+test('kardex outranks the order stage: a tracked sku at qty ≤ 0 demotes to Bajo pedido', () => {
+  // SOFA-1 reads "available" (received order) — but the books say it sold out.
+  const sold = byKey(store({ inventory: [{ sku: 'sofa-1', qtyOnHand: 0 }] }).items, 'ref:SOFA-1');
+  assert.equal(sold.availability.bucket, 'on_order');
+  assert.equal(sold.availability.label, 'Bajo pedido');
+  // Stock on hand → untouched; untracked reference → untouched.
+  const inStock = byKey(store({ inventory: [{ sku: 'SOFA-1', qtyOnHand: 2 }] }).items, 'ref:SOFA-1');
+  assert.equal(inStock.availability.bucket, 'available');
+  const untracked = byKey(store({ inventory: [{ sku: 'OTHER', qtyOnHand: 0 }] }).items, 'ref:SOFA-1');
+  assert.equal(untracked.availability.bucket, 'available');
+});
+
 test('an in-transit order reads as "En camino"; price is a compound point value', () => {
   // The compound lives on the order-less quote, so check the in-transit case via
   // a fresh fixture where SOFA-1 is only on o1.

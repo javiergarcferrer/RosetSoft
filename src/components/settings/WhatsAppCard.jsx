@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useState } from 'react';
 import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw, QrCode } from 'lucide-react';
 import { formatDateTime } from '../../lib/format.js';
@@ -83,7 +84,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 6000);
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -308,7 +309,7 @@ function CoexistenceRow({ settings, saveSettings, onConnected }) {
       }
     } catch (e) {
       setState('error');
-      setMsg(e?.message || 'No se pudo completar la conexión con Meta.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -455,7 +456,7 @@ function TemplateRow({ settings, saveSettings }) {
       }
     } catch (e) {
       setTemplates([]);
-      setLoadError(e?.message || 'No se pudieron cargar las plantillas.');
+      setLoadError(userMessageFor(e));
     }
   }
   useEffect(() => { load(); }, []);
@@ -684,7 +685,7 @@ function BusinessProfileRow() {
       }
     } catch (e) {
       setState('error');
-      setMsg(e?.message || 'No se pudo guardar el perfil.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -770,7 +771,7 @@ function TestSendRow() {
       }
     } catch (e) {
       setState('error');
-      setMsg(e?.message || 'No se pudo enviar.');
+      setMsg(userMessageFor(e));
     }
   }
 

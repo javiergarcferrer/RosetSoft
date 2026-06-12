@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { weightedAverageIn, resolveKardex } from '../src/lib/accounting/inventory.js';
-import { buildPurchaseEntry, buildCogsEntry } from '../src/lib/accounting/purchase.js';
+import { buildPurchaseEntry, buildCogsEntry, planSalida } from '../src/lib/accounting/purchase.js';
 import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
 import { resolveInventory, resolveItemKardex } from '../src/core/accounting/inventory.js';
@@ -104,4 +104,16 @@ test('resolve606 folds purchases in with expenses', () => {
   assert.equal(r.count, 2);
   assert.equal(r.totals.base, 51000);
   assert.equal(r.totals.itbis, 9180);
+});
+
+test('planSalida: validation + COGS at the running average + new on-hand', () => {
+  // Happy path: 3 × 250.5 = 751.5, on-hand 10 → 7.
+  assert.deepEqual(planSalida({ qty: '3', onHand: 10, avgCost: 250.5 }),
+    { ok: true, qty: 3, unitCost: 250.5, cost: 751.5, newQty: 7 });
+  // Over-draw and non-positive amounts refuse without touching on-hand.
+  assert.equal(planSalida({ qty: 11, onHand: 10, avgCost: 5 }).ok, false);
+  assert.equal(planSalida({ qty: 0, onHand: 10, avgCost: 5 }).ok, false);
+  assert.equal(planSalida({ qty: 'x', onHand: 10, avgCost: 5 }).ok, false);
+  // Zero average (pre-cost stock) plans a 0-cost salida — movement only.
+  assert.deepEqual(planSalida({ qty: 2, onHand: 4, avgCost: 0 }).cost, 0);
 });

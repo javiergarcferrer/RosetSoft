@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveImportacionesList, resolveAccountingConfig } from '../../core/accounting/index.js';
 import ExpedienteForm from './ExpedienteForm.jsx';
@@ -139,7 +140,28 @@ export default function Importaciones() {
           ) : vm.rows.length === 0 ? (
             <EmptyState icon={Ship} title="Sin resultados" description="Ajusta la búsqueda o los filtros." />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            <RowCards
+              rows={vm.rows.map((r) => ({
+                key: r.id,
+                to: `/accounting/importaciones/${r.id}`,
+                title: <>{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</>,
+                right: formatDop(r.landed),
+                sub: <>
+                  {r.number != null && <span className="tabular-nums mr-1.5">#{r.number}</span>}
+                  <span className="font-mono">{r.bl || '—'}</span>
+                  {r.blExtra > 0 && <span> +{r.blExtra}</span>}
+                  {r.containerCode && <span className="ml-1.5">{r.containerCode}</span>}
+                </>,
+                kv: [
+                  ['Fecha', formatDate(r.date)],
+                  ['Líneas', r.lineCount],
+                  ['CIF', formatDop(r.cif)],
+                  ['ITBIS créd.', formatDop(r.itbisCred)],
+                ],
+              }))}
+            />
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
               <table className="table min-w-[680px]">
                 <thead>
@@ -179,6 +201,7 @@ export default function Importaciones() {
               </table>
               </div>
             </div>
+            </>
           )}
         </>
       )}
@@ -189,7 +212,30 @@ export default function Importaciones() {
 /** The pre-expediente single liquidations, read-only (Histórico tab). */
 function LegacyTable({ list }) {
   return (
-    <div className="card overflow-hidden">
+    <>
+    <RowCards
+      rows={list.rows.map(({ liq: l, supplier, item, landed, unitCost }) => ({
+        key: l.id,
+        title: supplier?.name || '—',
+        right: formatDop(landed),
+        sub: <>{item?.name || '—'}{l.qty ? ` ×${l.qty}` : ''}</>,
+        kv: [
+          ['Fecha', formatDate(l.liquidatedAt)],
+          ['CIF', formatDop(l.cif)],
+          ['Gravamen', formatDop(l.duty)],
+          ['ITBIS imp.', formatDop(l.importItbis)],
+          ['C. unit.', formatDop(unitCost)],
+        ],
+      }))}
+      footer={[
+        ['Liquidaciones', list.count],
+        ['CIF', formatDop(list.totals.cif)],
+        ['Gravamen', formatDop(list.totals.duty)],
+        ['ITBIS imp.', formatDop(list.totals.importItbis)],
+        ['Costo destino', formatDop(list.totals.landed)],
+      ]}
+    />
+    <div className="hidden md:block card overflow-hidden">
       <div className="overflow-x-auto">
       <table className="table min-w-[640px]">
         <thead>
@@ -231,5 +277,6 @@ function LegacyTable({ list }) {
       </table>
       </div>
     </div>
+    </>
   );
 }

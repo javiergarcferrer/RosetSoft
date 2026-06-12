@@ -14,6 +14,9 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { resolveCustomerDetail } from '../core/quote/views/detail.js';
+import { resolveQuoteInvoiceStatus, resolveCustomerAccount } from '../core/bridge/index.js';
+import InvoiceChip from '../components/InvoiceChip.jsx';
+import { formatDop } from '../lib/format.js';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 
 /**
@@ -84,6 +87,29 @@ export default function CustomerDetail() {
   );
 
   const loaded = quotesLoaded && ordersLoaded && linesLoaded;
+
+  // Accounting → CRM through the bridge: "Facturada · NCF" stamps on the
+  // customer's quote history.
+  const postings = useLiveQuery(
+    () => db.salesPostings.where('customerId').equals(customerId).toArray(),
+    [customerId],
+    [],
+  );
+  const invoiceByQuoteId = useMemo(() => resolveQuoteInvoiceStatus(postings), [postings]);
+
+  // The 360's "Cuenta" card (admin/accounting): what this client owes, with a
+  // jump into their estado de cuenta in Banca.
+  const { currentProfile } = useApp();
+  const canBank = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
+  const payments = useLiveQuery(
+    () => (canBank ? db.payments.where('partyId').equals(customerId).toArray() : Promise.resolve([])),
+    [customerId, canBank],
+    [],
+  );
+  const account = useMemo(
+    () => resolveCustomerAccount({ postings, payments, customerId }),
+    [postings, payments, customerId],
+  );
 
   // The ViewModel: per-quote totals, the quotes grouped (and sorted) by
   // status, the related orders (direct customerId match OR any of the
@@ -173,6 +199,21 @@ export default function CustomerDetail() {
           tone="ink"
           accent
         />
+        {/* Cuenta — the books' one-way echo (bridge): facturado, cobrado y
+            balance, with a jump to the estado de cuenta. Accounting-side
+            roles only; renders only once something was invoiced. */}
+        {canBank && account.invoiced > 0 && (
+          <StatCard
+            label="Cuenta (RD$)"
+            value={formatDop(account.balance)}
+            hint={account.balance > 0.001
+              ? `por cobrar · facturado ${formatDop(account.invoiced)}`
+              : `al día · facturado ${formatDop(account.invoiced)}`}
+            tone={account.balance > 0.001 ? 'brand' : 'emerald'}
+            accent
+            to={`/accounting/cuentas?tab=cxc&statement=${customerId}`}
+          />
+        )}
       </div>
 
       {/* Quotes — grouped by status */}
@@ -227,8 +268,11 @@ export default function CustomerDetail() {
                             #{q.number || '—'}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-[11px] text-ink-500 truncate">
-                              Act. {formatDateTime(q.updatedAt)}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[11px] text-ink-500 truncate">
+                                Act. {formatDateTime(q.updatedAt)}
+                              </span>
+                              <InvoiceChip invoice={invoiceByQuoteId.get(q.id)} />
                             </div>
                           </div>
                           <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">

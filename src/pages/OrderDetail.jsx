@@ -1,8 +1,9 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
-  FileText, CheckCircle2, Package, DollarSign, Wallet,
+  FileText, CheckCircle2, Package, DollarSign, Wallet, Landmark,
   AlertCircle, FileDown, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
@@ -14,7 +15,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { displayRatesFor } from '../lib/exchangeRate.js';
+import { displayRatesFor, quoteRateState } from '../lib/exchangeRate.js';
 import { ORDER_STAGES, orderStageIndex } from '../lib/orderStages.js';
 import {
   canMarkDeposit, canMarkBalance, canMarkDelivered, deliveryBlockedReason,
@@ -146,7 +147,7 @@ export default function OrderDetail() {
       await downloadBlob(blob, `Registro LR Pedido ${order?.number ? `#${order.number}` : ''}`.trim() + '.pdf');
     } catch (e) {
       console.error('[OrderDetail] registration export failed:', e);
-      alert(e?.message || 'No se pudo generar el documento de registro.');
+      alert(userMessageFor(e));
     } finally {
       setRegistering(false);
     }
@@ -363,6 +364,21 @@ export default function OrderDetail() {
                     key={c.id}
                     container={c}
                     orderId={orderId}
+                    arrivalAction={
+                      // HL reports arrival but the order still says "En ruta" —
+                      // suggest the next stage; the dealer confirms with a tap.
+                      !isCancelled && stage === 'in_transit' && nxt ? (
+                        <button
+                          type="button"
+                          onClick={() => advance(nxt)}
+                          disabled={!canAdvance}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 min-h-9 coarse:min-h-11 text-xs font-medium text-amber-800 hover:bg-amber-100 active:scale-[0.98] transition-all disabled:opacity-50"
+                          title={canAdvance ? 'El rastreo reporta llegada a destino' : (blockedReason || '')}
+                        >
+                          <Truck size={12} aria-hidden /> Llegada reportada — ¿marcar {nxt.label}?
+                        </button>
+                      ) : null
+                    }
                   />
                 ))}
               </ul>
@@ -450,7 +466,7 @@ export default function OrderDetail() {
 // narrative that used to live per-container moved up to the order
 // (placed → confirmed → in_transit → in_customs → received).
 // ---------------------------------------------------------------------------
-function ContainerRow({ container }) {
+function ContainerRow({ container, arrivalAction = null }) {
   const filled = !!container.filledAt;
 
   // The container number lives in `code`. Validate it (ISO 6346 check
@@ -537,7 +553,7 @@ function ContainerRow({ container }) {
       </div>
 
       {/* A valid number tracks itself — no button to press. */}
-      {trackable && <ContainerTracking containerNo={validation.value} />}
+      {trackable && <ContainerTracking containerNo={validation.value} arrivalAction={arrivalAction} />}
     </li>
   );
 }
@@ -577,6 +593,9 @@ function ContainerNoHint({ validation, carrier }) {
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
 function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }) {
+  const { currentProfile } = useApp();
+  // The deposit→cobro handoff is for whoever can open Banca.
+  const canBank = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
   // Three commerce milestones live on the quote (not the order):
   //
   //   1. depositReceivedAt — the act of receiving the deposit IS what
@@ -681,6 +700,25 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
           onToggle={() => setMilestone('deliveredAt', !delivered)}
           tone="emerald"
         />
+        {/* Deposit → cobro handoff: the seller already recorded the amount
+            (USD, rate locked at accept) — offer Banca a prefilled cobro
+            instead of making the accountant re-type it. Pure affordance;
+            recording it stays a human act in CuentasCobrarPagar. */}
+        {deposit && canBank && customer?.id && (quote.depositAmount || 0) > 0 && (() => {
+          const { dopRate } = quoteRateState(quote, settings);
+          if (!dopRate) return null;
+          const dop = Math.round(quote.depositAmount * dopRate * 100) / 100;
+          const ref = encodeURIComponent(`Depósito cot. #${quote.number ?? ''}`);
+          return (
+            <Link
+              to={`/accounting/cuentas?new=in&party=${customer.id}&amount=${dop}&ref=${ref}`}
+              className="btn-ghost text-xs"
+              title="Abre Banca con el cobro prellenado al tipo de cambio bloqueado de la cotización"
+            >
+              <Landmark size={13} aria-hidden /> Registrar cobro
+            </Link>
+          );
+        })()}
       </div>
     </li>
   );

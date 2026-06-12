@@ -8,6 +8,7 @@ import OrderChip from './OrderChip.jsx';
 import SpecialOrderWarning from './SpecialOrderWarning.jsx';
 import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
+import InvoiceChip from '../InvoiceChip.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
@@ -23,6 +24,7 @@ import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
  */
 export default function QuoteHeader({
   quote,
+  invoice,
   customers,
   professionals,
   profileId,
@@ -131,6 +133,13 @@ export default function QuoteHeader({
           quote is accepted), so the "Agregar a pedido" CTA / order chip is
           always visible without horizontal scrolling on a phone. */}
       <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} />
+
+      {/* Invoicing stamp — the books' one-way echo (bridge): NCF + e-CF state. */}
+      {invoice && (
+        <div className="mt-1.5">
+          <InvoiceChip invoice={invoice} detail />
+        </div>
+      )}
 
       <SpecialOrderWarning quote={quote} />
 

@@ -97,6 +97,8 @@ export function resolveGlobalSearch({
   customers = [],
   professionals = [],
   orders = [],
+  containers = [],
+  suppliers = [],
   products = [],
   pages = [],
 } = {}) {
@@ -180,6 +182,37 @@ export function resolveGlobalSearch({
     tiebreak: byUpdatedDesc,
   });
 
+  // A container number ("MSCU1234567") answers "which order is this on?" —
+  // only rows attached to an order are navigable.
+  const containerGroup = rankGroup((containers || []).filter((c) => c.orderId), nq, tokens, {
+    fieldsOf: (c) => [
+      c.code,
+      c.number != null ? `#${c.number}` : null,
+      c.number != null ? String(c.number) : null,
+    ],
+    toItem: (c) => ({
+      key: `container:${c.id}`,
+      type: 'container',
+      to: `/orders/${c.orderId}`,
+      primary: c.code || `Contenedor #${c.number ?? '—'}`,
+      secondary: c.code ? `Contenedor #${c.number ?? '—'}` : 'Contenedor',
+    }),
+    tiebreak: byUpdatedDesc,
+  });
+
+  // Suppliers — the View passes rows only for accounting/admin roles.
+  const supplierGroup = rankGroup(suppliers, nq, tokens, {
+    fieldsOf: (s) => [s.name, s.rnc],
+    toItem: (s) => ({
+      key: `supplier:${s.id}`,
+      type: 'supplier',
+      to: '/accounting/suppliers',
+      primary: s.name || '—',
+      secondary: s.rnc || '',
+    }),
+    tiebreak: byNameAsc('name'),
+  });
+
   const productGroup = rankGroup(products, nq, tokens, {
     fieldsOf: (p) => [p.reference, p.name, p.family],
     toItem: (p) => ({
@@ -206,6 +239,8 @@ export function resolveGlobalSearch({
     { key: 'customers', label: 'Clientes', ...customerGroup },
     { key: 'professionals', label: 'Profesionales', ...professionalGroup },
     { key: 'orders', label: 'Pedidos', ...orderGroup },
+    { key: 'containers', label: 'Contenedores', ...containerGroup },
+    { key: 'suppliers', label: 'Proveedores', ...supplierGroup },
     { key: 'products', label: 'Productos (catálogo)', ...productGroup },
     { key: 'pages', label: 'Páginas', ...pagesGroup },
   ].filter((g) => g.items.length > 0);

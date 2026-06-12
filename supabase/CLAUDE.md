@@ -22,10 +22,20 @@ and the SQL in `supabase/migrations/`.
   `main` auto-applies them** (see root CLAUDE.md) — never ask the user to run
   them.
 
-## Live tables (10)
-`profiles · settings · images · customers · professionals · orders · quotes ·
-quote_lines · containers · materials`. Field-by-field shapes are in
-`src/types/domain.ts`; below are the DB facts that file doesn't carry.
+## Live tables (32 in `TABLES`)
+CRM side: `profiles · settings · images · customers · professionals · orders ·
+quotes · quote_lines · quote_groups · containers · materials · products ·
+model_fabrics`. Accounting side: `accounts · journal_entries · journal_lines ·
+suppliers · expenses · sales_postings · inventory_items · inventory_movements ·
+purchases · import_liquidations · import_expedientes · ecf_sequences ·
+payments · fiscal_periods · employees · payroll_runs`. Comms/AI:
+`wa_messages · wa_campaigns · claude_messages`. Outside `TABLES` sit the
+WRITE-ONLY credential stores (service-role/`save_*` RPC only — guarded by
+`tests/credentialDurability.test.js`): `shopify_config · whatsapp_config ·
+ecf_credentials · meta_social_config`. Field-by-field shapes are in
+`src/types/domain.ts`; below are the DB facts that file doesn't carry (the
+original CRM tables + the credential stores — the rest follow the same
+conventions).
 
 - **profiles** `id` (= auth.uid()). `role` CHECK `('admin','employee','accounting','team')`;
   `commission_pct` CHECK 0–50. Triggers: `prevent_self_privilege_escalation`

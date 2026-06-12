@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, AlertCircle, Store as StoreIcon, Search } from 'lucide-react';
 import FilterPopover from '../components/search/FilterPopover.jsx';
@@ -43,7 +44,7 @@ export default function PublicStore() {
     setState({ status: 'loading', bundle: null, error: null });
     fetchStoreCatalog()
       .then((bundle) => { if (active) setState({ status: 'ready', bundle, error: null }); })
-      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: e?.message || 'error' }); });
+      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e) }); });
     return () => { active = false; };
   }, []);
 
@@ -54,6 +55,7 @@ export default function PublicStore() {
       quotes: bundle?.quotes || [],
       lines: bundle?.lines || [],
       orders: bundle?.orders || [],
+      inventory: bundle?.inventory || [],
       q, tab, filters, sort,
     }),
     [bundle, q, tab, filters, sort],

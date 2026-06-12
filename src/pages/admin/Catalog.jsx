@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { PackageSearch, Shield, Upload, Loader2, Check, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -113,7 +114,7 @@ export default function Catalog() {
       setResult(`${upserts.length} productos importados.`);
     } catch (e) {
       console.error('[Catalog] import failed:', e);
-      setError(e?.message || 'No se pudo importar el archivo.');
+      setError(userMessageFor(e));
     } finally {
       setBusy(false);
     }

@@ -13,10 +13,52 @@ import {
   groupBySection, groupRuns, sectionSubtotal,
   setSubtotal, setSubtotalRange, alternativeSubtotal, selectedAlternative,
   lineHasRange, lineTotalRange, alternativeGroupInfo, setGroupInfo,
+  lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
+  isRangeLine, lineTotal, isRangeComponent, componentSubtotal, componentSubtotalRange,
 } from '../../../lib/pricing.js';
 import { isPricedLine } from '../../../lib/constants.js';
 import { isGroupOptional } from '../../../lib/quoteGroups.js';
 import { quoteRateState } from '../../../lib/exchangeRate.js';
+
+/**
+ * The per-LINE price shape every renderer of the tree shows (unit, list unit,
+ * total, savings inputs, range) — one assembly here so the editor preview, the
+ * public link and the PDF can't drift. A standalone/set-member line and a
+ * compound's component use different pricing primitives but render through
+ * this one shape.
+ */
+export function linePriced(line) {
+  const qty = lineQty(line);
+  const listUnit = lineListUnit(line);
+  const ranged = isRangeLine(line);
+  return {
+    qty,
+    unit: applyLineAdjustments(lineBasePrice(line), line.lineMarginPct, line.lineDiscountPct),
+    listUnit,
+    total: lineTotal(line),
+    listTotal: listUnit * qty,
+    discount: clampPct(line.lineDiscountPct),
+    ranged,
+    range: ranged ? lineTotalRange(line) : null,
+  };
+}
+
+/** The component twin of `linePriced` (components carry no per-line discount). */
+export function componentPriced(component) {
+  const qty = Number(component.qty) || 0;
+  const unit = Number(component.unitPrice) || 0;
+  const ranged = isRangeComponent(component);
+  return {
+    qty,
+    unit,
+    listUnit: unit,
+    total: componentSubtotal(component),
+    listTotal: unit * qty,
+    discount: 0,
+    ranged,
+    range: ranged ? componentSubtotalRange(component) : null,
+  };
+}
 
 // Footer DATA for a group run (set / alternative) — numbers, not strings. The
 // renderer turns `kind` into its label ("Total del conjunto" / "TOTAL") and

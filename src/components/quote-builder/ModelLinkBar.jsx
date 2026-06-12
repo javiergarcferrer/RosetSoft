@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { ExternalLink, Link2, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
@@ -35,7 +36,7 @@ export default function ModelLinkBar({ root, record }) {
       setUrl('');
       setEditing(false);
     } catch (e) {
-      setErr(e?.message || 'No se pudo vincular el modelo.');
+      setErr(userMessageFor(e));
     } finally {
       setBusy(false);
     }

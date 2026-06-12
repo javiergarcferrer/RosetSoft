@@ -12,6 +12,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
 import SegmentBar from '../../components/accounting/SegmentBar.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
@@ -443,7 +444,27 @@ export default function AccountingDashboard() {
             {segmented.rows.length === 0 ? (
               <p className="text-sm text-ink-400 py-6 text-center">Sin ventas que coincidan en el período.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <RowCards
+                rows={segmented.rows.slice(0, 10).map((s) => ({
+                  key: s.key,
+                  title: s.label,
+                  right: formatDop(s.total),
+                  kv: [
+                    ['Ventas', s.count],
+                    ['% del total', `${Math.round(s.share * 100)}%`],
+                    ['Base', formatDop(s.base)],
+                    ['ITBIS', formatDop(s.itbis)],
+                  ],
+                }))}
+                footer={[
+                  ['Segmentos', segmented.rows.length],
+                  ['Ventas', segmented.totals.count],
+                  ['Base', formatDop(segmented.totals.base)],
+                  ['Total', formatDop(segmented.totals.total)],
+                ]}
+              />
+              <div className="hidden md:block overflow-x-auto">
                 <table className="table">
                   <thead><tr><th>{segLabel}</th><th className="text-right">Ventas</th><th className="text-right">Base</th><th className="text-right">ITBIS</th><th className="text-right">Total</th><th className="text-right">% del total</th></tr></thead>
                   <tbody>
@@ -470,6 +491,7 @@ export default function AccountingDashboard() {
                   </tfoot>
                 </table>
               </div>
+              </>
             )}
           </div>
 
@@ -516,7 +538,22 @@ export default function AccountingDashboard() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <RowCards inCard
+                rows={monthly.map((m) => ({
+                  key: m.key,
+                  title: <span className="capitalize">{m.label}</span>,
+                  right: formatDop(m.ventas),
+                  sub: <>Año anterior <span className="tabular-nums">{formatDop(m.ventasYoy)}</span> <DeltaChip delta={m.deltaYoy} /></>,
+                  kv: [
+                    ['Cobrado', formatDop(m.cobrado)],
+                    ['Gastos', formatDop(m.gastos)],
+                    ['Compras', formatDop(m.compras)],
+                    ['Importado', formatDop(m.importado)],
+                  ],
+                }))}
+              />
+              <div className="hidden md:block overflow-x-auto">
                 <table className="table">
                   <thead><tr><th>Mes</th><th className="text-right">Ventas</th><th className="text-right">Año anterior</th><th className="text-right">Δ año</th><th className="text-right">Cobrado</th><th className="text-right">Gastos</th><th className="text-right">Compras</th><th className="text-right">Importado</th></tr></thead>
                   <tbody>
@@ -535,6 +572,7 @@ export default function AccountingDashboard() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 

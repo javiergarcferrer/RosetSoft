@@ -262,7 +262,11 @@ function StoreCard({ settings, saveSettings, customers }) {
       <p className="text-xs text-ink-500 mb-4">
         La tienda muestra los productos de las cotizaciones cuyo cliente sea la
         cuenta de la casa (ALCOVER). Elige ese cliente y comparte el enlace —
-        cualquiera puede verlo sin iniciar sesión.
+        cualquiera puede verlo sin iniciar sesión.{' '}
+        <a href="#/tienda" target="_blank" rel="noopener"
+          className="text-brand-600 hover:text-brand-700 font-medium whitespace-nowrap">
+          Ver tienda →
+        </a>
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -381,7 +385,7 @@ function RateCard({ local, set, saveSettings }) {
       await saveSettings({ exchangeRate: { buy, sell, updatedAt: Date.now() } });
       setManualOk(true);
     } catch (e) {
-      setManualErr(e?.message || 'No se pudo guardar la tasa.');
+      setManualErr(userMessageFor(e));
     } finally {
       setSavingManual(false);
     }
@@ -611,7 +615,7 @@ function ShopifyCard({ settings, store }) {
       setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -634,7 +638,7 @@ function ShopifyCard({ settings, store }) {
       }
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo sincronizar.');
+      setMsg(userMessageFor(e));
     } finally {
       setSyncing(false);
     }

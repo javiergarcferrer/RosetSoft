@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin, Download } from 'lucide-react';
@@ -53,7 +54,7 @@ export default function PublicQuoteView() {
     chainRef.current = Promise.resolve();
     fetchSharedQuote(token)
       .then((bundle) => { if (active) { bundleRef.current = bundle; setState({ status: 'ready', bundle, error: null }); } })
-      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: e?.message || 'error' }); });
+      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e) }); });
     return () => { active = false; };
   }, [token]);
 

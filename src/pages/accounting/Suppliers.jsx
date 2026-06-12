@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 const KIND_LABEL = { fisica: 'Persona física', juridica: 'Persona jurídica', exterior: 'Exterior' };
 // Classes a purchase from a supplier can debit: Activos (Inventario for
@@ -64,7 +65,7 @@ export default function Suppliers() {
         setLookupMsg(r.message || 'No encontrado.');
       }
     } catch (e) {
-      setLookupMsg(e?.message || 'Error consultando el RNC.');
+      setLookupMsg(userMessageFor(e));
     } finally {
       setLooking(false);
     }

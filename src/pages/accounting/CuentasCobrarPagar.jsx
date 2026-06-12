@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
@@ -9,11 +10,13 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { cleanRnc } from '../../lib/rncLookup.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
-  resolveReceivables, resolvePayables, resolvePartyStatement,
+  resolveReceivables, resolvePayables, resolveStatementFor,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
 
@@ -47,26 +50,25 @@ export default function CuentasCobrarPagar() {
   const urlTab = params.get('tab');
   const [tab, setTab] = useState(urlTab === 'cxc' || urlTab === 'cxp' ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
   const [showForm, setShowForm] = useState(!!params.get('new'));
-  const [selected, setSelected] = useState(null); // { type, id }
+  // ?statement=<partyId> deep-links straight into a party's estado de cuenta
+  // (the CustomerDetail "Cuenta" card uses it).
+  const [selected, setSelected] = useState(() => (params.get('statement')
+    ? { type: tab === 'cxp' ? 'supplier' : 'customer', id: params.get('statement') }
+    : null)); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
 
-  const statement = useMemo(() => {
-    if (!selected) return null;
-    if (selected.type === 'customer') {
-      const charges = salesQ.data.filter((s) => s.customerId === selected.id)
-        .map((s) => ({ date: s.postedAt, amount: (s.total || 0) - (s.depositApplied || 0), label: 'Factura', ref: s.ncf || '' }))
-        .filter((c) => c.amount > 0.001);
-      const payments = paymentsQ.data.filter((p) => p.direction === 'in' && p.partyId === selected.id)
-        .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Cobro', ref: p.reference || '' }));
-      return { name: customersById.get(selected.id)?.name || 'Cliente', ...resolvePartyStatement({ charges, payments }) };
-    }
-    const credit = (arr, df) => arr.filter((d) => d.paymentMethod === 'credit' && d.supplierId === selected.id)
-      .map((d) => ({ date: d[df], amount: (d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0), label: df === 'purchaseAt' ? 'Compra' : 'Gasto', ref: d.ncf || '' }));
-    const charges = [...credit(purchasesQ.data, 'purchaseAt'), ...credit(expensesQ.data, 'expenseAt')];
-    const payments = paymentsQ.data.filter((p) => p.direction === 'out' && p.partyId === selected.id)
-      .map((p) => ({ date: p.paidAt, amount: p.amount, label: 'Pago', ref: p.reference || '' }));
-    return { name: suppliersById.get(selected.id)?.name || 'Proveedor', ...resolvePartyStatement({ charges, payments }) };
-  }, [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById]);
+  // The estado de cuenta is a Model projection (core/accounting/receivables:
+  // resolveStatementFor) — the same money rules as the aging views, so the
+  // panel and the printed PDF can't disagree with the table that opened them.
+  const statement = useMemo(
+    () => resolveStatementFor({
+      selected,
+      salesPostings: salesQ.data, payments: paymentsQ.data,
+      purchases: purchasesQ.data, expenses: expensesQ.data,
+      customersById, suppliersById,
+    }),
+    [selected, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById],
+  );
 
   // In-app print preview state — the modal rasterizes the PDF and prints via
   // window.print() on our own page, so printing can never become a download.
@@ -78,14 +80,14 @@ export default function CuentasCobrarPagar() {
       const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
       const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
       const blob = await mod.generateStatementPdf({
-        emisor: { name: settings?.companyName || '', rnc: (settings?.companyRnc || '').replace(/\D/g, '') },
+        emisor: { name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc) },
         party: { name: statement.name, rnc: party?.rnc },
         title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
         rows: statement.rows, balance: statement.balance, asOf: Date.now(),
       });
       setPrintDoc({ blob, title: 'Estado de cuenta' });
     } catch (e) {
-      window.alert(e?.message || 'No se pudo generar el estado de cuenta.');
+      window.alert(userMessageFor(e));
     } finally {
       setPrintingSt(false);
     }
@@ -114,6 +116,11 @@ export default function CuentasCobrarPagar() {
           direction={tab === 'cxc' ? 'in' : 'out'} scope={scope} config={config}
           parties={tab === 'cxc' ? customersQ.data : suppliersQ.data}
           docsByParty={docsByParty}
+          initial={{
+            partyId: params.get('party') || '',
+            amount: params.get('amount') || '',
+            reference: params.get('ref') || '',
+          }}
           onClose={() => setShowForm(false)} />
       )}
 
@@ -121,7 +128,31 @@ export default function CuentasCobrarPagar() {
         <EmptyState icon={ArrowLeftRight} title={tab === 'cxc' ? 'Nada por cobrar' : 'Nada por pagar'}
           description={tab === 'cxc' ? 'Las facturas con saldo pendiente aparecen aquí.' : 'Las compras y gastos a crédito con saldo aparecen aquí.'} />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        <RowCards
+          rows={view.rows.map((r) => ({
+            key: r.partyId,
+            title: r.party?.name || '—',
+            right: formatDop(r.balance),
+            sub: <span className="inline-flex items-center gap-1"><FileText size={11} /> Estado de cuenta</span>,
+            onClick: () => setSelected({ type: tab === 'cxc' ? 'customer' : 'supplier', id: r.partyId }),
+            kv: [
+              ['0–30', formatDop(r.buckets.d0_30)],
+              ['31–60', formatDop(r.buckets.d31_60)],
+              ['61–90', formatDop(r.buckets.d61_90)],
+              ['+90', <span className={r.buckets.d90 > 0 ? 'text-rose-600' : ''}>{formatDop(r.buckets.d90)}</span>],
+            ],
+          }))}
+          footer={[
+            [partyLabel + 's', view.count],
+            ['Balance', formatDop(view.totals.balance)],
+            ['0–30', formatDop(view.totals.d0_30)],
+            ['31–60', formatDop(view.totals.d31_60)],
+            ['61–90', formatDop(view.totals.d61_90)],
+            ['+90', formatDop(view.totals.d90)],
+          ]}
+        />
+        <div className="hidden md:block card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table min-w-[640px]">
               <thead>
@@ -165,6 +196,7 @@ export default function CuentasCobrarPagar() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {statement && (
@@ -179,7 +211,20 @@ export default function CuentasCobrarPagar() {
               <button type="button" onClick={() => setSelected(null)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <RowCards
+            rows={statement.rows.map((r, i) => ({
+              key: i,
+              title: r.label,
+              right: formatDop(r.balance),
+              sub: r.ref || null,
+              kv: [
+                ['Fecha', formatDate(r.date)],
+                r.charge ? ['Cargo', formatDop(r.charge)] : null,
+                r.payment ? ['Abono', formatDop(r.payment)] : null,
+              ],
+            }))}
+          />
+          <div className="hidden md:block overflow-x-auto">
             <table className="table min-w-[560px]">
               <thead>
                 <tr>
@@ -214,9 +259,12 @@ export default function CuentasCobrarPagar() {
   );
 }
 
-function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }) {
+function PaymentForm({ direction, scope, config, parties, docsByParty, initial, onClose }) {
+  // `initial` seeds the deposit→cobro handoff (?party&amount&ref from a quote
+  // milestone) so the accountant doesn't re-type what the CRM already knows.
   const [form, setForm] = useState({
-    partyId: '', date: new Date().toISOString().slice(0, 10), amount: '', method: 'bank', reference: '',
+    partyId: initial?.partyId || '', date: new Date().toISOString().slice(0, 10),
+    amount: initial?.amount || '', method: 'bank', reference: initial?.reference || '',
     commission: '', commissionItbis: '', itbisRetained: '', isrRetained: '',
   });
   const [alloc, setAlloc] = useState({}); // docId -> amount string
@@ -277,7 +325,7 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, onClose }
       });
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

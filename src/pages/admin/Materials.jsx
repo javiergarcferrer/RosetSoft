@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
@@ -196,7 +197,53 @@ export default function Materials() {
           description="Importa la lista oficial de Ligne Roset 10.2025 o crea materiales manualmente."
         />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        {/* Mobile: one card per material (same fields + actions as the table). */}
+        <div className="md:hidden space-y-2">
+          {filtered.map((m) => (
+            <div key={m.id} className="card card-pad flex gap-3">
+              <ImageView
+                id={heroImageId(m)}
+                fallbackUrl={heroSwatchUrl(m)}
+                alt={m.name}
+                className="w-12 h-12 object-cover rounded-lg border border-ink-100 bg-white shadow-xs shrink-0"
+                placeholderClassName="w-12 h-12 rounded-lg border border-dashed border-ink-200 bg-ink-50 shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-ink-900 truncate">{m.name}</span>
+                  <span className="text-sm tabular-nums shrink-0">
+                    {m.price != null ? `$${m.price} / ${m.priceUnit === 'sm' ? 'm²' : 'yd'}` : '—'}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 flex-wrap text-xs text-ink-500">
+                  <span className="eyebrow font-normal tracking-wide">{categoryLabel(m.category)}</span>
+                  <GradePill grade={m.grade} />
+                  <span className="tabular-nums">{m.colors?.length || 0} colores</span>
+                  {m.discontinuedAt && (
+                    <span className="chip bg-amber-50 text-amber-700 border border-amber-200"><AlertTriangle size={10} /> No en sitio</span>
+                  )}
+                  {m.notInPricelistAt && (
+                    <span className="chip bg-red-50 text-red-700 border border-red-200"><AlertTriangle size={10} /> No en lista</span>
+                  )}
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <button type="button" onClick={() => setEditing(m)} className="btn-ghost text-xs" title="Editar">
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button type="button" onClick={() => remove(m)} className="btn-icon-danger"
+                    title="Eliminar" aria-label={`Eliminar ${m.name}`}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="card card-pad text-center text-sm text-ink-400">Sin resultados.</p>
+          )}
+        </div>
+        <div className="hidden md:block card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table">
               <thead>
@@ -286,6 +333,7 @@ export default function Materials() {
             </table>
           </div>
         </div>
+        </>
       )}
 
       {editing && (
@@ -413,7 +461,7 @@ function MaterialEditor({ material, profileId, onClose }) {
       await db.materials.put(row);
       onClose();
     } catch (e) {
-      setError(e?.message || 'No se pudo guardar.');
+      setError(userMessageFor(e));
       setBusy(false);
     }
   }
@@ -726,7 +774,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
       });
       setPreview({ rows, deleteIds, summary, siteFailed });
     } catch (e) {
-      setError(e?.message || 'No se pudo procesar el PDF.');
+      setError(userMessageFor(e));
     } finally {
       setBusy(null);
       setStep('');
@@ -745,7 +793,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
       if (preview.rows.length) await db.materials.bulkPut(preview.rows);
       setDone(preview.summary);
     } catch (e) {
-      setError(e?.message || 'No se pudieron guardar los cambios.');
+      setError(userMessageFor(e));
       setBusy(null);
     }
   }

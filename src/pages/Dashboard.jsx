@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, ArrowRight, Send, CheckCircle2, FileEdit, Clock, Package, Trophy, UserPlus,
+  Plus, ArrowRight, Send, CheckCircle2, FileEdit, Clock, Package, Trophy, UserPlus, Receipt,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../db/hooks.js';
+import { readyToInvoice } from '../lib/quoteMilestones.js';
 import PageHeader from '../components/PageHeader.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import StatCard from '../components/StatCard.jsx';
@@ -83,6 +84,19 @@ export default function Dashboard() {
     [profileId], [],
   );
   const allLinesQ = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
+
+  // Accounting → CRM, through the shared readyToInvoice gate: how many won
+  // sales sit ready with no factura yet. Tile renders for banking roles only.
+  const canBank = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
+  const postingsQ = useLiveQueryStatus(
+    () => (canBank ? db.salesPostings.where('profileId').equals(profileId || '').toArray() : Promise.resolve([])),
+    [profileId, canBank], [],
+  );
+  const porFacturar = useMemo(() => {
+    if (!canBank) return 0;
+    const posted = new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean));
+    return allQuotesQ.data.filter((q) => readyToInvoice(q) && !posted.has(q.id)).length;
+  }, [canBank, postingsQ.data, allQuotesQ.data]);
 
   const allQuotes = allQuotesQ.data;
   const loaded = allQuotesQ.loaded && allCustomersQ.loaded && allLinesQ.loaded
@@ -222,6 +236,19 @@ export default function Dashboard() {
               hint={loaded && kpis.wonThisMonth > 0 ? usd(kpis.wonThisMonthValue) : 'cotizaciones aceptadas'}
               to={quotesLink('accepted')}
             />
+            {/* Cross-core tile (banking roles): won sales the books haven't
+                invoiced yet — straight into Facturación's queue. */}
+            {canBank && porFacturar > 0 && (
+              <StatCard
+                label="Por facturar"
+                value={porFacturar}
+                icon={Receipt}
+                tone="emerald"
+                accent
+                hint="ventas listas sin factura"
+                to="/accounting/facturacion"
+              />
+            )}
           </div>
 
           {/* Work queues. The follow-up list is the seller's priority — it

@@ -23,7 +23,7 @@ import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription, familyStock } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription, familyStock, repriceComponentsAtGrade } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine, healComponentAlternatives } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
@@ -217,27 +217,9 @@ export default function QuoteLineItem({
   function applyMaterialToAllComponents({ grade, fabric, swatchImageId }) {
     const comps = Array.isArray(line.components) ? line.components : [];
     if (!comps.length) return;
-    const subtype = composeSubtype(grade, fabric);
-    const swatch = swatchImageId ?? null;
-    const components = comps.map((c) => {
-      const patch = { subtype, swatchImageId: swatch };
-      if (grade) {
-        const fam = families?.get(splitSkuGrade(c.reference).root) || null;
-        const p = fam ? productForGrade(fam, grade) : null;
-        // Reprice to this component's own SKU at the grade (no-op when the grade
-        // is unchanged; left intact when its model doesn't carry the grade).
-        if (p) {
-          patch.reference = p.reference;
-          patch.unitPrice = Number(p.priceUsd) || 0;
-        }
-        if (c.priceMin != null || c.priceMax != null) {
-          patch.priceMin = null;
-          patch.priceMax = null;
-        }
-      }
-      return { ...c, ...patch };
-    });
-    onChange({ components });
+    // Pure Model pipeline (lib/catalog) — the same rule GradeFabricRow.commit
+    // applies to one piece, so the two paths can't drift again.
+    onChange({ components: repriceComponentsAtGrade(comps, { grade, fabric, swatchImageId }, families) });
   }
   // Component-level ALTERNATIVE (pick-one among sub-pieces) — the compound twin
   // of addAlternative: assign the source a group (selecting it if new), then

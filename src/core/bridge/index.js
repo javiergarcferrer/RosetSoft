@@ -48,6 +48,51 @@ export function quoteToSale({ quote, lines, rate, hasFiscalId }) {
 }
 
 /**
+ * PROCESS — Estado de factura: the accounting sale postings → the ONE fact the
+ * CRM side may know about a quote's invoicing: that it was invoiced, under
+ * which NCF, and where the e-CF stands. Read-only and one-directional (books →
+ * sales); no amounts, no asiento — just the stamp. Latest posting per quote
+ * wins. Pure.
+ *
+ * @returns {Map<string, { ncf: string, ecfStatus: string, postedAt: number }>}
+ */
+export function resolveQuoteInvoiceStatus(postings) {
+  const m = new Map();
+  for (const p of postings || []) {
+    if (!p?.quoteId) continue;
+    const prev = m.get(p.quoteId);
+    if (!prev || (p.postedAt || 0) > prev.postedAt) {
+      m.set(p.quoteId, { ncf: p.ncf || '', ecfStatus: p.ecfStatus || '', postedAt: p.postedAt || 0 });
+    }
+  }
+  return m;
+}
+
+/**
+ * PROCESS — Cuenta del cliente: the books' postings + cobros → the one money
+ * summary a CRM surface may show about a customer's account: invoiced (net of
+ * deposits applied), paid, and the open balance, in DOP. Same arithmetic the
+ * receivables center uses (invoiced − paid); no aging, no docs — just the
+ * stamp. One-directional, read-only. Pure.
+ *
+ * @returns {{ invoiced: number, paid: number, balance: number }}
+ */
+export function resolveCustomerAccount({ postings, payments, customerId }) {
+  let invoiced = 0;
+  for (const s of postings || []) {
+    if (s.customerId !== customerId) continue;
+    invoiced += (s.total || 0) - (s.depositApplied || 0);
+  }
+  let paid = 0;
+  for (const p of payments || []) {
+    if (p.direction === 'in' && p.partyType === 'customer' && p.partyId === customerId) {
+      paid += p.amount || 0;
+    }
+  }
+  return { invoiced: round2(invoiced), paid: round2(paid), balance: round2(invoiced - paid) };
+}
+
+/**
  * PROCESS — Ventas de piso: a CRM quote's priced lines → the per-product rows
  * the Ligne Roset sell-through report books, in USD. A compound article rolls
  * up to ONE row at its line total (qty 1); a normal line keeps its qty and

@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ShoppingCart, Plus, Loader2, Check, X } from 'lucide-react';
@@ -8,6 +9,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   buildPurchaseEntry, computeExpenseTaxes, resolveAccountingConfig,
@@ -52,7 +54,23 @@ export default function Compras() {
       {!loaded ? <ListLoading /> : rows.length === 0 ? (
         <EmptyState icon={ShoppingCart} title="Sin compras" description="Registra una compra con “Nueva compra”." />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        <RowCards
+          rows={rows.map((p) => ({
+            key: p.id,
+            title: suppliersById.get(p.supplierId)?.name || '—',
+            right: formatDop((p.base || 0) + (p.itbis || 0)),
+            sub: KIND_LABEL[p.kind] || p.kind,
+            kv: [
+              ['Fecha', formatDate(p.purchaseAt)],
+              ['NCF', p.ncf || '—'],
+              ['Base', formatDop(p.base)],
+              ['ITBIS', formatDop(p.itbis)],
+              ['Pago', PAY_LABEL[p.paymentMethod] || p.paymentMethod],
+            ],
+          }))}
+        />
+        <div className="hidden md:block card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table min-w-[640px]">
               <thead>
@@ -84,6 +102,7 @@ export default function Compras() {
             </table>
           </div>
         </div>
+        </>
       )}
     </AccountingGate>
   );
@@ -158,7 +177,7 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
       }
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

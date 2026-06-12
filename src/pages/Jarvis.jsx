@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -285,7 +286,7 @@ export default function Jarvis() {
         const r = await run();
         setProbe(key, { state: 'ok', ...r });
       } catch (e) {
-        setProbe(key, { state: 'fail', note: e?.message || 'fallo' });
+        setProbe(key, { state: 'fail', note: userMessageFor(e) });
       }
     }));
     setScanning(false);
@@ -334,7 +335,7 @@ export default function Jarvis() {
         setDraft('');
       }
     } catch (e) {
-      setUplinkError(e?.message || 'Fallo de transmisión');
+      setUplinkError(userMessageFor(e));
     } finally {
       setSending(false);
     }
@@ -362,7 +363,7 @@ export default function Jarvis() {
       setApiKey('');
       await refreshSettings();
     } catch (e) {
-      setLinkError(e?.message || 'No se pudo guardar la llave');
+      setLinkError(userMessageFor(e));
     } finally {
       setLinking(false);
     }
@@ -389,7 +390,7 @@ export default function Jarvis() {
       if (data?.configured === false || data?.error) throw new Error(data?.error || 'sin respuesta');
       setSocialRaw(data);
     } catch (e) {
-      setSocialError(e?.message || 'No se pudo leer Meta');
+      setSocialError(userMessageFor(e));
     } finally {
       socialBusy.current = false;
       setSocialLoading(false);
@@ -418,7 +419,7 @@ export default function Jarvis() {
       if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
       await refreshSettings();
     } catch (e) {
-      setMetaLinkError(e?.message || 'No se pudo vincular');
+      setMetaLinkError(userMessageFor(e));
     } finally {
       metaBusy.current = false;
       setMetaLinking(false);
@@ -715,16 +716,14 @@ export default function Jarvis() {
             {/* pipeline funnel — bar length is the money each stage holds */}
             <div className="space-y-1.5">
               {pulse.funnel.map((f) => (
-                <div key={f.key} className="jv-funnel-row">
-                  {f.to
-                    ? <Link to={f.to} className="name" style={{ textDecoration: 'none', color: 'var(--jv-muted)' }}>{f.label}</Link>
-                    : <span className="name">{f.label}</span>}
+                <Link key={f.key} to={f.to} className="jv-funnel-row" title={`Abrir ${f.label.toLowerCase()} en Cotizaciones`}>
+                  <span className="name">{f.label}</span>
                   <span className="n jv-mono">{f.count}</span>
                   <div className="bar">
                     <i className={f.key} style={{ width: `${Math.max(f.totalUsd > 0 ? 2 : 0, f.share * 100)}%` }} />
                   </div>
                   <span className="money jv-mono">{formatMoney(f.totalUsd)}</span>
-                </div>
+                </Link>
               ))}
             </div>
 
@@ -1053,16 +1052,21 @@ export default function Jarvis() {
                   <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
                 </div>
               ))}
-              {opsFeed.map((e) => {
-                const Row = e.to ? Link : 'div';
-                return (
-                  <Row key={e.id} className="trow" {...(e.to ? { to: e.to } : {})}>
+              {opsFeed.map((e) => (
+                e.to ? (
+                  <Link key={e.id} to={e.to} className="trow" title="Abrir">
                     <span className={`tdot ${e.tone}`} />
                     <span className="ttext">{e.text}</span>
                     <span className="tago jv-mono">{e.ago || ''}</span>
-                  </Row>
-                );
-              })}
+                  </Link>
+                ) : (
+                  <div key={e.id} className="trow">
+                    <span className={`tdot ${e.tone}`} />
+                    <span className="ttext">{e.text}</span>
+                    <span className="tago jv-mono">{e.ago || ''}</span>
+                  </div>
+                )
+              ))}
               {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin actividad registrada todavía.

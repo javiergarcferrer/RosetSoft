@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -839,7 +840,7 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
     listWaTemplates().then((res) => {
       if (res?.ok) setTemplates((res.templates || []).filter((t) => t.status === 'APPROVED'));
       else { setTemplates([]); setLoadError(res?.error || 'No se pudieron cargar las plantillas.'); }
-    }).catch((e) => { setTemplates([]); setLoadError(e?.message || 'No se pudieron cargar las plantillas.'); });
+    }).catch((e) => { setTemplates([]); setLoadError(userMessageFor(e)); });
   }, [open]);
 
   function pick(t) {
@@ -1152,7 +1153,7 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
         else { setProducts([]); setLoadError(res?.error || 'No se pudo cargar el catálogo.'); }
       } catch (e) {
         setProducts([]);
-        setLoadError(e?.message || 'No se pudo cargar el catálogo.');
+        setLoadError(userMessageFor(e));
       }
     }, 350);
     return () => clearTimeout(id);
@@ -1166,7 +1167,7 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
       if (res?.ok) { setProducts((ps) => [...(ps || []), ...(res.products || [])]); setAfter(res.after || ''); }
       else setLoadError(res?.error || 'No se pudieron cargar más productos.');
     } catch (e) {
-      setLoadError(e?.message || 'No se pudieron cargar más productos.');
+      setLoadError(userMessageFor(e));
     }
     setLoadingMore(false);
   }

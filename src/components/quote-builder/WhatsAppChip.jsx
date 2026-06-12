@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { MessageCircle, Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
 import Modal from '../Modal.jsx';
@@ -177,7 +178,7 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
       }
     } catch (e) {
       setState('error');
-      setMsg(e?.message || 'No se pudo enviar.');
+      setMsg(userMessageFor(e));
     }
   }
 

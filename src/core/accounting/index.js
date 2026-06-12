@@ -7,7 +7,7 @@
 // reach into lib/accounting directly.
 
 // ── per-sale commission + payout projections (the original accounting surface)
-export { resolveSales, resolveCommissionsOverview } from './sales.js';
+export { resolveSales, resolveCommissionsOverview, resolveWorkspaceEntries } from './sales.js';
 
 // ── general-ledger ViewModels
 export {
@@ -37,7 +37,7 @@ export { buildSaleEntry, depositApplied } from '../../lib/accounting/sale.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
 export { resolveInventory, resolveItemKardex } from './inventory.js';
-export { buildPurchaseEntry, buildCogsEntry } from '../../lib/accounting/purchase.js';
+export { buildPurchaseEntry, buildCogsEntry, planSalida } from '../../lib/accounting/purchase.js';
 export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/inventory.js';
 
 // ── importación / liquidación DGA (landed cost)
@@ -60,7 +60,7 @@ export {
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
 
 // ── cobros / pagos + cuentas por cobrar / pagar
-export { resolveReceivables, resolvePayables, resolvePartyStatement } from './receivables.js';
+export { resolveReceivables, resolvePayables, resolvePartyStatement, resolveStatementFor } from './receivables.js';
 export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 
 // ── dashboard KPIs

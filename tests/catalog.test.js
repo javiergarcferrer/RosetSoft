@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock, repriceComponentsAtGrade } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -258,4 +258,29 @@ test('familyStock: graded LR models are untracked (special order, never gated)',
   const togo = groupFamilies(TOGO).find((f) => f.root === '15420000');
   assert.deepEqual(familyStock(togo), { tracked: false, qty: 0 });
   assert.deepEqual(familyStock(null), { tracked: false, qty: 0 });
+});
+
+/* ----------------------- repriceComponentsAtGrade ----------------------- */
+
+test('repriceComponentsAtGrade: every component re-snapshots to ITS model at the grade; ranges drop; fabric stamps', () => {
+  const families = new Map(groupFamilies(TOGO).map((f) => [f.root, f]));
+  const components = [
+    // Togo piece on grade A, carrying a stale range → repriced to G, range dropped.
+    { id: 'c1', reference: '15420000A', unitPrice: 3420, priceMin: 3000, priceMax: 5000, subtype: 'Grade A · Alpaga' },
+    // A model that doesn't carry grade G → price/reference left intact, fabric still stamps.
+    { id: 'c2', reference: '10261152W', unitPrice: 2165, subtype: '' },
+  ];
+  const next = repriceComponentsAtGrade(components, { grade: 'G', fabric: 'Steppe', swatchImageId: 'sw9' }, families);
+  assert.equal(next[0].reference, '15420000G');
+  assert.equal(next[0].unitPrice, 4450);
+  assert.equal(next[0].priceMin, null);
+  assert.equal(next[0].priceMax, null);
+  assert.equal(next[0].swatchImageId, 'sw9');
+  assert.equal(next[1].reference, '10261152W'); // intact
+  assert.equal(next[1].unitPrice, 2165);
+  assert.equal(next[0].subtype, next[1].subtype); // one stamp for all
+  // Fabric-only pick (no grade): nothing reprices, subtype/swatch still stamp.
+  const fabricOnly = repriceComponentsAtGrade(components, { fabric: 'Steppe' }, families);
+  assert.equal(fabricOnly[0].reference, '15420000A');
+  assert.equal(fabricOnly[0].priceMin, 3000); // range survives a fabric-only stamp
 });

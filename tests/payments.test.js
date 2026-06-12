@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
 import { buildPaymentEntry, paymentNet } from '../src/lib/accounting/payment.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
-import { resolveReceivables, resolvePayables, resolvePartyStatement } from '../src/core/accounting/receivables.js';
+import { resolveReceivables, resolvePayables, resolvePartyStatement, resolveStatementFor } from '../src/core/accounting/receivables.js';
 
 const config = resolveAccountingConfig(null);
 const M = config.postingMap;
@@ -120,4 +120,30 @@ test('resolvePartyStatement: chronological running balance', () => {
   });
   assert.deepEqual(st.rows.map((r) => r.balance), [10000, 6000, 11000]);
   assert.equal(st.balance, 11000);
+});
+
+test('resolveStatementFor: customer charges net of deposit; supplier credit docs net of retenciones', () => {
+  const customersById = new Map([['c1', { name: 'Ana' }]]);
+  const suppliersById = new Map([['s1', { name: 'Proveedor SA' }]]);
+  const salesPostings = [
+    { customerId: 'c1', postedAt: 1, total: 11800, depositApplied: 1800, ncf: 'B01' },
+    { customerId: 'c1', postedAt: 2, total: 1000, depositApplied: 1000 }, // fully covered → no charge row
+    { customerId: 'other', postedAt: 3, total: 99 },
+  ];
+  const payments = [
+    { direction: 'in', partyId: 'c1', paidAt: 4, amount: 4000, reference: 'TRX1' },
+    { direction: 'out', partyId: 's1', paidAt: 5, amount: 500 },
+  ];
+  const cust = resolveStatementFor({ selected: { type: 'customer', id: 'c1' }, salesPostings, payments, customersById, suppliersById });
+  assert.equal(cust.name, 'Ana');
+  assert.deepEqual(cust.rows.map((r) => [r.label, r.charge, r.payment]), [['Factura', 10000, 0], ['Cobro', 0, 4000]]);
+  assert.equal(cust.balance, 6000);
+
+  const purchases = [{ supplierId: 's1', paymentMethod: 'credit', purchaseAt: 1, base: 1000, itbis: 180, ncf: 'B11' }];
+  const expenses = [{ supplierId: 's1', paymentMethod: 'credit', expenseAt: 2, base: 500, itbis: 90, retentionIsr: 50, retentionItbis: 27 }];
+  const sup = resolveStatementFor({ selected: { type: 'supplier', id: 's1' }, salesPostings, payments, purchases, expenses, customersById, suppliersById });
+  assert.equal(sup.name, 'Proveedor SA');
+  assert.deepEqual(sup.rows.map((r) => [r.label, r.charge, r.payment]), [['Compra', 1180, 0], ['Gasto', 513, 0], ['Pago', 0, 500]]);
+  assert.equal(sup.balance, 1193);
+  assert.equal(resolveStatementFor({ selected: null }), null);
 });

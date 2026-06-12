@@ -332,7 +332,7 @@ test('reportedCommission: coerces a numeric-string snapshot (Postgres numeric)',
  * render: which accepted quotes count as sales in the window, the seller's
  * deposit-gated earned commission, the professional's owed/paid split, and
  * the company-wide overview roll-up the admin header shows. */
-import { resolveSales, resolveCommissionsOverview } from '../src/core/accounting/sales.js';
+import { resolveSales, resolveCommissionsOverview, resolveWorkspaceEntries } from '../src/core/accounting/sales.js';
 
 const VS_CYCLE = { start: 1000, end: 2000 };
 const VS_SELLER = { id: 'u1', name: 'Ana', commissionPct: 5 };
@@ -391,4 +391,46 @@ test('resolveCommissionsOverview: totals = seller + professional, paid + pending
   assert.equal(o.professional.pending, 0);
   assert.equal(o.total.commission, o.seller.commission + o.professional.commission);
   assert.equal(o.total.paid + o.total.pending, o.total.commission);
+});
+
+/* ── resolveWorkspaceEntries — the workspace refinement over the entries.
+ * Pins the MONEY rule in the commission sort: a deposit-in-cycle sale ranks
+ * by what it actually earns, one without by its live potential. */
+
+test('resolveWorkspaceEntries: deposit tabs count the whole cycle; tab filters rows', () => {
+  const entries = [
+    { quote: { id: 'q1', number: 12, acceptedAt: 3, depositReceivedAt: 9 }, customer: { name: 'Ana Pérez' }, creator: VS_SELLER, grandTotal: 100, depositIn: true, earnedCommission: 5, potentialCommission: 5 },
+    { quote: { id: 'q2', number: 34, acceptedAt: 2 }, customer: { company: 'Casa Bella' }, creator: { id: 'u2', email: 'leo@x.do' }, grandTotal: 300, depositIn: false, earnedCommission: 0, potentialCommission: 15 },
+    { quote: { id: 'q3', number: 56, acceptedAt: 1 }, customer: null, creator: null, grandTotal: 200, depositIn: false, earnedCommission: 0, potentialCommission: 8 },
+  ];
+  const r = resolveWorkspaceEntries({ entries });
+  assert.deepEqual(r.tabs.map((t) => t.count), [3, 1, 2]);
+  assert.deepEqual(r.rows.map((e) => e.quote.id), ['q1', 'q2', 'q3']); // acceptedAt desc
+  const rec = resolveWorkspaceEntries({ entries, tab: 'recibido' });
+  assert.deepEqual(rec.rows.map((e) => e.quote.id), ['q1']);
+  // Counts stay cycle-wide even on a filtered tab — each tab reads "how many would I see".
+  assert.deepEqual(rec.tabs.map((t) => t.count), [3, 1, 2]);
+});
+
+test('resolveWorkspaceEntries: commission sort ranks earned when deposit is in-cycle, potential otherwise', () => {
+  const entries = [
+    { quote: { id: 'hi-potential', acceptedAt: 1 }, customer: null, creator: null, grandTotal: 0, depositIn: false, earnedCommission: 0, potentialCommission: 100 },
+    // Earned applies (deposit in cycle): the stale 999 potential must be ignored.
+    { quote: { id: 'lo-earned', acceptedAt: 2 }, customer: null, creator: null, grandTotal: 0, depositIn: true, earnedCommission: 40, potentialCommission: 999 },
+  ];
+  const r = resolveWorkspaceEntries({ entries, sort: { key: 'commission', dir: 'desc' } });
+  assert.deepEqual(r.rows.map((e) => e.quote.id), ['hi-potential', 'lo-earned']);
+});
+
+test('resolveWorkspaceEntries: needle hits number/cliente/vendedor; creator options distinct + labeled', () => {
+  const entries = [
+    { quote: { id: 'q1', number: 12, acceptedAt: 3 }, customer: { company: 'Casa Bella' }, creator: VS_SELLER, grandTotal: 0, depositIn: false, earnedCommission: 0, potentialCommission: 0 },
+    { quote: { id: 'q2', number: 34, acceptedAt: 2 }, customer: { name: 'Pedro' }, creator: { id: 'u2', email: 'leo@x.do' }, grandTotal: 0, depositIn: false, earnedCommission: 0, potentialCommission: 0 },
+    { quote: { id: 'q3', number: 56, acceptedAt: 1 }, customer: { name: 'Pedro' }, creator: VS_SELLER, grandTotal: 0, depositIn: false, earnedCommission: 0, potentialCommission: 0 },
+  ];
+  assert.deepEqual(resolveWorkspaceEntries({ entries, q: 'casa be' }).rows.map((e) => e.quote.id), ['q1']);
+  assert.deepEqual(resolveWorkspaceEntries({ entries, q: 'leo@' }).rows.map((e) => e.quote.id), ['q2']);
+  assert.deepEqual(resolveWorkspaceEntries({ entries }).creatorOptions,
+    [{ value: 'u1', label: 'Ana' }, { value: 'u2', label: 'leo' }]); // email falls back to its user part
+  assert.deepEqual(resolveWorkspaceEntries({ entries, creator: 'u1' }).rows.map((e) => e.quote.id), ['q1', 'q3']);
 });

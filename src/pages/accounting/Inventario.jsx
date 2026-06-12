@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
@@ -8,11 +9,12 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import {
-  resolveInventory, resolveItemKardex, buildCogsEntry, resolveAccountingConfig,
+  resolveInventory, resolveItemKardex, buildCogsEntry, planSalida, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
 
 const TYPE_LABEL = { in: 'Entrada', out: 'Salida', adjust: 'Ajuste' };
@@ -33,19 +35,21 @@ export default function Inventario() {
   const loaded = itemsQ.loaded && movesQ.loaded;
 
   const inv = useMemo(() => resolveInventory({ items: itemsQ.data, movements: movesQ.data }), [itemsQ.data, movesQ.data]);
-  const [selectedId, setSelectedId] = useState('');
+  const [params] = useSearchParams();
+  // ?item=&qty= deep-link (the salida handoff from Facturación) preselects
+  // the kardex and fills the out quantity — confirming stays manual.
+  const [selectedId, setSelectedId] = useState(() => params.get('item') || '');
   const kardex = useMemo(
     () => (selectedId ? resolveItemKardex({ movements: movesQ.data, itemId: selectedId }) : null),
     [selectedId, movesQ.data],
   );
   const selectedItem = useMemo(() => itemsQ.data.find((i) => i.id === selectedId) || null, [itemsQ.data, selectedId]);
 
-  const [params] = useSearchParams();
   const [showItem, setShowItem] = useState(!!params.get('new'));
   const [itemForm, setItemForm] = useState({ sku: '', name: '', unit: 'unidad' });
   const [savingItem, setSavingItem] = useState(false);
 
-  const [outQty, setOutQty] = useState('');
+  const [outQty, setOutQty] = useState(() => params.get('qty') || '');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -67,33 +71,32 @@ export default function Inventario() {
 
   async function registerSalida() {
     setErr('');
-    const qty = Number(outQty) || 0;
-    if (!selectedItem || qty <= 0) { setErr('Indica una cantidad válida.'); return; }
-    if (kardex && qty > kardex.qty) { setErr('No hay suficiente existencia.'); return; }
-    const avg = kardex?.avgCost || 0;
-    const cost = Math.round(qty * avg * 100) / 100;
+    // The salida's MONEY rule (validation, COGS at average, new on-hand) is a
+    // pure Model helper; this handler only performs the writes it dictates.
+    const plan = planSalida({ qty: outQty, onHand: kardex?.qty || 0, avgCost: kardex?.avgCost });
+    if (!selectedItem || !plan.ok) { setErr(plan.error || 'Indica una cantidad válida.'); return; }
     setPosting(true);
     try {
       const moveId = newId();
-      if (cost > 0) {
-        const built = buildCogsEntry({ newId, config, cost, postedAt: Date.now(), refId: moveId, memo: `Salida ${selectedItem.name}` });
+      if (plan.cost > 0) {
+        const built = buildCogsEntry({ newId, config, cost: plan.cost, postedAt: Date.now(), refId: moveId, memo: `Salida ${selectedItem.name}` });
         await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
         await db.journalLines.bulkPut(built.lines);
         await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty, unitCost: avg,
+          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost,
           movedAt: Date.now(), memo: 'Costo de venta', journalEntryId: built.entry.id,
         });
       } else {
         await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty, unitCost: avg, movedAt: Date.now(),
+          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost, movedAt: Date.now(),
         });
       }
-      await db.inventoryItems.update(selectedItem.id, { qtyOnHand: (kardex?.qty || 0) - qty, avgCost: avg });
+      await db.inventoryItems.update(selectedItem.id, { qtyOnHand: plan.newQty, avgCost: plan.unitCost });
       // Stock changed → reflect it in the Shopify catalog (sold out → removed).
       syncShopify([selectedItem.id]).catch(() => {});
       setOutQty('');
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
     } finally {
       setPosting(false);
     }
@@ -106,7 +109,7 @@ export default function Inventario() {
       const res = await syncShopify();
       if (res?.configured === false) setErr('Conecta Shopify en Configuración para publicar el inventario.');
     } catch (e) {
-      setErr(e?.message || 'No se pudo sincronizar con Shopify.');
+      setErr(userMessageFor(e));
     } finally {
       setSyncing(false);
     }
@@ -148,7 +151,21 @@ export default function Inventario() {
         <EmptyState icon={Boxes} title="Sin artículos" description="Crea un artículo y regístralo desde Compras." />
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="card overflow-hidden">
+          <div className="min-w-0">
+          <RowCards
+            rows={inv.rows.map(({ item, qty, avgCost, value }) => ({
+              key: item.id,
+              title: <>{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</>,
+              right: formatDop(value),
+              onClick: () => { setSelectedId(item.id); setOutQty(''); setErr(''); },
+              kv: [
+                ['Existencia', `${qty} ${item.unit}`],
+                ['Costo prom.', formatDop(avgCost)],
+              ],
+            }))}
+            footer={[['Valor total', formatDop(inv.totalValue)]]}
+          />
+          <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
             <table className="table min-w-[320px]">
               <thead>
@@ -178,6 +195,7 @@ export default function Inventario() {
               </tfoot>
             </table>
             </div>
+          </div>
           </div>
 
           <div>
@@ -284,7 +302,7 @@ function CatalogBlock({ item }) {
       if (r.ok) setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 4000);
     } catch (e) {
       setStatus('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 

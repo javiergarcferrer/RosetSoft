@@ -24,7 +24,7 @@ import Dropdown, { DropdownItem } from './primitives/Dropdown.jsx';
  * app and on the public link — without it the keyless call reads as an expired
  * session.
  */
-export default function ContainerTracking({ containerNo, shareToken }) {
+export default function ContainerTracking({ containerNo, shareToken, arrivalAction = null }) {
   // ViewModel — owns the hl-track fetch + the summary → route → voyage
   // derivation; this view renders it and derives nothing itself.
   const { status, summary, error, fetchedAt, route, voyage, milestoneStop, reload } =
@@ -117,6 +117,11 @@ export default function ContainerTracking({ containerNo, shareToken }) {
                 </span>
               </div>
             )}
+
+            {/* Workflow nudge slot — the host surface (OrderDetail) supplies an
+                action that's only meaningful once the carrier reports arrival;
+                the human still confirms, nothing auto-advances. */}
+            {voyage.arrived && arrivalAction}
           </div>
 
           {route.stops.length > 0 && (

@@ -1,3 +1,4 @@
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Receipt, Plus, Loader2, Check, X, Download, Search } from 'lucide-react';
@@ -8,6 +9,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import PeriodPicker, { periodWindow } from '../../components/accounting/PeriodPicker.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
@@ -103,7 +105,13 @@ export default function Expenses() {
       {showForm && loaded && (
         <NewExpenseForm
           scope={scope} config={config} suppliers={suppliersQ.data} expenseAccounts={expenseAccounts}
-          suppliersById={suppliersById} onClose={() => setShowForm(false)} />
+          suppliersById={suppliersById}
+          initial={{
+            description: params.get('desc') || '',
+            base: params.get('amount') || '',
+            itbis: params.get('itbis') ?? '',
+          }}
+          onClose={() => setShowForm(false)} />
       )}
 
       {!loaded ? <ListLoading /> : tab === 'list' ? (
@@ -111,7 +119,29 @@ export default function Expenses() {
           <EmptyState icon={Receipt} title="Sin gastos en el período"
             description="Registra un gasto con “Nuevo gasto”." />
         ) : (
-          <div className="card overflow-hidden">
+          <>
+          <RowCards
+            rows={list.rows.map(({ expense: e, supplier, accountName, total }) => ({
+              key: e.id,
+              title: supplier?.name || '—',
+              right: formatDop(total),
+              sub: <><code className="text-[11px] text-ink-400 mr-1">{e.accountCode}</code>{accountName}</>,
+              kv: [
+                ['Fecha', formatDate(e.expenseAt)],
+                ['NCF', e.ncf || '—'],
+                ['Base', formatDop(e.base)],
+                ['ITBIS', formatDop(e.itbis)],
+                ['Pago', PAY_LABEL[e.paymentMethod] || e.paymentMethod],
+              ],
+            }))}
+            footer={[
+              ['Gastos', list.count],
+              ['Base', formatDop(list.totals.base)],
+              ['ITBIS', formatDop(list.totals.itbis)],
+              ['Total', formatDop(list.totals.total)],
+            ]}
+          />
+          <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="table min-w-[680px]">
                 <thead>
@@ -152,6 +182,7 @@ export default function Expenses() {
               </table>
             </div>
           </div>
+          </>
         )
       ) : (
         <>
@@ -166,7 +197,32 @@ export default function Expenses() {
             <EmptyState icon={Receipt} title="Sin comprobantes en el período"
               description="El 606 se arma con los gastos (y compras) con NCF del período." />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            <RowCards
+              rows={form606.rows.map((r) => ({
+                key: r.id,
+                title: r.name,
+                right: formatDop(r.total),
+                sub: r.rnc || '—',
+                kv: [
+                  ['NCF', r.ncf || '—'],
+                  ['Fecha', formatDate(r.date)],
+                  ['Base', formatDop(r.base)],
+                  ['ITBIS', formatDop(r.itbis)],
+                  ['Ret. ISR', formatDop(r.retIsr)],
+                  ['Ret. ITBIS', formatDop(r.retItbis)],
+                ],
+              }))}
+              footer={[
+                ['Comprobantes', form606.count],
+                ['Base', formatDop(form606.totals.base)],
+                ['ITBIS', formatDop(form606.totals.itbis)],
+                ['Ret. ISR', formatDop(form606.totals.retIsr)],
+                ['Ret. ITBIS', formatDop(form606.totals.retItbis)],
+                ['Total', formatDop(form606.totals.total)],
+              ]}
+            />
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="table min-w-[760px]">
                   <thead>
@@ -210,6 +266,7 @@ export default function Expenses() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       )}
@@ -217,10 +274,13 @@ export default function Expenses() {
   );
 }
 
-function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersById, onClose }) {
+function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersById, initial, onClose }) {
+  // `initial` seeds handoffs (e.g. the commission-payout link from Ventas y
+  // comisiones: ?amount&itbis=0&desc) so figures aren't re-typed.
   const [form, setForm] = useState({
     supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '', accountCode: '',
-    description: '', base: '', itbis: '', retIsr: '', retItbis: '', paymentMethod: 'bank',
+    description: initial?.description || '', base: initial?.base || '',
+    itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -287,7 +347,7 @@ function NewExpenseForm({ scope, config, suppliers, expenseAccounts, suppliersBy
       });
       onClose();
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
       setSaving(false);
     }
   }

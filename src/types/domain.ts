@@ -911,6 +911,11 @@ export interface QuoteLine {
   quoteId: string;
   kind: LineKind;
   sortOrder?: number;
+  /**
+   * The kardex item this line was inserted from (InventoryPicker). Quoting
+   * moves no stock; this link lets invoicing offer the salida prefilled.
+   */
+  inventoryItemId?: string | null;
 
   /* Identity */
   family?: string;

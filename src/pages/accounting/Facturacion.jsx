@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
-import { toRow } from '../../db/rowMapping.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
-import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
+import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
@@ -24,33 +24,17 @@ import {
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { supabase } from '../../db/supabaseClient.js';
+import { sendEcf, checkEcfStatus } from '../../lib/ecfSend.js';
+import { postSaleTx } from '../../lib/salePosting.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 function ymd(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// A floor sale ("venta de piso") isn't tied to an import order — it's sold off
-// the floor, so there's no delivery cycle: the moment money changes hands (the
-// deposit) it's ready to bill.
-function isFloorSale(q) {
-  return !q.orderId;
-}
-
-// Ready to invoice = accepted, and either delivered (any order type) or — for a
-// floor sale — its deposit has been received. (Special/import orders still wait
-// for delivery.)
-function readyToInvoice(q) {
-  if (q.status !== QUOTE_STATUS_ACCEPTED) return false;
-  if (q.deliveredAt) return true;
-  return isFloorSale(q) && !!q.depositReceivedAt;
-}
-
-// The effective invoice date — delivery if known, else the deposit, else accept.
-function invoiceReadyAt(q) {
-  return q.deliveredAt || q.depositReceivedAt || q.acceptedAt || Date.now();
-}
+// The "ready to invoice" gate + effective invoice date are SHARED with the
+// CRM dashboard's "Por facturar" tile — one rule, lib/quoteMilestones.
 
 /**
  * Facturación — recognize sales at delivery, the 607 (ventas) and the monthly
@@ -126,7 +110,7 @@ export default function Facturacion() {
       });
       setPrintDoc({ blob, title: `Factura ${p.ncf}` });
     } catch (e) {
-      setErr(e?.message || 'No se pudo generar la factura.');
+      setErr(userMessageFor(e));
     } finally {
       setPrinting(null);
     }
@@ -134,6 +118,13 @@ export default function Facturacion() {
 
   async function transmit(rowId) {
     const p = postingById.get(rowId);
+    if (p) await transmitPosting(p);
+  }
+
+  // Transmit one posting's e-CF to the DGII. Takes the posting OBJECT (not a
+  // row id) so postSale can auto-transmit the sale it just booked before the
+  // live query refetches; the manual Transmitir button stays the retry path.
+  async function transmitPosting(p) {
     if (!p || !p.ncf) return;
     setErr('');
     // Pre-flight: only a well-formed e-NCF can be signed (a manual NCF would
@@ -150,7 +141,7 @@ export default function Facturacion() {
       setErr('Define el RNC del emisor en Configuración contable antes de transmitir e-CF.');
       return;
     }
-    setTransmitting(rowId);
+    setTransmitting(p.id);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
       const payload = buildEcfPayload({
@@ -168,16 +159,13 @@ export default function Facturacion() {
         // Contado if the deposit covered the sale; crédito if a balance remains.
         tipoPago: (p.depositApplied || 0) >= p.total ? 1 : 2,
       });
-      const { data, error } = await supabase.functions.invoke('ecf-send', {
-        body: { payload, eNcf: p.ncf, profileId: scope },
-      });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error transmitiendo el e-CF.');
+      const data = await sendEcf({ payload, eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {
         trackId: data.trackId || '', securityCode: data.securityCode || '',
         fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
       });
     } catch (e) {
-      setErr(e?.message || 'Error transmitiendo el e-CF.');
+      setErr(userMessageFor(e));
     } finally {
       setTransmitting(null);
     }
@@ -191,10 +179,7 @@ export default function Facturacion() {
     setErr('');
     setChecking(rowId);
     try {
-      const { data, error } = await supabase.functions.invoke('ecf-send', {
-        body: { op: 'status', trackId: p.trackId, profileId: scope },
-      });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Error consultando el estado.');
+      const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
       const estado = String(data.estado || '');
       const norm = estado.toLowerCase();
       if (norm.includes('acept')) {
@@ -206,7 +191,7 @@ export default function Facturacion() {
         setErr(`DGII — ${p.ncf}: ${estado || 'en proceso'}`);
       }
     } catch (e) {
-      setErr(e?.message || 'Error consultando el estado.');
+      setErr(userMessageFor(e));
     } finally {
       setChecking(null);
     }
@@ -229,13 +214,11 @@ export default function Facturacion() {
     (async () => {
       for (const p of pending) {
         try {
-          const { data } = await supabase.functions.invoke('ecf-send', {
-            body: { op: 'status', trackId: p.trackId, profileId: scope },
-          });
+          const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
           const norm = String(data?.estado || '').toLowerCase();
-          if (data?.ok && norm.includes('acept')) {
+          if (norm.includes('acept')) {
             await db.salesPostings.update(p.id, { ecfStatus: 'accepted' });
-          } else if (data?.ok && norm.includes('rechaz')) {
+          } else if (norm.includes('rechaz')) {
             await db.salesPostings.update(p.id, { ecfStatus: 'rejected' });
           }
         } catch { /* silent — Consultar covers the manual path */ }
@@ -281,6 +264,13 @@ export default function Facturacion() {
     purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
   }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
+  // e-NCFs assigned but never transmitted — the count the 607 tab badges so
+  // signed-but-unsent invoices can't sit invisible.
+  const pendingEcfCount = useMemo(
+    () => postingsQ.data.filter((p) => p.ecfStatus === 'pending').length,
+    [postingsQ.data],
+  );
+
   const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, rnc, msg }
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
@@ -297,7 +287,7 @@ export default function Facturacion() {
       if (r.found) setDraft(quote.id, { rnc: r.rnc, msg: `✓ ${r.name}` });
       else setDraft(quote.id, { msg: r.message || 'No encontrado.' });
     } catch (e) {
-      setDraft(quote.id, { msg: e?.message || 'Error consultando.' });
+      setDraft(quote.id, { msg: userMessageFor(e) });
     } finally {
       setLookingId(null);
     }
@@ -342,27 +332,38 @@ export default function Facturacion() {
       });
       // One transaction: asiento + lines + posting land together (numbers
       // assigned server-side) or not at all — no half-posted sale to re-book.
-      const { error } = await supabase.rpc('post_sale', {
-        p_entry: toRow(built.entry),
-        p_lines: built.lines.map(toRow),
-        p_posting: toRow({
+      await postSaleTx({
+        entry: built.entry,
+        lines: built.lines,
+        posting: {
           id, profileId: scope, quoteId: quote.id, customerId: quote.customerId,
           postedAt, ncf, rnc, ecfType,
           ecfStatus: assigned ? 'pending' : '',
           ecfExpiresAt: assigned?.expiresAt ?? null,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
-        }),
+        },
       });
-      if (error) throw new Error(error.message || 'No se pudo registrar la venta.');
       invalidate();
       // Persist the RNC back onto the customer so it's reused next time.
       if (customer && rnc && rnc !== cleanRnc(customer.rnc)) {
         await db.customers.update(customer.id, { rnc });
       }
       setDrafts((d) => { const n = { ...d }; delete n[quote.id]; return n; });
+      // Auto-transmit the freshly assigned e-NCF when cert + emisor RNC are
+      // configured — no second manual step on the happy path. A failure stays
+      // 'pending' and surfaces in the 607 badge; Transmitir retries it with
+      // the SAME e-NCF (the state machine never reassigns).
+      if (assigned && settings?.ecfCertUploadedAt && cleanRnc(settings?.companyRnc)) {
+        transmitPosting({
+          id, customerId: quote.customerId, ncf, rnc, ecfType,
+          ecfExpiresAt: assigned?.expiresAt ?? null, postedAt,
+          base: book.base, itbis: book.itbis, total: book.total,
+          depositApplied: Math.min(book.deposit, book.total),
+        }).catch(() => { /* surfaced via setErr inside; badge keeps the count */ });
+      }
     } catch (e) {
-      setErr(e?.message || String(e));
+      setErr(userMessageFor(e));
     } finally {
       setPosting(null);
     }
@@ -389,13 +390,52 @@ export default function Facturacion() {
     downloadText(dgiiTxtFilename('607', settings?.companyRnc, period), txt);
   }
 
+  // e-CF status + actions for one 607 row — shared by the desktop cell and
+  // the mobile card so the two variants can't drift.
+  function ecfActions(r) {
+    const p = postingById.get(r.id);
+    const status = p?.ecfStatus || '';
+    const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
+    return (
+      <div className="flex items-center gap-3">
+        {status === 'accepted' ? (
+          <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
+        ) : status === 'sent' ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
+            {p?.trackId && (
+              <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
+                title="Consultar estado en la DGII"
+                className="btn-ghost text-xs whitespace-nowrap">
+                {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Consultar
+              </button>
+            )}
+          </span>
+        ) : status === 'rejected' ? (
+          <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
+        ) : !isEcf ? (
+          <span className="text-xs text-ink-400">—</span>
+        ) : (
+          <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+            className="btn-ghost text-xs whitespace-nowrap">
+            {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+          </button>
+        )}
+        <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
+          title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
+          {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
+        </button>
+      </div>
+    );
+  }
+
   return (
     <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)" />
 
       <TabPills tabs={[
         { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
-        { key: '607', label: '607' },
+        { key: '607', label: `607${pendingEcfCount ? ` · ${pendingEcfCount} por transmitir` : ''}` },
         { key: 'it1', label: 'IT-1 (ITBIS)' },
       ]} active={tab} onChange={setTab} />
       {err && <p className="text-sm text-rose-600 mb-3">{err}</p>}
@@ -425,10 +465,10 @@ export default function Facturacion() {
                     {book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 w-full sm:w-auto">
                       <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
                         onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
-                        className="input w-36" />
+                        className="input flex-1 min-w-0 sm:flex-none sm:w-36" />
                       <button type="button" onClick={() => lookupFor(q)}
                         disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
                         className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
@@ -439,11 +479,29 @@ export default function Facturacion() {
                       onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
                       className="input w-full sm:w-52" />
                     <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
-                      className="btn-primary">
+                      className="btn-primary w-full sm:w-auto justify-center">
                       {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
                     </button>
                     {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
                   </div>
+                  {/* Stock-sourced lines (inventoryItemId stamped at quoting
+                      time) → offer the kardex salida prefilled; the sale's
+                      stock move stays a human act in Inventario. */}
+                  {(() => {
+                    const stocked = (linesByQuote.get(q.id) || []).filter((l) => l.inventoryItemId);
+                    if (!stocked.length) return null;
+                    const first = stocked[0];
+                    return (
+                      <Link
+                        to={`/accounting/inventario?item=${first.inventoryItemId}&qty=${Number(first.qty) || 1}`}
+                        className="btn-ghost text-xs mt-2"
+                        title="Registrar la salida de almacén de los artículos vendidos de stock"
+                      >
+                        <Boxes size={12} aria-hidden /> Salida de inventario
+                        {stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
+                      </Link>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -452,10 +510,10 @@ export default function Facturacion() {
       ) : tab === '607' ? (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
               <input value={q607} onChange={(e) => setQ607(e.target.value)}
-                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-56" />
+                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-full sm:w-56" />
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-auto">
               <button type="button" onClick={export607} disabled={sales607.count === 0}
@@ -468,7 +526,28 @@ export default function Facturacion() {
             <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin ventas en el mes'}
               description={q607 ? 'Ninguna venta del período coincide con la búsqueda.' : 'Las ventas facturadas del mes aparecen aquí.'} />
           ) : (
-            <div className="card overflow-hidden">
+            <>
+            <RowCards
+              rows={sales607View.rows.map((r) => ({
+                key: r.id,
+                title: r.name || '—',
+                right: formatDop(r.total),
+                sub: <span className="tabular-nums">{r.rnc ? `${r.rnc} · ` : ''}{r.ncf || '—'}</span>,
+                kv: [
+                  ['Fecha', formatDate(r.date)],
+                  ['Base', formatDop(r.base)],
+                  ['ITBIS', formatDop(r.itbis)],
+                ],
+                actions: ecfActions(r),
+              }))}
+              footer={[
+                ['Ventas', sales607View.count],
+                ['Base', formatDop(sales607View.totals.base)],
+                ['ITBIS', formatDop(sales607View.totals.itbis)],
+                ['Total', formatDop(sales607View.totals.total)],
+              ]}
+            />
+            <div className="hidden md:block card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
@@ -484,11 +563,7 @@ export default function Facturacion() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sales607View.rows.map((r) => {
-                      const p = postingById.get(r.id);
-                      const status = p?.ecfStatus || '';
-                      const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
-                      return (
+                    {sales607View.rows.map((r) => (
                       <tr key={r.id}>
                         <td className="tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
                         <td className="min-w-[120px]">{r.name || '—'}</td>
@@ -497,40 +572,9 @@ export default function Facturacion() {
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
                         <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            {status === 'accepted' ? (
-                              <span className="text-xs text-emerald-700 whitespace-nowrap">Aceptado</span>
-                            ) : status === 'sent' ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="text-xs text-emerald-700 whitespace-nowrap">Transmitido</span>
-                                {p?.trackId && (
-                                  <button type="button" onClick={() => checkStatus(r.id)} disabled={checking === r.id}
-                                    title="Consultar estado en la DGII"
-                                    className="btn-ghost text-xs whitespace-nowrap">
-                                    {checking === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Consultar
-                                  </button>
-                                )}
-                              </span>
-                            ) : status === 'rejected' ? (
-                              <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
-                            ) : !isEcf ? (
-                              <span className="text-xs text-ink-400">—</span>
-                            ) : (
-                              <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-                                className="btn-ghost text-xs whitespace-nowrap">
-                                {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
-                              </button>
-                            )}
-                            <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
-                              title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
-                              {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
-                            </button>
-                          </div>
-                        </td>
+                        <td>{ecfActions(r)}</td>
                       </tr>
-                      );
-                    })}
+                    ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-ink-200 font-semibold">
@@ -544,6 +588,7 @@ export default function Facturacion() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       ) : (

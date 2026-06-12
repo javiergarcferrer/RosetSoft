@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useState } from 'react';
 import { Trash2, Search, Loader2 } from 'lucide-react';
 import Modal from './Modal.jsx';
@@ -78,7 +79,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
         setLookupMsg(r.message || 'No encontrado.');
       }
     } catch (e) {
-      setLookupMsg(e?.message || 'Error consultando el RNC.');
+      setLookupMsg(userMessageFor(e));
     } finally {
       setLooking(false);
     }

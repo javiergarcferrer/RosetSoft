@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -114,7 +115,7 @@ export default function Customers() {
       setWriteError('');
       return true;
     } catch (e) {
-      setWriteError(`No se pudo guardar el cambio: ${e?.message || e}`);
+      setWriteError(`No se pudo guardar el cambio: ${userMessageFor(e)}`);
       return false;
     }
   }

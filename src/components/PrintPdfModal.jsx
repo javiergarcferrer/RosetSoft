@@ -1,3 +1,4 @@
+import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
@@ -55,7 +56,7 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
       .then((out) => { if (!cancelled) setPages(out); })
       .catch((e) => {
         console.error('[PrintPdfModal] render failed:', e);
-        if (!cancelled) setError(e?.message || 'No se pudo preparar la impresión.');
+        if (!cancelled) setError(userMessageFor(e));
       });
     return () => { cancelled = true; };
   }, [blob]);

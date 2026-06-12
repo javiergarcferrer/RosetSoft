@@ -147,3 +147,32 @@ export function quoteOutstanding(
   if (!quote.depositReceivedAt) return safeTotal;
   return Math.max(0, safeTotal - (Number(quote.depositAmount) || 0));
 }
+
+/**
+ * Floor sale = a quote not attached to an order — the piece left the floor, so
+ * there's no delivery cycle: the moment money changes hands (the deposit) it's
+ * ready to bill. Special/import orders still wait for delivery.
+ */
+export function isFloorSale(quote: Pick<Quote, 'orderId'> | null | undefined): boolean {
+  return !quote?.orderId;
+}
+
+/**
+ * Ready to invoice = accepted, and either delivered (any order type) or — for
+ * a floor sale — its deposit has been received. The single gate Facturación's
+ * "Por facturar" queue and the CRM dashboard tile share.
+ */
+export function readyToInvoice(
+  quote: Pick<Quote, 'status' | 'orderId' | 'deliveredAt' | 'depositReceivedAt'> | null | undefined,
+): boolean {
+  if (!quote || quote.status !== 'accepted') return false;
+  if (quote.deliveredAt) return true;
+  return isFloorSale(quote) && !!quote.depositReceivedAt;
+}
+
+/** The effective invoice date — delivery if known, else the deposit, else accept. */
+export function invoiceReadyAt(
+  quote: Pick<Quote, 'deliveredAt' | 'depositReceivedAt' | 'acceptedAt'> | null | undefined,
+): number {
+  return quote?.deliveredAt || quote?.depositReceivedAt || quote?.acceptedAt || Date.now();
+}

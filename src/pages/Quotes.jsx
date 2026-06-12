@@ -11,6 +11,8 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveQuotesList } from '../core/quote/views/lists.js';
+import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
+import InvoiceChip from '../components/InvoiceChip.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import { quoteStagePill } from '../lib/statusPill.js';
@@ -138,6 +140,14 @@ export default function Quotes() {
     [profileId],
     [],
   );
+  // Accounting → CRM, through the bridge: which quotes are already invoiced
+  // (NCF stamp on the row). Read-only; the list never sees the asiento.
+  const postings = useLiveQuery(
+    () => db.salesPostings.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const invoiceByQuoteId = useMemo(() => resolveQuoteInvoiceStatus(postings), [postings]);
 
   // Search header query state. The status dimension is the primary tab
   // strip ('all' = Todas); secondary filters (currently just vendedor)
@@ -241,6 +251,7 @@ export default function Quotes() {
             tracking={trackingByQuoteId.get(qu.id)}
             total={totalByQuoteId.get(qu.id) || 0}
             rates={displayRatesFor(qu, settings)}
+            invoice={invoiceByQuoteId.get(qu.id)}
           />
         ))}
         {filtered.length === 0 && (
@@ -308,6 +319,7 @@ export default function Quotes() {
                     creator={profileById.get(qu.createdByUserId)}
                     total={totalByQuoteId.get(qu.id) || 0}
                     rates={displayRatesFor(qu, settings)}
+                    invoice={invoiceByQuoteId.get(qu.id)}
                   />
                 ))}
                 {/* Closing floor — left bar + bottom border seal the group so
@@ -324,6 +336,7 @@ export default function Quotes() {
                 creator={profileById.get(u.quote.createdByUserId)}
                 total={totalByQuoteId.get(u.quote.id) || 0}
                 rates={displayRatesFor(u.quote, settings)}
+                invoice={invoiceByQuoteId.get(u.quote.id)}
               />
             )))}
           </tbody>
@@ -351,7 +364,7 @@ function OrderIndicator({ order }) {
   );
 }
 
-function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
+function QuoteCard({ qu, client, creator, order, tracking, total, rates, invoice }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -377,6 +390,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
       </Link>
       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-100">
         <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
+        <InvoiceChip invoice={invoice} />
         <TradeFlag quote={qu} />
         <div className="flex-1 min-w-0">
           <OrderIndicator order={order} />
@@ -392,7 +406,7 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates }) {
   );
 }
 
-function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
+function QuoteRow({ qu, client, creator, total, rates, grouped = false, invoice }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
 
@@ -416,6 +430,7 @@ function QuoteRow({ qu, client, creator, total, rates, grouped = false }) {
       <td>
         <div className="flex items-center gap-1.5">
           <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
+          <InvoiceChip invoice={invoice} />
           <TradeFlag quote={qu} />
         </div>
       </td>
