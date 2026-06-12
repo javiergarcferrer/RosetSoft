@@ -1052,21 +1052,16 @@ export default function Jarvis() {
                   <Skeleton w={`${85 - i * 12}%`} h="0.65rem" />
                 </div>
               ))}
-              {opsFeed.map((e) => (
-                e.to ? (
-                  <Link key={e.id} to={e.to} className="trow" title="Abrir">
+              {opsFeed.map((e) => {
+                const Row = e.to ? Link : 'div';
+                return (
+                  <Row key={e.id} className="trow" {...(e.to ? { to: e.to } : {})}>
                     <span className={`tdot ${e.tone}`} />
                     <span className="ttext">{e.text}</span>
                     <span className="tago jv-mono">{e.ago || ''}</span>
-                  </Link>
-                ) : (
-                  <div key={e.id} className="trow">
-                    <span className={`tdot ${e.tone}`} />
-                    <span className="ttext">{e.text}</span>
-                    <span className="tago jv-mono">{e.ago || ''}</span>
-                  </div>
-                )
-              ))}
+                  </Row>
+                );
+              })}
               {bizLoaded && !opsFeed.length && (
                 <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin actividad registrada todavía.
