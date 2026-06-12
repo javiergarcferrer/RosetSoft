@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { execSync } from 'node:child_process';
 
 // For GitHub Pages: set base to '/<repo-name>/' or use '/' for user.github.io.
 // You can override via VITE_BASE env var when deploying.
@@ -27,6 +28,31 @@ export default defineConfig(({ mode }) => {
     process.env.GITHUB_SHA ||
     env.VITE_BUILD_ID ||
     String(Date.now());
+
+  // Deploy telemetry for the JARVIS dashboard: the commit this deploy runs
+  // plus a short git log ("cambios en vigor"). Vercel exposes the commit
+  // metadata as env vars; the log comes from the build checkout (Vercel's
+  // clone is shallow — whatever depth it has is plenty for a feed). Every
+  // value is optional: a missing git binary or repo just leaves the panel
+  // empty, never breaks the build.
+  let gitLog = [];
+  try {
+    gitLog = execSync('git log -n 12 --pretty=format:%h%x09%ct%x09%s', { encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, ct, ...rest] = line.split('\t');
+        return { sha, at: Number(ct) * 1000, msg: rest.join('\t') };
+      });
+  } catch { /* no git in the build environment */ }
+
+  const buildMeta = {
+    sha: process.env.VERCEL_GIT_COMMIT_SHA || gitLog[0]?.sha || '',
+    ref: process.env.VERCEL_GIT_COMMIT_REF || '',
+    msg: process.env.VERCEL_GIT_COMMIT_MESSAGE || gitLog[0]?.msg || '',
+    builtAt: Date.now(),
+    log: gitLog,
+  };
 
   const emitVersion = {
     name: 'emit-version-json',
@@ -87,6 +113,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_SUPABASE_URL':      JSON.stringify(supabaseUrl),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnon),
       'import.meta.env.VITE_BUILD_ID':          JSON.stringify(buildId),
+      'import.meta.env.VITE_BUILD_META':        JSON.stringify(JSON.stringify(buildMeta)),
     },
     build: {
       target: 'es2020',

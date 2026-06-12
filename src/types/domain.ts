@@ -259,6 +259,26 @@ export interface WaCampaign {
 }
 
 /**
+ * One frame on the Claude uplink — the JARVIS dashboard's channel to the
+ * Claude agent. `role:'user'` rows are directives typed in the dashboard
+ * (status: pending → seen → done as the agent picks them up); `role:'claude'`
+ * rows are the agent's replies and activity notes, written from its session.
+ * `kind` separates conversation ('directive' | 'reply') from telemetry
+ * ('activity' | 'deploy').
+ */
+export interface ClaudeMessage {
+  id: string;
+  profileId: string;
+  role: 'user' | 'claude' | 'system';
+  kind: string;
+  content: string;
+  status?: string;
+  meta?: Record<string, unknown>;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * Saved accounting configuration (overrides only — `resolveAccountingConfig`
  * fills the gaps from code defaults). `postingMap` maps a well-known posting
  * role (`salesLocal`, `itbisPayable`, `accountsPayable`…) to a chart account

@@ -30,6 +30,7 @@ import NotFound from './pages/NotFound.jsx';
 // safeDynamicImport wrapper recovers stale-deploy chunk misses with a reload.
 const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
+const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
@@ -243,6 +244,9 @@ function ProtectedApp() {
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}
             <Route path="admin/users" element={<AdminUsers />} />
+            {/* JARVIS — the admin ops HUD: integration health, deploy
+                telemetry and the Claude uplink console. */}
+            <Route path="jarvis" element={<Jarvis />} />
             <Route path="admin/materials" element={<AdminMaterials />} />
             {/* Catálogos — the brand-catalog section: an index of brands, each
                 with its own page + import manner. /admin/catalog (the old

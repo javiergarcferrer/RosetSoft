@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle,
+  MessageCircle, Bot,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -43,6 +43,7 @@ const ADMIN_GROUP = {
     { to: '/admin/materials', label: 'Materiales', icon: Layers },
     { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
     { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
+    { to: '/jarvis', label: 'JARVIS', icon: Bot },
   ],
 };
 
