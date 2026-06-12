@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, Send } from 'lucide-react';
+import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, Send, ExternalLink } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -25,7 +25,7 @@ import { ProjectPaletteContext } from '../components/quote-builder/ProjectPalett
 import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.jsx';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
-import { displayPhone } from '../lib/phone.js';
+import { displayPhone, waDigits } from '../lib/phone.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
 import { useMediaQuery } from '../components/Layout.jsx';
@@ -926,14 +926,25 @@ function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
         <span className="text-[11px] text-ink-400 min-w-0 truncate">
           WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}
         </span>
-        <button
-          type="button"
-          onClick={() => setSendOpen(true)}
-          className="btn-ghost text-xs shrink-0 text-emerald-700"
-          title="Enviar la cotización por WhatsApp (enlace o PDF)"
-        >
-          <Send size={12} /> Enviar cotización
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {/* The same thread lives in the Chats inbox — jump there for the
+              full-page surface (search, other conversations). */}
+          <Link
+            to={`/chats?chat=${waDigits(phone)}`}
+            className="btn-ghost text-xs text-ink-500"
+            title="Abrir esta conversación en la bandeja de Chats"
+          >
+            <ExternalLink size={12} /> Chats
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSendOpen(true)}
+            className="btn-ghost text-xs text-emerald-700"
+            title="Enviar la cotización por WhatsApp (enlace o PDF)"
+          >
+            <Send size={12} /> Enviar cotización
+          </button>
+        </div>
       </div>
       <div className="flex-1 min-h-0">
         <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} variant="pane" />

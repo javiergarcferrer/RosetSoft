@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
@@ -13,6 +13,7 @@ import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
 import { db } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
+import { useApp } from '../../context/AppContext.jsx';
 
 /**
  * The WhatsApp conversation thread — header (contact, linked to their CRM
@@ -49,7 +50,7 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, showHeader = true }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -64,6 +65,23 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // File staged for sending (picked or pasted) + its caption — the preview
   // step between choosing a file and it actually leaving.
   const [pendingFile, setPendingFile] = useState(null);
+
+  // Quote chips on bubbles: messages sent from a quote (the editor's chat
+  // pane, the header's "Enviar cotización", campaigns) carry quoteId — map it
+  // to the human #number so the thread shows WHICH deal a message was about
+  // and deep-links to it. Bubbles of the quote being edited (contextQuoteId,
+  // set by the workspace's embedded pane) skip the chip — there it's noise.
+  const { profileId } = useApp();
+  const quotes = useLiveQuery(
+    () => (profileId ? db.quotes.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId],
+    [],
+  );
+  const quoteNumberById = useMemo(() => {
+    const map = new Map();
+    for (const q of quotes) map.set(q.id, q.number);
+    return map;
+  }, [quotes]);
   const [pendingUrl, setPendingUrl] = useState(null);
   const [caption, setCaption] = useState('');
   // Message being quoted in the composer (set from a bubble's "Responder").
@@ -303,6 +321,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             onReply={setReplyTo}
             onReact={onReact ? react : null}
             onSaveCard={onSaveContact ? setSaveTarget : null}
+            quoteChip={m.quoteId && m.quoteId !== contextQuoteId
+              ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
+              : null}
           />
         ))}
         {!thread.items.length && (
@@ -1291,7 +1312,7 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
   );
 }
 
-function Bubble({ m, prev, onReply, onReact, onSaveCard }) {
+function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
   const showDay = !prev || dayLabel(prev.createdAt) !== day;
@@ -1330,6 +1351,19 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard }) {
               <Megaphone size={10} className="shrink-0" />
               <span className="truncate">Vino de un anuncio{referral.headline ? ` · ${referral.headline}` : ''}</span>
             </div>
+          )}
+          {/* Which deal this message was about — deep-links into the quote. */}
+          {quoteChip && (
+            <Link
+              to={`/quotes/${quoteChip.id}`}
+              className={`flex items-center gap-1 text-[10px] font-semibold rounded-md px-1.5 py-0.5 mb-1 max-w-full transition-colors ${
+                out ? 'text-brand-800 bg-white/60 hover:bg-white' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'
+              }`}
+              title="Abrir la cotización"
+            >
+              <FileText size={10} className="shrink-0" />
+              <span className="truncate">Cotización{quoteChip.number != null ? ` #${quoteChip.number}` : ''}</span>
+            </Link>
           )}
           {m.templateName && (
             <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-0.5">Plantilla · {m.templateName}</div>

@@ -118,6 +118,7 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null, 
       thread={thread}
       connected={connected}
       showHeader={false}
+      contextQuoteId={quoteId}
       onSend={async (text, replyTo) => {
         const draft = draftOutboundMessage({
           phone: contact.phone, text, profileId,
