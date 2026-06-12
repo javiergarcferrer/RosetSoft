@@ -185,3 +185,11 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [ ] Blocked on user: regenerate system-user token with the page/IG/ads
   scopes (use cases were just added) and paste it into the WhatsApp card —
   the social panel self-links once the token has page visibility.
+
+## Meta full-feature loop v2 (continues the roadmap above)
+- [x] Cycle A — catalog visibility (owned_product_catalogs counts in the Social
+  panel; read-only on purpose — Shopify's Meta channel owns the feed, we only
+  surface drift) + reply-to-comment from the IG triage list (POST /replies).
+- [ ] Cycle B — campaign controls: pause/resume from JARVIS (POST campaign
+  status; needs an explicit confirm in the UI — it moves real money).
+- [ ] Cycle C — IG Stories publishing (media_type=STORIES) from the composer.

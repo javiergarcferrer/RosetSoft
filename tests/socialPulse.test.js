@@ -163,6 +163,24 @@ test('recent IG comments flatten across posts, newest first, capped at 8', () =>
   assert.ok(recentComments[0].ago);
 });
 
+test('catalogs flatten across businesses with product counts', () => {
+  const businesses = [
+    { name: 'alcover', owned_product_catalogs: { data: [
+      { name: 'WhatsApp Product Catalog', product_count: '120', vertical: 'commerce' },
+      { name: 'Shopify Product Catalog', product_count: 300 },
+    ] } },
+  ];
+  const { catalogs, recentComments } = resolveSocialPulse({
+    businesses,
+    igMedia: [{ caption: 'P', comments: { data: [{ id: 'c1', text: 'hola', username: 'ana', timestamp: new Date(NOW - 1000).toISOString() }] } }],
+  }, { now: NOW });
+  assert.equal(catalogs.length, 2);
+  assert.equal(catalogs[0].products, 120); // string count normalized
+  assert.equal(catalogs[1].products, 300);
+  assert.equal(catalogs[0].business, 'alcover');
+  assert.equal(recentComments[0].id, 'c1'); // reply needs the id
+});
+
 test('inLabel covers minutes/hours/days and clamps the past to "ahora"', () => {
   assert.equal(inLabel(NOW + 30 * 60_000, NOW), 'en 30 min');
   assert.equal(inLabel(NOW - 1, NOW), 'ahora');

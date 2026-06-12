@@ -422,6 +422,31 @@ export default function Jarvis() {
     }
   }, [refreshSettings]);
 
+  // Inline reply to an IG comment from the triage list.
+  const [replyTo, setReplyTo] = useState(null); // comment id
+  const [replyText, setReplyText] = useState('');
+  const [replyBusy, setReplyBusy] = useState(false);
+  const [replyErr, setReplyErr] = useState(null);
+  const sendReply = useCallback(async () => {
+    const message = replyText.trim();
+    if (!message || !replyTo || replyBusy) return;
+    setReplyBusy(true);
+    setReplyErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { replyComment: { commentId: replyTo, message } },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo responder');
+      setReplyTo(null);
+      setReplyText('');
+    } catch (e) {
+      setReplyErr(e?.message || 'No se pudo responder');
+    } finally {
+      setReplyBusy(false);
+    }
+  }, [replyText, replyTo, replyBusy]);
+
   // Publishing composer — posts to the Page (now/scheduled) and/or IG.
   const [pubText, setPubText] = useState('');
   const [pubImageUrl, setPubImageUrl] = useState('');
@@ -1083,11 +1108,54 @@ export default function Jarvis() {
                 <div>
                   <div className="jv-kicker mb-1.5">Comentarios IG recientes</div>
                   {social.recentComments.map((c) => (
-                    <div key={`${c.username}-${c.at}`} className="jv-social-row">
-                      <span className="name">
-                        <span style={{ color: 'var(--jv-accent)' }}>@{c.username}</span> {c.text}
-                      </span>
-                      <span className="jv-mono stat dim">{c.ago || ''}</span>
+                    <div key={c.id || `${c.username}-${c.at}`}>
+                      <div className="jv-social-row">
+                        <span className="name">
+                          <span style={{ color: 'var(--jv-accent)' }}>@{c.username}</span> {c.text}
+                        </span>
+                        <span className="jv-mono stat dim">{c.ago || ''}</span>
+                        {c.id && (
+                          <button
+                            type="button"
+                            className="jv-btn flex-none"
+                            style={{ minHeight: '1.4rem', fontSize: '0.62rem', padding: '0 0.4rem' }}
+                            onClick={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText(''); setReplyErr(null); }}
+                          >
+                            Responder
+                          </button>
+                        )}
+                      </div>
+                      {replyTo === c.id && (
+                        <div className="flex gap-2 mt-1 mb-2">
+                          <input
+                            className="jv-input"
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') sendReply(); }}
+                            placeholder={`Responder a @${c.username}…`}
+                            maxLength={500}
+                            autoFocus
+                          />
+                          <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={sendReply} disabled={!replyText.trim() || replyBusy}>
+                            {replyBusy ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {replyErr && <div className="text-xs mt-1" style={{ color: 'var(--jv-danger)' }}>{replyErr}</div>}
+                </div>
+              )}
+
+              {/* Meta product catalogs — visibility (Shopify's channel feeds them) */}
+              {social.catalogs.length > 0 && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Catálogos Meta</div>
+                  {social.catalogs.map((cat) => (
+                    <div key={`${cat.business}-${cat.name}`} className="jv-social-row">
+                      <span className="name">{cat.name}</span>
+                      <span className="jv-mono stat">{cat.products.toLocaleString('en-US')} productos</span>
+                      <span className="jv-mono stat dim">{cat.vertical || cat.business}</span>
                     </div>
                   ))}
                 </div>

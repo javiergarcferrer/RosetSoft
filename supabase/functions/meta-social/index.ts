@@ -44,7 +44,14 @@ type PublishBody = {
   scheduleAt?: number;
   targets?: Array<'facebook' | 'instagram'>;
 };
-type Body = { link?: LinkBody; test?: boolean; snapshot?: boolean; publish?: PublishBody };
+type Body = {
+  link?: LinkBody;
+  test?: boolean;
+  snapshot?: boolean;
+  publish?: PublishBody;
+  /** Reply to an IG comment from the triage list. */
+  replyComment?: { commentId?: string; message?: string };
+};
 
 /** Translate Meta's token-death message into the action that fixes it. */
 function friendly(msg: string): string {
@@ -228,6 +235,19 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── replyComment: answer an IG comment in-thread ──────────────────────
+  if (body.replyComment) {
+    const commentId = String(body.replyComment.commentId || '').trim();
+    const message = String(body.replyComment.message || '').trim();
+    if (!commentId || !message) return json({ ok: false, error: 'commentId y message requeridos' }, 400);
+    try {
+      const r = await graphPost(`${commentId}/replies`, pageToken, { message });
+      return json({ ok: true, id: r?.id });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
   // ── publish: FB Page post (now or scheduled) + optional IG image post ──
   // Per-target results: one network failing doesn't waste the other's post.
   if (body.publish) {
@@ -318,7 +338,7 @@ Deno.serve(async (req) => {
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
           // comments ride along nested — recent triage without N+1 calls
-          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink,comments.limit(3){text,username,timestamp}',
+          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink,comments.limit(3){id,text,username,timestamp}',
           limit: '6',
         }))
         : Promise.resolve(null),
@@ -350,6 +370,13 @@ Deno.serve(async (req) => {
       })),
     ]);
 
+    // Product catalogs owned by the business — visibility, not sync (Shopify's
+    // own Meta channel feeds them; we read counts so JARVIS can flag drift).
+    const catalogs = await safe('catalogs', () => graph('me/businesses', userToken, {
+      fields: 'name,owned_product_catalogs{name,product_count,vertical}',
+      limit: '5',
+    }));
+
     return json({
       ok: true,
       fetchedAt: Date.now(),
@@ -367,6 +394,7 @@ Deno.serve(async (req) => {
       adsDaily: adsDaily?.data || null,
       adCampaigns: adCampaigns?.data || null,
       scheduled: scheduled?.data || null,
+      businesses: catalogs?.data || null,
       errors,
     });
   }

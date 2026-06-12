@@ -186,6 +186,7 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   // triage feed (what people are saying that may deserve a reply).
   const recentComments = (s.igMedia || [])
     .flatMap((m) => ((m.comments?.data) || []).map((c) => ({
+      id: c.id || null,
       text: (c.text || '').slice(0, 100),
       username: c.username || '',
       at: toMs(c.timestamp),
@@ -228,6 +229,13 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     scheduled,
     posts,
     recentComments,
+    // Meta product catalogs across the business portfolios the token sees.
+    catalogs: (s.businesses || []).flatMap((b) => ((b.owned_product_catalogs?.data) || []).map((c) => ({
+      name: c.name || '—',
+      products: num(c.product_count),
+      vertical: c.vertical || '',
+      business: b.name || '',
+    }))),
     errors: s.errors || {},
     fetchedAt: s.fetchedAt || null,
   };
