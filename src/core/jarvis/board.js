@@ -13,12 +13,12 @@ const DAY = 24 * HOUR;
 
 /** Card status → HUD chip label. `scanning` is probe-transient. */
 export const STATUS_LABELS = {
-  online: 'EN LÍNEA',
-  stale: 'DESFASE',
-  standby: 'EN ESPERA',
-  offline: 'SIN CONFIG',
-  fail: 'FALLO',
-  scanning: 'ESCANEANDO',
+  online: 'En línea',
+  stale: 'Desfase',
+  standby: 'En espera',
+  offline: 'Sin config',
+  fail: 'Fallo',
+  scanning: 'Escaneando',
 };
 
 /** Spanish relative-time label ("hace 3 min", "hace 2 d"). */

@@ -1,350 +1,268 @@
-/* JARVIS — dark HUD takeover for the /jarvis surface only. Everything is
-   scoped under .jarvis so the warm app theme is untouched elsewhere. */
+/* JARVIS — ops dashboard, dark surface tuned to the Vercel design guidelines:
+   monochrome layers, semi-transparent hairline borders + layered shadows
+   (ambient + direct), semantic color ONLY where it carries state, and motion
+   only in response to events — no autoplay decoration. Scoped under .jarvis
+   so the warm app theme is untouched elsewhere. */
 
 .jarvis {
-  --jv-bg: #04070f;
-  --jv-panel: rgba(9, 18, 33, 0.78);
-  --jv-line: rgba(75, 225, 255, 0.16);
-  --jv-line-strong: rgba(75, 225, 255, 0.45);
-  --jv-cyan: #4be1ff;
-  --jv-cyan-soft: rgba(75, 225, 255, 0.6);
-  --jv-green: #3dffb0;
-  --jv-amber: #ffb454;
-  --jv-red: #ff5470;
-  --jv-violet: #b48bff;
-  --jv-text: #c8ecff;
-  --jv-dim: #5f86a8;
+  --jv-bg: #000;
+  --jv-panel: #0a0a0a;
+  --jv-card: #111;
+  --jv-border: rgba(255, 255, 255, 0.09);
+  --jv-border-strong: rgba(255, 255, 255, 0.2);
+  --jv-fg: #ededed;
+  --jv-muted: #a1a1a1;
+  --jv-faint: #707070;
+  --jv-accent: #52a8ff;
+  --jv-success: #4cc38a;
+  --jv-warning: #f5a623;
+  --jv-danger: #ff6166;
+  --jv-scan: #bf7af0;
 
-  position: relative;
+  color-scheme: dark;
   min-height: 100%;
-  background:
-    radial-gradient(1100px 500px at 75% -10%, rgba(75, 225, 255, 0.09), transparent 60%),
-    radial-gradient(800px 420px at 10% 110%, rgba(180, 139, 255, 0.07), transparent 60%),
-    var(--jv-bg);
-  color: var(--jv-text);
+  background: var(--jv-bg);
+  color: var(--jv-fg);
   font-variant-numeric: tabular-nums;
   padding: 1rem 1rem 5rem;
-  isolation: isolate;
-}
-
-/* Holo grid + drifting scanline, behind everything. */
-.jarvis::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(rgba(75, 225, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(75, 225, 255, 0.05) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(ellipse at 50% 18%, black 30%, transparent 78%);
-}
-.jarvis::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(75, 225, 255, 0.06) 50%, transparent 100%);
-  background-size: 100% 220px;
-  background-repeat: no-repeat;
-  animation: jv-scanline 9s linear infinite;
-  opacity: 0.7;
-}
-
-@keyframes jv-scanline {
-  0% { background-position: 0 -240px; }
-  100% { background-position: 0 120vh; }
 }
 
 /* ── typography ──────────────────────────────────────────────────────── */
 .jv-mono {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  letter-spacing: 0.04em;
 }
 .jv-title {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: clamp(1.3rem, 3.2vw, 2rem);
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: var(--jv-cyan);
-  text-shadow: 0 0 18px rgba(75, 225, 255, 0.55), 0 0 50px rgba(75, 225, 255, 0.25);
-  animation: jv-flicker 7s linear infinite;
+  font-size: clamp(1.25rem, 2.6vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--jv-fg);
 }
 .jv-kicker {
-  font-size: 0.62rem;
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-  color: var(--jv-dim);
+  font-size: 0.75rem;
+  color: var(--jv-faint);
 }
 
-@keyframes jv-flicker {
-  0%, 91%, 94%, 97%, 100% { opacity: 1; }
-  92%, 95% { opacity: 0.55; }
-  93%, 96% { opacity: 0.85; }
-}
-
-/* ── panels ──────────────────────────────────────────────────────────── */
+/* ── panels — hairline border + two-layer shadow for a crisp edge ────── */
 .jv-panel {
-  position: relative;
   background: var(--jv-panel);
-  border: 1px solid var(--jv-line);
-  border-radius: 0.75rem;
-  backdrop-filter: blur(7px);
-  box-shadow: 0 0 0 1px rgba(4, 7, 15, 0.4), 0 18px 50px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--jv-border);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 8px 24px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
-/* Corner brackets, the HUD signature. */
-.jv-panel::before,
-.jv-panel::after {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--jv-line-strong);
-  pointer-events: none;
-}
-.jv-panel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-top-left-radius: 0.75rem; }
-.jv-panel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-bottom-right-radius: 0.75rem; }
-
 .jv-panel-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.65rem 0.9rem;
-  border-bottom: 1px solid var(--jv-line);
-  font-size: 0.66rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--jv-cyan-soft);
+  border-bottom: 1px solid var(--jv-border);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--jv-muted);
 }
 
-.jv-rise { animation: jv-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-@keyframes jv-rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── arc reactor ─────────────────────────────────────────────────────── */
-.jv-reactor {
+/* ── integrity gauge — value arc transitions only when the value moves ── */
+.jv-gauge {
   position: relative;
   width: 168px;
   height: 168px;
   margin: 0 auto;
 }
-.jv-reactor .ring {
+.jv-gauge svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.jv-gauge .track {
+  fill: none;
+  stroke: var(--jv-border);
+  stroke-width: 6;
+}
+.jv-gauge .value {
+  fill: none;
+  stroke: var(--jv-fg);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 326.73;
+  transition: stroke-dashoffset 0.6s ease;
+}
+.jv-gauge .reading {
   position: absolute;
   inset: 0;
-  border-radius: 9999px;
-  background: conic-gradient(from 0deg, transparent 0 70%, var(--jv-cyan) 86%, transparent 100%);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black calc(100% - 3px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black calc(100% - 3px));
-  animation: jv-spin 6s linear infinite;
-}
-.jv-reactor .ring.r2 {
-  inset: 16px;
-  animation-duration: 4s;
-  animation-direction: reverse;
-  opacity: 0.7;
-}
-.jv-reactor .ring.r3 { inset: 32px; animation-duration: 9s; opacity: 0.45; }
-.jv-reactor .core {
-  position: absolute;
-  inset: 46px;
-  border-radius: 9999px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle, rgba(75, 225, 255, 0.28), rgba(75, 225, 255, 0.06) 65%, transparent);
-  border: 1px solid var(--jv-line-strong);
-  box-shadow: 0 0 26px rgba(75, 225, 255, 0.4), inset 0 0 22px rgba(75, 225, 255, 0.25);
-  animation: jv-pulse 2.6s ease-in-out infinite;
+  gap: 0.15rem;
 }
-.jv-reactor .core b {
-  font-size: 1.5rem;
-  color: #eafcff;
-  text-shadow: 0 0 14px var(--jv-cyan);
+.jv-gauge .reading b {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
-
-@keyframes jv-spin { to { transform: rotate(360deg); } }
-@keyframes jv-pulse {
-  0%, 100% { box-shadow: 0 0 22px rgba(75, 225, 255, 0.35), inset 0 0 18px rgba(75, 225, 255, 0.2); }
-  50% { box-shadow: 0 0 44px rgba(75, 225, 255, 0.65), inset 0 0 30px rgba(75, 225, 255, 0.4); }
+.jv-gauge .reading span {
+  font-size: 0.72rem;
+  color: var(--jv-faint);
 }
 
-/* ── status chips + blips ────────────────────────────────────────────── */
+/* ── status chips — a static dot carries the state; no blinking ─────── */
 .jv-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.6rem;
-  letter-spacing: 0.18em;
-  padding: 0.18rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.1rem 0.5rem;
   border-radius: 9999px;
-  border: 1px solid currentColor;
-  text-transform: uppercase;
+  border: 1px solid var(--jv-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--jv-muted);
 }
 .jv-chip .dot {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
   background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-  animation: jv-blink 1.8s ease-in-out infinite;
 }
-.jv-online { color: var(--jv-green); }
-.jv-stale { color: var(--jv-amber); }
-.jv-standby { color: var(--jv-cyan-soft); }
-.jv-offline { color: var(--jv-dim); }
-.jv-fail { color: var(--jv-red); }
-.jv-scanning { color: var(--jv-violet); }
+.jv-online { color: var(--jv-success); }
+.jv-stale { color: var(--jv-warning); }
+.jv-standby { color: var(--jv-muted); }
+.jv-offline { color: var(--jv-faint); }
+.jv-fail { color: var(--jv-danger); }
+.jv-scanning { color: var(--jv-scan); }
 
-@keyframes jv-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* ── integration cards ───────────────────────────────────────────────── */
+/* ── integration cards — interaction raises contrast, nothing moves ─── */
 .jv-card {
-  position: relative;
-  border: 1px solid var(--jv-line);
-  border-radius: 0.6rem;
+  border: 1px solid var(--jv-border);
+  border-radius: 6px;
   padding: 0.7rem 0.8rem;
-  background: rgba(7, 14, 26, 0.65);
-  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
-  overflow: hidden;
+  background: var(--jv-card);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .jv-card:hover {
-  border-color: var(--jv-line-strong);
-  box-shadow: 0 0 22px rgba(75, 225, 255, 0.14);
-  transform: translateY(-2px);
+  border-color: var(--jv-border-strong);
+  background: #161616;
 }
-/* Sweep overlay while a probe is in flight. */
-.jv-card.is-scanning::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(180, 139, 255, 0.18) 50%, transparent 70%);
-  background-size: 250% 100%;
-  animation: jv-sweep-x 1.1s linear infinite;
-}
-@keyframes jv-sweep-x {
-  from { background-position: 130% 0; }
-  to { background-position: -130% 0; }
+/* In-flight probe (a response to pressing Diagnóstico). */
+.jv-card.is-scanning {
+  border-color: rgba(191, 122, 240, 0.45);
 }
 
-/* ── radar ───────────────────────────────────────────────────────────── */
-.jv-radar { position: relative; }
-.jv-radar .beam {
-  transform-origin: 50px 50px;
-  animation: jv-spin 5s linear infinite;
-}
-.jv-radar .blip {
-  animation: jv-blink 2.2s ease-in-out infinite;
+/* ── status map (radar without the theatrics) ────────────────────────── */
+.jv-radar circle.grid-ring {
+  fill: none;
+  stroke: var(--jv-border);
+  stroke-width: 0.4;
 }
 
 /* ── uplink console ──────────────────────────────────────────────────── */
 .jv-console {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   font-size: 0.8rem;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .jv-console .row { padding: 0.3rem 0; display: flex; gap: 0.6rem; align-items: baseline; }
-.jv-console .who { flex: none; font-size: 0.62rem; letter-spacing: 0.14em; padding-top: 0.1rem; }
-.jv-console .who.user { color: var(--jv-amber); }
-.jv-console .who.claude { color: var(--jv-cyan); text-shadow: 0 0 10px rgba(75, 225, 255, 0.5); }
-.jv-console .body { white-space: pre-wrap; word-break: break-word; color: var(--jv-text); }
+.jv-console .who { flex: none; font-size: 0.7rem; padding-top: 0.1rem; }
+.jv-console .who.user { color: var(--jv-muted); }
+.jv-console .who.claude { color: var(--jv-accent); }
+.jv-console .body { white-space: pre-wrap; word-break: break-word; color: var(--jv-fg); }
+/* Streaming caret — appears only while a reply is arriving (event-driven). */
 .jv-caret {
   display: inline-block;
   width: 0.55em;
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--jv-cyan);
-  box-shadow: 0 0 8px var(--jv-cyan);
-  animation: jv-blink 0.9s steps(1) infinite;
+  background: var(--jv-accent);
+  animation: jv-blink 1s steps(1) infinite;
+}
+@keyframes jv-blink {
+  50% { opacity: 0; }
 }
 
 .jv-input {
   width: 100%;
-  background: rgba(4, 9, 18, 0.9);
-  border: 1px solid var(--jv-line);
-  border-radius: 0.5rem;
-  color: #eafcff;
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 0.85rem;
-  padding: 0.6rem 0.75rem;
+  background: #000;
+  border: 1px solid var(--jv-border);
+  border-radius: 6px;
+  color: var(--jv-fg);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 2.25rem;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .jv-input:focus {
-  border-color: var(--jv-cyan);
-  box-shadow: 0 0 0 1px var(--jv-cyan), 0 0 18px rgba(75, 225, 255, 0.25);
+  border-color: var(--jv-accent);
+  box-shadow: 0 0 0 3px rgba(82, 168, 255, 0.25);
 }
-.jv-input::placeholder { color: var(--jv-dim); }
+.jv-input::placeholder { color: var(--jv-faint); }
+/* ≥16px on small screens so iOS Safari doesn't auto-zoom the console. */
+@media (max-width: 640px) {
+  .jv-input { font-size: 1rem; }
+}
 
+/* ── buttons — ghost by default, solid for the primary action ────────── */
 .jv-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
-  border: 1px solid var(--jv-line-strong);
-  color: var(--jv-cyan);
-  background: rgba(75, 225, 255, 0.08);
-  border-radius: 0.5rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  padding: 0.55rem 0.9rem;
-  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+  border: 1px solid var(--jv-border-strong);
+  color: var(--jv-fg);
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0 0.75rem;
+  min-height: 2.25rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.jv-btn:hover { background: rgba(75, 225, 255, 0.16); box-shadow: 0 0 18px rgba(75, 225, 255, 0.3); }
-.jv-btn:active { transform: scale(0.97); }
+.jv-btn:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.35); }
+.jv-btn:active { background: rgba(255, 255, 255, 0.12); }
 .jv-btn:disabled { opacity: 0.45; pointer-events: none; }
+.jv-btn-primary {
+  background: var(--jv-fg);
+  border-color: transparent;
+  color: #0a0a0a;
+}
+.jv-btn-primary:hover { background: #fff; border-color: transparent; }
+.jv-btn-primary:active { background: #d4d4d4; }
 
 /* ── activity feed ───────────────────────────────────────────────────── */
 .jv-feed .item {
   display: flex;
   gap: 0.55rem;
   align-items: baseline;
-  padding: 0.32rem 0;
-  border-bottom: 1px dashed rgba(75, 225, 255, 0.08);
+  padding: 0.34rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 0.76rem;
 }
+.jv-feed .item:last-child { border-bottom: 0; }
 .jv-feed .tag {
   flex: none;
-  font-size: 0.6rem;
-  color: var(--jv-violet);
-  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  color: var(--jv-faint);
 }
-.jv-feed .tag.commit { color: var(--jv-green); }
+.jv-feed .tag.commit { color: var(--jv-muted); }
+.jv-feed .tag.deploy { color: var(--jv-accent); }
 
 /* ── stat counters ───────────────────────────────────────────────────── */
 .jv-stat b {
   display: block;
-  font-size: 1.45rem;
-  color: #eafcff;
-  text-shadow: 0 0 14px rgba(75, 225, 255, 0.5);
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--jv-fg);
 }
 .jv-stat span {
-  font-size: 0.6rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--jv-dim);
+  font-size: 0.72rem;
+  color: var(--jv-faint);
 }
 
-/* Calm everything for users who asked for it. */
 @media (prefers-reduced-motion: reduce) {
-  .jarvis::after,
-  .jv-title,
-  .jv-reactor .ring,
-  .jv-reactor .core,
-  .jv-radar .beam,
-  .jv-radar .blip,
-  .jv-chip .dot,
-  .jv-caret,
-  .jv-card.is-scanning::after,
-  .jv-rise {
-    animation: none !important;
-  }
+  .jv-caret { animation: none; }
+  .jv-gauge .value { transition: none; }
 }

@@ -303,10 +303,10 @@ export default function Jarvis() {
   if (!isAdmin) {
     return (
       <div className="jarvis flex items-center justify-center">
-        <div className="jv-panel jv-rise p-8 text-center max-w-sm">
+        <div className="jv-panel p-8 text-center max-w-sm">
           <ShieldAlert size={28} className="mx-auto mb-3 jv-fail" />
-          <div className="jv-title" style={{ fontSize: '1rem' }}>ACCESO RESTRINGIDO</div>
-          <p className="text-sm mt-2" style={{ color: 'var(--jv-dim)' }}>
+          <div className="jv-title" style={{ fontSize: '1rem' }}>Acceso restringido</div>
+          <p className="text-sm mt-2" style={{ color: 'var(--jv-muted)' }}>
             El núcleo JARVIS solo responde al administrador.
           </p>
         </div>
@@ -317,20 +317,20 @@ export default function Jarvis() {
   return (
     <div className="jarvis">
       {/* ── HUD header ─────────────────────────────────────────────── */}
-      <header className="jv-rise flex flex-wrap items-end justify-between gap-3 px-1 pb-4">
+      <header className="flex flex-wrap items-end justify-between gap-3 px-1 pb-4">
         <div>
           <div className="jv-kicker">Roset Ops Core · v{String(BUILD.sha || '').slice(0, 7) || 'dev'}</div>
-          <h1 className="jv-title">J.A.R.V.I.S</h1>
+          <h1 className="jv-title">JARVIS</h1>
         </div>
-        <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-dim)' }}>
-          <div style={{ color: 'var(--jv-cyan)', fontSize: '1.05rem' }}>
+        <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-muted)' }}>
+          <div style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
             {clock.toLocaleTimeString('es-DO', { hour12: false })}
           </div>
           <div>{clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
           <div className="mt-1">
             <StatusChip
               status={navigator.onLine ? 'online' : 'fail'}
-              label={navigator.onLine ? 'ENLACE ACTIVO' : 'SIN RED'}
+              label={navigator.onLine ? 'Enlace activo' : 'Sin red'}
             />
           </div>
         </div>
@@ -339,23 +339,30 @@ export default function Jarvis() {
       <div className="grid gap-4 xl:grid-cols-[280px_1fr_300px]">
         {/* ── left column: reactor + stats ─────────────────────────── */}
         <div className="space-y-4">
-          <section className="jv-panel jv-rise p-4">
-            <div className="jv-reactor">
-              <div className="ring" />
-              <div className="ring r2" />
-              <div className="ring r3" />
-              <div className="core">
+          <section className="jv-panel p-4">
+            <div className="jv-gauge">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle className="track" cx="60" cy="60" r="52" />
+                <circle
+                  className="value"
+                  cx="60"
+                  cy="60"
+                  r="52"
+                  style={{ strokeDashoffset: 326.73 * (1 - integrityShown / 100) }}
+                />
+              </svg>
+              <div className="reading">
                 <b>{integrityShown}%</b>
-                <span className="jv-kicker">integridad</span>
+                <span>Integridad</span>
               </div>
             </div>
-            <p className="jv-mono text-center text-xs mt-3" style={{ color: 'var(--jv-dim)' }}>
+            <p className="jv-mono text-center text-xs mt-3" style={{ color: 'var(--jv-muted)' }}>
               {board.filter((c) => c.status === 'online').length} sistemas en línea ·{' '}
               {board.filter((c) => c.status === 'fail' || c.status === 'offline').length} fuera
             </p>
           </section>
 
-          <section className="jv-panel jv-rise" style={{ animationDelay: '60ms' }}>
+          <section className="jv-panel">
             <div className="jv-panel-head"><Activity size={12} /> Telemetría</div>
             <div className="grid grid-cols-2 gap-3 p-4">
               <div className="jv-stat"><b>{nQuotes}</b><span>Cotizaciones</span></div>
@@ -367,7 +374,7 @@ export default function Jarvis() {
         </div>
 
         {/* ── center: integration grid ─────────────────────────────── */}
-        <section className="jv-panel jv-rise" style={{ animationDelay: '120ms' }}>
+        <section className="jv-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><Satellite size={12} /> Integraciones</span>
             <button type="button" className="jv-btn" onClick={runDiagnostics} disabled={scanning}>
@@ -380,14 +387,14 @@ export default function Jarvis() {
               <div key={c.id} className={`jv-card ${c.status === 'scanning' ? 'is-scanning' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="jv-mono text-sm" style={{ color: '#eafcff' }}>{c.name}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--jv-dim)' }}>{c.desc}</div>
+                    <div className="jv-mono text-sm" style={{ color: 'var(--jv-fg)' }}>{c.name}</div>
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--jv-muted)' }}>{c.desc}</div>
                   </div>
                   <StatusChip status={c.status} label={c.statusLabel} />
                 </div>
-                <div className="jv-mono text-xs mt-2 flex items-center justify-between" style={{ color: 'var(--jv-cyan-soft)' }}>
+                <div className="jv-mono text-xs mt-2 flex items-center justify-between" style={{ color: 'var(--jv-muted)' }}>
                   <span>{c.detail}</span>
-                  <span style={{ color: 'var(--jv-dim)' }}>
+                  <span style={{ color: 'var(--jv-muted)' }}>
                     {c.latencyMs != null ? `${c.latencyMs} ms` : c.ago || ''}
                   </span>
                 </div>
@@ -398,44 +405,40 @@ export default function Jarvis() {
 
         {/* ── right column: radar + deploy feed ────────────────────── */}
         <div className="space-y-4">
-          <section className="jv-panel jv-rise p-3" style={{ animationDelay: '180ms' }}>
-            <div className="jv-panel-head -m-3 mb-2"><Radar size={12} /> Barrido orbital</div>
+          <section className="jv-panel p-3">
+            <div className="jv-panel-head -m-3 mb-2"><Radar size={12} /> Mapa de estado</div>
             <svg viewBox="0 0 100 100" className="jv-radar w-full">
               {[18, 30, 42].map((r) => (
-                <circle key={r} cx="50" cy="50" r={r} fill="none" stroke="rgba(75,225,255,0.16)" strokeWidth="0.4" />
+                <circle key={r} className="grid-ring" cx="50" cy="50" r={r} />
               ))}
-              <line x1="5" y1="50" x2="95" y2="50" stroke="rgba(75,225,255,0.1)" strokeWidth="0.3" />
-              <line x1="50" y1="5" x2="50" y2="95" stroke="rgba(75,225,255,0.1)" strokeWidth="0.3" />
-              <path className="beam" d="M50 50 L50 5 A45 45 0 0 1 81.8 18.2 Z" fill="rgba(75,225,255,0.12)" />
               {blips.map((b) => (
                 <circle
                   key={b.id}
-                  className="blip"
                   cx={b.x}
                   cy={b.y}
                   r="1.8"
                   fill={
-                    b.status === 'online' ? 'var(--jv-green)'
-                      : b.status === 'fail' ? 'var(--jv-red)'
-                        : b.status === 'stale' ? 'var(--jv-amber)'
-                          : b.status === 'offline' ? '#3a5571'
-                            : 'var(--jv-cyan)'
+                    b.status === 'online' ? 'var(--jv-success)'
+                      : b.status === 'fail' ? 'var(--jv-danger)'
+                        : b.status === 'stale' ? 'var(--jv-warning)'
+                          : b.status === 'offline' ? 'var(--jv-faint)'
+                            : 'var(--jv-muted)'
                   }
                 >
                   <title>{b.name}</title>
                 </circle>
               ))}
-              <circle cx="50" cy="50" r="2.4" fill="var(--jv-cyan)" />
+              <circle cx="50" cy="50" r="2" fill="var(--jv-fg)" />
             </svg>
           </section>
 
-          <section className="jv-panel jv-rise" style={{ animationDelay: '240ms' }}>
+          <section className="jv-panel">
             <div className="jv-panel-head"><Cpu size={12} /> Cambios en vigor</div>
             <div className="jv-feed jv-mono p-3 max-h-72 overflow-y-auto">
               {BUILD.builtAt ? (
                 <div className="item">
                   <span className="tag">deploy</span>
-                  <span style={{ color: 'var(--jv-text)' }}>
+                  <span style={{ color: 'var(--jv-fg)' }}>
                     Build {String(BUILD.sha || '').slice(0, 7)} · {BUILD.ref || 'main'} · {agoLabel(BUILD.builtAt, now)}
                   </span>
                 </div>
@@ -443,12 +446,12 @@ export default function Jarvis() {
               {activity.map((e) => (
                 <div key={e.id} className="item">
                   <span className={`tag ${e.type}`}>{e.type === 'commit' ? String(e.tag).slice(0, 7) : e.tag}</span>
-                  <span style={{ color: 'var(--jv-text)' }}>{e.text}</span>
-                  <span className="ml-auto flex-none" style={{ color: 'var(--jv-dim)', fontSize: '0.6rem' }}>{e.ago || ''}</span>
+                  <span style={{ color: 'var(--jv-fg)' }}>{e.text}</span>
+                  <span className="ml-auto flex-none" style={{ color: 'var(--jv-muted)', fontSize: '0.6rem' }}>{e.ago || ''}</span>
                 </div>
               ))}
               {!activity.length && !BUILD.builtAt && (
-                <div className="text-xs py-2" style={{ color: 'var(--jv-dim)' }}>
+                <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
                   Sin telemetría de despliegue en esta build.
                 </div>
               )}
@@ -458,10 +461,10 @@ export default function Jarvis() {
       </div>
 
       {/* ── Claude uplink console ─────────────────────────────────────── */}
-      <section className="jv-panel jv-rise mt-4" style={{ animationDelay: '300ms' }}>
+      <section className="jv-panel mt-4">
         <div className="jv-panel-head justify-between">
           <span className="flex items-center gap-2"><Bot size={12} /> Enlace Claude</span>
-          <span className="normal-case tracking-normal" style={{ color: 'var(--jv-dim)', letterSpacing: '0.05em' }}>
+          <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>
             {claudeLinked
               ? `Canal en vivo · ${settings?.claudeModel || 'claude-opus-4-8'} responde al instante`
               : pendingCount
@@ -472,8 +475,8 @@ export default function Jarvis() {
         <div className="jv-console p-4 max-h-80 overflow-y-auto">
           {thread.length === 0 && (
             <div className="row">
-              <span className="who claude">CLAUDE</span>
-              <span className="body" style={{ color: 'var(--jv-dim)' }}>
+              <span className="who claude">claude</span>
+              <span className="body" style={{ color: 'var(--jv-muted)' }}>
                 {claudeLinked
                   ? 'Canal en vivo. Pregunta lo que necesites — respondo al instante.'
                   : 'Canal de enlace establecido. Vincula tu llave API de Anthropic para activar respuestas en vivo.'}
@@ -483,7 +486,7 @@ export default function Jarvis() {
           {thread.map((m) => (
             <div key={m.id} className="row">
               <span className={`who ${m.role === 'claude' ? 'claude' : 'user'}`}>
-                {m.role === 'claude' ? 'CLAUDE' : '> TÚ'}
+                {m.role === 'claude' ? 'claude' : 'tú'}
               </span>
               {m.role === 'claude' && m.id === lastClaudeId
                 ? <TypeLine text={m.content} />
@@ -492,7 +495,7 @@ export default function Jarvis() {
                 <span className="ml-auto flex-none">
                   <StatusChip
                     status={m.status === 'done' ? 'online' : m.status === 'seen' ? 'scanning' : 'standby'}
-                    label={m.status === 'done' ? 'HECHO' : m.status === 'seen' ? 'EN CURSO' : 'EN COLA'}
+                    label={m.status === 'done' ? 'Hecho' : m.status === 'seen' ? 'En curso' : 'En cola'}
                   />
                 </span>
               )}
@@ -500,8 +503,8 @@ export default function Jarvis() {
           ))}
           {sending && claudeLinked && (
             <div className="row">
-              <span className="who claude">CLAUDE</span>
-              <span className="body" style={{ color: 'var(--jv-dim)' }}>
+              <span className="who claude">claude</span>
+              <span className="body" style={{ color: 'var(--jv-muted)' }}>
                 procesando<span className="jv-caret" />
               </span>
             </div>
@@ -509,7 +512,7 @@ export default function Jarvis() {
           <div ref={consoleEndRef} />
         </div>
         {!claudeLinked && (
-          <div className="p-3 border-t" style={{ borderColor: 'var(--jv-line)' }}>
+          <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
             <div className="jv-kicker mb-2">Vincular Claude API</div>
             <div className="flex gap-2">
               <input
@@ -521,19 +524,19 @@ export default function Jarvis() {
                 autoComplete="new-password"
                 spellCheck={false}
               />
-              <button type="button" className="jv-btn flex-none" onClick={linkClaude} disabled={!apiKey.trim() || linking}>
+              <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkClaude} disabled={!apiKey.trim() || linking}>
                 {linking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
               </button>
             </div>
             {linkError && (
-              <div className="text-xs mt-2" style={{ color: 'var(--jv-red)' }}>{linkError}</div>
+              <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{linkError}</div>
             )}
-            <p className="text-xs mt-2" style={{ color: 'var(--jv-dim)' }}>
+            <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
               La llave se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
             </p>
           </div>
         )}
-        <div className="p-3 border-t" style={{ borderColor: 'var(--jv-line)' }}>
+        <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
           <div className="flex gap-2">
             <input
               className="jv-input"
@@ -545,12 +548,12 @@ export default function Jarvis() {
                 : 'Transmitir directiva — quedará en cola hasta vincular la llave API'}
               maxLength={2000}
             />
-            <button type="button" className="jv-btn flex-none" onClick={transmit} disabled={!draft.trim() || sending}>
+            <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={transmit} disabled={!draft.trim() || sending}>
               <Send size={12} /> Transmitir
             </button>
           </div>
           {uplinkError && (
-            <div className="text-xs mt-2" style={{ color: 'var(--jv-red)' }}>{uplinkError}</div>
+            <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{uplinkError}</div>
           )}
         </div>
       </section>
