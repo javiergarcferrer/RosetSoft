@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igMedia, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
+    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
       safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
       cfg.ig_user_id
         ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
@@ -224,26 +224,40 @@ Deno.serve(async (req) => {
           metric: 'reach', period: 'day', since: String(since), until: String(until),
         }))
         : Promise.resolve(null),
+      // Daily audience metrics — follower growth + profile views. Separate
+      // call: mixing metric families 400s the whole insights request.
+      cfg.ig_user_id
+        ? safe('igAudience', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
+          metric: 'follower_count,profile_views',
+          period: 'day', since: String(since), until: String(until),
+        }))
+        : Promise.resolve(null),
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
           fields: 'caption,like_count,comments_count,timestamp,media_type,permalink',
           limit: '6',
         }))
         : Promise.resolve(null),
+      // Facebook Page daily engagement + unique reach (deprecation-prone
+      // metric family — fails independently; the panel just omits it).
+      safe('pageInsights', () => graph(`${cfg.page_id}/insights`, pageToken, {
+        metric: 'page_post_engagements,page_impressions_unique',
+        period: 'day', since: String(since), until: String(until),
+      })),
       cfg.ad_account_id
         ? safe('adAccount', () => graph(cfg.ad_account_id, userToken, { fields: 'name,currency' }))
         : Promise.resolve(null),
       cfg.ad_account_id
         ? safe('ads', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
           date_preset: 'last_28d', time_increment: '1', level: 'account',
-          fields: 'spend,impressions,clicks,reach,date_start',
+          fields: 'spend,impressions,clicks,reach,actions,date_start',
           limit: '40',
         }))
         : Promise.resolve(null),
       cfg.ad_account_id
         ? safe('campaigns', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
           date_preset: 'last_28d', level: 'campaign',
-          fields: 'campaign_name,spend,impressions,clicks',
+          fields: 'campaign_name,spend,impressions,clicks,actions',
           limit: '10',
         }))
         : Promise.resolve(null),
@@ -263,7 +277,9 @@ Deno.serve(async (req) => {
       ig: igProfile,
       adAccount,
       igReach: igReach?.data || null,
+      igAudience: igAudience?.data || null,
       igMedia: igMedia?.data || null,
+      pageInsights: pageInsights?.data || null,
       adsDaily: adsDaily?.data || null,
       adCampaigns: adCampaigns?.data || null,
       scheduled: scheduled?.data || null,

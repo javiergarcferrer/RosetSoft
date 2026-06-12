@@ -59,6 +59,53 @@ test('IG reach series reads the insights metric rows; campaigns sort by spend', 
   assert.deepEqual(campaigns.map((c) => c.name), ['A', 'B']);
 });
 
+test('ad results pick ONE action type by priority and never mix', () => {
+  const rows = [{
+    date_start: '2026-06-10',
+    spend: '60',
+    clicks: '30',
+    impressions: '1000',
+    actions: [
+      { action_type: 'link_click', value: '30' },
+      { action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '12' },
+    ],
+  }];
+  const { kpis, campaigns } = resolveSocialPulse({
+    adsDaily: rows,
+    adCampaigns: [{ campaign_name: 'C', spend: '60', clicks: '30', impressions: '1000', actions: rows[0].actions }],
+  }, { now: NOW });
+  // conversations outrank link clicks
+  assert.equal(kpis.resultsLabel, 'conversaciones');
+  assert.equal(kpis.results7, 12);
+  assert.equal(kpis.costPerResult7, 5); // 60 / 12
+  assert.equal(campaigns[0].results, 12);
+});
+
+test('no actions at all → null results label and no cost per result', () => {
+  const { kpis } = resolveSocialPulse({
+    adsDaily: [{ date_start: '2026-06-10', spend: '50', clicks: '0', impressions: '100' }],
+  }, { now: NOW });
+  assert.equal(kpis.resultsLabel, null);
+  assert.equal(kpis.results7, 0);
+  assert.equal(kpis.costPerResult7, null);
+});
+
+test('IG audience and Page insights series sum the right metric rows', () => {
+  const igAudience = [
+    { name: 'follower_count', values: [{ value: 2 }, { value: 3 }] },
+    { name: 'profile_views', values: [{ value: 10 }, { value: 5 }] },
+  ];
+  const pageInsights = [
+    { name: 'page_post_engagements', values: Array.from({ length: 14 }, (_, i) => ({ value: i < 7 ? 1 : 4 })) },
+  ];
+  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, pageInsights }, { now: NOW });
+  assert.equal(kpis.newFollowers7, 5);
+  assert.equal(kpis.profileViews7, 15);
+  assert.deepEqual(followerSeries, [2, 3]);
+  assert.equal(kpis.pageEngagement7, 28);
+  assert.equal(kpis.pageEngagementDeltaPct, 300); // 28 vs 7
+});
+
 test('scheduled posts: ISO and unix-second timestamps both parse; past drops; soonest first', () => {
   const { scheduled } = resolveSocialPulse({
     scheduled: [

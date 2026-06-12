@@ -871,11 +871,48 @@ export default function Jarvis() {
                       : 'sin clics aún'}
                   </span>
                 </div>
-                <div className="jv-kpi">
-                  <span className="label">CTR · 7d</span>
-                  <b className="jv-mono">{social.kpis.ctr7Pct != null ? `${social.kpis.ctr7Pct.toFixed(2)}%` : '—'}</b>
-                  <span className="sub">clics / impresiones</span>
-                </div>
+                {social.kpis.resultsLabel ? (
+                  <div className="jv-kpi">
+                    <span className="label">Resultados ads · 7d</span>
+                    <b className="jv-mono">{social.kpis.results7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      {social.kpis.resultsLabel}
+                      {social.kpis.costPerResult7 != null
+                        ? ` · ${social.kpis.costPerResult7.toFixed(2)}${social.adCurrency ? ` ${social.adCurrency}` : ''} c/u`
+                        : ''}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="jv-kpi">
+                    <span className="label">CTR · 7d</span>
+                    <b className="jv-mono">{social.kpis.ctr7Pct != null ? `${social.kpis.ctr7Pct.toFixed(2)}%` : '—'}</b>
+                    <span className="sub">clics / impresiones</span>
+                  </div>
+                )}
+                {social.hasIg && (
+                  <div className="jv-kpi">
+                    <span className="label">Perfil IG · 7d</span>
+                    <b className="jv-mono">{social.kpis.profileViews7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      visitas · {social.kpis.newFollowers7 >= 0 ? '+' : ''}{social.kpis.newFollowers7} seguidores
+                    </span>
+                  </div>
+                )}
+                {social.kpis.pageEngagement7 > 0 && (
+                  <div className="jv-kpi">
+                    <span className="label">Interacción FB · 7d</span>
+                    <b className="jv-mono">{social.kpis.pageEngagement7.toLocaleString('en-US')}</b>
+                    <span className="sub">
+                      {social.kpis.pageEngagementDeltaPct != null
+                        ? (
+                          <span className={`jv-delta ${social.kpis.pageEngagementDeltaPct >= 0 ? 'up' : 'down'}`}>
+                            {social.kpis.pageEngagementDeltaPct >= 0 ? '+' : ''}{social.kpis.pageEngagementDeltaPct}% vs 7d ant.
+                          </span>
+                        )
+                        : 'interacciones con publicaciones'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {(social.spendSeries.length > 1 || social.reachSeries.length > 1) && (
@@ -925,7 +962,9 @@ export default function Jarvis() {
                           {social.adCurrency ? ` ${social.adCurrency}` : ''}
                         </span>
                         <span className="jv-mono stat dim">
-                          {c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
+                          {c.results != null && social.kpis.resultsLabel
+                            ? `${c.results} ${social.kpis.resultsLabel}`
+                            : c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
                         </span>
                       </div>
                     ))}

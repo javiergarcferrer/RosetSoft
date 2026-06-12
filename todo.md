@@ -156,3 +156,27 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 ## Notes (found, already resolved — no action)
 - The `decorator_billing` migration comment said the trade-discount default was "15%" while
   `professionals.default_commission_pct` defaulted to 10%. The new floor rate (15%) reconciled this.
+
+---
+
+# Meta integration roadmap (JARVIS session — coordinating with the review loop)
+
+Owner: the jarvis-dynamic-react-ui session. Reviewers: please flag findings on
+these files via commits to main or notes here — this session reconciles on a
+recurring loop (fetch → merge → fix → continue).
+
+Surface: `supabase/functions/meta-social/index.ts` (Graph reads),
+`src/core/jarvis/social.js` (pure VM, pinned by tests/socialPulse.test.js),
+Social · Meta panel in `src/pages/Jarvis.jsx`.
+
+- [x] Pass 1 — analytics depth: IG follower/profile-view daily series, FB page
+  engagement (deprecation-tolerant), ad RESULTS (priority: messaging
+  conversations > leads > link clicks) + cost per result, per-campaign results.
+- [ ] Pass 2 — ads↔sales bridge: overlay ad spend vs quotes created in the
+  Pulso comercial cadence (needs a shared weekly bucketing of adsDaily).
+- [ ] Pass 3 — publishing: schedule/publish FB+IG posts from JARVIS
+  (pages_manage_posts / instagram_content_publish are now on the app).
+- [ ] Pass 4 — IG comments/DM triage into the CRM inbox (instagram_manage_*).
+- [ ] Blocked on user: regenerate system-user token with the page/IG/ads
+  scopes (use cases were just added) and paste it into the WhatsApp card —
+  the social panel self-links once the token has page visibility.

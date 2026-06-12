@@ -47,6 +47,24 @@ function sumTail(rows, field, days, skip = 0) {
 
 const deltaPct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
 
+/** One action type's count from an ads row's `actions` array. */
+const actionCount = (row, type) =>
+  num(((row?.actions || []).find((a) => a.action_type === type) || {}).value);
+
+// What an ad "result" means here, in priority order: a furniture dealer's
+// Meta ads overwhelmingly optimize for WhatsApp/Messenger conversations;
+// leads and link clicks are the honest fallbacks. The FIRST type with any
+// activity in range wins and is labeled as such — never mixed.
+const RESULT_TYPES = [
+  ['onsite_conversion.messaging_conversation_started_7d', 'conversaciones'],
+  ['lead', 'leads'],
+  ['link_click', 'clics al enlace'],
+];
+
+/** Daily values of one metric from an insights payload (data array). */
+const metricRows = (insights, name) =>
+  ((insights || []).find((m) => m.name === name)?.values) || [];
+
 /**
  * The social pulse. `snapshot` is the meta-social function's payload (may be
  * partial — sections that errored arrive null and surface in `errors`).
@@ -66,19 +84,43 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const impressions7 = sumTail(adsDaily, 'impressions', 7);
 
   // IG daily reach values (insights metric rows → the `reach` series).
-  const reachRows = ((s.igReach || []).find((m) => m.name === 'reach')?.values) || [];
+  const reachRows = metricRows(s.igReach, 'reach');
   const reach7 = sumTail(reachRows, 'value', 7);
   const reach7Prev = sumTail(reachRows, 'value', 7, 7);
+
+  // IG audience: net new followers per day + profile views.
+  const followerRows = metricRows(s.igAudience, 'follower_count');
+  const profileViewRows = metricRows(s.igAudience, 'profile_views');
+  const profileViews7 = sumTail(profileViewRows, 'value', 7);
+  const newFollowers7 = sumTail(followerRows, 'value', 7);
+
+  // Facebook Page daily engagement + unique reach (when Meta still answers
+  // this metric family — absent otherwise).
+  const pageEngRows = metricRows(s.pageInsights, 'page_post_engagements');
+  const pageEngagement7 = sumTail(pageEngRows, 'value', 7);
+  const pageEngagement7Prev = sumTail(pageEngRows, 'value', 7, 7);
+
+  // Ad RESULTS: the first result type with activity in range (see above).
+  const resultType = RESULT_TYPES.find(([t]) => adsDaily.some((r) => actionCount(r, t) > 0)) || null;
+  const sumResults = (days, skip = 0) => {
+    if (!resultType) return 0;
+    const end = adsDaily.length - skip;
+    return adsDaily.slice(Math.max(0, end - days), Math.max(0, end))
+      .reduce((acc, r) => acc + actionCount(r, resultType[0]), 0);
+  };
+  const results7 = sumResults(7);
 
   const campaigns = (s.adCampaigns || [])
     .map((c) => {
       const spend = num(c.spend);
       const clicks = num(c.clicks);
       const impressions = num(c.impressions);
+      const results = resultType ? actionCount(c, resultType[0]) : null;
       return {
         name: c.campaign_name || '—',
         spend,
         clicks,
+        results,
         ctrPct: impressions > 0 ? (clicks / impressions) * 100 : null,
         cpc: clicks > 0 ? spend / clicks : null,
       };
@@ -118,9 +160,17 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       clicks7,
       cpc7: clicks7 > 0 ? spend7 / clicks7 : null,
       ctr7Pct: impressions7 > 0 ? (clicks7 / impressions7) * 100 : null,
+      results7,
+      resultsLabel: resultType ? resultType[1] : null,
+      costPerResult7: results7 > 0 ? spend7 / results7 : null,
+      profileViews7,
+      newFollowers7,
+      pageEngagement7,
+      pageEngagementDeltaPct: deltaPct(pageEngagement7, pageEngagement7Prev),
     },
     spendSeries: adsDaily.map((r) => num(r.spend)),
     reachSeries: reachRows.map((r) => num(r.value)),
+    followerSeries: followerRows.map((r) => num(r.value)),
     campaigns,
     scheduled,
     posts,
