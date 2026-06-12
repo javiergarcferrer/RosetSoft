@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
-import { clampCommissionPct } from '../lib/commissions.js';
 
 /**
  * Professional create/edit modal. Used in two places:
@@ -42,10 +41,6 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       email: professional?.email || '',
       phone: professional?.phone || '',
       notes: professional?.notes || '',
-      // 10% is the dealer's anecdotal "typical" cut; we surface it
-      // as the suggested default rather than 0 so saving without
-      // thinking does the right thing for most cases.
-      defaultCommissionPct: professional?.defaultCommissionPct ?? 10,
     });
   }
   if (!open || !data) return <Modal open={false} onClose={onClose} title="" />;
@@ -70,7 +65,6 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       email: data.email.trim(),
       phone: data.phone.trim(),
       notes: data.notes,
-      defaultCommissionPct: clampCommissionPct(data.defaultCommissionPct),
       createdAt: professional?.createdAt || now,
       updatedAt: now,
     };
@@ -136,26 +130,6 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
             autoComplete="organization"
             autoCapitalize="words"
           />
-        </div>
-        <div>
-          <div className="label">Comisión de referencia</div>
-          <div className="relative">
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="20"
-              step="0.5"
-              className="input pr-8 tabular-nums"
-              value={data.defaultCommissionPct}
-              onChange={(e) => set('defaultCommissionPct', e.target.value)}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-500">%</span>
-          </div>
-          <p className="text-[11px] text-ink-500 mt-1">
-            Solo una nota de referencia (0–20%). La comisión real la fija el tipo de
-            pedido de cada cotización (Piso 15% · Especial 20%) y puede ajustarse por venta.
-          </p>
         </div>
         <div>
           <div className="label">Correo</div>

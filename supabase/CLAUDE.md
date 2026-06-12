@@ -34,8 +34,9 @@ quote_lines · containers · materials`. Field-by-field shapes are in
 - **settings** PK `profile_id`. One row per profile. The USD↔DOP rate lives in
   `exchange_rate` (written by the **`bpd-rate` Edge Function**, Banco Popular
   venta); `currency_rates`/`bsc`/`bpd`/`dop_rate_mode` are legacy read-fallbacks.
-- **customers / professionals** profile-scoped. `professionals.default_commission_pct`
-  default 10, CHECK 0–20. `professionals` has a per-`(profile_id, number)` unique.
+- **customers / professionals** profile-scoped. `professionals` has a
+  per-`(profile_id, number)` unique. (The commission rate is order-type driven
+  on the quote — `baseCommissionPct` — so there's no per-professional rate column.)
 - **quotes** `status` CHECK `('draft','sent','accepted','declined','archived')`.
   FKs (all `on delete set null`): `customer_id`, `professional_id`, `order_id`,
   `created_by_user_id`. Accepted-quote milestones live HERE not on the order:

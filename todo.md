@@ -76,11 +76,12 @@ Verify gate for every change: `npm run typecheck && npm test && npm run build`.
 ## P2 — leftovers / hygiene
 
 - [x] **Vestigial per-professional default commission.**
-  - DONE (relabel route) — copy no longer implies the value drives the quote rate:
-    `ProfessionalModal` field is now "Comisión de referencia" with honest help text
-    (rate comes from the order type, Piso 15% / Especial 20%); `ProfessionalPicker` shows
-    "ref. X%"; `Professionals` list header is "Comisión ref.". The editable field/column is kept
-    (dropping the column is optional/non-urgent, per the note) — no data/migration change.
+  - DONE (removed) — the field is gone end-to-end. The commission rate is set by
+    the quote's order type (Piso 15% / Especial 20%, `baseCommissionPct`), so the
+    per-professional `defaultCommissionPct` drove nothing. Dropped from the
+    `Professional` type, `ProfessionalModal`, `ProfessionalPicker`, the
+    `Professionals` sheet (column + commission filter/sort), and the
+    `professionals.default_commission_pct` DB column (migration 20260709120000).
 
 - [x] **Side-effect inside a presentation component.** DONE — now that the action layer exists,
   `GradeFabricRow` dispatches `rememberSwatch(subtype, imageId)` through `QuoteActionsContext`

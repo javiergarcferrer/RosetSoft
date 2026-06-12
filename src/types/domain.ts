@@ -711,8 +711,6 @@ export interface Professional {
   email?: string;
   phone?: string;
   notes?: string;
-  /** 0–20. The dealer's house cap. */
-  defaultCommissionPct?: number;
   createdAt?: number;
   updatedAt?: number;
 }

@@ -10,41 +10,12 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
-import { clampCommissionPct } from '../lib/commissions.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveProfessionalsList } from '../core/quote/views/lists.js';
-
-// The reference commission % a row displays — a non-binding note (the real
-// rate is the quote's order-type rate, Piso 15% / Especial 20%), clamped into
-// the legal [0,20] range, falling back to the house 10% when unset. Kept as a
-// single helper so the band filter, the sort, and the rendered cells all read
-// the same number (otherwise a row could fall in one band but sort as if it
-// were in another).
-function commissionOf(p) {
-  return clampCommissionPct(p.defaultCommissionPct ?? 10);
-}
-
-// Secondary filter: bucket the (clamped) commission % into bands. The
-// cap is 20%, so four bands cover the whole range without overlap.
-const COMMISSION_BANDS = [
-  { value: '0', label: '0%', test: (pct) => pct === 0 },
-  { value: '1-5', label: '1–5%', test: (pct) => pct >= 1 && pct <= 5 },
-  { value: '6-10', label: '6–10%', test: (pct) => pct >= 6 && pct <= 10 },
-  { value: '10+', label: '>10%', test: (pct) => pct > 10 },
-];
-
-const COMMISSION_FILTER = {
-  key: 'commission',
-  label: 'Comisión',
-  type: 'select',
-  placeholder: 'Todas',
-  options: COMMISSION_BANDS.map(({ value, label }) => ({ value, label })),
-};
 
 const SORT_OPTIONS = [
   { key: 'name', label: 'Nombre A–Z' },
   { key: 'quotes', label: 'Cotizaciones' },
-  { key: 'commission', label: 'Comisión %' },
   { key: 'company', label: 'Empresa' },
 ];
 
@@ -151,7 +122,6 @@ export default function Professionals() {
   );
 
   const [q, setQ] = useState('');
-  const [filters, setFilters] = useState({}); // { commission: '1-5' | … }
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
   // Which rows are dropped open. A Set so several professionals can be
   // compared side by side; toggled by the chevron (cells own the click).
@@ -173,9 +143,7 @@ export default function Professionals() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const band = COMMISSION_BANDS.find((b) => b.value === filters.commission);
     const rows = pros.filter((p) => {
-      if (band && !band.test(commissionOf(p))) return false;
       if (!needle) return true;
       return (
         p.name?.toLowerCase().includes(needle) ||
@@ -186,9 +154,6 @@ export default function Professionals() {
 
     const mul = sort.dir === 'asc' ? 1 : -1;
     return [...rows].sort((a, b) => {
-      if (sort.key === 'commission') {
-        return (commissionOf(a) - commissionOf(b)) * mul;
-      }
       if (sort.key === 'quotes') {
         const ac = rollupByProfessionalId.get(a.id)?.count || 0;
         const bc = rollupByProfessionalId.get(b.id)?.count || 0;
@@ -199,7 +164,7 @@ export default function Professionals() {
       }
       return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) * mul;
     });
-  }, [pros, q, filters, sort, rollupByProfessionalId]);
+  }, [pros, q, sort, rollupByProfessionalId]);
 
   // ── Sheet writes ───────────────────────────────────────────────────────────
   // One field per commit, straight to the row. The live query repaints the
@@ -209,13 +174,6 @@ export default function Professionals() {
       const name = String(raw).trim();
       if (!name) return false; // a professional can't be nameless — revert
       await db.professionals.update(p.id, { name, updatedAt: Date.now() });
-      return true;
-    }
-    if (field === 'defaultCommissionPct') {
-      await db.professionals.update(p.id, {
-        defaultCommissionPct: clampCommissionPct(raw),
-        updatedAt: Date.now(),
-      });
       return true;
     }
     await db.professionals.update(p.id, { [field]: String(raw).trim(), updatedAt: Date.now() });
@@ -242,7 +200,6 @@ export default function Professionals() {
       email: String(draft.email || '').trim(),
       phone: String(draft.phone || '').trim(),
       notes: '',
-      defaultCommissionPct: clampCommissionPct(draft.pct === '' || draft.pct == null ? 10 : draft.pct),
       createdAt: now,
       updatedAt: now,
     };
@@ -289,9 +246,6 @@ export default function Professionals() {
               searchValue={q}
               onSearchChange={setQ}
               searchPlaceholder="Buscar profesionales…"
-              filters={[COMMISSION_FILTER]}
-              activeFilters={filters}
-              onFiltersChange={setFilters}
               sortOptions={SORT_OPTIONS}
               sort={sort}
               onSortChange={setSort}
@@ -337,7 +291,6 @@ export default function Professionals() {
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
                   <th className="text-right">Cotizaciones</th>
-                  <th className="text-right">Comisión ref.</th>
                   <th className="w-10"></th>
                 </tr>
               </thead>
@@ -400,19 +353,6 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             </span>
           )}
         </td>
-        <td className="text-right">
-          <span className="inline-flex items-center justify-end gap-0.5 font-semibold text-ink-800">
-            <Cell
-              value={commissionOf(p)}
-              onCommit={(v) => onCommit('defaultCommissionPct', v)}
-              row={row} col="pct"
-              type="number" inputMode="decimal"
-              align="text-right w-12 tabular-nums"
-              label={`Comisión de ${p.name}`}
-            />
-            <span className="text-xs text-ink-400">%</span>
-          </span>
-        </td>
         <td className="!pl-0 text-right">
           <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
             <Link
@@ -435,7 +375,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={8} className="!p-0 bg-ink-50/50">
+          <td colSpan={7} className="!p-0 bg-ink-50/50">
             <ProQuotesPanel pro={p} rollup={rollup} />
           </td>
         </tr>
@@ -450,7 +390,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
  * else was typed, then the row resets for the next one.
  */
 function NewSheetRow({ row, onCreate }) {
-  const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '', pct: '' });
+  const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '' });
   const creating = useRef(false);
 
   async function maybeCreate(patch) {
@@ -460,7 +400,7 @@ function NewSheetRow({ row, onCreate }) {
     creating.current = true;
     try {
       const ok = await onCreate(next);
-      if (ok) setDraft({ name: '', company: '', email: '', phone: '', pct: '' });
+      if (ok) setDraft({ name: '', company: '', email: '', phone: '' });
       return ok;
     } finally {
       creating.current = false;
@@ -472,7 +412,7 @@ function NewSheetRow({ row, onCreate }) {
       value={draft[field]}
       onCommit={(v) => maybeCreate({ [field]: v })}
       row={row}
-      col={field === 'defaultCommissionPct' ? 'pct' : field}
+      col={field}
       {...props}
     />
   );
@@ -497,12 +437,6 @@ function NewSheetRow({ row, onCreate }) {
       <td className="hidden lg:table-cell max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
       <td className="hidden lg:table-cell max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
       <td className="text-right text-[11px] text-ink-300">—</td>
-      <td className="text-right">
-        <span className="inline-flex items-center justify-end gap-0.5">
-          {cell('pct', { placeholder: '10', type: 'number', inputMode: 'decimal', align: 'text-right w-12 tabular-nums' })}
-          <span className="text-xs text-ink-400">%</span>
-        </span>
-      </td>
       <td></td>
     </tr>
   );
@@ -522,17 +456,7 @@ function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
           <Cell value={p.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${p.name}`} align="text-[12px] text-ink-500" />
         </div>
         <div className="text-right shrink-0">
-          <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums text-ink-800">
-            <Cell
-              value={commissionOf(p)}
-              onCommit={(v) => onCommit('defaultCommissionPct', v)}
-              col="pct" type="number" inputMode="decimal"
-              align="text-right w-10 tabular-nums"
-              label={`Comisión de ${p.name}`}
-            />
-            <span className="text-xs text-ink-400">%</span>
-          </span>
-          <div className="eyebrow-xs text-ink-400 mt-0.5">{rollup?.count || 0} cotiz.</div>
+          <div className="eyebrow-xs text-ink-400">{rollup?.count || 0} cotiz.</div>
         </div>
         <button
           type="button"

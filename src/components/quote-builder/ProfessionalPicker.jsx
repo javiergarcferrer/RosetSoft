@@ -6,9 +6,8 @@ import { db, newId, assignSequenceNumber } from '../../db/database.js';
 /**
  * Modal professional picker with inline create. Mirrors CustomerPicker
  * (search → list, inline "Crear: 'XYZ'", keyboard navigation, "Quitar"
- * footer), but creates rows in the professionals table and seeds them
- * with the default 10% commission. The dealer can edit richer details
- * (company, email, exact %) on the Professionals page.
+ * footer), but creates rows in the professionals table. The dealer can
+ * edit richer details (company, email, phone) on the Professionals page.
  */
 export default function ProfessionalPicker({ open, onClose, onSelect, professionals, profileId, currentId }) {
   const [q, setQ] = useState('');
@@ -61,7 +60,6 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
         email: '',
         phone: '',
         notes: '',
-        defaultCommissionPct: 10,
         createdAt: now,
         updatedAt: now,
       }),
@@ -143,7 +141,7 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
                 Crear profesional: <b>&ldquo;{q.trim()}&rdquo;</b>
               </div>
               <div className="text-[11px] text-ink-500">
-                Comisión 10% por defecto. Edita los detalles desde Profesionales.
+                Edita los detalles desde Profesionales.
               </div>
             </span>
           </button>
@@ -174,15 +172,12 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
                     {p.name}
                     {isCurrent && <span className="ml-1.5 text-[10px] text-amber-700 font-medium">· actual</span>}
                   </div>
-                  <div className="text-[11px] text-ink-500 truncate">
-                    {[p.company, p.email].filter(Boolean).join(' · ') || `Ref. ${p.defaultCommissionPct ?? 10}%`}
-                  </div>
+                  {[p.company, p.email].filter(Boolean).length > 0 && (
+                    <div className="text-[11px] text-ink-500 truncate">
+                      {[p.company, p.email].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
                 </div>
-                {/* Reference rate only — the real commission is set by the
-                    quote's order type (Piso 15% / Especial 20%), not here. */}
-                <span className="text-[11px] text-ink-400 tabular-nums whitespace-nowrap flex-shrink-0" title="Comisión de referencia · la fija el tipo de pedido">
-                  ref. {p.defaultCommissionPct ?? 10}%
-                </span>
               </button>
             );
           })
