@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle, Megaphone, Bot,
+  MessageCircle, Megaphone, Landmark, Bot,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -27,7 +27,6 @@ const CRM_GROUP = {
     { to: '/quotes', label: 'Cotizaciones', icon: FileText },
     { to: '/orders', label: 'Pedidos', icon: Package },
     { to: '/chats', label: 'WhatsApp', icon: MessageCircle },
-    { to: '/marketing', label: 'Marketing', icon: Megaphone },
     { to: '/customers', label: 'Clientes', icon: Users },
     { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
   ],
@@ -44,6 +43,10 @@ const ADMIN_GROUP = {
     { to: '/admin/materials', label: 'Materiales', icon: Layers },
     { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
     { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
+    { to: '/marketing', label: 'Marketing', icon: Megaphone },
+    // Single entry point — the full accounting section nav only joins the
+    // sidebar while the admin is INSIDE /accounting/* (see navForRole).
+    { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
     { to: '/jarvis', label: 'JARVIS', icon: Bot },
   ],
 };
@@ -58,9 +61,20 @@ const CONFIG = { items: [{ to: '/settings', label: 'Configuración', icon: Setti
  *   • admin      — everything, both cores, in one place.
  * `team` is the shared settings row, not a human, so it gets nothing.
  */
-export function navForRole(role) {
+export function navForRole(role, { accountingOpen = true } = {}) {
   if (role === 'accounting') return [{ items: accountingSectionNav }];
-  if (role === 'admin') return [HOME, CRM_GROUP, COMMISSIONS, ADMIN_GROUP, ACCOUNTING_GROUP, CONFIG];
+  if (role === 'admin') {
+    // The admin's sidebar stays lean: the Contabilidad section list only
+    // appears while they're inside /accounting/* (Layout passes the route
+    // context); otherwise the Administración group's single "Contabilidad"
+    // link is the way in. Callers that need the full map regardless —
+    // GlobalSearch indexing destinations — get it by default.
+    return [
+      HOME, CRM_GROUP, COMMISSIONS, ADMIN_GROUP,
+      ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
+      CONFIG,
+    ];
+  }
   if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
   return [];
 }

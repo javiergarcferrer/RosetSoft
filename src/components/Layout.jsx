@@ -23,7 +23,13 @@ const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
 
 export default function Layout() {
   const { settings, currentProfile, isAdmin, isAccounting, profileId } = useApp();
-  const navGroups = navForRole(currentProfile?.role);
+  const location = useLocation();
+  // The admin's Contabilidad section list is contextual: it joins the sidebar
+  // only while they're inside /accounting/* (the Administración group carries
+  // the single entry link).
+  const navGroups = navForRole(currentProfile?.role, {
+    accountingOpen: location.pathname.startsWith('/accounting'),
+  });
   // Unread WhatsApp badge on the nav entry — inbound messages not yet opened
   // in the inbox. Rides the same live-query invalidation as the rest of the
   // app, so opening a thread (which stamps readAt) clears it everywhere.
@@ -33,7 +39,6 @@ export default function Layout() {
     [],
   );
   const waUnread = waMessages.reduce((n, m) => n + (m.direction === 'in' && !m.readAt ? 1 : 0), 0);
-  const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   // Desktop-only: hide the static sidebar to reclaim horizontal space. Persisted
   // so the choice survives reloads. Every effect of it below is md:-gated, so the
