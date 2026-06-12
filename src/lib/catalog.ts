@@ -17,6 +17,7 @@ import { ALPHA_GRADES, parseSubtype, composeSubtype } from './subtype.js';
 import type {
   Product,
   QuoteLine,
+  LineComponent,
   MaterialOption,
   MaterialOptions,
 } from '../types/domain.ts';
@@ -226,6 +227,43 @@ function numOr0(v: unknown): number {
  * survives — so the line always carries a real catalog price, mirroring
  * CatalogPicker's insertProduct.
  */
+/**
+ * Reprice a compound's COMPONENTS to a picked grade+fabric — the pure pipeline
+ * behind "aplicar material a todas" (composition header AND per-component
+ * copy-to-all), mirroring what GradeFabricRow.commit does for one piece. A
+ * grade is a price tier, so every component re-snapshots reference + price to
+ * ITS OWN model at that grade (left intact when its family doesn't carry it)
+ * and any material-less range drops; the fabric + swatch stamp regardless.
+ * Pure — the caller persists the returned components.
+ */
+export function repriceComponentsAtGrade(
+  components: readonly LineComponent[] | null | undefined,
+  pick: { grade?: string | null; fabric?: string | null; swatchImageId?: string | null },
+  families: ReadonlyMap<string, CatalogFamily> | null | undefined,
+): LineComponent[] {
+  const comps = Array.isArray(components) ? components : [];
+  const subtype = composeSubtype(pick.grade, pick.fabric);
+  const swatch = pick.swatchImageId ?? null;
+  return comps.map((c) => {
+    const patch: Partial<LineComponent> = { subtype, swatchImageId: swatch };
+    if (pick.grade) {
+      const fam = families?.get(splitSkuGrade(c.reference).root) || null;
+      const p = fam ? productForGrade(fam, pick.grade) : null;
+      // Reprice to this component's own SKU at the grade (no-op when the grade
+      // is unchanged; left intact when its model doesn't carry the grade).
+      if (p) {
+        patch.reference = p.reference;
+        patch.unitPrice = Number(p.priceUsd) || 0;
+      }
+      if (c.priceMin != null || c.priceMax != null) {
+        patch.priceMin = null;
+        patch.priceMax = null;
+      }
+    }
+    return { ...c, ...patch };
+  });
+}
+
 export function switchLineProduct(
   line: Pick<QuoteLine, 'subtype' | 'swatchImageId' | 'materialOptions'>,
   family: CatalogFamily | null | undefined,

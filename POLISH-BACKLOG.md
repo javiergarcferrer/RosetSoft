@@ -143,15 +143,18 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (10 files), CRM, admin and components now calls userMessageFor;
       `{ ok, error: e?.message }` RESULT payloads (Chats/Difusion send
       results) intentionally untouched — they're data shapes, not renders.)
-- [ ] Extract View-inlined money derivations into resolvers (one per
+- [~] Extract View-inlined money derivations into resolvers (one per
       iteration): party statements (`CuentasCobrarPagar.jsx:53-69` →
-      `core/accounting/receivables`), workspace filter/sort/commission
-      comparator (`Workspace.jsx:239-279` → `resolveSales`) ✓ done in i5,
+      `core/accounting/receivables`) ✓ i25, workspace filter/sort/commission
+      comparator (`Workspace.jsx:239-279` → `resolveSales`) ✓ i5,
       client-preview
-      priced shapes (`ClientPreview.jsx:560-589` → `resolveQuoteView`),
+      priced shapes (`ClientPreview.jsx:560-589` → `resolveQuoteView`)
+      ← REMAINING (touches the shared screen/paper tree; needs a careful
+      pass with quotePickParity + pricing tests),
       compound repricing (`QuoteLineItem.jsx:217-241` → pure
-      `repriceComponentsAtGrade` in `lib/pricing`), COGS click-handler math
-      (`Inventario.jsx:68-100` → helper beside `buildCogsEntry`).
+      `repriceComponentsAtGrade` in `lib/catalog`) ✓ i26 (pinned in
+      tests/catalog.test.js), COGS click-handler math
+      (`Inventario.jsx:68-100` → `planSalida` beside `buildCogsEntry`) ✓ i25.
 - [~] Wrap raw RPC/invoke calls in lib (pattern: `ecfSequence.js`):
       `Facturacion.jsx` ecf-send ×3 + `post_sale`, `Jarvis.jsx` ×5,
       `Materials.jsx:711`.
