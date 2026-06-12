@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Percent, ChevronRight } from 'lucide-react';
+import { Percent, ChevronRight } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
 import { resolveItbisLiquidation } from '../../core/accounting/index.js';
 
@@ -18,14 +18,14 @@ import { resolveItbisLiquidation } from '../../core/accounting/index.js';
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export default function Impuestos() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
   const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
+  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = salesQ.loaded && expensesQ.loaded && purchasesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
@@ -34,18 +34,9 @@ export default function Impuestos() {
     end: today.getTime(),
   }), [today]);
   const itbis = useMemo(() => resolveItbisLiquidation({
-    salesPostings: salesQ.data, expenses: expensesQ.data, purchases: purchasesQ.data, imports: importsQ.data, ...win,
-  }), [salesQ.data, expensesQ.data, purchasesQ.data, importsQ.data, win]);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Centro de impuestos" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
+    salesPostings: salesQ.data, expenses: expensesQ.data, purchases: purchasesQ.data,
+    imports: importsQ.data, expedientes: expedientesQ.data, ...win,
+  }), [salesQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
   const monthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
   const forms = [
@@ -55,7 +46,7 @@ export default function Impuestos() {
   ];
 
   return (
-    <>
+    <AccountingGate title="Centro de impuestos">
       <PageHeader title="Centro de impuestos" subtitle={`Posición de ITBIS · ${monthLabel}`} />
 
       {!loaded ? <ListLoading /> : (
@@ -70,6 +61,9 @@ export default function Impuestos() {
               <div className="min-w-0">
                 <div className="eyebrow mb-1">Crédito fiscal (compras)</div>
                 <div className="text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.creditoFiscal)}</div>
+                <div className="text-xs text-ink-400 tabular-nums mt-0.5">
+                  Local {formatDop(itbis.creditoLocal)} · Importación {formatDop(itbis.creditoImportacion)}
+                </div>
               </div>
               <div className="min-w-0">
                 <div className="eyebrow mb-1">{itbis.aPagar > 0 ? 'A pagar' : 'Saldo a favor'}</div>
@@ -99,6 +93,6 @@ export default function Impuestos() {
           </p>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

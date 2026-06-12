@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw, Download } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -22,7 +24,7 @@ import {
  *               unbalanced one, via assertBalanced).
  *   • Mayor   — one account's movements with a running balance.
  *   • Balanza — the trial balance (Σ débito must equal Σ crédito).
- * Self-gates on the accounting/admin role.
+ * Self-gates on accounting/admin via AccountingGate.
  */
 const SOURCE_LABEL = {
   manual: 'Manual', opening: 'Apertura', sale: 'Venta', purchase: 'Compra',
@@ -136,7 +138,6 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
 
 export default function Ledger() {
   const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
   const scope = profileId || 'team';
 
   const [tab, setTab] = useState('diario'); // 'diario' | 'mayor' | 'balanza'
@@ -196,23 +197,6 @@ export default function Ledger() {
     }
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Libro contable" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
-  const tabBtn = (key, label) => (
-    <button type="button" onClick={() => setTab(key)}
-      className={`btn ${tab === key ? 'tab-pill-active' : 'tab-pill'}`}>
-      {label}
-    </button>
-  );
-
   const isoDay = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
   function exportActive() {
     if (tab === 'balanza') {
@@ -235,7 +219,7 @@ export default function Ledger() {
   }
 
   return (
-    <>
+    <AccountingGate title="Libro contable">
       <PageHeader
         title="Libro contable"
         subtitle="Diario, mayor y balanza — partida doble en RD$"
@@ -247,10 +231,10 @@ export default function Ledger() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {tabBtn('diario', 'Diario')}
-        {tabBtn('mayor', 'Mayor')}
-        {tabBtn('balanza', 'Balanza')}
+      <div className="flex flex-wrap items-start gap-2">
+        <TabPills
+          tabs={[{ key: 'diario', label: 'Diario' }, { key: 'mayor', label: 'Mayor' }, { key: 'balanza', label: 'Balanza' }]}
+          active={tab} onChange={setTab} />
         <button type="button" onClick={exportActive}
           className="ml-auto btn-ghost"><Download size={14} /> <span className="hidden sm:inline">Exportar</span></button>
       </div>
@@ -397,6 +381,6 @@ export default function Ledger() {
           </div>
         )
       )}
-    </>
+    </AccountingGate>
   );
 }

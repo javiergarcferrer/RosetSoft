@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
+import { Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
@@ -23,8 +24,7 @@ const TYPE_LABEL = { in: 'Entrada', out: 'Salida', adjust: 'Ajuste' };
  * Self-gates on accounting/admin.
  */
 export default function Inventario() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -49,16 +49,6 @@ export default function Inventario() {
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
   const [syncing, setSyncing] = useState(false);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Inventario" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   async function createItem() {
     if (!itemForm.name.trim()) return;
@@ -125,7 +115,7 @@ export default function Inventario() {
   const field = 'input';
 
   return (
-    <>
+    <AccountingGate title="Inventario">
       <PageHeader title="Inventario"
         subtitle={loaded ? `${inv.count} artículos · valor ${formatDop(inv.totalValue)}` : ' '}
         actions={(
@@ -246,7 +236,7 @@ export default function Inventario() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }
 

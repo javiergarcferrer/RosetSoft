@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, PanelLeftClose, PanelLeft, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
+import ListLoading from './ListLoading.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
 import QuickCreate from './QuickCreate.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
@@ -299,11 +300,15 @@ function MainContent() {
   // Landscape-notch insets via pl/pr-safe so content doesn't slide under the
   // Dynamic Island ear. Bottom padding reserves room for the QuoteBuilder's
   // sticky mobile totals bar AND the home indicator.
+  // The Suspense boundary catches the code-split accounting/admin pages while
+  // their chunk loads — the shell (sidebar + subnav) stays put.
   return (
     <div className="px-4 py-4 md:px-8 md:py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
       <div className="max-w-[1400px] mx-auto">
         <AccountingSubnav />
-        <Outlet key={location.pathname} />
+        <Suspense fallback={<ListLoading />}>
+          <Outlet key={location.pathname} />
+        </Suspense>
       </div>
     </div>
   );

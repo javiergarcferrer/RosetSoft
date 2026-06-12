@@ -1,18 +1,22 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, Receipt, Plus, Loader2, Check, X, Download } from 'lucide-react';
+import { Receipt, Plus, Loader2, Check, X, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
+import PeriodPicker, { periodWindow } from '../../components/accounting/PeriodPicker.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
-import { downloadCsv } from '../../lib/csv.js';
+import { downloadCsv, downloadText } from '../../lib/csv.js';
 import {
   resolveExpensesList, resolve606, buildExpenseEntry, computeExpenseTaxes,
   resolveAccountingConfig, classOf, postableAccounts,
+  dgii606Txt, dgiiPeriod, dgiiTxtFilename,
 } from '../../core/accounting/index.js';
 
 const PAY_LABEL = { cash: 'Efectivo', bank: 'Banco', card: 'Tarjeta', credit: 'Crédito' };
@@ -27,8 +31,7 @@ function ymd(ts) {
  * ledger) and the DGII 606 projection. Self-gates on accounting/admin.
  */
 export default function Expenses() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -36,6 +39,7 @@ export default function Expenses() {
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
+  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = expensesQ.loaded && suppliersQ.loaded && accountsQ.loaded;
 
   const expenseAccounts = useMemo(
@@ -47,52 +51,44 @@ export default function Expenses() {
   const today = useMemo(() => new Date(), []);
   const [params] = useSearchParams();
   const [tab, setTab] = useState(params.get('tab') === '606' ? '606' : 'list'); // 'list' | '606'
-  const [start, setStart] = useState(() => isoDate(new Date(today.getFullYear(), today.getMonth(), 1).getTime()));
-  const [end, setEnd] = useState(() => isoDate(today.getTime()));
+  const [from, setFrom] = useState(() => isoDate(new Date(today.getFullYear(), today.getMonth(), 1).getTime()));
+  const [to, setTo] = useState(() => isoDate(today.getTime()));
   const [showForm, setShowForm] = useState(!!params.get('new'));
+  const [txtErr, setTxtErr] = useState('');
 
-  const win = { start: parseISODate(start), end: parseISODate(end, true) };
+  const win = periodWindow(from, to);
   const list = useMemo(() => resolveExpensesList({ expenses: expensesQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, ...win }),
-    [expensesQ.data, suppliersQ.data, accountsQ.data, start, end]);
-  const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, purchases: purchasesQ.data, suppliers: suppliersQ.data, ...win }),
-    [expensesQ.data, purchasesQ.data, suppliersQ.data, start, end]);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Gastos" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
+    [expensesQ.data, suppliersQ.data, accountsQ.data, from, to]);
+  const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, purchases: purchasesQ.data, expedientes: expedientesQ.data, suppliers: suppliersQ.data, ...win }),
+    [expensesQ.data, purchasesQ.data, expedientesQ.data, suppliersQ.data, from, to]);
 
   function export606() {
     const rows = [
       ['RNC/Cédula', 'Nombre', 'NCF', 'Fecha', 'Monto', 'ITBIS', 'Retención ISR', 'Retención ITBIS', 'Total'],
       ...form606.rows.map((r) => [r.rnc, r.name, r.ncf, ymd(r.date), r.base, r.itbis, r.retIsr, r.retItbis, r.total]),
     ];
-    downloadCsv(`606_${start}_${end}.csv`, rows);
+    downloadCsv(`606_${from}_${to}.csv`, rows);
   }
 
-  const dateInput = 'input w-auto';
+  function export606Txt() {
+    setTxtErr('');
+    if (!(settings?.companyRnc || '').trim()) {
+      setTxtErr('Configura el "RNC del emisor" en Configuración contable para generar el TXT.');
+      return;
+    }
+    const period = dgiiPeriod(win.end || Date.now());
+    const txt = dgii606Txt({ rows: form606.rows, rncEmisor: settings?.companyRnc, period });
+    downloadText(dgiiTxtFilename('606', settings?.companyRnc, period), txt);
+  }
 
   return (
-    <>
+    <AccountingGate title="Gastos">
       <PageHeader title="Gastos" subtitle="Captura un gasto y se asienta solo · 606"
         actions={<button type="button" onClick={() => { setShowForm((v) => !v); setTab('list'); }}
           className="btn-primary"><Plus size={15} /> Nuevo gasto</button>} />
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <button type="button" onClick={() => setTab('list')} className={`btn ${tab === 'list' ? 'tab-pill-active' : 'tab-pill'}`}>Gastos</button>
-        <button type="button" onClick={() => setTab('606')} className={`btn ${tab === '606' ? 'tab-pill-active' : 'tab-pill'}`}>606</button>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <label className="text-sm text-ink-500">Desde</label>
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={dateInput} />
-          <label className="text-sm text-ink-500">Hasta</label>
-          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={dateInput} />
-        </div>
-      </div>
+      <TabPills tabs={[{ key: 'list', label: 'Gastos' }, { key: '606', label: '606' }]} active={tab} onChange={setTab} />
+      <PeriodPicker from={from} to={to} onChange={({ from, to }) => { setFrom(from); setTo(to); }} />
 
       {showForm && loaded && (
         <NewExpenseForm
@@ -149,10 +145,13 @@ export default function Expenses() {
         )
       ) : (
         <>
-          <div className="flex justify-end mb-3">
+          <div className="flex flex-wrap justify-end gap-2 mb-3">
             <button type="button" onClick={export606} disabled={form606.count === 0}
               className="btn-ghost"><Download size={14} /> Exportar 606 (CSV)</button>
+            <button type="button" onClick={export606Txt} disabled={form606.count === 0}
+              className="btn-ghost"><Download size={14} /> TXT DGII (606)</button>
           </div>
+          {txtErr && <p className="text-sm text-rose-600 text-right mb-3">{txtErr}</p>}
           {form606.count === 0 ? (
             <EmptyState icon={Receipt} title="Sin comprobantes en el período"
               description="El 606 se arma con los gastos (y compras) con NCF del período." />
@@ -204,7 +203,7 @@ export default function Expenses() {
           )}
         </>
       )}
-    </>
+    </AccountingGate>
   );
 }
 

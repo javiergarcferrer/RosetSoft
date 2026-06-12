@@ -1,22 +1,22 @@
 import { useMemo, useState } from 'react';
-import { Shield, Landmark, Check } from 'lucide-react';
+import { Landmark, Check } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveReconciliation } from '../../core/accounting/index.js';
 
 /**
  * Conciliación bancaria — pick a bank account, tick the ledger lines that
  * cleared the bank statement, and compare the reconciled balance to the
- * statement's ending balance. Self-gates on accounting/admin.
+ * statement's ending balance. Self-gates on accounting/admin via AccountingGate.
  */
 export default function Conciliacion() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
@@ -38,16 +38,6 @@ export default function Conciliacion() {
     [accountCode, accountsQ.data, entriesQ.data, linesQ.data, stmt],
   );
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Conciliación bancaria" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   async function toggle(row) {
     setBusy(row.line.id);
     try {
@@ -60,7 +50,7 @@ export default function Conciliacion() {
   const field = 'input';
 
   return (
-    <>
+    <AccountingGate title="Conciliación bancaria">
       <PageHeader title="Conciliación bancaria" subtitle="Marca los movimientos que aparecen en el estado del banco" />
 
       {!loaded ? <ListLoading /> : (
@@ -134,6 +124,6 @@ export default function Conciliacion() {
           )}
         </>
       )}
-    </>
+    </AccountingGate>
   );
 }

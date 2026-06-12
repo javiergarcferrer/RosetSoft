@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
+import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
@@ -21,8 +23,7 @@ import {
  * Each payment posts a balanced asiento. Self-gates on accounting/admin.
  */
 export default function CuentasCobrarPagar() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -43,7 +44,8 @@ export default function CuentasCobrarPagar() {
     [purchasesQ.data, expensesQ.data, paymentsQ.data, suppliersById]);
 
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
+  const urlTab = params.get('tab');
+  const [tab, setTab] = useState(urlTab === 'cxc' || urlTab === 'cxp' ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
   const [showForm, setShowForm] = useState(!!params.get('new'));
   const [selected, setSelected] = useState(null); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
@@ -89,35 +91,23 @@ export default function CuentasCobrarPagar() {
     }
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Cuentas por cobrar y pagar" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   const view = tab === 'cxc' ? receivables : payables;
   const partyLabel = tab === 'cxc' ? 'Cliente' : 'Proveedor';
   const docsByParty = new Map(view.rows.map((r) => [r.partyId, r.docs || []]));
 
   return (
-    <>
+    <AccountingGate title="Cuentas por cobrar y pagar">
       <PageHeader title="Cuentas por cobrar y pagar" subtitle="Saldos, antigüedad y estados de cuenta — valores en RD$"
         actions={<button type="button" onClick={() => { setShowForm((v) => !v); setSelected(null); }}
           className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>} />
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button type="button" onClick={() => { setTab('cxc'); setSelected(null); }} className={`btn ${tab === 'cxc' ? 'tab-pill-active' : 'tab-pill'}`}>Por cobrar</button>
-        <button type="button" onClick={() => { setTab('cxp'); setSelected(null); }} className={`btn ${tab === 'cxp' ? 'tab-pill-active' : 'tab-pill'}`}>Por pagar</button>
-        {loaded && (
-          <span className="sm:ml-auto self-center text-sm text-ink-500">
-            Balance total <b className="tabular-nums text-ink-800">{formatDop(view.totals.balance)}</b>
-          </span>
-        )}
-      </div>
+      <TabPills tabs={[{ key: 'cxc', label: 'Por cobrar' }, { key: 'cxp', label: 'Por pagar' }]}
+        active={tab} onChange={(k) => { setTab(k); setSelected(null); }} />
+      {loaded && (
+        <p className="text-sm text-ink-500 -mt-2 mb-4">
+          Balance total <b className="tabular-nums text-ink-800">{formatDop(view.totals.balance)}</b>
+        </p>
+      )}
 
       {showForm && loaded && (
         <PaymentForm
@@ -220,7 +210,7 @@ export default function CuentasCobrarPagar() {
       {printDoc && (
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
-    </>
+    </AccountingGate>
   );
 }
 

@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, UserSquare2, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
+import { UserSquare2, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
 
 /** Empleados — payroll master. Self-gates on accounting/admin. */
 function blank() { return { name: '', cedula: '', position: '', monthlySalary: '', active: true }; }
 
 export default function Empleados() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const empQ = useLiveQueryStatus(() => db.employees.where('profileId').equals(scope).toArray(), [scope], []);
@@ -22,16 +22,6 @@ export default function Empleados() {
   const [editing, setEditing] = useState(params.get('new') ? 'new' : null);
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Empleados" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   function openNew() { setForm(blank()); setEditing('new'); }
   function openEdit(e) {
@@ -62,7 +52,7 @@ export default function Empleados() {
   const field = 'input';
 
   return (
-    <>
+    <AccountingGate title="Empleados">
       <PageHeader title="Empleados" subtitle={empQ.loaded ? `${empQ.data.length} empleados` : ' '}
         actions={<button type="button" onClick={openNew} className="btn-primary"><Plus size={15} /> Nuevo empleado</button>} />
 
@@ -131,6 +121,6 @@ export default function Empleados() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

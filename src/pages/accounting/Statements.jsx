@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Shield, Scale, TrendingUp, Download } from 'lucide-react';
+import { Scale, TrendingUp, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -24,7 +25,7 @@ function flattenTree(node, rows = [], depth = 0) {
  * Estados financieros — Balance General (Estado de Situación) + Estado de
  * Resultados, both pure projections of the general ledger (core/accounting).
  * The Balance folds the period result into equity so it balances before the
- * closing entry. Self-gates on the accounting/admin role.
+ * closing entry. Self-gates on accounting/admin via AccountingGate.
  */
 function TreeRows({ node, depth = 0 }) {
   if (!node) return null;
@@ -61,8 +62,7 @@ function SectionTotal({ label, value, strong }) {
 }
 
 export default function Statements() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
 
   const [params] = useSearchParams();
   const [tab, setTab] = useState(params.get('tab') === 'income' ? 'income' : 'balance'); // 'balance' | 'income'
@@ -112,31 +112,19 @@ export default function Statements() {
     }
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Estados financieros" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   const dateInput = 'input w-auto';
 
   return (
-    <>
+    <AccountingGate title="Estados financieros">
       <PageHeader title="Estados financieros" subtitle="Proyecciones del libro mayor — valores en RD$" />
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <button type="button" onClick={() => setTab('balance')}
-          className={`btn ${tab === 'balance' ? 'tab-pill-active' : 'tab-pill'}`}>
-          <Scale size={15} /> Balance General
-        </button>
-        <button type="button" onClick={() => setTab('income')}
-          className={`btn ${tab === 'income' ? 'tab-pill-active' : 'tab-pill'}`}>
-          <TrendingUp size={15} /> Estado de Resultados
-        </button>
+      <div className="flex flex-wrap items-start gap-2">
+        <TabPills
+          tabs={[
+            { key: 'balance', label: <><Scale size={15} /> Balance General</> },
+            { key: 'income', label: <><TrendingUp size={15} /> Estado de Resultados</> },
+          ]}
+          active={tab} onChange={setTab} />
         <button type="button" onClick={exportActive}
           className="sm:ml-auto btn-ghost"><Download size={14} /> Exportar</button>
       </div>
@@ -197,6 +185,6 @@ export default function Statements() {
           </div>
         </>
       )}
-    </>
+    </AccountingGate>
   );
 }

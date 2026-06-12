@@ -103,6 +103,7 @@ export default function AccountingDashboard() {
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
+  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && salesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
@@ -114,9 +115,10 @@ export default function AccountingDashboard() {
   const d = useMemo(() => resolveAccountingDashboard({
     accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data,
     salesPostings: salesQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
-    payments: paymentsQ.data, imports: importsQ.data, customersById, suppliersById,
+    payments: paymentsQ.data, imports: importsQ.data, expedientes: expedientesQ.data,
+    customersById, suppliersById,
     monthStart, monthEnd: today.getTime(),
-  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, customersById, suppliersById, monthStart, today]);
+  }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, customersById, suppliersById, monthStart, today]);
 
   if (!allowed) {
     return (

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { RefreshCw, Hourglass, LogOut } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { safeDynamicImport } from './lib/dynamicImport.js';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import SetPassword from './pages/SetPassword.jsx';
@@ -20,35 +21,41 @@ import Chats from './pages/Chats.jsx';
 import Difusion from './pages/Difusion.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
-import AdminUsers from './pages/admin/Users.jsx';
-import AdminMaterials from './pages/admin/Materials.jsx';
-import AdminCatalogs from './pages/admin/Catalogs.jsx';
-import AdminCatalog from './pages/admin/Catalog.jsx';
-import AdminCatalogLifestyleGarden from './pages/admin/CatalogLifestyleGarden.jsx';
-import AccountingWorkspace from './pages/accounting/Workspace.jsx';
-import AccountingDashboard from './pages/accounting/Dashboard.jsx';
-import AccountingLedger from './pages/accounting/Ledger.jsx';
-import AccountingStatements from './pages/accounting/Statements.jsx';
-import ChartOfAccounts from './pages/accounting/ChartOfAccounts.jsx';
-import AccountingSettings from './pages/accounting/AccountingSettings.jsx';
-import AccountingExpenses from './pages/accounting/Expenses.jsx';
-import AccountingSuppliers from './pages/accounting/Suppliers.jsx';
-import AccountingFacturacion from './pages/accounting/Facturacion.jsx';
-import AccountingLigneRoset from './pages/accounting/LigneRosetSales.jsx';
-import AccountingCompras from './pages/accounting/Compras.jsx';
-import AccountingInventario from './pages/accounting/Inventario.jsx';
-import AccountingImportaciones from './pages/accounting/Importaciones.jsx';
-import AccountingImportacionDetail from './pages/accounting/ImportacionDetail.jsx';
-import AccountingECFSequences from './pages/accounting/ECFSequences.jsx';
-import AccountingCuentas from './pages/accounting/CuentasCobrarPagar.jsx';
-import AccountingConciliacion from './pages/accounting/Conciliacion.jsx';
-import AccountingImpuestos from './pages/accounting/Impuestos.jsx';
-import AccountingInformes from './pages/accounting/Informes.jsx';
-import AccountingPeriodos from './pages/accounting/Periodos.jsx';
-import AccountingNomina from './pages/accounting/Nomina.jsx';
-import AccountingEmpleados from './pages/accounting/Empleados.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import NotFound from './pages/NotFound.jsx';
+
+// Accounting + admin pages are code-split: the CRM bundle (what every seller
+// loads daily) stays lean, and each back-office area arrives on demand.
+// Layout's <Suspense> shows the loading state while a chunk fetches; the
+// safeDynamicImport wrapper recovers stale-deploy chunk misses with a reload.
+const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
+const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
+const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
+const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
+const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
+const AdminCatalogLifestyleGarden = lazyPage(() => import('./pages/admin/CatalogLifestyleGarden.jsx'));
+const AccountingWorkspace = lazyPage(() => import('./pages/accounting/Workspace.jsx'));
+const AccountingDashboard = lazyPage(() => import('./pages/accounting/Dashboard.jsx'));
+const AccountingLedger = lazyPage(() => import('./pages/accounting/Ledger.jsx'));
+const AccountingStatements = lazyPage(() => import('./pages/accounting/Statements.jsx'));
+const ChartOfAccounts = lazyPage(() => import('./pages/accounting/ChartOfAccounts.jsx'));
+const AccountingSettings = lazyPage(() => import('./pages/accounting/AccountingSettings.jsx'));
+const AccountingExpenses = lazyPage(() => import('./pages/accounting/Expenses.jsx'));
+const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
+const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
+const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
+const AccountingCompras = lazyPage(() => import('./pages/accounting/Compras.jsx'));
+const AccountingInventario = lazyPage(() => import('./pages/accounting/Inventario.jsx'));
+const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Importaciones.jsx'));
+const AccountingImportacionDetail = lazyPage(() => import('./pages/accounting/ImportacionDetail.jsx'));
+const AccountingECFSequences = lazyPage(() => import('./pages/accounting/ECFSequences.jsx'));
+const AccountingCuentas = lazyPage(() => import('./pages/accounting/CuentasCobrarPagar.jsx'));
+const AccountingConciliacion = lazyPage(() => import('./pages/accounting/Conciliacion.jsx'));
+const AccountingImpuestos = lazyPage(() => import('./pages/accounting/Impuestos.jsx'));
+const AccountingInformes = lazyPage(() => import('./pages/accounting/Informes.jsx'));
+const AccountingPeriodos = lazyPage(() => import('./pages/accounting/Periodos.jsx'));
+const AccountingNomina = lazyPage(() => import('./pages/accounting/Nomina.jsx'));
+const AccountingEmpleados = lazyPage(() => import('./pages/accounting/Empleados.jsx'));
 
 /**
  * Loading screen. If the boot takes longer than 5 s — typically because of a
@@ -244,12 +251,13 @@ function ProtectedApp() {
             <Route path="admin/catalog" element={<AdminCatalogs />} />
             <Route path="admin/catalog/roset" element={<AdminCatalog />} />
             <Route path="admin/catalog/lifestylegarden" element={<AdminCatalogLifestyleGarden />} />
-            {/* Accounting surface — a single workspace page that
-                rolls cotizaciones aceptadas, comisiones por pagar, and
-                the Odoo CSV exports into one table-first view. The
-                three legacy sub-paths redirect here so old bookmarks
-                still work. Self-gates on the accounting/admin role. */}
-            <Route path="accounting" element={<AccountingWorkspace />} />
+            {/* Accounting surface. /accounting lands on the Panel (the
+                business overview) — the sales/commissions workspace lives at
+                /accounting/ventas with the other Ventas tabs. Every legacy
+                sub-path redirects so old bookmarks still work. Pages
+                self-gate on the accounting/admin role. */}
+            <Route path="accounting" element={<Navigate to="/accounting/dashboard" replace />} />
+            <Route path="accounting/ventas" element={<AccountingWorkspace />} />
             <Route path="accounting/dashboard" element={<AccountingDashboard />} />
             <Route path="accounting/ledger" element={<AccountingLedger />} />
             <Route path="accounting/statements" element={<AccountingStatements />} />
@@ -271,9 +279,9 @@ function ProtectedApp() {
             <Route path="accounting/periodos" element={<AccountingPeriodos />} />
             <Route path="accounting/nomina" element={<AccountingNomina />} />
             <Route path="accounting/empleados" element={<AccountingEmpleados />} />
-            <Route path="accounting/quotes" element={<Navigate to="/accounting" replace />} />
-            <Route path="accounting/commissions" element={<Navigate to="/accounting" replace />} />
-            <Route path="accounting/odoo" element={<Navigate to="/accounting" replace />} />
+            <Route path="accounting/quotes" element={<Navigate to="/accounting/ventas" replace />} />
+            <Route path="accounting/commissions" element={<Navigate to="/accounting/ventas" replace />} />
+            <Route path="accounting/odoo" element={<Navigate to="/accounting/ventas" replace />} />
             {/* The standalone admin commissions report folded into the
                 accounting workspace (comisiones por pagar). Redirect old
                 bookmarks there instead of 404'ing. */}

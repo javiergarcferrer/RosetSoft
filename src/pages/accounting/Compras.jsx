@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, ShoppingCart, Plus, Loader2, Check, X } from 'lucide-react';
+import { ShoppingCart, Plus, Loader2, Check, X } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   buildPurchaseEntry, computeExpenseTaxes, resolveAccountingConfig,
@@ -22,8 +23,7 @@ const PAY_LABEL = { cash: 'Efectivo', bank: 'Banco', card: 'Tarjeta', credit: 'C
  * and feeds the 606. Self-gates on accounting/admin.
  */
 export default function Compras() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -37,20 +37,10 @@ export default function Compras() {
   const [params] = useSearchParams();
   const [showForm, setShowForm] = useState(!!params.get('new'));
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Compras" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   const rows = purchasesQ.data.slice().sort((a, b) => (b.purchaseAt || 0) - (a.purchaseAt || 0));
 
   return (
-    <>
+    <AccountingGate title="Compras">
       <PageHeader title="Compras" subtitle="Compra de mercancía (a inventario), activos y servicios — se asienta sola"
         actions={<button type="button" onClick={() => setShowForm((v) => !v)} className="btn-primary"><Plus size={15} /> Nueva compra</button>} />
 
@@ -95,7 +85,7 @@ export default function Compras() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }
 

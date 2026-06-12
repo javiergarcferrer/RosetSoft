@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Shield, Wallet, Loader2, Check } from 'lucide-react';
+import { Wallet, Loader2, Check } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig } from '../../core/accounting/index.js';
 
@@ -16,8 +17,7 @@ const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio
  * preview it, and post the asiento. Self-gates on accounting/admin.
  */
 export default function Nomina() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -35,16 +35,6 @@ export default function Nomina() {
     .map((e) => ({ employeeId: e.id, name: e.name, ...computePayrollItem(e.monthlySalary) })),
     [empQ.data]);
   const totals = useMemo(() => payrollTotals(items), [items]);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Nómina" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   async function post() {
     setErr('');
@@ -74,7 +64,7 @@ export default function Nomina() {
   const runs = runsQ.data.slice().sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
 
   return (
-    <>
+    <AccountingGate title="Nómina">
       <PageHeader title="Nómina" subtitle="Genera la nómina del mes (TSS + ISR) y se asienta sola" />
 
       {!loaded ? <ListLoading /> : (
@@ -193,6 +183,6 @@ export default function Nomina() {
           )}
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

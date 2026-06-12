@@ -1,21 +1,21 @@
 import { useMemo, useState } from 'react';
-import { Shield, Lock, LockOpen, Loader2 } from 'lucide-react';
+import { Lock, LockOpen, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 /**
  * Períodos contables — close a month so nothing can post into it (enforced by a
- * DB trigger across every path), reopen to amend. Self-gates on accounting/admin.
+ * DB trigger across every path), reopen to amend. Self-gates on accounting/admin
+ * via AccountingGate.
  */
 export default function Periodos() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
@@ -30,16 +30,6 @@ export default function Periodos() {
     return out;
   }, []);
   const [busy, setBusy] = useState(null);
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Períodos contables" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   async function toggle(year, month) {
     const key = `${year}-${month}`;
@@ -58,7 +48,7 @@ export default function Periodos() {
   }
 
   return (
-    <>
+    <AccountingGate title="Períodos contables">
       <PageHeader title="Períodos contables"
         subtitle="Cierra un mes para que no se pueda asentar en él (se valida en la base de datos)" />
 
@@ -98,6 +88,6 @@ export default function Periodos() {
           </table>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

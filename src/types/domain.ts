@@ -460,6 +460,8 @@ export interface PayrollItem {
   net: number;
   sfsPat: number;
   afpPat: number;
+  /** SRL patronal. Optional: items saved before the field existed lack it. */
+  srlPat?: number;
   infotepPat: number;
 }
 

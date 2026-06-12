@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Shield, Hash, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
+import { Hash, Plus, Loader2, Check, X, Pencil } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { ECF_TYPES, ecfTypeLabel, sequenceState } from '../../core/accounting/index.js';
@@ -20,8 +21,7 @@ function blank() {
 }
 
 export default function ECFSequences() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const seqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
@@ -33,16 +33,6 @@ export default function ECFSequences() {
     () => seqQ.data.slice().sort((a, b) => (a.ecfType || '').localeCompare(b.ecfType || '') || Number(a.seqFrom) - Number(b.seqFrom)),
     [seqQ.data],
   );
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Secuencias e-NCF" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   function openNew() { setForm(blank()); setEditing('new'); }
   function openEdit(s) {
@@ -78,7 +68,7 @@ export default function ECFSequences() {
   const field = 'input';
 
   return (
-    <>
+    <AccountingGate title="Secuencias e-NCF">
       <PageHeader title="Secuencias e-NCF"
         subtitle="Rangos de e-NCF autorizados por la DGII; el sistema asigna el próximo al facturar"
         actions={<button type="button" onClick={openNew} className="btn-primary"><Plus size={15} /> Nueva secuencia</button>} />
@@ -151,6 +141,6 @@ export default function ECFSequences() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

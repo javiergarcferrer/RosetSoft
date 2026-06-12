@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Shield, FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { toRow } from '../../db/rowMapping.js';
@@ -8,16 +8,18 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
-import { downloadCsv } from '../../lib/csv.js';
+import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, isValidFiscalId,
-  ecfQrUrl, formatEcfDate,
+  ecfQrUrl, formatEcfDate, dgii607Txt, dgiiPeriod, dgiiTxtFilename,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -57,8 +59,7 @@ function invoiceReadyAt(q) {
  * the client deposit) and records the NCF. Self-gates on accounting/admin.
  */
 export default function Facturacion() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -69,6 +70,8 @@ export default function Facturacion() {
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
   const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
+  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
+  const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
@@ -218,8 +221,8 @@ export default function Facturacion() {
     [postingsQ.data, customersById, win]);
   const itbis = useMemo(() => resolveItbisLiquidation({
     salesPostings: postingsQ.data, expenses: expensesQ.data,
-    purchases: purchasesQ.data, imports: importsQ.data, ...win,
-  }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, win]);
+    purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
+  }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
   const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, rnc, msg }
   const [posting, setPosting] = useState(null);
@@ -241,16 +244,6 @@ export default function Facturacion() {
     } finally {
       setLookingId(null);
     }
-  }
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Facturación" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
   }
 
   async function postSale(quote) {
@@ -326,20 +319,28 @@ export default function Facturacion() {
     downloadCsv(`607_${ymd(win.start)}_${ymd(win.end)}.csv`, rows);
   }
 
-  const tabBtn = (key, label) => (
-    <button type="button" onClick={() => setTab(key)}
-      className={`btn ${tab === key ? 'tab-pill-active' : 'tab-pill'}`}>{label}</button>
-  );
+  // The official fixed-format TXT the DGII portal actually ingests (the CSV is
+  // the human-readable copy). Needs the emisor RNC for the header line.
+  function export607Txt() {
+    setErr('');
+    if (!settings?.companyRnc) {
+      setErr('Define el RNC del emisor en Configuración contable para generar el TXT DGII.');
+      return;
+    }
+    const period = dgiiPeriod(win.end);
+    const txt = dgii607Txt({ rows: sales607.rows, payments: paymentsQ.data, rncEmisor: settings?.companyRnc, period });
+    downloadText(dgiiTxtFilename('607', settings?.companyRnc, period), txt);
+  }
 
   return (
-    <>
+    <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)" />
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        {tabBtn('pending', `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}`)}
-        {tabBtn('607', '607')}
-        {tabBtn('it1', 'IT-1 (ITBIS)')}
-      </div>
+      <TabPills tabs={[
+        { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
+        { key: '607', label: '607' },
+        { key: 'it1', label: 'IT-1 (ITBIS)' },
+      ]} active={tab} onChange={setTab} />
       {err && <p className="text-sm text-rose-600 mb-3">{err}</p>}
 
       {!loaded ? <ListLoading /> : tab === 'pending' ? (
@@ -393,9 +394,11 @@ export default function Facturacion() {
         )
       ) : tab === '607' ? (
         <>
-          <div className="flex justify-end mb-3">
+          <div className="flex flex-wrap justify-end gap-2 mb-3">
             <button type="button" onClick={export607} disabled={sales607.count === 0}
               className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
+            <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
+              className="btn-primary"><Download size={14} /> TXT DGII (607)</button>
           </div>
           {sales607.count === 0 ? (
             <EmptyState icon={FileText} title="Sin ventas en el mes"
@@ -485,6 +488,8 @@ export default function Facturacion() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span>Débito fiscal (ITBIS ventas)</span><span className="tabular-nums">{formatDop(itbis.debitoFiscal)}</span></div>
             <div className="flex justify-between"><span>Crédito fiscal (ITBIS compras)</span><span className="tabular-nums">−{formatDop(itbis.creditoFiscal)}</span></div>
+            <div className="flex justify-between text-xs text-ink-500 pl-3"><span>Local (606)</span><span className="tabular-nums">{formatDop(itbis.creditoLocal)}</span></div>
+            <div className="flex justify-between text-xs text-ink-500 pl-3"><span>Importación (DUA)</span><span className="tabular-nums">{formatDop(itbis.creditoImportacion)}</span></div>
             <div className="flex justify-between pt-2 mt-1 border-t border-ink-200 font-bold">
               <span>{itbis.aPagar > 0 ? 'ITBIS a pagar' : 'Saldo a favor'}</span>
               <span className="tabular-nums">{formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor)}</span>
@@ -495,6 +500,6 @@ export default function Facturacion() {
       {printDoc && (
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
-    </>
+    </AccountingGate>
   );
 }

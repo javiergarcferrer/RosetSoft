@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Shield, Wallet, FileCheck, Users as UsersIcon, Download,
+  Wallet, FileCheck, Users as UsersIcon, Download,
   Loader2, Calendar, ChevronDown, Briefcase, Check,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import Dropdown, { DropdownItem } from '../../components/primitives/Dropdown.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
@@ -58,7 +59,6 @@ import { resolveSales } from '../../core/accounting/sales.js';
  */
 export default function AccountingWorkspace() {
   const { profileId, profiles, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
 
   // Cycle state — same shape as admin/Commissions so the math agrees.
   const [mode, setMode] = useState('current'); // 'current' | 'previous' | 'custom'
@@ -387,23 +387,10 @@ export default function AccountingWorkspace() {
     downloadCsv(`comisiones-profesionales-${cycleStartIso}-a-${cycleEndIso}.csv`, rows);
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Contabilidad" subtitle=" " />
-        <EmptyState
-          icon={Shield}
-          title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página."
-        />
-      </>
-    );
-  }
-
   return (
-    <>
+    <AccountingGate title="Ventas y comisiones">
       <PageHeader
-        title="Contabilidad"
+        title="Ventas y comisiones"
         subtitle={`Ciclo ${formatCycle(cycle)}`}
         actions={
           /* The four Odoo exports are one-shot commands — ONE menu instead of
@@ -595,7 +582,7 @@ export default function AccountingWorkspace() {
           subOf={(r) => r.professional.company || null}
         />
       )}
-    </>
+    </AccountingGate>
   );
 }
 

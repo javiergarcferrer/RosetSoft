@@ -60,7 +60,9 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 State worth keeping across sessions lives in a test or in this file — never in
 conversation. Two kinds:
 - **Money/parsing/data-integrity tests**:
-  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync}.test.js`.
+  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats}.test.js`.
+  `dgiiFormats` pins the OFFICIAL DGII 606/607 TXT layouts (header + 23 pipe
+  fields, code tables) — never relax it to match the app; fix the builder.
   New money/data invariant worth keeping → pin it here so future loops inherit
   it. Don't pin presentational/getters/label maps — write obviously-correct code
   instead.

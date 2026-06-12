@@ -48,13 +48,13 @@ function subtreeBalance(index, raw, code) {
  *   `ar` (cobros aging split) and `collected30` (cobrado últimos 30 días).
  */
 export function resolveAccountingDashboard({
-  accounts, entries, lines, salesPostings, purchases, expenses, payments, imports,
+  accounts, entries, lines, salesPostings, purchases, expenses, payments, imports, expedientes,
   customersById, suppliersById, monthStart, monthEnd,
 } = {}) {
   const end = monthEnd ?? Date.now();
   const cxc = resolveReceivables({ salesPostings, payments, customersById });
   const cxp = resolvePayables({ purchases, expenses, payments, suppliersById });
-  const itbis = resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, start: monthStart, end });
+  const itbis = resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, start: monthStart, end });
   const income = resolveIncomeStatement({ accounts, lines, entries, start: monthStart, end });
 
   const index = buildChartIndex(accounts);

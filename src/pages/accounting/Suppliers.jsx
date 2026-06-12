@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Shield, Truck, Plus, Loader2, Check, X, Pencil, Search } from 'lucide-react';
+import { Truck, Plus, Loader2, Check, X, Pencil, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 
@@ -25,8 +26,7 @@ function blank() {
 }
 
 export default function Suppliers() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
@@ -70,16 +70,6 @@ export default function Suppliers() {
     }
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Proveedores" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   function openNew() { setForm(blank()); setLookupMsg(''); setEditing('new'); }
   function openEdit(s) {
     setLookupMsg('');
@@ -119,7 +109,7 @@ export default function Suppliers() {
   const field = 'input';
 
   return (
-    <>
+    <AccountingGate title="Proveedores">
       <PageHeader title="Proveedores"
         subtitle={suppliersQ.loaded ? `${suppliersQ.data.length} proveedores` : ' '}
         actions={<button type="button" onClick={openNew} className="btn-primary"><Plus size={15} /> Nuevo proveedor</button>} />
@@ -217,6 +207,6 @@ export default function Suppliers() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

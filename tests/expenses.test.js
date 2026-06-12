@@ -113,6 +113,40 @@ test('resolve606 honors the date window', () => {
   assert.equal(r.rows[0].ncf, 'B0100000002');
 });
 
+test('resolve606 folds in expediente costs that carry an NCF', () => {
+  const expedientes = [{
+    id: 'x1', liquidatedAt: 1500,
+    costs: [
+      { id: 'c1', concept: 'agenciamiento', supplierId: 's1', ncf: 'B0100000099', amount: 11800, itbis: 1800, paymentMethod: 'credit' },
+      { id: 'c2', concept: 'seguro', supplierId: 's2', ncf: 'B0100000100', amount: 2360, itbis: 360 },
+      { id: 'c3', concept: 'tasaDga', amount: 5000, itbis: 0 }, // no NCF → not a 606 doc
+    ],
+  }];
+  const r = resolve606({ expedientes, suppliers: SUPPLIERS });
+  assert.equal(r.count, 2);
+  const agencia = r.rows.find((x) => x.ncf === 'B0100000099');
+  assert.equal(agencia.base, 10000);   // amount net of its ITBIS
+  assert.equal(agencia.itbis, 1800);
+  assert.equal(agencia.tipo606, '02'); // servicios
+  assert.equal(agencia.pay, 'credit');
+  assert.equal(r.rows.find((x) => x.ncf === 'B0100000100').tipo606, '11'); // seguros
+  assert.equal(r.totals.itbis, 2160);
+});
+
+test('resolve606 stamps the DGII tipo de bienes/servicios per doc', () => {
+  const r = resolve606({
+    expenses: [{ id: 'g1', supplierId: 's1', expenseAt: 1000, ncf: 'B01', base: 100, itbis: 18, accountCode: '6-01-001-01-00-00', paymentMethod: 'cash' }],
+    purchases: [
+      { id: 'p1', supplierId: 's1', purchaseAt: 1000, ncf: 'B02', base: 100, itbis: 18, kind: 'goods', paymentMethod: 'credit' },
+      { id: 'p2', supplierId: 's1', purchaseAt: 1000, ncf: 'B03', base: 100, itbis: 18, kind: 'asset', paymentMethod: 'bank' },
+    ],
+    suppliers: SUPPLIERS,
+  });
+  assert.equal(r.rows.find((x) => x.ncf === 'B01').tipo606, '01'); // gastos de personal
+  assert.equal(r.rows.find((x) => x.ncf === 'B02').tipo606, '09'); // costo de venta
+  assert.equal(r.rows.find((x) => x.ncf === 'B03').tipo606, '10'); // adquisición de activos
+});
+
 test('resolveExpensesList joins supplier + account names, newest first', () => {
   const accounts = [{ code: '6-02-007-01-03-00', name: 'TELEFONO E INTERNET' }];
   const withAcct = EXPENSES.map((e) => ({ ...e, accountCode: '6-02-007-01-03-00', paymentMethod: 'bank' }));

@@ -237,7 +237,7 @@ export default function Comisiones() {
 
           {(role === 'admin' || role === 'accounting') && (
             <p className="text-xs text-ink-400">
-              Marca pagos y exporta desde <Link to="/accounting" className="text-brand-600 hover:text-brand-700 underline underline-offset-2">Contabilidad → Ventas y comisiones</Link>.
+              Marca pagos y exporta desde <Link to="/accounting/ventas" className="text-brand-600 hover:text-brand-700 underline underline-offset-2">Contabilidad → Ventas y comisiones</Link>.
             </p>
           )}
         </div>

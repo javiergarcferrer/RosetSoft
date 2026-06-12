@@ -29,6 +29,7 @@ export function resolveSales607({ salesPostings, customersById, start, end } = {
         base: round2(p.base || 0),
         itbis: round2(p.itbis || 0),
         total: round2(p.total || 0),
+        depositApplied: round2(p.depositApplied || 0),
       };
     })
     .sort((a, b) => (a.date || 0) - (b.date || 0));
@@ -45,11 +46,15 @@ export function resolveSales607({ salesPostings, customersById, start, end } = {
 
 /**
  * IT-1 — liquidación mensual de ITBIS. Débito fiscal (ITBIS de ventas) menos
- * crédito fiscal (ITBIS adelantado en gastos/compras) en el período. Saldo
- * positivo ⇒ a pagar; negativo ⇒ a favor (arrastra). Las compras se suman desde
- * los gastos (y, cuando exista, el módulo de compras).
+ * crédito fiscal en el período. Saldo positivo ⇒ a pagar; negativo ⇒ a favor
+ * (arrastra). The credit splits the way the IT-1 form wants it:
+ *   • `creditoLocal` — ITBIS on NCF-backed local docs: gastos + compras + the
+ *     expediente cost sheets (agenciamiento, transporte, puerto…). These rows
+ *     must also appear in the 606 (DGII cross-checks the two).
+ *   • `creditoImportacion` — ITBIS paid at customs (DUA-backed, no NCF): the
+ *     legacy single liquidations + every expediente's import ITBIS.
  */
-export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, start, end } = {}) {
+export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, start, end } = {}) {
   const debitoFiscal = round2((salesPostings || [])
     .filter((p) => inWindow(p.postedAt, start, end))
     .reduce((s, p) => s + (Number(p.itbis) || 0), 0));
@@ -62,10 +67,24 @@ export function resolveItbisLiquidation({ salesPostings, expenses, purchases, im
   const impCredit = (imports || [])
     .filter((l) => inWindow(l.liquidatedAt, start, end))
     .reduce((s, l) => s + (Number(l.importItbis) || 0), 0);
-  const creditoFiscal = round2(expCredit + purCredit + impCredit);
+  const expedienteWindow = (expedientes || []).filter((e) => inWindow(e.liquidatedAt, start, end));
+  const expedienteImportItbis = expedienteWindow
+    .reduce((s, e) => s + (Number(e.importItbis) || 0), 0);
+  // Cost-sheet ITBIS: each cost's recoverable portion, clamped to its amount
+  // (mirrors expedienteCostTotals — duplicated sum here to stay row-shaped).
+  const expedienteCostItbis = expedienteWindow.reduce((s, e) => s
+    + (e.costs || []).reduce((cs, c) => {
+      const a = Math.max(0, Number(c?.amount) || 0);
+      return cs + Math.min(Math.max(0, Number(c?.itbis) || 0), a);
+    }, 0), 0);
+  const creditoLocal = round2(expCredit + purCredit + expedienteCostItbis);
+  const creditoImportacion = round2(impCredit + expedienteImportItbis);
+  const creditoFiscal = round2(creditoLocal + creditoImportacion);
   const saldo = round2(debitoFiscal - creditoFiscal);
   return {
     debitoFiscal,
+    creditoLocal,
+    creditoImportacion,
     creditoFiscal,
     saldo,
     aPagar: saldo > 0 ? saldo : 0,

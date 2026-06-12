@@ -54,3 +54,27 @@ test('resolveItbisLiquidation folds import ITBIS into the credit', () => {
   assert.equal(r.saldo, 6400);
   assert.equal(r.aPagar, 6400);
 });
+
+test('resolveItbisLiquidation credits the expedientes: import ITBIS + cost-sheet ITBIS', () => {
+  const r = resolveItbisLiquidation({
+    salesPostings: [{ postedAt: 1000, itbis: 50000 }],
+    expedientes: [
+      {
+        liquidatedAt: 1000,
+        importItbis: 21600,
+        costs: [
+          { amount: 11800, itbis: 1800 },          // agenciamiento with NCF ITBIS
+          { amount: 5000, itbis: 0 },              // cost without creditable ITBIS
+          { amount: 100, itbis: 500 },             // bad input: ITBIS clamps to amount
+        ],
+      },
+      { liquidatedAt: 99999, importItbis: 9999, costs: [] }, // outside window
+    ],
+    end: 2000,
+  });
+  // débito 50000 − (21600 import + 1800 + 100 local) = 26500
+  assert.equal(r.creditoImportacion, 21600);
+  assert.equal(r.creditoLocal, 1900);
+  assert.equal(r.creditoFiscal, 23500);
+  assert.equal(r.aPagar, 26500);
+});

@@ -34,8 +34,37 @@ test('computePayrollItem: TSS deductions + net', () => {
   assert.equal(it.afpEmp, round2(50000 * DR_PAYROLL.afpEmp / 100));
   assert.equal(it.sfsPat, round2(50000 * DR_PAYROLL.sfsPat / 100));
   assert.equal(it.infotepPat, round2(50000 * DR_PAYROLL.infotepPat / 100));
+  // 50k sits under every tope, so SRL contributes on the full salary.
+  assert.equal(it.srlPat, round2(50000 * DR_PAYROLL.srlPat / 100));
   // net = gross − (sfsEmp+afpEmp) − isr
   assert.equal(it.net, round2(50000 - it.sfsEmp - it.afpEmp - it.isr));
+});
+
+test('computePayrollItem applies the TSS topes per insurance', () => {
+  const s = 500_000; // above every tope
+  const it = computePayrollItem(s);
+  // SFS contributes on its tope (10× mínimo), AFP on its (20×), SRL on its (4×).
+  assert.equal(it.sfsEmp, round2(DR_PAYROLL.sfsSalaryCap * DR_PAYROLL.sfsEmp / 100));
+  assert.equal(it.sfsPat, round2(DR_PAYROLL.sfsSalaryCap * DR_PAYROLL.sfsPat / 100));
+  assert.equal(it.afpEmp, round2(DR_PAYROLL.afpSalaryCap * DR_PAYROLL.afpEmp / 100));
+  assert.equal(it.afpPat, round2(DR_PAYROLL.afpSalaryCap * DR_PAYROLL.afpPat / 100));
+  assert.equal(it.srlPat, round2(DR_PAYROLL.srlSalaryCap * DR_PAYROLL.srlPat / 100));
+  // INFOTEP has no tope — full salary.
+  assert.equal(it.infotepPat, round2(s * DR_PAYROLL.infotepPat / 100));
+  // ISR taxes the salary net of the CAPPED TSS deductions.
+  const tssEmp = round2(it.sfsEmp + it.afpEmp);
+  assert.equal(it.net, round2(s - tssEmp - it.isr));
+});
+
+test('payrollTotals folds SRL into employerSs (and tolerates pre-SRL items)', () => {
+  const it = computePayrollItem(50000);
+  const legacy = { ...computePayrollItem(30000) };
+  delete legacy.srlPat; // an item persisted before the SRL field existed
+  const t = payrollTotals([
+    { employeeId: 'e1', name: 'A', ...it },
+    { employeeId: 'e2', name: 'B', ...legacy },
+  ]);
+  assert.equal(t.employerSs, round2(it.sfsPat + it.afpPat + it.srlPat + legacy.sfsPat + legacy.afpPat));
 });
 
 test('payroll asiento balances for a multi-employee run', () => {

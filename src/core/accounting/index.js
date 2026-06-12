@@ -26,6 +26,9 @@ export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/exp
 // ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation
 export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
 
+// ── DGII Formato de Envío TXT builders (606/607 Oficina Virtual files)
+export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } from './dgiiFormats.js';
+
 // ── Ligne Roset supplier sell-through report (monthly floor sales)
 export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,

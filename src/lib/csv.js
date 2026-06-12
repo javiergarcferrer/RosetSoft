@@ -16,10 +16,7 @@ export function buildCsv(rows) {
   return rows.map(csvRow).join('\r\n');
 }
 
-export function downloadCsv(filename, rows) {
-  // BOM so Excel picks UTF-8 correctly (accented characters, ñ, etc.).
-  const body = '﻿' + buildCsv(rows);
-  const blob = new Blob([body], { type: 'text/csv;charset=utf-8;' });
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -28,4 +25,16 @@ export function downloadCsv(filename, rows) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function downloadCsv(filename, rows) {
+  // BOM so Excel picks UTF-8 correctly (accented characters, ñ, etc.).
+  const body = '﻿' + buildCsv(rows);
+  downloadBlob(filename, new Blob([body], { type: 'text/csv;charset=utf-8;' }));
+}
+
+/** Download a prebuilt plain-text body (e.g. a DGII 606/607 TXT). No BOM —
+ *  the Oficina Virtual wants the bare pipe-delimited file. */
+export function downloadText(filename, text) {
+  downloadBlob(filename, new Blob([text], { type: 'text/plain;charset=utf-8;' }));
 }

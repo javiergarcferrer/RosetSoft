@@ -1,16 +1,16 @@
 import { Link } from 'react-router-dom';
-import { Shield, BarChart3, ChevronRight } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
+import { BarChart3, ChevronRight } from 'lucide-react';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 
 /**
- * Informes — the reports center (QuickBooks-style): every report grouped by
- * area, each linking to the surface that renders it. Self-gates on
- * accounting/admin.
+ * Informes — the reports center (QuickBooks-style): every accounting and
+ * fiscal report grouped by area, each deep-linking into the surface (and tab)
+ * that renders it. Self-gates on accounting/admin via AccountingGate.
  */
 const GROUPS = [
   { title: 'Resumen del negocio', items: [
+    { label: 'Panel de contabilidad', desc: 'KPIs, flujo y series de 6 meses', to: '/accounting/dashboard' },
     { label: 'Balance General', desc: 'Estado de situación a una fecha', to: '/accounting/statements?tab=balance' },
     { label: 'Estado de Resultados', desc: 'Ingresos, costos y gastos del período', to: '/accounting/statements?tab=income' },
   ] },
@@ -19,39 +19,33 @@ const GROUPS = [
     { label: 'Libro mayor', desc: 'Movimientos por cuenta', to: '/accounting/ledger?tab=mayor' },
     { label: 'Libro diario', desc: 'Todos los asientos', to: '/accounting/ledger?tab=diario' },
     { label: 'Catálogo de cuentas', desc: 'El plan de cuentas completo', to: '/accounting/chart' },
+    { label: 'Cierre de período', desc: 'Meses bloqueados / abiertos', to: '/accounting/periodos' },
+  ] },
+  { title: 'Impuestos (DGII)', items: [
+    { label: '607 — Ventas', desc: 'Comprobantes de ventas + TXT Oficina Virtual', to: '/accounting/facturacion?tab=607' },
+    { label: '606 — Compras y gastos', desc: 'Comprobantes de compras + TXT Oficina Virtual', to: '/accounting/expenses?tab=606' },
+    { label: 'Liquidación de ITBIS (IT-1)', desc: 'Débito − crédito (local + importación)', to: '/accounting/facturacion?tab=it1' },
+    { label: 'Secuencias e-NCF', desc: 'Rangos autorizados por tipo de e-CF', to: '/accounting/ecf' },
   ] },
   { title: 'Ventas y clientes', items: [
-    { label: '607 — Ventas', desc: 'Comprobantes de ventas del mes', to: '/accounting/facturacion?tab=607' },
+    { label: 'Ventas y comisiones', desc: 'Ciclo de ventas, comisiones por pagar y CSV Odoo', to: '/accounting/ventas' },
     { label: 'Ventas Ligne Roset', desc: 'Ventas de piso del mes para el proveedor', to: '/accounting/ligne-roset' },
-    { label: 'Cuentas por cobrar', desc: 'Antigüedad y estados de cuenta', to: '/accounting/cuentas' },
+    { label: 'Cuentas por cobrar', desc: 'Antigüedad y estados de cuenta', to: '/accounting/cuentas?tab=cxc' },
   ] },
   { title: 'Gastos y proveedores', items: [
-    { label: '606 — Compras y gastos', desc: 'Comprobantes de compras del mes', to: '/accounting/expenses?tab=606' },
-    { label: 'Cuentas por pagar', desc: 'Antigüedad por proveedor', to: '/accounting/cuentas' },
+    { label: 'Cuentas por pagar', desc: 'Antigüedad por proveedor', to: '/accounting/cuentas?tab=cxp' },
+    { label: 'Importaciones', desc: 'Expedientes, costo en destino e ITBIS aduanal', to: '/accounting/importaciones' },
+    { label: 'Conciliación bancaria', desc: 'Movimientos del banco vs. el mayor', to: '/accounting/conciliacion' },
   ] },
-  { title: 'Impuestos', items: [
-    { label: 'Liquidación de ITBIS (IT-1)', desc: 'Débito − crédito del mes', to: '/accounting/facturacion?tab=it1' },
-    { label: 'Centro de impuestos', desc: '606 · 607 · IT-1 en un lugar', to: '/accounting/impuestos' },
-  ] },
-  { title: 'Inventario', items: [
+  { title: 'Inventario y nómina', items: [
     { label: 'Existencias y valuación', desc: 'Kardex y costo promedio', to: '/accounting/inventario' },
+    { label: 'Nómina', desc: 'Corridas mensuales — TSS, ISR y neto', to: '/accounting/nomina' },
   ] },
 ];
 
 export default function Informes() {
-  const { currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Informes" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
   return (
-    <>
+    <AccountingGate title="Informes">
       <PageHeader title="Informes" subtitle="Todos los reportes contables y fiscales, en un lugar" />
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {GROUPS.map((g) => (
@@ -71,6 +65,6 @@ export default function Informes() {
           </div>
         ))}
       </div>
-    </>
+    </AccountingGate>
   );
 }

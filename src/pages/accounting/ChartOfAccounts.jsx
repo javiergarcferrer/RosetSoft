@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, BookText, Search } from 'lucide-react';
+import { BookText, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { buildChartIndex, chartRoots, ACCOUNT_CLASS_NAMES } from '../../core/accounting/index.js';
 
 /**
  * Catálogo de cuentas — the read-only chart of accounts (seeded from the
  * advisor's DGII IR-2-aligned plan). A collapsible tree in catálogo order;
  * searching flattens to matching code/name. Title accounts are muted, postable
- * leaves are emphasized (only leaves take postings). Self-gates on the
- * accounting/admin role.
+ * leaves are emphasized (only leaves take postings). Self-gates on
+ * accounting/admin via AccountingGate.
  */
 const CLASS_TONE = {
   1: 'bg-sky-100 text-sky-700',
@@ -56,8 +57,7 @@ function AccountNode({ node, index, depth }) {
 }
 
 export default function ChartOfAccounts() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
 
   const accountsQ = useLiveQueryStatus(
     () => db.accounts.where('profileId').equals(profileId || 'team').toArray(),
@@ -76,21 +76,11 @@ export default function ChartOfAccounts() {
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [q, accountsQ.data]);
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Catálogo de cuentas" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   const total = accountsQ.data.length;
   const leaves = accountsQ.data.filter((a) => a.isPostable).length;
 
   return (
-    <>
+    <AccountingGate title="Catálogo de cuentas">
       <PageHeader
         title="Catálogo de cuentas"
         subtitle={accountsQ.loaded ? `${total} cuentas · ${leaves} imputables · ${total - leaves} de título` : ' '}
@@ -144,6 +134,6 @@ export default function ChartOfAccounts() {
           ))}
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Shield, FileText, Send, Settings as SettingsIcon } from 'lucide-react';
+import { FileText, Send, Settings as SettingsIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
 import { linesByQuoteId } from '../../core/quote/totals.js';
@@ -32,8 +33,7 @@ function fromMonthValue(value) {
  * month (what you send on the 15th). Self-gates on accounting/admin.
  */
 export default function LigneRosetSales() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
 
   const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
@@ -72,18 +72,8 @@ export default function LigneRosetSales() {
     window.location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Ventas Ligne Roset" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   return (
-    <>
+    <AccountingGate title="Ventas Ligne Roset">
       <PageHeader title="Ventas Ligne Roset"
         subtitle="Reporte mensual de ventas de piso para el proveedor" />
 
@@ -157,6 +147,6 @@ export default function LigneRosetSales() {
           </div>
         </div>
       )}
-    </>
+    </AccountingGate>
   );
 }
