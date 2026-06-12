@@ -4,12 +4,14 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
-import { displayPhone } from '../../lib/phone.js';
+import { resolveReferral, fillTemplateBody, resolveNewChatContacts } from '../../core/crm/index.js';
+import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
+import { db } from '../../db/database.js';
+import { useLiveQuery } from '../../db/hooks.js';
 
 /**
  * The WhatsApp conversation thread — header (contact, linked to their CRM
@@ -46,7 +48,7 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, showHeader = true }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, showHeader = true }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -55,6 +57,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [attachOpen, setAttachOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [productsOpen, setProductsOpen] = useState(false);
+  // Contact being saved into the CRM ({ name, phone } from a received card
+  // or the unknown-chatter header action), or null.
+  const [saveTarget, setSaveTarget] = useState(null);
   // Message being quoted in the composer (set from a bubble's "Responder").
   const [replyTo, setReplyTo] = useState(null);
   // Voice-note recording in flight (state drives the UI; the ref lets
@@ -227,13 +232,33 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             {contact.contactKind === 'professional' && <span className="inline-flex items-center gap-0.5"><UserSquare2 size={10} /> Profesional</span>}
           </div>
         </div>
+        {/* Unknown chatter → save them into the CRM (the official app's "Add to contacts"). */}
+        {onSaveContact && !contact.contactKind && contact.phone && (
+          <button
+            type="button"
+            onClick={() => setSaveTarget({
+              name: contact.name && contact.name !== displayPhone(contact.phone) ? contact.name : '',
+              phone: contact.phone,
+            })}
+            className="btn-ghost text-xs inline-flex items-center gap-1.5 shrink-0"
+          >
+            <UserPlus size={13} /> Guardar
+          </button>
+        )}
       </div>
       )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 bg-ink-50/40">
         {thread.items.map((m, i) => (
-          <Bubble key={m.id} m={m} prev={thread.items[i - 1]} onReply={setReplyTo} onReact={onReact ? react : null} />
+          <Bubble
+            key={m.id}
+            m={m}
+            prev={thread.items[i - 1]}
+            onReply={setReplyTo}
+            onReact={onReact ? react : null}
+            onSaveCard={onSaveContact ? setSaveTarget : null}
+          />
         ))}
         {!thread.items.length && (
           <p className="text-xs text-ink-400 text-center py-8">
@@ -431,6 +456,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
         <ContactSendModal
           open={contactOpen}
           onClose={() => setContactOpen(false)}
+          excludeKey={contact.key}
           onSend={async (c) => {
             const res = await onSendContact({ ...c, replyTo: replyTo?.waId || null });
             if (res?.ok) { setContactOpen(false); setReplyTo(null); }
@@ -448,6 +474,14 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           return res;
         }}
       />
+
+      {onSaveContact && (
+        <SaveContactModal
+          target={saveTarget}
+          onClose={() => setSaveTarget(null)}
+          onSave={onSaveContact}
+        />
+      )}
     </>
   );
 }
@@ -465,8 +499,14 @@ function AttachItem({ icon: Icon, label, onClick }) {
   );
 }
 
-/** Send a contact card (vCard) the client can save — name + phone (+ company). */
-function ContactSendModal({ open, onClose, onSend }) {
+/**
+ * Send a contact card (vCard) the client can save. Picks from the CRM
+ * (customers + professionals with a phone, minus this thread's own contact)
+ * — tapping a row prefills the form for a quick confirm — or fill the fields
+ * manually for someone outside the list.
+ */
+function ContactSendModal({ open, onClose, excludeKey, onSend }) {
+  const [needle, setNeedle] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [org, setOrg] = useState('');
@@ -474,11 +514,36 @@ function ContactSendModal({ open, onClose, onSend }) {
   const [error, setError] = useState(null);
   useEffect(() => {
     if (!open) return;
+    setNeedle('');
     setName('');
     setPhone('');
     setOrg('');
     setError(null);
   }, [open]);
+
+  // The CRM lists load only while the modal is open (the host pages may not
+  // have them — the quote editor's card doesn't fetch professionals).
+  const customers = useLiveQuery(
+    () => (open ? db.customers.toArray() : Promise.resolve([])),
+    [open], [],
+  );
+  const professionals = useLiveQuery(
+    () => (open ? db.professionals.toArray() : Promise.resolve([])),
+    [open], [],
+  );
+  const picks = (open ? resolveNewChatContacts(customers, professionals, [], { needle }) : [])
+    .filter((c) => c.key !== excludeKey)
+    .slice(0, 30);
+
+  function pick(c) {
+    const row = c.customerId
+      ? customers.find((r) => r.id === c.customerId)
+      : professionals.find((r) => r.id === c.professionalId);
+    setName(c.name);
+    setPhone(c.phone);
+    setOrg(row?.company || '');
+    setError(null);
+  }
 
   async function submit() {
     if (sending) return;
@@ -493,6 +558,39 @@ function ContactSendModal({ open, onClose, onSend }) {
   return (
     <Modal open={open} onClose={onClose} title="Enviar contacto" size="sm">
       <div className="space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
+          <input
+            className="input pl-9 text-sm"
+            value={needle}
+            onChange={(e) => setNeedle(e.target.value)}
+            placeholder="Buscar en clientes y profesionales…"
+            aria-label="Buscar contacto"
+          />
+        </div>
+        {picks.length > 0 && (
+          <div className="max-h-44 overflow-y-auto -mx-1 px-1 rounded-lg border border-ink-100 divide-y divide-ink-50">
+            {picks.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => pick(c)}
+                className={`w-full text-left px-3 py-2 flex items-center gap-2.5 transition-colors ${
+                  phoneKey(phone) === c.key ? 'bg-brand-50' : 'hover:bg-ink-50'
+                }`}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-ink-900 truncate">{c.name}</span>
+                  <span className="block text-[11px] text-ink-400">
+                    {displayPhone(c.phone)} · {c.contactKind === 'customer' ? 'Cliente' : 'Profesional'}
+                  </span>
+                </span>
+                {phoneKey(phone) === c.key && <Check size={14} className="text-brand-700 shrink-0" />}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="eyebrow-xs text-ink-400">…o escríbelo manualmente</div>
         <div>
           <div className="label">Nombre</div>
           <input className="input text-sm" value={name} onChange={(e) => setName(e.target.value)} />
@@ -513,6 +611,80 @@ function ContactSendModal({ open, onClose, onSend }) {
         <div className="flex justify-end pt-1">
           <button type="button" onClick={submit} disabled={sending} className="btn-primary text-sm inline-flex items-center gap-1.5">
             {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Save a chat contact (a received vCard, or the unknown number you're
+ * chatting with) into the CRM as a customer or professional. Duplicates
+ * don't double-save — the existing row is named instead.
+ */
+function SaveContactModal({ target, onClose, onSave }) {
+  const open = !!target;
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [kind, setKind] = useState('customer');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null); // { tone: 'error'|'info', text }
+  useEffect(() => {
+    if (!target) return;
+    setName(target.name || '');
+    setPhone(target.phone || '');
+    setKind('customer');
+    setMsg(null);
+  }, [target]);
+
+  async function submit() {
+    if (saving) return;
+    if (!name.trim() || !phone.trim()) { setMsg({ tone: 'error', text: 'Completa el nombre y el teléfono.' }); return; }
+    setSaving(true);
+    setMsg(null);
+    const res = await onSave({ name: name.trim(), phone: phone.trim(), kind });
+    setSaving(false);
+    if (!res?.ok) { setMsg({ tone: 'error', text: res?.error || 'No se pudo guardar.' }); return; }
+    if (res.existed) { setMsg({ tone: 'info', text: `Ese número ya está guardado${res.name ? ` como ${res.name}` : ''}.` }); return; }
+    onClose();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Guardar contacto" size="sm">
+      <div className="space-y-3">
+        <div className="flex rounded-lg bg-ink-50 p-0.5">
+          {[['customer', 'Cliente'], ['professional', 'Profesional']].map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                kind === k ? 'bg-white shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div>
+          <div className="label">Nombre</div>
+          <input className="input text-sm" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <div className="label">Teléfono</div>
+          <input className="input text-sm" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </div>
+        {msg && (
+          <p className={`text-xs rounded-lg px-3 py-2 flex items-start gap-1.5 ${
+            msg.tone === 'error' ? 'text-red-700 bg-red-50' : 'text-amber-800 bg-amber-50'
+          }`}>
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{msg.text}</span>
+          </p>
+        )}
+        <div className="flex justify-end pt-1">
+          <button type="button" onClick={submit} disabled={saving} className="btn-primary text-sm inline-flex items-center gap-1.5">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Guardar
           </button>
         </div>
       </div>
@@ -994,7 +1166,7 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
   );
 }
 
-function Bubble({ m, prev, onReply, onReact }) {
+function Bubble({ m, prev, onReply, onReact, onSaveCard }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
   const showDay = !prev || dayLabel(prev.createdAt) !== day;
@@ -1100,14 +1272,25 @@ function Bubble({ m, prev, onReply, onReact }) {
               <span className="min-w-0 truncate">Ver en el mapa</span>
             </a>
           )}
-          {/* Contact card (either direction) — who was shared. */}
+          {/* Contact card (either direction) — who was shared. Inbound cards
+              offer one-tap save into the CRM. */}
           {card && (
             <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white/70 border border-ink-200 px-2.5 py-1.5">
               <ContactRound size={15} className="text-ink-400 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="text-xs font-medium text-ink-800 truncate">{card.name}</div>
                 {card.phone && <div className="text-[11px] text-ink-500">{card.phone}</div>}
               </div>
+              {!out && onSaveCard && card.phone && (
+                <button
+                  type="button"
+                  onClick={() => onSaveCard({ name: card.name, phone: card.phone })}
+                  className="shrink-0 inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 transition-colors"
+                  title="Guardar en el CRM"
+                >
+                  <UserPlus size={11} /> Guardar
+                </button>
+              )}
             </div>
           )}
           <div className={`flex items-center gap-1 mt-0.5 ${out ? 'justify-end' : ''}`}>

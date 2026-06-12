@@ -8,8 +8,8 @@
 // (connected-at, display number, verify token) lands on `settings` for the UI.
 
 import { supabase } from '../db/supabaseClient.js';
-import { updateSettings, db, newId } from '../db/database.js';
-import { waDigits } from './phone.js';
+import { updateSettings, db, newId, assignSequenceNumber } from '../db/database.js';
+import { waDigits, phoneKey } from './phone.js';
 
 const TEAM_PROFILE_ID = 'team';
 
@@ -332,6 +332,49 @@ export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
 export async function sendQuotePdf({ to, blob, filename, customer, quoteId }) {
   const file = new File([blob], filename, { type: 'application/pdf' });
   return sendWhatsappMedia({ to, file, customerId: customer?.id, quoteId });
+}
+
+/**
+ * Save a contact gleaned from the chat — a received vCard or an unknown
+ * chatter — into the CRM. `kind` = 'customer' | 'professional'. A phone
+ * already in either table short-circuits: { ok:true, existed:true, name }
+ * names the row that holds it (no duplicate created). Creation mirrors
+ * CustomerModal / ProfessionalModal exactly (professionals take the
+ * race-safe sequence number).
+ */
+export async function saveChatContact({ name, phone, kind = 'customer', profileId = TEAM_PROFILE_ID }) {
+  const cleanName = String(name || '').trim();
+  const cleanPhone = String(phone || '').trim();
+  if (!cleanName || !cleanPhone) return { ok: false, error: 'Faltan el nombre o el teléfono.' };
+  const key = phoneKey(cleanPhone);
+  if (!key) return { ok: false, error: 'El teléfono no es válido.' };
+  const [customers, professionals] = await Promise.all([
+    db.customers.where('profileId').equals(profileId).toArray(),
+    db.professionals.where('profileId').equals(profileId).toArray(),
+  ]);
+  const dup = [...customers, ...professionals].find((r) => phoneKey(r.phone) === key);
+  if (dup) return { ok: true, existed: true, name: dup.name || dup.company || '' };
+  const now = Date.now();
+  if (kind === 'professional') {
+    await assignSequenceNumber({
+      table: 'professionals',
+      profileId,
+      start: 1,
+      build: (number) => ({
+        id: newId(), profileId, number,
+        name: cleanName, company: '', email: '', phone: cleanPhone, notes: '',
+        createdAt: now, updatedAt: now,
+      }),
+    });
+  } else {
+    await db.customers.put({
+      id: newId(), profileId,
+      name: cleanName, rnc: '', company: '', contactName: '', email: '',
+      phone: cleanPhone, address: '', city: '', state: '', zip: '', country: '',
+      notes: '', createdAt: now,
+    });
+  }
+  return { ok: true };
 }
 
 /**

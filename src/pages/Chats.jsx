@@ -15,7 +15,7 @@ import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
-  sendWhatsappProducts, markThreadRead, draftOutboundMessage,
+  sendWhatsappProducts, saveChatContact, markThreadRead, draftOutboundMessage,
 } from '../lib/whatsapp.js';
 
 /**
@@ -260,6 +260,12 @@ export default function Chats() {
                   to: selected.phone, items, names, text,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
+                invalidate();
+                return res;
+              }}
+              onSaveContact={async (spec) => {
+                const res = await saveChatContact({ ...spec, profileId })
+                  .catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
                 return res;
               }}

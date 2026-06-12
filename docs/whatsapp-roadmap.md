@@ -114,3 +114,7 @@ P3 — growth & ops:
   (Archivo · Ubicación · Contacto); pins/cards render both directions;
   webhook labels inbound contacts. **P1 complete.** Next: P2 #9 quick
   replies (needs a wa_quick_replies migration), #11 archive/pin.
+- 2026-06-12 · it.5 (user ask): contact send picks from the CRM (search over
+  customers+professionals, manual fallback); received cards get "Guardar" →
+  CRM row (customer/professional, dup-guarded via saveChatContact), and
+  unknown chatters get a header "Guardar" — saving auto-links the thread.
