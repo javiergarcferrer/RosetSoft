@@ -363,6 +363,21 @@ export default function OrderDetail() {
                     key={c.id}
                     container={c}
                     orderId={orderId}
+                    arrivalAction={
+                      // HL reports arrival but the order still says "En ruta" —
+                      // suggest the next stage; the dealer confirms with a tap.
+                      !isCancelled && stage === 'in_transit' && nxt ? (
+                        <button
+                          type="button"
+                          onClick={() => advance(nxt)}
+                          disabled={!canAdvance}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 min-h-9 coarse:min-h-11 text-xs font-medium text-amber-800 hover:bg-amber-100 active:scale-[0.98] transition-all disabled:opacity-50"
+                          title={canAdvance ? 'El rastreo reporta llegada a destino' : (blockedReason || '')}
+                        >
+                          <Truck size={12} aria-hidden /> Llegada reportada — ¿marcar {nxt.label}?
+                        </button>
+                      ) : null
+                    }
                   />
                 ))}
               </ul>
@@ -450,7 +465,7 @@ export default function OrderDetail() {
 // narrative that used to live per-container moved up to the order
 // (placed → confirmed → in_transit → in_customs → received).
 // ---------------------------------------------------------------------------
-function ContainerRow({ container }) {
+function ContainerRow({ container, arrivalAction = null }) {
   const filled = !!container.filledAt;
 
   // The container number lives in `code`. Validate it (ISO 6346 check
@@ -537,7 +552,7 @@ function ContainerRow({ container }) {
       </div>
 
       {/* A valid number tracks itself — no button to press. */}
-      {trackable && <ContainerTracking containerNo={validation.value} />}
+      {trackable && <ContainerTracking containerNo={validation.value} arrivalAction={arrivalAction} />}
     </li>
   );
 }
