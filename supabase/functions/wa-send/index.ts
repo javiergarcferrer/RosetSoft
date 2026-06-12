@@ -80,6 +80,10 @@ type SendBody = {
     list?: { button?: string; rows?: { title?: string; description?: string }[] };
     cta?: { displayText?: string; url?: string };
   };
+  /** Location pin the client can open in Maps (free-form — 24h window). */
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+  /** Contact card (vCard) the client can save (free-form — 24h window). */
+  contact?: { name?: string; phone?: string; org?: string };
   customerId?: string | null;
   professionalId?: string | null;
   quoteId?: string | null;
@@ -608,6 +612,57 @@ Deno.serve(async (req: Request) => {
       logKind: 'interactive',
       logBody: text,
       logPayload: { ...(contextLog || {}), interactive: logInteractive },
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
+
+  // Location pin.
+  if (body.location) {
+    const lat = Number(body.location.latitude);
+    const lng = Number(body.location.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return json({ ok: false, error: 'Faltan las coordenadas.' }, 400);
+    const name = String(body.location.name || '').trim();
+    const address = String(body.location.address || '').trim();
+    const res = await sendOne({
+      to,
+      payload: {
+        messaging_product: 'whatsapp', to, type: 'location', ...contextPart,
+        location: { latitude: lat, longitude: lng, ...(name ? { name } : {}), ...(address ? { address } : {}) },
+      },
+      logKind: 'location',
+      logBody: name || address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      logPayload: { ...(contextLog || {}), location: { latitude: lat, longitude: lng, name, address } },
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
+
+  // Contact card (vCard).
+  if (body.contact) {
+    const cName = String(body.contact.name || '').trim();
+    const cPhone = String(body.contact.phone || '').replace(/[^\d+]/g, '');
+    if (!cName || !cPhone) return json({ ok: false, error: 'Faltan el nombre o el teléfono del contacto.' }, 400);
+    const org = String(body.contact.org || '').trim();
+    const res = await sendOne({
+      to,
+      payload: {
+        messaging_product: 'whatsapp', to, type: 'contacts', ...contextPart,
+        contacts: [{
+          name: { formatted_name: cName, first_name: cName.split(/\s+/)[0] },
+          phones: [{ phone: cPhone, type: 'CELL', wa_id: cPhone.replace(/\D/g, '') }],
+          ...(org ? { org: { company: org } } : {}),
+        }],
+      },
+      logKind: 'contacts',
+      logBody: cName,
+      logPayload: { ...(contextLog || {}), contact: { name: cName, phone: cPhone, org } },
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,

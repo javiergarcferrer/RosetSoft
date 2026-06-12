@@ -142,6 +142,22 @@ export async function sendWhatsappInteractive({ to, text, buttons, list, cta, re
   return invokeWaSend({ to: waDigits(to), interactive: { text, buttons, list, cta }, replyTo, customerId, professionalId, quoteId });
 }
 
+/**
+ * Send a location pin the client opens in Maps (free-form — 24h window).
+ * `name`/`address` label the pin (optional).
+ */
+export async function sendWhatsappLocation({ to, latitude, longitude, name, address, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), location: { latitude, longitude, name, address }, replyTo, customerId, professionalId, quoteId });
+}
+
+/**
+ * Send a contact card (vCard) the client can save with one tap (free-form —
+ * 24h window). `org` is the optional company line.
+ */
+export async function sendWhatsappContact({ to, name, phone, org, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), contact: { name, phone, org }, replyTo, customerId, professionalId, quoteId });
+}
+
 /** Read the number's public business profile (about, address, email, web…). */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });

@@ -4,6 +4,7 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, X, Mic, Trash2, ExternalLink,
+  MapPin, ContactRound,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
@@ -44,12 +45,14 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, showHeader = true }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, showHeader = true }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [interactiveOpen, setInteractiveOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   // Message being quoted in the composer (set from a bubble's "Responder").
   const [replyTo, setReplyTo] = useState(null);
   // Voice-note recording in flight (state drives the UI; the ref lets
@@ -107,6 +110,28 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setError(null);
     const res = await onReact(m, emoji);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar la reacción.');
+  }
+
+  // Share the dealer's current position (the attach menu's "Ubicación").
+  function sendCurrentLocation() {
+    setAttachOpen(false);
+    if (!navigator.geolocation) { setError('Este dispositivo no expone la ubicación.'); return; }
+    setSending(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const res = await onSendLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          replyTo: replyTo?.waId || null,
+        });
+        setReplyTo(null);
+        setSending(false);
+        if (!res?.ok) setError(res?.error || 'No se pudo enviar la ubicación.');
+      },
+      () => { setSending(false); setError('Sin acceso a la ubicación — permítela en el navegador.'); },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   }
 
   // Voice notes — record in a format Meta's audio upload accepts and ship
@@ -280,16 +305,30 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={!connected || sending}
-              className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-              title="Adjuntar archivo (imagen, PDF, video…)"
-              aria-label="Adjuntar archivo"
-            >
-              <Paperclip size={17} />
-            </button>
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setAttachOpen((v) => !v)}
+                disabled={!connected || sending}
+                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors"
+                title="Adjuntar (archivo · ubicación · contacto)"
+                aria-label="Adjuntar"
+                aria-expanded={attachOpen}
+              >
+                <Paperclip size={17} />
+              </button>
+              {attachOpen && (
+                <>
+                  {/* Invisible backdrop — a tap anywhere else closes the menu. */}
+                  <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setAttachOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
+                  <div className="absolute bottom-full left-0 mb-2 z-20 w-48 rounded-xl bg-white border border-ink-100 shadow-lg overflow-hidden py-1">
+                    <AttachItem icon={FileText} label="Archivo" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
+                    {onSendLocation && <AttachItem icon={MapPin} label="Ubicación actual" onClick={sendCurrentLocation} />}
+                    {onSendContact && <AttachItem icon={ContactRound} label="Contacto" onClick={() => { setAttachOpen(false); setContactOpen(true); }} />}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setTemplateOpen(true)}
@@ -373,7 +412,87 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           return res;
         }}
       />
+
+      {onSendContact && (
+        <ContactSendModal
+          open={contactOpen}
+          onClose={() => setContactOpen(false)}
+          onSend={async (c) => {
+            const res = await onSendContact({ ...c, replyTo: replyTo?.waId || null });
+            if (res?.ok) { setContactOpen(false); setReplyTo(null); }
+            return res;
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** One row of the attach popover menu. */
+function AttachItem({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-ink-700 hover:bg-ink-50 transition-colors"
+    >
+      <Icon size={15} className="text-ink-400 shrink-0" /> {label}
+    </button>
+  );
+}
+
+/** Send a contact card (vCard) the client can save — name + phone (+ company). */
+function ContactSendModal({ open, onClose, onSend }) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [org, setOrg] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    setName('');
+    setPhone('');
+    setOrg('');
+    setError(null);
+  }, [open]);
+
+  async function submit() {
+    if (sending) return;
+    if (!name.trim() || !phone.trim()) { setError('Completa el nombre y el teléfono.'); return; }
+    setSending(true);
+    setError(null);
+    const res = await onSend({ name: name.trim(), phone: phone.trim(), org: org.trim() });
+    setSending(false);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar el contacto.');
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Enviar contacto" size="sm">
+      <div className="space-y-3">
+        <div>
+          <div className="label">Nombre</div>
+          <input className="input text-sm" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <div className="label">Teléfono</div>
+          <input className="input text-sm" type="tel" inputMode="tel" value={phone} placeholder="809 000 0000" onChange={(e) => setPhone(e.target.value)} />
+        </div>
+        <div>
+          <div className="label">Empresa (opcional)</div>
+          <input className="input text-sm" value={org} onChange={(e) => setOrg(e.target.value)} />
+        </div>
+        {error && (
+          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
+          </p>
+        )}
+        <div className="flex justify-end pt-1">
+          <button type="button" onClick={submit} disabled={sending} className="btn-primary text-sm inline-flex items-center gap-1.5">
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -681,6 +800,8 @@ function Bubble({ m, prev, onReply, onReact }) {
   const isDocChip = !!m.mediaPath && !/^(image|video|audio)\//.test(m.mediaMime || '');
   // Stickers render bare — no bubble chrome — like the official app.
   const isSticker = m.kind === 'sticker' && !!m.mediaPath;
+  const card = contactCard(m);
+  const loc = m.payload?.location;
   // Reply/react address the message by wamid — without one (an optimistic
   // draft, a failed send) there is nothing to act on.
   const canAct = !!m.waId && !!(onReply || onReact);
@@ -719,9 +840,9 @@ function Bubble({ m, prev, onReply, onReact }) {
             </div>
           )}
           {m.mediaPath && <MediaAttachment m={m} />}
-          {m.body && !isDocChip
+          {m.body && !isDocChip && !card
             ? m.body
-            : !m.mediaPath && !m.body && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}
+            : !m.mediaPath && !m.body && !card && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}
           {/* Quick-reply buttons WE sent — non-clickable chips showing what the client saw. */}
           {m.payload?.interactive?.buttons?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -752,6 +873,28 @@ function Bubble({ m, prev, onReply, onReact }) {
               <ExternalLink size={11} className="shrink-0" /> {m.payload.interactive.cta.displayText || 'Abrir enlace'}
             </a>
           )}
+          {/* Location pin (either direction) — opens in Maps. */}
+          {loc?.latitude != null && (
+            <a
+              href={`https://maps.google.com/?q=${loc.latitude},${loc.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-white/70 border border-ink-200 px-2.5 py-1.5 text-xs font-medium text-sky-700 hover:bg-white transition-colors"
+            >
+              <MapPin size={13} className="shrink-0" />
+              <span className="min-w-0 truncate">Ver en el mapa</span>
+            </a>
+          )}
+          {/* Contact card (either direction) — who was shared. */}
+          {card && (
+            <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white/70 border border-ink-200 px-2.5 py-1.5">
+              <ContactRound size={15} className="text-ink-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-ink-800 truncate">{card.name}</div>
+                {card.phone && <div className="text-[11px] text-ink-500">{card.phone}</div>}
+              </div>
+            </div>
+          )}
           <div className={`flex items-center gap-1 mt-0.5 ${out ? 'justify-end' : ''}`}>
             <span className="text-[10px] opacity-50 tabular-nums">{timeOfDay(m.createdAt)}</span>
             {out && <StatusTicks status={m.status} />}
@@ -771,6 +914,18 @@ function Bubble({ m, prev, onReply, onReact }) {
       </div>
     </>
   );
+}
+
+/**
+ * A contact-card message's { name, phone } — ours ride logPayload.contact,
+ * the client's arrive as Meta's contacts[] array. Null = not a card message.
+ */
+function contactCard(m) {
+  const p = m.payload;
+  if (p?.contact?.name) return { name: p.contact.name, phone: p.contact.phone || '' };
+  const c = Array.isArray(p?.contacts) ? p.contacts[0] : null;
+  if (!c) return null;
+  return { name: c.name?.formatted_name || c.name?.first_name || 'Contacto', phone: c.phones?.[0]?.phone || '' };
 }
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🙏'];

@@ -8,7 +8,8 @@ import { resolveThread } from '../../core/crm/index.js';
 import { phoneKey, displayPhone } from '../../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
-  sendWhatsappReaction, sendWhatsappInteractive, markThreadRead, draftOutboundMessage,
+  sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
+  markThreadRead, draftOutboundMessage,
 } from '../../lib/whatsapp.js';
 
 /**
@@ -170,6 +171,18 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
             }}
             onSendInteractive={async (spec) => {
               const res = await sendWhatsappInteractive({ to: contact.phone, ...spec, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
+              invalidate();
+              return res;
+            }}
+            onSendLocation={async (spec) => {
+              const res = await sendWhatsappLocation({ to: contact.phone, ...spec, ...link })
+                .catch((e) => ({ ok: false, error: e?.message }));
+              invalidate();
+              return res;
+            }}
+            onSendContact={async (spec) => {
+              const res = await sendWhatsappContact({ to: contact.phone, ...spec, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;

@@ -14,7 +14,8 @@ import {
 import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
-  sendWhatsappReaction, sendWhatsappInteractive, markThreadRead, draftOutboundMessage,
+  sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
+  markThreadRead, draftOutboundMessage,
 } from '../lib/whatsapp.js';
 
 /**
@@ -232,6 +233,22 @@ export default function Chats() {
               }}
               onSendInteractive={async (spec) => {
                 const res = await sendWhatsappInteractive({
+                  to: selected.phone, ...spec,
+                  customerId: selected.customerId, professionalId: selected.professionalId,
+                }).catch((e) => ({ ok: false, error: e?.message }));
+                invalidate();
+                return res;
+              }}
+              onSendLocation={async (spec) => {
+                const res = await sendWhatsappLocation({
+                  to: selected.phone, ...spec,
+                  customerId: selected.customerId, professionalId: selected.professionalId,
+                }).catch((e) => ({ ok: false, error: e?.message }));
+                invalidate();
+                return res;
+              }}
+              onSendContact={async (spec) => {
+                const res = await sendWhatsappContact({
                   to: selected.phone, ...spec,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));

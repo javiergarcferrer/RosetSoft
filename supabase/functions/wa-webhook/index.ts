@@ -90,6 +90,10 @@ function inboundBody(msg: Record<string, any>): string {
       const l = msg.location || {};
       return l.name || (l.latitude != null ? `${l.latitude}, ${l.longitude}` : '');
     }
+    case 'contacts': {
+      const c = (msg.contacts || [])[0];
+      return c?.name?.formatted_name || c?.name?.first_name || 'Contacto';
+    }
     default: return '';
   }
 }

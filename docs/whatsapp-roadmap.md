@@ -64,9 +64,10 @@ P1 — chat parity (per-message actions & composer):
 6. ~~Interactive messages~~ ✅ it.3 — list menus (≤10 rows + descriptions) and
    CTA-URL link buttons join quick-reply buttons in one three-mode composer
    modal; bubbles render the menu/link the client saw.
-7. **Location**: send (map-pick or fixed store location); render inbound pin
-   on a map link (today: text only).
-8. **Contacts (vCard)** send — e.g. share the assigned salesperson card.
+7. ~~Location~~ ✅ it.4 (attach menu → current GPS position; both directions
+   render a "Ver en el mapa" chip).
+8. ~~Contacts (vCard)~~ ✅ it.4 (attach menu → name/phone/company modal; card
+   chip renders both directions).
 P2 — business-app productivity:
 9. **Quick replies** (canned responses, `/shortcut` in composer; new table).
 10. **Labels** on conversations + filter chips (new table; CRM-local — Cloud
@@ -109,3 +110,7 @@ P3 — growth & ops:
 - 2026-06-12 · it.3: list menus + CTA-URL (three-mode interactive modal,
   wa-send sub-types, bubble rendering) + sticker render. Next: #7 location,
   #8 vCard, then P2 #9 quick replies.
+- 2026-06-12 · it.4: location + vCard sends behind a new attach popover
+  (Archivo · Ubicación · Contacto); pins/cards render both directions;
+  webhook labels inbound contacts. **P1 complete.** Next: P2 #9 quick
+  replies (needs a wa_quick_replies migration), #11 archive/pin.
