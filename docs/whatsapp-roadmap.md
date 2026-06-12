@@ -55,10 +55,10 @@ checking them off, not re-building them.
 P1 — chat parity (per-message actions & composer):
 1. ~~Send reactions~~ ✅ 007c6fe.
 2. ~~Send quoted replies~~ ✅ 007c6fe.
-3. **Typing indicator + auto-read** on thread open/compose (wa-send already
-   accepts `markRead.typing`; UI never sends it).
-4. **Voice notes**: record (MediaRecorder, audio/ogg;codecs=opus) → send as
-   audio. Render side exists.
+3. ~~Typing indicator + auto-read~~ ✅ it.2 (typing throttled 20s from the
+   composer via `markRead.typing`; auto-read existed in both hosts).
+4. ~~Voice notes~~ ✅ it.2 (mic on empty composer → MediaRecorder ogg-opus/
+   m4a/aac; webm-only browsers hide the mic; ships via the media path).
 5. **Stickers**: render inbound webp stickers properly (today: generic kind),
    send static stickers.
 6. **Interactive messages, rest**: list menus (≤10 rows) + CTA-URL free-form
@@ -102,3 +102,6 @@ P3 — growth & ops:
 - 2026-06-12 · audit + this roadmap; code work deferred (coordination rule).
 - 2026-06-12 · 007c6fe landed mid-iteration — matrix updated, ban lifted. Next
   iteration starts at P1 #3 (typing/auto-read) then #4 (voice notes).
+- 2026-06-12 · it.2: typing indicator + voice notes, both inside ChatThread so
+  inbox/contact-cards/quote editor inherit them; wa-send learns audio/mp4→m4a.
+  Next: #5 stickers, #6 list menus + CTA-URL.

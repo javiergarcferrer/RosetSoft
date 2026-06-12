@@ -3,20 +3,20 @@ import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
-  FileText, Download, Reply, SmilePlus, SquareMenu, X,
+  FileText, Download, Reply, SmilePlus, SquareMenu, X, Mic, Trash2,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
 import { displayPhone } from '../../lib/phone.js';
-import { listWaTemplates, fetchWaMediaUrl } from '../../lib/whatsapp.js';
+import { listWaTemplates, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
 
 /**
  * The WhatsApp conversation thread — header (contact, linked to their CRM
  * card), message bubbles (media, reactions, quoted replies, status ticks),
- * the 24h-window banner and the composer (free text · attach file · approved
- * template). Extracted from the Chats inbox so the SAME thread renders both
- * in the full inbox (split-pane) and embedded in the quote editor
- * (QuoteChatCard) — one surface, no drift.
+ * the 24h-window banner and the composer (free text · attach file · voice
+ * note · approved template). Extracted from the Chats inbox so the SAME
+ * thread renders both in the full inbox (split-pane) and embedded in the
+ * quote editor (QuoteChatCard) — one surface, no drift.
  *
  * Pure View: the parent owns the data (a `resolveThread` result + the contact)
  * and the send side-effects (`onSend(body, replyTo)` / `onSendMedia(file,
@@ -27,6 +27,23 @@ import { listWaTemplates, fetchWaMediaUrl } from '../../lib/whatsapp.js';
  * list↔thread navigation). `showHeader:false` drops the contact header for
  * hosts that already carry their own (the quote editor's collapsible card).
  */
+/**
+ * The first recordable format Meta's audio upload accepts, probed once: Meta
+ * takes ogg-opus (the native voice-note format), m4a/aac and mp3 — but NOT
+ * webm. Null (webm-only recorder, no MediaRecorder) hides the mic entirely.
+ */
+const VOICE_MIME = (() => {
+  const M = typeof window !== 'undefined' ? window.MediaRecorder : undefined;
+  if (!M || typeof M.isTypeSupported !== 'function') return null;
+  return ['audio/ogg;codecs=opus', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac']
+    .find((t) => { try { return M.isTypeSupported(t); } catch { return false; } }) || null;
+})();
+
+function recClock(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, showHeader = true }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -35,10 +52,42 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [interactiveOpen, setInteractiveOpen] = useState(false);
   // Message being quoted in the composer (set from a bubble's "Responder").
   const [replyTo, setReplyTo] = useState(null);
+  // Voice-note recording in flight (state drives the UI; the ref lets
+  // unmount/thread-switch cleanups reach the recorder without re-binding).
+  const [rec, setRec] = useState(null);
+  const [recElapsed, setRecElapsed] = useState(0);
+  const recRef = useRef(null);
+  const recCancelled = useRef(false);
+  const typingAt = useRef(0);
   const fileRef = useRef(null);
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [thread.items.length, contact.key]);
-  useEffect(() => { setText(''); setError(null); setReplyTo(null); }, [contact.key]);
+  useEffect(() => { setText(''); setError(null); setReplyTo(null); typingAt.current = 0; }, [contact.key]);
+  // Switching threads or unmounting abandons an in-flight recording.
+  useEffect(() => () => {
+    recCancelled.current = true;
+    try { recRef.current?.recorder.stop(); } catch { /* idle */ }
+  }, [contact.key]);
+  useEffect(() => {
+    if (!rec) { setRecElapsed(0); return undefined; }
+    const t0 = Date.now();
+    const id = setInterval(() => setRecElapsed(Date.now() - t0), 500);
+    return () => clearInterval(id);
+  }, [rec]);
+
+  // Typing indicator — the customer sees "escribiendo…" while the dealer
+  // drafts. Meta addresses typing through the latest inbound wamid and expires
+  // it itself (~25s), so fire at most once per 20s. Fire-and-forget leaf call,
+  // same standing as fetchWaMediaUrl below.
+  function notifyTyping() {
+    if (!connected || !thread.windowOpen) return;
+    const now = Date.now();
+    if (now - typingAt.current < 20000) return;
+    const lastIn = [...thread.items].reverse().find((m) => m.direction === 'in' && m.waId);
+    if (!lastIn) return;
+    typingAt.current = now;
+    sendWhatsappTyping(lastIn.waId);
+  }
 
   async function submit() {
     const body = text.trim();
@@ -58,6 +107,54 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setError(null);
     const res = await onReact(m, emoji);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar la reacción.');
+  }
+
+  // Voice notes — record in a format Meta's audio upload accepts and ship
+  // through the same media path as attachments. Browsers that only record
+  // webm (which Meta rejects) never see the mic button at all (VOICE_MIME).
+  async function startRecording() {
+    if (!VOICE_MIME || sending || recRef.current) return;
+    setError(null);
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError('Sin acceso al micrófono — permítelo en el navegador para grabar notas de voz.');
+      return;
+    }
+    const recorder = new MediaRecorder(stream, { mimeType: VOICE_MIME });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      recRef.current = null;
+      setRec(null);
+      if (recCancelled.current) return;
+      const type = VOICE_MIME.split(';')[0];
+      sendVoiceNote(new Blob(chunks, { type }), type);
+    };
+    recCancelled.current = false;
+    recorder.start();
+    recRef.current = { recorder };
+    setRec({ recorder });
+  }
+
+  function stopRecording(cancel) {
+    if (!recRef.current) return;
+    recCancelled.current = !!cancel;
+    try { recRef.current.recorder.stop(); } catch { recRef.current = null; setRec(null); }
+  }
+
+  async function sendVoiceNote(blob, type) {
+    // A tap shorter than ~½s yields a header-only blob — discard, don't send.
+    if (blob.size < 1024) return;
+    const ext = { 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/aac': 'aac' }[type] || 'm4a';
+    const file = new File([blob], `nota-de-voz.${ext}`, { type });
+    setSending(true);
+    const res = await onSendMedia(file, '', replyTo?.waId || null);
+    setReplyTo(null);
+    setSending(false);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar la nota de voz.');
   }
 
   // Attach: any picked file ships as media (image/video/audio inline,
@@ -155,60 +252,104 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       )}
       <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-white">
         <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={!connected || sending}
-          className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-          title="Adjuntar archivo (imagen, PDF, video…)"
-          aria-label="Adjuntar archivo"
-        >
-          <Paperclip size={17} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setTemplateOpen(true)}
-          disabled={!connected || sending}
-          className={`p-2.5 min-h-[42px] rounded-lg disabled:opacity-40 transition-colors shrink-0 ${
-            thread.windowOpen ? 'text-ink-400 hover:text-brand-700 hover:bg-brand-50' : 'text-amber-600 hover:bg-amber-50'
-          }`}
-          title={thread.windowOpen ? 'Enviar plantilla' : 'Ventana cerrada — envía una plantilla aprobada'}
-          aria-label="Enviar plantilla"
-        >
-          <LayoutTemplate size={17} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setInteractiveOpen(true)}
-          disabled={!connected || sending}
-          className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-          title="Botones de respuesta rápida"
-          aria-label="Botones de respuesta rápida"
-        >
-          <SquareMenu size={17} />
-        </button>
-        <textarea
-          className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-          }}
-          placeholder={connected ? 'Escribe un mensaje…' : 'Conecta WhatsApp en Configuración para enviar'}
-          disabled={!connected}
-          aria-label="Mensaje"
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!connected || sending || !text.trim()}
-          className="btn-primary !px-3 min-h-[42px] disabled:opacity-40 shrink-0"
-          title="Enviar"
-          aria-label="Enviar mensaje"
-        >
-          {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-        </button>
+        {rec ? (
+          <>
+            <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 border border-red-100 px-3">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+              <span className="text-sm text-red-800 tabular-nums">{recClock(recElapsed)}</span>
+              <span className="text-xs text-red-700/70 flex-1 truncate">Grabando nota de voz…</span>
+              <button
+                type="button"
+                onClick={() => stopRecording(true)}
+                className="p-1.5 -mr-1 rounded text-red-700 hover:bg-red-100 transition-colors"
+                title="Descartar grabación"
+                aria-label="Descartar grabación"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => stopRecording(false)}
+              className="btn-primary !px-3 min-h-[42px] shrink-0"
+              title="Enviar nota de voz"
+              aria-label="Enviar nota de voz"
+            >
+              <Send size={16} />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={!connected || sending}
+              className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+              title="Adjuntar archivo (imagen, PDF, video…)"
+              aria-label="Adjuntar archivo"
+            >
+              <Paperclip size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setTemplateOpen(true)}
+              disabled={!connected || sending}
+              className={`p-2.5 min-h-[42px] rounded-lg disabled:opacity-40 transition-colors shrink-0 ${
+                thread.windowOpen ? 'text-ink-400 hover:text-brand-700 hover:bg-brand-50' : 'text-amber-600 hover:bg-amber-50'
+              }`}
+              title={thread.windowOpen ? 'Enviar plantilla' : 'Ventana cerrada — envía una plantilla aprobada'}
+              aria-label="Enviar plantilla"
+            >
+              <LayoutTemplate size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setInteractiveOpen(true)}
+              disabled={!connected || sending}
+              className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+              title="Botones de respuesta rápida"
+              aria-label="Botones de respuesta rápida"
+            >
+              <SquareMenu size={17} />
+            </button>
+            <textarea
+              className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
+              rows={1}
+              value={text}
+              onChange={(e) => { setText(e.target.value); notifyTyping(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+              }}
+              placeholder={connected ? 'Escribe un mensaje…' : 'Conecta WhatsApp en Configuración para enviar'}
+              disabled={!connected}
+              aria-label="Mensaje"
+            />
+            {/* WhatsApp Web pattern: mic on an empty composer, send once there's a draft. */}
+            {!text.trim() && VOICE_MIME && !sending ? (
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={!connected}
+                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+                title="Grabar nota de voz"
+                aria-label="Grabar nota de voz"
+              >
+                <Mic size={17} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!connected || sending || !text.trim()}
+                className="btn-primary !px-3 min-h-[42px] disabled:opacity-40 shrink-0"
+                title="Enviar"
+                aria-label="Enviar mensaje"
+              >
+                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       <TemplateSendModal

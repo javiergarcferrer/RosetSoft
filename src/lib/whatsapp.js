@@ -216,6 +216,17 @@ export async function sendWhatsappReadReceipt(messageId) {
 }
 
 /**
+ * Show "escribiendo…" on the customer's side (Meta auto-expires it after ~25s
+ * or when the message lands). The API addresses typing through the read
+ * receipt of an inbound message, so this rides the latest inbound wamid.
+ * Fire-and-forget like the read receipt.
+ */
+export async function sendWhatsappTyping(messageId) {
+  if (!messageId) return { ok: false };
+  return invokeWaSend({ markRead: { messageId, typing: true } }).catch(() => ({ ok: false }));
+}
+
+/**
  * Send one approved template to many recipients as a named campaign
  * (Difusión). `recipients` = [{ to, params?, customerId?, professionalId? }].
  * The server creates the wa_campaigns row, sends sequentially, logs each

@@ -117,7 +117,7 @@ function waMediaKind(mime: string): 'image' | 'video' | 'audio' | 'document' {
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
-  'video/mp4': 'mp4', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
+  'video/mp4': 'mp4', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a',
   'application/pdf': 'pdf',
 };
 
