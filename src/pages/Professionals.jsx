@@ -481,14 +481,23 @@ function MobileNewCard({ onCreate }) {
   );
 }
 
-/** tel: / mailto: / wa.me quick action — contacting the referrer IS the job. */
-function QuickAction({ href, icon: Icon, label, external }) {
+/**
+ * Contact quick action — contacting the referrer IS the job. `to` renders an
+ * in-app Link (WhatsApp goes to OUR inbox, /chats?chat=<phone>, never out to
+ * wa.me — the business chats from the Cloud API number, logged in the CRM);
+ * `href` covers the native tel:/mailto: handoffs that have no in-app pane.
+ */
+function QuickAction({ href, to, icon: Icon, label }) {
+  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
+  if (to) {
+    return (
+      <Link to={to} className={cls}>
+        <Icon size={13} aria-hidden /> {label}
+      </Link>
+    );
+  }
   return (
-    <a
-      href={href}
-      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]"
-    >
+    <a href={href} className={cls}>
       <Icon size={13} aria-hidden /> {label}
     </a>
   );
@@ -508,7 +517,7 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
       {/* Quick actions — only the channels this professional actually has. */}
       {(wa || pro.phone || pro.email) && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {wa && <QuickAction href={`https://wa.me/${wa}`} icon={MessageCircle} label="WhatsApp" external />}
+          {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
           {pro.phone && <QuickAction href={`tel:${pro.phone}`} icon={Phone} label="Llamar" />}
           {pro.email && <QuickAction href={`mailto:${pro.email}`} icon={Mail} label="Correo" />}
         </div>

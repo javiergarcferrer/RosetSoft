@@ -355,14 +355,23 @@ function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
   );
 }
 
-/** tel: / mailto: / wa.me quick action — contacting the client IS the job. */
-function QuickAction({ href, icon: Icon, label, external }) {
+/**
+ * Contact quick action — contacting the client IS the job. `to` renders an
+ * in-app Link (WhatsApp goes to OUR inbox, /chats?chat=<phone>, never out to
+ * wa.me — the business chats from the Cloud API number, logged in the CRM);
+ * `href` covers the native tel:/mailto: handoffs that have no in-app pane.
+ */
+function QuickAction({ href, to, icon: Icon, label }) {
+  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
+  if (to) {
+    return (
+      <Link to={to} className={cls}>
+        <Icon size={13} aria-hidden /> {label}
+      </Link>
+    );
+  }
   return (
-    <a
-      href={href}
-      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]"
-    >
+    <a href={href} className={cls}>
       <Icon size={13} aria-hidden /> {label}
     </a>
   );
@@ -380,7 +389,7 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
     <div className="px-4 py-3 space-y-3">
       {/* Quick actions — only the channels this client actually has. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        {wa && <QuickAction href={`https://wa.me/${wa}`} icon={MessageCircle} label="WhatsApp" external />}
+        {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
         {c.phone && <QuickAction href={`tel:${c.phone}`} icon={Phone} label="Llamar" />}
         {c.email && <QuickAction href={`mailto:${c.email}`} icon={Mail} label="Correo" />}
         <Link

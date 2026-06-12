@@ -7,6 +7,7 @@ export {
   resolveConversations,
   resolveThread,
   resolveNewChatContacts,
+  resolveChatTarget,
   resolveReferral,
 } from './views/inbox.js';
 export {

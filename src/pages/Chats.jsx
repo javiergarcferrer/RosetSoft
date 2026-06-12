@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MessageCircle, Loader2, Search, Plus, Megaphone } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
-  resolveConversations, resolveThread, resolveNewChatContacts,
+  resolveConversations, resolveThread, resolveNewChatContacts, resolveChatTarget,
 } from '../core/crm/index.js';
 import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
@@ -36,11 +36,11 @@ export default function Chats() {
     () => db.waMessages.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
-  const { data: customers } = useLiveQueryStatus(
+  const { data: customers, loaded: customersLoaded } = useLiveQueryStatus(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
-  const { data: professionals } = useLiveQueryStatus(
+  const { data: professionals, loaded: professionalsLoaded } = useLiveQueryStatus(
     () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
@@ -74,6 +74,24 @@ export default function Chats() {
     () => (selectedKey ? resolveThread([...messages, ...pending], { key: selectedKey }) : null),
     [messages, pending, selectedKey],
   );
+
+  // Deep link: /chats?chat=<phone> (the CRM pages' WhatsApp quick action)
+  // opens that conversation — or a draft thread when the contact has never
+  // chatted, exactly like picking them in "Nuevo chat". Applied once per
+  // param value, only after all three datasets are in (an early run over
+  // empty arrays would consume the param and select nothing).
+  const [searchParams] = useSearchParams();
+  const chatParam = searchParams.get('chat');
+  const appliedChatParam = useRef(null);
+  useEffect(() => {
+    if (!chatParam || !loaded || !customersLoaded || !professionalsLoaded) return;
+    if (appliedChatParam.current === chatParam) return;
+    appliedChatParam.current = chatParam;
+    const hit = resolveChatTarget(customers, professionals, conversations, chatParam);
+    if (!hit) return;
+    setDraftTarget(hit.existing ? null : hit.target);
+    setSelectedKey(hit.key);
+  }, [chatParam, loaded, customersLoaded, professionalsLoaded, customers, professionals, conversations]);
 
   // Server rows landed → drop the optimistic copies they replace.
   useEffect(() => {
