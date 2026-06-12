@@ -135,6 +135,13 @@ export default function Facturacion() {
 
   async function transmit(rowId) {
     const p = postingById.get(rowId);
+    if (p) await transmitPosting(p);
+  }
+
+  // Transmit one posting's e-CF to the DGII. Takes the posting OBJECT (not a
+  // row id) so postSale can auto-transmit the sale it just booked before the
+  // live query refetches; the manual Transmitir button stays the retry path.
+  async function transmitPosting(p) {
     if (!p || !p.ncf) return;
     setErr('');
     // Pre-flight: only a well-formed e-NCF can be signed (a manual NCF would
@@ -151,7 +158,7 @@ export default function Facturacion() {
       setErr('Define el RNC del emisor en Configuración contable antes de transmitir e-CF.');
       return;
     }
-    setTransmitting(rowId);
+    setTransmitting(p.id);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
       const payload = buildEcfPayload({
@@ -282,6 +289,13 @@ export default function Facturacion() {
     purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
   }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
+  // e-NCFs assigned but never transmitted — the count the 607 tab badges so
+  // signed-but-unsent invoices can't sit invisible.
+  const pendingEcfCount = useMemo(
+    () => postingsQ.data.filter((p) => p.ecfStatus === 'pending').length,
+    [postingsQ.data],
+  );
+
   const [drafts, setDrafts] = useState({}); // quoteId -> { ncf, rnc, msg }
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
@@ -362,6 +376,18 @@ export default function Facturacion() {
         await db.customers.update(customer.id, { rnc });
       }
       setDrafts((d) => { const n = { ...d }; delete n[quote.id]; return n; });
+      // Auto-transmit the freshly assigned e-NCF when cert + emisor RNC are
+      // configured — no second manual step on the happy path. A failure stays
+      // 'pending' and surfaces in the 607 badge; Transmitir retries it with
+      // the SAME e-NCF (the state machine never reassigns).
+      if (assigned && settings?.ecfCertUploadedAt && cleanRnc(settings?.companyRnc)) {
+        transmitPosting({
+          id, customerId: quote.customerId, ncf, rnc, ecfType,
+          ecfExpiresAt: assigned?.expiresAt ?? null, postedAt,
+          base: book.base, itbis: book.itbis, total: book.total,
+          depositApplied: Math.min(book.deposit, book.total),
+        }).catch(() => { /* surfaced via setErr inside; badge keeps the count */ });
+      }
     } catch (e) {
       setErr(e?.message || String(e));
     } finally {
@@ -435,7 +461,7 @@ export default function Facturacion() {
 
       <TabPills tabs={[
         { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
-        { key: '607', label: '607' },
+        { key: '607', label: `607${pendingEcfCount ? ` · ${pendingEcfCount} por transmitir` : ''}` },
         { key: 'it1', label: 'IT-1 (ITBIS)' },
       ]} active={tab} onChange={setTab} />
       {err && <p className="text-sm text-rose-600 mb-3">{err}</p>}

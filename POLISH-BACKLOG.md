@@ -112,9 +112,13 @@ Keep diffs small; follow existing patterns (cards mirror `Quotes.jsx:233-262`).
       (i17 — `resolveCustomerAccount` in core/bridge (pinned in
       tests/bridge.test.js); StatCard links to Banca, and CxC now honors
       ?statement=<partyId> to auto-open the estado de cuenta.)
-- [ ] e-CF: auto-transmit after posting when cert+sequence configured (manual
+- [x] e-CF: auto-transmit after posting when cert+sequence configured (manual
       button stays as fallback); pending-transmission badge on the 607 tab
       (`accounting/Facturacion.jsx`).
+      (i18 — postSale fire-and-forgets transmitPosting (refactored to take
+      the posting object) when an e-NCF was assigned and cert+RNC exist; a
+      failure stays 'pending' (same e-NCF retried via the button) and the
+      607 tab badges "N por transmitir".)
 - [ ] Cross-core dashboard tiles: "N por facturar" on CRM Dashboard (admins) ↔
       quote links in accounting panels (bridge-shaped data only).
 - [ ] Tienda availability: cross-check store cards against `inventory_items`
