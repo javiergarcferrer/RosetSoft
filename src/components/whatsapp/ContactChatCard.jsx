@@ -168,8 +168,8 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null }
               invalidate();
               return res;
             }}
-            onSendInteractive={async ({ text, buttons }) => {
-              const res = await sendWhatsappInteractive({ to: contact.phone, text, buttons, ...link })
+            onSendInteractive={async (spec) => {
+              const res = await sendWhatsappInteractive({ to: contact.phone, ...spec, ...link })
                 .catch((e) => ({ ok: false, error: e?.message }));
               invalidate();
               return res;

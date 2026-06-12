@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
-  FileText, Download, Reply, SmilePlus, SquareMenu, X, Mic, Trash2,
+  FileText, Download, Reply, SmilePlus, SquareMenu, X, Mic, Trash2, ExternalLink,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, fillTemplateBody } from '../../core/crm/index.js';
@@ -307,8 +307,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               onClick={() => setInteractiveOpen(true)}
               disabled={!connected || sending}
               className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-              title="Botones de respuesta rápida"
-              aria-label="Botones de respuesta rápida"
+              title="Mensaje interactivo (botones · lista · enlace)"
+              aria-label="Mensaje interactivo"
             >
               <SquareMenu size={17} />
             </button>
@@ -485,50 +485,90 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
 }
 
 /**
- * Compose a quick-reply buttons message: body text + up to 3 tappable answers
- * (20 chars max each — the Cloud API limit). Free-form interactive, so it
- * obeys the same 24h-window rule as plain text; the client's tap arrives back
- * as a normal inbound message carrying the button title.
+ * Compose a free-form interactive message in one of three shapes: quick-reply
+ * buttons (≤3 · 20 chars — the Cloud API limit), a list menu (≤10 options
+ * behind one menu button) or a CTA link button. All obey the same 24h-window
+ * rule as plain text; the client's choice arrives back as a normal inbound
+ * message carrying the option they tapped.
  */
 function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
+  const [mode, setMode] = useState('buttons'); // buttons | list | cta
   const [text, setText] = useState('');
   const [buttons, setButtons] = useState(['', '', '']);
+  const [listButton, setListButton] = useState('');
+  const [rows, setRows] = useState([{ title: '', description: '' }, { title: '', description: '' }, { title: '', description: '' }]);
+  const [ctaText, setCtaText] = useState('');
+  const [ctaUrl, setCtaUrl] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!open) return;
+    setMode('buttons');
     setText('');
     setButtons(['', '', '']);
+    setListButton('');
+    setRows([{ title: '', description: '' }, { title: '', description: '' }, { title: '', description: '' }]);
+    setCtaText('');
+    setCtaUrl('');
     setError(null);
   }, [open]);
 
   async function submit() {
     if (sending) return;
     const body = text.trim();
-    const titles = buttons.map((b) => b.trim()).filter(Boolean);
     if (!body) { setError('Escribe el mensaje.'); return; }
-    if (!titles.length) { setError('Agrega al menos un botón.'); return; }
+    let spec;
+    if (mode === 'buttons') {
+      const titles = buttons.map((b) => b.trim()).filter(Boolean);
+      if (!titles.length) { setError('Agrega al menos un botón.'); return; }
+      spec = { text: body, buttons: titles };
+    } else if (mode === 'list') {
+      const clean = rows
+        .map((r) => ({ title: r.title.trim(), ...(r.description.trim() ? { description: r.description.trim() } : {}) }))
+        .filter((r) => r.title);
+      if (!clean.length) { setError('Agrega al menos una opción.'); return; }
+      spec = { text: body, list: { button: listButton.trim() || 'Ver opciones', rows: clean } };
+    } else {
+      const url = ctaUrl.trim();
+      if (!ctaText.trim()) { setError('Escribe el texto del botón.'); return; }
+      if (!/^https?:\/\//i.test(url)) { setError('El enlace debe empezar con https://'); return; }
+      spec = { text: body, cta: { displayText: ctaText.trim(), url } };
+    }
     setSending(true);
     setError(null);
-    const res = await onSend({ text: body, buttons: titles });
+    const res = await onSend(spec);
     setSending(false);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Botones de respuesta rápida" size="sm">
+    <Modal open={open} onClose={onClose} title="Mensaje interactivo" size="sm">
       <div className="space-y-3">
+        <div className="flex rounded-lg bg-ink-50 p-0.5">
+          {[['buttons', 'Botones'], ['list', 'Lista'], ['cta', 'Enlace']].map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => { setMode(k); setError(null); }}
+              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                mode === k ? 'bg-white shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div>
           <div className="label">Mensaje</div>
           <textarea
             className="input text-sm min-h-[72px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="¿Le interesa esta propuesta?"
+            placeholder={mode === 'cta' ? 'Mire nuestro catálogo de temporada' : '¿Le interesa esta propuesta?'}
           />
         </div>
-        {buttons.map((b, i) => (
+        {mode === 'buttons' && buttons.map((b, i) => (
           <div key={i}>
             <div className="label">Botón {i + 1}{i > 0 ? ' (opcional)' : ''}</div>
             <input
@@ -539,8 +579,76 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
             />
           </div>
         ))}
+        {mode === 'list' && (
+          <>
+            <div>
+              <div className="label">Botón del menú</div>
+              <input
+                className="input text-sm"
+                maxLength={20}
+                value={listButton}
+                placeholder="Ver opciones"
+                onChange={(e) => setListButton(e.target.value)}
+              />
+            </div>
+            {rows.map((r, i) => (
+              <div key={i} className="flex gap-2">
+                <input
+                  className="input text-sm flex-1 min-w-0"
+                  maxLength={24}
+                  value={r.title}
+                  placeholder={`Opción ${i + 1}`}
+                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
+                />
+                <input
+                  className="input text-sm flex-1 min-w-0"
+                  maxLength={72}
+                  value={r.description}
+                  placeholder="Descripción (opcional)"
+                  onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))}
+                />
+              </div>
+            ))}
+            {rows.length < 10 && (
+              <button
+                type="button"
+                onClick={() => setRows((rs) => [...rs, { title: '', description: '' }])}
+                className="btn-ghost text-xs"
+              >
+                + Agregar opción ({rows.length}/10)
+              </button>
+            )}
+          </>
+        )}
+        {mode === 'cta' && (
+          <>
+            <div>
+              <div className="label">Texto del botón</div>
+              <input
+                className="input text-sm"
+                maxLength={20}
+                value={ctaText}
+                placeholder="Ver catálogo"
+                onChange={(e) => setCtaText(e.target.value)}
+              />
+            </div>
+            <div>
+              <div className="label">Enlace</div>
+              <input
+                className="input text-sm"
+                type="url"
+                inputMode="url"
+                value={ctaUrl}
+                placeholder="https://…"
+                onChange={(e) => setCtaUrl(e.target.value)}
+              />
+            </div>
+          </>
+        )}
         <p className="text-[11px] text-ink-400">
-          El cliente toca un botón y su respuesta llega aquí como un mensaje.
+          {mode === 'buttons' && 'El cliente toca un botón y su respuesta llega aquí como un mensaje.'}
+          {mode === 'list' && 'El cliente abre el menú, elige una opción y su elección llega aquí como un mensaje.'}
+          {mode === 'cta' && 'El cliente ve un botón que abre el enlace — sin URLs largas en el texto.'}
         </p>
         {!windowOpen && (
           <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
@@ -571,6 +679,8 @@ function Bubble({ m, prev, onReply, onReact }) {
   // A non-inline attachment renders as a chip that already carries m.body
   // (the filename/caption) — don't repeat it as text below.
   const isDocChip = !!m.mediaPath && !/^(image|video|audio)\//.test(m.mediaMime || '');
+  // Stickers render bare — no bubble chrome — like the official app.
+  const isSticker = m.kind === 'sticker' && !!m.mediaPath;
   // Reply/react address the message by wamid — without one (an optimistic
   // draft, a failed send) there is nothing to act on.
   const canAct = !!m.waId && !!(onReply || onReact);
@@ -584,10 +694,14 @@ function Bubble({ m, prev, onReply, onReact }) {
       <div className={`group flex items-center gap-1 ${out ? 'justify-end' : 'justify-start'}`}>
         {out && canAct && <BubbleActions m={m} onReply={onReply} onReact={onReact} />}
         {/* tabIndex: a tap focuses the bubble, revealing the actions on touch. */}
-        <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs break-words whitespace-pre-wrap focus:outline-none ${
-          out
-            ? m.status === 'failed' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-brand-100 text-ink-900'
-            : 'bg-white border border-ink-100 text-ink-900'
+        <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] text-sm break-words whitespace-pre-wrap focus:outline-none ${
+          isSticker
+            ? 'px-1 py-0.5'
+            : `rounded-2xl px-3 py-2 shadow-xs ${
+              out
+                ? m.status === 'failed' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-brand-100 text-ink-900'
+                : 'bg-white border border-ink-100 text-ink-900'
+            }`
         }`}>
           {referral && (
             <div className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 rounded-md px-1.5 py-0.5 mb-1 max-w-full">
@@ -615,6 +729,28 @@ function Bubble({ m, prev, onReply, onReact }) {
                 <span key={i} className="rounded-full bg-white/70 border border-ink-200 px-2.5 py-0.5 text-xs text-ink-700">{b}</span>
               ))}
             </div>
+          )}
+          {/* List menu WE sent — the menu label + its options, as the client saw them. */}
+          {m.payload?.interactive?.rows?.length > 0 && (
+            <div className="mt-1.5 rounded-lg bg-white/70 border border-ink-200 overflow-hidden">
+              <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400 border-b border-ink-100">
+                {m.payload.interactive.listButton || 'Opciones'}
+              </div>
+              {m.payload.interactive.rows.map((t, i) => (
+                <div key={i} className="px-2.5 py-1 text-xs text-ink-700 border-b border-ink-50 last:border-0">{t}</div>
+              ))}
+            </div>
+          )}
+          {/* CTA link button WE sent — tappable here too. */}
+          {m.payload?.interactive?.cta?.url && (
+            <a
+              href={m.payload.interactive.cta.url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1.5 flex items-center justify-center gap-1.5 rounded-full bg-white/70 border border-ink-200 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-white transition-colors"
+            >
+              <ExternalLink size={11} className="shrink-0" /> {m.payload.interactive.cta.displayText || 'Abrir enlace'}
+            </a>
           )}
           <div className={`flex items-center gap-1 mt-0.5 ${out ? 'justify-end' : ''}`}>
             <span className="text-[10px] opacity-50 tabular-nums">{timeOfDay(m.createdAt)}</span>
@@ -734,6 +870,9 @@ function MediaAttachment({ m }) {
   }
   if (!url) {
     return <div className="flex items-center gap-1.5 text-[11px] opacity-60 mb-1"><Loader2 size={12} className="animate-spin" /> Cargando…</div>;
+  }
+  if (m.kind === 'sticker') {
+    return <img src={url} alt="Sticker" className="max-h-36 max-w-[160px] object-contain mb-1" />;
   }
   if (mime.startsWith('image/')) {
     return (

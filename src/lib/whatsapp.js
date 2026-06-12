@@ -131,13 +131,15 @@ export async function sendWhatsappReaction({ to, messageId, emoji, customerId, p
 }
 
 /**
- * Send a quick-reply buttons message: body text + up to 3 tappable replies
- * (e.g. "Me interesa" / "Tengo preguntas"). Free-form interactive — same 24h
- * window rule as text. The client's tap arrives as a normal inbound message
- * carrying the button title.
+ * Send a free-form interactive message — same 24h window rule as text; the
+ * client's choice arrives back as a normal inbound message. One of:
+ *   buttons: up to 3 quick-reply buttons (e.g. "Me interesa").
+ *   list:    { button, rows:[{ title, description? }] } — ≤10 options behind
+ *            one menu button.
+ *   cta:     { displayText, url } — a single tappable link button.
  */
-export async function sendWhatsappInteractive({ to, text, buttons, replyTo, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), interactive: { text, buttons }, replyTo, customerId, professionalId, quoteId });
+export async function sendWhatsappInteractive({ to, text, buttons, list, cta, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), interactive: { text, buttons, list, cta }, replyTo, customerId, professionalId, quoteId });
 }
 
 /** Read the number's public business profile (about, address, email, web…). */

@@ -230,9 +230,9 @@ export default function Chats() {
                 invalidate();
                 return res;
               }}
-              onSendInteractive={async ({ text, buttons }) => {
+              onSendInteractive={async (spec) => {
                 const res = await sendWhatsappInteractive({
-                  to: selected.phone, text, buttons,
+                  to: selected.phone, ...spec,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();

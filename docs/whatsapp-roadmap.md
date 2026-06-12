@@ -59,10 +59,11 @@ P1 — chat parity (per-message actions & composer):
    composer via `markRead.typing`; auto-read existed in both hosts).
 4. ~~Voice notes~~ ✅ it.2 (mic on empty composer → MediaRecorder ogg-opus/
    m4a/aac; webm-only browsers hide the mic; ships via the media path).
-5. **Stickers**: render inbound webp stickers properly (today: generic kind),
-   send static stickers.
-6. **Interactive messages, rest**: list menus (≤10 rows) + CTA-URL free-form
-   messages (quick-reply buttons ✅ 007c6fe; webhook parses all replies).
+5. ~~Stickers render~~ ✅ it.3 (bare bubble, 160px webp). Sticker SEND parked:
+   needs a sticker asset pack — low dealer value, revisit only if asked.
+6. ~~Interactive messages~~ ✅ it.3 — list menus (≤10 rows + descriptions) and
+   CTA-URL link buttons join quick-reply buttons in one three-mode composer
+   modal; bubbles render the menu/link the client saw.
 7. **Location**: send (map-pick or fixed store location); render inbound pin
    on a map link (today: text only).
 8. **Contacts (vCard)** send — e.g. share the assigned salesperson card.
@@ -105,3 +106,6 @@ P3 — growth & ops:
 - 2026-06-12 · it.2: typing indicator + voice notes, both inside ChatThread so
   inbox/contact-cards/quote editor inherit them; wa-send learns audio/mp4→m4a.
   Next: #5 stickers, #6 list menus + CTA-URL.
+- 2026-06-12 · it.3: list menus + CTA-URL (three-mode interactive modal,
+  wa-send sub-types, bubble rendering) + sticker render. Next: #7 location,
+  #8 vCard, then P2 #9 quick replies.

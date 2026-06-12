@@ -72,8 +72,14 @@ type SendBody = {
   replyTo?: string;
   /** React to a message: empty emoji removes the reaction. */
   reaction?: { messageId?: string; emoji?: string };
-  /** Quick-reply buttons message (free-form — 24h window rules apply). */
-  interactive?: { text?: string; buttons?: string[] };
+  /** Free-form interactive message (24h window rules apply): quick-reply
+   *  buttons, a list menu (≤10 rows behind one button), or a CTA-URL button. */
+  interactive?: {
+    text?: string;
+    buttons?: string[];
+    list?: { button?: string; rows?: { title?: string; description?: string }[] };
+    cta?: { displayText?: string; url?: string };
+  };
   customerId?: string | null;
   professionalId?: string | null;
   quoteId?: string | null;
@@ -553,25 +559,55 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, id: res.id });
   }
 
-  // Quick-reply buttons (free-form interactive — 24h window rules apply).
+  // Free-form interactive (24h window rules apply): quick-reply buttons, a
+  // list menu, or a CTA-URL button. One Graph payload shape per sub-type; the
+  // log payload mirrors what the client saw so the thread renders it.
   if (body.interactive) {
     const text = String(body.interactive.text || '').trim();
-    const titles = (Array.isArray(body.interactive.buttons) ? body.interactive.buttons : [])
-      .map((t) => String(t || '').trim().slice(0, 20)).filter(Boolean).slice(0, 3);
-    if (!text || !titles.length) return json({ ok: false, error: 'Faltan el texto o los botones de respuesta.' }, 400);
+    if (!text) return json({ ok: false, error: 'Falta el texto del mensaje.' }, 400);
+    let inner: Record<string, unknown>;
+    let logInteractive: Record<string, unknown>;
+    if (body.interactive.cta) {
+      const displayText = String(body.interactive.cta.displayText || '').trim().slice(0, 20);
+      const url = String(body.interactive.cta.url || '').trim();
+      if (!displayText || !/^https?:\/\//i.test(url)) {
+        return json({ ok: false, error: 'Faltan el texto del botón o un enlace válido (https://…).' }, 400);
+      }
+      inner = { type: 'cta_url', body: { text }, action: { name: 'cta_url', parameters: { display_text: displayText, url } } };
+      logInteractive = { text, cta: { displayText, url } };
+    } else if (body.interactive.list) {
+      const button = String(body.interactive.list.button || '').trim().slice(0, 20) || 'Ver opciones';
+      const rows = (Array.isArray(body.interactive.list.rows) ? body.interactive.list.rows : [])
+        .map((r, i) => {
+          const description = String(r?.description || '').trim().slice(0, 72);
+          return {
+            id: `ls_${i + 1}`,
+            title: String(r?.title || '').trim().slice(0, 24),
+            ...(description ? { description } : {}),
+          };
+        })
+        .filter((r) => r.title)
+        .slice(0, 10);
+      if (!rows.length) return json({ ok: false, error: 'Agrega al menos una opción a la lista.' }, 400);
+      inner = { type: 'list', body: { text }, action: { button, sections: [{ rows }] } };
+      logInteractive = { text, listButton: button, rows: rows.map((r) => r.title) };
+    } else {
+      const titles = (Array.isArray(body.interactive.buttons) ? body.interactive.buttons : [])
+        .map((t) => String(t || '').trim().slice(0, 20)).filter(Boolean).slice(0, 3);
+      if (!titles.length) return json({ ok: false, error: 'Faltan el texto o los botones de respuesta.' }, 400);
+      inner = {
+        type: 'button',
+        body: { text },
+        action: { buttons: titles.map((t, i) => ({ type: 'reply', reply: { id: `qr_${i + 1}`, title: t } })) },
+      };
+      logInteractive = { text, buttons: titles };
+    }
     const res = await sendOne({
       to,
-      payload: {
-        messaging_product: 'whatsapp', to, type: 'interactive', ...contextPart,
-        interactive: {
-          type: 'button',
-          body: { text },
-          action: { buttons: titles.map((t, i) => ({ type: 'reply', reply: { id: `qr_${i + 1}`, title: t } })) },
-        },
-      },
+      payload: { messaging_product: 'whatsapp', to, type: 'interactive', ...contextPart, interactive: inner },
       logKind: 'interactive',
       logBody: text,
-      logPayload: { ...(contextLog || {}), interactive: { text, buttons: titles } },
+      logPayload: { ...(contextLog || {}), interactive: logInteractive },
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
