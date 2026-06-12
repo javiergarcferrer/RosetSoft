@@ -1,8 +1,8 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, ExternalLink, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, ExternalLink, FileDown, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
 import ImageView from '../../components/ImageView.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
+import { searchProducts, catalogCategories, productsByCategory, productsByBrand } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -11,6 +11,8 @@ import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { importLifestyleGardenCatalog } from '../../lib/shopifySync.js';
 import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
+import { groupLsgModels, resolveLsgCatalogBook } from '../../core/catalog/index.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
 /**
  * Catálogo LifestyleGarden — the second brand catalog. Its particular import
@@ -48,6 +50,7 @@ export default function CatalogLifestyleGarden() {
   );
 
   const [busy, setBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
 
@@ -84,6 +87,37 @@ export default function CatalogLifestyleGarden() {
     }
   }
 
+  // The client-facing catalog PDF: only pieces in stock, grouped by
+  // collection, shared through the same blob pipeline as the quote PDF
+  // (Web Share on touch → WhatsApp, anchor download on desktop).
+  async function onCatalogPdf() {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    setError('');
+    setResult('');
+    try {
+      const products = await productsByBrand(profileId, BRAND_LIFESTYLEGARDEN);
+      const book = resolveLsgCatalogBook(products);
+      if (!book.hasStockData) {
+        setError('El catálogo aún no trae existencias. Sincroniza desde Shopify y vuelve a generar el PDF.');
+        return;
+      }
+      if (!book.skus) {
+        setError('No hay piezas en existencia para armar el catálogo.');
+        return;
+      }
+      const mod = await safeDynamicImport(() => import('../../pdf/catalog/index.js'));
+      const blob = await mod.generateLsgCatalogPdf({ book });
+      await mod.downloadBlob(blob, 'Catálogo LifestyleGarden.pdf');
+      setResult(`Catálogo listo: ${book.models} modelo(s) en existencia.`);
+    } catch (e) {
+      console.error('[CatalogLifestyleGarden] catalog pdf failed:', e);
+      setError(e?.message || 'No se pudo generar el catálogo PDF.');
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   const emptyCatalog = !searching && catsLoaded && !catsError && total === 0;
 
   return (
@@ -92,15 +126,27 @@ export default function CatalogLifestyleGarden() {
         title="Catálogo LifestyleGarden"
         subtitle={total > 0 ? `${total} producto(s)` : ' '}
         actions={(
-          <button
-            type="button"
-            onClick={onSync}
-            disabled={busy}
-            className="btn-primary disabled:opacity-60"
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Sincronizar desde Shopify
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onCatalogPdf}
+              disabled={pdfBusy || total === 0}
+              className="btn-secondary disabled:opacity-60"
+              title="Catálogo PDF de piezas en existencia, para enviar por WhatsApp"
+            >
+              {pdfBusy ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+              Catálogo PDF
+            </button>
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={busy}
+              className="btn-primary disabled:opacity-60"
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Sincronizar desde Shopify
+            </button>
+          </>
         )}
       />
 
@@ -172,33 +218,6 @@ function sortCat(a, b) {
   return (a || '').localeCompare(b || '', 'es', { sensitivity: 'base' });
 }
 
-/**
- * The Shopify-product title behind a row — the row's `name` minus the
- * " · variant" suffix the import appends (subtype carries the variant alone),
- * so a multi-variant product folds back into ONE model header.
- */
-function modelTitleOf(p) {
-  const name = p.name || p.reference || '—';
-  const v = p.subtype || '';
-  return v && name.endsWith(` · ${v}`) ? name.slice(0, name.length - v.length - 3) : name;
-}
-
-/** Group rows into MODELS — one per Shopify product (familyCode = handle). */
-function groupModels(products) {
-  const byHandle = new Map();
-  for (const p of products || []) {
-    const key = p.familyCode || p.id;
-    const m = byHandle.get(key);
-    if (m) m.members.push(p);
-    else byHandle.set(key, { key, name: modelTitleOf(p), members: [p] });
-  }
-  const models = [...byHandle.values()];
-  for (const m of models) {
-    m.members.sort((a, b) => (Number(a.priceUsd) || 0) - (Number(b.priceUsd) || 0));
-  }
-  return models.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
-}
-
 /** "$X" for one price, "$lo – $hi" across a model's variants. */
 function priceRangeLabel(model) {
   const prices = model.members.map((p) => Number(p.priceUsd) || 0).filter((n) => n > 0);
@@ -239,7 +258,7 @@ function CategoryModels({ profileId, category, refresh }) {
     [profileId, category, refresh],
     [],
   );
-  const models = useMemo(() => groupModels(products), [products]);
+  const models = useMemo(() => groupLsgModels(products), [products]);
 
   if (!loaded) {
     return (
@@ -272,7 +291,7 @@ function SearchResults({ profileId, term }) {
       else byCategory.set(key, [p]);
     }
     return [...byCategory.entries()]
-      .map(([category, items]) => ({ category, count: items.length, models: groupModels(items) }))
+      .map(([category, items]) => ({ category, count: items.length, models: groupLsgModels(items) }))
       .sort((a, b) => sortCat(a.category, b.category));
   }, [rows]);
 

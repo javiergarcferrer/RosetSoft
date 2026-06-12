@@ -40,7 +40,7 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
             collections(first: 10) { nodes { title } }
             variants(first: 100) {
               nodes {
-                id title sku price
+                id title sku price inventoryQuantity
                 media(first: 1) { nodes { preview { image { url } } } }
                 inventoryItem { unitCost { amount } }
               }

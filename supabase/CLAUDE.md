@@ -72,7 +72,9 @@ quote_lines · containers · materials`. Field-by-field shapes are in
   `lifestylegarden` (pulled from the team's Shopify store by `shopify-sync`'s
   `importCatalog` mode, `id` = `lsg-<variantId>`). Unique `(profile_id,
   reference)` ACROSS brands. Category aggregate via the `catalog_categories`
-  SQL fn (optional `p_brand` filter).
+  SQL fn (optional `p_brand` filter). LSG rows also carry `stock_qty` (Shopify
+  `inventoryQuantity` at sync time; null = pre-stock import) — the "en
+  existencia" gate for the client catalog PDF (`core/catalog`).
 - **shopify_config** WRITE-ONLY (no client policies; service role reads, the
   `save_shopify_config(domain, store, client_id, client_secret)` SECURITY
   DEFINER RPC writes). Auth is the Dev Dashboard app flow ONLY:

@@ -60,7 +60,10 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 State worth keeping across sessions lives in a test or in this file — never in
 conversation. Two kinds:
 - **Money/parsing/data-integrity tests**:
-  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats,ogImage}.test.js`.
+  `tests/{pricing,commissions,containerTracking,catalog,catalogSync,lrCatalog,lsgCatalog,lsgCatalogBook,priceListCsv,quoteMilestones,exchangeRate,voyageGeometry,clientPick,subtype,modular,shopifySync,dgiiFormats,ogImage}.test.js`.
+  `lsgCatalogBook` pins the client catalog PDF's in-stock gate (only
+  stockQty > 0 prints; all-null stock flags `hasStockData` instead of
+  rendering an empty book).
   `ogImage` pins the link-preview image as a BASELINE jpeg — WhatsApp renders
   progressive JPEGs as garbled noise; fixing it also requires a NEW filename
   (WhatsApp caches the card per-URL for weeks).

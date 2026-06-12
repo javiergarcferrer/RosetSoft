@@ -1049,6 +1049,9 @@ export interface Product {
   category?: string;
   priceUsd?: number;
   cost?: number;
+  /** LSG rows: sellable units in the store (Shopify inventoryQuantity),
+   *  refreshed on each catalog sync. Null = not tracked / pre-stock sync. */
+  stockQty?: number | null;
   /** Mirrored product photo (→ images.id) — LSG rows, set by the import's
    *  mirror pass; quote lines snapshot it on insert. Null for LR rows. */
   imageId?: string | null;

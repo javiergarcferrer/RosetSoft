@@ -585,6 +585,27 @@ export async function productsByCategory(profileId: string, category: string, br
   return fromRows<Product>(out);
 }
 
+/**
+ * Every product of ONE brand catalog, ordered by name — the whole-catalog
+ * reads (the LSG catalog PDF export) come through here instead of paging the
+ * categories one by one. Pages past the 1000-row API cap like the rest.
+ */
+export async function productsByBrand(profileId: string, brand: string): Promise<Product[]> {
+  const PAGE = 1000;
+  let out: unknown[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('products').select('*')
+      .eq('profile_id', profileId).eq('brand', brand)
+      .order('name').order('id').range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data as unknown[]) || [];
+    out = from === 0 ? page : out.concat(page);
+    if (page.length < PAGE) break;
+  }
+  return fromRows<Product>(out);
+}
+
 /* ---------------------------------------------------------------------- */
 /*  Sequential numbering                                                   */
 /* ---------------------------------------------------------------------- */

@@ -29,6 +29,8 @@ export interface ShopifyCatalogVariant {
   title?: string | null;
   sku?: string | null;
   price?: string | number | null;
+  /** Sellable units across the store's locations; null when not tracked. */
+  inventoryQuantity?: number | string | null;
   /** The variant's own media (first node), when the store assigns one. */
   media?: { nodes?: ShopifyMediaPreview[] | null } | null;
   inventoryItem?: { unitCost?: { amount?: string | number | null } | null } | null;
@@ -60,6 +62,9 @@ export interface LsgProductRow {
   category: string;
   price_usd: number | null;
   cost: number | null;
+  /** Shopify inventoryQuantity at sync time — the "en existencia" gate for the
+   *  client catalog PDF. Null when the store doesn't track the variant. */
+  stock_qty: number | null;
   /** The store's CDN photo URL — the variant's own image, else the product's
    *  featured one. index.ts mirrors it into our images bucket (`image_id` is
    *  set THERE, never here, so an upsert can't clobber an existing mirror). */
@@ -83,6 +88,11 @@ const numOrNull = (v: unknown): number | null => {
   if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+};
+
+const intOrNull = (v: unknown): number | null => {
+  const n = numOrNull(v);
+  return n == null ? null : Math.trunc(n);
 };
 
 /** Numeric tail of a Shopify GID (gid://shopify/ProductVariant/123 → "123"). */
@@ -166,6 +176,7 @@ export function mapShopifyCatalog(
         category,
         price_usd: numOrNull(v.price),
         cost: numOrNull(v.inventoryItem?.unitCost?.amount),
+        stock_qty: intOrNull(v.inventoryQuantity),
         image_src: imageSrcOf(p, v),
         active: true,
         updated_at: ctx.nowIso,

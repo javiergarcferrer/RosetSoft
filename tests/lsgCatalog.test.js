@@ -35,6 +35,7 @@ function defaultVariant(over = {}) {
     title: 'Default Title',
     sku: '7166540001, 8104379000',
     price: '988.20',
+    inventoryQuantity: 4,
     inventoryItem: { unitCost: null },
     ...over,
   };
@@ -58,6 +59,7 @@ test('maps an active default-variant product to one catalog row', () => {
     category: 'Garnet',
     price_usd: 988.2,
     cost: null,
+    stock_qty: 4,
     image_src: '',
     active: true,
     updated_at: CTX.nowIso,
@@ -112,6 +114,19 @@ test('parses the wholesale cost when Shopify carries one', () => {
     variants: { nodes: [defaultVariant({ inventoryItem: { unitCost: { amount: '512.34' } } })] },
   })], CTX);
   assert.equal(rows[0].cost, 512.34);
+});
+
+test('stock_qty carries the variant inventory; missing/invalid → null', () => {
+  const pick = (inventoryQuantity) => mapShopifyCatalog([product({
+    variants: { nodes: [defaultVariant({ inventoryQuantity })] },
+  })], CTX).rows[0].stock_qty;
+  assert.equal(pick(12), 12);
+  assert.equal(pick('3'), 3);
+  assert.equal(pick(0), 0);
+  assert.equal(pick(-2), -2); // oversold stays a real (non-positive) figure
+  assert.equal(pick(undefined), null);
+  assert.equal(pick(null), null);
+  assert.equal(pick('x'), null);
 });
 
 test('a missing SKU falls back to a stable variant-id reference', () => {
