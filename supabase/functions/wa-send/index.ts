@@ -192,10 +192,25 @@ Deno.serve(async (req: Request) => {
       `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(code)}`,
     );
     const exData = await ex.json().catch(() => ({}));
-    const newToken = (exData as { access_token?: string }).access_token || '';
+    let newToken = (exData as { access_token?: string }).access_token || '';
     if (!ex.ok || !newToken) {
       console.error('[wa-send] onboard token exchange failed:', JSON.stringify(exData));
       return json({ ok: false, error: metaError(exData, ex.status) }, 502);
+    }
+    // The dialog can hand back a SHORT-LIVED token (it dies at midnight PT
+    // and takes messaging — and the JARVIS social pulse — down with it).
+    // Exchange it for a long-lived token (~60 days) before persisting; if
+    // the exchange fails we keep the original and log, never block onboarding.
+    try {
+      const ll = await fetch(
+        `${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(newToken)}`,
+      );
+      const llData = await ll.json().catch(() => ({}));
+      const llToken = (llData as { access_token?: string }).access_token || '';
+      if (ll.ok && llToken) newToken = llToken;
+      else console.error('[wa-send] long-lived token exchange failed:', JSON.stringify(llData));
+    } catch (e) {
+      console.error('[wa-send] long-lived token exchange error:', e);
     }
     await admin.from('whatsapp_config').upsert({
       profile_id: TEAM,

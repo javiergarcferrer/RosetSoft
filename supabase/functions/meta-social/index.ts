@@ -35,6 +35,13 @@ const TEAM = 'team';
 type LinkBody = { token?: string; pageId?: string; adAccountId?: string };
 type Body = { link?: LinkBody; test?: boolean; snapshot?: boolean };
 
+/** Translate Meta's token-death message into the action that fixes it. */
+function friendly(msg: string): string {
+  return /session has expired|expirad[oa]|access token.*(invalid|expired)|error validating access token/i.test(msg)
+    ? 'El token de Meta expiró — reconecta WhatsApp en Configuración (mismo usuario del sistema) y este panel se cura solo con el token nuevo.'
+    : msg;
+}
+
 /** GET a Graph endpoint; throws the API's own error message on failure. */
 async function graph(path: string, token: string, params: Record<string, string> = {}) {
   const url = new URL(`${GRAPH}/${path}`);
@@ -126,12 +133,16 @@ Deno.serve(async (req) => {
       }
 
       const ig = page.instagram_business_account || {};
+      // A WhatsApp-sourced link stores EMPTY token sentinels: every later
+      // call re-reads the CURRENT whatsapp_config token (and re-derives the
+      // page token), so a WhatsApp re-connect heals this panel by itself.
+      // Only a manually pasted token is persisted here.
       await admin.from('meta_social_config').upsert({
         profile_id: TEAM,
-        access_token: token,
+        access_token: fromWhatsApp ? '' : token,
         page_id: page.id,
         page_name: page.name || '',
-        page_token: page.access_token || '',
+        page_token: fromWhatsApp ? '' : (page.access_token || ''),
         ig_user_id: ig.id || '',
         ig_username: ig.username || '',
         ad_account_id: adAccountId,
@@ -150,25 +161,45 @@ Deno.serve(async (req) => {
         adAccountId: adAccountId || null,
       });
     } catch (e) {
-      return json({ ok: false, error: String((e as Error)?.message || e).slice(0, 200) });
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
   }
 
-  // Everything below needs stored credentials.
+  // Everything below needs stored credentials. Tokens resolve LIVE: a row
+  // linked from WhatsApp stores empty sentinels and always uses the current
+  // whatsapp_config token + a freshly derived page token, so it never goes
+  // stale on its own.
   const { data: cfg } = await admin
     .from('meta_social_config')
     .select('access_token, page_id, page_name, page_token, ig_user_id, ig_username, ad_account_id')
     .eq('profile_id', TEAM)
     .maybeSingle();
-  if (!cfg?.access_token) return json({ configured: false, error: 'Sin token de Meta' });
-  const pageToken = cfg.page_token || cfg.access_token;
+  if (!cfg) return json({ configured: false, error: 'Sin token de Meta' });
+  let userToken = cfg.access_token || '';
+  if (!userToken) {
+    const { data: wa } = await admin
+      .from('whatsapp_config')
+      .select('access_token')
+      .eq('profile_id', TEAM)
+      .maybeSingle();
+    userToken = wa?.access_token || '';
+  }
+  if (!userToken) return json({ configured: false, error: 'Sin token de Meta' });
+  let pageToken = cfg.page_token || '';
+  if (!pageToken && cfg.page_id) {
+    try {
+      const p = await graph(cfg.page_id, userToken, { fields: 'access_token' });
+      pageToken = p?.access_token || '';
+    } catch { /* fall through to the user token */ }
+  }
+  pageToken = pageToken || userToken;
 
   if (body.test) {
     try {
       const p = await graph(cfg.page_id, pageToken, { fields: 'name' });
       return json({ configured: true, ok: true, page: p?.name || cfg.page_name });
     } catch (e) {
-      return json({ configured: true, ok: false, error: String((e as Error)?.message || e).slice(0, 200) });
+      return json({ configured: true, ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
   }
 
@@ -178,7 +209,7 @@ Deno.serve(async (req) => {
     const errors: Record<string, string> = {};
     const safe = async <T>(key: string, fn: () => Promise<T>): Promise<T | null> => {
       try { return await fn(); } catch (e) {
-        errors[key] = String((e as Error)?.message || e).slice(0, 160);
+        errors[key] = friendly(String((e as Error)?.message || e).slice(0, 160));
         return null;
       }
     };
@@ -200,17 +231,17 @@ Deno.serve(async (req) => {
         }))
         : Promise.resolve(null),
       cfg.ad_account_id
-        ? safe('adAccount', () => graph(cfg.ad_account_id, cfg.access_token, { fields: 'name,currency' }))
+        ? safe('adAccount', () => graph(cfg.ad_account_id, userToken, { fields: 'name,currency' }))
         : Promise.resolve(null),
       cfg.ad_account_id
-        ? safe('ads', () => graph(`${cfg.ad_account_id}/insights`, cfg.access_token, {
+        ? safe('ads', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
           date_preset: 'last_28d', time_increment: '1', level: 'account',
           fields: 'spend,impressions,clicks,reach,date_start',
           limit: '40',
         }))
         : Promise.resolve(null),
       cfg.ad_account_id
-        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/insights`, cfg.access_token, {
+        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
           date_preset: 'last_28d', level: 'campaign',
           fields: 'campaign_name,spend,impressions,clicks',
           limit: '10',
