@@ -16,6 +16,7 @@ import {
   resolveBusinessPulse,
   resolveOpsFeed,
   resolveActivityHeatmap,
+  resolveWaBrief,
   sparkPoints,
 } from '../src/core/jarvis/pulse.js';
 import { ITBIS_PCT } from '../src/lib/pricing.js';
@@ -149,6 +150,22 @@ test('sparkPoints maps a series into the viewbox, max at the top', () => {
   assert.equal(sparkPoints([]), '');
   // all-zero series stays on the baseline instead of dividing by zero
   assert.equal(sparkPoints([0, 0], 100, 28, 2), '2.0,26.0 98.0,26.0');
+});
+
+test('WhatsApp brief counts 7d in/out, unread inbound and newest inbound age', () => {
+  const msgs = [
+    { direction: 'in', createdAt: NOW - 1000, readAt: null },
+    { direction: 'in', createdAt: NOW - 2 * DAY, readAt: NOW - DAY },
+    { direction: 'in', createdAt: NOW - 10 * DAY, readAt: null }, // old but unread still counts
+    { direction: 'out', createdAt: NOW - 3 * DAY },
+    { direction: 'out', createdAt: NOW - 9 * DAY }, // outside 7d window
+  ];
+  const b = resolveWaBrief(msgs, NOW);
+  assert.equal(b.in7, 2);
+  assert.equal(b.out7, 1);
+  assert.equal(b.unread, 2);
+  assert.equal(b.lastInAt, NOW - 1000);
+  assert.ok(b.lastInAgo);
 });
 
 test('ops feed is real events newest first, capped at limit', () => {

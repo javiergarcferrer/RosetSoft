@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Package,
-  Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp, Users, X, Zap,
+  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Megaphone,
+  Package, Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp,
+  Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -17,6 +18,7 @@ import {
   resolveActivityHeatmap,
   resolveSocialPulse,
   resolveAdsSalesWeeks,
+  resolveWaBrief,
   systemIntegrity,
   radarPoints,
   sparkPoints,
@@ -188,17 +190,18 @@ export default function Jarvis() {
   // fresh across devices, same as the uplink thread.
   const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
-      const [quotes, orders, customers, products, quoteLines] = await Promise.all([
+      const [quotes, orders, customers, products, quoteLines, waMessages] = await Promise.all([
         db.quotes.where('profileId').equals(profileId || '').toArray(),
         db.orders.where('profileId').equals(profileId || '').toArray(),
         db.customers.where('profileId').equals(profileId || '').toArray(),
         db.products.where('profileId').equals(profileId || '').toArray(),
         db.quoteLines.toArray(),
+        db.waMessages.where('profileId').equals(profileId || '').toArray(),
       ]);
-      return { quotes, orders, customers, products, quoteLines };
+      return { quotes, orders, customers, products, quoteLines, waMessages };
     },
     [profileId, tick],
-    { quotes: [], orders: [], customers: [], products: [], quoteLines: [] },
+    { quotes: [], orders: [], customers: [], products: [], quoteLines: [], waMessages: [] },
   );
 
   // ── live diagnostics ─────────────────────────────────────────────────
@@ -422,75 +425,6 @@ export default function Jarvis() {
     }
   }, [refreshSettings]);
 
-  // Inline reply to an IG comment from the triage list.
-  const [replyTo, setReplyTo] = useState(null); // comment id
-  const [replyText, setReplyText] = useState('');
-  const [replyBusy, setReplyBusy] = useState(false);
-  const [replyErr, setReplyErr] = useState(null);
-  const sendReply = useCallback(async () => {
-    const message = replyText.trim();
-    if (!message || !replyTo || replyBusy) return;
-    setReplyBusy(true);
-    setReplyErr(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { replyComment: { commentId: replyTo, message } },
-      });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      if (!data?.ok) throw new Error(data?.error || 'No se pudo responder');
-      setReplyTo(null);
-      setReplyText('');
-    } catch (e) {
-      setReplyErr(e?.message || 'No se pudo responder');
-    } finally {
-      setReplyBusy(false);
-    }
-  }, [replyText, replyTo, replyBusy]);
-
-  // Publishing composer — posts to the Page (now/scheduled) and/or IG.
-  const [pubText, setPubText] = useState('');
-  const [pubImageUrl, setPubImageUrl] = useState('');
-  const [pubAt, setPubAt] = useState('');
-  const [pubIg, setPubIg] = useState(false);
-  const [pubBusy, setPubBusy] = useState(false);
-  const [pubNote, setPubNote] = useState(null); // { ok, text }
-  const publishPost = useCallback(async () => {
-    const message = pubText.trim();
-    if (!message || pubBusy) return;
-    setPubBusy(true);
-    setPubNote(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: {
-          publish: {
-            message,
-            imageUrl: pubImageUrl.trim() || undefined,
-            scheduleAt: pubAt ? new Date(pubAt).getTime() : undefined,
-            targets: pubIg ? ['facebook', 'instagram'] : ['facebook'],
-          },
-        },
-      });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      const results = data?.results || {};
-      const parts = Object.entries(results).map(([t, r]) => (
-        r.ok
-          ? `${t === 'facebook' ? 'FB' : 'IG'} ✓${pubAt && t === 'facebook' ? ' programado' : ''}`
-          : `${t === 'facebook' ? 'FB' : 'IG'}: ${r.error}`
-      ));
-      setPubNote({ ok: !!data?.ok, text: parts.join(' · ') || data?.error || 'sin respuesta' });
-      if (data?.ok) {
-        setPubText('');
-        setPubImageUrl('');
-        setPubAt('');
-        loadSocial(); // the scheduled list should reflect it
-      }
-    } catch (e) {
-      setPubNote({ ok: false, text: e?.message || 'Fallo al publicar' });
-    } finally {
-      setPubBusy(false);
-    }
-  }, [pubText, pubImageUrl, pubAt, pubIg, pubBusy, loadSocial]);
-
   const whatsappLinked = !!settings?.whatsappConnectedAt;
   const metaAutoTried = useRef(false);
   useEffect(() => {
@@ -559,6 +493,7 @@ export default function Jarvis() {
     }),
     [biz, nowMin],
   );
+  const waBrief = useMemo(() => resolveWaBrief(biz.waMessages, nowMin), [biz, nowMin]);
   const social = useMemo(
     () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
     [socialRaw, nowMin],
@@ -671,6 +606,22 @@ export default function Jarvis() {
               <div className="jv-stat"><b>{nOrders}</b><span>Pedidos</span></div>
               <div className="jv-stat"><b>{nCustomers}</b><span>Clientes</span></div>
               <div className="jv-stat"><b>{nProducts}</b><span>Productos</span></div>
+            </div>
+          </section>
+
+          <section className="jv-panel">
+            <div className="jv-panel-head"><Send size={12} /> WhatsApp · 7 días</div>
+            <div className="grid grid-cols-2 gap-2 p-3">
+              <div className="jv-stat"><b>{waBrief.in7}</b><span>Recibidos</span></div>
+              <div className="jv-stat"><b>{waBrief.out7}</b><span>Enviados</span></div>
+              <div className="jv-stat">
+                <b style={{ color: waBrief.unread > 0 ? 'var(--jv-warning)' : undefined }}>{waBrief.unread}</b>
+                <span>Sin leer</span>
+              </div>
+              <div className="jv-stat">
+                <b style={{ fontSize: '0.85rem', lineHeight: '1.9rem' }}>{waBrief.lastInAgo || '—'}</b>
+                <span>Último entrante</span>
+              </div>
             </div>
           </section>
 
@@ -1047,178 +998,16 @@ export default function Jarvis() {
                 </div>
               )}
 
-              {social.campaigns.length > 0 && (
-                <div>
-                  <div className="jv-kicker mb-1.5">Campañas · 28 días</div>
-                  <div className="space-y-1">
-                    {social.campaigns.slice(0, 5).map((c) => (
-                      <div key={c.name} className="jv-social-row">
-                        <span className="name">{c.name}</span>
-                        <span className="jv-mono stat">
-                          {c.spend.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                          {social.adCurrency ? ` ${social.adCurrency}` : ''}
-                        </span>
-                        <span className="jv-mono stat dim">
-                          {c.results != null && social.kpis.resultsLabel
-                            ? `${c.results} ${social.kpis.resultsLabel}`
-                            : c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(social.scheduled.length > 0 || social.posts.length > 0) && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <div className="jv-kicker mb-1.5">Programado</div>
-                    {social.scheduled.length ? social.scheduled.slice(0, 4).map((p) => (
-                      <div key={p.at} className="jv-social-row">
-                        <span className="name">{p.text}</span>
-                        <span className="jv-mono stat dim">{p.inLabel}</span>
-                      </div>
-                    )) : (
-                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Nada programado.</div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="jv-kicker mb-1.5">Últimas publicaciones IG</div>
-                    {social.posts.slice(0, 4).map((p) => (
-                      <div key={p.permalink || p.at} className="jv-social-row">
-                        <span className="name">{p.text}</span>
-                        <span className="jv-mono stat dim">♥ {p.likes} · 💬 {p.comments}</span>
-                      </div>
-                    ))}
-                    {!social.posts.length && (
-                      <div className="text-xs" style={{ color: 'var(--jv-muted)' }}>Sin publicaciones recientes.</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {Object.keys(social.errors).length > 0 && (
                 <div className="text-xs" style={{ color: 'var(--jv-warning)' }}>
                   Secciones sin respuesta: {Object.keys(social.errors).join(', ')} — el resto es dato real.
                 </div>
               )}
 
-              {/* IG comment triage — what people are saying, newest first */}
-              {social.recentComments.length > 0 && (
-                <div>
-                  <div className="jv-kicker mb-1.5">Comentarios IG recientes</div>
-                  {social.recentComments.map((c) => (
-                    <div key={c.id || `${c.username}-${c.at}`}>
-                      <div className="jv-social-row">
-                        <span className="name">
-                          <span style={{ color: 'var(--jv-accent)' }}>@{c.username}</span> {c.text}
-                        </span>
-                        <span className="jv-mono stat dim">{c.ago || ''}</span>
-                        {c.id && (
-                          <button
-                            type="button"
-                            className="jv-btn flex-none"
-                            style={{ minHeight: '1.4rem', fontSize: '0.62rem', padding: '0 0.4rem' }}
-                            onClick={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText(''); setReplyErr(null); }}
-                          >
-                            Responder
-                          </button>
-                        )}
-                      </div>
-                      {replyTo === c.id && (
-                        <div className="flex gap-2 mt-1 mb-2">
-                          <input
-                            className="jv-input"
-                            value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') sendReply(); }}
-                            placeholder={`Responder a @${c.username}…`}
-                            maxLength={500}
-                            autoFocus
-                          />
-                          <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={sendReply} disabled={!replyText.trim() || replyBusy}>
-                            {replyBusy ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {replyErr && <div className="text-xs mt-1" style={{ color: 'var(--jv-danger)' }}>{replyErr}</div>}
-                </div>
-              )}
-
-              {/* Meta product catalogs — visibility (Shopify's channel feeds them) */}
-              {social.catalogs.length > 0 && (
-                <div>
-                  <div className="jv-kicker mb-1.5">Catálogos Meta</div>
-                  {social.catalogs.map((cat) => (
-                    <div key={`${cat.business}-${cat.name}`} className="jv-social-row">
-                      <span className="name">{cat.name}</span>
-                      <span className="jv-mono stat">{cat.products.toLocaleString('en-US')} productos</span>
-                      <span className="jv-mono stat dim">{cat.vertical || cat.business}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* composer — publish to the Page now/scheduled, optionally IG */}
-              <div className="pt-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
-                <div className="jv-kicker mb-2">Publicar</div>
-                <div className="space-y-2">
-                  <input
-                    className="jv-input"
-                    value={pubText}
-                    onChange={(e) => setPubText(e.target.value)}
-                    placeholder="Texto de la publicación…"
-                    maxLength={2000}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      className="jv-input"
-                      style={{ flex: '2 1 12rem', width: 'auto' }}
-                      value={pubImageUrl}
-                      onChange={(e) => setPubImageUrl(e.target.value)}
-                      placeholder="URL de imagen (obligatoria para IG)"
-                      spellCheck={false}
-                    />
-                    <input
-                      className="jv-input"
-                      style={{ flex: '1 1 10rem', width: 'auto' }}
-                      type="datetime-local"
-                      value={pubAt}
-                      onChange={(e) => setPubAt(e.target.value)}
-                      aria-label="Programar (solo Facebook)"
-                    />
-                    <button
-                      type="button"
-                      className={`jv-btn flex-none ${pubIg ? 'jv-online' : ''}`}
-                      onClick={() => setPubIg((v) => !v)}
-                      aria-pressed={pubIg}
-                    >
-                      IG {pubIg ? '✓' : ''}
-                    </button>
-                    <button
-                      type="button"
-                      className="jv-btn jv-btn-primary flex-none"
-                      onClick={publishPost}
-                      disabled={!pubText.trim() || pubBusy}
-                    >
-                      {pubBusy ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                      {pubAt ? 'Programar' : 'Publicar'}
-                    </button>
-                  </div>
-                  <p className="text-xs" style={{ color: 'var(--jv-faint)' }}>
-                    Facebook admite programar (10 min – 30 días); Instagram publica al
-                    momento y requiere imagen. Siempre a la página {social.pageName || ''}
-                    {social.igUsername ? ` / @${social.igUsername}` : ''}.
-                  </p>
-                  {pubNote && (
-                    <div className="text-xs" style={{ color: pubNote.ok ? 'var(--jv-success)' : 'var(--jv-danger)' }}>
-                      {pubNote.text}
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* JARVIS briefs; acting on Meta lives in /marketing */}
+              <Link to="/marketing" className="jv-btn" style={{ alignSelf: 'flex-start' }}>
+                <Megaphone size={12} /> Abrir Marketing — publicar, responder, campañas
+              </Link>
             </div>
           )}
         </section>

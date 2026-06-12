@@ -193,3 +193,7 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
 - [ ] Cycle B — campaign controls: pause/resume from JARVIS (POST campaign
   status; needs an explicit confirm in the UI — it moves real money).
 - [ ] Cycle C — IG Stories publishing (media_type=STORIES) from the composer.
+- [x] Restructure — JARVIS is now the read-only BRIEFING surface (KPI brief +
+  sparks + ads↔ventas + WhatsApp 7d brief + link out); ACTING on Meta moved to
+  the new /marketing page (Ventas nav group): composer, comment replies,
+  campaigns, scheduled, posts, catalogs. Same VM spine (core/jarvis/social).
