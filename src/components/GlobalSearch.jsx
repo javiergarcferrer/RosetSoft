@@ -75,6 +75,19 @@ function SearchOverlay({ onClose }) {
     [profileId],
     [],
   );
+  // Containers resolve "MSCU1234567 → which order?"; suppliers are an
+  // accounting-side group, fetched only for the roles whose nav has them.
+  const canAccounting = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
+  const { data: containers } = useLiveQueryStatus(
+    () => db.containers.where('profileId').equals(profileId || '').toArray(),
+    [profileId],
+    [],
+  );
+  const { data: suppliers } = useLiveQueryStatus(
+    () => (canAccounting ? db.suppliers.where('profileId').equals(profileId || '').toArray() : Promise.resolve([])),
+    [profileId, canAccounting],
+    [],
+  );
   const loaded = quotesLoaded && customersLoaded && professionalsLoaded && ordersLoaded;
 
   // Catalog is tens of thousands of SKUs → server-side search (bounded), and
@@ -102,8 +115,8 @@ function SearchOverlay({ onClose }) {
   }, [currentProfile?.role]);
 
   const result = useMemo(
-    () => resolveGlobalSearch({ query, quotes, customers, professionals, orders, products, pages }),
-    [query, quotes, customers, professionals, orders, products, pages],
+    () => resolveGlobalSearch({ query, quotes, customers, professionals, orders, containers, suppliers, products, pages }),
+    [query, quotes, customers, professionals, orders, containers, suppliers, products, pages],
   );
 
   // ↑/↓ selection across ALL results (flat order). Reset when results change.
