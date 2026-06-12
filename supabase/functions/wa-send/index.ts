@@ -282,15 +282,36 @@ Deno.serve(async (req: Request) => {
   // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
   // The catalog id is resolved fresh per request — one cheap Graph call, no
   // state to go stale when the team reconnects a different catalog.
+  // Three sources, because Graph SILENTLY FILTERS objects the token can't
+  // see (an empty list does NOT mean "no catalog connected" — usually it
+  // means the System User wasn't assigned the catalog asset):
+  //   1. the WABA's product_catalogs edge,
+  //   2. the number's whatsapp_commerce_settings (carries catalog_id),
+  //   3. the token's own catalog_management granular scope (debug_token).
+  // Every miss is logged so the real Meta answer is in the function logs.
   async function connectedCatalogId(): Promise<{ id: string | null; error: string | null }> {
     if (!wabaId) return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA).' };
     const r = await fetch(`${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, { headers: graphHeaders });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) return { id: null, error: metaError(data, r.status) };
-    const id = (data as { data?: { id?: string }[] }).data?.[0]?.id || null;
+    let id = r.ok ? ((data as { data?: { id?: string }[] }).data?.[0]?.id || null) : null;
+    if (!id) {
+      console.error('[wa-send] product_catalogs gave no catalog:', r.status, JSON.stringify(data));
+      const cs = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings?fields=catalog_id`, { headers: graphHeaders });
+      const csData = await cs.json().catch(() => ({}));
+      id = cs.ok ? ((csData as { data?: { catalog_id?: string }[] }).data?.[0]?.catalog_id || null) : null;
+      if (!id) console.error('[wa-send] whatsapp_commerce_settings gave no catalog:', cs.status, JSON.stringify(csData));
+    }
+    if (!id) {
+      const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
+      const dd = await dbg.json().catch(() => ({})) as
+        { data?: { granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+      id = (dd.data?.granular_scopes || [])
+        .find((s) => s.scope === 'catalog_management')?.target_ids?.[0] || null;
+      if (!id) console.error('[wa-send] catalog_management scope gave no catalog:', JSON.stringify(dd.data?.granular_scopes || []));
+    }
     return {
       id,
-      error: id ? null : 'La cuenta de WhatsApp no tiene un catálogo conectado. Conéctalo en Meta → WhatsApp Manager → Catálogo.',
+      error: id ? null : 'No se pudo ver el catálogo con el token guardado. Suele faltar uno de estos: (1) asignar el CATÁLOGO como activo al System User del token (Business Manager → System users → Add assets → Catálogos) y que el token tenga el permiso catalog_management, o (2) conectar el catálogo a la cuenta de WhatsApp (WhatsApp Manager → Catálogo). Tras corregirlo, vuelve a intentar.',
     };
   }
 
