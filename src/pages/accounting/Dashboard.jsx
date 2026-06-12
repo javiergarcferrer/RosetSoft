@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Wallet, ArrowDownCircle, ArrowUpCircle,
-  Receipt, FileWarning, AlertTriangle, BookOpen, Landmark, Ship,
+  Wallet, ArrowDownCircle, ArrowUpCircle, Receipt, FileWarning,
+  AlertTriangle, BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -61,20 +61,20 @@ function CardHead({ title, note, to, action }) {
 
 function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   const body = (
-    <div className="card card-pad h-full flex flex-col gap-2 transition-shadow min-w-0">
+    <div className="stat-card card-pad h-full flex flex-col gap-2 min-w-0">
       <div className="flex items-center gap-2 min-w-0">
         {Icon && (
-          <span className="w-7 h-7 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0">
+          <span className="icon-tile tint-ink w-7 h-7 rounded-lg">
             <Icon size={14} />
           </span>
         )}
         <span className="eyebrow-xs tracking-wide text-ink-500 min-w-0 truncate">{label}</span>
       </div>
-      <div className={`text-xl leading-none font-semibold tabular-nums break-all ${tone || 'text-ink-900'}`}>{value}</div>
+      <div className={`stat-value text-xl break-all ${tone || ''}`}>{value}</div>
       {sub && <div className="text-xs text-ink-400 break-words">{sub}</div>}
     </div>
   );
-  return to ? <Link to={to} className="block hover:shadow-soft active:scale-[0.99] transition-all min-w-0">{body}</Link> : body;
+  return to ? <Link to={to} className="block active:scale-[0.99] transition-transform min-w-0">{body}</Link> : body;
 }
 
 /** Simple proportional progress bar (P&L rows). */
@@ -193,9 +193,9 @@ export default function AccountingDashboard() {
               period last year. */}
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0">
             {kpis.map((k) => (
-              <div key={k.key} className="card p-3.5 min-w-0">
-                <div className="eyebrow-xs text-ink-500 truncate mb-1">{k.label}</div>
-                <div className={`text-lg font-semibold tabular-nums whitespace-nowrap ${k.key === 'utilidad' ? (k.current >= 0 ? 'text-emerald-700' : 'text-rose-700') : 'text-ink-900'}`}>
+              <div key={k.key} className="stat-card p-3.5 min-w-0">
+                <div className="eyebrow-xs text-ink-500 truncate mb-1.5">{k.label}</div>
+                <div className={`stat-value text-xl whitespace-nowrap ${k.key === 'utilidad' ? (k.current >= 0 ? 'text-emerald-700' : 'text-rose-700') : ''}`}>
                   {formatDop(k.current)}
                 </div>
                 <div className="flex items-center gap-2 mt-1">
@@ -365,31 +365,32 @@ export default function AccountingDashboard() {
               sub={d.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion" />
           </div>
 
+          <div className="section-rule"><span>Análisis del período</span></div>
+
           {/* Analysis layer — importaciones 360° + where spending moved. */}
           <div className="grid lg:grid-cols-2 gap-4 min-w-0">
             <div className="card p-4 min-w-0">
               <CardHead title="Importaciones" to="/accounting/importaciones" action="Ver expedientes →" />
               <div className="grid grid-cols-2 gap-3">
-                <div className="min-w-0">
-                  <div className="eyebrow-xs text-ink-500 mb-0.5 inline-flex items-center gap-1"><Ship size={12} /> En tránsito</div>
-                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.inTransit)}</div>
-                  <div className="text-xs text-ink-400">mercancía en el agua</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="eyebrow-xs text-ink-500 mb-0.5">Importado · {monthLabel}</div>
-                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.landed)}</div>
-                  <div className="flex items-center gap-1.5"><DeltaChip delta={importPanel.landedDelta} vs={period.prev.label} /><span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span></div>
-                </div>
-                <div className="min-w-0">
-                  <div className="eyebrow-xs text-ink-500 mb-0.5">ITBIS aduanal</div>
-                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{formatDop(importPanel.itbisAduanal)}</div>
-                  <div className="text-xs text-ink-400">crédito fiscal del período</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="eyebrow-xs text-ink-500 mb-0.5">Factor de costo</div>
-                  <div className="text-lg font-semibold tabular-nums whitespace-nowrap">{importPanel.landedFactor != null ? `× ${importPanel.landedFactor.toFixed(2)}` : '—'}</div>
-                  <div className="text-xs text-ink-400">{importPanel.expedientesCount} expediente{importPanel.expedientesCount === 1 ? '' : 's'} · destino ÷ CIF</div>
-                </div>
+                {[
+                  { tint: 'tint-sky', icon: Ship, label: 'En tránsito', value: formatDop(importPanel.inTransit), sub: 'mercancía en el agua' },
+                  { tint: 'tint-brand', icon: Boxes, label: `Importado · ${monthLabel}`, value: formatDop(importPanel.landed), delta: true },
+                  { tint: 'tint-emerald', icon: Percent, label: 'ITBIS aduanal', value: formatDop(importPanel.itbisAduanal), sub: 'crédito fiscal del período' },
+                  { tint: 'tint-ink', icon: Gauge, label: 'Factor de costo', value: importPanel.landedFactor != null ? `× ${importPanel.landedFactor.toFixed(2)}` : '—', sub: `${importPanel.expedientesCount} expediente${importPanel.expedientesCount === 1 ? '' : 's'} · destino ÷ CIF` },
+                ].map((it) => (
+                  <div key={it.label} className="surface-subtle p-3 min-w-0 flex items-start gap-2.5">
+                    <span className={`icon-tile ${it.tint}`}><it.icon size={14} /></span>
+                    <div className="min-w-0">
+                      <div className="eyebrow-xs text-ink-500 mb-0.5 truncate">{it.label}</div>
+                      <div className="stat-value text-lg whitespace-nowrap">{it.value}</div>
+                      {it.delta ? (
+                        <div className="flex items-center gap-1.5 mt-0.5"><DeltaChip delta={importPanel.landedDelta} vs={period.prev.label} /><span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span></div>
+                      ) : (
+                        <div className="text-[11px] text-ink-400 truncate">{it.sub}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -428,6 +429,8 @@ export default function AccountingDashboard() {
               )}
             </div>
           </div>
+
+          <div className="section-rule"><span>Detalle</span></div>
 
           {/* Drill layer — segmented sales (Odoo-style group-by). */}
           <div className="card p-4 min-w-0">

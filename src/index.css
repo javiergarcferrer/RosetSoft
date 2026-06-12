@@ -363,6 +363,48 @@
      INSIDE a card (table heads, secondary fills, sub-sections) that need to
      read as recessed rather than as another raised card. */
   .surface-subtle { @apply rounded-xl bg-ink-50 border border-ink-100/80; }
+
+  /* ── Stat surfaces (the analytics panel's dimensional layer) ──────────
+     .stat-card  — a KPI tile one tonal step ABOVE .card: an inset top
+                   highlight (lit edge), a faint clay bloom in the corner,
+                   and a hover lift, so figures read as material tiles
+                   instead of flat rectangles.
+     .stat-value — the headline figure: display face, tight, tabular.
+     .icon-tile  — the small squircle icon plate; tint with a .tint-*.
+     .tint-*     — soft tinted gradient washes for icon plates / accents
+                   (kept here so the palette stays one move to retune). */
+  .stat-card {
+    @apply card relative overflow-hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), theme('boxShadow.soft');
+  }
+  .stat-card:hover {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), theme('boxShadow.md');
+  }
+  .stat-card::after {
+    content: '';
+    @apply absolute pointer-events-none;
+    inset: -45% -35% auto auto;
+    width: 75%;
+    height: 95%;
+    background: radial-gradient(closest-side, rgba(199, 107, 41, 0.08), transparent 72%);
+  }
+  .stat-value { @apply font-display text-2xl leading-none font-semibold tabular-nums tracking-tight text-ink-900; }
+  .icon-tile { @apply w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-inset ring-black/5 shadow-xs; }
+  .tint-brand   { background-image: linear-gradient(135deg, #f7e7d4, #eecbab); color: #7d3e1c; }
+  .tint-emerald { background-image: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #047857; }
+  .tint-rose    { background-image: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #be123c; }
+  .tint-sky     { background-image: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0369a1; }
+  .tint-ink     { background-image: linear-gradient(135deg, #f7f7f6, #e8e7e3); color: #544f43; }
+
+  /* Section divider — editorial rhythm between a page's layers (monitor /
+     analysis / drill on the panel): an eyebrow + a fading hairline. */
+  .section-rule { @apply flex items-center gap-3 pt-1; }
+  .section-rule > span { @apply eyebrow whitespace-nowrap; }
+  .section-rule::after {
+    content: '';
+    @apply h-px flex-1;
+    background: linear-gradient(90deg, theme('colors.ink.200'), transparent);
+  }
   .kbd   { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-mono text-ink-600; }
   .badge { @apply inline-flex items-center rounded-md bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700; }
   .badge-brand { @apply inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700; }

@@ -27,10 +27,13 @@ export function Donut({ segments = [], size = 132, thickness = 16, children }) {
         {total > 0 && segments.map((s, i) => {
           const len = (Math.max(0, s.value || 0) / total) * circ;
           if (len <= 0.01) return null;
-          const dash = `${len} ${circ - len}`;
+          // A hairline gap between segments (when there are several) keeps
+          // slices legible instead of fusing into one ring.
+          const gap = segments.length > 1 ? Math.min(2.5, len * 0.25) : 0;
+          const dash = `${Math.max(0.5, len - gap)} ${circ - len + gap}`;
           const node = (
             <circle key={i} cx={c} cy={c} r={r} fill="none" stroke={s.color} strokeWidth={thickness}
-              strokeDasharray={dash} strokeDashoffset={-offset} />
+              strokeDasharray={dash} strokeDashoffset={-offset} strokeLinecap={segments.length > 1 ? 'butt' : 'round'} />
           );
           offset += len;
           return node;
@@ -73,8 +76,12 @@ export function BarPairs({ data = [], colors = ['#059669', '#e8a76d'], height = 
 function Column({ h, color, title }) {
   return (
     <div
-      className="w-2.5 sm:w-3 rounded-t-[3px]"
-      style={{ height: `${Math.max(2, h * 100)}%`, backgroundColor: color }}
+      className="w-2.5 sm:w-3 rounded-t-[4px]"
+      style={{
+        height: `${Math.max(2, h * 100)}%`,
+        background: `linear-gradient(180deg, color-mix(in srgb, ${color} 72%, white), ${color} 88%)`,
+        boxShadow: '0 1px 2px rgba(59,56,48,0.15)',
+      }}
       title={title}
     />
   );
@@ -127,6 +134,7 @@ export function AreaChart({ points = [], color = '#059669', height = 116 }) {
  * `points: number[]` (oldest first).
  */
 export function Sparkline({ points = [], color = '#878374', height = 26, strokeWidth = 1.5 }) {
+  const id = useId();
   const W = 120;
   const H = 32;
   const pad = 3;
@@ -140,9 +148,17 @@ export function Sparkline({ points = [], color = '#878374', height = 26, strokeW
     H - pad - (((v || 0) - min) / span) * (H - 2 * pad),
   ]);
   const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const area = `${line} L${xy[n - 1][0].toFixed(1)} ${H} L${xy[0][0].toFixed(1)} ${H} Z`;
   const [lx, ly] = xy[n - 1];
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={height} preserveAspectRatio="none" className="block" aria-hidden>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.16" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${id})`} />
       <path d={line} fill="none" stroke={color} strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={lx} cy={ly} r="2.4" fill={color} />
@@ -168,10 +184,14 @@ export function YoYColumns({ data = [], color = '#c96a2a', ghost = '#e3e1da', he
           const title = `${d.label}: ${fmt(d.value)} · año anterior ${fmt(d.prev)}${delta != null ? ` · ${delta >= 0 ? '+' : ''}${delta}%` : ''}`;
           return (
             <div key={d.label} className="relative flex-1 h-full flex items-end justify-center" title={title}>
-              <div className="absolute bottom-0 w-full max-w-7 rounded-t-[3px]"
-                style={{ height: pctOf(d.prev), backgroundColor: ghost }} />
-              <div className="relative w-1/2 max-w-3.5 rounded-t-[3px]"
-                style={{ height: pctOf(d.value), backgroundColor: color }} />
+              <div className="absolute bottom-0 w-full max-w-7 rounded-t-[4px]"
+                style={{ height: pctOf(d.prev), background: `linear-gradient(180deg, color-mix(in srgb, ${ghost} 55%, white), ${ghost})` }} />
+              <div className="relative w-1/2 max-w-3.5 rounded-t-[4px]"
+                style={{
+                  height: pctOf(d.value),
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${color} 70%, white), ${color} 85%)`,
+                  boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 35%, white), 0 1px 2px rgba(59,56,48,0.18)`,
+                }} />
             </div>
           );
         })}
@@ -193,10 +213,16 @@ export function YoYColumns({ data = [], color = '#c96a2a', ghost = '#e3e1da', he
 export function BulletBar({ value = 0, marker = null, max = 1, color = '#c96a2a', height = 10 }) {
   const pct = (v) => `${Math.min(100, (Math.max(0, v) / Math.max(1, max)) * 100)}%`;
   return (
-    <div className="relative w-full rounded-full bg-ink-100 overflow-hidden" style={{ height }}>
-      <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(value), backgroundColor: color, opacity: 0.85 }} />
+    <div className="relative w-full rounded-full bg-ink-100 overflow-hidden"
+      style={{ height, boxShadow: 'inset 0 1px 2px rgba(59,56,48,0.10)' }}>
+      <div className="absolute inset-y-0 left-0 rounded-full"
+        style={{
+          width: pct(value),
+          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 68%, white), ${color})`,
+          boxShadow: '0 1px 1.5px rgba(59,56,48,0.22)',
+        }} />
       {marker != null && marker > 0 && (
-        <div className="absolute inset-y-0 w-0.5 bg-ink-600" style={{ left: pct(marker) }} />
+        <div className="absolute inset-y-0 w-0.5 bg-ink-700/80 rounded-full" style={{ left: pct(marker) }} />
       )}
     </div>
   );
