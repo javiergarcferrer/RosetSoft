@@ -37,15 +37,27 @@
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 .jv-title {
-  font-size: clamp(1.25rem, 2.6vw, 1.75rem);
+  font-family: 'Rauschen B', 'Sohne', 'Lausanne', system-ui, sans-serif;
+  font-size: clamp(2.25rem, 7vw, 3.5rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  /* Rauschen is uppercase by cut, but normalize so the wordmark is solid. */
+  text-transform: uppercase;
+  /* Center optically — the tracking adds trailing space on the right. */
+  text-indent: 0.14em;
   color: var(--jv-fg);
 }
 .jv-kicker {
   font-size: 0.75rem;
   color: var(--jv-faint);
 }
+
+/* ── HUD header — JARVIS wordmark centered, controls on a row below ───── */
+.jv-header { display: flex; flex-direction: column; gap: 0.85rem; }
+.jv-wordmark { text-align: center; }
+.jv-wordmark .jv-kicker { letter-spacing: 0.04em; }
+.jv-wordmark .jv-title { margin-top: 0.3rem; }
 
 /* ── panels — hairline border + two-layer shadow for a crisp edge ────── */
 .jv-panel {

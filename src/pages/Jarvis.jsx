@@ -552,15 +552,15 @@ export default function Jarvis() {
 
   return (
     <div className="jarvis">
-      {/* ── HUD header ─────────────────────────────────────────────── */}
-      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1 pb-4">
-        <div className="min-w-0">
+      {/* ── HUD header — centered wordmark, controls on their own row ─── */}
+      <header className="jv-header px-1 pb-4">
+        <div className="jv-wordmark">
           <div className="jv-kicker">Roset Ops Core · v{String(BUILD.sha || '').slice(0, 7) || 'dev'}</div>
           <h1 className="jv-title">JARVIS</h1>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-          <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-muted)' }}>
-            <div className="flex items-center justify-end gap-2">
+        <div className="jv-header-bar flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="jv-mono text-xs" style={{ color: 'var(--jv-muted)' }}>
+            <div className="flex items-center gap-2">
               <span style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
                 {clock.toLocaleTimeString('es-DO', { hour12: false })}
               </span>
