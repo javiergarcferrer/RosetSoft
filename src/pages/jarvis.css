@@ -352,6 +352,26 @@
 .jv-funnel-row .bar i.accepted { background: var(--jv-success); }
 .jv-funnel-row .money { color: var(--jv-fg); font-size: 0.72rem; }
 
+/* ── follow-ups — stalled sent quotes, ranked by money at stake ───────── */
+.jv-followup-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.32rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.74rem;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.jv-followup-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.jv-followup-row .name { color: var(--jv-fg); min-width: 0; }
+.jv-followup-row .quiet { color: var(--jv-warning); font-size: 0.68rem; white-space: nowrap; }
+.jv-followup-row .money { color: var(--jv-muted); font-size: 0.72rem; white-space: nowrap; }
+
 /* ── cadence sparkline — two series, ONE shared scale ─────────────────── */
 .jv-spark {
   width: 100%;

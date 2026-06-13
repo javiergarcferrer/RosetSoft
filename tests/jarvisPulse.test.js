@@ -17,6 +17,7 @@ import {
   resolveOpsFeed,
   resolveActivityHeatmap,
   resolveWaBrief,
+  resolveFollowUps,
   sparkPoints,
 } from '../src/core/jarvis/pulse.js';
 import { ITBIS_PCT } from '../src/lib/pricing.js';
@@ -180,4 +181,40 @@ test('ops feed is real events newest first, capped at limit', () => {
   assert.ok(feed[0].text.includes('aceptada'));
   assert.ok(feed.every((e) => e.ago));
   assert.equal(resolveOpsFeed({ quotes, orders, customers, now: NOW, limit: 2 }).length, 2);
+});
+
+// ── resolveFollowUps — stalled sent quotes, ranked by money at risk ──────
+test('flags only sent quotes gone quiet past staleDays, ranked by value', () => {
+  const quotes = [
+    { id: 'q1', status: 'sent', sentAt: NOW - 10 * DAY, customerId: 'c1' }, // quiet, big
+    { id: 'q2', status: 'sent', sentAt: NOW - 5 * DAY, customerId: 'c2' },  // quiet, small
+    { id: 'q3', status: 'sent', sentAt: NOW - 1 * DAY, customerId: 'c3' },  // fresh — excluded
+    { id: 'q4', status: 'accepted', sentAt: NOW - 9 * DAY, customerId: 'c4' }, // not sent — excluded
+    { id: 'q5', status: 'draft', createdAt: NOW - 9 * DAY }, // not sent — excluded
+  ];
+  const lines = [line('q1', 1000), line('q2', 100), line('q3', 5000), line('q4', 9000)];
+  const { items, count, atRiskUsd } = resolveFollowUps({ quotes, lines, now: NOW });
+  assert.deepEqual(items.map((i) => i.id), ['q1', 'q2']); // big money first
+  assert.equal(count, 2);
+  assert.ok(items[0].valueUsd > items[1].valueUsd);
+  assert.equal(Math.round(atRiskUsd), Math.round(items[0].valueUsd + items[1].valueUsd));
+  assert.equal(items[0].quietDays, 10);
+});
+
+test('recent WhatsApp traffic (by quote or customer) resets the quiet clock', () => {
+  const quotes = [
+    { id: 'q1', status: 'sent', sentAt: NOW - 10 * DAY, customerId: 'c1' },
+    { id: 'q2', status: 'sent', sentAt: NOW - 10 * DAY, customerId: 'c2' },
+  ];
+  const lines = [line('q1', 500), line('q2', 500)];
+  const messages = [
+    { id: 'm1', quoteId: 'q1', direction: 'in', createdAt: NOW - 1 * DAY }, // q1 is live
+    { id: 'm2', customerId: 'c2', direction: 'out', createdAt: NOW - 20 * DAY }, // older than sent — no help
+  ];
+  const { items } = resolveFollowUps({ quotes, lines, messages, now: NOW, staleDays: 3 });
+  assert.deepEqual(items.map((i) => i.id), ['q2']); // q1 silenced by the recent reply
+});
+
+test('empty input is safe', () => {
+  assert.deepEqual(resolveFollowUps(), { items: [], count: 0, atRiskUsd: 0 });
 });

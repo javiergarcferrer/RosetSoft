@@ -20,6 +20,7 @@ import {
   resolveSocialPulse,
   resolveAdsSalesWeeks,
   resolveWaBrief,
+  resolveFollowUps,
   systemIntegrity,
   sparkPoints,
   agoLabel,
@@ -493,6 +494,13 @@ export default function Jarvis() {
     [biz, nowMin],
   );
   const waBrief = useMemo(() => resolveWaBrief(biz.waMessages, nowMin), [biz, nowMin]);
+  const followUps = useMemo(
+    () => resolveFollowUps({
+      quotes: biz.quotes, lines: biz.quoteLines, customers: biz.customers,
+      messages: biz.waMessages, now: nowMin,
+    }),
+    [biz, nowMin],
+  );
   const social = useMemo(
     () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
     [socialRaw, nowMin],
@@ -728,6 +736,28 @@ export default function Jarvis() {
                 </Link>
               ))}
             </div>
+
+            {/* follow-ups — which sent quotes have gone quiet, biggest money
+                first, deep-linked to chase. Hidden when nothing is stale. */}
+            {followUps.count > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="jv-kicker">Seguimientos · {followUps.count} en silencio</span>
+                  <span className="jv-mono jv-stale" title="Total en cotizaciones enviadas sin respuesta">
+                    {formatMoney(followUps.atRiskUsd)} en riesgo
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  {followUps.items.map((f) => (
+                    <Link key={f.id} to={f.to} className="jv-followup-row" title={`Abrir ${f.name}`}>
+                      <span className="name truncate">{f.name}</span>
+                      <span className="quiet">{f.quietDays} d sin contacto</span>
+                      <span className="money jv-mono">{formatMoney(f.valueUsd)}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               {/* weekly cadence — created vs accepted on ONE shared scale */}

@@ -212,3 +212,61 @@ export function resolveOpsFeed({ quotes = [], orders = [], customers = [], now =
     .slice(0, limit)
     .map((e) => ({ ...e, ago: agoLabel(e.at, now) }));
 }
+
+/**
+ * Follow-ups — the actionable counterpart to the funnel's "En juego" figure.
+ * A `sent` quote that's gone quiet (no WhatsApp traffic and no acceptance for
+ * `staleDays`+ days) is a deal at risk; this surfaces those, ranked by the
+ * money at stake so the dealer chases the biggest stalled ones first. "Quiet"
+ * counts the LAST activity in either direction — a recent reply means the
+ * conversation is live, so it's not flagged. Each row deep-links to its quote.
+ * Money rolls up through core/quote/totals, same as the funnel — they agree.
+ */
+export function resolveFollowUps({
+  quotes = [], lines = [], customers = [], messages = [],
+  now = Date.now(), staleDays = 3, limit = 6,
+} = {}) {
+  const byQuote = linesByQuoteId(lines);
+  const customersById = new Map((customers || []).map((c) => [c.id, c]));
+
+  // Last WhatsApp activity (either direction) keyed by quote and by customer —
+  // a quote inherits its customer's traffic when no message is tagged to it.
+  const lastByQuote = new Map();
+  const lastByCustomer = new Map();
+  for (const m of messages || []) {
+    const at = m.createdAt || 0;
+    if (!at) continue;
+    if (m.quoteId && at > (lastByQuote.get(m.quoteId) || 0)) lastByQuote.set(m.quoteId, at);
+    if (m.customerId && at > (lastByCustomer.get(m.customerId) || 0)) lastByCustomer.set(m.customerId, at);
+  }
+
+  const cutoff = staleDays * DAY;
+  const rows = [];
+  for (const q of quotes) {
+    if (q.status !== 'sent') continue;
+    const sentAt = q.sentAt || q.createdAt || 0;
+    const lastContactAt = Math.max(
+      sentAt,
+      lastByQuote.get(q.id) || 0,
+      q.customerId ? (lastByCustomer.get(q.customerId) || 0) : 0,
+    );
+    const quietMs = now - lastContactAt;
+    if (quietMs < cutoff) continue;
+    rows.push({
+      id: q.id,
+      name: quoteDisplayName(q, customersById.get(q.customerId) || null),
+      valueUsd: quoteGrandTotal(q, byQuote.get(q.id) || []),
+      lastContactAt,
+      quietDays: Math.floor(quietMs / DAY),
+      quietAgo: agoLabel(lastContactAt, now),
+      to: `/quotes/${q.id}`,
+    });
+  }
+
+  rows.sort((a, b) => (b.valueUsd - a.valueUsd) || (b.quietDays - a.quietDays));
+  return {
+    items: rows.slice(0, limit),
+    count: rows.length,
+    atRiskUsd: rows.reduce((s, r) => s + r.valueUsd, 0),
+  };
+}
