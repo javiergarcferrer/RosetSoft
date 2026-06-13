@@ -371,6 +371,8 @@
 .jv-followup-row .name { color: var(--jv-fg); min-width: 0; }
 .jv-followup-row .quiet { color: var(--jv-warning); font-size: 0.68rem; white-space: nowrap; }
 .jv-followup-row .money { color: var(--jv-muted); font-size: 0.72rem; white-space: nowrap; }
+.jv-followup-row.is-alert { border-color: color-mix(in srgb, var(--jv-warning) 45%, transparent); }
+.jv-followup-row.is-alert .quiet { font-weight: 600; }
 
 /* ── cadence sparkline — two series, ONE shared scale ─────────────────── */
 .jv-spark {

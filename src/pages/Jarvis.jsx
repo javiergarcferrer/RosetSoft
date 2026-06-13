@@ -21,6 +21,7 @@ import {
   resolveAdsSalesWeeks,
   resolveWaBrief,
   resolveFollowUps,
+  resolveShipments,
   systemIntegrity,
   sparkPoints,
   agoLabel,
@@ -501,6 +502,10 @@ export default function Jarvis() {
     }),
     [biz, nowMin],
   );
+  const shipments = useMemo(
+    () => resolveShipments({ orders: biz.orders, now: nowMin }),
+    [biz, nowMin],
+  );
   const social = useMemo(
     () => (socialRaw ? resolveSocialPulse(socialRaw, { now: nowMin }) : null),
     [socialRaw, nowMin],
@@ -753,6 +758,30 @@ export default function Jarvis() {
                       <span className="name truncate">{f.name}</span>
                       <span className="quiet">{f.quietDays} d sin contacto</span>
                       <span className="money jv-mono">{formatMoney(f.valueUsd)}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* logistics — LR shipments in motion, longest-in-stage first;
+                customs dwell is flagged. Hidden when nothing's open. */}
+            {shipments.count > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="jv-kicker">En tránsito · {shipments.count} pedidos en ruta</span>
+                  {shipments.alerts > 0 && (
+                    <span className="jv-mono jv-stale" title="Pedidos detenidos en aduanas">
+                      {shipments.alerts} en aduanas +7 d
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  {shipments.items.map((s) => (
+                    <Link key={s.id} to={s.to} className={`jv-followup-row${s.alert ? ' is-alert' : ''}`} title={`Abrir pedido ${s.name}`}>
+                      <span className="name truncate">{s.name}</span>
+                      <span className="quiet">{s.stageLabel} · {s.days} d</span>
+                      <span className="money jv-mono">{s.ago}</span>
                     </Link>
                   ))}
                 </div>

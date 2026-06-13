@@ -11,6 +11,7 @@
 import { linesByQuoteId, quoteGrandTotal } from '../quote/totals.js';
 import { quoteOutstanding } from '../../lib/quoteMilestones.js';
 import { quoteDisplayName } from '../../lib/quoteNaming.js';
+import { ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
 import { agoLabel } from './board.js';
 
 const DAY = 86_400_000;
@@ -268,5 +269,47 @@ export function resolveFollowUps({
     items: rows.slice(0, limit),
     count: rows.length,
     atRiskUsd: rows.reduce((s, r) => s + r.valueUsd, 0),
+  };
+}
+
+/** Open-pipeline order stages — placed through customs (before received/cancelled). */
+const OPEN_SHIPMENT_STAGES = ['placed', 'confirmed', 'in_transit', 'in_customs'];
+
+/**
+ * Logistics watch — the LR shipments still in motion (placed → in customs),
+ * each showing how long it's sat in its current stage so a PO that stalled at
+ * the factory or a container stuck at DR customs floats to the top. Customs
+ * dwell past `customsAlertDays` is flagged (`alert`) — that's the stage where
+ * delays cost storage fees, so it sorts first. Stage labels come from
+ * lib/orderStages (ORDER_STAGE_BY_KEY), so JARVIS never re-spells the lifecycle.
+ * Pure projection of the order rows; each item deep-links to its order.
+ */
+export function resolveShipments({ orders = [], now = Date.now(), limit = 6, customsAlertDays = 7 } = {}) {
+  const rows = [];
+  for (const o of orders) {
+    if (!OPEN_SHIPMENT_STAGES.includes(o.status)) continue;
+    const stage = ORDER_STAGE_BY_KEY[o.status];
+    if (!stage) continue;
+    const stageAt = (stage.timestampField && o[stage.timestampField]) || o.createdAt || now;
+    const days = Math.max(0, Math.floor((now - stageAt) / DAY));
+    rows.push({
+      id: o.id,
+      name: o.name || (o.number != null ? `#${o.number}` : o.id),
+      status: o.status,
+      stageLabel: stage.label,
+      days,
+      ago: agoLabel(stageAt, now),
+      alert: o.status === 'in_customs' && days >= customsAlertDays,
+      to: `/orders/${o.id}`,
+    });
+  }
+  // Attention first (customs over the dwell threshold), then longest in stage.
+  rows.sort((a, b) => (Number(b.alert) - Number(a.alert)) || (b.days - a.days));
+  return {
+    items: rows.slice(0, limit),
+    count: rows.length,
+    inTransit: rows.filter((r) => r.status === 'in_transit').length,
+    inCustoms: rows.filter((r) => r.status === 'in_customs').length,
+    alerts: rows.filter((r) => r.alert).length,
   };
 }

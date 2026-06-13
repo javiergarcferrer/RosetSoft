@@ -13,6 +13,7 @@ export {
   resolveActivityHeatmap,
   resolveWaBrief,
   resolveFollowUps,
+  resolveShipments,
   sparkPoints,
   FUNNEL_STAGES,
 } from './pulse.js';

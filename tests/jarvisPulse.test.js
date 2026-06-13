@@ -18,6 +18,7 @@ import {
   resolveActivityHeatmap,
   resolveWaBrief,
   resolveFollowUps,
+  resolveShipments,
   sparkPoints,
 } from '../src/core/jarvis/pulse.js';
 import { ITBIS_PCT } from '../src/lib/pricing.js';
@@ -217,4 +218,37 @@ test('recent WhatsApp traffic (by quote or customer) resets the quiet clock', ()
 
 test('empty input is safe', () => {
   assert.deepEqual(resolveFollowUps(), { items: [], count: 0, atRiskUsd: 0 });
+});
+
+// ── resolveShipments — open LR shipments, customs dwell flagged ──────────
+test('lists open-pipeline orders, customs-stuck first then longest in stage', () => {
+  const orders = [
+    { id: 'o1', number: 1, status: 'in_transit', inTransitAt: NOW - 12 * DAY },
+    { id: 'o2', number: 2, status: 'in_customs', inCustomsAt: NOW - 9 * DAY },   // alert (≥7d)
+    { id: 'o3', number: 3, status: 'placed', placedAt: NOW - 2 * DAY },
+    { id: 'o4', number: 4, status: 'in_customs', inCustomsAt: NOW - 1 * DAY },   // not yet alert
+    { id: 'o5', number: 5, status: 'received', receivedAt: NOW - 1 * DAY },      // closed — excluded
+    { id: 'o6', number: 6, status: 'cancelled', cancelledAt: NOW },              // closed — excluded
+  ];
+  const { items, count, inTransit, inCustoms, alerts } = resolveShipments({ orders, now: NOW });
+  assert.equal(count, 4);
+  assert.equal(inTransit, 1);
+  assert.equal(inCustoms, 2);
+  assert.equal(alerts, 1);
+  // o2 is the only customs-alert → first; rest by days-in-stage desc
+  assert.deepEqual(items.map((i) => i.id), ['o2', 'o1', 'o3', 'o4']);
+  assert.equal(items[0].alert, true);
+  assert.equal(items[0].stageLabel, 'En aduanas');
+  assert.equal(items[1].days, 12);
+});
+
+test('shipment stage age falls back to createdAt when the stage stamp is missing', () => {
+  const orders = [{ id: 'o1', number: 1, status: 'in_transit', createdAt: NOW - 4 * DAY }];
+  const { items } = resolveShipments({ orders, now: NOW });
+  assert.equal(items[0].days, 4);
+  assert.equal(items[0].alert, false);
+});
+
+test('resolveShipments empty input is safe', () => {
+  assert.deepEqual(resolveShipments(), { items: [], count: 0, inTransit: 0, inCustoms: 0, alerts: 0 });
 });
