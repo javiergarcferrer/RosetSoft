@@ -1369,7 +1369,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
             <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-0.5">Plantilla · {m.templateName}</div>
           )}
           {m.quoted && (
-            <div className="border-l-2 border-emerald-500/60 bg-black/5 rounded-r-md pl-2 pr-2.5 py-1 mb-1">
+            <div className="border-l-2 border-emerald-500/60 bg-black/5 dark:bg-white/[0.06] rounded-r-md pl-2 pr-2.5 py-1 mb-1">
               <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
               <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
             </div>
@@ -1603,7 +1603,7 @@ function MediaAttachment({ m }) {
     <a
       href={url}
       download={m.body || 'documento'}
-      className="flex items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2 mb-1 hover:bg-black/10 transition-colors"
+      className="flex items-center gap-2 rounded-lg bg-black/5 dark:bg-white/[0.06] px-2.5 py-2 mb-1 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
     >
       <FileText size={16} className="shrink-0 opacity-60" />
       <span className="text-xs font-medium truncate flex-1">{m.body || 'Documento'}</span>

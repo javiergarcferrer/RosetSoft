@@ -1091,7 +1091,7 @@ function NoteToggle({ icon: Icon, text, label, content, open, onClick }) {
         <Icon size={13} aria-hidden />
         {text}
         {hasContent && !open && (
-          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-white" aria-hidden />
+          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-surface" aria-hidden />
         )}
       </button>
       <span

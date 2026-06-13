@@ -157,7 +157,7 @@ function VoyageHud({ voyage }) {
     resolveVoyageHud(voyage);
 
   return (
-    <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-surface/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
+    <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 dark:border-white/15 bg-surface/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
       {/* Port names wrap, never truncate — the HUD grows downward over the map. */}
       <div className="flex items-center gap-1.5 font-semibold text-ink-900 leading-tight">
         <span className="min-w-0 break-words">{originName}</span>

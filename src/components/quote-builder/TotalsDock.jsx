@@ -524,7 +524,7 @@ function DockAction({
       {dot && (
         <span
           className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ring-2 ${
-            pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-white'
+            pressed ? 'bg-amber-400 ring-ink-900' : 'bg-amber-500 ring-surface'
           }`}
           aria-hidden
         />
