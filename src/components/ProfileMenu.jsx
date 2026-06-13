@@ -1,6 +1,44 @@
 import { useState } from 'react';
-import { ChevronUp, LogOut } from 'lucide-react';
+import { ChevronUp, LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { getThemePreference, setThemePreference } from '../lib/theme.js';
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Claro', Icon: Sun },
+  { value: 'dark', label: 'Oscuro', Icon: Moon },
+  { value: 'system', label: 'Auto', Icon: Monitor },
+];
+
+/** Light / Dark / Auto segmented control. Lives in the ProfileMenu so theming
+ *  sits with the rest of the per-user account state. */
+function ThemeToggle() {
+  const [theme, setTheme] = useState(getThemePreference);
+  return (
+    <div className="px-3 pt-2.5 pb-1">
+      <div className="eyebrow-xs text-ink-500 mb-1.5">Tema</div>
+      <div className="flex items-center gap-1 rounded-lg bg-white/[0.05] p-0.5">
+        {THEME_OPTIONS.map(({ value, label, Icon }) => {
+          const active = theme === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTheme(setThemePreference(value))}
+              aria-pressed={active}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-medium transition-colors ${
+                active
+                  ? 'bg-white/[0.12] text-ink-100 shadow-xs'
+                  : 'text-ink-400 hover:text-ink-200 hover:bg-white/[0.06]'
+              }`}
+            >
+              <Icon size={13} aria-hidden /> {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function ProfileMenu() {
   const { user, signOut } = useAuth();
@@ -24,6 +62,8 @@ export default function ProfileMenu() {
               {user?.email || '—'}
             </div>
           </div>
+          <div className="border-t border-white/[0.07] mx-2 my-1" />
+          <ThemeToggle />
           <div className="border-t border-white/[0.07] mx-2 mb-1" />
           <button
             onClick={handleSignOut}

@@ -86,7 +86,7 @@ export default function Layout() {
       {/* Mobile topbar — extends behind the status bar on standalone iOS
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-ink-900 text-ink-100 border-b border-ink-800">
+      <header className="theme-chrome md:hidden sticky top-0 z-30 flex items-center justify-between px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] bg-ink-900 text-ink-100 border-b border-ink-800">
         <div className="flex items-center">
           <button
             onClick={() => setNavOpen(true)}
@@ -134,7 +134,7 @@ export default function Layout() {
       {/* Mobile drawer overlay */}
       {navOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-ink-900/50"
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
           onClick={() => setNavOpen(false)}
           aria-hidden
         />
@@ -146,7 +146,7 @@ export default function Layout() {
           pb-safe-area / pl-safe-area keep the panel content clear of the
           notch, home indicator, and landscape ear. */}
       <aside
-        className={`bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
         } ${collapsed ? 'md:hidden' : ''}`}
         aria-label="Navegación principal"
@@ -274,7 +274,7 @@ export default function Layout() {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          className="hidden md:inline-flex fixed top-3 left-2.5 z-20 items-center justify-center w-9 h-9 rounded-md bg-white text-ink-600 border border-ink-200 shadow-soft hover:bg-ink-50 hover:text-ink-900 transition-colors"
+          className="hidden md:inline-flex fixed top-3 left-2.5 z-20 items-center justify-center w-9 h-9 rounded-md bg-surface text-ink-600 border border-ink-200 shadow-soft hover:bg-ink-50 hover:text-ink-900 transition-colors"
           aria-label="Mostrar menú"
           title="Mostrar menú"
         >

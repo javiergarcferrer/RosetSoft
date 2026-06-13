@@ -6,6 +6,11 @@ import App from './App.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { startVersionWatcher } from './lib/liveReload.js';
 import { installVirtualKeyboardWatcher } from './lib/useVirtualKeyboard.js';
+import { initTheme } from './lib/theme.js';
+
+// Re-affirm the theme the inline boot script already painted, and start
+// following the OS while the dealer is on "system" (see lib/theme).
+initTheme();
 
 // Auto-reload the tab when a new build is deployed (see lib/liveReload).
 startVersionWatcher();

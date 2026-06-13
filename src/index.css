@@ -62,6 +62,91 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Theme tokens — the single source of truth for color ───────────────────
+     Tailwind's ink / brand / surface / canvas scales resolve to these channel
+     triplets (see tailwind.config.js), so the entire app re-skins from this one
+     block. The LIGHT values equal the exact hexes the app always shipped —
+     light mode is unchanged to the pixel — and `.dark` only overrides what must
+     change. Triplets are bare `R G B` (no rgb()/commas) so Tailwind's
+     `/<alpha-value>` opacity modifier keeps working. */
+  :root {
+    color-scheme: light;
+    /* warm-neutral ink ramp — lightest paper (50) → darkest ink (900) */
+    --ink-50: 247 247 246;  --ink-100: 232 231 227; --ink-200: 207 204 196;
+    --ink-300: 171 167 154; --ink-400: 135 131 116; --ink-500: 108 104 89;
+    --ink-600: 84 79 67;    --ink-700: 59 56 48;    --ink-800: 38 36 31;
+    --ink-900: 23 22 18;
+    /* terracotta / clay brand ramp */
+    --brand-50: 251 244 236;  --brand-100: 247 231 212; --brand-200: 238 203 171;
+    --brand-300: 232 167 109; --brand-400: 217 136 63;  --brand-500: 199 107 41;
+    --brand-600: 168 86 32;   --brand-700: 125 62 28;   --brand-800: 97 47 22;
+    --brand-900: 77 39 19;
+    /* surface roles: page canvas, raised panel, faint nested fill */
+    --canvas: 243 241 237;
+    --surface: 255 255 255;
+    --surface-2: 247 247 246;
+    /* card sheen (lit-from-above) + stat-card inset top highlight */
+    --card-sheen: linear-gradient(180deg, #ffffff 0%, #fcfbf9 100%);
+    --card-hi: rgba(255, 255, 255, 0.75);
+  }
+
+  .dark {
+    color-scheme: dark;
+    /* inverted-lightness warm ink ramp — darkest surface (50) → brightest text
+       (900). Not a naive invert: text steps (500–900) are tuned for AA on the
+       dark canvas, surfaces (50–200) stay warm, never pure black. */
+    --ink-50: 38 35 30;     --ink-100: 47 44 38;    --ink-200: 61 57 50;
+    --ink-300: 84 79 70;    --ink-400: 122 116 104; --ink-500: 156 149 136;
+    --ink-600: 184 177 164; --ink-700: 209 203 192; --ink-800: 230 226 217;
+    --ink-900: 243 240 233;
+    /* clay ramp, lightness-inverted: deep tints (low) for fills, bright clay
+       (high) for text/accents so `text-brand-700` stays legible on dark. */
+    --brand-50: 51 34 23;     --brand-100: 64 42 29;    --brand-200: 90 58 40;
+    --brand-300: 140 86 56;   --brand-400: 184 116 80;  --brand-500: 214 138 102;
+    --brand-600: 224 150 112; --brand-700: 233 173 132; --brand-800: 240 190 155;
+    --brand-900: 245 205 175;
+    /* surfaces step LIGHTER with elevation (Material dark-elevation model) */
+    --canvas: 23 21 18;
+    --surface: 32 30 26;
+    --surface-2: 40 37 32;
+    --card-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 55%);
+    --card-hi: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Always-dark chrome (the sidebar, the mobile topbar, and the ProfileMenu
+     nested inside the sidebar). It re-pins the ink/brand vars to the LIGHT ramp
+     LOCALLY, so its `bg-ink-900 / text-ink-100 / brand-*` styling resolves to
+     the original dark palette in BOTH themes — the chrome stays put while the
+     page canvas flips around it. Custom properties inherit, so re-declaring
+     them on the wrapper element overrides the global (.dark) values for its
+     whole subtree. */
+  .theme-chrome {
+    --ink-50: 247 247 246;  --ink-100: 232 231 227; --ink-200: 207 204 196;
+    --ink-300: 171 167 154; --ink-400: 135 131 116; --ink-500: 108 104 89;
+    --ink-600: 84 79 67;    --ink-700: 59 56 48;    --ink-800: 38 36 31;
+    --ink-900: 23 22 18;
+    --brand-50: 251 244 236;  --brand-100: 247 231 212; --brand-200: 238 203 171;
+    --brand-300: 232 167 109; --brand-400: 217 136 63;  --brand-500: 199 107 41;
+    --brand-600: 168 86 32;   --brand-700: 125 62 28;   --brand-800: 97 47 22;
+    --brand-900: 77 39 19;
+    --surface: 255 255 255;
+    --surface-2: 247 247 246;
+  }
+
+  /* Honour reduced-motion globally (the enter/exit animations, hover lifts and
+     theme transitions all collapse to ~instant). Individual maps/dropdowns
+     already guard themselves; this is the app-wide safety net. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer base {
   /* App-shell scroll model: html / body / #root are pinned to the viewport
      and never scroll themselves. The Layout's <main> is the single scroll
      container. This is what makes the page feel like a native app on iOS:
@@ -120,7 +205,7 @@
        No background-attachment: fixed — body is pinned full-viewport (the
        app scrolls inside #root) so `fixed` changes nothing visually, while
        on iOS it forces chunked background painting. */
-    background-color: #f3f1ed;
+    background-color: rgb(var(--canvas));
     background-image: theme('backgroundImage.app-wash');
     background-repeat: no-repeat;
     background-size: 100% 100%;
@@ -317,7 +402,7 @@
     @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 min-h-9 coarse:min-h-11 text-sm font-medium transition-[background-color,color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98] select-none;
   }
   .btn-primary   { @apply btn bg-ink-900 text-ink-50 shadow-sm hover:bg-ink-800 hover:shadow-md active:bg-ink-700 active:shadow-sm; }
-  .btn-secondary { @apply btn bg-white text-ink-900 border border-ink-200 shadow-xs hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100; }
+  .btn-secondary { @apply btn bg-surface text-ink-900 border border-ink-200 shadow-xs hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100; }
   .btn-ghost    { @apply btn text-ink-700 hover:bg-ink-100 active:bg-ink-200; }
   .btn-danger   { @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800; }
   /* Brand CTA — the terracotta primary action. A lit clay gradient surface
@@ -341,7 +426,7 @@
   /* Inputs. Same coarse-pointer touch-target treatment as buttons. The
      16px-on-mobile rule above keeps Safari from auto-zooming on focus. */
   .input {
-    @apply w-full rounded-md border border-ink-200 bg-white px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
+    @apply w-full rounded-md border border-ink-200 bg-surface px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
   }
   .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
   /* Card = the resting elevated surface. Softer 2xl radius (warm editorial),
@@ -350,8 +435,8 @@
      canvas — the single biggest fix for the "flat" feeling. */
   .card  {
     @apply rounded-2xl border border-ink-100 shadow-soft transition-[box-shadow,transform,border-color] duration-200;
-    background-color: #ffffff;
-    background-image: theme('backgroundImage.card-grad');
+    background-color: rgb(var(--surface));
+    background-image: var(--card-sheen);
   }
   /* Interactive card — for cards that are links/buttons. Lifts on hover with a
      deeper shadow + a hairline terracotta border so the whole surface reads as
@@ -375,10 +460,10 @@
                    (kept here so the palette stays one move to retune). */
   .stat-card {
     @apply card relative overflow-hidden;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), theme('boxShadow.soft');
+    box-shadow: inset 0 1px 0 var(--card-hi), theme('boxShadow.soft');
   }
   .stat-card:hover {
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), theme('boxShadow.md');
+    box-shadow: inset 0 1px 0 var(--card-hi), theme('boxShadow.md');
   }
   .stat-card::after {
     content: '';
@@ -427,12 +512,14 @@
      badges stay small-caps pills. Toggle call sites paint their ON state
      (e.g. `text-brand-700 bg-brand-50 border-brand-200`); the OFF state is
      this base. Coarse-pointer floor so a thumb can actually hit it. */
-  .chip-action { @apply inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2 py-1 text-[11px] font-medium text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 coarse:min-h-11 coarse:px-3; }
+  .chip-action { @apply inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-surface px-2 py-1 text-[11px] font-medium text-ink-600 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 coarse:min-h-11 coarse:px-3; }
   /* Tab pill — the in-page tab switcher of the accounting module (Ledger,
      Facturación, Gastos/606, Estados, CxC/CxP). Compose with .btn:
      `btn tab-pill` at rest, `btn tab-pill-active` for the open tab. */
   .tab-pill        { @apply bg-ink-100 text-ink-600 hover:bg-ink-200 active:bg-ink-300; }
-  .tab-pill-active { @apply bg-ink-900 text-white shadow-sm; }
+  /* text-ink-50 (not literal white) so the label inverts with the pill: in dark
+     mode bg-ink-900 lifts to near-white and the text drops to dark ink. */
+  .tab-pill-active { @apply bg-ink-900 text-ink-50 shadow-sm; }
   .table { @apply w-full text-sm; }
   .table th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 bg-ink-50/70 border-b border-ink-100; }
   .table td { @apply px-3 py-2 border-b border-ink-100; }
@@ -491,7 +578,7 @@
      page's gutter when at rest. Pair with an <ArrowLeft size={12}/>
      at the call site. */
   .back-link {
-    @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 min-h-8 coarse:min-h-10 mb-3 text-xs font-medium text-ink-700 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 transition-colors select-none active:scale-[0.98];
+    @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 min-h-8 coarse:min-h-10 mb-3 text-xs font-medium text-ink-700 border border-ink-200 bg-surface hover:bg-ink-50 hover:border-ink-300 hover:text-ink-900 active:bg-ink-100 active:border-ink-400 transition-colors select-none active:scale-[0.98];
   }
 
   /* Status pill — the semantic colors for quote status and
@@ -522,6 +609,16 @@
   .status-pill-pending  { @apply bg-amber-100 text-amber-800; }
   .status-pill-active   { @apply bg-emerald-100 text-emerald-800; }
   .status-pill-inactive { @apply bg-ink-100 text-ink-500; }
+  /* Dark mode: the light Tailwind tints (blue-100 / emerald-100 …) glare on a
+     dark canvas, so each maps to a deep, desaturated tint with a bright, AA
+     foreground. draft / archived / inactive ride the ink ramp and flip on their
+     own. Values tuned per the dark-accent rule (lighten + desaturate). */
+  .dark .status-pill-sent     { background-color: rgb(20 32 58);  color: rgb(147 180 247); }
+  .dark .status-pill-accepted,
+  .dark .status-pill-active   { background-color: rgb(22 39 30);  color: rgb(110 231 168); }
+  .dark .status-pill-declined { background-color: rgb(42 20 24);  color: rgb(251 113 133); }
+  .dark .status-pill-pending  { background-color: rgb(42 33 16);  color: rgb(251 191 36); }
+  .dark .status-pill-deposito { background-color: rgb(5 120 87);  color: #ffffff; }
 
   /* Auth card — Login + SetPassword centered cards. Same chrome
      as regular cards but with `p-8` for a generous breathing
@@ -530,8 +627,8 @@
      stretching to absurd widths. */
   .card-auth {
     @apply rounded-2xl border border-ink-100 shadow-md p-8 w-full max-w-sm;
-    background-color: #ffffff;
-    background-image: theme('backgroundImage.card-grad');
+    background-color: rgb(var(--surface));
+    background-image: var(--card-sheen);
   }
 
   /* ===========================================================
@@ -910,6 +1007,12 @@
 .vmap-leaf .leaflet-control-zoom a { color: theme('colors.ink.700'); }
 .vmap-leaf .leaflet-popup-content { margin: 8px 10px; }
 .vmap-leaf .leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: theme('boxShadow.pop'); }
+/* Dark mode: a warm-dark sea so the (light) tiles don't flash a cold slab
+   behind them, and the popup/tooltip surfaces pick up the dark card tone. */
+.dark .vmap-leaf .leaflet-container { background: #211f1b; }
+.dark .vmap-leaf .leaflet-popup-content-wrapper,
+.dark .vmap-leaf .leaflet-popup-tip { background: rgb(var(--surface)); color: rgb(var(--ink-800)); }
+.dark .vmap-leaf .leaflet-tooltip.vmap-label { background: rgba(32, 30, 26, 0.92); border-color: rgb(var(--ink-200)); color: rgb(var(--ink-700)); }
 
 /* Strip Leaflet's default white divIcon box so only our glyphs show. */
 .vmap-icon { background: transparent; border: 0; }
