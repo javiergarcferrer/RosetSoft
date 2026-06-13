@@ -205,20 +205,13 @@
        sharpens the type without shifting layout. */
     font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     /* Premium-flat canvas (Claude / Stripe / Shopify school): a calm warm
-       paper tone (#f3f1ed) a clear step below the white cards, plus ONE
-       smooth ambient layer — faint terracotta blooms lighting the page
-       corners. Depth comes from tonal elevation (canvas → card + sheen →
-       overlay + shadow-pop), never from texture: the previous film-grain
-       layer (feTurbulence SVG, then a baked PNG tile) is deliberately GONE —
-       the owner wants a clean surface, and the SVG variant rendered as a
-       checkerboard on iOS anyway. Don't reintroduce grain.
-       No background-attachment: fixed — body is pinned full-viewport (the
-       app scrolls inside #root) so `fixed` changes nothing visually, while
-       on iOS it forces chunked background painting. */
+       paper tone (#f3f1ed) a clear step below the white cards. Depth comes
+       purely from tonal elevation (canvas → card + sheen → overlay +
+       shadow-pop), never from a background gradient or texture: the owner
+       wants a clean, flat surface — the terracotta corner blooms (`app-wash`)
+       AND the older film-grain layer are deliberately GONE. Don't reintroduce
+       either. */
     background-color: rgb(var(--canvas));
-    background-image: theme('backgroundImage.app-wash');
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
     /* iOS treats position: fixed on a child as an Anchor for scroll-into-view
        when a focused input is covered by the keyboard. Keeping body as a
        static block lets that machinery work even though it doesn't scroll. */

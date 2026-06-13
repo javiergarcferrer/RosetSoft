@@ -96,11 +96,6 @@ export default {
         // every card a faint lit-from-above quality (Radix/Linear "surface"
         // tonal step) instead of reading as a dead white rectangle.
         'card-grad': 'linear-gradient(180deg, #ffffff 0%, #fcfbf9 100%)',
-        // Whole-app backdrop wash — two warm clay blooms (a brighter terracotta
-        // top-right, a deeper clay top-left) so the warm-editorial canvas feels
-        // lit and white cards lift off it. Paired with grain (in index.css) for
-        // texture. Both blooms now share the brand hue (no more cold violet).
-        'app-wash': 'radial-gradient(900px 480px at 100% -6%, rgba(199,107,41,0.06), transparent 60%), radial-gradient(720px 440px at -8% 4%, rgba(168,86,32,0.05), transparent 56%)',
       },
       boxShadow: {
         // Warm-tinted elevation ladder (shadow color = ink-700 #3b3830, not
