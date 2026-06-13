@@ -173,6 +173,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           La conexión queda guardada — los deploys no la tocan. Para cambiar un solo valor (p. ej. un token nuevo), pega solo ese campo: los vacíos conservan lo guardado.
         </p>
       )}
+      {connectedAt && <NumberHealth settings={settings} />}
       {webhook && (
         webhook.subscribed ? (
           <p className="text-[11px] text-emerald-700 mt-1.5 flex items-start gap-1">
@@ -1085,6 +1086,44 @@ function QrCodesRow() {
         <p className="text-[11px] mt-2 text-rose-600 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Number health — the WhatsApp quality rating (GREEN/YELLOW/RED) and current
+ * messaging-limit tier, mirrored onto settings by the connection test and the
+ * phone_number_quality_update webhook. A degraded number is throttled or
+ * blocked by Meta, so surfacing it lets the dealer act before campaigns fail.
+ */
+function NumberHealth({ settings }) {
+  const rating = (settings?.whatsappQualityRating || '').toUpperCase();
+  const limit = settings?.whatsappMessagingLimit || '';
+  if (!rating && !limit) return null;
+  const tone = rating === 'GREEN'
+    ? { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Alta' }
+    : rating === 'YELLOW'
+      ? { dot: 'bg-amber-500', text: 'text-amber-700', label: 'Media' }
+      : rating === 'RED'
+        ? { dot: 'bg-red-500', text: 'text-red-700', label: 'Baja' }
+        : { dot: 'bg-ink-300', text: 'text-ink-500', label: rating || '—' };
+  const LIMITS = { TIER_50: '50/día', TIER_250: '250/día', TIER_1K: '1.000/día', TIER_10K: '10.000/día', TIER_100K: '100.000/día', TIER_UNLIMITED: 'Sin límite' };
+  const limitLabel = LIMITS[String(limit).toUpperCase()] || '';
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+      {rating && (
+        <span className={`inline-flex items-center gap-1.5 ${tone.text}`} title="Calidad del número según Meta">
+          <span className={`h-2 w-2 rounded-full ${tone.dot}`} aria-hidden /> Calidad: {tone.label}
+        </span>
+      )}
+      {limitLabel && (
+        <span className="inline-flex items-center gap-1 text-ink-500" title="Límite de clientes nuevos por 24 h">
+          <Send size={11} /> Límite: {limitLabel}
+        </span>
+      )}
+      {rating === 'RED' && (
+        <span className="text-red-700">Meta está limitando este número — revisa la calidad en WhatsApp Manager.</span>
       )}
     </div>
   );

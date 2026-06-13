@@ -129,9 +129,10 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
 
   const raw = await req.text();
-  const { data: cfg } = await admin.from('whatsapp_config').select('app_secret, access_token').eq('profile_id', TEAM).maybeSingle();
+  const { data: cfg } = await admin.from('whatsapp_config').select('app_secret, access_token, phone_number_id').eq('profile_id', TEAM).maybeSingle();
   const secret = (cfg as { app_secret?: string } | null)?.app_secret || '';
   const accessToken = (cfg as { access_token?: string } | null)?.access_token || '';
+  const phoneNumberId = (cfg as { phone_number_id?: string } | null)?.phone_number_id || '';
   if (!(await validSignature(raw, req.headers.get('x-hub-signature-256'), secret))) {
     return new Response('invalid signature', { status: 401 });
   }
@@ -207,6 +208,27 @@ Deno.serve(async (req: Request) => {
             map[name] = next;
             const { error } = await admin.from('settings').update({ whatsapp_template_status: map }).eq('profile_id', TEAM);
             if (error) console.error('[wa-webhook] template status update failed:', error.message);
+          }
+          continue;
+        }
+
+        // Number quality changed → re-fetch the authoritative rating + tier and
+        // persist, so the connection card flags a degraded number (which Meta
+        // throttles or blocks) promptly instead of only on the next manual test.
+        if (change.field === 'phone_number_quality_update') {
+          if (accessToken && phoneNumberId) {
+            try {
+              const r = await fetch(`${GRAPH}/${phoneNumberId}?fields=quality_rating,messaging_limit_tier`, { headers: { Authorization: `Bearer ${accessToken}` } });
+              const d = await r.json().catch(() => ({})) as { quality_rating?: string; messaging_limit_tier?: string };
+              if (r.ok) {
+                await admin.from('settings').update({
+                  whatsapp_quality_rating: d.quality_rating || null,
+                  whatsapp_messaging_limit: d.messaging_limit_tier || null,
+                }).eq('profile_id', TEAM);
+              }
+            } catch (e) {
+              console.error('[wa-webhook] quality refresh failed:', (e as Error).message);
+            }
           }
           continue;
         }

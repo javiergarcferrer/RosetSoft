@@ -266,10 +266,10 @@ Deno.serve(async (req: Request) => {
 
   // ── Connection check ───────────────────────────────────────────────────────
   if (body.test === true) {
-    const r = await fetch(`${GRAPH}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`, { headers: graphHeaders });
+    const r = await fetch(`${GRAPH}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`, { headers: graphHeaders });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return json({ configured: true, ok: false, error: metaError(data, r.status) }, 502);
-    const d = data as { display_phone_number?: string; verified_name?: string; quality_rating?: string };
+    const d = data as { display_phone_number?: string; verified_name?: string; quality_rating?: string; messaging_limit_tier?: string };
     // Resolve the app (and, if needed, the WABA) from the token itself —
     // debug_token carries the app that minted it plus the WABAs a System
     // User token manages. The healed WABA id persists so templates /
@@ -322,7 +322,7 @@ Deno.serve(async (req: Request) => {
           // app, the chat-history sync at onboarding, and contact sync. The
           // template_* fields proactively flag an approved template that Meta
           // later pauses/disables or downgrades (it silently breaks sends).
-          fields: 'messages,smb_message_echoes,history,smb_app_state_sync,message_template_status_update,message_template_quality_update',
+          fields: 'messages,smb_message_echoes,history,smb_app_state_sync,message_template_status_update,message_template_quality_update,phone_number_quality_update',
           access_token: `${appId}|${appSecret}`,
         }),
       });
@@ -338,11 +338,13 @@ Deno.serve(async (req: Request) => {
     await admin.from('settings').update({
       whatsapp_display_number: d.display_phone_number || '',
       whatsapp_verified_name: d.verified_name || '',
+      whatsapp_quality_rating: d.quality_rating || null,
+      whatsapp_messaging_limit: d.messaging_limit_tier || null,
     }).eq('profile_id', TEAM);
     return json({
       configured: true, ok: true,
       displayNumber: d.display_phone_number, verifiedName: d.verified_name, quality: d.quality_rating,
-      webhookSubscribed, webhookError,
+      messagingLimit: d.messaging_limit_tier, webhookSubscribed, webhookError,
     });
   }
 

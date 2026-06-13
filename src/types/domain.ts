@@ -210,6 +210,11 @@ export interface Settings {
   /** The connected number as Meta displays it (e.g. "+1 809-555-0100"). */
   whatsappDisplayNumber?: string;
   whatsappVerifiedName?: string;
+  /** Number health mirrors (the rating lives at Meta): quality GREEN/YELLOW/RED
+   *  and the current messaging-limit tier (e.g. "TIER_1K"). Set by the
+   *  connection test, refreshed by the phone_number_quality_update webhook. */
+  whatsappQualityRating?: string;
+  whatsappMessagingLimit?: string;
   /** Approved Meta template used to send a quote link to a client who hasn't
    *  written in the last 24h. Empty ⇒ quote sends go as free-form text (only
    *  works inside the 24h window). Picked (not typed) in Settings, which also
