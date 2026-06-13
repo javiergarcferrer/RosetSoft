@@ -37,7 +37,7 @@ export default function QuoteHeader({
   canRedo,
   savedAt,
   saving,
-  buildPdf,
+  onShare,
 }) {
   const goBack = useGoBack();
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
@@ -112,7 +112,7 @@ export default function QuoteHeader({
         aria-label="Datos de la cotización"
       >
         <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-        <WhatsAppChip customer={customer} quote={quote} onUpdateQuote={onUpdateQuote} buildPdf={buildPdf} />
+        <WhatsAppChip customer={customer} onShare={onShare} />
         <ProfessionalChip
           quote={quote}
           professional={professional}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, Send, ExternalLink } from 'lucide-react';
+import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, ExternalLink } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -30,7 +30,6 @@ import { displayPhone, waDigits } from '../lib/phone.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
 import { useMediaQuery } from '../components/Layout.jsx';
-import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
@@ -680,7 +679,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           canRedo={canRedo}
           savedAt={savedAt}
           saving={saving}
-          buildPdf={generatePdf}
+          onShare={shareQuote}
         />
       )}
 
@@ -731,8 +730,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           quote={quote}
           customer={customer}
           settings={settings}
-          onUpdateQuote={hx(updateQuote)}
-          buildPdf={generatePdf}
+          onShare={shareQuote}
         />
       ) : view === 'client' ? (
         <ClientPreview
@@ -966,8 +964,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
  * a prerequisite is missing (connection, customer, phone) the pane explains
  * the next step instead of rendering dead air.
  */
-function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
-  const [sendOpen, setSendOpen] = useState(false);
+function ChatPaneCard({ quote, customer, settings, onShare }) {
   const connected = !!settings?.whatsappConnectedAt;
   const phone = customer?.phone || '';
 
@@ -1024,26 +1021,17 @@ function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
           </Link>
           <button
             type="button"
-            onClick={() => setSendOpen(true)}
+            onClick={onShare}
             className="btn-ghost text-xs text-emerald-700"
-            title="Enviar la cotización por WhatsApp (enlace o PDF)"
+            title="Compartir la cotización (enlace público · Correo, WhatsApp…)"
           >
-            <Send size={12} /> Enviar cotización
+            <Share2 size={12} /> Compartir cotización
           </button>
         </div>
       </div>
       <div className="flex-1 min-h-0">
         <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} variant="pane" />
       </div>
-      <SendQuoteModal
-        open={sendOpen}
-        onClose={() => setSendOpen(false)}
-        customer={customer}
-        quote={quote}
-        settings={settings}
-        onUpdateQuote={onUpdateQuote}
-        buildPdf={buildPdf}
-      />
     </div>
   );
 }

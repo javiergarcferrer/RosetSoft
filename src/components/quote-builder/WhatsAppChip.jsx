@@ -1,14 +1,9 @@
-import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
-import { MessageCircle, Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
-import Modal from '../Modal.jsx';
-import BrandName from '../BrandName.jsx';
+import { MessageCircle, Check, X, Pencil, Share2 } from 'lucide-react';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
-import { waDigits, displayPhone } from '../../lib/phone.js';
-import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
-import { quoteSlug } from '../../lib/quoteNaming.js';
-import { sendQuoteLink, sendQuotePdf, phoneOwner, phoneInUseMessage } from '../../lib/whatsapp.js';
+import { waDigits } from '../../lib/phone.js';
+import { phoneOwner, phoneInUseMessage } from '../../lib/whatsapp.js';
 
 /**
  * The quote customer's WhatsApp number, editable inline from the header — so
@@ -20,23 +15,21 @@ import { sendQuoteLink, sendQuotePdf, phoneOwner, phoneInUseMessage } from '../.
  * a customer is assigned (the CustomerChip prompts that first — there's no one to
  * attach a number to yet).
  *
- * With the Business API connected (Settings → WhatsApp), the chip also grows a
- * send action: it ships the quote from the BUSINESS number in the dealer's
- * choice of format — the public client link (template outside the 24h window,
- * free text inside it) or the exported PDF as a WhatsApp document — confirmed
- * through a small modal that owns the in-flight/result state. `buildPdf` is
- * useQuoteExport's generatePdf, threaded in by the Workspace.
+ * The chip also carries a Share action that mirrors the totals-dock Share
+ * button: `onShare` (useQuoteExport.shareQuote) hands the quote's public client
+ * link to the OS share sheet (`navigator.share` → Mail / WhatsApp / Messages),
+ * falling back to a clipboard copy on desktop. This replaced the old
+ * Business-API send modal — the native share sheet is the reliable path the
+ * dealer actually uses to send the quote on WhatsApp.
  */
-export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf }) {
-  const { settings, profileId } = useApp();
+export default function WhatsAppChip({ customer, onShare }) {
+  const { profileId } = useApp();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [phoneErr, setPhoneErr] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!customer) return null;
   const phone = customer.phone || '';
-  const apiReady = !!settings?.whatsappConnectedAt && !!quote && typeof onUpdateQuote === 'function';
 
   function startEdit() {
     setValue(phone);
@@ -113,169 +106,20 @@ export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf 
             worst case the pill wraps instead of hiding digits. */}
         <span className="font-semibold break-all">{phone}</span>
       </a>
-      {apiReady && (
+      {onShare && (
         <button
           type="button"
-          onClick={() => setConfirmOpen(true)}
-          title="Enviar la cotización por WhatsApp (número del negocio)"
-          aria-label="Enviar la cotización por WhatsApp"
+          onClick={onShare}
+          title="Compartir la cotización (enlace público · Correo, WhatsApp…)"
+          aria-label="Compartir la cotización"
           className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 flex-shrink-0 transition-colors"
         >
-          <Send size={11} />
+          <Share2 size={11} />
         </button>
       )}
       <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 flex-shrink-0 transition-colors">
         <Pencil size={10} />
       </button>
-      {apiReady && (
-        <SendQuoteModal
-          open={confirmOpen}
-          onClose={() => setConfirmOpen(false)}
-          customer={customer}
-          quote={quote}
-          settings={settings}
-          onUpdateQuote={onUpdateQuote}
-          buildPdf={buildPdf}
-        />
-      )}
     </span>
-  );
-}
-
-/**
- * Confirm-and-send, in the dealer's choice of format:
- *   • Enlace — mints (once) the quote's public share link — same rule as
- *     useQuoteExport.mintClientLink, persisted through the caller's
- *     updateQuote — and ships it via the wa-send Edge Function (approved
- *     template outside the 24h window, free text inside it).
- *   • PDF — builds the same blob Exportar downloads (buildPdf =
- *     useQuoteExport.generatePdf) and ships it as a WhatsApp document.
- *     Documents are free-form media, so they only deliver inside the 24h
- *     window — the per-format hint below says so before the dealer sends.
- * Owns the in-flight/result state so the chip strip never has to lay out an
- * error message.
- *
- * Exported: the mobile chat mode (QuoteBuilder's ChatPaneCard) opens this
- * same modal from its action strip, so the send flow has ONE implementation.
- */
-export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpdateQuote, buildPdf }) {
-  const [state, setState] = useState('idle'); // idle | sending | sent | error
-  const [msg, setMsg] = useState('');
-  const [format, setFormat] = useState('link'); // 'link' | 'pdf'
-  const template = (settings?.whatsappQuoteTemplate || '').trim();
-  const canPdf = typeof buildPdf === 'function';
-
-  async function send() {
-    if (state === 'sending') return;
-    setState('sending');
-    setMsg('');
-    try {
-      let res;
-      if (format === 'pdf' && canPdf) {
-        const { blob, filename } = await buildPdf();
-        res = await sendQuotePdf({ to: customer.phone, blob, filename, customer, quoteId: quote.id });
-      } else {
-        let token = quote.shareToken;
-        if (!token || !quote.shareEnabled) {
-          token = token || newShareToken();
-          await onUpdateQuote({ shareToken: token, shareEnabled: true });
-        }
-        const url = shareLinkUrl(token, quoteSlug(quote, customer));
-        res = await sendQuoteLink({ to: customer.phone, url, settings, customer, quoteId: quote.id });
-      }
-      if (res?.ok) {
-        setState('sent');
-        setMsg(`Enviado a ${displayPhone(waDigits(customer.phone))}.`);
-      } else {
-        setState('error');
-        setMsg(res?.error || 'No se pudo enviar.');
-      }
-    } catch (e) {
-      setState('error');
-      setMsg(userMessageFor(e));
-    }
-  }
-
-  const pickFormat = (f) => {
-    if (state === 'sending') return;
-    setFormat(f);
-    if (state === 'error') { setState('idle'); setMsg(''); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
-      <p className="text-sm text-ink-600">
-        Se enviará la cotización a{' '}
-        <strong><BrandName name={customer.name || customer.company} /></strong> ({displayPhone(waDigits(customer.phone))})
-        desde el número del negocio{settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.
-      </p>
-
-      {/* Format — the interactive client link or the exported PDF document. */}
-      <div className="grid grid-cols-2 gap-2 mt-3" role="radiogroup" aria-label="Formato del envío">
-        <FormatOption
-          icon={Link2}
-          label="Enlace interactivo"
-          hint="El cliente abre la cotización en vivo y elige telas"
-          active={format === 'link'}
-          onPick={() => pickFormat('link')}
-        />
-        <FormatOption
-          icon={FileText}
-          label="PDF"
-          hint="El documento exportado, como archivo adjunto"
-          active={format === 'pdf'}
-          disabled={!canPdf}
-          onPick={() => pickFormat('pdf')}
-        />
-      </div>
-
-      <p className="text-xs text-ink-500 mt-2.5">
-        {format === 'pdf'
-          ? 'El PDF viaja como archivo adjunto — WhatsApp solo lo entrega si el cliente escribió en las últimas 24 horas. Fuera de esa ventana, envía el enlace (usa la plantilla aprobada).'
-          : template
-            ? <>Se usa la plantilla aprobada <code>{template}</code>, así que llega aunque el cliente no haya escrito.</>
-            : 'Sin plantilla configurada se envía como texto libre — solo llega si el cliente escribió en las últimas 24 horas. Configura la plantilla en Configuración → WhatsApp.'}
-      </p>
-      {msg && (
-        <p className={`text-xs mt-3 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>
-          {state === 'error' ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <Check size={13} className="mt-0.5 shrink-0" />}
-          <span className="min-w-0 break-words">{msg}</span>
-        </p>
-      )}
-      <div className="flex items-center justify-end gap-2 mt-5">
-        <button type="button" onClick={onClose} className="btn-ghost text-sm">
-          {state === 'sent' ? 'Cerrar' : 'Cancelar'}
-        </button>
-        {state !== 'sent' && (
-          <button type="button" onClick={send} disabled={state === 'sending'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-            {state === 'sending' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            {state === 'error' ? 'Reintentar' : format === 'pdf' ? 'Enviar PDF' : 'Enviar enlace'}
-          </button>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-/** One selectable format card in the send modal's link-or-PDF pair. */
-function FormatOption({ icon: Icon, label, hint, active, disabled, onPick }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      disabled={disabled}
-      onClick={onPick}
-      className={`text-left rounded-lg border p-2.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        active
-          ? 'border-emerald-400 bg-emerald-50/60 ring-1 ring-inset ring-emerald-200'
-          : 'border-ink-200 hover:border-ink-300 hover:bg-ink-50'
-      }`}
-    >
-      <span className={`flex items-center gap-1.5 text-sm font-medium ${active ? 'text-emerald-800' : 'text-ink-800'}`}>
-        <Icon size={14} className={active ? 'text-emerald-600' : 'text-ink-400'} /> {label}
-      </span>
-      <span className="block text-[11px] text-ink-500 mt-0.5">{hint}</span>
-    </button>
   );
 }
