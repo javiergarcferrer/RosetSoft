@@ -5,10 +5,10 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { resolveReferral, fillTemplateBody, resolveNewChatContacts } from '../../core/crm/index.js';
+import { resolveReferral, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
 import { db } from '../../db/database.js';
@@ -59,6 +59,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [attachOpen, setAttachOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [productsOpen, setProductsOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   // Contact being saved into the CRM ({ name, phone } from a received card
   // or the unknown-chatter header action), or null.
   const [saveTarget, setSaveTarget] = useState(null);
@@ -71,7 +72,13 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // to the human #number so the thread shows WHICH deal a message was about
   // and deep-links to it. Bubbles of the quote being edited (contextQuoteId,
   // set by the workspace's embedded pane) skip the chip — there it's noise.
-  const { profileId } = useApp();
+  const { profileId, settings } = useApp();
+  // Quick replies (canned snippets) the dealer inserts with one tap — only the
+  // composer button appears once any are configured (Settings → WhatsApp), so
+  // the cluster stays uncluttered until the team opts in. {{nombre}}/{{negocio}}
+  // resolve against THIS contact + the dealer's business name at insert time.
+  const quickReplies = Array.isArray(settings?.whatsappQuickReplies) ? settings.whatsappQuickReplies : [];
+  const quickVars = { nombre: contact.name || '', negocio: settings?.companyName || '' };
   const quotes = useLiveQuery(
     () => (profileId ? db.quotes.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId],
@@ -94,6 +101,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const recCancelled = useRef(false);
   const typingAt = useRef(0);
   const fileRef = useRef(null);
+  const composerRef = useRef(null);
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [thread.items.length, contact.key]);
   useEffect(() => { setText(''); setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0; }, [contact.key]);
@@ -140,6 +148,20 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setReplyTo(null);
     setSending(false);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+  }
+
+  // Insert a quick reply into the composer (never auto-send) — the dealer can
+  // tweak it before sending, and it rides the same free-text path as typing
+  // (so the 24h-window rule applies identically). Appends to any draft rather
+  // than clobbering it; caret lands at the end, composer focused.
+  function insertQuickReply(qr) {
+    const filled = fillQuickReply(qr.text, quickVars);
+    setQuickOpen(false);
+    setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')} ${filled}` : filled));
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
+    });
   }
 
   // Reactions fire straight from a bubble; failures surface on the shared
@@ -450,6 +472,43 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         ) : (
           <>
+            {/* Quick replies — leftmost so the upward popover (w-72) stays
+                on-screen on a phone. Rendered only once the team has saved
+                some (Settings → WhatsApp), so it's zero clutter by default. */}
+            {quickReplies.length > 0 && (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setQuickOpen((v) => !v)}
+                  disabled={!connected || sending}
+                  className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors"
+                  title="Respuestas rápidas"
+                  aria-label="Respuestas rápidas"
+                  aria-expanded={quickOpen}
+                >
+                  <Zap size={17} />
+                </button>
+                {quickOpen && (
+                  <>
+                    <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setQuickOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
+                    <div className="absolute bottom-full left-0 mb-2 z-20 w-[min(18rem,calc(100vw-2rem))] max-h-72 overflow-y-auto rounded-xl bg-white border border-ink-100 shadow-lg py-1">
+                      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Respuestas rápidas</div>
+                      {quickReplies.map((qr) => (
+                        <button
+                          key={qr.id}
+                          type="button"
+                          onClick={() => insertQuickReply(qr)}
+                          className="block w-full text-left px-3 py-2 hover:bg-ink-50 active:bg-ink-100 transition-colors"
+                        >
+                          <div className="text-sm font-medium text-ink-800 truncate">{qr.label || 'Sin título'}</div>
+                          <div className="text-[11px] text-ink-500 truncate">{fillQuickReply(qr.text, quickVars)}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -509,6 +568,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               <ShoppingBag size={17} />
             </button>
             <textarea
+              ref={composerRef}
               className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
               rows={1}
               value={text}
