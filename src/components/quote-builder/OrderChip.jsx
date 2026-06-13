@@ -65,7 +65,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
     <div className="mt-2.5">
       <Link
         to={`/orders/${order.id}`}
-        className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-11 rounded-full text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
+        className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-11 rounded-full text-xs font-medium text-ink-700 bg-surface border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
         title={stage?.description}
       >
         <Package size={13} className="text-ink-400 flex-shrink-0" />

@@ -143,7 +143,7 @@ export default function Dropdown({
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-white px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+        className={`inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-surface px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
       >
         {label}
         {chevron && (
@@ -169,7 +169,7 @@ export default function Dropdown({
             right: pos.right,
             maxHeight: pos.maxHeight,
           }}
-          className={`dropdown-pop z-[2000] min-w-[12rem] overflow-y-auto rounded-xl border border-ink-100/80 bg-white py-1.5 shadow-pop ring-1 ring-inset ring-black/[0.03] ${panelClassName}`}
+          className={`dropdown-pop z-[2000] min-w-[12rem] overflow-y-auto rounded-xl border border-ink-100/80 bg-surface py-1.5 shadow-pop ring-1 ring-inset ring-black/[0.03] ${panelClassName}`}
         >
           {body}
         </div>,

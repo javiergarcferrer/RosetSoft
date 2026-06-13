@@ -96,8 +96,8 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
                           ? 'bg-red-500 border-red-500 text-white shadow-sm'
                           : 'bg-brand-500 border-brand-500 text-white shadow-sm')
                       : isCurrent
-                        ? `bg-white ${accent === 'red' ? 'border-red-500 ring-2 ring-red-200' : 'border-brand-500 ring-[3px] ring-brand-100'}`
-                        : 'bg-white border-ink-200'}`}
+                        ? `bg-surface ${accent === 'red' ? 'border-red-500 ring-2 ring-red-200' : 'border-brand-500 ring-[3px] ring-brand-100'}`
+                        : 'bg-surface border-ink-200'}`}
                 >
                   {(isPast || (isCurrent && i === QUOTE_STAGES.length - 1)) && (
                     accent === 'red' ? <X size={11} strokeWidth={2.5} /> : <CheckCircle2 size={11} strokeWidth={2.5} />
@@ -192,7 +192,7 @@ function TerminalMenu({ stage, terminal, onPick }) {
         Más <ChevronDown size={12} className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-white shadow-pop py-1 z-30 overflow-hidden" role="menu">
+        <div className="absolute right-0 mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-surface shadow-pop py-1 z-30 overflow-hidden" role="menu">
           {QUOTE_TERMINAL_STAGES.map((t) => (
             <button
               key={t.key}

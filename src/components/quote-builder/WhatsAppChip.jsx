@@ -48,7 +48,7 @@ export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf 
 
   if (editing) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-white px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50 max-w-full min-w-0">
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-surface px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50 max-w-full min-w-0">
         <MessageCircle size={12} className="text-emerald-600 flex-shrink-0" aria-hidden />
         <input
           autoFocus
@@ -86,7 +86,7 @@ export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf 
   return (
     // min-w-0 instead of shrink-0 so the chip can yield space in a
     // flex-wrap row rather than pushing siblings off-screen.
-    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
+    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
       <a
         href={`https://wa.me/${waDigits(phone)}`}
         target="_blank"

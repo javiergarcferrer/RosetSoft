@@ -31,7 +31,7 @@ export default function CustomerChip({ customer, onOpen }) {
     <button
       type="button"
       onClick={onOpen}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 min-h-7 coarse:min-h-11 text-xs hover:border-ink-400 hover:bg-ink-50 transition-all active:scale-[0.98] max-w-full min-w-0 ring-1 ring-inset ring-black/5"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 min-h-7 coarse:min-h-11 text-xs hover:border-ink-400 hover:bg-ink-50 transition-all active:scale-[0.98] max-w-full min-w-0 ring-1 ring-inset ring-black/5"
       title={[customer.name, customer.company, customer.email, customer.phone].filter(Boolean).join(' · ')}
     >
       <UserIcon size={12} className="text-brand-500 flex-shrink-0" />

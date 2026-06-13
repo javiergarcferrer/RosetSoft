@@ -79,7 +79,7 @@ function Column({ h, color, title }) {
       className="w-2.5 sm:w-3 rounded-t-[4px]"
       style={{
         height: `${Math.max(2, h * 100)}%`,
-        background: `linear-gradient(180deg, color-mix(in srgb, ${color} 72%, white), ${color} 88%)`,
+        background: `linear-gradient(180deg, color-mix(in srgb, ${color} 72%, rgb(var(--surface))), ${color} 88%)`,
         boxShadow: '0 1px 2px rgba(59,56,48,0.15)',
       }}
       title={title}
@@ -133,7 +133,7 @@ export function AreaChart({ points = [], color = '#059669', height = 116 }) {
  * shows a metric's SHAPE next to its number. The endpoint dot anchors "now".
  * `points: number[]` (oldest first).
  */
-export function Sparkline({ points = [], color = '#878374', height = 26, strokeWidth = 1.5 }) {
+export function Sparkline({ points = [], color = 'rgb(var(--ink-400))', height = 26, strokeWidth = 1.5 }) {
   const id = useId();
   const W = 120;
   const H = 32;
@@ -172,7 +172,7 @@ export function Sparkline({ points = [], color = '#878374', height = 26, strokeW
  * eye reads gain/shortfall as overhang without a second chart. Hovering a
  * period shows both values + the delta. `data: [{ label, value, prev }]`.
  */
-export function YoYColumns({ data = [], color = '#c96a2a', ghost = '#e3e1da', height = 150, format }) {
+export function YoYColumns({ data = [], color = '#c96a2a', ghost = 'rgb(var(--ink-100))', height = 150, format }) {
   const fmt = format || ((v) => String(v));
   const max = Math.max(1, ...data.flatMap((d) => [Math.abs(d.value || 0), Math.abs(d.prev || 0)]));
   const pctOf = (v) => `${Math.max(v > 0 ? 1.5 : 0, (Math.abs(v) / max) * 100)}%`;
@@ -185,12 +185,12 @@ export function YoYColumns({ data = [], color = '#c96a2a', ghost = '#e3e1da', he
           return (
             <div key={d.label} className="relative flex-1 h-full flex items-end justify-center" title={title}>
               <div className="absolute bottom-0 w-full max-w-7 rounded-t-[4px]"
-                style={{ height: pctOf(d.prev), background: `linear-gradient(180deg, color-mix(in srgb, ${ghost} 55%, white), ${ghost})` }} />
+                style={{ height: pctOf(d.prev), background: `linear-gradient(180deg, color-mix(in srgb, ${ghost} 55%, rgb(var(--surface))), ${ghost})` }} />
               <div className="relative w-1/2 max-w-3.5 rounded-t-[4px]"
                 style={{
                   height: pctOf(d.value),
-                  background: `linear-gradient(180deg, color-mix(in srgb, ${color} 70%, white), ${color} 85%)`,
-                  boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 35%, white), 0 1px 2px rgba(59,56,48,0.18)`,
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${color} 70%, rgb(var(--surface))), ${color} 85%)`,
+                  boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 35%, rgb(var(--surface))), 0 1px 2px rgba(59,56,48,0.18)`,
                 }} />
             </div>
           );
@@ -218,7 +218,7 @@ export function BulletBar({ value = 0, marker = null, max = 1, color = '#c96a2a'
       <div className="absolute inset-y-0 left-0 rounded-full"
         style={{
           width: pct(value),
-          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 68%, white), ${color})`,
+          background: `linear-gradient(180deg, color-mix(in srgb, ${color} 68%, rgb(var(--surface))), ${color})`,
           boxShadow: '0 1px 1.5px rgba(59,56,48,0.22)',
         }} />
       {marker != null && marker > 0 && (

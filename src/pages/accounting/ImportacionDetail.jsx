@@ -16,7 +16,7 @@ import { TEMPLATE_KEY } from './ExpedienteForm.jsx';
 /** One KPI tile of the expediente's landed-cost band. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2 shadow-xs">
+    <div className="rounded-xl border border-ink-100 bg-surface px-3 py-2 shadow-xs">
       <div className="eyebrow text-ink-400">{label}</div>
       <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
     </div>
@@ -174,7 +174,7 @@ export default function ImportacionDetail() {
 
             <div className="space-y-2">
               {em.facturas.map((f) => (
-                <div key={f.id} className="rounded-lg border border-ink-200 bg-white p-2.5">
+                <div key={f.id} className="rounded-lg border border-ink-200 bg-surface p-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5 text-sm">
                     <Receipt size={14} className="text-ink-400 shrink-0" />
                     <span className="font-medium text-ink-700">{f.supplierName || 'Factura'}</span>

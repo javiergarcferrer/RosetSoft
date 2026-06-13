@@ -306,7 +306,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     <>
       {/* Thread header — who, linked to their CRM card. */}
       {showHeader && (
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-ink-100 bg-white">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-ink-100 bg-surface">
         {onBack && (
           <button type="button" onClick={onBack} className="md:hidden -ml-1 p-1.5 rounded text-ink-500 hover:bg-ink-50" aria-label="Volver a la lista">
             <ArrowLeft size={16} />
@@ -384,7 +384,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       )}
       {/* Quoted-reply preview — same visual language as the in-bubble quote. */}
       {replyTo && (
-        <div className="flex items-center gap-2 px-3 py-2 border-t border-ink-100 bg-white">
+        <div className="flex items-center gap-2 px-3 py-2 border-t border-ink-100 bg-surface">
           <div className="min-w-0 flex-1 border-l-2 border-emerald-500/60 bg-ink-50 rounded-r-md pl-2 pr-2.5 py-1">
             <div className="text-[10px] font-semibold text-emerald-700">{replyTo.direction === 'out' ? 'Tú' : 'Cliente'}</div>
             <div className="text-xs text-ink-500 truncate">{replyTo.body || `(${replyTo.kind || 'mensaje'})`}</div>
@@ -402,7 +402,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       )}
       <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
       {pendingFile ? (
-        <div className="border-t border-ink-100 bg-white px-3 py-3 space-y-2.5">
+        <div className="border-t border-ink-100 bg-surface px-3 py-3 space-y-2.5">
           <div className="flex items-start gap-3">
             <PendingPreview file={pendingFile} url={pendingUrl} />
             <div className="min-w-0 flex-1 pt-0.5">
@@ -453,7 +453,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </div>
         </div>
       ) : (
-      <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-white">
+      <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-surface">
         {rec ? (
           <>
             <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 border border-red-100 px-3">
@@ -535,7 +535,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
                 <>
                   {/* Invisible backdrop — a tap anywhere else closes the menu. */}
                   <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setAttachOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
-                  <div className="absolute bottom-full left-0 mb-2 z-20 w-48 rounded-xl bg-white border border-ink-100 shadow-lg overflow-hidden py-1">
+                  <div className="absolute bottom-full left-0 mb-2 z-20 w-48 rounded-xl bg-surface border border-ink-100 shadow-lg overflow-hidden py-1">
                     <AttachItem icon={FileText} label="Archivo" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
                     {onSendLocation && <AttachItem icon={MapPin} label="Ubicación actual" onClick={sendCurrentLocation} />}
                     {onSendContact && <AttachItem icon={ContactRound} label="Contacto" onClick={() => { setAttachOpen(false); setContactOpen(true); }} />}
@@ -881,7 +881,7 @@ function SaveContactModal({ target, onClose, onSave }) {
               type="button"
               onClick={() => setKind(k)}
               className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                kind === k ? 'bg-white shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
+                kind === k ? 'bg-surface shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
               }`}
             >
               {label}
@@ -1088,7 +1088,7 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
               type="button"
               onClick={() => { setMode(k); setError(null); }}
               className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                mode === k ? 'bg-white shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
+                mode === k ? 'bg-surface shadow-xs text-ink-900' : 'text-ink-500 hover:text-ink-800'
               }`}
             >
               {label}
@@ -1479,7 +1479,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
     <>
       {showDay && (
         <div className="text-center py-1.5">
-          <span className="text-[10px] font-medium text-ink-400 bg-white border border-ink-100 rounded-full px-2.5 py-0.5">{day}</span>
+          <span className="text-[10px] font-medium text-ink-400 bg-surface border border-ink-100 rounded-full px-2.5 py-0.5">{day}</span>
         </div>
       )}
       <div className={`group flex items-center gap-1 ${out ? 'justify-end' : 'justify-start'}`}>
@@ -1491,7 +1491,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             : `rounded-2xl px-3 py-2 shadow-xs ${
               out
                 ? m.status === 'failed' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-brand-100 text-ink-900'
-                : 'bg-white border border-ink-100 text-ink-900'
+                : 'bg-surface border border-ink-100 text-ink-900'
             }`
         }`}>
           {referral && (
@@ -1517,7 +1517,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-0.5">Plantilla · {m.templateName}</div>
           )}
           {m.quoted && (
-            <div className="border-l-2 border-emerald-500/60 bg-black/5 rounded-r-md pl-2 pr-2.5 py-1 mb-1">
+            <div className="border-l-2 border-emerald-500/60 bg-black/5 dark:bg-white/[0.06] rounded-r-md pl-2 pr-2.5 py-1 mb-1">
               <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
               <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
             </div>
@@ -1528,7 +1528,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             <div className="flex flex-wrap items-center gap-1 mb-1">
               <ShoppingBag size={12} className="shrink-0 opacity-60" aria-hidden />
               {m.payload.products.items.map((id, i) => (
-                <span key={`${id}-${i}`} className="rounded-full bg-white/70 border border-ink-200 px-2 py-0.5 text-[11px] text-ink-700 max-w-[180px] truncate">
+                <span key={`${id}-${i}`} className="rounded-full bg-surface/70 border border-ink-200 px-2 py-0.5 text-[11px] text-ink-700 max-w-[180px] truncate">
                   {m.payload.products.names?.[i] || id}
                 </span>
               ))}
@@ -1579,13 +1579,13 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
           {m.payload?.interactive?.buttons?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {m.payload.interactive.buttons.map((b, i) => (
-                <span key={i} className="rounded-full bg-white/70 border border-ink-200 px-2.5 py-0.5 text-xs text-ink-700">{b}</span>
+                <span key={i} className="rounded-full bg-surface/70 border border-ink-200 px-2.5 py-0.5 text-xs text-ink-700">{b}</span>
               ))}
             </div>
           )}
           {/* List menu WE sent — the menu label + its options, as the client saw them. */}
           {m.payload?.interactive?.rows?.length > 0 && (
-            <div className="mt-1.5 rounded-lg bg-white/70 border border-ink-200 overflow-hidden">
+            <div className="mt-1.5 rounded-lg bg-surface/70 border border-ink-200 overflow-hidden">
               <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400 border-b border-ink-100">
                 {m.payload.interactive.listButton || 'Opciones'}
               </div>
@@ -1600,7 +1600,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
               href={m.payload.interactive.cta.url}
               target="_blank"
               rel="noreferrer"
-              className="mt-1.5 flex items-center justify-center gap-1.5 rounded-full bg-white/70 border border-ink-200 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-white transition-colors"
+              className="mt-1.5 flex items-center justify-center gap-1.5 rounded-full bg-surface/70 border border-ink-200 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-surface transition-colors"
             >
               <ExternalLink size={11} className="shrink-0" /> {m.payload.interactive.cta.displayText || 'Abrir enlace'}
             </a>
@@ -1611,7 +1611,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
               href={`https://maps.google.com/?q=${loc.latitude},${loc.longitude}`}
               target="_blank"
               rel="noreferrer"
-              className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-white/70 border border-ink-200 px-2.5 py-1.5 text-xs font-medium text-sky-700 hover:bg-white transition-colors"
+              className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-surface/70 border border-ink-200 px-2.5 py-1.5 text-xs font-medium text-sky-700 hover:bg-surface transition-colors"
             >
               <MapPin size={13} className="shrink-0" />
               <span className="min-w-0 truncate">Ver en el mapa</span>
@@ -1620,7 +1620,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
           {/* Contact card (either direction) — who was shared. Inbound cards
               offer one-tap save into the CRM. */}
           {card && (
-            <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white/70 border border-ink-200 px-2.5 py-1.5">
+            <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-surface/70 border border-ink-200 px-2.5 py-1.5">
               <ContactRound size={15} className="text-ink-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-medium text-ink-800 truncate">{card.name}</div>
@@ -1630,7 +1630,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
                 <button
                   type="button"
                   onClick={() => onSaveCard({ name: card.name, phone: card.phone })}
-                  className="shrink-0 inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 transition-colors"
+                  className="shrink-0 inline-flex items-center gap-1 rounded-full border border-ink-200 bg-surface px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 transition-colors"
                   title="Guardar en el CRM"
                 >
                   <UserPlus size={11} /> Guardar
@@ -1647,7 +1647,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
           )}
           {m.reactions?.length > 0 && (
             <div className={`-mb-3 ${out ? 'text-left' : 'text-right'}`}>
-              <span className="inline-flex items-center rounded-full bg-white border border-ink-100 shadow-xs px-1.5 py-0.5 text-sm leading-none">
+              <span className="inline-flex items-center rounded-full bg-surface border border-ink-100 shadow-xs px-1.5 py-0.5 text-sm leading-none">
                 {m.reactions.join(' ')}
               </span>
             </div>
@@ -1684,7 +1684,7 @@ function BubbleActions({ m, onReply, onReact }) {
   return (
     <div className="self-center flex items-center gap-0.5 shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity">
       {pickerOpen && onReact ? (
-        <div className="flex items-center gap-0.5 rounded-full bg-white border border-ink-100 shadow-sm px-1.5 py-1">
+        <div className="flex items-center gap-0.5 rounded-full bg-surface border border-ink-100 shadow-sm px-1.5 py-1">
           {REACTION_EMOJIS.map((e) => (
             <button
               key={e}
@@ -1715,7 +1715,7 @@ function BubbleActions({ m, onReply, onReact }) {
             <button
               type="button"
               onClick={() => onReply(m)}
-              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-white transition-colors"
+              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-surface transition-colors"
               title="Responder"
               aria-label="Responder"
             >
@@ -1726,7 +1726,7 @@ function BubbleActions({ m, onReply, onReact }) {
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-white transition-colors"
+              className="p-1.5 rounded-full text-ink-400 hover:text-brand-700 hover:bg-surface transition-colors"
               title="Reaccionar"
               aria-label="Reaccionar"
             >
@@ -1789,7 +1789,7 @@ function MediaAttachment({ m }) {
     <a
       href={url}
       download={m.body || 'documento'}
-      className="flex items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2 mb-1 hover:bg-black/10 transition-colors"
+      className="flex items-center gap-2 rounded-lg bg-black/5 dark:bg-white/[0.06] px-2.5 py-2 mb-1 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
     >
       <FileText size={16} className="shrink-0 opacity-60" />
       <span className="text-xs font-medium truncate flex-1">{m.body || 'Documento'}</span>

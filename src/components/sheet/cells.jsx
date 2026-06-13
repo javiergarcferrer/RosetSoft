@@ -16,7 +16,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X } from 'lucide-react'
 // Borderless input that reads exactly like the cell text until focused —
 // the "viewing IS editing" core of the sheet.
 export const CELL_CLS = 'w-full bg-transparent text-sm text-ink-900 placeholder:text-ink-300 '
-  + 'px-1 py-0.5 -mx-1 rounded-md border-0 focus:outline-none focus:bg-white '
+  + 'px-1 py-0.5 -mx-1 rounded-md border-0 focus:outline-none focus:bg-surface '
   + 'focus:ring-2 focus:ring-brand-400/70 focus:shadow-sm transition-shadow';
 
 /** Move focus to the same column on another row (Enter / Shift+Enter). */
@@ -82,7 +82,7 @@ export function PanelField({ label, value, onCommit, type = 'text', inputMode, p
       <input
         type={type}
         inputMode={inputMode}
-        className="mt-1 w-full rounded-lg border border-ink-100 bg-white px-2.5 py-1.5 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
+        className="mt-1 w-full rounded-lg border border-ink-100 bg-surface px-2.5 py-1.5 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
         value={draft}
         placeholder={placeholder || '—'}
         aria-label={label}
@@ -194,7 +194,7 @@ export function PanelTextArea({ label, value, onCommit, placeholder, name }) {
       <span className="eyebrow-xs text-ink-400">{label}</span>
       <textarea
         rows={2}
-        className="mt-1 w-full resize-y rounded-lg border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
+        className="mt-1 w-full resize-y rounded-lg border border-ink-100 bg-surface px-2.5 py-2 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
         placeholder={placeholder}
         aria-label={name ? `${label} de ${name}` : label}
         value={draft}

@@ -382,7 +382,7 @@ function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
  * `href` covers the native tel:/mailto: handoffs that have no in-app pane.
  */
 function QuickAction({ href, to, icon: Icon, label }) {
-  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
+  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
   if (to) {
     return (
       <Link to={to} className={cls}>
@@ -453,7 +453,7 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
                   {entries.length} {entries.length === 1 ? 'cotización' : 'cotizaciones'}
                 </span>
               </div>
-              <ul className="divide-y divide-ink-100 rounded-lg bg-white ring-1 ring-inset ring-ink-100 overflow-hidden">
+              <ul className="divide-y divide-ink-100 rounded-lg bg-surface ring-1 ring-inset ring-ink-100 overflow-hidden">
                 {entries.map((e) => (
                   <li key={e.quote.id}>
                     <Link

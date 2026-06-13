@@ -42,7 +42,7 @@ function readSeed(scope, defaults) {
 /** A single landed-cost KPI tile. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-3 py-2 min-w-0">
+    <div className="rounded-xl border border-ink-200 bg-surface px-3 py-2 min-w-0">
       <div className="eyebrow text-ink-400">{label}</div>
       <div className={`text-base font-semibold tabular-nums whitespace-nowrap ${accent || 'text-ink-800'}`}>{value}</div>
     </div>
@@ -371,7 +371,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             {/* Facturas */}
             <div className="mt-3 space-y-2">
               {emb.facturas.map((fac) => (
-                <div key={fac.id} className="rounded-lg border border-ink-200 bg-white p-2.5">
+                <div key={fac.id} className="rounded-lg border border-ink-200 bg-surface p-2.5">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Receipt size={14} className="text-ink-400 shrink-0" />
                     <select value={fac.supplierId} onChange={(e) => patchFac(emb.id, fac.id, { supplierId: e.target.value })} className={`${field} flex-1 min-w-[140px]`}>

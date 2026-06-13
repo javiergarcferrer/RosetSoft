@@ -49,7 +49,7 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
   return (
     <div
       ref={ref}
-      className={`absolute z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-ink-200 bg-white shadow-pop p-3 ${
+      className={`absolute z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-ink-200 bg-surface shadow-pop p-3 ${
         anchor === 'right' ? 'right-0' : 'left-0'
       }`}
     >

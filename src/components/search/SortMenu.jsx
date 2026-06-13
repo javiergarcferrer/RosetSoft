@@ -47,7 +47,7 @@ export default function SortMenu({ sortOptions, sort, onSortChange }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="btn-ghost border border-ink-200 bg-white transition-colors hover:border-ink-300"
+        className="btn-ghost border border-ink-200 bg-surface transition-colors hover:border-ink-300"
         title="Ordenar"
       >
         <ArrowUpDown size={14} />
@@ -59,7 +59,7 @@ export default function SortMenu({ sortOptions, sort, onSortChange }) {
         <div
           role="menu"
           aria-label="Ordenar por"
-          className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-ink-100 bg-white py-1.5 shadow-pop"
+          className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-ink-100 bg-surface py-1.5 shadow-pop"
         >
           {sortOptions.map((o) => {
             const isCurrent = o.key === current.key;

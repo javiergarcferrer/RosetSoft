@@ -130,7 +130,7 @@ export default function MaterialOptionsStrip({
                   }`}
                 />
                 {selected && (
-                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white shadow-sm ring-2 ring-white">
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-600 text-white shadow-sm ring-2 ring-surface">
                     <Check size={12} aria-hidden />
                   </span>
                 )}

@@ -282,7 +282,7 @@ function ModeToggle({ multi, onChange }) {
     { v: true, label: 'Agregar opciones' },
   ];
   return (
-    <div className="flex rounded-md border border-ink-200 bg-white text-xs mb-3 w-full sm:w-auto sm:inline-flex overflow-hidden">
+    <div className="flex rounded-md border border-ink-200 bg-surface text-xs mb-3 w-full sm:w-auto sm:inline-flex overflow-hidden">
       {opts.map((o, i) => (
         <button
           key={o.label}
@@ -290,7 +290,7 @@ function ModeToggle({ multi, onChange }) {
           onClick={() => onChange(o.v)}
           aria-pressed={multi === o.v}
           className={`flex-1 sm:flex-none px-3 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
-            multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
+            multi === o.v ? 'bg-ink-900 text-ink-50' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
           }`}
         >
           {o.label}
@@ -412,7 +412,7 @@ function MaterialList({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-md border border-ink-200 bg-white text-xs w-full sm:w-auto sm:inline-flex overflow-hidden">
+          <div className="flex rounded-md border border-ink-200 bg-surface text-xs w-full sm:w-auto sm:inline-flex overflow-hidden">
             {[
               { k: '', label: 'Todos' },
               { k: 'fabric', label: 'Telas' },
@@ -425,7 +425,7 @@ function MaterialList({
                 onClick={() => setCategory(c.k)}
                 aria-pressed={category === c.k}
                 className={`flex-1 sm:flex-none px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                  category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
+                  category === c.k ? 'bg-ink-900 text-ink-50' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
                 }`}
               >
                 {c.label}
@@ -438,7 +438,7 @@ function MaterialList({
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="text-xs border border-ink-200 rounded-md bg-white text-ink-700 pl-2 pr-6 py-1.5 min-h-9 coarse:min-h-11 shadow-xs transition-shadow focus:outline-none focus:border-brand-500 focus:shadow-focus flex-1 sm:flex-none"
+                className="text-xs border border-ink-200 rounded-md bg-surface text-ink-700 pl-2 pr-6 py-1.5 min-h-9 coarse:min-h-11 shadow-xs transition-shadow focus:outline-none focus:border-brand-500 focus:shadow-focus flex-1 sm:flex-none"
                 aria-label="Ordenar materiales"
               >
                 {SORTS.map((s) => (
@@ -452,8 +452,8 @@ function MaterialList({
               aria-pressed={groupByFiber}
               className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors flex-shrink-0 ${
                 groupByFiber
-                  ? 'bg-ink-900 text-white border-ink-900'
-                  : 'bg-white text-ink-600 border-ink-200 hover:bg-ink-50 active:bg-ink-100'
+                  ? 'bg-ink-900 text-ink-50 border-ink-900'
+                  : 'bg-surface text-ink-600 border-ink-200 hover:bg-ink-50 active:bg-ink-100'
               }`}
               title="Agrupar por composición (fibra principal)"
             >
@@ -504,7 +504,7 @@ function MaterialList({
         ) : groups ? (
           groups.map((g) => (
             <li key={g.fiber} className="py-0">
-              <div className="sticky top-0 z-[1] bg-white/95 backdrop-blur px-3 py-1.5 eyebrow flex items-center justify-between">
+              <div className="sticky top-0 z-[1] bg-surface/95 backdrop-blur px-3 py-1.5 eyebrow flex items-center justify-between">
                 <span className="truncate">{g.fiber}</span>
                 <span className="text-ink-400 font-normal tabular-nums">{g.items.length}</span>
               </div>
@@ -585,7 +585,7 @@ function MaterialRow({ m, active, multiSelect, checked, family, onHover, onActiv
         {multiSelect && (
           <span
             className={`flex items-center justify-center w-4 h-4 rounded border flex-shrink-0 ${
-              checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300 bg-white'
+              checked ? 'bg-brand-600 border-brand-600 text-white' : 'border-ink-300 bg-surface'
             }`}
             aria-hidden
           >

@@ -185,7 +185,7 @@ function MultiRow({ fam, grade, checked, onToggle }) {
       } ${!offered ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
       <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors ${
-        checked ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white'
+        checked ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-surface'
       }`}>
         {checked && <Check size={11} strokeWidth={3} aria-hidden />}
       </span>

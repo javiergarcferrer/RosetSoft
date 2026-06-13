@@ -167,7 +167,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // CompoundClientLine and stop it following the page scroll.
   return (
     <>
-    <div className="bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
+    <div className="theme-light bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
       {/* Banner. On the interactive link the Ver / Personalizar mode toggle is
           a floating pill pinned to the screen (rendered after this card) so it
           never scrolls away — the banner just states the mode + date here. */}
@@ -463,7 +463,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         under the transient SaveToast (z-50). Lifted above the editor's bottom
         dock when shown inside the in-app preview (gradePricesFor). */}
     {interactive && (
-      <div className={`fixed z-40 print:hidden kb-hide-when-open right-[max(1rem,env(safe-area-inset-right))] ${gradePricesFor ? 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]'}`}>
+      <div className={`theme-light fixed z-40 print:hidden kb-hide-when-open right-[max(1rem,env(safe-area-inset-right))] ${gradePricesFor ? 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]'}`}>
         <button
           type="button"
           onClick={() => setMode(mode === 'edit' ? 'view' : 'edit')}

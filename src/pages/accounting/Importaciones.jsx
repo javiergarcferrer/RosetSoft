@@ -16,7 +16,7 @@ import ExpedienteForm from './ExpedienteForm.jsx';
 /** One KPI tile of the band over the filtered expedientes. */
 function Stat({ label, value, accent }) {
   return (
-    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2 shadow-xs">
+    <div className="rounded-xl border border-ink-100 bg-surface px-3 py-2 shadow-xs">
       <div className="eyebrow text-ink-400">{label}</div>
       <div className={`text-base font-semibold tabular-nums ${accent || 'text-ink-800'}`}>{value}</div>
     </div>

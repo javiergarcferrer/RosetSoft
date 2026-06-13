@@ -7,8 +7,35 @@
          content. iOS ignores it and is handled via visualViewport in JS
          (lib/useVirtualKeyboard). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- theme-color stays the dark ink of the mobile topbar (always-dark
+         chrome) in BOTH themes, so the iOS status bar / Android URL bar keep
+         matching the bar right below them. color-scheme advertises both so the
+         UA themes native controls/scrollbars once `.dark` is set. -->
     <meta name="theme-color" content="#171612" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Anti-FOUC theme boot. Inline + synchronous in <head> so `.dark` lands
+         on <html> BEFORE first paint — no flash of the wrong theme. Must mirror
+         src/lib/theme.js exactly (same key, same rules): explicit 'dark'/'light'
+         override wins; otherwise follow the OS; public client routes (the shared
+         quote link and the storefront) are always light, since they're the
+         dealer's "paper" shown on a customer's device. -->
+    <script>
+      (function () {
+        try {
+          var hash = location.hash || '';
+          var isPublic = hash.indexOf('#/q/') === 0 || hash.indexOf('#/tienda') === 0;
+          var pref = null;
+          try { pref = localStorage.getItem('rs.theme'); } catch (e) {}
+          var dark =
+            !isPublic &&
+            (pref === 'dark' ||
+              ((pref === null || pref === 'system') &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches));
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {}
+      })();
+    </script>
 
     <!-- iOS / Android standalone behavior when "Add to Home Screen" is used.
          viewport-fit=cover above is what makes env(safe-area-inset-*) return

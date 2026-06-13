@@ -414,7 +414,7 @@ export default function QuoteLineItem({
           // together), mirroring the Conjunto / Compuesto card language. The
           // border encodes state: dashed+tinted = optional, brand = a loose
           // alternative mid-edit, otherwise a quiet hairline that lifts on hover.
-          : `rounded-xl border bg-white shadow-sm hover:shadow-md ${
+          : `rounded-xl border bg-surface shadow-sm hover:shadow-md ${
               line.isOptional
                 ? 'border-dashed border-ink-300 bg-ink-50/40'
                 : line.alternativeGroup
@@ -426,7 +426,7 @@ export default function QuoteLineItem({
       {dimmed && (
         // Veil rounding matches the chrome: the standalone card is rounded-xl,
         // a flat member row inside a GroupCard is square-cornered.
-        <div className={`pointer-events-none absolute inset-0 z-[1] bg-white/55 ${insideGroupCard ? '' : 'rounded-xl'}`} aria-hidden />
+        <div className={`pointer-events-none absolute inset-0 z-[1] bg-surface/55 ${insideGroupCard ? '' : 'rounded-xl'}`} aria-hidden />
       )}
       <TopStrip
         family={line.family}
@@ -614,7 +614,7 @@ function TopStrip({
       <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors ${
         isSelectedAlternative
           ? 'border-brand-500 bg-brand-500 text-white'
-          : 'border-ink-300 bg-white hover:border-brand-400'
+          : 'border-ink-300 bg-surface hover:border-brand-400'
       }`}>
         {isSelectedAlternative && <Check size={11} strokeWidth={3} />}
       </span>
@@ -1001,7 +1001,7 @@ function AutoGrowTextarea({ value, onCommit, label, placeholder, ...rest }) {
       placeholder={placeholder}
       aria-label={label || placeholder}
       onInput={(e) => autoSize(e.currentTarget)}
-      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded-md resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-white focus:ring-1 focus:ring-inset focus:ring-ink-200 focus:outline-none transition-colors"
+      className="block w-full bg-transparent border-0 px-1 -mx-1 py-1 rounded-md resize-none overflow-hidden text-[13px] coarse:text-sm leading-snug text-ink-700 placeholder:text-ink-300 hover:bg-ink-50 focus:bg-surface focus:ring-1 focus:ring-inset focus:ring-ink-200 focus:outline-none transition-colors"
       {...rest}
     />
   );
@@ -1091,12 +1091,12 @@ function NoteToggle({ icon: Icon, text, label, content, open, onClick }) {
         <Icon size={13} aria-hidden />
         {text}
         {hasContent && !open && (
-          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-white" aria-hidden />
+          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-surface" aria-hidden />
         )}
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[260px] whitespace-pre-line rounded-md bg-ink-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white shadow-soft opacity-0 transition-opacity duration-150 group-hover/note:opacity-100"
+        className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[260px] whitespace-pre-line rounded-md bg-ink-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-ink-50 shadow-soft opacity-0 transition-opacity duration-150 group-hover/note:opacity-100"
       >
         {tip}
       </span>
@@ -1603,7 +1603,7 @@ function PricingRow({
             <button
               type="button"
               onClick={onToggleBreakdown}
-              className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-white active:bg-ink-100 transition-colors"
+              className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-surface active:bg-ink-100 transition-colors"
               title="Ver desglose"
               aria-expanded={breakdownOpen}
             >
@@ -1732,7 +1732,7 @@ function CompoundCalculatorBand({
           <button
             type="button"
             onClick={onToggleBreakdown}
-            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-white active:bg-ink-100 transition-colors"
+            className="block w-full text-right px-1 py-1 -mx-1 -my-1 rounded-md hover:bg-surface active:bg-ink-100 transition-colors"
             title="Ver desglose"
             aria-expanded={breakdownOpen}
           >
@@ -1910,7 +1910,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
     // so their backgrounds follow the panel's rounded corners.
     <div className="mt-3 rounded-lg border border-ink-100 bg-ink-50/40">
       {/* Composition controls: toggle modular, and group the current selection. */}
-      <div className="px-3 py-2 bg-white rounded-t-[7px] border-b border-ink-100 flex items-center gap-2 flex-wrap">
+      <div className="px-3 py-2 bg-surface rounded-t-[7px] border-b border-ink-100 flex items-center gap-2 flex-wrap">
         {/* The species ("Producto modular" / "Compuesto") is announced by the
             card's header band — this inner strip labels just the contents. */}
         <span className="eyebrow">
@@ -1976,7 +1976,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
                         className="inline-flex items-center gap-1.5 coarse:min-h-11 flex-shrink-0"
                       >
                         <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                          m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+                          m.selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-surface hover:border-brand-400'
                         }`}>
                           {m.selected && <Check size={9} strokeWidth={3} aria-hidden />}
                         </span>
@@ -2080,7 +2080,7 @@ function ComponentsPanel({ line, components: componentVMs, currency, rates, fmt,
         </div>
       )}
 
-      <div className="px-3 py-2 bg-white rounded-b-[7px] border-t border-ink-100 flex items-center justify-end gap-1.5">
+      <div className="px-3 py-2 bg-surface rounded-b-[7px] border-t border-ink-100 flex items-center justify-end gap-1.5">
         {onAddMany && (
           <button
             type="button"
@@ -2164,7 +2164,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   // stacking vertically reads cleaner and gives the name the full
   // row width unconditionally.
   return (
-    <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-white space-y-2 ${
+    <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-surface space-y-2 ${
       optional ? 'border-l-2 border-dashed border-ink-300' : ''
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''
@@ -2172,7 +2172,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
       {/* Deactivated (optional) OR non-selected alternative: a white veil fades
           the block; the radio + swatch stay lifted (z-[2]) and clickable. */}
       {(optional || dimmed) && (
-        <div className="pointer-events-none absolute inset-0 z-[1] bg-white/55" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-surface/55" aria-hidden />
       )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
@@ -2193,7 +2193,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             className="relative z-[2] inline-flex items-center gap-1.5 coarse:min-h-11"
           >
             <span className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-              isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+              isSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-surface hover:border-brand-400'
             }`}>
               {isSelected && <Check size={9} strokeWidth={3} aria-hidden />}
             </span>

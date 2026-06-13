@@ -9,6 +9,13 @@ export default {
   // dropped any class that appeared exclusively inside a `.tsx` file —
   // the bigger-thumbnail visual fix was a recent victim of that.
   content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
+  // Class-based dark mode: the inline boot script in index.html stamps
+  // `.dark` on <html> before first paint (no FOUC); lib/theme.js keeps it in
+  // sync with the dealer's choice + the OS preference. Light mode is the
+  // canonical design — every `--ink-*` / `--brand-*` light value below equals
+  // the exact hex the app shipped before theming, so light mode is unchanged
+  // to the pixel and dark mode is a pure variable swap (see src/index.css).
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
@@ -30,40 +37,56 @@ export default {
         'safe-r': 'env(safe-area-inset-right)',
       },
       colors: {
+        // Both ramps are CSS-variable-backed (channel triplets, so Tailwind's
+        // `/<alpha-value>` opacity modifier keeps working). The light values
+        // (src/index.css :root) are the EXACT hexes the app always used; the
+        // dark values (.dark) invert lightness while holding the warm hue, so a
+        // single `.dark` toggle re-skins the whole app. Surfaces that must stay
+        // dark in both themes (the sidebar / mobile topbar) live inside
+        // `.theme-chrome`, which locally re-pins these vars to the light ramp.
         ink: {
-          50: '#f7f7f6',
-          100: '#e8e7e3',
-          200: '#cfccc4',
-          300: '#aba79a',
-          400: '#878374',
-          500: '#6c6859',
-          600: '#544f43',
-          700: '#3b3830',
-          800: '#26241f',
-          900: '#171612',
+          50:  'rgb(var(--ink-50) / <alpha-value>)',
+          100: 'rgb(var(--ink-100) / <alpha-value>)',
+          200: 'rgb(var(--ink-200) / <alpha-value>)',
+          300: 'rgb(var(--ink-300) / <alpha-value>)',
+          400: 'rgb(var(--ink-400) / <alpha-value>)',
+          500: 'rgb(var(--ink-500) / <alpha-value>)',
+          600: 'rgb(var(--ink-600) / <alpha-value>)',
+          700: 'rgb(var(--ink-700) / <alpha-value>)',
+          800: 'rgb(var(--ink-800) / <alpha-value>)',
+          900: 'rgb(var(--ink-900) / <alpha-value>)',
         },
         // Alcover terracotta — a warm, grounded clay. Chosen for its
         // neuropsychology: warm earth tones read as comfort, craftsmanship and
         // approachability (the right register for high-end furniture), where the
         // old electric violet read as cold tech. Anchored on the SAME hexes the
-        // PDF already used (theme.ts: 50 #fbf4ec · 300 #e8a76d · 500 #c76b29 ·
-        // 700 #7d3e1c) so screen, public link and printed paper finally share
-        // one brand color instead of drifting (violet on screen vs terracotta on
-        // paper). Constant-hue (~25°) ladder: lighter tints → 50, deeper shades
-        // → 900. Every `brand-*` usage (buttons, badges, map markers, the
-        // ::selection wash, focus ring, chart accents) flips to clay in one move.
+        // PDF uses (theme.ts: 50 #fbf4ec · 300 #e8a76d · 500 #c76b29 · 700
+        // #7d3e1c) so screen, public link and printed paper share one brand
+        // color. In dark mode the ladder inverts lightness (deep clay tints at
+        // the low end for fills, bright clay at the high end for text/accents)
+        // so `text-brand-700` stays legible on a dark surface.
         brand: {
-          50:  '#fbf4ec',
-          100: '#f7e7d4',
-          200: '#eecbab',
-          300: '#e8a76d',
-          400: '#d9883f',
-          500: '#c76b29',
-          600: '#a85620',
-          700: '#7d3e1c',
-          800: '#612f16',
-          900: '#4d2713',
+          50:  'rgb(var(--brand-50) / <alpha-value>)',
+          100: 'rgb(var(--brand-100) / <alpha-value>)',
+          200: 'rgb(var(--brand-200) / <alpha-value>)',
+          300: 'rgb(var(--brand-300) / <alpha-value>)',
+          400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)',
+          600: 'rgb(var(--brand-600) / <alpha-value>)',
+          700: 'rgb(var(--brand-700) / <alpha-value>)',
+          800: 'rgb(var(--brand-800) / <alpha-value>)',
+          900: 'rgb(var(--brand-900) / <alpha-value>)',
         },
+        // Semantic surface roles for literal panels (the `bg-white` /
+        // page-canvas usages that the ink ramp can't express). `surface` = a
+        // raised panel (cards, inputs, popovers), `surface-2` = a faint nested
+        // fill, `canvas` = the page backdrop. Light values match today's
+        // #ffffff / #f7f7f6 / #f3f1ed; dark values step lighter with elevation.
+        surface: {
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          2: 'rgb(var(--surface-2) / <alpha-value>)',
+        },
+        canvas: 'rgb(var(--canvas) / <alpha-value>)',
       },
       backgroundImage: {
         // Primary-CTA gradient — a touch of motion in the clay so the main
