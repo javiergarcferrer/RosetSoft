@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Search, FilePlus2, Moon, Sun } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import { db, searchProducts } from '../db/database.js';
 import { navForRole } from '../lib/access.js';
+import { resolveIsDark, setThemePreference } from '../lib/theme.js';
 import { resolveGlobalSearch } from '../core/search/index.js';
 import { quoteStagePill, orderStatusPill } from '../lib/statusPill.js';
 import { formatMoney } from '../lib/format.js';
@@ -114,9 +115,31 @@ function SearchOverlay({ onClose }) {
     );
   }, [currentProfile?.role]);
 
+  // Quick actions (commands). Role-gated by reusing the already-role-gated
+  // `pages`: "Nueva cotización" only when this role's nav exposes Cotizaciones.
+  // Theme toggle is universal. The label reflects the current theme; toggling
+  // closes the palette, so it never goes stale mid-open.
+  const isDark = resolveIsDark();
+  const actions = useMemo(() => {
+    const list = [];
+    if (pages.some((p) => p.to === '/quotes')) {
+      list.push({
+        key: 'new-quote', label: 'Nueva cotización', to: '/quotes/new', icon: FilePlus2,
+        keywords: ['nueva', 'crear', 'cotizacion', 'presupuesto', 'quote', 'new'],
+      });
+    }
+    list.push({
+      key: 'toggle-theme',
+      label: isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
+      run: 'theme', icon: isDark ? Sun : Moon,
+      keywords: ['tema', 'theme', 'modo', 'oscuro', 'claro', 'dark', 'light', 'apariencia'],
+    });
+    return list;
+  }, [pages, isDark]);
+
   const result = useMemo(
-    () => resolveGlobalSearch({ query, quotes, customers, professionals, orders, containers, suppliers, products, pages }),
-    [query, quotes, customers, professionals, orders, containers, suppliers, products, pages],
+    () => resolveGlobalSearch({ query, quotes, customers, professionals, orders, containers, suppliers, products, pages, actions }),
+    [query, quotes, customers, professionals, orders, containers, suppliers, products, pages, actions],
   );
 
   // ↑/↓ selection across ALL results (flat order). Reset when results change.
@@ -133,7 +156,11 @@ function SearchOverlay({ onClose }) {
 
   function go(item) {
     if (!item) return;
-    navigate(item.to);
+    if (item.run === 'theme') {
+      setThemePreference(resolveIsDark() ? 'light' : 'dark');
+    } else if (item.to) {
+      navigate(item.to);
+    }
     onClose();
   }
 
@@ -237,7 +264,7 @@ function SearchOverlay({ onClose }) {
  * hands over the raw stage/status key and USD price.
  */
 function ResultRow({ item, isActive, onPick, onHover }) {
-  const Icon = item.type === 'page' ? item.icon : null;
+  const Icon = item.type === 'page' || item.type === 'action' ? item.icon : null;
   const detail = secondaryFor(item);
   return (
     <button

@@ -75,6 +75,9 @@ const byNameAsc = (key) => (a, b) => norm(a[key]).localeCompare(norm(b[key]));
  *   products       — catalog rows the View fetched server-side (searchProducts).
  *   pages          — [{ to, label, icon?, group? }] nav shortcuts, already
  *                    role-gated by the View (navForRole).
+ *   actions        — [{ key, label, keywords?, to?, run?, icon?, hint? }]
+ *                    commands (create shortcuts, theme toggle), role-gated by
+ *                    the View. `to` navigates; `run` is a host side effect.
  *
  * Output:
  *   {
@@ -90,6 +93,7 @@ const byNameAsc = (key) => (a, b) => norm(a[key]).localeCompare(norm(b[key]));
  *   + order:    { status }     — order status key; the View labels it.
  *   + product:  { priceUsd }   — the View formats the money.
  *   + page:     { icon }       — passed through from the nav definition.
+ *   + action:   { icon, run }  — command; `run` is the host side-effect key.
  */
 export function resolveGlobalSearch({
   query = '',
@@ -101,6 +105,7 @@ export function resolveGlobalSearch({
   suppliers = [],
   products = [],
   pages = [],
+  actions = [],
 } = {}) {
   const trimmed = String(query || '').trim();
   const nq = norm(trimmed);
@@ -115,13 +120,28 @@ export function resolveGlobalSearch({
     icon: p.icon || null,
   });
 
-  // Blank query → navigation shortcuts only (the palette's "home" state).
+  // A command (e.g. "Nueva cotización", theme toggle). `to` navigates; `run`
+  // is a host-handled side effect (the View's `go` dispatches on it). Already
+  // role-gated by the View, same as `pages`.
+  const actionItem = (a) => ({
+    key: `action:${a.key}`,
+    type: 'action',
+    to: a.to || null,
+    run: a.run || null,
+    primary: a.label,
+    secondary: a.hint || 'Acción',
+    icon: a.icon || null,
+  });
+
+  // Blank query → the palette's "home": what you can DO (commands) then where
+  // you can GO (nav shortcuts).
   if (!nq) {
-    const items = (pages || []).map(pageItem);
-    const groups = items.length
-      ? [{ key: 'pages', label: 'Páginas', items, more: 0 }]
-      : [];
-    return { query: trimmed, isEmptyQuery: true, groups, flat: items };
+    const groups = [];
+    const actionItems = (actions || []).map(actionItem);
+    if (actionItems.length) groups.push({ key: 'commands', label: 'Acciones', items: actionItems, more: 0 });
+    const pageItems = (pages || []).map(pageItem);
+    if (pageItems.length) groups.push({ key: 'pages', label: 'Páginas', items: pageItems, more: 0 });
+    return { query: trimmed, isEmptyQuery: true, groups, flat: groups.flatMap((g) => g.items) };
   }
 
   const customerById = new Map((customers || []).map((c) => [c.id, c]));
@@ -234,7 +254,17 @@ export function resolveGlobalSearch({
     tiebreak: byNameAsc('label'),
   });
 
+  // Commands rank on their label + keyword synonyms, so "nueva", "crear" or
+  // "tema" surface the right action. Empty unless the query hits one, so a
+  // name search is never cluttered by it — hence safe to list first.
+  const commandsGroup = rankGroup(actions, nq, tokens, {
+    fieldsOf: (a) => [a.label, ...(a.keywords || [])],
+    toItem: actionItem,
+    tiebreak: byNameAsc('label'),
+  });
+
   const groups = [
+    { key: 'commands', label: 'Acciones', ...commandsGroup },
     { key: 'quotes', label: 'Cotizaciones', ...quoteGroup },
     { key: 'customers', label: 'Clientes', ...customerGroup },
     { key: 'professionals', label: 'Profesionales', ...professionalGroup },
