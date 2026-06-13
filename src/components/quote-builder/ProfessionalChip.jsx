@@ -62,7 +62,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
             picker, not a link, and the team knows the chip opens. */}
         <button type="button" onClick={openPicker} className={`${SEG} pl-2.5 pr-2 min-w-0`}>
           <DraftingCompass size={12} className="text-amber-600 flex-shrink-0" />
-          <span className="font-semibold text-ink-900 truncate max-w-[110px] sm:max-w-[170px] lg:max-w-[210px]">
+          <span className="font-display font-semibold text-ink-900 truncate max-w-[110px] sm:max-w-[170px] lg:max-w-[210px]">
             {professional.name}
           </span>
         </button>

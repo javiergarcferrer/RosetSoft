@@ -195,7 +195,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
             <div key={campaign.id} className="card card-pad">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-ink-900 truncate">{campaign.name}</div>
+                  <div className="font-display text-sm font-semibold text-ink-900 truncate">{campaign.name}</div>
                   <div className="text-[11px] text-ink-500 mt-0.5">
                     Plantilla <span className="font-medium">{campaign.templateName}</span>
                     {campaign.audience ? <> · {campaign.audience}</> : null}
@@ -619,7 +619,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-ink-900">{t.name}</span>
+                    <span className="font-display text-sm font-semibold text-ink-900">{t.name}</span>
                     <span className="text-[10px] text-ink-400 uppercase">{t.language}</span>
                     <CategoryPill category={t.category} />
                     <span className={`text-[10px] font-semibold rounded px-1.5 py-0.5 ${STATUS_TONE[t.status] || 'bg-ink-100 text-ink-500'}`}>

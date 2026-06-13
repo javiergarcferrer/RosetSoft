@@ -73,7 +73,7 @@ function BrandCard({ brand, to, name, importHint, icon: Icon }) {
         <Icon size={18} aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-sm text-ink-900 truncate">{name}</span>
+        <span className="block font-display font-semibold text-sm text-ink-900 truncate">{name}</span>
         <span className="block text-xs text-ink-500 truncate" title={importHint}>{importHint}</span>
       </span>
       <span className="eyebrow-xs flex-shrink-0">

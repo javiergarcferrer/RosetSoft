@@ -168,7 +168,7 @@ export default function ProfessionalPicker({ open, onClose, onSelect, profession
               >
                 <Avatar name={p.name} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-ink-900 truncate">
+                  <div className="font-display text-sm font-medium text-ink-900 truncate">
                     {p.name}
                     {isCurrent && <span className="ml-1.5 text-[10px] text-amber-700 font-medium">· actual</span>}
                   </div>

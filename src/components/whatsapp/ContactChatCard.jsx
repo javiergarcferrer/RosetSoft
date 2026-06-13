@@ -204,7 +204,7 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null, 
       >
         <MessageCircle size={16} className="text-emerald-600 shrink-0" aria-hidden />
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-sm text-ink-900">
+          <span className="block font-display font-semibold text-sm text-ink-900">
             {isCustomer ? 'Conversación con el cliente' : 'Conversación con el profesional'}
           </span>
           <span className="block text-[11px] text-ink-400 truncate">

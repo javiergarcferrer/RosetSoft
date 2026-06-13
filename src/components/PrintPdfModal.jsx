@@ -96,7 +96,7 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
             <ArrowLeft size={16} aria-hidden />
             <span className="hidden sm:inline">Volver</span>
           </button>
-          <span className="min-w-0 flex-1 break-words text-sm font-semibold text-ink-900">{title}</span>
+          <span className="font-display min-w-0 flex-1 break-words text-sm font-semibold text-ink-900">{title}</span>
           <button
             type="button"
             onClick={() => window.print()}

@@ -302,7 +302,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   return (
     <div className="card p-4 mb-4 border-ink-300">
       <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
-        <h3 className="font-semibold inline-flex items-center gap-2 min-w-0 truncate"><FileText size={16} className="shrink-0" /> Nuevo expediente de importación</h3>
+        <h3 className="font-display font-semibold inline-flex items-center gap-2 min-w-0 truncate"><FileText size={16} className="shrink-0" /> Nuevo expediente de importación</h3>
         <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
 
@@ -352,7 +352,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         {embs.map((emb, ei) => (
           <div key={emb.id} className="surface-subtle p-3">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
+              <h4 className="font-display text-sm font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
               {embs.length > 1 && <button type="button" onClick={() => delEmb(emb.id)} className="btn-icon-danger" title="Eliminar embarque" aria-label="Eliminar embarque"><Trash2 size={15} /></button>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
@@ -450,7 +450,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       {/* Cost sheet */}
       <div className="mt-4">
         <div className="flex items-center justify-between mb-1.5">
-          <h4 className="text-sm font-medium text-ink-700">Costos del expediente (agenciamiento, transporte, puerto…)</h4>
+          <h4 className="font-display text-sm font-medium text-ink-700">Costos del expediente (agenciamiento, transporte, puerto…)</h4>
           <button type="button" onClick={addCost} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Costo</button>
         </div>
         {costs.length === 0 ? (

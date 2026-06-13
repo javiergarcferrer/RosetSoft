@@ -259,7 +259,7 @@ function CategoryCard({ profileId, category, count, refresh }) {
             className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
             aria-hidden
           />
-          <span className="font-semibold text-sm text-ink-900 truncate" title={label}>{label}</span>
+          <span className="font-display font-semibold text-sm text-ink-900 truncate" title={label}>{label}</span>
         </span>
         <span className="eyebrow-xs flex-shrink-0">{count} SKU</span>
       </summary>
@@ -332,7 +332,7 @@ function SearchResults({ profileId, term }) {
                   className="text-ink-400 flex-shrink-0 transition-transform group-open/cat:rotate-90"
                   aria-hidden
                 />
-                <span className="font-semibold text-sm text-ink-900 truncate" title={s.category || NO_CATEGORY}>
+                <span className="font-display font-semibold text-sm text-ink-900 truncate" title={s.category || NO_CATEGORY}>
                   {s.category || NO_CATEGORY}
                 </span>
               </span>

@@ -88,7 +88,7 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
   return (
     <div className="card p-4 mb-4 border-ink-300">
       <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
-        <h3 className="font-semibold min-w-0 truncate">Nuevo asiento</h3>
+        <h3 className="font-display font-semibold min-w-0 truncate">Nuevo asiento</h3>
         <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
       <div className="flex flex-wrap gap-3 mb-3">

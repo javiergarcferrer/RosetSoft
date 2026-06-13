@@ -76,13 +76,13 @@ export default function ContainerTracking({ containerNo, shareToken, arrivalActi
             <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
               {/* Port names wrap, never truncate — they're the client's data. */}
               {voyage.origin ? (
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 font-semibold text-ink-900">
+                <div className="font-display flex min-w-0 flex-1 items-center gap-1.5 font-semibold text-ink-900">
                   <span className="min-w-0 break-words">{voyage.origin.name}</span>
                   <ArrowRight size={13} className="shrink-0 text-ink-300" aria-hidden />
                   <span className="min-w-0 break-words">{voyage.destination?.name || '—'}</span>
                 </div>
               ) : (
-                <span className="font-semibold text-ink-900 min-w-0 break-words">Seguimiento del contenedor</span>
+                <span className="font-display font-semibold text-ink-900 min-w-0 break-words">Seguimiento del contenedor</span>
               )}
               <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${voyage.arrived ? 'bg-emerald-50 text-emerald-700' : 'bg-brand-50 text-brand-700'}`}>
                 {voyage.arrived ? <CheckCircle2 size={11} /> : <Navigation size={11} />}

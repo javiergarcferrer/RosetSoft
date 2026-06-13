@@ -133,7 +133,7 @@ export default function Inventario() {
       {showItem && (
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">Nuevo artículo</h3>
+            <h3 className="font-display font-semibold">Nuevo artículo</h3>
             <button type="button" onClick={() => setShowItem(false)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -203,7 +203,7 @@ export default function Inventario() {
               <div className="card p-6 text-sm text-ink-500">Selecciona un artículo para ver su kardex.</div>
             ) : (
               <div className="card p-4">
-                <h3 className="font-semibold mb-1 min-w-0 truncate">{selectedItem.name}</h3>
+                <h3 className="font-display font-semibold mb-1 min-w-0 truncate">{selectedItem.name}</h3>
                 <p className="text-sm text-ink-500 mb-3">{kardex.qty} {selectedItem.unit} · costo prom. {formatDop(kardex.avgCost)} · valor {formatDop(kardex.value)}</p>
 
                 <CatalogBlock item={selectedItem} key={selectedItem.id} />

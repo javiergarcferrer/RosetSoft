@@ -162,7 +162,7 @@ export default function ImportacionDetail() {
         {embarques.map((em, ei) => (
           <div key={em.id} className="rounded-xl border border-ink-200 bg-ink-50/40 p-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-sm">
-              <h4 className="font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
+              <h4 className="font-display font-medium text-ink-700 inline-flex items-center gap-1.5"><Ship size={15} /> Embarque {ei + 1}</h4>
               {em.bl && <span className="font-mono text-xs text-ink-500">BL {em.bl}</span>}
               {em.customsRef && <span className="text-xs text-ink-500">DUA {em.customsRef}</span>}
               {em.containerCode && <span className="inline-flex items-center gap-0.5 text-xs text-ink-500"><Container size={12} />{em.containerCode}</span>}

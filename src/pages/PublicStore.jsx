@@ -229,7 +229,7 @@ function ProductCard({ c }) {
       <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           {/* Full name, never clamped — product names are data. */}
-          <h3 className="text-sm font-medium leading-snug text-ink-900">{c.name}</h3>
+          <h3 className="font-display text-sm font-medium leading-snug text-ink-900">{c.name}</h3>
           <div className="mt-1 text-sm text-ink-500 tabular-nums break-words">{priceLabel(c.price)}</div>
           {showAvail && (
             <div className="eyebrow-xs mt-1.5 text-ink-400 tracking-widest">{c.availability.label}</div>

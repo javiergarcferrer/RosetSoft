@@ -189,7 +189,7 @@ function NewPurchaseForm({ scope, config, suppliers, suppliersById, accounts, it
   return (
     <div className="card p-4 mb-4 border-ink-300 min-w-0">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold">Nueva compra</h3>
+        <h3 className="font-display font-semibold">Nueva compra</h3>
         <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
       <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">

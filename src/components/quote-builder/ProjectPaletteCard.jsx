@@ -27,7 +27,7 @@ export default function ProjectPaletteCard() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <Palette size={15} className="text-ink-500 flex-shrink-0" aria-hidden />
-          <h3 className="text-sm font-semibold text-ink-800 truncate">Paleta del proyecto</h3>
+          <h3 className="font-display text-sm font-semibold text-ink-800 truncate">Paleta del proyecto</h3>
         </div>
         {onAdd && (
           <button type="button" onClick={() => setAddOpen(true)} className="btn-ghost text-xs flex-shrink-0">

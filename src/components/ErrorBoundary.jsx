@@ -29,7 +29,7 @@ export default class ErrorBoundary extends React.Component {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-50 text-red-600 mb-4">
             <AlertCircle size={22} />
           </div>
-          <h1 className="text-lg font-semibold">Algo salió mal</h1>
+          <h1 className="font-display text-lg font-semibold">Algo salió mal</h1>
           <p className="text-sm text-ink-500 mt-2">
             La aplicación encontró un error inesperado. Recarga la página para continuar.
           </p>

@@ -145,7 +145,7 @@ function AttachCta({ quote, profileId, onAttach }) {
             <Plus size={18} className="text-brand-600" />
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-brand-700">Crear pedido nuevo</span>
+            <span className="font-display block text-sm font-semibold text-brand-700">Crear pedido nuevo</span>
             <span className="block text-xs text-ink-400">Inicia un pedido con esta cotización</span>
           </span>
         </button>
@@ -170,7 +170,7 @@ function AttachCta({ quote, profileId, onAttach }) {
                         <Package size={16} className="text-ink-400" />
                       </span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-semibold text-ink-900 truncate">
+                        <span className="font-display block text-sm font-semibold text-ink-900 truncate">
                           Pedido #{o.number ?? o.id.slice(-4)}
                           {o.name ? ` — ${o.name}` : ''}
                         </span>

@@ -438,7 +438,7 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
 
       <section className="px-4 py-3 space-y-2">
         <div className="flex items-baseline justify-between gap-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
+          <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
           {(rollup?.openTotal > 0 || rollup?.acceptedTotal > 0) && (
             <span className="flex flex-wrap justify-end gap-x-3 text-[11px] tabular-nums text-ink-500">
               {rollup.openTotal > 0 && (
@@ -498,7 +498,7 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
           same in-place commit semantics. Dirección stays its own field;
           notes is for remarks only. */}
       <section className="px-4 py-3 space-y-2.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del cliente</h4>
+        <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del cliente</h4>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <PanelField label="RNC / Cédula" value={c.rnc} onCommit={(v) => onCommit('rnc', v)} inputMode="numeric" />
           <PanelField label="Contacto" value={c.contactName} onCommit={(v) => onCommit('contactName', v)} className="col-span-1 sm:col-span-2" />

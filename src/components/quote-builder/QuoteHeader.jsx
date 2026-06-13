@@ -85,7 +85,7 @@ export default function QuoteHeader({
           </button>
           <div className="flex items-baseline gap-2 min-w-0">
             <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest hidden sm:inline">Cotización</span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">
+            <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">
               {quote.number != null ? `#${quote.number}` : 'Borrador'}
             </h1>
             <SaveIndicator savedAt={savedAt} saving={saving} />

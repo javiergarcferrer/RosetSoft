@@ -106,7 +106,7 @@ export default function SetPassword() {
             </div>
           </div>
           <div className="font-wordmark text-2xl tracking-wide text-ink-900 mb-1.5">ALCOVER</div>
-          <h1 className="text-sm font-semibold text-ink-700">Crea tu contraseña</h1>
+          <h1 className="font-display text-sm font-semibold text-ink-700">Crea tu contraseña</h1>
           <p className="text-xs text-ink-400 mt-2 leading-relaxed max-w-[260px] mx-auto">
             Bienvenido{currentProfile?.name ? `, ${currentProfile.name.split(' ')[0]}` : ''}.
             Elige una contraseña para terminar de configurar tu cuenta.

@@ -167,7 +167,7 @@ export default function PublicQuoteView() {
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ink-100 text-ink-400 mb-5 shadow-xs">
           <AlertCircle size={28} strokeWidth={1.5} aria-hidden />
         </div>
-        <div className="text-lg font-semibold text-ink-800">Enlace no disponible</div>
+        <div className="font-display text-lg font-semibold text-ink-800">Enlace no disponible</div>
         <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
           Este enlace de cotización no es válido o fue desactivado. Pídele a tu
           asesor un enlace actualizado.
@@ -225,7 +225,7 @@ export default function PublicQuoteView() {
             promising the client real-time geolocation once the order ships. */}
         {trackable.length > 0 ? (
           <section className="card p-4 sm:p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
+            <h2 className="font-display text-sm font-semibold text-ink-900 flex items-center gap-2">
               <Ship size={15} className="text-brand-500" aria-hidden /> Seguimiento de tu envío
             </h2>
             {trackable.map((c) => (
@@ -242,7 +242,7 @@ export default function PublicQuoteView() {
           </section>
         ) : (
           <section className="card p-4 sm:p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
+            <h2 className="font-display text-sm font-semibold text-ink-900 flex items-center gap-2">
               <Ship size={15} className="text-brand-500" aria-hidden /> Seguimiento de tu envío
             </h2>
             <div className="flex items-start gap-3 rounded-lg border border-brand-100 bg-brand-50/40 p-3.5">

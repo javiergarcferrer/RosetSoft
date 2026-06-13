@@ -150,7 +150,7 @@ export default function TotalsDock({
       <div className="border-t border-ink-100 pt-3 mt-1 space-y-3">
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={13} className="text-ink-500" />
-          <h2 className="font-semibold text-sm">Ajustes de la cotización</h2>
+          <h2 className="font-display font-semibold text-sm">Ajustes de la cotización</h2>
           {hasAdjustment && !financiallyLocked && (
             <span className="chip bg-amber-50 text-amber-700 border border-amber-200">Aplicado</span>
           )}
@@ -438,7 +438,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
   return (
     <div className="rounded-lg border border-ink-200 bg-ink-50/40 p-3 space-y-2 mt-1 shadow-xs">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm">Comisión profesional</h3>
+        <h3 className="font-display font-semibold text-sm">Comisión profesional</h3>
         <span className="eyebrow-xs text-ink-400">Interno</span>
       </div>
       {/* Gross is the % on the post-courtesy base — the courtesy already shrank

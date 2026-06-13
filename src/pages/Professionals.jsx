@@ -564,7 +564,7 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
 
       <section className="px-4 py-3 space-y-2">
         <div className="flex items-baseline justify-between gap-2">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
+          <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Cotizaciones</h4>
           {rollup?.count > 0 && (
             <span className="flex flex-wrap justify-end gap-x-3 text-[11px] tabular-nums text-ink-500">
               <span>Total <span className="font-semibold text-ink-700">{formatMoney(rollup.allTimeTotal, 'USD', { USD: 1 })}</span></span>
@@ -624,7 +624,7 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
       {/* Dirección is a real field (the seed's DIRECCIÓN column now lives
           here, not in notes); notes is for remarks only. */}
       <section className="px-4 py-3 space-y-2.5">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del profesional</h4>
+        <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del profesional</h4>
         <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} />
         <PanelTextArea
           label="Notas"

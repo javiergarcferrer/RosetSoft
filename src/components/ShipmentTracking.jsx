@@ -79,7 +79,7 @@ export default function ShipmentTracking({
 
   return (
     <section className={`card card-pad space-y-3 ${className}`}>
-      <h2 className="font-semibold text-sm flex items-center gap-2">
+      <h2 className="font-display font-semibold text-sm flex items-center gap-2">
         <Ship size={16} className="text-ink-500" /> {title}
       </h2>
       {panels}

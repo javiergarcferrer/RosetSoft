@@ -59,7 +59,7 @@ export default function Empleados() {
       {editing && (
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">{editing === 'new' ? 'Nuevo empleado' : 'Editar empleado'}</h3>
+            <h3 className="font-display font-semibold">{editing === 'new' ? 'Nuevo empleado' : 'Editar empleado'}</h3>
             <button type="button" onClick={() => setEditing(null)} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">

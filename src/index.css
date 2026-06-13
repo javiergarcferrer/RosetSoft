@@ -552,19 +552,34 @@
   /* ── Type scale ──────────────────────────────────────────────
      Canonical ladder. Prefer these roles over arbitrary text-[Npx]
      sizes, which had drifted to eight different values across the app:
-       Display    text-2xl / text-3xl   page + quote titles
-       Title      text-lg               card / dialog titles
-       Subtitle   text-base             product names, emphasis
+       Display    text-2xl / text-3xl   page + quote titles      ▸ Söhne
+       Title      text-lg               card / dialog titles      ▸ Söhne
+       Subtitle   text-base             product / entity names    ▸ Söhne
        Body       text-sm               default running text  ← DEFAULT
        Meta       text-xs               secondary / helper text
        Micro      text-[11px]           dense numeric, captions
-       Eyebrow    .eyebrow              small-caps section label (11px)
-       Eyebrow·xs .eyebrow-xs           dense in-component label (10px)
+       Eyebrow    .eyebrow              small-caps section label  ▸ Söhne
+       Eyebrow·xs .eyebrow-xs           dense in-component label  ▸ Söhne
      The named Tailwind sizes are exact equivalents of the old arbitrary
      ones — text-xs = 12px, text-sm = 14px, text-base = 16px, text-lg =
      18px — so always use the named token, never text-[12px]/[14px]/etc.
      9 / 10 / 11 / 13 / 15px have no named equivalent and remain as
-     deliberate in-between steps (the eyebrow primitives cover 10/11). */
+     deliberate in-between steps (the eyebrow primitives cover 10/11).
+
+     ── Typographic identity (two faces, complementary jobs) ─────
+     Every HEADING role (Display / Title / Subtitle / Eyebrow — page
+     titles, card & dialog titles, section labels, the name a card is
+     "about") carries `font-display` → Söhne, the brand display cut. It
+     ships ONE weight (Halbfett), so a heading reads at that weight no
+     matter the `font-medium/-semibold/-bold` next to it — the size +
+     small-caps tracking carry the hierarchy, not the weight.
+     Everything else — Body / Meta / Micro running text, table data,
+     form fields, buttons, captions, status pills, and money/stat VALUES
+     (`tabular-nums`) — is Lausanne, the body face, which DOES carry the
+     real 400 / 500 / 600 / 700 range. So weight contrast lives in
+     Lausanne; Söhne supplies the editorial header voice on top of it.
+     Net: if it's a label/title, give it `font-display`; if it's content
+     someone reads or a figure they scan, leave it Lausanne and weight it. */
 
   /* Eyebrow — small uppercase widely-tracked label. The one we
      standardized on after seeing text-[10px] / text-[11px] /
@@ -582,7 +597,7 @@
      Always: title on the left, optional action on the right,
      hairline below, generous-but-not-loud padding. */
   .card-header { @apply px-5 py-3 border-b border-ink-100 flex items-center justify-between gap-3; }
-  .card-header h2 { @apply font-semibold text-sm text-ink-900; }
+  .card-header h2 { @apply font-display font-semibold text-sm text-ink-900; }
   .card-header .card-header-action { @apply text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1; }
 
   /* Back-link — the "← Volver a …" affordance on every detail

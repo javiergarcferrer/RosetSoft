@@ -184,7 +184,7 @@ export default function Stepper({
       <div className="pt-3 border-t border-ink-100 flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="eyebrow tracking-wide">Estado actual</div>
-          <div className="text-sm font-semibold mt-0.5">{currentLabel}</div>
+          <div className="font-display text-sm font-semibold mt-0.5">{currentLabel}</div>
           {currentDescription ? (
             <div className="text-xs text-ink-500 mt-1">{currentDescription}</div>
           ) : null}

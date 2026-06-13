@@ -76,7 +76,7 @@ export default function ECFSequences() {
       {editing && (
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold">{editing === 'new' ? 'Nueva secuencia' : 'Editar secuencia'}</h3>
+            <h3 className="font-display font-semibold">{editing === 'new' ? 'Nueva secuencia' : 'Editar secuencia'}</h3>
             <button type="button" onClick={() => setEditing(null)} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap items-end gap-3">

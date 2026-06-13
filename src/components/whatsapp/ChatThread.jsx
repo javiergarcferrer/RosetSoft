@@ -416,7 +416,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           {initials(contact.name)}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm text-ink-900 truncate">
+          <div className="font-display font-semibold text-sm text-ink-900 truncate">
             {detailLink ? <Link to={detailLink} className="hover:underline">{contact.name}</Link> : contact.name}
           </div>
           <div className="text-[11px] text-ink-400 flex items-center gap-1.5">

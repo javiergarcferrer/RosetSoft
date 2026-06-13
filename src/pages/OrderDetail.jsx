@@ -495,7 +495,7 @@ function ContainerRow({ container, arrivalAction = null }) {
             <span className={`w-6 h-6 rounded-md ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0 ${filled ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-100 text-ink-500'}`}>
               <Package size={12} />
             </span>
-            <span className="text-sm font-semibold text-ink-900">Contenedor #{container.number || '—'}</span>
+            <span className="font-display text-sm font-semibold text-ink-900">Contenedor #{container.number || '—'}</span>
             {filled ? (
               <span className="status-pill status-pill-accepted">
                 <CheckCircle2 size={11} /> Lleno · {formatDateTime(container.filledAt)}
@@ -628,7 +628,7 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
           to={`/quotes/${quote.id}`}
           className="flex-1 min-w-0 basis-36"
         >
-          <div className="text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
+          <div className="font-display text-sm font-semibold truncate text-ink-900 group-hover:text-brand-700 transition-colors">
             {clientLabel}
           </div>
           <div className="text-[11px] text-ink-500 truncate">
@@ -864,7 +864,7 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
             className="w-full text-left px-4 py-3 hover:bg-brand-50/60 active:scale-[0.99] transition-all duration-150 flex items-center gap-3 rounded-md"
           >
             <div className="flex-1 min-w-0 mr-2">
-              <div className="text-sm font-semibold truncate text-ink-900">
+              <div className="font-display text-sm font-semibold truncate text-ink-900">
                 {client?.name || 'Sin cliente asignado'}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
