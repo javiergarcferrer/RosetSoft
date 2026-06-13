@@ -201,6 +201,17 @@ export async function saveConversationalAutomation({ prompts, commands, enableWe
   return invokeWaSend({ setConversationalAutomation: { prompts, commands, enableWelcome } });
 }
 
+/** Managed click-to-chat QR links / short links (message_qrdls). */
+export async function listWaQrCodes() {
+  return invokeWaSend({ listQrCodes: true });
+}
+export async function createWaQrCode({ prefilledMessage } = {}) {
+  return invokeWaSend({ createQrCode: { prefilledMessage } });
+}
+export async function deleteWaQrCode(code) {
+  return invokeWaSend({ deleteQrCode: { code } });
+}
+
 /** Read the number's public business profile (about, address, email, web…). */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });

@@ -7,6 +7,7 @@ import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
   listWaTemplates, listWaCatalog, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
   getConversationalAutomation, saveConversationalAutomation,
+  listWaQrCodes, createWaQrCode, deleteWaQrCode,
 } from '../../lib/whatsapp.js';
 import { runCoexistenceSignup } from '../../lib/waEmbeddedSignup.js';
 import SettingsSection from './SettingsSection.jsx';
@@ -196,6 +197,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           <CatalogRow settings={settings} saveSettings={saveSettings} />
           <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
           <ConversationalRow />
+          <QrCodesRow />
           <BusinessProfileRow />
           <TestSendRow />
         </>
@@ -925,6 +927,137 @@ function ConversationalRow() {
       )}
       {msg && (
         <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-amber-700'}`}>
+          <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Managed click-to-chat QR links — a dealer prints these on catalogs, invoices
+ * and the storefront so a scan opens WhatsApp to the business number with a
+ * message pre-typed ("Hola, quiero una cotización"). Each is a stable code +
+ * a wa.me/message/<code> deep link + a Meta-hosted QR image. Loaded on first
+ * open; create/delete round-trip straight to Meta.
+ */
+function QrCodesRow() {
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [codes, setCodes] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [copied, setCopied] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setMsg('');
+    try {
+      const res = await listWaQrCodes();
+      if (res?.ok) { setCodes(res.codes || []); setLoaded(true); }
+      else setMsg(res?.error || 'No se pudieron cargar los códigos.');
+    } catch (e) {
+      setMsg(e?.message || 'No se pudieron cargar los códigos.');
+    } finally {
+      setLoading(false);
+    }
+  }
+  function expand() { setOpen(true); if (!loaded && !loading) load(); }
+
+  async function create() {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await createWaQrCode({ prefilledMessage: text });
+      if (res?.ok && res.code) { setCodes((c) => [res.code, ...c]); setDraft(''); }
+      else setMsg(res?.error || 'No se pudo crear el código.');
+    } catch (e) {
+      setMsg(e?.message || 'No se pudo crear el código.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(code) {
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await deleteWaQrCode(code);
+      if (res?.ok) setCodes((c) => c.filter((x) => x.code !== code));
+      else setMsg(res?.error || 'No se pudo eliminar.');
+    } catch (e) {
+      setMsg(e?.message || 'No se pudo eliminar.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(link) {
+    try { await navigator.clipboard.writeText(link); setCopied(link); setTimeout(() => setCopied((c) => (c === link ? '' : c)), 1500); } catch { /* clipboard blocked */ }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <button type="button" onClick={expand} className="btn-ghost text-xs inline-flex items-center gap-1.5">
+          <QrCode size={13} /> Códigos QR / enlaces de chat
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-ink-100 p-3">
+      <div className="label inline-flex items-center gap-1.5"><QrCode size={12} className="text-emerald-600" /> Códigos QR / enlaces de chat</div>
+      <p className="text-[11px] text-ink-500 mb-2.5">
+        Imprime un código en catálogos, facturas o la tienda: al escanearlo, el cliente abre WhatsApp
+        con un mensaje ya escrito hacia tu número.
+      </p>
+
+      <div className="flex items-end gap-2 mb-3">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Hola, quiero una cotización de Ligne Roset."
+          className="input text-sm flex-1 min-h-[44px] resize-y"
+          aria-label="Mensaje del código QR"
+        />
+        <button type="button" onClick={create} disabled={busy || !draft.trim()} className="btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-40 shrink-0">
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Crear
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-ink-400 py-3"><Loader2 size={14} className="animate-spin" /> Cargando…</div>
+      ) : codes.length ? (
+        <ul className="space-y-2">
+          {codes.map((c) => (
+            <li key={c.code} className="flex items-start gap-3 rounded-lg border border-ink-200 bg-white p-2.5">
+              {c.imageUrl && <img src={c.imageUrl} alt={`QR ${c.code}`} className="h-16 w-16 shrink-0 rounded border border-ink-100" />}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-ink-800 truncate">{c.prefilledMessage || '(sin mensaje)'}</div>
+                {c.deepLink && (
+                  <button type="button" onClick={() => copy(c.deepLink)} className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-800" title="Copiar enlace">
+                    <Copy size={11} /> {copied === c.deepLink ? 'Copiado' : c.deepLink}
+                  </button>
+                )}
+              </div>
+              <button type="button" onClick={() => remove(c.code)} disabled={busy} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0" aria-label="Eliminar código">
+                <Trash2 size={13} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] text-ink-400">Aún no hay códigos. Crea el primero arriba.</p>
+      )}
+
+      {msg && (
+        <p className="text-[11px] mt-2 text-rose-600 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
         </p>
       )}

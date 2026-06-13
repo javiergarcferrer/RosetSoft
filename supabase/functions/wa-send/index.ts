@@ -72,6 +72,10 @@ type SendBody = {
     commands?: { name?: string; description?: string }[];
     enableWelcome?: boolean;
   };
+  /** Managed click-to-chat QR links / short links (message_qrdls). */
+  listQrCodes?: boolean;
+  createQrCode?: { prefilledMessage?: string };
+  deleteQrCode?: { code?: string };
   /** Send product(s) from the connected catalog — 1 item ⇒ single-product
    *  message, 2+ ⇒ product_list. `names` ride along only for our chat log. */
   products?: { items?: string[]; names?: string[]; text?: string };
@@ -416,6 +420,55 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: metaError(data, r.status) }, 502);
     }
     return json({ ok: true, prompts, commands });
+  }
+
+  // ── Managed click-to-chat QR links (message_qrdls) ───────────────────────
+  // A printable QR / short link that opens WhatsApp to this number with a
+  // message pre-typed — the dealer puts them on catalogs, invoices, the
+  // storefront. Each carries a stable `code`, a wa.me/message/<code> deep
+  // link, and a Meta-hosted QR image.
+  if (body.listQrCodes) {
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/message_qrdls?fields=code,prefilled_message,deep_link_url,qr_image_url`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    const d = data as { data?: { code?: string; prefilled_message?: string; deep_link_url?: string; qr_image_url?: string }[] };
+    return json({
+      ok: true,
+      codes: (d.data || []).map((c) => ({
+        code: c.code || '',
+        prefilledMessage: c.prefilled_message || '',
+        deepLink: c.deep_link_url || '',
+        imageUrl: c.qr_image_url || '',
+      })).filter((c) => c.code),
+    });
+  }
+
+  if (body.createQrCode) {
+    const prefilled = String(body.createQrCode.prefilledMessage || '').trim();
+    if (!prefilled) return json({ ok: false, error: 'Escribe el mensaje que traerá el código QR.' }, 400);
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/message_qrdls`, {
+      method: 'POST', headers: graphJson,
+      body: JSON.stringify({ prefilled_message: prefilled, generate_qr_image: 'PNG' }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[wa-send] createQrCode failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    const c = data as { code?: string; prefilled_message?: string; deep_link_url?: string; qr_image_url?: string };
+    return json({
+      ok: true,
+      code: { code: c.code || '', prefilledMessage: c.prefilled_message || prefilled, deepLink: c.deep_link_url || '', imageUrl: c.qr_image_url || '' },
+    });
+  }
+
+  if (body.deleteQrCode) {
+    const code = String(body.deleteQrCode.code || '').trim();
+    if (!code) return json({ ok: false, error: 'Falta el código a eliminar.' }, 400);
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/message_qrdls/${encodeURIComponent(code)}`, { method: 'DELETE', headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    return json({ ok: true });
   }
 
   // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
