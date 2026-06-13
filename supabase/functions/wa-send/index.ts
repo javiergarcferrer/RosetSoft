@@ -117,6 +117,14 @@ type SendBody = {
 
 /** Meta error code → dealer-readable Spanish. Falls back to Meta's message. */
 function friendlyMetaError(code: number | undefined, message: string): string {
+  // Catalog / commerce sends fail with a catalog-specific message regardless of
+  // the numeric code (usually 100): "Invalid catalog_id." or "check the catalog
+  // is linked to the WhatsApp Business Account and enabled in Commerce
+  // Settings". Point at the one place that fixes it, not the generic code-100
+  // token guidance below.
+  if (/catalog/i.test(message)) {
+    return 'El catálogo no está conectado a tu número de WhatsApp o no está habilitado en Commerce. Abre Configuración → WhatsApp → "Probar catálogo" para ver el diagnóstico exacto, o conéctalo en WhatsApp Manager → Catálogo.';
+  }
   switch (code) {
     case 190:
       return 'El token de acceso expiró o fue revocado. Genera un token PERMANENTE (System User en Business Manager) y pégalo de nuevo en Configuración.';
@@ -505,100 +513,139 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
-  // The catalog id is resolved fresh per request — cheap Graph calls, no
-  // state to go stale when the team reconnects a different catalog. A manual
-  // override (Configuración → WhatsApp → "ID del catálogo", stored on
+  // The catalog id is resolved fresh per request — cheap Graph calls, no state
+  // to go stale when the team reconnects a different catalog. A manual override
+  // (Configuración → WhatsApp → "ID del catálogo", stored on
   // settings.whatsapp_catalog_id) short-circuits discovery — the escape hatch
-  // when Meta hides the catalog from the token.
-  // Discovery tries FIVE sources, because Graph SILENTLY FILTERS objects the
-  // token can't see (an empty list does NOT mean "no catalog connected" —
-  // usually it means the System User wasn't assigned the catalog asset):
-  //   1. the WABA's product_catalogs edge,
-  //   2. the number's whatsapp_commerce_settings (carries catalog_id),
-  //   3. the token's own catalog_management granular scope (debug_token),
-  //   4. the System User's assigned catalogs (me/assigned_product_catalogs),
-  //   5. the token's businesses → each one's owned_product_catalogs.
-  // Every probe's outcome is collected and RETURNED in the error (and logged),
-  // and debug_token's scope list decides which instruction leads — so the UI
-  // says exactly which Meta grant is missing (regenerate the token vs. assign
-  // the catalog asset) instead of one generic guess.
+  // when Meta hides the connected catalog from the token.
+  //
+  // CRITICAL: product / catalog MESSAGES are validated against the ONE catalog
+  // *connected to the WABA* (Meta allows one catalog per account). A catalog
+  // the token can merely READ — a business/owned catalog the System User
+  // happens to have access to — lists products fine in the picker but is
+  // rejected at SEND time with "Invalid catalog_id" / "check the catalog is
+  // linked to the WhatsApp Business Account". So the id we send comes ONLY from
+  // the WABA's own product_catalogs edge (or the manual override): the broader
+  // probes below (token scope, assigned/owned catalogs) are kept purely to make
+  // the "not connected" error ACTIONABLE — never as the id we send, because
+  // sending one of those is the exact bug that produces "Invalid catalog_id".
+  type Edge = { data?: { id?: string; name?: string }[]; error?: { code?: number; message?: string } };
   async function connectedCatalogId(): Promise<{ id: string | null; error: string | null }> {
     const { data: st } = await admin.from('settings').select('whatsapp_catalog_id').eq('profile_id', TEAM).maybeSingle();
     const manual = String((st as { whatsapp_catalog_id?: string } | null)?.whatsapp_catalog_id || '').replace(/\D/g, '');
     if (manual) return { id: manual, error: null };
 
-    type Edge = { data?: { id?: string; catalog_id?: string; name?: string }[]; error?: { code?: number; message?: string } };
+    if (!wabaId) {
+      return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA). Pégalo en Configuración → WhatsApp y prueba la conexión.' };
+    }
+
     const probes: string[] = [];
-    // One discovery probe: fetch, pick the id out of the JSON, record misses
-    // (with Meta's own error when there is one) for the diagnosis tail.
-    async function probe(label: string, url: string, pick: (d: Edge) => string | null | undefined): Promise<string | null> {
+    // The authoritative source: the catalog CONNECTED to this WhatsApp account.
+    {
+      const r = await fetch(`${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, { headers: graphHeaders });
+      const data = await r.json().catch(() => ({})) as Edge;
+      if (r.ok) {
+        const id = data.data?.[0]?.id || null;
+        if (id) return { id, error: null };
+        probes.push('catálogo conectado al WABA: sin resultados');
+      } else {
+        probes.push(`catálogo conectado al WABA: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
+        console.error('[wa-send] connected catalog lookup failed:', r.status, JSON.stringify(data));
+      }
+    }
+
+    // Nothing connected (or Meta hides the connection from the token). Probe
+    // what the token CAN see — solely to name the fix in the error. These
+    // catalogs are NOT connected, so they are never returned as a send id.
+    let seenId: string | null = null;
+    let seenName = '';
+    async function probe(label: string, url: string, pick: (d: Edge) => { id?: string; name?: string } | undefined): Promise<void> {
+      if (seenId) return;
       try {
         const r = await fetch(url, { headers: graphHeaders });
         const data = await r.json().catch(() => ({})) as Edge;
         if (!r.ok) {
           probes.push(`${label}: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
-          console.error(`[wa-send] catalog probe "${label}" failed:`, r.status, JSON.stringify(data));
-          return null;
+          return;
         }
-        const id = pick(data) || null;
-        if (!id) probes.push(`${label}: sin resultados`);
-        return id;
+        const hit = pick(data);
+        if (hit?.id) { seenId = hit.id; seenName = hit.name || ''; }
+        else probes.push(`${label}: sin resultados`);
       } catch (e) {
         probes.push(`${label}: ${String(e)}`);
-        return null;
       }
     }
 
-    if (!wabaId) {
-      return { id: null, error: 'Falta el WhatsApp Business Account ID (WABA). Pégalo en Configuración → WhatsApp y prueba la conexión.' };
-    }
-    let id = await probe('catálogos del WABA', `${GRAPH}/${wabaId}/product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
-    if (!id) {
-      id = await probe('commerce settings del número', `${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings?fields=catalog_id`, (d) => d.data?.[0]?.catalog_id);
-    }
-
-    // debug_token: the granular catalog_management scope can carry the id
-    // directly, and the `scopes` list says whether the token has the
-    // permission AT ALL — that decides which instruction the error leads with.
-    let scopes: string[] | null = null;
-    if (!id) {
-      const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
-      const dd = await dbg.json().catch(() => ({})) as
-        { data?: { scopes?: string[]; granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
-      scopes = Array.isArray(dd.data?.scopes) ? (dd.data?.scopes as string[]) : null;
-      id = (dd.data?.granular_scopes || [])
-        .find((s) => s.scope === 'catalog_management')?.target_ids?.[0] || null;
-      if (!id) probes.push(scopes ? `permisos del token: ${scopes.join(', ') || '(ninguno)'}` : 'debug_token: sin datos');
-    }
-
-    if (!id) {
-      id = await probe('catálogos asignados al System User', `${GRAPH}/me/assigned_product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
-    }
-    if (!id) {
+    await probe('catálogos asignados al System User', `${GRAPH}/me/assigned_product_catalogs?fields=id,name`, (d) => d.data?.[0]);
+    if (!seenId) {
       try {
         const r = await fetch(`${GRAPH}/me/businesses?fields=id,name`, { headers: graphHeaders });
         const data = await r.json().catch(() => ({})) as Edge;
-        if (!r.ok) {
-          probes.push(`negocios del token: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
-        } else {
+        if (r.ok) {
           const bizs = (data.data || []).filter((b) => b.id).slice(0, 5);
           if (!bizs.length) probes.push('negocios del token: sin resultados');
           for (const b of bizs) {
-            id = await probe(`catálogos de ${b.name || b.id}`, `${GRAPH}/${b.id}/owned_product_catalogs?fields=id,name`, (d) => d.data?.[0]?.id);
-            if (id) break;
+            await probe(`catálogos de ${b.name || b.id}`, `${GRAPH}/${b.id}/owned_product_catalogs?fields=id,name`, (d) => d.data?.[0]);
+            if (seenId) break;
           }
+        } else {
+          probes.push(`negocios del token: error${data.error?.code ? ` #${data.error.code}` : ''} — ${data.error?.message || `HTTP ${r.status}`}`);
         }
       } catch (e) {
         probes.push(`negocios del token: ${String(e)}`);
       }
     }
-    if (id) return { id, error: null };
+
+    // debug_token: does the token even hold catalog_management (so we lead with
+    // the right fix), and — as a last resort for an id to name — its granular
+    // catalog_management scope.
+    let scopes: string[] | null = null;
+    {
+      const dbg = await fetch(`${GRAPH}/debug_token?input_token=${encodeURIComponent(token)}`, { headers: graphHeaders });
+      const dd = await dbg.json().catch(() => ({})) as
+        { data?: { scopes?: string[]; granular_scopes?: { scope?: string; target_ids?: string[] }[] } };
+      scopes = Array.isArray(dd.data?.scopes) ? (dd.data?.scopes as string[]) : null;
+      if (!seenId) {
+        seenId = (dd.data?.granular_scopes || []).find((s) => s.scope === 'catalog_management')?.target_ids?.[0] || null;
+      }
+      if (scopes) probes.push(`permisos del token: ${scopes.join(', ') || '(ninguno)'}`);
+    }
 
     const missingScope = scopes !== null && !scopes.includes('catalog_management');
-    const head = missingScope
-      ? 'El token guardado NO tiene el permiso catalog_management — un token no gana los permisos que se añadan a la app después de generarlo. Genera un token NUEVO del System User (Business Manager → Usuarios del sistema → Generar token) marcando whatsapp_business_messaging, whatsapp_business_management y catalog_management, pégalo en Configuración → WhatsApp y vuelve a intentar.'
-      : 'El token tiene catalog_management pero Meta no le muestra ningún catálogo. Falta uno de estos: (1) asignar el CATÁLOGO como activo al System User del token (Business Manager → Usuarios del sistema → Asignar activos → Catálogos, control total), o (2) conectar el catálogo a la cuenta de WhatsApp (WhatsApp Manager → Catálogo). Alternativa inmediata: pega el ID del catálogo (Commerce Manager → tu catálogo, el número de la URL) en Configuración → WhatsApp → ID del catálogo.';
-    return { id: null, error: `${head}\n\nDiagnóstico de Meta: ${probes.join(' · ')}` };
+    let head: string;
+    if (seenId) {
+      // A catalog exists but isn't connected to WhatsApp — the precise cause of
+      // "Invalid catalog_id". Connecting it (or pinning its id when Meta hides
+      // an already-connected catalog from the token) is the fix.
+      head = `Tu catálogo${seenName ? ` «${seenName}»` : ''} (ID ${seenId}) existe pero NO está conectado a tu número de WhatsApp — por eso los envíos fallan con "Invalid catalog_id". Conéctalo en WhatsApp Manager → Catálogo → Conectar catálogo. Si YA está conectado pero Meta no se lo muestra al token, pega el ID ${seenId} en Configuración → WhatsApp → ID del catálogo.`;
+    } else if (missingScope) {
+      head = 'El token guardado NO tiene el permiso catalog_management — un token no gana los permisos que se añadan a la app después de generarlo. Genera un token NUEVO del System User (Business Manager → Usuarios del sistema → Generar token) marcando whatsapp_business_messaging, whatsapp_business_management y catalog_management, pégalo en Configuración → WhatsApp y vuelve a intentar.';
+    } else {
+      head = 'No hay ningún catálogo conectado a tu número de WhatsApp. Conéctalo en WhatsApp Manager → Catálogo → Conectar catálogo (el catálogo vive en Commerce Manager), o pega su ID en Configuración → WhatsApp → ID del catálogo.';
+    }
+    return { id: null, error: probes.length ? `${head}\n\nDiagnóstico de Meta: ${probes.join(' · ')}` : head };
+  }
+
+  // Product / catalog MESSAGES also require the connected catalog to be VISIBLE
+  // in the number's commerce settings — otherwise Meta rejects the send with
+  // "…and the catalog is enabled in the WhatsApp Commerce Settings". The dealer
+  // is actively sending the catalog, so flip visibility ON when it's off (best
+  // effort, idempotent, preserves is_cart_enabled; never blocks the send). Only
+  // mutates when we positively read it as false — never clobbers on a read miss.
+  async function ensureCatalogVisible(): Promise<void> {
+    try {
+      const r = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings`, { headers: graphHeaders });
+      if (!r.ok) return;
+      const data = await r.json().catch(() => ({})) as { data?: { is_cart_enabled?: boolean; is_catalog_visible?: boolean }[] };
+      const s = data.data?.[0];
+      if (!s || s.is_catalog_visible === true) return;
+      const params = new URLSearchParams({ is_catalog_visible: 'true' });
+      if (typeof s.is_cart_enabled === 'boolean') params.set('is_cart_enabled', String(s.is_cart_enabled));
+      const up = await fetch(`${GRAPH}/${phoneNumberId}/whatsapp_commerce_settings?${params}`, { method: 'POST', headers: graphHeaders });
+      if (!up.ok) console.error('[wa-send] enable catalog visibility failed:', up.status, await up.text().catch(() => ''));
+    } catch (e) {
+      console.error('[wa-send] ensureCatalogVisible error:', e);
+    }
   }
 
   if (body.listCatalog) {
@@ -1039,6 +1086,7 @@ Deno.serve(async (req: Request) => {
   if (body.catalogMessage) {
     const cat = await connectedCatalogId();
     if (!cat.id) return json({ ok: false, error: cat.error }, 502);
+    await ensureCatalogVisible();
     const text = String(body.catalogMessage.text || '').trim();
     const res = await sendOne({
       to,
@@ -1069,6 +1117,7 @@ Deno.serve(async (req: Request) => {
     const text = String(body.products.text || '').trim();
     const cat = await connectedCatalogId();
     if (!cat.id) return json({ ok: false, error: cat.error }, 502);
+    await ensureCatalogVisible();
     const interactive = items.length === 1
       ? {
           type: 'product',
