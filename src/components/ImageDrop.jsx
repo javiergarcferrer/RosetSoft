@@ -96,7 +96,8 @@ export default function ImageDrop({
               type="button"
               onClick={clear}
               className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-8 h-8 coarse:w-11 coarse:h-11 bg-surface/95 hover:bg-surface active:bg-ink-50 text-ink-900 rounded-md shadow-sm border border-ink-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition-opacity"
-              title="Remove image"
+              title="Quitar imagen"
+              aria-label="Quitar imagen"
             >
               <X size={14} />
             </button>
