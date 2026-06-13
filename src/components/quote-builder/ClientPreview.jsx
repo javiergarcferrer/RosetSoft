@@ -167,7 +167,17 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // CompoundClientLine and stop it following the page scroll.
   return (
     <>
-    <div className="theme-light bg-white border border-ink-100 rounded-xl shadow-soft overflow-clip">
+    <div className={`theme-light bg-white overflow-clip ${
+      // In the editor's mobile Cliente pane the preview is a full-pane mini-app:
+      // break OUT of the shell's px-4/py-4 gutter (-mx-4/-mt-4) so the paper spans
+      // the phone edge-to-edge and starts right under the topbar, dropping the
+      // floating-card chrome (border/rounded/shadow) that wasted a margin around
+      // it — the card is restored at md (desktop, where it sits in page flow) and
+      // on the public link (paper-on-canvas), which never passes inEditor.
+      inEditor
+        ? '-mx-4 -mt-4 md:mx-0 md:mt-0 md:border md:border-ink-100 md:rounded-xl md:shadow-soft'
+        : 'border border-ink-100 rounded-xl shadow-soft'
+    }`}>
       {/* Banner. On the interactive link the Ver / Personalizar mode toggle is
           a floating pill pinned to the screen (rendered after this card) so it
           never scrolls away — the banner just states the mode + date here. */}
