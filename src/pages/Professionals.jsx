@@ -17,6 +17,7 @@ import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { waDigits } from '../lib/phone.js';
+import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
 import { resolveProfessionalsList } from '../core/quote/views/lists.js';
 
 const SORT_OPTIONS = [
@@ -110,6 +111,15 @@ export default function Professionals() {
         const name = String(raw).trim();
         if (!name) return false; // a professional can't be nameless — revert
         await db.professionals.update(p.id, { name, updatedAt: Date.now() });
+      } else if (field === 'phone') {
+        // Keep the WhatsApp-number relation watertight: refuse a number already
+        // held by another contact (the inbox links a thread by phone).
+        const phone = String(raw).trim();
+        if (phone) {
+          const owner = await phoneOwner({ phone, excludeId: p.id, profileId });
+          if (owner) { setWriteError(phoneInUseMessage(owner)); return false; }
+        }
+        await db.professionals.update(p.id, { phone, updatedAt: Date.now() });
       } else {
         const value = field === 'notes' ? String(raw) : String(raw).trim();
         await db.professionals.update(p.id, { [field]: value, updatedAt: Date.now() });

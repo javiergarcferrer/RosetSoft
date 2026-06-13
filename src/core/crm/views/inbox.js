@@ -3,9 +3,11 @@
 // Pure projections over wa_messages + customers + professionals — no React,
 // no db. The View fetches, calls these in useMemo, renders. Threads group by
 // phoneKey (last 10 digits) so country-code variants of the same number land
-// in one conversation, and each thread is linked to a customer/professional
-// either by the id stamped on a message at write time or by phone match here
-// (covers messages logged before the contact existed).
+// in one conversation, and each thread is linked to the customer/professional
+// who CURRENTLY owns that number (phone match here) — the id stamped on a
+// message at write time is only a fallback for when no contact holds the
+// number today. Numbers are unique per contact (enforced at every write, see
+// lib/phone:findPhoneOwner), so the current owner is unambiguous.
 
 import { phoneKey, displayPhone } from '../../../lib/phone.js';
 
@@ -57,9 +59,17 @@ export function resolveConversations(messages, customers, professionals, { needl
 
   const out = [];
   for (const t of threads.values()) {
-    const customer = (t.customerId && (customers || []).find((c) => c.id === t.customerId)) || customerByKey.get(t.key) || null;
+    // The thread's identity is its PHONE NUMBER, so the contact is whoever
+    // CURRENTLY owns that number (customerByKey/professionalByKey — unique per
+    // key, the relation is watertight at write time). The id stamped on a
+    // message is only a FALLBACK, used when no contact holds the number today
+    // (e.g. the number was cleared). This ordering keeps a thread from clinging
+    // to a stale contact after its number is reassigned — the "Carmen had
+    // Alcover's number for testing" bug, where old messages stamped with
+    // Carmen kept the thread under her even though Alcover now owns the number.
+    const customer = customerByKey.get(t.key) || (t.customerId && (customers || []).find((c) => c.id === t.customerId)) || null;
     const professional = customer ? null
-      : ((t.professionalId && (professionals || []).find((p) => p.id === t.professionalId)) || professionalByKey.get(t.key) || null);
+      : (professionalByKey.get(t.key) || (t.professionalId && (professionals || []).find((p) => p.id === t.professionalId)) || null);
     const name = customer?.name || customer?.company
       || professional?.name || professional?.company
       || t.profileName || displayPhone(t.phone);

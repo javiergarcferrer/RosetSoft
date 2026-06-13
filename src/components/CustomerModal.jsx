@@ -4,6 +4,7 @@ import { Trash2, Search, Loader2 } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { db, newId } from '../db/database.js';
 import { lookupRnc, cleanRnc } from '../lib/rncLookup.js';
+import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
 
 /**
  * Customer create/edit modal. Used in two places (symmetric with
@@ -41,10 +42,13 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
   const [data, setData] = useState(null);
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // Reset when opening
   if (open && data?.__id !== (customer?.id || 'new')) {
     setLookupMsg('');
+    setPhoneErr('');
     setData({
       __id: customer?.id || 'new',
       name: customer?.name || '',
@@ -86,27 +90,40 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
   }
 
   async function save() {
-    if (!data.name.trim()) return;
+    if (!data.name.trim() || saving) return;
     const id = customer?.id || newId();
-    await db.customers.put({
-      id,
-      profileId,
-      name: data.name.trim(),
-      rnc: cleanRnc(data.rnc),
-      company: data.company.trim(),
-      contactName: data.contactName.trim(),
-      email: data.email.trim(),
-      phone: data.phone.trim(),
-      address: data.address.trim(),
-      city: data.city.trim(),
-      state: data.state.trim(),
-      zip: data.zip.trim(),
-      country: data.country.trim(),
-      notes: data.notes,
-      createdAt: customer?.createdAt || Date.now(),
-    });
-    onSaved?.(id);
-    onClose();
+    const phone = data.phone.trim();
+    setSaving(true);
+    try {
+      // Watertight WhatsApp-number relation: a number maps to exactly one
+      // contact, so refuse one already held by another customer/professional
+      // (the inbox links a thread by phone — duplicates misattribute it).
+      if (phone) {
+        const owner = await phoneOwner({ phone, excludeId: id, profileId });
+        if (owner) { setPhoneErr(phoneInUseMessage(owner)); return; }
+      }
+      await db.customers.put({
+        id,
+        profileId,
+        name: data.name.trim(),
+        rnc: cleanRnc(data.rnc),
+        company: data.company.trim(),
+        contactName: data.contactName.trim(),
+        email: data.email.trim(),
+        phone,
+        address: data.address.trim(),
+        city: data.city.trim(),
+        state: data.state.trim(),
+        zip: data.zip.trim(),
+        country: data.country.trim(),
+        notes: data.notes,
+        createdAt: customer?.createdAt || Date.now(),
+      });
+      onSaved?.(id);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove() {
@@ -130,7 +147,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
         )}
         <div className="flex-1" />
         <button onClick={onClose} className="btn-ghost">Cancelar</button>
-        <button onClick={save} className="btn-primary">Guardar</button>
+        <button onClick={save} disabled={saving} className="btn-primary disabled:opacity-40">Guardar</button>
       </>
     }>
       {/* autoComplete + inputMode hints give iOS the right keyboard / autofill
@@ -220,14 +237,15 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
         <div>
           <div className="label">Teléfono</div>
           <input
-            className="input"
+            className={`input ${phoneErr ? 'border-rose-400 ring-1 ring-rose-300' : ''}`}
             type="tel"
             value={data.phone}
-            onChange={(e) => set('phone', e.target.value)}
+            onChange={(e) => { set('phone', e.target.value); if (phoneErr) setPhoneErr(''); }}
             inputMode="tel"
             autoComplete="tel"
             enterKeyHint="next"
           />
+          {phoneErr && <p className="text-xs mt-1.5 text-rose-600">{phoneErr}</p>}
         </div>
         <div>
           <div className="label">País</div>

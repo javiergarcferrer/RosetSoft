@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import Modal from './Modal.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
+import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
 
 /**
  * Professional create/edit modal. Used in two places:
@@ -32,8 +33,11 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
   const open = !!professional;
   const isNew = !professional?.id;
   const [data, setData] = useState(null);
+  const [phoneErr, setPhoneErr] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (open && data?.__id !== (professional?.id || 'new')) {
+    setPhoneErr('');
     setData({
       __id: professional?.id || 'new',
       name: professional?.name || '',
@@ -48,9 +52,18 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
   function set(k, v) { setData((d) => ({ ...d, [k]: v })); }
 
   async function save() {
-    if (!data.name.trim()) return;
+    if (!data.name.trim() || saving) return;
     const id = professional?.id || newId();
     const now = Date.now();
+    const phone = data.phone.trim();
+    setSaving(true);
+    try {
+    // Watertight WhatsApp-number relation: refuse a number already held by
+    // another contact (customer or professional) — see CustomerModal.
+    if (phone) {
+      const owner = await phoneOwner({ phone, excludeId: id, profileId });
+      if (owner) { setPhoneErr(phoneInUseMessage(owner)); return; }
+    }
     // Sequential number — same numbering rule as customers/quotes:
     // max(number) + 1, or 1 if empty. Start from 1 (no vanity prefix;
     // professionals are an internal list). New rows go through the
@@ -63,7 +76,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       name: data.name.trim(),
       company: data.company.trim(),
       email: data.email.trim(),
-      phone: data.phone.trim(),
+      phone,
       notes: data.notes,
       createdAt: professional?.createdAt || now,
       updatedAt: now,
@@ -79,6 +92,9 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       await db.professionals.put({ ...recordCore, number: professional.number });
     }
     onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove() {
@@ -106,7 +122,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
           )}
           <div className="flex-1" />
           <button onClick={onClose} className="btn-ghost">Cancelar</button>
-          <button onClick={save} className="btn-primary">Guardar</button>
+          <button onClick={save} disabled={saving} className="btn-primary disabled:opacity-40">Guardar</button>
         </>
       }
     >
@@ -147,13 +163,14 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
         <div>
           <div className="label">Teléfono</div>
           <input
-            className="input"
+            className={`input ${phoneErr ? 'border-rose-400 ring-1 ring-rose-300' : ''}`}
             type="tel"
             value={data.phone}
-            onChange={(e) => set('phone', e.target.value)}
+            onChange={(e) => { set('phone', e.target.value); if (phoneErr) setPhoneErr(''); }}
             inputMode="tel"
             autoComplete="tel"
           />
+          {phoneErr && <p className="text-xs mt-1.5 text-rose-600">{phoneErr}</p>}
         </div>
         <div className="sm:col-span-2">
           <div className="label">Notas</div>

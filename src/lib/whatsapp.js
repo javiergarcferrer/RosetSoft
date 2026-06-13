@@ -9,7 +9,7 @@
 
 import { supabase } from '../db/supabaseClient.js';
 import { updateSettings, db, newId, assignSequenceNumber } from '../db/database.js';
-import { waDigits, phoneKey } from './phone.js';
+import { waDigits, phoneKey, findPhoneOwner, phoneOwnerLabel } from './phone.js';
 
 const TEAM_PROFILE_ID = 'team';
 
@@ -385,6 +385,30 @@ export async function sendQuotePdf({ to, blob, filename, customer, quoteId }) {
 }
 
 /**
+ * The contact that already holds `phone`, by phoneKey — the async gate every
+ * contact-phone write goes through (CustomerModal/ProfessionalModal, the inline
+ * list edits, the quote's WhatsApp chip, saveChatContact). Loads both tables
+ * and delegates the match to the pure findPhoneOwner so a WhatsApp number maps
+ * to exactly ONE contact and the inbox can never attach a thread to the wrong
+ * one. `excludeId` skips the row being edited; returns null when the number is
+ * free. `phoneInUseMessage` formats the rejection copy from the result.
+ */
+export async function phoneOwner({ phone, excludeId = null, profileId = TEAM_PROFILE_ID }) {
+  if (!phoneKey(phone)) return null;
+  const [customers, professionals] = await Promise.all([
+    db.customers.where('profileId').equals(profileId).toArray(),
+    db.professionals.where('profileId').equals(profileId).toArray(),
+  ]);
+  return findPhoneOwner(phone, { customers, professionals, excludeId });
+}
+
+/** Rejection copy for a taken WhatsApp number — names the contact that holds
+ *  it so the user knows where the duplicate lives. */
+export function phoneInUseMessage(owner) {
+  return `Ese número de WhatsApp ya pertenece a ${phoneOwnerLabel(owner)}. Cada número identifica a un solo contacto.`;
+}
+
+/**
  * Save a contact gleaned from the chat — a received vCard or an unknown
  * chatter — into the CRM. `kind` = 'customer' | 'professional'. A phone
  * already in either table short-circuits: { ok:true, existed:true, name }
@@ -398,12 +422,8 @@ export async function saveChatContact({ name, phone, kind = 'customer', profileI
   if (!cleanName || !cleanPhone) return { ok: false, error: 'Faltan el nombre o el teléfono.' };
   const key = phoneKey(cleanPhone);
   if (!key) return { ok: false, error: 'El teléfono no es válido.' };
-  const [customers, professionals] = await Promise.all([
-    db.customers.where('profileId').equals(profileId).toArray(),
-    db.professionals.where('profileId').equals(profileId).toArray(),
-  ]);
-  const dup = [...customers, ...professionals].find((r) => phoneKey(r.phone) === key);
-  if (dup) return { ok: true, existed: true, name: dup.name || dup.company || '' };
+  const dup = await phoneOwner({ phone: cleanPhone, profileId });
+  if (dup) return { ok: true, existed: true, name: dup.row.name || dup.row.company || '' };
   const now = Date.now();
   if (kind === 'professional') {
     await assignSequenceNumber({

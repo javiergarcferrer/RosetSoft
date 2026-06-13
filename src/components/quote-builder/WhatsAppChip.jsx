@@ -7,7 +7,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { waDigits, displayPhone } from '../../lib/phone.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
-import { sendQuoteLink, sendQuotePdf } from '../../lib/whatsapp.js';
+import { sendQuoteLink, sendQuotePdf, phoneOwner, phoneInUseMessage } from '../../lib/whatsapp.js';
 
 /**
  * The quote customer's WhatsApp number, editable inline from the header — so
@@ -27,9 +27,10 @@ import { sendQuoteLink, sendQuotePdf } from '../../lib/whatsapp.js';
  * useQuoteExport's generatePdf, threaded in by the Workspace.
  */
 export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf }) {
-  const { settings } = useApp();
+  const { settings, profileId } = useApp();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!customer) return null;
@@ -38,35 +39,47 @@ export default function WhatsAppChip({ customer, quote, onUpdateQuote, buildPdf 
 
   function startEdit() {
     setValue(phone);
+    setPhoneErr('');
     setEditing(true);
   }
   async function save() {
     const next = value.trim();
-    if (next !== phone) await db.customers.update(customer.id, { phone: next || null });
+    if (next === phone) { setEditing(false); return; }
+    // Watertight WhatsApp-number relation: refuse a number already held by
+    // another contact (the inbox links a thread by phone — duplicates
+    // misattribute it, the "Carmen had Alcover's number" bug).
+    if (next) {
+      const owner = await phoneOwner({ phone: next, excludeId: customer.id, profileId });
+      if (owner) { setPhoneErr(phoneInUseMessage(owner)); return; }
+    }
+    await db.customers.update(customer.id, { phone: next || null });
     setEditing(false);
   }
 
   if (editing) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-surface px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset ring-emerald-200/50 max-w-full min-w-0">
-        <MessageCircle size={12} className="text-emerald-600 flex-shrink-0" aria-hidden />
-        <input
-          autoFocus
-          type="tel"
-          inputMode="tel"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-          placeholder="809 000 0000"
-          className="w-24 min-w-0 bg-transparent border-0 p-0 text-xs text-ink-900 focus:outline-none focus:ring-0"
-          aria-label="Número de WhatsApp"
-        />
-        <button type="button" onClick={save} title="Guardar" aria-label="Guardar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors flex-shrink-0">
-          <Check size={13} />
-        </button>
-        <button type="button" onClick={() => setEditing(false)} title="Cancelar" aria-label="Cancelar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 transition-colors flex-shrink-0">
-          <X size={13} />
-        </button>
+      <span className="inline-flex flex-col gap-1 min-w-0 max-w-full">
+        <span className={`inline-flex items-center gap-1 rounded-full border bg-surface px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset max-w-full min-w-0 ${phoneErr ? 'border-rose-300 ring-rose-200/60' : 'border-emerald-300 ring-emerald-200/50'}`}>
+          <MessageCircle size={12} className={phoneErr ? 'text-rose-500 flex-shrink-0' : 'text-emerald-600 flex-shrink-0'} aria-hidden />
+          <input
+            autoFocus
+            type="tel"
+            inputMode="tel"
+            value={value}
+            onChange={(e) => { setValue(e.target.value); if (phoneErr) setPhoneErr(''); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+            placeholder="809 000 0000"
+            className="w-24 min-w-0 bg-transparent border-0 p-0 text-xs text-ink-900 focus:outline-none focus:ring-0"
+            aria-label="Número de WhatsApp"
+          />
+          <button type="button" onClick={save} title="Guardar" aria-label="Guardar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors flex-shrink-0">
+            <Check size={13} />
+          </button>
+          <button type="button" onClick={() => setEditing(false)} title="Cancelar" aria-label="Cancelar" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 transition-colors flex-shrink-0">
+            <X size={13} />
+          </button>
+        </span>
+        {phoneErr && <span className="text-[11px] text-rose-600 max-w-60 break-words">{phoneErr}</span>}
       </span>
     );
   }

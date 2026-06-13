@@ -29,6 +29,45 @@ export function phoneKey(phone) {
 }
 
 /**
+ * The contact (customer or professional) that already holds `phone`, matched by
+ * phoneKey — the SINGLE source of truth for "is this WhatsApp number taken?".
+ *
+ * A WhatsApp number must identify exactly ONE contact: the inbox links a thread
+ * to a contact by this same key (`indexByPhone` in core/crm), so two contacts
+ * sharing a number make the conversation resolve to whichever happens to be
+ * first — the "Carmen had Alcover's number" bug. Every contact-phone write goes
+ * through this gate (the create/edit modals + inline edits) so the relation
+ * stays watertight. `excludeId` skips the row being edited, so re-saving an
+ * unchanged number isn't flagged against itself. Country-code variants collapse
+ * via phoneKey, so "+1 809…" can't sneak past an existing "809…".
+ *
+ *   findPhoneOwner('8297608184', { customers, professionals, excludeId })
+ *     → { kind: 'customer' | 'professional', row } | null
+ */
+export function findPhoneOwner(phone, { customers = [], professionals = [], excludeId = null } = {}) {
+  const key = phoneKey(phone);
+  if (!key) return null;
+  const hit = (rows, kind) => {
+    for (const r of rows || []) {
+      if (excludeId && r.id === excludeId) continue;
+      if (phoneKey(r.phone) === key) return { kind, row: r };
+    }
+    return null;
+  };
+  return hit(customers, 'customer') || hit(professionals, 'professional');
+}
+
+/** Spanish label naming a findPhoneOwner result, for the "already in use"
+ *  message the modals/inline edits show. */
+export function phoneOwnerLabel(owner) {
+  if (!owner) return '';
+  const { kind, row } = owner;
+  const name = (row?.name || row?.company || displayPhone(row?.phone) || '').trim();
+  const who = kind === 'professional' ? 'el profesional' : 'el cliente';
+  return name ? `${who} ${name}` : who;
+}
+
+/**
  * Human display for a normalized digits number. NANP numbers (1 + 10 digits —
  * the DR lives here) render as "+1 809 555 0100"; anything else gets a bare
  * "+" prefix rather than a wrong grouping.

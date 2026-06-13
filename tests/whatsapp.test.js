@@ -11,7 +11,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { waDigits, phoneKey, displayPhone } from '../src/lib/phone.js';
+import { waDigits, phoneKey, displayPhone, findPhoneOwner } from '../src/lib/phone.js';
 import {
   WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts, fillQuickReply, resolveOrderMessage,
   buildOrderRefsParam, parseOrderRefs,
@@ -40,6 +40,32 @@ test('displayPhone — NANP grouping, bare + for the rest', () => {
   assert.equal(displayPhone('18095550100'), '+1 809 555 0100');
   assert.equal(displayPhone('8095550100'), '+1 809 555 0100');
   assert.equal(displayPhone('34600112233'), '+34600112233');
+});
+
+test('findPhoneOwner — a WhatsApp number maps to exactly one contact (watertight)', () => {
+  const customers = [
+    { id: 'c1', name: 'Carmen Rizek', phone: '809 555 0100' },
+    { id: 'c2', name: 'Alcover SRL', phone: '' },
+  ];
+  const professionals = [{ id: 'p1', name: 'Diseños Mota', phone: '829 555 0200' }];
+
+  // A free number → no owner.
+  assert.equal(findPhoneOwner('809 555 9999', { customers, professionals }), null);
+  // Blank / junk → no owner (never collides on an empty key).
+  assert.equal(findPhoneOwner('', { customers, professionals }), null);
+
+  // A taken number resolves to its holder, across country-code spellings.
+  const hit = findPhoneOwner('+1 (809) 555-0100', { customers, professionals });
+  assert.equal(hit.kind, 'customer');
+  assert.equal(hit.row.id, 'c1');
+
+  // Cross-table match (the number belongs to a professional).
+  assert.equal(findPhoneOwner('18295550200', { customers, professionals }).kind, 'professional');
+
+  // excludeId skips the row being edited → re-saving an unchanged number is allowed,
+  // but another row claiming it is still flagged.
+  assert.equal(findPhoneOwner('8095550100', { customers, professionals, excludeId: 'c1' }), null);
+  assert.equal(findPhoneOwner('8095550100', { customers, professionals, excludeId: 'c2' }).row.id, 'c1');
 });
 
 function fixtures(now) {
@@ -90,6 +116,28 @@ test('resolveConversations — groups by phoneKey, links contacts, counts unread
   // Needle filters by name and by digits.
   assert.equal(resolveConversations(messages, customers, professionals, { now, needle: 'eduardo' }).length, 1);
   assert.equal(resolveConversations(messages, customers, professionals, { now, needle: '0300' })[0].name, 'Ana');
+});
+
+test('resolveConversations — the CURRENT phone owner wins over a stale stamped id', () => {
+  const now = Date.now();
+  // Alcover holds the number today; the old test messages are still stamped
+  // with Carmen's id (she had the number "for testing"). The thread must
+  // resolve to Alcover (the current owner), not Carmen.
+  const customers = [
+    { id: 'carmen', name: 'Carmen Rizek', phone: '' },
+    { id: 'alcover', name: 'Alcover SRL', phone: '829 760 8184' },
+  ];
+  const messages = [
+    { id: 'm1', direction: 'in', phone: '18297608184', body: 'Hola', createdAt: now - 2 * HOUR, customerId: 'carmen' },
+    { id: 'm2', direction: 'out', phone: '8297608184', body: 'Su cotización', createdAt: now - 1 * HOUR, customerId: 'carmen' },
+  ];
+  const [convo] = resolveConversations(messages, customers, [], { now });
+  assert.equal(convo.customerId, 'alcover');
+  assert.equal(convo.name, 'Alcover SRL');
+
+  // Fallback: if nobody holds the number today, the stamped id still links it.
+  const orphaned = resolveConversations(messages, [{ id: 'carmen', name: 'Carmen Rizek', phone: '' }], [], { now });
+  assert.equal(orphaned[0].customerId, 'carmen');
 });
 
 test('resolveThread — chronological items + the 24h window off the LAST inbound', () => {
