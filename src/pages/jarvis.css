@@ -29,7 +29,8 @@
   background: var(--jv-bg);
   color: var(--jv-fg);
   font-variant-numeric: tabular-nums;
-  padding: 1rem 1rem calc(3rem + env(safe-area-inset-bottom, 0px));
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem
+    calc(3rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── typography ──────────────────────────────────────────────────────── */
@@ -655,7 +656,10 @@
 
 @media (max-width: 640px) {
   /* Tighter gutters reclaim ~0.5rem each side for content on a 360px phone. */
-  .jarvis { padding: 0.75rem 0.75rem calc(2.5rem + env(safe-area-inset-bottom, 0px)); }
+  .jarvis {
+    padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 0.75rem
+      calc(2.5rem + env(safe-area-inset-bottom, 0px));
+  }
   /* The reactor gauge is a glance metric, not the headline — shrink it so it
      doesn't eat a whole screen above the numbers that matter. */
   .jv-gauge { width: 132px; height: 132px; }

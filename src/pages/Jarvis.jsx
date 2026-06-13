@@ -555,7 +555,6 @@ export default function Jarvis() {
       {/* ── HUD header — centered wordmark, controls on their own row ─── */}
       <header className="jv-header px-1 pb-4">
         <div className="jv-wordmark">
-          <div className="jv-kicker">Roset Ops Core · v{String(BUILD.sha || '').slice(0, 7) || 'dev'}</div>
           <h1 className="jv-title">JARVIS</h1>
         </div>
         <div className="jv-header-bar flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
