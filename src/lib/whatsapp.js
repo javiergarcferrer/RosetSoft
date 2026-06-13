@@ -212,6 +212,15 @@ export async function deleteWaQrCode(code) {
   return invokeWaSend({ deleteQrCode: { code } });
 }
 
+/** Block / unblock a WhatsApp user (spam / abuse). Meta only allows blocking a
+ *  number that has messaged the business. */
+export async function blockWhatsappUser({ to } = {}) {
+  return invokeWaSend({ blockUser: { to: waDigits(to) } });
+}
+export async function unblockWhatsappUser({ to } = {}) {
+  return invokeWaSend({ unblockUser: { to: waDigits(to) } });
+}
+
 /** Read the number's public business profile (about, address, email, web…). */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });

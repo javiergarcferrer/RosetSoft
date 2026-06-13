@@ -5,12 +5,12 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
-import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
+import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser } from '../../lib/whatsapp.js';
 import { db } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -338,6 +338,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             <UserPlus size={13} /> Guardar
           </button>
         )}
+        {/* Overflow actions (block / unblock). Only in the inbox header. */}
+        {connected && contact.phone && <BlockMenu phone={contact.phone} onError={setError} />}
       </div>
       )}
 
@@ -1376,6 +1378,60 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Overflow menu in the thread header: block / unblock the contact. Meta only
+ * allows blocking a number that has messaged the business. Block state isn't
+ * persisted (the Block API exposes no per-user "is blocked" query, only a full
+ * list) — it's tracked for THIS open thread so the label flips after acting;
+ * reopening defaults to "Bloquear" (blocking an already-blocked number is a
+ * harmless no-op, and unblock works regardless).
+ */
+function BlockMenu({ phone, onError }) {
+  const [open, setOpen] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    onError(null);
+    const fn = blocked ? unblockWhatsappUser : blockWhatsappUser;
+    const res = await fn({ to: phone }).catch((e) => ({ ok: false, error: e?.message }));
+    setBusy(false);
+    setOpen(false);
+    if (!res?.ok) { onError(res?.error || 'No se pudo completar la acción.'); return; }
+    setBlocked((b) => !b);
+  }
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 transition-colors"
+        aria-label="Más acciones"
+        aria-expanded={open}
+      >
+        <MoreVertical size={16} />
+      </button>
+      {open && (
+        <>
+          <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
+          <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl bg-white border border-ink-100 shadow-lg overflow-hidden py-1">
+            <button
+              type="button"
+              onClick={toggle}
+              disabled={busy}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-left text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 transition-colors"
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+              {blocked ? 'Desbloquear contacto' : 'Bloquear contacto'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

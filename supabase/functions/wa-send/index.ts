@@ -76,6 +76,9 @@ type SendBody = {
   listQrCodes?: boolean;
   createQrCode?: { prefilledMessage?: string };
   deleteQrCode?: { code?: string };
+  /** Block / unblock a WhatsApp user (spam / abuse). */
+  blockUser?: { to?: string };
+  unblockUser?: { to?: string };
   /** Send product(s) from the connected catalog — 1 item ⇒ single-product
    *  message, 2+ ⇒ product_list. `names` ride along only for our chat log. */
   products?: { items?: string[]; names?: string[]; text?: string };
@@ -468,6 +471,30 @@ Deno.serve(async (req: Request) => {
     const r = await fetch(`${GRAPH}/${phoneNumberId}/message_qrdls/${encodeURIComponent(code)}`, { method: 'DELETE', headers: graphHeaders });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    return json({ ok: true });
+  }
+
+  // ── Block / unblock a user ───────────────────────────────────────────────
+  // Same endpoint, POST to block and DELETE to unblock, with the user in the
+  // body. Meta only lets you block a number that has messaged you; a refusal
+  // (or a per-user failure) is surfaced to the dealer rather than swallowed.
+  if (body.blockUser || body.unblockUser) {
+    const isBlock = !!body.blockUser;
+    const target = String((body.blockUser?.to || body.unblockUser?.to) || '').replace(/\D/g, '');
+    if (!target) return json({ ok: false, error: 'Falta el número del contacto.' }, 400);
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/block_users`, {
+      method: isBlock ? 'POST' : 'DELETE', headers: graphJson,
+      body: JSON.stringify({ messaging_product: 'whatsapp', block_users: [{ user: target }] }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    // A 200 can still carry per-user failures (e.g. the user never messaged us).
+    const failed = (data as { block_users?: { failed_users?: { errors?: { message?: string; error_data?: { details?: string } }[] }[] } })
+      .block_users?.failed_users?.[0];
+    if (failed) {
+      const e = failed.errors?.[0];
+      return json({ ok: false, error: e?.error_data?.details || e?.message || 'No se pudo completar la acción de bloqueo.' }, 502);
+    }
     return json({ ok: true });
   }
 
