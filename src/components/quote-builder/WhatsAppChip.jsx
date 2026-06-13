@@ -81,35 +81,45 @@ export default function WhatsAppChip({ customer }) {
     );
   }
 
+  // The chip is now a compact status dot, not a number readout: a green
+  // WhatsApp glyph when the client has a number on file, a muted grey one when
+  // they don't. The digits aren't shown (you don't need to watch them here) —
+  // they live on the customer and the send-dock/CRM own the actual messaging.
   if (!phone) {
     return (
       <button
         type="button"
         onClick={startEdit}
-        className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-ink-300 px-3 py-1 text-xs text-ink-500 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50/50 transition-all active:scale-[0.98]"
+        title="Agregar WhatsApp"
+        aria-label="Agregar número de WhatsApp"
+        className="inline-flex h-7 w-7 coarse:h-11 coarse:w-11 items-center justify-center rounded-full border border-dashed border-ink-300 text-ink-300 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition-all active:scale-[0.95]"
       >
-        <MessageCircle size={12} /> Agregar WhatsApp
+        <MessageCircle size={14} aria-hidden />
       </button>
     );
   }
 
   return (
-    // min-w-0 instead of shrink-0 so the chip can yield space in a
-    // flex-wrap row rather than pushing siblings off-screen.
-    <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 min-h-7 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5">
+    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50/60 ring-1 ring-inset ring-emerald-200/50">
+      {/* Green = number on file. Tap opens the WhatsApp chat. */}
       <a
         href={`https://wa.me/${waDigits(phone)}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 min-w-0 transition-colors"
+        className="inline-flex h-7 w-7 coarse:h-11 coarse:w-11 items-center justify-center rounded-full text-emerald-600 hover:text-emerald-700 transition-colors"
         title={`Abrir WhatsApp · ${phone}`}
+        aria-label={`Abrir WhatsApp de ${phone}`}
       >
-        <MessageCircle size={12} className="flex-shrink-0" aria-hidden />
-        {/* break-all (never truncate) — a phone number is user data; in the
-            worst case the pill wraps instead of hiding digits. */}
-        <span className="font-semibold break-all">{phone}</span>
+        <MessageCircle size={14} className="flex-shrink-0" aria-hidden />
       </a>
-      <button type="button" onClick={startEdit} title="Editar número" aria-label="Editar número de WhatsApp" className="inline-flex h-6 w-6 coarse:h-8 coarse:w-8 items-center justify-center rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50 active:bg-ink-100 flex-shrink-0 transition-colors">
+      {/* Edit stays reachable (fix a typo) without ever printing the number. */}
+      <button
+        type="button"
+        onClick={startEdit}
+        title="Editar número"
+        aria-label="Editar número de WhatsApp"
+        className="inline-flex h-7 w-5 coarse:h-11 coarse:w-9 items-center justify-center rounded-r-full text-emerald-600/60 hover:text-emerald-700 hover:bg-emerald-100/60 transition-colors flex-shrink-0"
+      >
         <Pencil size={10} />
       </button>
     </span>

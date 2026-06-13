@@ -91,16 +91,29 @@ export default function QuoteHeader({
             <SaveIndicator savedAt={savedAt} saving={saving} />
           </div>
         </div>
+        {/* Seller (Vendedor) — lifted out of the meta strip below into the
+            header's open space, where it's always visible. In the strip it sat
+            at the tail of a horizontal scroller whose edge-fade could hide it on
+            a phone; here it reads inline with the quote number ("#1010 by …")
+            and never scrolls out of view. */}
+        {isAdmin ? (
+          <SellerSelect quote={quote} assignableSellers={assignableSellers} onUpdateQuote={onUpdateQuote} />
+        ) : creatorLabel ? (
+          <span className="text-[11px] text-ink-400 whitespace-nowrap">
+            Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
+          </span>
+        ) : null}
         <div className="flex items-center gap-2 flex-shrink-0">
           <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
           <ViewToggle view={view} onChange={onViewChange} />
         </div>
       </div>
 
-      {/* ROW 2 — the "who": customer + professional + seller. A single
+      {/* ROW 2 — the "who": customer + professional. A single
           horizontally-scrollable strip on a phone (so it never stacks into
           extra rows), with a soft right-edge fade so the overflow reads as
           "scroll for more", not a clipped chip. Wraps normally on sm+.
+          (The seller moved up to ROW 1 so it's never hidden by the fade.)
 
           The order affordance is deliberately NOT in this strip: it's the
           primary post-accept action, so burying it behind a horizontal
@@ -119,14 +132,6 @@ export default function QuoteHeader({
           profileId={profileId}
           onUpdateQuote={onUpdateQuote}
         />
-        {isAdmin && (
-          <SellerSelect quote={quote} assignableSellers={assignableSellers} onUpdateQuote={onUpdateQuote} />
-        )}
-        {!isAdmin && creatorLabel && (
-          <span className="text-[11px] text-ink-400 ml-0.5">
-            Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
-          </span>
-        )}
       </div>
 
       {/* Order affordance — its own full-width row (renders nothing until the
