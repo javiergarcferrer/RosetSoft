@@ -775,7 +775,7 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
       onClick={onToggle}
       title={`Marcar ${label.toLowerCase()}`}
       aria-pressed={false}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium bg-white text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium bg-surface text-ink-700 border border-ink-200 hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.97] transition-all duration-150"
     >
       <Icon size={12} />
       {label}

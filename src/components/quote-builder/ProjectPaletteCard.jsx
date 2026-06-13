@@ -53,7 +53,7 @@ export default function ProjectPaletteCard() {
               {g.items.map((m) => (
                 <span
                   key={m.id}
-                  className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white py-0.5 pl-0.5 pr-1 min-w-0 max-w-full"
+                  className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-surface py-0.5 pl-0.5 pr-1 min-w-0 max-w-full"
                 >
                   <ImageView
                     id={m.swatchImageId || null}

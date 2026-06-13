@@ -78,7 +78,7 @@ export default function ProfessionalChip({ quote, professional, professionals, p
 
 /* The outer pill: one rounded-full segmented container shared by both states. */
 const PILL =
-  'inline-flex items-stretch rounded-full border border-ink-200 bg-white hover:border-ink-400 ' +
+  'inline-flex items-stretch rounded-full border border-ink-200 bg-surface hover:border-ink-400 ' +
   'transition-all max-w-full min-w-0 text-xs overflow-hidden ring-1 ring-inset ring-black/5';
 
 /* A segment: full-height flex cell with consistent touch height + feedback. */

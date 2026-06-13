@@ -162,7 +162,7 @@ function SearchOverlay({ onClose }) {
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-pop border border-ink-100/60 flex flex-col overflow-hidden max-h-[80vh] sm:max-h-[60vh] animate-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-xl bg-surface rounded-2xl shadow-pop border border-ink-100/60 flex flex-col overflow-hidden max-h-[80vh] sm:max-h-[60vh] animate-in zoom-in-95 duration-150">
         {/* Search field */}
         <div className="relative flex-shrink-0 border-b border-ink-100">
           <Search

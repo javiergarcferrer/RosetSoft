@@ -215,7 +215,7 @@ export default function AdminUsers() {
           <section>
             <SectionHeader title="Activos" count={active.length} />
             {active.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-ink-200 bg-white px-5 py-12 text-center text-sm text-ink-400">
+              <div className="rounded-xl border border-dashed border-ink-200 bg-surface px-5 py-12 text-center text-sm text-ink-400">
                 Aún no hay usuarios activos.
               </div>
             ) : (
@@ -527,7 +527,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
                   type="text"
                   value={profile.name || ''}
                   onCommit={setName}
-                  className="font-bold text-sm bg-white border border-ink-200 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400 hover:border-ink-300 transition-colors min-w-0 w-full max-w-[220px]"
+                  className="font-bold text-sm bg-surface border border-ink-200 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400 hover:border-ink-300 transition-colors min-w-0 w-full max-w-[220px]"
                   placeholder={profile.email || 'Sin nombre'}
                   aria-label="Nombre del usuario"
                   autoComplete="off"

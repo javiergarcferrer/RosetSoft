@@ -49,7 +49,7 @@ export default function ModeBar({ view, onChange, customer }) {
       aria-label="Modo de la cotización"
       className="fixed inset-x-0 bottom-0 z-30 md:hidden print:hidden kb-hide-when-open"
     >
-      <div className="bg-white border-t border-ink-200 shadow-pop pb-safe-standalone">
+      <div className="bg-surface border-t border-ink-200 shadow-pop pb-safe-standalone">
         <div className="grid grid-cols-3">
           {tabs.map(({ id, label, icon: Icon, badge }) => {
             const active = view === id;

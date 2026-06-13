@@ -550,7 +550,7 @@ function GroupCard({ type, accent, memberCount, optional, onToggleOptional, onAp
       {/* No overflow:hidden (hard rule — silent clipping): the header/footer
           bands carry their own matched inner radius (12px outer − 2px border
           = 10px) so their tinted backgrounds follow the card's corners. */}
-      <div className={`rounded-xl border-2 ${ring} bg-white shadow-sm ${optional ? 'border-dashed' : ''}`}>
+      <div className={`rounded-xl border-2 ${ring} bg-surface shadow-sm ${optional ? 'border-dashed' : ''}`}>
         <div className={`${headBg} rounded-t-[10px] px-4 py-2 flex flex-wrap items-center gap-x-2 gap-y-1.5`}>
           <span className="inline-flex items-center gap-1.5 min-w-0 flex-shrink">
             {dragHandleProps && (
@@ -688,7 +688,7 @@ function AlternativeOption({ line, fmt, groupInfo, selected, expanded, onSelect,
         {/* Hit target wraps the visual circle: the glyph stays a quiet 20px
             radio while the button meets the 44px touch minimum on coarse. */}
         <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors ${
-          selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-white hover:border-brand-400'
+          selected ? 'border-brand-500 bg-brand-500 text-white' : 'border-ink-300 bg-surface hover:border-brand-400'
         }`}>
           {selected && <Check size={11} strokeWidth={3} aria-hidden />}
         </span>

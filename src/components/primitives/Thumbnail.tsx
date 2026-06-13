@@ -145,7 +145,7 @@ export default function Thumbnail({
         <button
           type="button"
           onClick={clear}
-          className="absolute -top-1.5 -right-1.5 w-5 h-5 inline-flex items-center justify-center bg-white border border-ink-200 rounded-full text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-sm opacity-0 group-hover/thumb:opacity-100 focus:opacity-100 transition-opacity coarse:opacity-100"
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 inline-flex items-center justify-center bg-surface border border-ink-200 rounded-full text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-sm opacity-0 group-hover/thumb:opacity-100 focus:opacity-100 transition-opacity coarse:opacity-100"
           aria-label="Quitar imagen"
         >
           <X size={11} />

@@ -222,7 +222,7 @@ export default function TotalsDock({
               type="button"
               onClick={handleRefreshRate}
               disabled={refreshingRate || financiallyLocked}
-              className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-2 py-1 min-h-7 coarse:min-h-11 font-medium text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 rounded-md border border-ink-200 bg-surface px-2 py-1 min-h-7 coarse:min-h-11 font-medium text-ink-700 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               title={financiallyLocked
                 ? 'La tasa quedó fija al aceptar la cotización — el total ya no puede cambiar'
                 : 'Trae la tasa USD→DOP publicada hoy por Banco Popular Dominicano'}
@@ -278,14 +278,14 @@ export default function TotalsDock({
           otherwise leak the page / manifest grey under the bar. This paints it
           white WITH the dock. Off-screen (harmless) when the dock already sits
           flush at the physical bottom — Safari tabs, desktop, fresh installs. */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-24 bg-white" />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-24 bg-surface" />
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
           behind it in the PWA. md:pb-safe-standalone fills the home-indicator
           inset with white ONLY when installed as a PWA AND the dock sits at the
           physical bottom (md+) — under md the ModeBar below the dock carries
           that inset instead, so padding here would just be dead space. */}
-      <div className="border-t-[3px] border-brand-500 bg-white shadow-pop md:pb-safe-standalone">
+      <div className="border-t-[3px] border-brand-500 bg-surface shadow-pop md:pb-safe-standalone">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
@@ -467,7 +467,7 @@ function CommissionCard({ commissionPct, grossCommission, discountAmt, courtesyA
           value={mode}
           onChange={(e) => onUpdateQuote({ decoratorBilling: e.target.value })}
           className={`text-xs font-medium rounded-md border px-2 py-1 min-h-7 coarse:min-h-11 cursor-pointer transition-colors min-w-0 max-w-[60%] truncate ${
-            trade ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-ink-200 bg-white text-ink-700'
+            trade ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-ink-200 bg-surface text-ink-700'
           }`}
           aria-label="Modalidad de facturación con el decorador"
         >
@@ -508,7 +508,7 @@ function DockAction({
     ? 'bg-brand-grad text-white shadow-glow hover:brightness-110 active:brightness-95'
     : pressed
       ? 'bg-ink-900 text-white border border-ink-900 shadow-sm'
-      : 'text-ink-700 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100 shadow-xs';
+      : 'text-ink-700 border border-ink-200 bg-surface hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100 shadow-xs';
   return (
     <button
       type="button"

@@ -443,12 +443,12 @@ function RateCard({ local, set, saveSettings }) {
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-white border border-ink-100 shadow-xs px-3 py-2.5">
+          <div className="rounded-lg bg-surface border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Compra</div>
             <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.buy)}</div>
             <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD</div>
           </div>
-          <div className="rounded-lg bg-white border border-ink-100 shadow-xs px-3 py-2.5">
+          <div className="rounded-lg bg-surface border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Venta</div>
             <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.sell)}</div>
             <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD · se cotiza con esta</div>

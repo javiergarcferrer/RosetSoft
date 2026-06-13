@@ -72,7 +72,7 @@ export default function ContainerTracking({ containerNo, shareToken, arrivalActi
           {/* Voyage summary — route, status, progress and last position in one
               clean band. On wide panels the map sits beside it (see .vtrack-grid);
               the map's overlay HUD only appears when expanded to full screen. */}
-          <div className="vtrack-summary rounded-lg border border-ink-100 bg-white p-2.5 space-y-2 min-w-0">
+          <div className="vtrack-summary rounded-lg border border-ink-100 bg-surface p-2.5 space-y-2 min-w-0">
             <div className="flex items-center justify-between gap-2 flex-wrap min-w-0">
               {/* Port names wrap, never truncate — they're the client's data. */}
               {voyage.origin ? (

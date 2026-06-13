@@ -48,7 +48,7 @@ export default function QuickCreate() {
         />
       </button>
       {open && (
-        <div className="dropdown-pop absolute left-0 right-0 z-50 mt-2 w-auto min-w-[12rem] rounded-xl bg-white text-ink-800 shadow-pop border border-ink-100/80 ring-1 ring-inset ring-black/[0.03] py-2 max-h-[70vh] overflow-y-auto">
+        <div className="dropdown-pop absolute left-0 right-0 z-50 mt-2 w-auto min-w-[12rem] rounded-xl bg-surface text-ink-800 shadow-pop border border-ink-100/80 ring-1 ring-inset ring-black/[0.03] py-2 max-h-[70vh] overflow-y-auto">
           {QUICK_CREATE.map((col, gi) => (
             <div key={col.group} className={gi > 0 ? 'mt-0.5 pt-1.5 border-t border-ink-100/60' : ''}>
               <div className="eyebrow-xs text-ink-400 px-3 pt-0.5 pb-1">{col.group}</div>

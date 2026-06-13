@@ -57,7 +57,7 @@ const HeroInput = forwardRef<HTMLTextAreaElement, HeroInputProps>(function HeroI
       // Shift+Enter still allowed for power users who want to break by hand.
       onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) e.preventDefault(); }}
       onInput={(e) => autoSize(e.currentTarget)}
-      className={`block w-full bg-transparent border-0 px-1 -mx-1 py-0.5 -my-0.5 rounded resize-none overflow-hidden text-[15px] leading-snug font-semibold text-ink-900 placeholder:text-ink-300 placeholder:font-medium hover:bg-ink-50 focus:bg-white focus:shadow-[inset_0_0_0_1px_theme('colors.brand.400')] focus:outline-none transition-colors ${className}`}
+      className={`block w-full bg-transparent border-0 px-1 -mx-1 py-0.5 -my-0.5 rounded resize-none overflow-hidden text-[15px] leading-snug font-semibold text-ink-900 placeholder:text-ink-300 placeholder:font-medium hover:bg-ink-50 focus:bg-surface focus:shadow-[inset_0_0_0_1px_theme('colors.brand.400')] focus:outline-none transition-colors ${className}`}
       {...inputProps}
     />
   );

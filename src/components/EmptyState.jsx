@@ -2,7 +2,7 @@ export default function EmptyState({ icon: Icon, title, description, action }) {
   return (
     <div className="text-center py-14 px-8 rounded-xl border border-dashed border-ink-200/80 bg-ink-50/40">
       {Icon && (
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white border border-ink-100 shadow-xs text-ink-400 mb-4 ring-1 ring-inset ring-black/[0.04]">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-surface border border-ink-100 shadow-xs text-ink-400 mb-4 ring-1 ring-inset ring-black/[0.04]">
           <Icon size={22} strokeWidth={1.5} aria-hidden />
         </div>
       )}

@@ -92,8 +92,8 @@ export default function Stepper({
                       : isPast || isTerminalCurrent
                         ? 'bg-brand-500 border-brand-500 text-white'
                         : isCurrent
-                          ? 'bg-white border-brand-500 ring-2 ring-brand-200'
-                          : 'bg-white border-ink-200'
+                          ? 'bg-surface border-brand-500 ring-2 ring-brand-200'
+                          : 'bg-surface border-ink-200'
                   }`}
                 >
                   {!cancelled && (isPast || isTerminalCurrent) && <CheckCircle2 size={12} />}

@@ -46,7 +46,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         aria-hidden
       />
       <div
-        className={`relative w-full ${widths[size] || widths.md} bg-white shadow-pop border border-ink-100/60 flex flex-col rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[88vh] pb-[env(safe-area-inset-bottom)] sm:pb-0 animate-in slide-in-from-bottom-2 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200`}
+        className={`relative w-full ${widths[size] || widths.md} bg-surface shadow-pop border border-ink-100/60 flex flex-col rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[88vh] pb-[env(safe-area-inset-bottom)] sm:pb-0 animate-in slide-in-from-bottom-2 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200`}
       >
         {/* iOS-style grab handle (decorative — pointer doesn't drag, but the
             visual cue makes the sheet read as dismissible). */}

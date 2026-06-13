@@ -119,7 +119,7 @@ export default function SearchPicker({
       {open && (
         <ul
           ref={listRef}
-          className="dropdown-pop absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-auto overscroll-contain rounded-xl border border-ink-200 bg-white shadow-pop py-1 text-sm"
+          className="dropdown-pop absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-auto overscroll-contain rounded-xl border border-ink-200 bg-surface shadow-pop py-1 text-sm"
         >
           {matches.map((o, i) => (
             <li key={o.id}>

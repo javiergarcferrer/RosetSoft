@@ -38,7 +38,7 @@ export default function ProjectPalettePicks({ palette, onApply }) {
               key={m.id}
               type="button"
               onClick={() => onApply({ grade: m.grade, fabric: m.fabric, swatchImageId: m.swatchImageId ?? null })}
-              className="group overflow-hidden rounded-xl border border-ink-200 bg-white text-left transition-all hover:border-brand-400 hover:shadow-soft active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              className="group overflow-hidden rounded-xl border border-ink-200 bg-surface text-left transition-all hover:border-brand-400 hover:shadow-soft active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               title={`Aplicar ${m.material}${m.groupGrade ? ` · Grade ${m.groupGrade}` : ''} · ${color}`}
             >
               <div className="aspect-[4/3] w-full overflow-hidden bg-ink-50">

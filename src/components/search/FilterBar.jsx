@@ -162,7 +162,7 @@ function FilterPill({ filter, value, onChange }) {
         <div
           role="dialog"
           aria-label={filter.label}
-          className="absolute left-0 z-30 mt-1 w-[min(17rem,calc(100vw-1rem))] rounded-xl border border-ink-100 bg-white shadow-pop"
+          className="absolute left-0 z-30 mt-1 w-[min(17rem,calc(100vw-1rem))] rounded-xl border border-ink-100 bg-surface shadow-pop"
         >
           {body}
         </div>

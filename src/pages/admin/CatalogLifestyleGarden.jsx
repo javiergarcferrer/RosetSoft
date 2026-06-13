@@ -375,7 +375,7 @@ const ModelCard = memo(function ModelCard({ model }) {
   const storeUrl = lead.familyCode ? `https://www.lifestylegarden.do/products/${lead.familyCode}` : null;
   const stock = modelStock(model);
   return (
-    <div className="rounded-lg border border-ink-100 bg-white overflow-hidden flex flex-col shadow-xs [content-visibility:auto] [contain-intrinsic-size:auto_280px]">
+    <div className="rounded-lg border border-ink-100 bg-surface overflow-hidden flex flex-col shadow-xs [content-visibility:auto] [contain-intrinsic-size:auto_280px]">
       <ImageView
         id={lead.imageId}
         fallbackUrl={lead.imageSrc || null}

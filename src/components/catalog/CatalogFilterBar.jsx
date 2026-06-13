@@ -58,7 +58,7 @@ export default function CatalogFilterBar({
   const textActive = (value.text || '').trim().length > 0;
 
   return (
-    <div className="sticky top-0 z-10 border-b border-ink-100 bg-white/95 backdrop-blur px-3 sm:px-5 py-2 space-y-2">
+    <div className="sticky top-0 z-10 border-b border-ink-100 bg-surface/95 backdrop-blur px-3 sm:px-5 py-2 space-y-2">
       {/* Controls row — scrolls horizontally on a narrow phone, never wraps. */}
       <div className="flex items-center gap-2 overflow-x-auto">
         <div className="relative flex-1 min-w-[150px]">
@@ -94,7 +94,7 @@ export default function CatalogFilterBar({
             {priceActive ? priceChipLabel(value.min, value.max) : 'Precio'}
             <ChevronDown size={13} aria-hidden />
           </summary>
-          <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-3 shadow-pop dropdown-pop">
+          <div className="absolute right-0 z-20 mt-1.5 w-60 rounded-xl border border-ink-200 bg-surface p-3 shadow-pop dropdown-pop">
             <p className="eyebrow-xs mb-2">Rango de precio (USD)</p>
             <div className="flex items-center gap-2">
               <DebouncedInput

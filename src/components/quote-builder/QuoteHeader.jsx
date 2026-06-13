@@ -171,7 +171,7 @@ export default function QuoteHeader({
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
   return (
     <label
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
+      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
       title="Vendedor"
     >
       <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
@@ -201,7 +201,7 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
  */
 function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
   return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-surface shadow-xs">
       <button
         type="button"
         onClick={onUndo}
@@ -231,7 +231,7 @@ function ViewToggle({ view, onChange }) {
   // (compose / client / chat) — keeping this pair too would be a second,
   // partial switcher fighting over the same state.
   return (
-    <div className="hidden md:inline-flex rounded-md border border-ink-200 overflow-hidden bg-white shadow-xs">
+    <div className="hidden md:inline-flex rounded-md border border-ink-200 overflow-hidden bg-surface shadow-xs">
       <button
         type="button"
         onClick={() => onChange('compose')}

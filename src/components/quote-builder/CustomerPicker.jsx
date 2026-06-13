@@ -171,7 +171,7 @@ export default function CustomerPicker({ open, onClose, onSelect, customers, pro
             <button
               type="button"
               onClick={openDetail}
-              className="flex-shrink-0 self-center mr-1.5 px-2.5 py-1.5 min-h-9 coarse:min-h-11 rounded-md border border-ink-200 bg-white text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 active:bg-ink-100 transition-colors"
+              className="flex-shrink-0 self-center mr-1.5 px-2.5 py-1.5 min-h-9 coarse:min-h-11 rounded-md border border-ink-200 bg-surface text-xs font-medium text-ink-700 hover:border-ink-900 hover:text-ink-900 active:bg-ink-100 transition-colors"
             >
               Con detalles
             </button>

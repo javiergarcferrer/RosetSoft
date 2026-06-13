@@ -577,7 +577,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
       : { cls: 'text-emerald-700', text: 'Comisiones pagadas' };
 
   return (
-    <li className="bg-white hover:bg-ink-50/40 transition-colors group">
+    <li className="bg-surface hover:bg-ink-50/40 transition-colors group">
       <div className="flex items-start gap-2 px-4 py-3">
         <button
           type="button"
@@ -713,7 +713,7 @@ function ExpenseLink({ amountUsd, desc, settings }) {
 /** One commission row inside a sale card (vendedor or profesional). */
 function CommissionLine({ role, who, badge, detail, action }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-ink-100 bg-white px-3 py-2.5 shadow-xs">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-ink-100 bg-surface px-3 py-2.5 shadow-xs">
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="eyebrow-xs tracking-wide text-ink-400">{role}</span>
@@ -860,7 +860,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-ink-100 bg-white shadow-xs">
+      <div className="overflow-x-auto rounded-md border border-ink-100 bg-surface shadow-xs">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left text-ink-500 bg-ink-50 border-b border-ink-100">
@@ -921,7 +921,7 @@ function CyclePill({ label, sub, active, onClick }) {
       className={`text-left rounded-md border px-3 py-2 min-h-11 transition-all active:scale-[0.98] select-none ${
         active
           ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
-          : 'border-ink-200 hover:border-ink-300 bg-white hover:shadow-xs text-ink-700'
+          : 'border-ink-200 hover:border-ink-300 bg-surface hover:shadow-xs text-ink-700'
       }`}
     >
       <div className="flex items-center gap-1.5 text-sm font-medium">

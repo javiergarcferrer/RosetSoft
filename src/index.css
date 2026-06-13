@@ -194,6 +194,11 @@
   body {
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
+    /* Pristine type rendering: proper kerning, standard ligatures and
+       contextual alternates for Lausanne/Söhne. Kept to safe, universally
+       beneficial features (no stylistic sets that could swap glyphs), so it
+       sharpens the type without shifting layout. */
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     /* Premium-flat canvas (Claude / Stripe / Shopify school): a calm warm
        paper tone (#f3f1ed) a clear step below the white cards, plus ONE
        smooth ambient layer — faint terracotta blooms lighting the page
@@ -378,6 +383,10 @@
      font-medium/semibold utility they also carry. */
   h1, h2, h3, h4, h5, h6 {
     font-family: theme('fontFamily.display');
+    /* Danish-editorial display headers: a hair of negative tracking so Söhne
+       sets tight and confident at large sizes (Fredericia/Anthom register).
+       Subtle enough not to disturb dense UI labels. */
+    letter-spacing: -0.012em;
   }
 }
 

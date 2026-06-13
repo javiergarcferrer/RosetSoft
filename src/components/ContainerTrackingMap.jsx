@@ -157,7 +157,7 @@ function VoyageHud({ voyage }) {
     resolveVoyageHud(voyage);
 
   return (
-    <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-white/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
+    <div className="absolute top-2 left-2 z-[1000] max-w-[min(20rem,calc(100%-5rem))] rounded-lg border border-white/60 bg-surface/85 backdrop-blur-md shadow-pop px-3 py-2 text-xs">
       {/* Port names wrap, never truncate — the HUD grows downward over the map. */}
       <div className="flex items-center gap-1.5 font-semibold text-ink-900 leading-tight">
         <span className="min-w-0 break-words">{originName}</span>
@@ -190,7 +190,7 @@ function MapButton({ title, onClick, children }) {
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="w-7 h-7 coarse:w-11 coarse:h-11 grid place-items-center rounded-md border border-ink-200 bg-white/90 backdrop-blur text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft transition-colors"
+      className="w-7 h-7 coarse:w-11 coarse:h-11 grid place-items-center rounded-md border border-ink-200 bg-surface/90 backdrop-blur text-ink-600 hover:text-ink-900 hover:border-ink-400 shadow-soft transition-colors"
     >
       {children}
     </button>
