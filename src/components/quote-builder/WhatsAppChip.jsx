@@ -2,6 +2,7 @@ import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { MessageCircle, Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
 import Modal from '../Modal.jsx';
+import BrandName from '../BrandName.jsx';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { waDigits, displayPhone } from '../../lib/phone.js';
@@ -205,7 +206,7 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
     <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
       <p className="text-sm text-ink-600">
         Se enviará la cotización a{' '}
-        <strong>{customer.name || customer.company}</strong> ({displayPhone(waDigits(customer.phone))})
+        <strong><BrandName name={customer.name || customer.company} /></strong> ({displayPhone(waDigits(customer.phone))})
         desde el número del negocio{settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.
       </p>
 

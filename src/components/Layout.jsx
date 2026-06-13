@@ -124,7 +124,7 @@ export default function Layout() {
           ) : (
             <div className="font-wordmark text-base truncate leading-tight" title={company}>{company}</div>
           )}
-          <div className="text-[9px] uppercase tracking-widest text-ink-400 leading-none">ALCOVER</div>
+          <div className="font-wordmark text-[9px] uppercase tracking-widest text-ink-400 leading-none">ALCOVER</div>
         </div>
         {/* Spacer mirrors the left button group (menu + search) so the brand
             block stays visually centered between them. */}
@@ -169,7 +169,7 @@ export default function Layout() {
                 {company}
               </div>
             )}
-            <div className="eyebrow-xs font-normal tracking-widest text-ink-400">ALCOVER</div>
+            <div className="eyebrow-xs font-wordmark font-normal tracking-widest text-ink-400">ALCOVER</div>
           </div>
           <div className="flex items-center -mr-2 -my-2">
             {/* Desktop: collapse the sidebar out of the way (it reappears via the

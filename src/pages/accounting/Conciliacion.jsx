@@ -72,11 +72,11 @@ export default function Conciliacion() {
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Saldo en libros</div><div className="text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.ledgerBalance)}</div></div>
-                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Conciliado</div><div className="text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.reconciledBalance)}</div></div>
-                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Pendiente</div><div className="text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.pendingBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Saldo en libros</div><div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.ledgerBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Conciliado</div><div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.reconciledBalance)}</div></div>
+                <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Pendiente</div><div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.pendingBalance)}</div></div>
                 <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Diferencia vs. estado</div>
-                  <div className={`text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto ${rec.difference === 0 ? 'text-emerald-700' : rec.difference == null ? 'text-ink-400' : 'text-rose-700'}`}>
+                  <div className={`font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto ${rec.difference === 0 ? 'text-emerald-700' : rec.difference == null ? 'text-ink-400' : 'text-rose-700'}`}>
                     {rec.difference == null ? '—' : formatDop(rec.difference)}
                   </div>
                 </div>

@@ -130,15 +130,15 @@ export default function Comisiones() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 max-w-2xl">
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Comisión del ciclo</div>
-              <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(myRow?.commission || 0)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-ink-900">{usd(myRow?.commission || 0)}</div>
             </div>
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pagado</div>
-              <div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(myRow?.paid || 0)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-emerald-700">{usd(myRow?.paid || 0)}</div>
             </div>
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pendiente</div>
-              <div className="text-xl font-semibold tabular-nums text-amber-700">{usd(myRow?.pending || 0)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-amber-700">{usd(myRow?.pending || 0)}</div>
             </div>
           </div>
           {myEntries.length === 0 ? (
@@ -198,26 +198,26 @@ export default function Comisiones() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Ventas del ciclo</div>
-              <div className="text-xl font-semibold tabular-nums text-ink-900">{overview.salesCount}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-ink-900">{overview.salesCount}</div>
               <div className="text-xs text-ink-500 tabular-nums">Base {usd(overview.base)}</div>
             </div>
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Comisiones del ciclo</div>
-              <div className="text-xl font-semibold tabular-nums text-ink-900">{usd(overview.total.commission)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-ink-900">{usd(overview.total.commission)}</div>
               <div className="text-xs text-ink-500 tabular-nums">
                 Vend. {usd(overview.seller.commission)} · Prof. {usd(overview.professional.commission)}
               </div>
             </div>
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pagado</div>
-              <div className="text-xl font-semibold tabular-nums text-emerald-700">{usd(overview.total.paid)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-emerald-700">{usd(overview.total.paid)}</div>
               <div className="text-xs text-ink-500 tabular-nums">
                 Vend. {usd(overview.seller.paid)} · Prof. {usd(overview.professional.paid)}
               </div>
             </div>
             <div className="card p-4 sm:p-5 flex flex-col gap-1.5">
               <div className="eyebrow-xs tracking-wide text-ink-500">Pendiente</div>
-              <div className="text-xl font-semibold tabular-nums text-amber-700">{usd(overview.total.pending)}</div>
+              <div className="font-display text-xl font-semibold tabular-nums text-amber-700">{usd(overview.total.pending)}</div>
               <div className="text-xs text-ink-500 tabular-nums">
                 Vend. {usd(overview.seller.pending)} · Prof. {usd(overview.professional.pending)}
               </div>

@@ -445,12 +445,12 @@ function RateCard({ local, set, saveSettings }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-surface border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Compra</div>
-            <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.buy)}</div>
+            <div className="font-display text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.buy)}</div>
             <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD</div>
           </div>
           <div className="rounded-lg bg-surface border border-ink-100 shadow-xs px-3 py-2.5">
             <div className="eyebrow-xs font-medium tracking-wide">Venta</div>
-            <div className="text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.sell)}</div>
+            <div className="font-display text-lg font-semibold text-ink-900 mt-1 tabular-nums">{fmt(rate.sell)}</div>
             <div className="text-[10px] text-ink-400 mt-0.5">RD$ por 1 USD · se cotiza con esta</div>
           </div>
         </div>
@@ -518,7 +518,7 @@ function RateCard({ local, set, saveSettings }) {
       {/* Effective */}
       <div className="rounded-lg bg-brand-50 border border-brand-200 px-4 py-3.5">
         <div className="eyebrow-xs font-medium tracking-wider text-brand-700">Tasa efectiva</div>
-        <div className="text-xl font-semibold text-brand-900 mt-1 tabular-nums">
+        <div className="font-display text-xl font-semibold text-brand-900 mt-1 tabular-nums">
           1 USD = {eff.toFixed(2)} DOP
         </div>
         <div className="text-[11px] text-brand-700 mt-1 tabular-nums">
