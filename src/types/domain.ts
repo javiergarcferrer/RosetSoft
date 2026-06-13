@@ -276,6 +276,11 @@ export interface WaMessage {
   mediaMime?: string | null;
   /** Difusión: the wa_campaigns row this outbound template send belongs to. */
   campaignId?: string | null;
+  /** Per-message pricing from the delivery-status webhook (2025+ model):
+   *  the billing category (marketing/utility/authentication/service) and
+   *  whether Meta charged for it. Captured for cost reporting. */
+  pricingCategory?: string | null;
+  pricingBillable?: boolean | null;
   readAt?: number | null;
   statusAt?: number | null;
   createdAt?: number;

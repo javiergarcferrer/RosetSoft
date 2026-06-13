@@ -190,7 +190,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
         </div>
       ) : (
         <div className="space-y-2">
-          {campaignRows.map(({ campaign, recipients, sent, delivered, read, failed }) => (
+          {campaignRows.map(({ campaign, recipients, sent, delivered, read, failed, billable }) => (
             <div key={campaign.id} className="card card-pad">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -199,6 +199,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
                     Plantilla <span className="font-medium">{campaign.templateName}</span>
                     {campaign.audience ? <> · {campaign.audience}</> : null}
                     {' · '}{formatDateTime(campaign.createdAt)}
+                    {billable > 0 && <> · <span title="Mensajes que Meta facturó (aplica tu tarifa por país)">{billable} facturable{billable === 1 ? '' : 's'}</span></>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-center shrink-0">

@@ -246,8 +246,8 @@ test('resolveCampaignsList — live rollup with stage precedence; frozen fallbac
     { id: 'k0', name: 'Vieja sin mensajes', recipientCount: 3, sentCount: 2, failedCount: 1, createdAt: 1000 },
   ];
   const messages = [
-    { campaignId: 'k1', status: 'read' },      // counts as sent+delivered+read
-    { campaignId: 'k1', status: 'delivered' }, // sent+delivered
+    { campaignId: 'k1', status: 'read', pricingBillable: true },      // sent+delivered+read, billable
+    { campaignId: 'k1', status: 'delivered', pricingBillable: true }, // sent+delivered, billable
     { campaignId: 'k1', status: 'accepted' },  // sent only
     { campaignId: 'k1', status: 'failed' },    // failed only
     { campaignId: 'other', status: 'read' },   // another campaign — ignored
@@ -257,8 +257,8 @@ test('resolveCampaignsList — live rollup with stage precedence; frozen fallbac
   assert.equal(rows.length, 2);
   assert.equal(rows[0].campaign.id, 'k1'); // newest first
   assert.deepEqual(
-    { sent: rows[0].sent, delivered: rows[0].delivered, read: rows[0].read, failed: rows[0].failed },
-    { sent: 3, delivered: 2, read: 1, failed: 1 },
+    { sent: rows[0].sent, delivered: rows[0].delivered, read: rows[0].read, failed: rows[0].failed, billable: rows[0].billable },
+    { sent: 3, delivered: 2, read: 1, failed: 1, billable: 2 },
   );
   // No campaign-tagged messages yet → the counters frozen at send time.
   assert.deepEqual({ sent: rows[1].sent, failed: rows[1].failed }, { sent: 2, failed: 1 });

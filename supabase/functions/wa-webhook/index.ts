@@ -340,6 +340,13 @@ Deno.serve(async (req: Request) => {
             ? (STATUS_ERRORS[Number(e0.code)] || e0.error_data?.details || e0.message || e0.title)
             : null;
           if (errMsg) patch.error = errMsg;
+          // Per-message pricing (2025+ model) rides the status webhook: the
+          // billing category + whether Meta charged. Record it for cost reports.
+          const pricing = st.pricing as { category?: string; billable?: boolean } | undefined;
+          if (pricing) {
+            if (pricing.category) patch.pricing_category = String(pricing.category);
+            if (typeof pricing.billable === 'boolean') patch.pricing_billable = pricing.billable;
+          }
           const { error } = await admin.from('wa_messages').update(patch).eq('wa_id', st.id);
           if (error) console.error('[wa-webhook] status update failed:', error.message);
         }

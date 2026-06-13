@@ -140,7 +140,9 @@ export function resolveCampaignsList({ campaigns, messages }) {
     let delivered = 0;
     let read = 0;
     let failed = 0;
+    let billable = 0; // messages Meta charged for (per-message pricing webhook)
     for (const m of rows) {
+      if (m.pricingBillable === true) billable += 1;
       if (m.status === 'failed') { failed += 1; continue; }
       const stage = OUT_STAGE[m.status] || 0;
       if (stage >= 1) sent += 1;
@@ -160,6 +162,7 @@ export function resolveCampaignsList({ campaigns, messages }) {
       delivered,
       read,
       failed,
+      billable,
     };
   });
   out.sort((a, b) => (b.campaign.createdAt || 0) - (a.campaign.createdAt || 0));
