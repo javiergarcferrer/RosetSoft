@@ -1096,7 +1096,7 @@ function NoteToggle({ icon: Icon, text, label, content, open, onClick }) {
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[260px] whitespace-pre-line rounded-md bg-ink-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-white shadow-soft opacity-0 transition-opacity duration-150 group-hover/note:opacity-100"
+        className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 w-max max-w-[260px] whitespace-pre-line rounded-md bg-ink-900 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-ink-50 shadow-soft opacity-0 transition-opacity duration-150 group-hover/note:opacity-100"
       >
         {tip}
       </span>

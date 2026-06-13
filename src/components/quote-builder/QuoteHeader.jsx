@@ -238,7 +238,7 @@ function ViewToggle({ view, onChange }) {
         aria-pressed={view === 'compose'}
         className={`px-2.5 sm:px-3 py-1.5 min-h-7 coarse:min-h-11 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
           view === 'compose'
-            ? 'bg-ink-900 text-white shadow-sm'
+            ? 'bg-ink-900 text-ink-50 shadow-sm'
             : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
         }`}
         title="Vista de edición"

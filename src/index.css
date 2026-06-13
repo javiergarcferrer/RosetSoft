@@ -113,14 +113,19 @@
     --card-hi: rgba(255, 255, 255, 0.05);
   }
 
-  /* Always-dark chrome (the sidebar, the mobile topbar, and the ProfileMenu
-     nested inside the sidebar). It re-pins the ink/brand vars to the LIGHT ramp
-     LOCALLY, so its `bg-ink-900 / text-ink-100 / brand-*` styling resolves to
-     the original dark palette in BOTH themes — the chrome stays put while the
-     page canvas flips around it. Custom properties inherit, so re-declaring
-     them on the wrapper element overrides the global (.dark) values for its
-     whole subtree. */
-  .theme-chrome {
+  /* Pin a subtree to the LIGHT ramp regardless of the global theme. Two uses:
+     `.theme-chrome` — always-dark chrome (sidebar, mobile topbar, the
+       ProfileMenu inside it): its `bg-ink-900 / text-ink-100` styling resolves
+       to the original dark palette in BOTH themes, so the chrome stays put while
+       the page canvas flips around it.
+     `.theme-light` — always-light "paper" (the client document in ClientPreview,
+       shown both in the authed editor preview and the public link): its
+       ink/brand tokens must read like the printed PDF even when the dealer's app
+       is in dark mode.
+     Custom properties inherit, so re-declaring them on the wrapper overrides the
+     global (.dark) values for its whole subtree. */
+  .theme-chrome,
+  .theme-light {
     --ink-50: 247 247 246;  --ink-100: 232 231 227; --ink-200: 207 204 196;
     --ink-300: 171 167 154; --ink-400: 135 131 116; --ink-500: 108 104 89;
     --ink-600: 84 79 67;    --ink-700: 59 56 48;    --ink-800: 38 36 31;
@@ -490,6 +495,14 @@
   .tint-rose    { background-image: linear-gradient(135deg, #ffe4e6, #fecdd3); color: #be123c; }
   .tint-sky     { background-image: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0369a1; }
   .tint-ink     { background-image: linear-gradient(135deg, #f7f7f6, #e8e7e3); color: #544f43; }
+  /* Dark mode: the light pastel icon plates glare on a dark card, so each maps
+     to a deep, desaturated tint with a bright icon — same treatment as the
+     status pills, keeping the two families visually consistent. */
+  .dark .tint-brand   { background-image: linear-gradient(135deg, #3a261b, #4a3022); color: #e9ad84; }
+  .dark .tint-emerald { background-image: linear-gradient(135deg, #16271e, #1d3327); color: #6ee7a8; }
+  .dark .tint-rose    { background-image: linear-gradient(135deg, #2a1418, #381c22); color: #fb7185; }
+  .dark .tint-sky     { background-image: linear-gradient(135deg, #14203a, #1b2c49); color: #7dd3fc; }
+  .dark .tint-ink     { background-image: linear-gradient(135deg, #2f2c26, #3a3730); color: #c8c1b4; }
 
   /* Section divider — editorial rhythm between a page's layers (monitor /
      analysis / drill on the panel): an eyebrow + a fading hairline. */

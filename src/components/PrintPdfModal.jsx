@@ -79,7 +79,7 @@ export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
   }, [pages]);
 
   return createPortal(
-    <div className="print-pdf-root fixed inset-0 z-[100] flex items-stretch justify-center bg-ink-900/60 sm:py-6 sm:px-4">
+    <div className="print-pdf-root fixed inset-0 z-[100] flex items-stretch justify-center bg-black/60 sm:py-6 sm:px-4">
       <div className="print-pdf-frame flex w-full max-w-3xl flex-col bg-ink-100 sm:rounded-xl sm:shadow-pop overflow-hidden">
         {/* Header — hidden on paper (.print-pdf-chrome). On a phone the modal is
             full-screen, so the header pads itself past the iOS status bar

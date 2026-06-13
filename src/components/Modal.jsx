@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       {/* Refined backdrop: warm dark + subtle blur so content behind reads as
           "there" but clearly behind — same technique as Linear and Stripe. */}
       <div
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px] transition-opacity"
+        className="fixed inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity"
         onClick={onClose}
         aria-hidden
       />

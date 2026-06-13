@@ -158,7 +158,7 @@ function SearchOverlay({ onClose }) {
       aria-label="Búsqueda global"
     >
       <div
-        className="fixed inset-0 bg-ink-900/50 backdrop-blur-[2px]"
+        className="fixed inset-0 bg-black/50 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden
       />

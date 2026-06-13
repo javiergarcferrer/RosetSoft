@@ -635,10 +635,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 
       {/* Share-link toast — the copied URL (or a manual-copy fallback). */}
       {shareMsg && (
-        <div role="status" className="mb-4 rounded-md bg-ink-900 text-white px-3 py-2 text-xs flex items-start gap-2">
+        <div role="status" className="mb-4 rounded-md bg-ink-900 text-ink-50 px-3 py-2 text-xs flex items-start gap-2">
           <Share2 size={14} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1 break-all">{shareMsg}</div>
-          <button type="button" onClick={() => setShareMsg(null)} className="inline-flex items-center flex-shrink-0 rounded-md px-2 py-1 -my-1 -mr-1 min-h-7 coarse:min-h-11 coarse:-my-2 text-[11px] font-medium underline text-white/70 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors">Cerrar</button>
+          <button type="button" onClick={() => setShareMsg(null)} className="inline-flex items-center flex-shrink-0 rounded-md px-2 py-1 -my-1 -mr-1 min-h-7 coarse:min-h-11 coarse:-my-2 text-[11px] font-medium underline text-ink-50/70 hover:text-ink-50 hover:bg-ink-50/10 active:bg-ink-50/20 transition-colors">Cerrar</button>
         </div>
       )}
 

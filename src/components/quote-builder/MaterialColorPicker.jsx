@@ -290,7 +290,7 @@ function ModeToggle({ multi, onChange }) {
           onClick={() => onChange(o.v)}
           aria-pressed={multi === o.v}
           className={`flex-1 sm:flex-none px-3 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
-            multi === o.v ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
+            multi === o.v ? 'bg-ink-900 text-ink-50' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
           }`}
         >
           {o.label}
@@ -425,7 +425,7 @@ function MaterialList({
                 onClick={() => setCategory(c.k)}
                 aria-pressed={category === c.k}
                 className={`flex-1 sm:flex-none px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors ${i > 0 ? 'border-l border-ink-200' : ''} ${
-                  category === c.k ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
+                  category === c.k ? 'bg-ink-900 text-ink-50' : 'text-ink-600 hover:bg-ink-50 active:bg-ink-100'
                 }`}
               >
                 {c.label}
@@ -452,7 +452,7 @@ function MaterialList({
               aria-pressed={groupByFiber}
               className={`inline-flex items-center gap-1 text-xs rounded-md border px-2.5 py-1.5 min-h-9 coarse:min-h-11 transition-colors flex-shrink-0 ${
                 groupByFiber
-                  ? 'bg-ink-900 text-white border-ink-900'
+                  ? 'bg-ink-900 text-ink-50 border-ink-900'
                   : 'bg-surface text-ink-600 border-ink-200 hover:bg-ink-50 active:bg-ink-100'
               }`}
               title="Agrupar por composición (fibra principal)"

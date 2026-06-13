@@ -507,7 +507,7 @@ function DockAction({
   const tone = primary
     ? 'bg-brand-grad text-white shadow-glow hover:brightness-110 active:brightness-95'
     : pressed
-      ? 'bg-ink-900 text-white border border-ink-900 shadow-sm'
+      ? 'bg-ink-900 text-ink-50 border border-ink-900 shadow-sm'
       : 'text-ink-700 border border-ink-200 bg-surface hover:bg-ink-50 hover:border-ink-300 active:bg-ink-100 shadow-xs';
   return (
     <button
