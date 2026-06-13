@@ -192,7 +192,7 @@ export default function Chats() {
           unchanged. */}
       <div className={`card overflow-hidden flex min-h-[420px] ${
         selectedKey
-          ? 'h-[calc(100dvh-8.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] md:h-[calc(100dvh-230px)]'
+          ? 'h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] md:h-[calc(100dvh-230px)] max-md:-mx-4 max-md:-mt-4 max-md:rounded-none max-md:border-x-0 max-md:border-t-0'
           : 'h-[calc(100dvh-230px)]'
       }`}>
         {/* Conversation list — full width on a phone until a thread is open. */}

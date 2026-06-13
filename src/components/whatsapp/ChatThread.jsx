@@ -400,7 +400,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
 
       {/* 24h-window state + composer */}
       {!thread.windowOpen && (
-        <div className="px-4 py-2 bg-amber-50 border-t border-amber-100 text-[11px] text-amber-800 flex items-start gap-1.5">
+        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-t border-amber-100 dark:border-amber-900/40 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-1.5">
           <Clock size={12} className="mt-0.5 shrink-0" />
           <span>
             {thread.lastInboundAt
@@ -410,7 +410,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
         </div>
       )}
       {error && (
-        <div className="px-4 py-2 bg-red-50 border-t border-red-100 text-[11px] text-red-700 flex items-start gap-1.5">
+        <div className="px-4 py-2 bg-red-50 dark:bg-red-950/40 border-t border-red-100 dark:border-red-900/40 text-[11px] text-red-700 dark:text-red-200 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
         </div>
       )}
@@ -1538,7 +1538,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             ? 'px-1 py-0.5'
             : `rounded-2xl px-3 py-2 shadow-xs ${
               out
-                ? m.status === 'failed' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-brand-100 text-ink-900'
+                ? m.status === 'failed' ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-red-800 dark:text-red-200' : 'bg-brand-100 text-ink-900'
                 : 'bg-surface border border-ink-100 text-ink-900'
             }`
         }`}>
@@ -1586,9 +1586,9 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
               the bridge from a WhatsApp Commerce browse to a quote. */}
           {order && (
             <div className="mt-1 rounded-lg bg-white/70 dark:bg-white/[0.06] border border-ink-200 overflow-hidden">
-              <div className="px-2.5 py-1.5 flex items-center gap-1.5 border-b border-ink-100 bg-emerald-50/70">
-                <ShoppingBag size={12} className="text-emerald-700 shrink-0" aria-hidden />
-                <span className="text-[11px] font-semibold text-emerald-800">Pedido del catálogo · {order.items.length} producto(s)</span>
+              <div className="px-2.5 py-1.5 flex items-center gap-1.5 border-b border-ink-100 bg-emerald-50/70 dark:bg-emerald-950/30">
+                <ShoppingBag size={12} className="text-emerald-700 dark:text-emerald-300 shrink-0" aria-hidden />
+                <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">Pedido del catálogo · {order.items.length} producto(s)</span>
               </div>
               <div className="divide-y divide-ink-50">
                 {order.items.map((it, i) => (
@@ -1691,7 +1691,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             {out && <StatusTicks status={m.status} />}
           </div>
           {m.status === 'failed' && m.error && (
-            <div className="text-[11px] mt-1 text-red-700">{m.error}</div>
+            <div className="text-[11px] mt-1 text-red-700 dark:text-red-300/90">{m.error}</div>
           )}
           {m.reactions?.length > 0 && (
             <div className={`-mb-3 ${out ? 'text-left' : 'text-right'}`}>
