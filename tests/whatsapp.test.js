@@ -72,11 +72,13 @@ test('resolveConversations — groups by phoneKey, links contacts, counts unread
   assert.equal(eduardo.unread, 1);                 // m1 has no readAt
   assert.equal(eduardo.lastBody, 'Su cotización'); // the newest message wins
   assert.equal(eduardo.lastDirection, 'out');
+  assert.equal(eduardo.awaitingReply, false);      // we replied last
   assert.equal(eduardo.windowOpen, true);          // inbound 2h ago
 
   const mota = convos[2];
   assert.equal(mota.contactKind, 'professional');
   assert.equal(mota.professionalId, 'p1');
+  assert.equal(mota.awaitingReply, true);          // client wrote last, no reply yet
   assert.equal(mota.windowOpen, false);            // inbound 30h ago
 
   const ana = convos[1];

@@ -75,6 +75,11 @@ export function resolveConversations(messages, customers, professionals, { needl
       lastDirection: t.lastDirection,
       lastStatus: t.lastStatus,
       unread: t.unread,
+      // The client wrote last and we haven't answered — distinct from `unread`
+      // (which clears the moment the thread is OPENED, even with no reply). This
+      // is the inbox's "ball in our court" signal, used by the "Sin responder"
+      // filter so a read-but-unanswered client is never lost.
+      awaitingReply: t.lastDirection === 'in',
       windowOpen: !!t.lastInboundAt && now - t.lastInboundAt < WA_WINDOW_MS,
     });
   }

@@ -58,18 +58,35 @@ export default function Chats() {
   // carry its contact info until the first send materializes the thread.
   const [draftTarget, setDraftTarget] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Inbox status filter — 'all' | 'unread' | 'awaiting'. "Sin responder"
+  // (awaiting) is the sales-critical one: a client wrote last and we haven't
+  // answered, even if the thread was already opened (so `unread` cleared).
+  const [filter, setFilter] = useState('all');
   // Optimistic outbound rows, dropped once the server-logged row arrives.
   const [pending, setPending] = useState([]);
 
-  const conversations = useMemo(
+  // The full needle-matched list — selection, deep-links and the Nuevo-chat
+  // dedupe all read THIS (never the status-filtered view, so filtering the
+  // list never closes an open thread or un-dedupes the picker).
+  const allConversations = useMemo(
     () => resolveConversations(messages, customers, professionals, { needle }),
     [messages, customers, professionals, needle],
   );
+  const filterCounts = useMemo(() => ({
+    all: allConversations.length,
+    unread: allConversations.reduce((n, c) => n + (c.unread > 0 ? 1 : 0), 0),
+    awaiting: allConversations.reduce((n, c) => n + (c.awaitingReply ? 1 : 0), 0),
+  }), [allConversations]);
+  const conversations = useMemo(() => {
+    if (filter === 'unread') return allConversations.filter((c) => c.unread > 0);
+    if (filter === 'awaiting') return allConversations.filter((c) => c.awaitingReply);
+    return allConversations;
+  }, [allConversations, filter]);
   const selected = useMemo(() => {
     if (!selectedKey) return null;
-    return conversations.find((c) => c.key === selectedKey)
+    return allConversations.find((c) => c.key === selectedKey)
       || (draftTarget && draftTarget.key === selectedKey ? draftTarget : null);
-  }, [conversations, selectedKey, draftTarget]);
+  }, [allConversations, selectedKey, draftTarget]);
 
   const thread = useMemo(
     () => (selectedKey ? resolveThread([...messages, ...pending], { key: selectedKey }) : null),
@@ -88,11 +105,11 @@ export default function Chats() {
     if (!chatParam || !loaded || !customersLoaded || !professionalsLoaded) return;
     if (appliedChatParam.current === chatParam) return;
     appliedChatParam.current = chatParam;
-    const hit = resolveChatTarget(customers, professionals, conversations, chatParam);
+    const hit = resolveChatTarget(customers, professionals, allConversations, chatParam);
     if (!hit) return;
     setDraftTarget(hit.existing ? null : hit.target);
     setSelectedKey(hit.key);
-  }, [chatParam, loaded, customersLoaded, professionalsLoaded, customers, professionals, conversations]);
+  }, [chatParam, loaded, customersLoaded, professionalsLoaded, customers, professionals, allConversations]);
 
   // Server rows landed → drop the optimistic copies they replace.
   useEffect(() => {
@@ -170,7 +187,7 @@ export default function Chats() {
       }`}>
         {/* Conversation list — full width on a phone until a thread is open. */}
         <div className={`${selectedKey ? 'hidden md:flex' : 'flex'} w-full md:w-[320px] lg:w-[360px] shrink-0 flex-col border-r border-ink-100`}>
-          <div className="p-3 border-b border-ink-100">
+          <div className="p-3 border-b border-ink-100 space-y-2.5">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
               <input
@@ -181,6 +198,12 @@ export default function Chats() {
                 aria-label="Buscar conversación"
               />
             </div>
+            {/* Status filter — "Sin responder" is the ball-in-our-court view. */}
+            <div className="flex items-center gap-1.5" role="group" aria-label="Filtrar conversaciones">
+              <FilterChip label="Todas" active={filter === 'all'} onClick={() => setFilter('all')} count={filterCounts.all} />
+              <FilterChip label="Sin leer" active={filter === 'unread'} onClick={() => setFilter('unread')} count={filterCounts.unread} tone="emerald" />
+              <FilterChip label="Sin responder" active={filter === 'awaiting'} onClick={() => setFilter('awaiting')} count={filterCounts.awaiting} tone="amber" />
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {!loaded && (
@@ -190,7 +213,13 @@ export default function Chats() {
             )}
             {loaded && !conversations.length && (
               <p className="text-xs text-ink-400 text-center px-6 py-10">
-                {needle ? 'Sin resultados.' : 'Aún no hay conversaciones. Cuando un cliente escriba al número del negocio aparecerá aquí — o inicia tú con “Nuevo chat”.'}
+                {needle
+                  ? 'Sin resultados.'
+                  : filter === 'unread'
+                    ? 'No hay conversaciones sin leer.'
+                    : filter === 'awaiting'
+                      ? 'Todo respondido — ningún cliente espera respuesta.'
+                      : 'Aún no hay conversaciones. Cuando un cliente escriba al número del negocio aparecerá aquí — o inicia tú con “Nuevo chat”.'}
               </p>
             )}
             {conversations.map((c) => (
@@ -298,7 +327,7 @@ export default function Chats() {
         onClose={() => setPickerOpen(false)}
         customers={customers}
         professionals={professionals}
-        conversations={conversations}
+        conversations={allConversations}
         onPick={(contact) => {
           setDraftTarget(contact);
           setSelectedKey(contact.key);
@@ -306,6 +335,33 @@ export default function Chats() {
         }}
       />
     </>
+  );
+}
+
+/** One inbox status filter pill — label + live count, tinted when it carries
+ *  pending work (emerald for unread, amber for awaiting-reply). */
+function FilterChip({ label, active, onClick, count, tone }) {
+  const activeTone = tone === 'amber'
+    ? 'bg-amber-500 text-white border-amber-500'
+    : tone === 'emerald'
+      ? 'bg-emerald-600 text-white border-emerald-600'
+      : 'bg-ink-900 text-white border-ink-900';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-[11px] font-medium transition-colors ${
+        active ? activeTone : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
+      }`}
+    >
+      {label}
+      {count > 0 && (
+        <span className={`tabular-nums ${active ? 'opacity-90' : tone === 'amber' ? 'text-amber-600' : tone === 'emerald' ? 'text-emerald-600' : 'text-ink-400'}`}>
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -332,6 +388,11 @@ function ConversationRow({ c, active, onOpen }) {
           {c.unread ? (
             <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center">
               {c.unread}
+            </span>
+          ) : c.awaitingReply ? (
+            // Read but unanswered — the client is still waiting on us.
+            <span className="shrink-0 inline-flex items-center" title="Sin responder">
+              <span className="h-2 w-2 rounded-full bg-amber-500" aria-label="Sin responder" />
             </span>
           ) : null}
         </span>
