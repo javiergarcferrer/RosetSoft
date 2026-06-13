@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, ExternalLink } from 'lucide-react';
+import { Hash, AlertCircle, Plus, Loader2, MessageCircle, ExternalLink } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -30,6 +30,7 @@ import { displayPhone, waDigits } from '../lib/phone.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
 import { useMediaQuery } from '../components/Layout.jsx';
+import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
@@ -530,15 +531,19 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
   }, [lines, editorGradeReanchorPatch, updateLine]);
 
-  // PDF export + share-link logic lives in its own hook so the export UI
-  // (TotalsDock, the banners below) stays thin. It persists the share token
-  // through updateQuote — the single quote writer from the controller above.
+  // PDF export logic lives in its own hook so the export UI (TotalsDock, the
+  // banners below) stays thin.
   const {
-    exporting, printing, exportError, setExportError,
-    sharing, shareMsg, setShareMsg, exportErrorRef,
-    exportPdf, printPdf, shareQuote, generatePdf,
+    exporting, printing, exportError, setExportError, exportErrorRef,
+    exportPdf, printPdf, generatePdf,
     printDoc, closePrint,
-  } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote });
+  } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families });
+
+  // The ONE place the quote is sent to the client: the WhatsApp Business API
+  // send modal (enlace or PDF). It is opened from the single dock action and
+  // rendered once at page level — there is no OS share-sheet fallback, so the
+  // send never bypasses the dealer's WhatsApp number.
+  const [sendOpen, setSendOpen] = useState(false);
 
   // Heal legacy quotes that lost their sequence number to the old
   // updateQuote write-back race (it persisted the stale in-memory quote,
@@ -679,7 +684,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           canRedo={canRedo}
           savedAt={savedAt}
           saving={saving}
-          onShare={shareQuote}
         />
       )}
 
@@ -705,15 +709,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      {/* Share-link toast — the copied URL (or a manual-copy fallback). */}
-      {shareMsg && (
-        <div role="status" className="mb-4 rounded-md bg-ink-900 text-ink-50 px-3 py-2 text-xs flex items-start gap-2">
-          <Share2 size={14} className="flex-shrink-0 mt-0.5" />
-          <div className="flex-1 break-all">{shareMsg}</div>
-          <button type="button" onClick={() => setShareMsg(null)} className="inline-flex items-center flex-shrink-0 rounded-md px-2 py-1 -my-1 -mr-1 min-h-7 coarse:min-h-11 coarse:-my-2 text-[11px] font-medium underline text-ink-50/70 hover:text-ink-50 hover:bg-ink-50/10 active:bg-ink-50/20 transition-colors">Cerrar</button>
-        </div>
-      )}
-
       {/* Lifecycle stepper + status switching belong to the EDITOR only. The
           Cliente preview and the WhatsApp conversation are focused surfaces —
           the dealer doesn't advance the quote's status from inside them, and on
@@ -730,7 +725,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           quote={quote}
           customer={customer}
           settings={settings}
-          onShare={shareQuote}
         />
       ) : view === 'client' ? (
         <ClientPreview
@@ -858,8 +852,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           exporting={exporting}
           onPrint={printPdf}
           printing={printing}
-          onShare={shareQuote}
-          sharing={sharing}
+          onShare={() => setSendOpen(true)}
         />
       )}
 
@@ -887,6 +880,21 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           onClose={closePrint}
         />
       )}
+
+      {/* The single send surface — opened by the dock's share/send action.
+          Ships the quote from the dealer's WhatsApp Business number as the
+          interactive link or the exported PDF; it persists the share token
+          through updateQuote and self-explains when the quote can't be sent
+          yet (no customer / no number / API not connected). */}
+      <SendQuoteModal
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        customer={customer}
+        quote={quote}
+        settings={settings}
+        onUpdateQuote={hx(updateQuote)}
+        buildPdf={generatePdf}
+      />
 
       {undoToast}
     </>
@@ -958,13 +966,14 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
 /**
  * The mobile WhatsApp mode — the quote customer's conversation as the page's
  * main surface (ModeBar's third tab). Reuses ContactChatCard's send wiring
- * (variant="pane") so this surface and the desktop inline card can't drift,
- * and tops it with the quote-specific action: "Enviar cotización" opens the
- * SAME link-or-PDF modal as the header chip (one send implementation). When
- * a prerequisite is missing (connection, customer, phone) the pane explains
- * the next step instead of rendering dead air.
+ * (variant="pane") so this surface and the desktop inline card can't drift.
+ * Sending the quote itself lives in ONE place — the dock's share/send action
+ * (SendQuoteModal at page level) — so the pane carries only the conversation,
+ * not its own send button. When a prerequisite is missing (connection,
+ * customer, phone) the pane explains the next step instead of rendering dead
+ * air.
  */
-function ChatPaneCard({ quote, customer, settings, onShare }) {
+function ChatPaneCard({ quote, customer, settings }) {
   const connected = !!settings?.whatsappConnectedAt;
   const phone = customer?.phone || '';
 
@@ -1019,14 +1028,6 @@ function ChatPaneCard({ quote, customer, settings, onShare }) {
           >
             <ExternalLink size={12} /> Chats
           </Link>
-          <button
-            type="button"
-            onClick={onShare}
-            className="btn-ghost text-xs text-emerald-700"
-            title="Compartir la cotización (enlace público · Correo, WhatsApp…)"
-          >
-            <Share2 size={12} /> Compartir cotización
-          </button>
         </div>
       </div>
       <div className="flex-1 min-h-0">

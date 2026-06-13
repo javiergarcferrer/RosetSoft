@@ -42,7 +42,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onExport, exporting, onPrint, printing, onShare, sharing,
+  onExport, exporting, onPrint, printing, onShare,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
@@ -376,17 +376,17 @@ export default function TotalsDock({
                   stamped a redundant pair on mobile. The dock keeps only the
                   cross-cutting actions: Share / Print / Export. */}
 
-              {/* Share the PUBLIC CLIENT LINK (the live interactive quote) via
-                  the OS share sheet — the PDF stays under Exportar. Pinned at
-                  every width. */}
+              {/* The single SEND surface — opens the WhatsApp Business API send
+                  modal (interactive link or exported PDF). This is the one place
+                  the quote goes to the client; nothing here bypasses the dealer's
+                  WhatsApp number. Pinned at every width. */}
               <DockAction
                 icon={Share2}
-                label="Compartir"
+                label="Enviar"
                 onClick={onShare}
-                disabled={sharing || exporting || printing}
-                busy={sharing}
-                ariaLabel="Compartir el enlace de la cotización"
-                title="Compartir el enlace público de la cotización (Correo, WhatsApp…)"
+                disabled={exporting || printing}
+                ariaLabel="Enviar la cotización por WhatsApp"
+                title="Enviar la cotización por WhatsApp (enlace interactivo o PDF)"
               />
 
               {/* Print the PDF straight to the printer (no download). */}
@@ -394,7 +394,7 @@ export default function TotalsDock({
                 icon={Printer}
                 label="Imprimir"
                 onClick={onPrint}
-                disabled={exporting || printing || sharing}
+                disabled={exporting || printing}
                 busy={printing}
                 ariaLabel="Imprimir PDF"
                 title="Imprimir directamente (sin descargar)"
@@ -407,7 +407,7 @@ export default function TotalsDock({
                 icon={Download}
                 label="Exportar"
                 onClick={onExport}
-                disabled={exporting || printing || sharing}
+                disabled={exporting || printing}
                 busy={exporting}
                 primary
                 ariaLabel="Exportar PDF"

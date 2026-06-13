@@ -2,19 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
-import { quoteSlug } from '../../lib/quoteNaming.js';
 
 /**
- * PDF export + share-link logic for the quote editor, lifted out of the
- * Workspace component so the export UI (TotalsDock, the error/share banners)
- * stays thin and the side-effect flow lives in one testable place.
+ * PDF export logic for the quote editor, lifted out of the Workspace component
+ * so the export UI (TotalsDock, the error banner) stays thin and the
+ * side-effect flow lives in one testable place.
  *
- * Owns the export/share UI status (in-flight flags + the transient banners)
- * and the two self-contained effects that drive them (auto-dismiss the share
- * toast; scroll the error banner into view on mobile). The actual mutations
- * stay outside — `shareQuote` persists the token through the caller's
- * `updateQuote`, the single quote writer.
+ * Owns the export UI status (in-flight flags + the error banner) and the
+ * effect that scrolls the banner into view on mobile. Sharing the quote with
+ * the client is NOT here — that goes through the WhatsApp Business API send
+ * modal (SendQuoteModal), the single send surface, which mints the public link
+ * itself; there is no OS share-sheet path that would bypass the dealer's
+ * WhatsApp number.
  *
  * @param {object}   deps
  * @param {object}   deps.quote          current quote (may be null while loading)
@@ -25,10 +24,9 @@ import { quoteSlug } from '../../lib/quoteNaming.js';
  * @param {Array}    deps.profiles       user profiles (resolve the seller)
  * @param {Array}    deps.groups         quote groups (Conjuntos/Alternativas)
  * @param {Map}      deps.families       catalog families by SKU root
- * @param {Function} deps.updateQuote    the quote writer (persists the share token)
  */
 export function useQuoteExport({
-  quote, settings, lines, customers, professionals, profiles, groups, families, updateQuote,
+  quote, settings, lines, customers, professionals, profiles, groups, families,
 }) {
   // PDF export UI state — disables the export button while a generation is in
   // flight, and surfaces failures (a malformed line, a refusal from the
@@ -36,16 +34,6 @@ export function useQuoteExport({
   const [exporting, setExporting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [exportError, setExportError] = useState(null);
-  // Share-link state: a spinner while the token is minted/persisted, and a
-  // transient toast confirming the copied link (or showing it to copy by
-  // hand when the clipboard API is unavailable).
-  const [sharing, setSharing] = useState(false);
-  const [shareMsg, setShareMsg] = useState(null);
-  useEffect(() => {
-    if (!shareMsg) return undefined;
-    const id = setTimeout(() => setShareMsg(null), 6000);
-    return () => clearTimeout(id);
-  }, [shareMsg]);
   // On mobile the only export trigger is the bottom sticky bar, but the error
   // banner renders at the top of the page — so a failed export would stop the
   // spinner with the explanation scrolled far out of sight, recreating the "I
@@ -57,65 +45,6 @@ export function useQuoteExport({
       exportErrorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     }
   }, [exportError]);
-
-  // Share the PUBLIC CLIENT LINK — never the PDF. The link opens the live
-  // interactive quote (ClientPreview) where the client can browse and pick
-  // fabrics; the static PDF stays one tap away under Exportar. Mints (once) and
-  // persists the share token, then hands the URL to the OS share sheet
-  // (`navigator.share`) so it goes straight to Mail / WhatsApp / Messages;
-  // where the Web Share API is unavailable (desktop browsers, mostly) it
-  // copies the link to the clipboard instead.
-  async function shareQuote() {
-    if (sharing || exporting || printing) return;
-    setSharing(true);
-    setExportError(null);
-    try {
-      const url = await mintClientLink();
-      if (navigator.share) {
-        try {
-          await navigator.share({ url, title: clientLinkLabel() });
-          return;
-        } catch (err) {
-          if (err && err.name === 'AbortError') return; // user dismissed the sheet
-          // Anything else (gesture lost, unsupported payload) → copy instead.
-          console.warn('[QuoteBuilder] link share fell through:', err);
-        }
-      }
-      try {
-        await navigator.clipboard.writeText(url);
-        setShareMsg(`Enlace copiado · ${url}`);
-      } catch {
-        setShareMsg(url);
-      }
-    } catch (err) {
-      console.error('[QuoteBuilder] shareQuote failed:', err);
-      setExportError(err?.message || 'No se pudo compartir la cotización.');
-    } finally {
-      setSharing(false);
-    }
-  }
-
-  // The same "client - Cotizacion N" label the PDF filename uses — slugged into
-  // the URL and shown as the share-sheet title, so the link reads like the
-  // document it opens.
-  function clientLinkLabel() {
-    const customer = quote.customerId
-      ? customers.find((c) => c.id === quote.customerId)
-      : null;
-    return quoteSlug(quote, customer);
-  }
-
-  // Mint (once) + persist the public interactive link for the client. The token
-  // is generated on first share and persisted on the quote; `shareEnabled` lets
-  // a later revoke flip it off without losing the URL.
-  async function mintClientLink() {
-    let token = quote.shareToken;
-    if (!token || !quote.shareEnabled) {
-      token = token || newShareToken();
-      await updateQuote({ shareToken: token, shareEnabled: true });
-    }
-    return shareLinkUrl(token, clientLinkLabel());
-  }
 
   // Shared PDF build for both Export (download) and Print. Resolves the related
   // entities + totals on demand (so the path stays self-contained — the dealer
@@ -146,7 +75,7 @@ export function useQuoteExport({
   }
 
   async function exportPdf() {
-    if (exporting || printing || sharing) return;   // de-bounce double-taps / concurrent gen
+    if (exporting || printing) return;   // de-bounce double-taps / concurrent gen
     setExportError(null);
     setExporting(true);
     try {
@@ -170,7 +99,7 @@ export function useQuoteExport({
   // rationale). The Workspace renders the modal off `printDoc`.
   const [printDoc, setPrintDoc] = useState(null);   // { blob } | null
   async function printPdf() {
-    if (exporting || printing || sharing) return;
+    if (exporting || printing) return;
     setExportError(null);
     setPrinting(true);
     try {
@@ -186,9 +115,8 @@ export function useQuoteExport({
   const closePrint = () => setPrintDoc(null);
 
   return {
-    exporting, printing, exportError, setExportError,
-    sharing, shareMsg, setShareMsg, exportErrorRef,
-    exportPdf, printPdf, shareQuote,
+    exporting, printing, exportError, setExportError, exportErrorRef,
+    exportPdf, printPdf,
     // The raw blob builder, for callers that deliver the PDF themselves
     // (the WhatsApp send modal ships it as a document via wa-send).
     generatePdf,
