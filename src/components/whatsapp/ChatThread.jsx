@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
-  AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
+  AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
   Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles,
 } from 'lucide-react';
@@ -48,6 +48,76 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/**
+ * The composer's single action primitive. Collapses every "to the left of the
+ * box" action (attach a file · share location · send a contact · template ·
+ * interactive · catalog products · quick reply · AI draft) behind ONE button
+ * that fans the choices up in a staggered spring — modern speed-dial, zero
+ * clutter at rest. Each action is `{ key, icon, label, onClick, tone?, busy?,
+ * disabled? }`; falsy entries are dropped so callers can gate items inline. The
+ * fan closes itself before running an action, so handlers never have to.
+ */
+function ComposerActions({ actions, disabled }) {
+  const [open, setOpen] = useState(false);
+  const items = actions.filter(Boolean);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  if (!items.length) return null;
+  return (
+    <div className="relative shrink-0">
+      {open && (
+        <>
+          {/* Tap-away scrim — a hair of dim so the fan reads as a layer. */}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-20 cursor-default bg-black/10 backdrop-blur-[1px]"
+            style={{ animation: 'rs-fan-fade .18s ease' }}
+            aria-label="Cerrar acciones"
+            tabIndex={-1}
+          />
+          <div className="absolute bottom-full left-0 mb-3 z-30 flex flex-col-reverse items-start gap-2.5">
+            {items.map((a, i) => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => { setOpen(false); a.onClick(); }}
+                disabled={a.disabled}
+                style={{ animation: 'rs-fan-in .26s cubic-bezier(.34,1.56,.64,1) backwards', animationDelay: `${i * 38}ms` }}
+                className="flex items-center gap-2.5 rounded-full bg-surface border border-ink-100 shadow-pop pl-1.5 pr-4 py-1.5 text-left transition-colors hover:border-brand-200 hover:bg-brand-50/50 active:scale-95 disabled:opacity-50"
+              >
+                <span className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 ${
+                  a.tone === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-brand-100 text-brand-700'
+                }`}>
+                  {a.busy ? <Loader2 size={15} className="animate-spin" /> : <a.icon size={15} />}
+                </span>
+                <span className="text-sm font-medium text-ink-800 whitespace-nowrap">{a.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className={`relative z-30 flex h-[42px] w-[42px] items-center justify-center rounded-full text-white shadow-pop transition-all duration-300 disabled:opacity-40 ${
+          open ? 'bg-brand-700 scale-95' : 'bg-gradient-to-br from-brand-500 to-brand-700 hover:from-brand-600 hover:to-brand-800'
+        }`}
+        title="Acciones"
+        aria-label="Acciones"
+        aria-expanded={open}
+      >
+        <Plus size={20} className={`transition-transform duration-300 ${open ? 'rotate-[135deg]' : ''}`} />
+      </button>
+    </div>
+  );
+}
+
 export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
@@ -55,7 +125,6 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [error, setError] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [interactiveOpen, setInteractiveOpen] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [productsOpen, setProductsOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -211,7 +280,6 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
 
   // Share the dealer's current position (the attach menu's "Ubicación").
   function sendCurrentLocation() {
-    setAttachOpen(false);
     if (!navigator.geolocation) { setError('Este dispositivo no expone la ubicación.'); return; }
     setSending(true);
     setError(null);
@@ -514,117 +582,40 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         ) : (
           <>
-            {/* AI reply suggestion — drops a draft into the composer (never
-                sends). Shown only with an inbound message to answer and the
-                24h window open, so it's zero clutter on cold threads. */}
-            {onSuggestReply && canDraft && thread.windowOpen && (
-              <button
-                type="button"
-                onClick={suggestReply}
-                disabled={!connected || sending || drafting}
-                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-                title="Sugerir respuesta con IA"
-                aria-label="Sugerir respuesta con IA"
-                aria-busy={drafting}
-              >
-                {drafting ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
-              </button>
-            )}
-            {/* Quick replies — leftmost so the upward popover (w-72) stays
-                on-screen on a phone. Rendered only once the team has saved
-                some (Settings → WhatsApp), so it's zero clutter by default. */}
-            {quickReplies.length > 0 && (
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setQuickOpen((v) => !v)}
-                  disabled={!connected || sending}
-                  className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors"
-                  title="Respuestas rápidas"
-                  aria-label="Respuestas rápidas"
-                  aria-expanded={quickOpen}
-                >
-                  <Zap size={17} />
-                </button>
-                {quickOpen && (
-                  <>
-                    <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setQuickOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
-                    <div className="absolute bottom-full left-0 mb-2 z-20 w-[min(18rem,calc(100vw-2rem))] max-h-72 overflow-y-auto rounded-xl bg-surface border border-ink-100 shadow-lg py-1">
-                      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Respuestas rápidas</div>
-                      {quickReplies.map((qr) => (
-                        <button
-                          key={qr.id}
-                          type="button"
-                          onClick={() => insertQuickReply(qr)}
-                          className="block w-full text-left px-3 py-2 hover:bg-ink-50 active:bg-ink-100 transition-colors"
-                        >
-                          <div className="text-sm font-medium text-ink-800 truncate">{qr.label || 'Sin título'}</div>
-                          <div className="text-[11px] text-ink-500 truncate">{fillQuickReply(qr.text, quickVars)}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setAttachOpen((v) => !v)}
-                disabled={!connected || sending}
-                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors"
-                title="Adjuntar (archivo · ubicación · contacto)"
-                aria-label="Adjuntar"
-                aria-expanded={attachOpen}
-              >
-                <Paperclip size={17} />
-              </button>
-              {attachOpen && (
-                <>
-                  {/* Invisible backdrop — a tap anywhere else closes the menu. */}
-                  <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setAttachOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
-                  <div className="absolute bottom-full left-0 mb-2 z-20 w-48 rounded-xl bg-surface border border-ink-100 shadow-lg overflow-hidden py-1">
-                    <AttachItem icon={FileText} label="Archivo" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
-                    {onSendLocation && <AttachItem icon={MapPin} label="Ubicación actual" onClick={sendCurrentLocation} />}
-                    {onSendContact && <AttachItem icon={ContactRound} label="Contacto" onClick={() => { setAttachOpen(false); setContactOpen(true); }} />}
-                  </div>
-                </>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setTemplateOpen(true)}
+            {/* One primitive, fanned out — every "left of the box" action
+                (attach · location · contact · template · interactive · catalog
+                · quick reply · AI draft) behind a single speed-dial. Falsy
+                entries drop, so each item stays gated exactly as before. */}
+            <ComposerActions
               disabled={!connected || sending}
-              className={`p-2.5 min-h-[42px] rounded-lg disabled:opacity-40 transition-colors shrink-0 ${
-                thread.windowOpen ? 'text-ink-400 hover:text-brand-700 hover:bg-brand-50' : 'text-amber-600 hover:bg-amber-50'
-              }`}
-              title={thread.windowOpen ? 'Enviar plantilla' : 'Ventana cerrada — envía una plantilla aprobada'}
-              aria-label="Enviar plantilla"
-            >
-              <LayoutTemplate size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setInteractiveOpen(true)}
-              disabled={!connected || sending}
-              className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
-              title="Mensaje interactivo (botones · lista · enlace)"
-              aria-label="Mensaje interactivo"
-            >
-              <SquareMenu size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setProductsOpen(true)}
-              disabled={!connected || sending}
-              className={`p-2.5 min-h-[42px] rounded-lg disabled:opacity-40 transition-colors shrink-0 ${
-                thread.windowOpen ? 'text-ink-400 hover:text-brand-700 hover:bg-brand-50' : 'text-amber-600 hover:bg-amber-50'
-              }`}
-              title="Enviar productos del catálogo"
-              aria-label="Enviar productos del catálogo"
-            >
-              <ShoppingBag size={17} />
-            </button>
+              actions={[
+                onSuggestReply && canDraft && thread.windowOpen && {
+                  key: 'ai', icon: Sparkles, label: 'Sugerir con IA',
+                  onClick: suggestReply, busy: drafting, disabled: drafting,
+                },
+                quickReplies.length > 0 && {
+                  key: 'quick', icon: Zap, label: 'Respuestas rápidas',
+                  onClick: () => setQuickOpen(true),
+                },
+                { key: 'file', icon: FileText, label: 'Archivo', onClick: () => fileRef.current?.click() },
+                onSendLocation && {
+                  key: 'location', icon: MapPin, label: 'Ubicación actual', onClick: sendCurrentLocation,
+                },
+                onSendContact && {
+                  key: 'contact', icon: ContactRound, label: 'Contacto', onClick: () => setContactOpen(true),
+                },
+                {
+                  key: 'template', icon: LayoutTemplate,
+                  label: thread.windowOpen ? 'Plantilla' : 'Plantilla aprobada',
+                  onClick: () => setTemplateOpen(true), tone: thread.windowOpen ? null : 'amber',
+                },
+                { key: 'interactive', icon: SquareMenu, label: 'Mensaje interactivo', onClick: () => setInteractiveOpen(true) },
+                {
+                  key: 'products', icon: ShoppingBag, label: 'Productos del catálogo',
+                  onClick: () => setProductsOpen(true), tone: thread.windowOpen ? null : 'amber',
+                },
+              ]}
+            />
             <textarea
               ref={composerRef}
               className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
@@ -666,6 +657,24 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         )}
       </div>
+      )}
+
+      {quickReplies.length > 0 && (
+        <Modal open={quickOpen} onClose={() => setQuickOpen(false)} title="Respuestas rápidas" size="sm">
+          <div className="space-y-1 max-h-[60vh] overflow-y-auto -mx-1 px-1">
+            {quickReplies.map((qr) => (
+              <button
+                key={qr.id}
+                type="button"
+                onClick={() => insertQuickReply(qr)}
+                className="block w-full text-left px-3 py-2.5 rounded-lg hover:bg-ink-50 active:bg-ink-100 transition-colors"
+              >
+                <div className="text-sm font-medium text-ink-800 truncate">{qr.label || 'Sin título'}</div>
+                <div className="text-[11px] text-ink-500 truncate">{fillQuickReply(qr.text, quickVars)}</div>
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
 
       <TemplateSendModal
@@ -753,19 +762,6 @@ function prettySize(bytes) {
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   if (n >= 1024) return `${Math.round(n / 1024)} KB`;
   return `${n} B`;
-}
-
-/** One row of the attach popover menu. */
-function AttachItem({ icon: Icon, label, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-ink-700 hover:bg-ink-50 transition-colors"
-    >
-      <Icon size={15} className="text-ink-400 shrink-0" /> {label}
-    </button>
-  );
 }
 
 /**

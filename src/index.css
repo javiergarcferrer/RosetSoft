@@ -1018,6 +1018,31 @@
   html.kb-open .kb-chat-pane {
     height: calc(100dvh - 3.5rem - env(safe-area-inset-top));
   }
+  /* The WhatsApp inbox thread fills the viewport minus the app chrome AND both
+     safe-area insets (Chats.jsx, the selectedKey height). In an installed PWA
+     the webview RESIZES to exclude the keyboard when it opens, but the bottom
+     safe-area inset (the home indicator, now hidden behind the keyboard) is
+     still subtracted — floating the composer that inset ABOVE the keyboard as a
+     dead gap. Reclaim it while typing, exactly like the quote chat pane above.
+     Phones only (the bar's own breakpoint); md+ has no soft keyboard. */
+  @media (max-width: 767.98px) {
+    html.kb-open .kb-inbox-pane {
+      height: calc(100dvh - 7.5rem - env(safe-area-inset-top));
+    }
+  }
+}
+
+/* Composer action fan-out (ChatThread): the single "+" primitive expands into a
+   staggered speed-dial — each item springs up with a slight overshoot, the scrim
+   fades in. Kept as global keyframes (not Tailwind config) so the inline
+   per-item animation-delay can stagger them. */
+@keyframes rs-fan-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.8); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@keyframes rs-fan-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ===================================================================
