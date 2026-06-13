@@ -8,7 +8,7 @@ import {
   Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { resolveReferral, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
+import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping } from '../../lib/whatsapp.js';
 import { db } from '../../db/database.js';
@@ -1390,6 +1390,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
   // Stickers render bare — no bubble chrome — like the official app.
   const isSticker = m.kind === 'sticker' && !!m.mediaPath;
   const card = contactCard(m);
+  const order = resolveOrderMessage(m);
   const loc = m.payload?.location;
   // Reply/react address the message by wamid — without one (an optimistic
   // draft, a failed send) there is nothing to act on.
@@ -1453,9 +1454,36 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
               ))}
             </div>
           )}
-          {m.body && !isDocChip && !card
+          {/* A cart the client built from our catalog cards and sent back —
+              the bridge from a WhatsApp Commerce browse to a quote. */}
+          {order && (
+            <div className="mt-1 rounded-lg bg-white/70 border border-ink-200 overflow-hidden">
+              <div className="px-2.5 py-1.5 flex items-center gap-1.5 border-b border-ink-100 bg-emerald-50/70">
+                <ShoppingBag size={12} className="text-emerald-700 shrink-0" aria-hidden />
+                <span className="text-[11px] font-semibold text-emerald-800">Pedido del catálogo · {order.items.length} producto(s)</span>
+              </div>
+              <div className="divide-y divide-ink-50">
+                {order.items.map((it, i) => (
+                  <div key={`${it.retailerId}-${i}`} className="px-2.5 py-1 flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-mono text-ink-600 truncate">{it.retailerId}</span>
+                    <span className="text-ink-500 tabular-nums shrink-0">
+                      {it.quantity}{it.price > 0 ? ` × ${it.currency} ${it.price.toLocaleString('en-US')}` : ' u.'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {order.total > 0 && (
+                <div className="px-2.5 py-1.5 flex items-center justify-between border-t border-ink-100 text-xs font-semibold text-ink-800">
+                  <span>Total</span>
+                  <span className="tabular-nums">{order.currency} {order.total.toLocaleString('en-US')}</span>
+                </div>
+              )}
+              {order.text && <div className="px-2.5 py-1.5 text-[11px] text-ink-600 border-t border-ink-100 whitespace-pre-wrap">{order.text}</div>}
+            </div>
+          )}
+          {m.body && !isDocChip && !card && !order
             ? m.body
-            : !m.mediaPath && !m.body && !card && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}
+            : !m.mediaPath && !m.body && !card && !order && <span className="opacity-60 italic">({m.kind || 'mensaje'})</span>}
           {/* Quick-reply buttons WE sent — non-clickable chips showing what the client saw. */}
           {m.payload?.interactive?.buttons?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">

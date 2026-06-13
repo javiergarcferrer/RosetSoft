@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { waDigits, phoneKey, displayPhone } from '../src/lib/phone.js';
 import {
-  WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts, fillQuickReply,
+  WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts, fillQuickReply, resolveOrderMessage,
 } from '../src/core/crm/index.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -125,6 +125,28 @@ test('fillQuickReply — named placeholders, unknown tokens left intact', () => 
   // Known key with no value collapses to ''.
   assert.equal(fillQuickReply('Hola {{nombre}}!', {}), 'Hola !');
   assert.equal(fillQuickReply('', { nombre: 'Ana' }), '');
+});
+
+test('resolveOrderMessage — normalizes an inbound cart and sums the total', () => {
+  const m = {
+    kind: 'order',
+    payload: { order: {
+      catalog_id: 'cat1', text: 'Quiero estos',
+      product_items: [
+        { product_retailer_id: 'lsg-1', quantity: 2, item_price: 100, currency: 'USD' },
+        { product_retailer_id: 'lsg-2', quantity: 1, item_price: 50.5, currency: 'USD' },
+      ],
+    } },
+  };
+  const o = resolveOrderMessage(m);
+  assert.equal(o.catalogId, 'cat1');
+  assert.equal(o.items.length, 2);
+  assert.equal(o.total, 250.5);
+  assert.equal(o.currency, 'USD');
+  assert.equal(o.text, 'Quiero estos');
+  // A non-order message (and an empty cart) → null.
+  assert.equal(resolveOrderMessage({ kind: 'text', payload: { text: { body: 'hola' } } }), null);
+  assert.equal(resolveOrderMessage({ kind: 'order', payload: { order: { product_items: [] } } }), null);
 });
 
 test('resolveNewChatContacts — phone-bearing contacts not already in a thread', () => {

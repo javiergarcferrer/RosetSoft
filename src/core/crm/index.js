@@ -9,6 +9,7 @@ export {
   resolveNewChatContacts,
   resolveChatTarget,
   resolveReferral,
+  resolveOrderMessage,
   fillQuickReply,
 } from './views/inbox.js';
 export {

@@ -223,6 +223,33 @@ export function resolveChatTarget(customers, professionals, conversations, phone
 }
 
 /**
+ * The product order a customer submitted from a catalog / product-list message
+ * (Meta's inbound `order` message), normalized for the chat — or null. The
+ * client builds a cart out of the product cards we sent and sends it back; this
+ * surfaces it in the thread so the dealer can turn it into a quote. `item_price`
+ * is a decimal in `currency`; the total is summed here so the bubble and any
+ * downstream "crear cotización" read one figure.
+ */
+export function resolveOrderMessage(message) {
+  const o = message?.payload?.order;
+  if (!o || !Array.isArray(o.product_items)) return null;
+  const items = o.product_items.map((p) => ({
+    retailerId: String(p.product_retailer_id || ''),
+    quantity: Number(p.quantity) || 0,
+    price: Number(p.item_price) || 0,
+    currency: String(p.currency || ''),
+  })).filter((p) => p.retailerId);
+  if (!items.length) return null;
+  return {
+    catalogId: String(o.catalog_id || ''),
+    items,
+    currency: items[0].currency,
+    total: items.reduce((s, p) => s + p.price * p.quantity, 0),
+    text: String(o.text || ''),
+  };
+}
+
+/**
  * The Click-to-WhatsApp ad referral of an inbound message, normalized for the
  * chat bubble, or null. Meta stamps `referral` on the FIRST message a user
  * sends after tapping a CTWA ad / sponsored post — the inbox surfaces it so
@@ -269,6 +296,7 @@ function labelForKind(kind) {
   const labels = {
     image: '📷 Imagen', video: '🎬 Video', audio: '🎤 Audio', document: '📄 Documento',
     sticker: 'Sticker', location: '📍 Ubicación', contacts: 'Contacto', reaction: 'Reacción',
+    order: '🛒 Pedido', system: 'Aviso del sistema',
   };
   return labels[kind] || (kind && kind !== 'text' ? `Mensaje (${kind})` : 'Mensaje');
 }

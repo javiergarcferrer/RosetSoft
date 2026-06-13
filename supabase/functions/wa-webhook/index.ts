@@ -94,6 +94,14 @@ function inboundBody(msg: Record<string, any>): string {
       const c = (msg.contacts || [])[0];
       return c?.name?.formatted_name || c?.name?.first_name || 'Contacto';
     }
+    case 'order': {
+      // A cart the client built from product cards we sent. The renderable
+      // detail (items, prices) lives in payload.order — this is just the
+      // inbox-list label; the chat bubble reads the full order off payload.
+      const n = (msg.order?.product_items || []).length;
+      return n ? `🛒 Pedido · ${n} producto(s)` : '🛒 Pedido';
+    }
+    case 'system': return msg.system?.body || 'Aviso del sistema';
     default: return '';
   }
 }
