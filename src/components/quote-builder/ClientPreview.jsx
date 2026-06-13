@@ -213,7 +213,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           <div className="eyebrow">Cotización</div>
           {/* Quieter quote number — it shouldn't out-shout the company
               wordmark or (on the totals) the grand total. */}
-          <div className="text-xl font-semibold tracking-tight leading-tight">#{quote.number || '—'}</div>
+          <div className="font-display text-xl font-semibold tracking-tight leading-tight">#{quote.number || '—'}</div>
         </div>
       </div>
 
@@ -231,7 +231,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
               <>
                 {/* Up-weighted recipient — the second-most prominent
                     identity after the company, matching the PDF. */}
-                <div className="text-lg font-semibold text-ink-900">{customer.name}</div>
+                <div className="font-display text-lg font-semibold text-ink-900">{customer.name}</div>
                 {customer.company && <div className="text-xs text-ink-700">{customer.company}</div>}
                 {/* Stacked details, one line each: contact (email · phone),
                     then street, then city/state/zip. Country is omitted. */}
@@ -512,7 +512,7 @@ function LineIdentity({ family, name }) {
       {family && (
         <div className="eyebrow-xs tracking-widest text-ink-500 mb-0.5">{family}</div>
       )}
-      <div className="text-base font-semibold text-ink-900 sm:text-sm">{name || '—'}</div>
+      <div className="font-display text-base font-semibold text-ink-900 sm:text-sm">{name || '—'}</div>
     </>
   );
 }
