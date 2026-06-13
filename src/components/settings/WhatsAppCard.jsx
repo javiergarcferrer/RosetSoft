@@ -1,6 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useState } from 'react';
-import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw, QrCode } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw, QrCode, Zap, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { newId } from '../../db/database.js';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
@@ -192,6 +193,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           <WebhookRow settings={settings} />
           <TemplateRow settings={settings} saveSettings={saveSettings} />
           <CatalogRow settings={settings} saveSettings={saveSettings} />
+          <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
           <BusinessProfileRow />
           <TestSendRow />
         </>
@@ -642,6 +644,134 @@ function CatalogRow({ settings, saveSettings }) {
  * it. The profile photo can't be set through this API surface, hence the
  * WhatsApp Manager pointer.
  */
+/**
+ * Quick replies (canned responses) — the small team-shared library the chat
+ * composer inserts with one tap. Each entry is { id, label, text }; the text
+ * may carry {{nombre}} (the contact) and {{negocio}} (the business name),
+ * filled at insert time. The whole array persists on each add / edit / delete
+ * through saveSettings (one settings column, replaced wholesale), so the
+ * composer button surfaces them the moment they're saved.
+ */
+function QuickRepliesRow({ settings, saveSettings }) {
+  const items = Array.isArray(settings?.whatsappQuickReplies) ? settings.whatsappQuickReplies : [];
+  const [editingId, setEditingId] = useState(null); // entry id | 'new' | null
+  const [label, setLabel] = useState('');
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const negocio = settings?.companyName || 'tu negocio';
+
+  function startAdd() { setEditingId('new'); setLabel(''); setText(''); }
+  function startEdit(qr) { setEditingId(qr.id); setLabel(qr.label || ''); setText(qr.text || ''); }
+  function cancel() { setEditingId(null); setLabel(''); setText(''); }
+
+  async function persist(next) {
+    setSaving(true);
+    try {
+      await saveSettings({ whatsappQuickReplies: next });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function save() {
+    const l = label.trim();
+    const t = text.trim();
+    if (!l || !t) return;
+    const next = editingId === 'new'
+      ? [...items, { id: newId(), label: l, text: t }]
+      : items.map((q) => (q.id === editingId ? { ...q, label: l, text: t } : q));
+    await persist(next);
+    cancel();
+  }
+
+  async function remove(id) {
+    await persist(items.filter((q) => q.id !== id));
+    if (editingId === id) cancel();
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="label inline-flex items-center gap-1.5"><Zap size={12} className="text-brand-600" /> Respuestas rápidas</div>
+      <p className="text-[11px] text-ink-500 mb-2">
+        Frases reutilizables que insertas en el chat con un toque. Usa <code>{'{{nombre}}'}</code> (el cliente) y{' '}
+        <code>{'{{negocio}}'}</code> ({negocio}) y se completan al insertarlas.
+      </p>
+
+      {items.length > 0 && (
+        <ul className="space-y-1.5 mb-2">
+          {items.map((qr) => (
+            <li key={qr.id}>
+              {editingId === qr.id ? (
+                <QuickReplyForm
+                  label={label} text={text} setLabel={setLabel} setText={setText}
+                  onSave={save} onCancel={cancel} saving={saving}
+                />
+              ) : (
+                <div className="flex items-start gap-2 rounded-lg border border-ink-200 bg-white px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-ink-800 truncate">{qr.label}</div>
+                    <div className="text-[11px] text-ink-500 line-clamp-2 whitespace-pre-wrap">{qr.text}</div>
+                  </div>
+                  <button type="button" onClick={() => startEdit(qr)} disabled={saving} className="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 disabled:opacity-40 shrink-0" title="Editar" aria-label="Editar respuesta">
+                    <Pencil size={13} />
+                  </button>
+                  <button type="button" onClick={() => remove(qr.id)} disabled={saving} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0" title="Eliminar" aria-label="Eliminar respuesta">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editingId === 'new' ? (
+        <QuickReplyForm
+          label={label} text={text} setLabel={setLabel} setText={setText}
+          onSave={save} onCancel={cancel} saving={saving}
+        />
+      ) : (
+        <button type="button" onClick={startAdd} className="btn-ghost text-xs inline-flex items-center gap-1">
+          <Plus size={13} /> Añadir respuesta
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The add/edit form shared by a new entry and an inline edit. */
+function QuickReplyForm({ label, text, setLabel, setText, onSave, onCancel, saving }) {
+  const valid = label.trim() && text.trim();
+  return (
+    <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-2.5 space-y-2">
+      <input
+        type="text"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder="Título (p. ej. Saludo)"
+        className="input text-sm"
+        aria-label="Título de la respuesta rápida"
+        maxLength={40}
+      />
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Hola {{nombre}}, gracias por escribir a {{negocio}}…"
+        className="input text-sm min-h-[72px] resize-y"
+        aria-label="Texto de la respuesta rápida"
+      />
+      <div className="flex items-center justify-end gap-2">
+        <button type="button" onClick={onCancel} className="btn-ghost text-xs inline-flex items-center gap-1">
+          <X size={13} /> Cancelar
+        </button>
+        <button type="button" onClick={onSave} disabled={!valid || saving} className="btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-40">
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BusinessProfileRow() {
   const [fetched, setFetched] = useState(false); // first-open fetch guard
   const [loading, setLoading] = useState(false);

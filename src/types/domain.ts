@@ -230,6 +230,10 @@ export interface Settings {
   /** Manual Commerce-catalog id override for the chat's product picker.
    *  Empty ⇒ wa-send auto-discovers the catalog from the token. */
   whatsappCatalogId?: string;
+  /** Quick replies (canned responses) the chat composer inserts with one tap.
+   *  The text may carry {{nombre}} / {{negocio}} placeholders, filled at insert
+   *  time (core/crm fillQuickReply). */
+  whatsappQuickReplies?: { id: string; label: string; text: string }[];
 }
 
 /**

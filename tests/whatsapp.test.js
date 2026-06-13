@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { waDigits, phoneKey, displayPhone } from '../src/lib/phone.js';
 import {
-  WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts,
+  WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts, fillQuickReply,
 } from '../src/core/crm/index.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -109,6 +109,20 @@ test('resolveThread — chronological items + the 24h window off the LAST inboun
   const fresh = resolveThread([], { key: '8095550100', now });
   assert.equal(fresh.windowOpen, false);
   assert.equal(fresh.lastInboundAt, null);
+});
+
+test('fillQuickReply — named placeholders, unknown tokens left intact', () => {
+  assert.equal(
+    fillQuickReply('Hola {{nombre}}, gracias por escribir a {{negocio}}.', { nombre: 'Eduardo', negocio: 'ALCOVER' }),
+    'Hola Eduardo, gracias por escribir a ALCOVER.',
+  );
+  // Case-insensitive key, tolerant of inner spacing.
+  assert.equal(fillQuickReply('Hola {{ Nombre }}', { nombre: 'Ana' }), 'Hola Ana');
+  // Unknown placeholder is preserved (a typo stays visible).
+  assert.equal(fillQuickReply('Hola {{cliente}}', { nombre: 'Ana' }), 'Hola {{cliente}}');
+  // Known key with no value collapses to ''.
+  assert.equal(fillQuickReply('Hola {{nombre}}!', {}), 'Hola !');
+  assert.equal(fillQuickReply('', { nombre: 'Ana' }), '');
 });
 
 test('resolveNewChatContacts — phone-bearing contacts not already in a thread', () => {

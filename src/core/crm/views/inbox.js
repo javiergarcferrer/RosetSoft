@@ -234,6 +234,23 @@ export function resolveReferral(message) {
   };
 }
 
+/**
+ * Fill a quick-reply snippet's named placeholders. Supported (case-insensitive):
+ *   {{nombre}}  → the contact's name
+ *   {{negocio}} → the dealer's business name
+ * An UNKNOWN placeholder is left intact (so a typo is visible, not silently
+ * dropped); a known key with no value collapses to ''. Distinct from
+ * fillTemplateBody's numeric {{1}} scheme — quick replies are free text the
+ * dealer authors, so named tokens read better than positional ones.
+ */
+export function fillQuickReply(text, { nombre = '', negocio = '' } = {}) {
+  const map = { nombre, negocio };
+  return String(text || '').replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (whole, key) => {
+    const k = key.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(map, k) ? String(map[k] ?? '') : whole;
+  });
+}
+
 function indexByPhone(rows) {
   const map = new Map();
   for (const r of rows || []) {
