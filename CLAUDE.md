@@ -194,6 +194,34 @@ ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
 - **Parallelize**: batch independent tool calls in one turn; fan out agents for big
   sweeps (see Traps).
 
+## Theming (light/dark — variable-driven, light is FROZEN)
+One toggle re-skins the whole app; the mechanism is CSS variables, not a
+per-component `dark:` sweep.
+- **Source of truth**: `src/index.css` `:root` (light) vs `.dark` (dark) define
+  `--ink-50..900`, `--brand-50..900`, `--canvas`, `--surface`, `--surface-2`,
+  `--card-sheen`, `--card-hi`. `tailwind.config.js` maps `ink/brand/surface/
+  canvas` to `rgb(var(--…) / <alpha-value>)` (bare channel triplets — never wrap
+  in `rgb()` or add commas, it breaks the alpha modifier). So `text-ink-900`,
+  `bg-surface`, `border-ink-100`, etc. flip for free.
+- **Light values are FROZEN** = the exact hexes the app always shipped. NEVER
+  edit a `:root` light value to "fix" a dark-mode problem — that regresses light
+  mode. Fix it in the `.dark` block (or with a `dark:` variant) instead. A new
+  color = add the var to BOTH `:root` and `.dark`.
+- **Always-dark chrome** (sidebar, mobile topbar, the ProfileMenu inside it) is
+  wrapped in `.theme-chrome`, which re-pins `--ink-*`/`--brand-*`/`--surface` to
+  the LIGHT ramp locally so it stays dark in both themes. Don't strip that class
+  or the sidebar inverts to light in dark mode.
+- **`bg-white` can't flip** (literal). Manually-built panels use `bg-surface`
+  (light value `#fff`); the only remaining literal whites are intentional
+  knockouts (logo plates, fabric-swatch backings, transparent-image mattes,
+  white-on-colored chips) and the client/PDF "paper".
+- **Anti-FOUC**: an inline `<head>` script in `index.html` stamps `.dark` before
+  first paint; it MUST mirror `lib/theme.js` exactly (key `rs.theme`,
+  light/dark/system, public routes forced light). `lib/theme.js` owns the live
+  toggle + OS-follow; the `theme-color` meta stays the dark chrome ink in both.
+- **Public client surfaces stay light** (`/#/q/…`, `/#/tienda`, `ClientPreview`):
+  they're the dealer's paper on a customer's device — must match the PDF.
+
 ## Traps (symptom → cause → fix)
 - **Deno ↔ Vite is a hard wall**: app `src/*` (Vite, browser) and Edge Functions
   `supabase/functions/*` (Deno, server: URL imports, `Deno.env`, service-role key)
