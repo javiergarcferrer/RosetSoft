@@ -272,13 +272,17 @@ export default function TotalsDock({
     // and the dock returns to bottom-0.
     <div data-kb-keep className="fixed bottom-0 bottom-above-modebar left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
       {/* Safe-area apron — a white fill that spills BELOW the dock to the
-          physical screen edge. If iOS lays the standalone viewport SHORT (a
+          physical screen edge. md+ ONLY: there the dock sits at the physical
+          bottom (no ModeBar), so if iOS lays the standalone viewport SHORT (a
           legacy / cached black-translucent install, before the status-bar=black
           fix is picked up on reinstall), the home-indicator strip would
-          otherwise leak the page / manifest grey under the bar. This paints it
-          white WITH the dock. Off-screen (harmless) when the dock already sits
-          flush at the physical bottom — Safari tabs, desktop, fresh installs. */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-24 bg-surface" />
+          otherwise leak the page / manifest grey under the bar — this paints it
+          white WITH the dock. Under md the dock is LIFTED above the mobile
+          ModeBar (bottom-above-modebar), so this apron would spill straight over
+          the bar and hide it (it's pointer-events-none, so the bar still works
+          but reads as missing); the ModeBar paints its own home-indicator inset
+          there, so the apron is both unneeded and harmful — hence md:block. */}
+      <div aria-hidden className="hidden md:block pointer-events-none absolute inset-x-0 top-full h-24 bg-surface" />
       {/* Premium elevated dock — terracotta top border, deep shadow. SOLID white
           (no translucency / backdrop-blur): a see-through dock smeared content
           behind it in the PWA. md:pb-safe-standalone fills the home-indicator

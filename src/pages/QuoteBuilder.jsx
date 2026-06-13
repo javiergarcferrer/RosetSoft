@@ -749,6 +749,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           materials={materials}
           modelFabrics={modelFabrics}
           gradePricesFor={editorGradePricesFor}
+          inEditor
           // The picks the public link wires, so the preview is live too. hx joins
           // each into undo/redo + autosave (one snapshot per gesture), matching the
           // editor's other actions (QuoteActionsContext). onPickMaterialMany batches

@@ -110,7 +110,7 @@ function moduleAlternativeInfo(modules) {
   return map;
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, inEditor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -460,10 +460,12 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
         the bottom-RIGHT (thumb zone, clear of the centred content) toggles edit
         mode: a pencil to start configuring, a check to return to the clean
         proposal. An amber dot quietly advertises there's more to do. z-40 sits
-        under the transient SaveToast (z-50). Lifted above the editor's bottom
-        dock when shown inside the in-app preview (gradePricesFor). */}
+        under the transient SaveToast (z-50). Inside the in-app editor preview
+        (inEditor) it clears the stacked bottom chrome — the ModeBar (~3.5rem)
+        plus the TotalsDock above it (~3.5rem) — so it never lands on the dock's
+        share/export row; on the public link there's no dock, so it hugs 1rem. */}
     {interactive && (
-      <div className={`theme-light fixed z-40 print:hidden kb-hide-when-open right-[max(1rem,env(safe-area-inset-right))] ${gradePricesFor ? 'bottom-[calc(4.5rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]'}`}>
+      <div className={`theme-light fixed z-40 print:hidden kb-hide-when-open right-[max(1rem,env(safe-area-inset-right))] ${inEditor ? 'bottom-[calc(8rem+env(safe-area-inset-bottom))] md:bottom-[calc(4.5rem+env(safe-area-inset-bottom))]' : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]'}`}>
         <button
           type="button"
           onClick={() => setMode(mode === 'edit' ? 'view' : 'edit')}
