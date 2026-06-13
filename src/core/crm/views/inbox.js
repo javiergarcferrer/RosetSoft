@@ -250,6 +250,34 @@ export function resolveOrderMessage(message) {
 }
 
 /**
+ * Encode an order's items as a `refs` query value for the quote builder's
+ * draft seeder — `reference:qty` pairs, comma-joined, each reference
+ * percent-encoded so a SKU's own `:`/`,` can't collide with the separators.
+ * The inverse is parseOrderRefs; the pair round-trips (pinned in the test).
+ */
+export function buildOrderRefsParam(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((it) => ({ reference: String(it?.reference ?? it?.retailerId ?? '').trim(), qty: Math.max(1, Number(it?.qty ?? it?.quantity) || 1) }))
+    .filter((it) => it.reference)
+    .map((it) => `${encodeURIComponent(it.reference)}:${it.qty}`)
+    .join(',');
+}
+
+/** Parse a `refs` query value back into [{ reference, qty }]. Tolerant of a
+ *  missing/blank qty (→ 1) and of junk segments (skipped). */
+export function parseOrderRefs(str) {
+  return String(str || '')
+    .split(',')
+    .map((seg) => {
+      const i = seg.lastIndexOf(':');
+      const ref = i >= 0 ? seg.slice(0, i) : seg;
+      const qty = i >= 0 ? Number(seg.slice(i + 1)) : 1;
+      return { reference: decodeURIComponent(ref || '').trim(), qty: Math.max(1, qty || 1) };
+    })
+    .filter((it) => it.reference);
+}
+
+/**
  * The Click-to-WhatsApp ad referral of an inbound message, normalized for the
  * chat bubble, or null. Meta stamps `referral` on the FIRST message a user
  * sends after tapping a CTWA ad / sponsored post — the inbox surfaces it so

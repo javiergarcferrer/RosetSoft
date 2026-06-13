@@ -50,7 +50,7 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, showHeader = true, contextQuoteId = null }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, onCreateQuote, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -353,6 +353,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             onReply={setReplyTo}
             onReact={onReact ? react : null}
             onSaveCard={onSaveContact ? setSaveTarget : null}
+            onCreateOrder={onCreateQuote || null}
             quoteChip={m.quoteId && m.quoteId !== contextQuoteId
               ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
               : null}
@@ -1435,7 +1436,7 @@ function BlockMenu({ phone, onError }) {
   );
 }
 
-function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
+function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, quoteChip = null }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
   const showDay = !prev || dayLabel(prev.createdAt) !== day;
@@ -1535,6 +1536,17 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, quoteChip = null }) {
                 </div>
               )}
               {order.text && <div className="px-2.5 py-1.5 text-[11px] text-ink-600 border-t border-ink-100 whitespace-pre-wrap">{order.text}</div>}
+              {/* Turn the cart into a quote draft — seeds the new quote's lines
+                  with these references + quantities and pre-fills the customer. */}
+              {onCreateOrder && (
+                <button
+                  type="button"
+                  onClick={() => onCreateOrder(order)}
+                  className="w-full px-2.5 py-2 flex items-center justify-center gap-1.5 border-t border-ink-100 text-xs font-semibold text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition-colors"
+                >
+                  <FileText size={12} /> Crear cotización
+                </button>
+              )}
             </div>
           )}
           {m.body && !isDocChip && !card && !order

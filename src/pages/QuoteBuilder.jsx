@@ -11,6 +11,7 @@ import {
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
+import { parseOrderRefs } from '../core/crm/index.js';
 import { composeSubtype } from '../lib/subtype.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
@@ -88,6 +89,10 @@ export default function QuoteBuilder() {
       // credited to a random dealer.
       createdByUserId={currentProfile?.id || null}
       initialRef={search.get('ref') || ''}
+      // ?refs=<ref:qty,…>&customer=<id> — the "Crear cotización" action on a
+      // WhatsApp catalog order seeds the draft with the client's cart.
+      initialRefs={parseOrderRefs(search.get('refs') || '')}
+      initialCustomerId={search.get('customer') || null}
       navigate={navigate}
     />
   );
@@ -97,7 +102,7 @@ export default function QuoteBuilder() {
 /*  Draft → Materialize                                                       */
 /* -------------------------------------------------------------------------- */
 
-function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navigate }) {
+function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, initialRefs, initialCustomerId, navigate }) {
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = newId();
   const id = idRef.current;
@@ -154,35 +159,50 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, navi
     return inFlightRef.current;
   }, [id, defaults, profileId]);
 
-  // ?ref=XXXXX pre-fills the first line's reference field after materialize.
+  // Pre-fill a fresh draft after materialize. Two entry points share the path:
+  //   • ?ref=XXXXX            — one reference (the catalog quick-add link).
+  //   • ?refs=ref:qty,…       — many references + quantities (a WhatsApp
+  //     catalog order, via Chats' "Crear cotización"), with ?customer=<id>.
+  // Runs ONCE (the seededRef guard) — the params don't change for a draft.
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (!initialRef) return;
+    if (seededRef.current) return;
+    const seeds = (initialRefs && initialRefs.length)
+      ? initialRefs
+      : (initialRef ? [{ reference: initialRef, qty: 1 }] : []);
+    if (!seeds.length && !initialCustomerId) return;
+    seededRef.current = true;
     let cancel = false;
     (async () => {
       await materialize();
       if (cancel) return;
-      await db.quoteLines.put({
-        id: newId(),
-        quoteId: id,
-        kind: LINE_KIND_ITEM,
-        sortOrder: 0,
-        family: '',
-        reference: initialRef,
-        name: '',
-        subtype: '',
-        dimensions: '',
-        description: '',
-        pageRef: '',
-        imageId: null,
-        qty: 1,
-        unitPrice: 0,
-        lineMarginPct: 0,
-        lineDiscountPct: 0,
-        notes: '',
-      });
+      if (initialCustomerId) {
+        try { await db.quotes.update(id, { customerId: initialCustomerId }); } catch { /* leave unassigned */ }
+      }
+      if (seeds.length) {
+        await db.quoteLines.bulkPut(seeds.map((s, i) => ({
+          id: newId(),
+          quoteId: id,
+          kind: LINE_KIND_ITEM,
+          sortOrder: i,
+          family: '',
+          reference: s.reference,
+          name: '',
+          subtype: '',
+          dimensions: '',
+          description: '',
+          pageRef: '',
+          imageId: null,
+          qty: Math.max(1, Number(s.qty) || 1),
+          unitPrice: 0,
+          lineMarginPct: 0,
+          lineDiscountPct: 0,
+          notes: '',
+        })));
+      }
     })();
     return () => { cancel = true; };
-  }, [initialRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Workspace

@@ -10,6 +10,8 @@ export {
   resolveChatTarget,
   resolveReferral,
   resolveOrderMessage,
+  buildOrderRefsParam,
+  parseOrderRefs,
   fillQuickReply,
 } from './views/inbox.js';
 export {

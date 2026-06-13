@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { waDigits, phoneKey, displayPhone } from '../src/lib/phone.js';
 import {
   WA_WINDOW_MS, resolveConversations, resolveThread, resolveNewChatContacts, fillQuickReply, resolveOrderMessage,
+  buildOrderRefsParam, parseOrderRefs,
 } from '../src/core/crm/index.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -147,6 +148,23 @@ test('resolveOrderMessage — normalizes an inbound cart and sums the total', ()
   // A non-order message (and an empty cart) → null.
   assert.equal(resolveOrderMessage({ kind: 'text', payload: { text: { body: 'hola' } } }), null);
   assert.equal(resolveOrderMessage({ kind: 'order', payload: { order: { product_items: [] } } }), null);
+});
+
+test('buildOrderRefsParam / parseOrderRefs — round-trips refs + quantities', () => {
+  const items = [
+    { retailerId: 'lsg-1', quantity: 2 },
+    { retailerId: 'TOGO:3,seat', quantity: 1 }, // separators inside the SKU
+  ];
+  const param = buildOrderRefsParam(items);
+  const back = parseOrderRefs(param);
+  assert.deepEqual(back, [
+    { reference: 'lsg-1', qty: 2 },
+    { reference: 'TOGO:3,seat', qty: 1 },
+  ]);
+  // Tolerant: blank qty → 1, junk segments skipped.
+  assert.deepEqual(parseOrderRefs('lsg-9'), [{ reference: 'lsg-9', qty: 1 }]);
+  assert.deepEqual(parseOrderRefs(''), []);
+  assert.equal(buildOrderRefsParam([]), '');
 });
 
 test('resolveNewChatContacts — phone-bearing contacts not already in a thread', () => {

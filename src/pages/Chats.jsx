@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageCircle, Loader2, Search, Plus, Megaphone } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
-  resolveConversations, resolveThread, resolveNewChatContacts, resolveChatTarget,
+  resolveConversations, resolveThread, resolveNewChatContacts, resolveChatTarget, buildOrderRefsParam,
 } from '../core/crm/index.js';
 import { displayPhone, phoneKey } from '../lib/phone.js';
 import {
@@ -33,6 +33,7 @@ const POLL_MS = 10000;
 
 export default function Chats() {
   const { profileId, settings } = useApp();
+  const navigate = useNavigate();
   const { data: messages, loaded } = useLiveQueryStatus(
     () => db.waMessages.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
@@ -237,6 +238,16 @@ export default function Chats() {
               thread={thread}
               connected={connected}
               onBack={() => setSelectedKey(null)}
+              onCreateQuote={(order) => {
+                // Seed a new quote draft from the client's cart: the items'
+                // references + quantities, with the customer pre-filled when
+                // the thread is linked to one.
+                const params = new URLSearchParams();
+                const refs = buildOrderRefsParam(order.items);
+                if (refs) params.set('refs', refs);
+                if (selected?.customerId) params.set('customer', selected.customerId);
+                navigate(`/quotes/new?${params.toString()}`);
+              }}
               onSend={async (text, replyTo) => {
                 const draft = draftOutboundMessage({
                   phone: selected.phone, text,
