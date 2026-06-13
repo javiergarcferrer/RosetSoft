@@ -436,6 +436,7 @@
      16px-on-mobile rule above keeps Safari from auto-zooming on focus. */
   .input {
     @apply w-full rounded-md border border-ink-200 bg-surface px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
+    caret-color: rgb(var(--brand-500));
   }
   .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
   /* Card = the resting elevated surface. Softer 2xl radius (warm editorial),

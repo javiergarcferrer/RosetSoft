@@ -31,10 +31,12 @@ const C = {
   expense: '#fb7185',  // rose-400
   sales: '#c96a2a',    // brand-500
   overdue: '#f43f5e',  // rose-500
-  current: '#aba79a',  // ink-300
+  current: 'rgb(var(--ink-300))',  // ink-300 — theme-aware neutral
 };
-// Donut slice ramp (gastos por categoría).
-const DONUT = ['#c96a2a', '#e8a76d', '#059669', '#878374', '#f59e0b', '#cfccc4'];
+// Donut slice ramp (gastos por categoría). Vibrant series stay fixed (they read
+// on either canvas); the two neutral fillers ride the ink ramp so they don't
+// glare as bright grey slices in dark mode.
+const DONUT = ['#c96a2a', '#e8a76d', '#059669', 'rgb(var(--ink-400))', '#f59e0b', 'rgb(var(--ink-200))'];
 
 const SOURCE = {
   manual: 'Manual', sale: 'Venta', expense: 'Gasto', purchase: 'Compra',
@@ -515,13 +517,13 @@ export default function AccountingDashboard() {
                   color={C.sales} format={formatDop} />
                 <Legend items={[
                   { label: 'Ventas facturadas', color: C.sales },
-                  { label: 'Mismo mes, año anterior', color: '#e3e1da' },
+                  { label: 'Mismo mes, año anterior', color: 'rgb(var(--ink-100))' },
                 ]} />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-ink-100">
                   {[
                     { key: 'cobrado', label: 'Cobrado', color: C.in },
                     { key: 'gastos', label: 'Gastos', color: C.expense },
-                    { key: 'compras', label: 'Compras', color: '#878374' },
+                    { key: 'compras', label: 'Compras', color: 'rgb(var(--ink-400))' },
                     { key: 'importado', label: 'Importado', color: C.out },
                   ].map((m) => {
                     const last = monthly[monthly.length - 1];
