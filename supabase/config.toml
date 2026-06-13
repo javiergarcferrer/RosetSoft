@@ -53,10 +53,13 @@ verify_jwt = false
 
 # lr-catalog reads a public Ligne Roset product page + its catalog AJAX
 # endpoints and returns the offered fabrics/colors as JSON for the Materials
-# importer. It's read-only and locked to ligne-roset.com (no SSRF), and it only
-# returns public catalog data — no auth needed. The gateway must NOT require a
-# JWT, or the browser's CORS preflight (which carries no Authorization header)
-# would be rejected before the function runs.
+# importer + the quote builder's per-model fabric lookup. Read-only and locked
+# to ligne-roset.com (no SSRF). It verifies the caller's JWT ITSELF
+# (auth.getUser on the Authorization header) so anonymous internet traffic can't
+# drive the expensive { all:true } sitemap sweep. Gateway check off (verify_jwt
+# = false) for the same reason as bpd-rate: the browser's CORS preflight carries
+# no Authorization header, so a gateway check would reject it before the
+# function runs.
 [functions.lr-catalog]
 verify_jwt = false
 

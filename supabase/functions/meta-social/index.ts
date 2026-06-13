@@ -124,6 +124,18 @@ Deno.serve(async (req) => {
   // token (write-only whatsapp_config) — one Meta system user runs both;
   // the Page/IG/ad account just have to be assigned to it in Meta Business.
   if (body.link) {
+    // Linking PERSISTS the Meta credentials (meta_social_config) — an
+    // admin-only action, like the save_* credential RPCs. The read / publish
+    // modes below stay open to the whole team; only connecting is gated. The
+    // caller is already authenticated above; here we also require admin.
+    const { data: prof } = await caller
+      .from('profiles')
+      .select('role, active')
+      .eq('id', userData.user.id)
+      .maybeSingle();
+    if (!prof || prof.role !== 'admin' || !prof.active) {
+      return json({ ok: false, error: 'Solo un administrador puede conectar Meta.' }, 403);
+    }
     let token = String(body.link.token || '').trim();
     let fromWhatsApp = false;
     if (!token) {

@@ -21,6 +21,14 @@
 //
 // Locked to ligne-roset.com (no SSRF). All catalog mapping/merge logic lives in
 // the pure, unit-tested src/lib/lrCatalog.ts; this function only fetches+shapes.
+//
+// Auth: a signed-in team member only. The single-product mode backs the quote
+// builder's per-model fabric lookup (any role) and the { all:true } sweep backs
+// the Materials admin importer; neither is public. We verify the caller's JWT
+// in-code (gateway verify_jwt stays off so the CORS preflight passes) so
+// anonymous internet traffic can't drive the expensive sitemap sweep.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -304,6 +312,25 @@ async function importCatalog(): Promise<Response> {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  // Require a logged-in dealer so the expensive catalog sweep can't be driven
+  // by anonymous traffic. verify_jwt is off at the gateway (so the CORS
+  // preflight, which carries no Authorization header, passes); we verify the
+  // token here instead — same as bpd-rate / hl-track.
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+  const authHeader = req.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return json({ error: 'Authorization header required' }, 401);
+  }
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await caller.auth.getUser();
+    if (error || !data?.user) return json({ error: 'Invalid or expired session' }, 401);
+  }
 
   let body: { url?: string; all?: boolean } = {};
   try {
