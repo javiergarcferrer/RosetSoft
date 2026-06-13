@@ -581,7 +581,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button type="button" onClick={onReload} className="btn-ghost" title="Actualizar estado">
+          <button type="button" onClick={onReload} className="btn-ghost" title="Actualizar estado" aria-label="Actualizar estado de plantillas">
             <RefreshCw size={14} />
           </button>
           <button type="button" onClick={() => setCreateOpen(true)} className="btn-brand">
@@ -650,6 +650,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
                     disabled={deleting === t.name}
                     className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
                     title="Eliminar plantilla"
+                    aria-label="Eliminar plantilla"
                   >
                     {deleting === t.name ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                   </button>

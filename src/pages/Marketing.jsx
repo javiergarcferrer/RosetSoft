@@ -478,7 +478,7 @@ export default function Marketing() {
                             maxLength={500}
                             autoFocus
                           />
-                          <button type="button" className="btn-brand" onClick={sendReply} disabled={!replyText.trim() || replyBusy}>
+                          <button type="button" className="btn-brand" onClick={sendReply} disabled={!replyText.trim() || replyBusy} aria-label="Enviar respuesta" title="Enviar respuesta">
                             {replyBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                           </button>
                         </div>

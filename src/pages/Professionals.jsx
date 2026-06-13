@@ -329,6 +329,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             onClick={onToggle}
             className="p-1 rounded text-ink-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
             title={isOpen ? 'Ocultar detalle' : 'Ver cotizaciones y notas'}
+            aria-label={isOpen ? 'Ocultar detalle' : 'Ver cotizaciones y notas'}
             aria-expanded={isOpen}
           >
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -365,6 +366,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
               to={`/professionals/${p.id}`}
               className="p-1.5 rounded text-ink-300 hover:text-brand-600 hover:bg-brand-50 transition-colors"
               title="Ver perfil y comisiones"
+              aria-label="Ver perfil y comisiones"
             >
               <ArrowRight size={13} />
             </Link>
@@ -373,6 +375,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
               onClick={onRemove}
               className="p-1.5 rounded text-ink-300 hover:text-red-600 hover:bg-red-50 transition-colors"
               title="Eliminar profesional"
+              aria-label="Eliminar profesional"
             >
               <Trash2 size={13} />
             </button>
