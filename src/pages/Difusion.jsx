@@ -158,7 +158,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
     <div className="space-y-4">
       <div className="card card-pad flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-ink-900">Nueva campaña</div>
+          <div className="font-display text-sm font-semibold text-ink-900">Nueva campaña</div>
           <p className="text-xs text-ink-500 mt-0.5">
             Envía una plantilla aprobada a profesionales o clientes. Meta cobra por conversación de
             marketing iniciada; la entrega y lectura se rastrean aquí.
@@ -574,7 +574,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
     <div className="space-y-4">
       <div className="card card-pad flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-ink-900">Plantillas de mensaje</div>
+          <div className="font-display text-sm font-semibold text-ink-900">Plantillas de mensaje</div>
           <p className="text-xs text-ink-500 mt-0.5">
             Las plantillas son la única forma de iniciar una conversación (o escribir fuera de la
             ventana de 24 h). Meta revisa cada plantilla nueva antes de aprobarla.

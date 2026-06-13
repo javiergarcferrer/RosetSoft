@@ -245,7 +245,7 @@ export default function AccountingDashboard() {
             {/* Flujo de caja */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
-              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.cash)}</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.cash)}</div>
               <div className="text-xs text-ink-400 mb-3">Saldo en caja y bancos</div>
               <div className="mt-auto">
                 <BarPairs
@@ -284,7 +284,7 @@ export default function AccountingDashboard() {
             {/* Ganancia y pérdida */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Ganancia y pérdida" note={monthLabel} />
-              <div className={`text-2xl font-semibold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              <div className={`font-display text-2xl font-semibold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {formatDop(d.utilidadMonth)}
               </div>
               <div className="text-xs text-ink-400 mb-3">Utilidad neta de {monthLabel}</div>
@@ -306,7 +306,7 @@ export default function AccountingDashboard() {
             {/* Cuentas por cobrar */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
-              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.ar.unpaid)}</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.ar.unpaid)}</div>
               <div className="text-xs text-ink-400 mb-3">Sin cobrar</div>
               <div className="mt-auto">
                 <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
@@ -327,7 +327,7 @@ export default function AccountingDashboard() {
             {/* Ventas */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Ventas" note="6 meses" />
-              <div className="text-2xl font-semibold tabular-nums text-ink-900">{formatDop(ventasKpi?.current || 0)}</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(ventasKpi?.current || 0)}</div>
               <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
               <div className="mt-auto">
                 <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />

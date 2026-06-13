@@ -13,7 +13,7 @@ export default function KpiBand({ items }) {
       {list.map((it) => (
         <div key={it.label} className="card p-4 min-w-0">
           <div className="eyebrow mb-1">{it.label}</div>
-          <div className={`text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${toneClass(it.tone)}`}>
+          <div className={`font-display text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${toneClass(it.tone)}`}>
             {it.value}
           </div>
           {it.hint && <div className="text-xs text-ink-400 mt-0.5">{it.hint}</div>}

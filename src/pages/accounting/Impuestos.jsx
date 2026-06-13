@@ -56,18 +56,18 @@ export default function Impuestos() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="min-w-0">
                 <div className="eyebrow mb-1">Débito fiscal (ventas)</div>
-                <div className="text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.debitoFiscal)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.debitoFiscal)}</div>
               </div>
               <div className="min-w-0">
                 <div className="eyebrow mb-1">Crédito fiscal (compras)</div>
-                <div className="text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.creditoFiscal)}</div>
+                <div className="font-display text-xl font-semibold tabular-nums whitespace-nowrap">{formatDop(itbis.creditoFiscal)}</div>
                 <div className="text-xs text-ink-400 tabular-nums mt-0.5">
                   Local {formatDop(itbis.creditoLocal)} · Importación {formatDop(itbis.creditoImportacion)}
                 </div>
               </div>
               <div className="min-w-0">
                 <div className="eyebrow mb-1">{itbis.aPagar > 0 ? 'A pagar' : 'Saldo a favor'}</div>
-                <div className={`text-xl font-bold tabular-nums whitespace-nowrap ${itbis.aPagar > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                <div className={`font-display text-xl font-bold tabular-nums whitespace-nowrap ${itbis.aPagar > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                   {formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor)}
                 </div>
               </div>

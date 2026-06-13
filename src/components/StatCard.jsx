@@ -35,7 +35,7 @@ export default function StatCard({ label, value, hint, icon: Icon, tone = 'ink',
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="eyebrow">{label}</div>
-        <div className="text-2xl sm:text-3xl font-semibold mt-1.5 tabular-nums break-words text-ink-900">
+        <div className="font-display text-2xl sm:text-3xl font-semibold mt-1.5 tabular-nums break-words text-ink-900">
           {value}
         </div>
         {hint && <div className="text-xs text-ink-500 mt-1">{hint}</div>}

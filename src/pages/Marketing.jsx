@@ -16,7 +16,7 @@ function Stat({ label, value, sub, tone }) {
   return (
     <div className="stat-card p-4">
       <div className="text-[11px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className={`text-2xl font-semibold tabular-nums mt-0.5 ${tone || 'text-ink-900'}`}>{value}</div>
+      <div className={`font-display text-2xl font-semibold tabular-nums mt-0.5 ${tone || 'text-ink-900'}`}>{value}</div>
       {sub && <div className="text-xs text-ink-400 mt-0.5">{sub}</div>}
     </div>
   );
