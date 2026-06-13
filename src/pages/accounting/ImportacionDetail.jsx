@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Shield, Ship, Receipt, Plus, Copy, Container, BookOpen } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen } from 'lucide-react';
+import BackLink from '../../components/BackLink.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -88,9 +89,7 @@ export default function ImportacionDetail() {
   if (!expQ.data || !detail) {
     return (
       <>
-        <Link to="/accounting/importaciones" className="back-link">
-          <ArrowLeft size={12} /> Volver a importaciones
-        </Link>
+        <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
         <EmptyState icon={Ship} title="Expediente no encontrado" description="Puede haber sido registrado en otro perfil." />
       </>
     );
@@ -128,9 +127,7 @@ export default function ImportacionDetail() {
 
   return (
     <>
-      <Link to="/accounting/importaciones" className="back-link">
-        <ArrowLeft size={12} /> Volver a importaciones
-      </Link>
+      <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
       <PageHeader
         title={`Expediente${meta.number != null ? ` #${meta.number}` : ''}`}
         subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}`}

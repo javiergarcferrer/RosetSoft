@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useGoBack } from '../context/NavMemory.jsx';
 import { MessageCircle, Loader2, Search, Plus, Megaphone } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -34,6 +35,12 @@ const POLL_MS = 10000;
 export default function Chats() {
   const { profileId, settings } = useApp();
   const navigate = useNavigate();
+  const goBack = useGoBack();
+  // How the open thread was reached, so Back knows where to send you:
+  // 'deeplink' = arrived from another page (a contact's WhatsApp quick action),
+  // so Back returns there; 'list' = picked from the inbox here, so Back just
+  // closes the thread back to the list. Defaults to 'list' for direct opens.
+  const selectionOrigin = useRef('list');
   const { data: messages, loaded } = useLiveQueryStatus(
     () => db.waMessages.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
@@ -108,6 +115,7 @@ export default function Chats() {
     appliedChatParam.current = chatParam;
     const hit = resolveChatTarget(customers, professionals, allConversations, chatParam);
     if (!hit) return;
+    selectionOrigin.current = 'deeplink';
     setDraftTarget(hit.existing ? null : hit.target);
     setSelectedKey(hit.key);
   }, [chatParam, loaded, customersLoaded, professionalsLoaded, customers, professionals, allConversations]);
@@ -225,7 +233,7 @@ export default function Chats() {
             )}
             {conversations.map((c) => (
               <ConversationRow key={c.key} c={c} active={c.key === selectedKey}
-                onOpen={() => { setSelectedKey(c.key); setDraftTarget(null); }} />
+                onOpen={() => { selectionOrigin.current = 'list'; setSelectedKey(c.key); setDraftTarget(null); }} />
             ))}
           </div>
         </div>
@@ -237,7 +245,15 @@ export default function Chats() {
               contact={selected}
               thread={thread}
               connected={connected}
-              onBack={() => setSelectedKey(null)}
+              onBack={() => {
+                // Closing the thread always drops the local selection back to
+                // the list. When the thread was reached from another page (a
+                // contact's WhatsApp quick action), ALSO step back to that page
+                // — goBack falls back to '/chats' (which clears the deep-link
+                // param) when there's no in-app origin to return to.
+                setSelectedKey(null);
+                if (selectionOrigin.current === 'deeplink') goBack('/chats');
+              }}
               onCreateQuote={(order) => {
                 // Seed a new quote draft from the client's cart: the items'
                 // references + quantities, with the customer pre-filled when
@@ -348,6 +364,7 @@ export default function Chats() {
         professionals={professionals}
         conversations={allConversations}
         onPick={(contact) => {
+          selectionOrigin.current = 'list';
           setDraftTarget(contact);
           setSelectedKey(contact.key);
           setPickerOpen(false);

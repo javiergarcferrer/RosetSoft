@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil, FileText } from 'lucide-react';
+import { UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil, FileText } from 'lucide-react';
+import BackLink from '../components/BackLink.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import StatCard from '../components/StatCard.jsx';
@@ -103,9 +104,7 @@ export default function ProfessionalDetail() {
 
   return (
     <>
-      <Link to="/professionals" className="back-link">
-        <ArrowLeft size={12} /> Volver a profesionales
-      </Link>
+      <BackLink to="/professionals">Volver a profesionales</BackLink>
 
       <PageHeader
         title={pro.name}

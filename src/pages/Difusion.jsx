@@ -2,10 +2,11 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
+  Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
   CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import BackLink from '../components/BackLink.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -88,7 +89,7 @@ export default function Difusion() {
   if (!connected) {
     return (
       <>
-        <Link to="/chats" className="back-link"><ArrowLeft size={12} /> Volver a WhatsApp</Link>
+        <BackLink to="/chats">Volver a WhatsApp</BackLink>
         <PageHeader title="Difusión" subtitle="Campañas de WhatsApp con plantillas aprobadas" />
         <EmptyState
           icon={Megaphone}
@@ -102,7 +103,7 @@ export default function Difusion() {
 
   return (
     <>
-      <Link to="/chats" className="back-link"><ArrowLeft size={12} /> Volver a WhatsApp</Link>
+      <BackLink to="/chats">Volver a WhatsApp</BackLink>
       <PageHeader
         title="Difusión"
         subtitle="Campañas de marketing por WhatsApp — plantillas aprobadas a tu lista de contactos"

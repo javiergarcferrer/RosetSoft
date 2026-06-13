@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { RefreshCw, Hourglass, LogOut } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { NavMemoryProvider } from './context/NavMemory.jsx';
 import { safeDynamicImport } from './lib/dynamicImport.js';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
@@ -313,22 +314,26 @@ function ProtectedApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
-        {/* Public, logged-out interactive quote view. Lives OUTSIDE
-            RequireAuth so a client with the link never hits the login wall.
-            The optional `:slug` segment carries the human label
-            ("eduardo-garcia-cotizacion-1042") so the sent URL reads like the
-            PDF — it's purely cosmetic; the token is the real key, and the
-            bare `/q/:token` form (older links) still resolves. */}
-        <Route path="/q/:token" element={<PublicQuoteView />} />
-        <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
-        {/* Public, logged-out storefront ("Tienda"). Like the quote link it
-            lives OUTSIDE RequireAuth so a customer never hits the login wall;
-            the `store` Edge Function serves a public-safe, margin-free catalog. */}
-        <Route path="/tienda" element={<PublicStore />} />
-        <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
-      </Routes>
+      {/* Tracks in-app history depth so every "Back" returns you to the page
+          you actually came from, not a fixed section list (see NavMemory). */}
+      <NavMemoryProvider>
+        <Routes>
+          <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
+          {/* Public, logged-out interactive quote view. Lives OUTSIDE
+              RequireAuth so a client with the link never hits the login wall.
+              The optional `:slug` segment carries the human label
+              ("eduardo-garcia-cotizacion-1042") so the sent URL reads like the
+              PDF — it's purely cosmetic; the token is the real key, and the
+              bare `/q/:token` form (older links) still resolves. */}
+          <Route path="/q/:token" element={<PublicQuoteView />} />
+          <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
+          {/* Public, logged-out storefront ("Tienda"). Like the quote link it
+              lives OUTSIDE RequireAuth so a customer never hits the login wall;
+              the `store` Edge Function serves a public-safe, margin-free catalog. */}
+          <Route path="/tienda" element={<PublicStore />} />
+          <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
+        </Routes>
+      </NavMemoryProvider>
     </AuthProvider>
   );
 }

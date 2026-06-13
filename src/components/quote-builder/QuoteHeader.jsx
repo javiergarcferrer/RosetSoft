@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ArrowLeft, Briefcase, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
+import { useGoBack } from '../../context/NavMemory.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import WhatsAppChip from './WhatsAppChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
@@ -39,6 +39,7 @@ export default function QuoteHeader({
   saving,
   buildPdf,
 }) {
+  const goBack = useGoBack();
   const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
   // Look up the quote's creator from the AppContext profiles list. The
   // user who clicked "Nueva cotización" has their auth.uid() stamped
@@ -79,10 +80,10 @@ export default function QuoteHeader({
           second line. */}
       <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
-          <Link to="/quotes" className="back-link mb-0 px-2" title="Volver a cotizaciones">
+          <button type="button" onClick={() => goBack('/quotes')} className="back-link mb-0 px-2" title="Volver a cotizaciones">
             <ArrowLeft size={14} />
             <span className="hidden sm:inline">Volver</span>
-          </Link>
+          </button>
           <div className="flex items-baseline gap-2 min-w-0">
             <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest hidden sm:inline">Cotización</span>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">

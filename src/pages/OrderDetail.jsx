@@ -2,11 +2,12 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
+  Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
   FileText, CheckCircle2, Package, DollarSign, Wallet, Landmark,
   AlertCircle, FileDown, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import BackLink from '../components/BackLink.jsx';
 import Dropdown, { DropdownItem } from '../components/primitives/Dropdown.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
@@ -251,9 +252,7 @@ export default function OrderDetail() {
 
   return (
     <>
-      <Link to="/orders" className="back-link">
-        <ArrowLeft size={12} /> Volver a pedidos
-      </Link>
+      <BackLink to="/orders">Volver a pedidos</BackLink>
       <PageHeader
         title={`Pedido #${order.number || order.id.slice(-4)}`}
         subtitle={

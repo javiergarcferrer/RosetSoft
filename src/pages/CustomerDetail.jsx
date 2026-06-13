@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Mail, Phone, MapPin, Pencil, ExternalLink, FileText, Package, User,
+  Mail, Phone, MapPin, Pencil, ExternalLink, FileText, Package, User,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import BackLink from '../components/BackLink.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
@@ -138,12 +139,7 @@ export default function CustomerDetail() {
 
   return (
     <>
-      <Link
-        to="/customers"
-        className="back-link"
-      >
-        <ArrowLeft size={12} /> Volver a clientes
-      </Link>
+      <BackLink to="/customers">Volver a clientes</BackLink>
 
       <PageHeader
         title={customer.name || 'Cliente'}
