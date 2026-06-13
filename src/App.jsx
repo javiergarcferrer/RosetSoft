@@ -21,6 +21,7 @@ import Comisiones from './pages/Comisiones.jsx';
 import Chats from './pages/Chats.jsx';
 import Difusion from './pages/Difusion.jsx';
 import Marketing from './pages/Marketing.jsx';
+import InstagramStudio from './pages/InstagramStudio.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import Settings from './pages/Settings.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
@@ -241,6 +242,7 @@ function ProtectedApp() {
             <Route path="chats" element={<Chats />} />
             <Route path="chats/difusion" element={<Difusion />} />
             <Route path="marketing" element={<Marketing />} />
+            <Route path="instagram-studio" element={<InstagramStudio />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />

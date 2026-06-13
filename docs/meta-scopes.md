@@ -36,8 +36,8 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 |---|---|---|
 | `instagram_basic` | ✅ | Read the linked IG business account (username, counts). |
 | `instagram_content_publish` | ✅ | IG feed posts, Reels, video/image Stories + carousels (`/media` → `/media_publish`, video containers polled). |
-| `instagram_manage_comments` | ✅ | Read + reply to IG comments (`replyComment`, nested triage). |
-| `instagram_manage_insights` | ✅ | IG reach / follower / profile-view / per-post insights. |
+| `instagram_manage_comments` | ✅ | Read + reply + hide/unhide + delete IG comments (Marketing triage + Studio per-post moderation). |
+| `instagram_manage_insights` | ✅ | IG reach / follower / profile-view / per-post insights, the Studio's **follower demographics** (gender/age/country/city) and **hashtag search** (discovery). |
 | `instagram_manage_contents` | ⬜ | Manage existing IG content (newer edit/management surface). |
 | `instagram_manage_messages` | ⬜ | IG DMs → Instagram thread in the CRM inbox. |
 | `instagram_shopping_tag_products` | ⬜ | Tag Shopify catalog products in IG posts. |

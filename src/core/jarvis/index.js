@@ -18,3 +18,9 @@ export {
   FUNNEL_STAGES,
 } from './pulse.js';
 export { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from './social.js';
+export {
+  resolveIgStudio,
+  resolveMediaInsights,
+  resolveMediaComments,
+  resolveHashtagMedia,
+} from './igStudio.js';

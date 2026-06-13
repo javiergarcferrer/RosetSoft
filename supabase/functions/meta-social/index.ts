@@ -70,6 +70,18 @@ type Body = {
   replyComment?: { commentId?: string; message?: string; platform?: 'instagram' | 'facebook' };
   /** Pause/resume an ad campaign (Marketing page, behind an explicit confirm). */
   setCampaignStatus?: { campaignId?: string; status?: string };
+  /** Instagram Studio: one consolidated read (profile, demographics, media, stories, mentions). */
+  igStudio?: boolean;
+  /** Per-post insight drill-down (on click). */
+  mediaInsights?: { mediaId?: string; productType?: string };
+  /** Comments on a single post (the per-post moderation thread). */
+  mediaComments?: { mediaId?: string };
+  /** Hide/unhide an IG comment. */
+  setCommentVisibility?: { commentId?: string; hide?: boolean };
+  /** Delete an IG comment. */
+  deleteComment?: { commentId?: string };
+  /** Hashtag listening — discover top media for a tag. */
+  hashtagSearch?: { q?: string };
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -215,6 +227,27 @@ async function publishFacebookReel(pageId: string, token: string, videoUrl: stri
     upload_phase: 'finish', video_id: videoId, video_state: 'PUBLISHED', description,
   });
   return { id: videoId };
+}
+
+/**
+ * Read a media's insights, resilient to Meta's metric churn: try the richest
+ * metric set first, fall back to leaner ones (a single unsupported metric 400s
+ * the whole call), and surface whatever answered as a flat {metric: value} map.
+ */
+async function mediaInsightValues(mediaId: string, token: string, metricSets: string[]): Promise<Record<string, number>> {
+  let lastErr: unknown = null;
+  for (const metric of metricSets) {
+    try {
+      const r = await graph(`${mediaId}/insights`, token, { metric });
+      const out: Record<string, number> = {};
+      for (const row of (r?.data || [])) {
+        const v = row?.values?.[0]?.value;
+        if (typeof v === 'number') out[String(row.name)] = v;
+      }
+      return out;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('Sin métricas');
 }
 
 Deno.serve(async (req) => {
@@ -595,6 +628,167 @@ Deno.serve(async (req) => {
       businesses: catalogs?.data || null,
       errors,
     });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // Instagram Studio — the advanced IG surface (separate from the Marketing
+  // snapshot). All reads use the page token; every IG endpoint here is backed
+  // by scopes already granted (instagram_basic / _manage_insights /
+  // _manage_comments / _content_publish).
+  // ════════════════════════════════════════════════════════════════════
+  const igId = cfg.ig_user_id || '';
+  const needIg = body.igStudio || body.mediaInsights || body.mediaComments || body.hashtagSearch;
+  if (needIg && !igId) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
+
+  // ── igStudio: one consolidated read, sections fail independently ──────
+  if (body.igStudio) {
+    const since = Math.floor((Date.now() - 28 * 86_400_000) / 1000);
+    const until = Math.floor(Date.now() / 1000);
+    const errors: Record<string, string> = {};
+    const safe = async <T>(key: string, fn: () => Promise<T>): Promise<T | null> => {
+      try { return await fn(); } catch (e) {
+        errors[key] = friendly(String((e as Error)?.message || e).slice(0, 160));
+        return null;
+      }
+    };
+    // Follower demographics — the modern total_value+breakdown shape (replaces
+    // the deprecated audience_* metrics). One call per dimension: mixing
+    // breakdowns is unreliable, and ≥100 followers is required or it errors
+    // (then the section is just absent).
+    const demo = (breakdown: string) => safe(`demo_${breakdown}`, () => graph(`${igId}/insights`, pageToken, {
+      metric: 'follower_demographics', period: 'lifetime', metric_type: 'total_value',
+      timeframe: 'last_30_days', breakdown,
+    }));
+
+    const [profile, reach, accountTotals, profileViews, media, stories, mentions, gender, age, country, city] = await Promise.all([
+      safe('profile', () => graph(igId, pageToken, {
+        fields: 'username,name,biography,followers_count,follows_count,media_count,profile_picture_url',
+      })),
+      // Daily reach series, 28d (the area chart).
+      safe('reach', () => graph(`${igId}/insights`, pageToken, {
+        metric: 'reach', period: 'day', since: String(since), until: String(until),
+      })),
+      // 28d account totals — the advanced engagement metrics (total_value form).
+      safe('accountTotals', () => graph(`${igId}/insights`, pageToken, {
+        metric: 'reach,accounts_engaged,total_interactions', metric_type: 'total_value',
+        period: 'day', since: String(since), until: String(until),
+      })),
+      safe('profileViews', () => graph(`${igId}/insights`, pageToken, {
+        metric: 'profile_views', metric_type: 'total_value', period: 'day',
+        since: String(since), until: String(until),
+      })),
+      // The content grid.
+      safe('media', () => graph(`${igId}/media`, pageToken, {
+        fields: 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+        limit: '24',
+      })),
+      // Active stories (last 24h).
+      safe('stories', () => graph(`${igId}/stories`, pageToken, {
+        fields: 'id,media_type,media_url,thumbnail_url,permalink,timestamp', limit: '20',
+      })),
+      // Media the account is @-tagged in (mentions wall).
+      safe('mentions', () => graph(`${igId}/tags`, pageToken, {
+        fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,username,timestamp,like_count,comments_count',
+        limit: '12',
+      })),
+      demo('gender'), demo('age'), demo('country'), demo('city'),
+    ]);
+
+    return json({
+      ok: true,
+      fetchedAt: Date.now(),
+      igUsername: cfg.ig_username,
+      profile,
+      reach: reach?.data || null,
+      accountTotals: accountTotals?.data || null,
+      profileViews: profileViews?.data || null,
+      media: media?.data || null,
+      stories: stories?.data || null,
+      mentions: mentions?.data || null,
+      demographics: {
+        gender: gender?.data || null,
+        age: age?.data || null,
+        country: country?.data || null,
+        city: city?.data || null,
+      },
+      errors,
+    });
+  }
+
+  // ── mediaInsights: per-post drill-down ───────────────────────────────
+  if (body.mediaInsights) {
+    const mediaId = String(body.mediaInsights.mediaId || '').trim();
+    if (!mediaId) return json({ ok: false, error: 'mediaId requerido' }, 400);
+    const isReel = String(body.mediaInsights.productType || '').toUpperCase() === 'REELS';
+    // Richest first → leaner fallbacks (metric names drift between media kinds
+    // and API versions; the helper keeps whatever answers).
+    const sets = isReel
+      ? ['reach,total_interactions,saved,shares,views', 'reach,total_interactions,saved,shares', 'reach,total_interactions']
+      : ['reach,total_interactions,saved,shares', 'reach,total_interactions,saved', 'reach,total_interactions'];
+    try {
+      const metrics = await mediaInsightValues(mediaId, pageToken, sets);
+      return json({ ok: true, metrics });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── mediaComments: a single post's comment thread (moderation) ───────
+  if (body.mediaComments) {
+    const mediaId = String(body.mediaComments.mediaId || '').trim();
+    if (!mediaId) return json({ ok: false, error: 'mediaId requerido' }, 400);
+    try {
+      const r = await graph(`${mediaId}/comments`, pageToken, {
+        fields: 'id,text,username,timestamp,like_count,hidden,replies{id,text,username,timestamp,like_count}',
+        limit: '40',
+      });
+      return json({ ok: true, comments: r?.data || [] });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── setCommentVisibility / deleteComment: moderation actions ─────────
+  if (body.setCommentVisibility) {
+    const commentId = String(body.setCommentVisibility.commentId || '').trim();
+    if (!commentId) return json({ ok: false, error: 'commentId requerido' }, 400);
+    try {
+      await graphPost(commentId, pageToken, { hide: body.setCommentVisibility.hide ? 'true' : 'false' });
+      return json({ ok: true, hidden: !!body.setCommentVisibility.hide });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+  if (body.deleteComment) {
+    const commentId = String(body.deleteComment.commentId || '').trim();
+    if (!commentId) return json({ ok: false, error: 'commentId requerido' }, 400);
+    try {
+      const res = await fetch(`${GRAPH}/${commentId}?access_token=${encodeURIComponent(pageToken)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── hashtagSearch: discovery — top media for a tag ───────────────────
+  if (body.hashtagSearch) {
+    const q = String(body.hashtagSearch.q || '').trim().replace(/^#/, '');
+    if (!q) return json({ ok: false, error: 'Escribe un hashtag' }, 400);
+    try {
+      const found = await graph('ig_hashtag_search', pageToken, { user_id: igId, q });
+      const hashtagId = String(found?.data?.[0]?.id || '');
+      if (!hashtagId) return json({ ok: false, error: `Sin resultados para #${q}` });
+      const top = await graph(`${hashtagId}/top_media`, pageToken, {
+        user_id: igId,
+        fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,like_count,comments_count,timestamp',
+        limit: '24',
+      });
+      return json({ ok: true, hashtag: { id: hashtagId, name: q }, media: top?.data || [] });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
   }
 
   return json({ error: 'Petición no reconocida' }, 400);

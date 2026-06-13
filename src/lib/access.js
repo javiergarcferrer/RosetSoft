@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle, Megaphone, Landmark, Bot,
+  MessageCircle, Megaphone, Landmark, Bot, Instagram,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -44,6 +44,7 @@ const ADMIN_GROUP = {
     { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
     { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
     { to: '/marketing', label: 'Marketing', icon: Megaphone },
+    { to: '/instagram-studio', label: 'Instagram Studio', icon: Instagram },
     // Single entry point — the full accounting section nav only joins the
     // sidebar while the admin is INSIDE /accounting/* (see navForRole).
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
