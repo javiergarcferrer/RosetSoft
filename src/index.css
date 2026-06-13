@@ -1010,6 +1010,14 @@
   html.kb-keep-open .kb-scroll-pad {
     scroll-padding-bottom: calc(var(--rs-keyboard, 0px) + 1rem);
   }
+  /* The quote workspace's WhatsApp pane sizes itself to end exactly on the
+     ModeBar's top edge (it subtracts the bar's 3.5rem). While typing, the bar
+     slides away (.kb-hide-when-open), so the pane must reclaim that 3.5rem —
+     otherwise its composer floats a bar's-height above the keyboard. (No bottom
+     safe-area inset here: the home indicator is hidden behind the keyboard.) */
+  html.kb-open .kb-chat-pane {
+    height: calc(100dvh - 3.5rem - env(safe-area-inset-top));
+  }
 }
 
 /* ===================================================================

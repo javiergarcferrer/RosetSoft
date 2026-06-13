@@ -22,8 +22,21 @@ import { useEffect, useState } from 'react';
  *                            discount/shipping inputs) → that chrome is LIFTED
  *                            above the keyboard instead of hidden, so you can
  *                            still see what you're typing.
- *   • `--rs-keyboard`      — the inset height in px, for the lift transform and
- *                            scroll padding.
+ *   • `--rs-keyboard`      — the OVERLAY inset in px (only the Safari-tab case;
+ *                            see below), for the lift transform and scroll pad.
+ *
+ * TWO ENGINES, TWO SIGNALS. The inset above (`innerHeight − vv.height`) only
+ * works in a Safari TAB, where the layout viewport stays full and the keyboard
+ * just overlays it. In an installed iOS PWA the WKWebView itself RESIZES when
+ * the keyboard opens, so `window.innerHeight` shrinks in lockstep with
+ * `vv.height` and that subtraction collapses to ~0 — `kb-open` would never fire
+ * and the bottom ModeBar stays wedged between the composer and the keyboard.
+ * So we ALSO track a baseline (the tallest `vv.height` seen with no field
+ * focused = keyboard closed) and treat any drop from it as the keyboard. We
+ * detect on max(overlay, drop), but publish only the OVERLAY into
+ * `--rs-keyboard`: in a resized webview the layout already excludes the
+ * keyboard, so a lift transform would overshoot — there the resize itself does
+ * the work and 0 lift is correct.
  *
  * The CSS that consumes these lives in index.css (search "kb-open").
  */
@@ -32,6 +45,8 @@ import { useEffect, useState } from 'react';
 // keyboard accessory bar, sub-pixel jitter. A real soft keyboard is far taller.
 const KB_OPEN_THRESHOLD = 120;
 
+// The overlay inset = how much of the layout viewport the keyboard COVERS.
+// Real in a Safari tab; ~0 in a resized PWA webview (handled via the baseline).
 function computeInset() {
   const vv = typeof window !== 'undefined' ? window.visualViewport : null;
   if (!vv) return 0;
@@ -72,13 +87,32 @@ export function installVirtualKeyboardWatcher() {
   const root = document.documentElement;
   const vv = window.visualViewport;
 
+  // Baseline = the tallest visualViewport.height seen while NO field is focused
+  // (keyboard closed), reset whenever the width changes (orientation flip). In a
+  // resized PWA webview the live height drops below this when the keyboard opens,
+  // which is the only reliable signal there. Tracked per width so a rotate that
+  // legitimately changes the height doesn't read as a stuck keyboard.
+  let baseHeight = 0;
+  let baseWidth = 0;
+
   const apply = () => {
-    const inset = computeInset();
-    const open = inset > KB_OPEN_THRESHOLD && isEditableFocused();
+    const overlay = computeInset();
+    const editable = isEditableFocused();
+    // Only sample the baseline with the keyboard down; a focused field means it
+    // may be up, so the current height can't be trusted as "full".
+    if (!editable) {
+      if (vv.width !== baseWidth) { baseWidth = vv.width; baseHeight = 0; }
+      baseHeight = Math.max(baseHeight, vv.height);
+    }
+    const drop = baseHeight ? Math.max(0, baseHeight - vv.height) : 0;
+    const inset = Math.max(overlay, drop);
+    const open = inset > KB_OPEN_THRESHOLD && editable;
     const keep = open && focusInsideKeepZone();
     root.classList.toggle('kb-open', open && !keep);
     root.classList.toggle('kb-keep-open', keep);
-    root.style.setProperty('--rs-keyboard', `${open ? inset : 0}px`);
+    // Publish only the OVERLAY — in a resized webview (overlay ~0) the layout
+    // already sits above the keyboard, so the lift must stay 0, not `inset`.
+    root.style.setProperty('--rs-keyboard', `${open ? overlay : 0}px`);
   };
 
   // `focusout` fires with document.activeElement momentarily on <body> even when

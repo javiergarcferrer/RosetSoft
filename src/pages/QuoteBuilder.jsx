@@ -1004,7 +1004,7 @@ function ChatPaneCard({ quote, customer, settings, onShare }) {
     // gap, no composer hidden behind the bar); the min-h floor keeps the
     // composer usable on short landscape phones. md:* resets are harmless
     // belt-and-suspenders — chat is mobile-only and redirects to compose at md.
-    <div className="-mx-4 -mt-4 md:mx-0 md:mt-0 bg-surface overflow-hidden flex flex-col h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
+    <div className="kb-chat-pane -mx-4 -mt-4 md:mx-0 md:mt-0 bg-surface overflow-hidden flex flex-col h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
       <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <span className="text-[11px] text-ink-400 min-w-0 truncate">
           WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}
