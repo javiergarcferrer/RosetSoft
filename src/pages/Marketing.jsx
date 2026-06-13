@@ -26,6 +26,50 @@ const deltaSub = (pct, fallback) => (pct != null
   ? `${pct >= 0 ? '+' : ''}${pct}% vs 7d anteriores`
   : fallback);
 
+// "hace 12 s" → "hace 3 min" → "hace 2 h". Drives the live freshness pill.
+const freshLabel = (ms, now) => {
+  if (!ms) return null;
+  const s = Math.max(0, Math.round((now - ms) / 1000));
+  if (s < 4) return 'ahora mismo';
+  if (s < 60) return `hace ${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `hace ${min} min`;
+  return `hace ${Math.round(min / 60)} h`;
+};
+
+// Live-status pill — replaces the old "Actualizar" button. A pulsing dot +
+// ticking freshness label reads as a passive "this is live" signal; it's
+// still tappable to force a refresh (and shows the spinner on hover/while
+// fetching), but it no longer looks like a chore the user has to perform.
+function LivePill({ loading, hasData, error, sinceLabel, onRefresh }) {
+  // A failed poll only counts as "degraded" when there's nothing on screen;
+  // with data still showing, it's just a momentary reconnect.
+  const stale = error && hasData;
+  const dot = stale ? 'bg-amber-500' : 'bg-emerald-500';
+  const text = loading && !hasData
+    ? 'Conectando…'
+    : stale
+      ? 'Reconectando…'
+      : loading
+        ? 'Actualizando…'
+        : `En vivo${sinceLabel ? ` · ${sinceLabel}` : ''}`;
+  return (
+    <button
+      type="button"
+      onClick={onRefresh}
+      title="Datos en vivo — toca para actualizar ahora"
+      className="group inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface px-2.5 py-1 text-xs text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+    >
+      <span className="relative flex h-2 w-2">
+        {!stale && <span className={`absolute inline-flex h-full w-full rounded-full ${dot} opacity-60 animate-ping`} />}
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${dot}`} />
+      </span>
+      <span className="tabular-nums">{text}</span>
+      <RefreshCw size={12} className={`transition-opacity ${loading ? 'animate-spin opacity-90' : 'opacity-0 group-hover:opacity-60'}`} />
+    </button>
+  );
+}
+
 export default function Marketing() {
   const { settings, refreshSettings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
@@ -33,25 +77,57 @@ export default function Marketing() {
   const [raw, setRaw] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [loadedAt, setLoadedAt] = useState(null);
   const busy = useRef(false);
   const load = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
     setLoading(true);
-    setLoadError(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', { body: { snapshot: true } });
       if (error) throw new Error(error.message || 'sin respuesta');
       if (data?.configured === false || data?.error) throw new Error(data?.error || 'sin respuesta');
       setRaw(data);
+      setLoadError(null);
+      setLoadedAt(Date.now());
     } catch (e) {
+      // Keep the last good snapshot on screen — a transient blip shouldn't
+      // blank a live dashboard; the freshness pill flags the degraded state
+      // and the next poll heals it.
       setLoadError(e?.message || 'No se pudo leer Meta');
     } finally {
       busy.current = false;
       setLoading(false);
     }
   }, []);
-  useEffect(() => { if (linked) load(); }, [linked, load]);
+
+  // Live data, no manual refresh: load on mount, poll every 45 s while the
+  // tab is visible, and re-fetch the instant the user returns to it. Polling
+  // pauses in a hidden tab so we don't spend Graph API calls nobody is reading.
+  useEffect(() => {
+    if (!linked) return undefined;
+    load();
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    const poll = setInterval(onVisible, 45_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [linked, load]);
+
+  // 1-second clock so the "hace 12 s" label actually ticks between polls
+  // (paused while hidden — a background tab needn't wake to count seconds).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!linked) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') setNowTick(Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [linked]);
 
   // Self-link from the WhatsApp system user (same path as JARVIS).
   const [linking, setLinking] = useState(false);
@@ -175,9 +251,13 @@ export default function Marketing() {
           ? [m?.pageName, m?.igUsername && `@${m.igUsername}`].filter(Boolean).join(' · ') || 'Meta conectado'
           : 'Sin conectar — usa el usuario del sistema de WhatsApp'}
         actions={linked ? (
-          <button type="button" onClick={load} disabled={loading} className="btn-brand">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Actualizar
-          </button>
+          <LivePill
+            loading={loading}
+            hasData={!!m}
+            error={loadError}
+            sinceLabel={freshLabel(loadedAt, nowTick)}
+            onRefresh={load}
+          />
         ) : (
           <button type="button" onClick={linkNow} disabled={linking} className="btn-brand">
             {linking ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />} Vincular
@@ -193,11 +273,12 @@ export default function Marketing() {
           publicitaria, y pulsa Vincular.
           {linkError && <div className="text-red-600 mt-2">{linkError}</div>}
         </div>
-      ) : loadError ? (
+      ) : loadError && !raw ? (
         <div className="card card-pad text-sm">
           <div className="text-red-600">{loadError}</div>
+          <div className="mt-1 text-xs text-ink-400">Reintentando automáticamente…</div>
           <button type="button" className="btn-brand mt-3" onClick={load}>
-            <RefreshCw size={14} /> Reintentar
+            <RefreshCw size={14} /> Reintentar ahora
           </button>
         </div>
       ) : !m ? (
