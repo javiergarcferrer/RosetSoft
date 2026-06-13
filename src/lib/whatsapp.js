@@ -190,6 +190,17 @@ export async function sendWhatsappProducts({ to, items, names, text, customerId,
   return invokeWaSend({ to: waDigits(to), products: { items, names, text }, customerId, professionalId, quoteId });
 }
 
+/** Read the number's conversational components (ice breakers + commands). */
+export async function getConversationalAutomation() {
+  return invokeWaSend({ getConversationalAutomation: true });
+}
+
+/** Set the number's ice breakers (≤4) and slash-commands (≤30). The API
+ *  REPLACES the full set, so pass the complete desired state. */
+export async function saveConversationalAutomation({ prompts, commands, enableWelcome } = {}) {
+  return invokeWaSend({ setConversationalAutomation: { prompts, commands, enableWelcome } });
+}
+
 /** Read the number's public business profile (about, address, email, web…). */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });

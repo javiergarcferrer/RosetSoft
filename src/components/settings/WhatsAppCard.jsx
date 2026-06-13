@@ -6,6 +6,7 @@ import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
   listWaTemplates, listWaCatalog, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
+  getConversationalAutomation, saveConversationalAutomation,
 } from '../../lib/whatsapp.js';
 import { runCoexistenceSignup } from '../../lib/waEmbeddedSignup.js';
 import SettingsSection from './SettingsSection.jsx';
@@ -194,6 +195,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           <TemplateRow settings={settings} saveSettings={saveSettings} />
           <CatalogRow settings={settings} saveSettings={saveSettings} />
           <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
+          <ConversationalRow />
           <BusinessProfileRow />
           <TestSendRow />
         </>
@@ -768,6 +770,164 @@ function QuickReplyForm({ label, text, setLabel, setText, onSave, onCancel, savi
           {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Conversational components — the first-contact menu Meta shows a NEW chatter:
+ * ice breakers (≤4 tappable prompts before they type) and slash-commands (the
+ * "/" autocomplete). Loaded from the number on first open and saved as a whole
+ * (the API replaces the set). A furniture dealer points the breakers at the
+ * common first asks — "Ver catálogo", "Cotizar", "Horario y ubicación".
+ */
+function ConversationalRow() {
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [prompts, setPrompts] = useState([]);       // string[]
+  const [commands, setCommands] = useState([]);      // { name, description }[]
+  const [state, setState] = useState('idle');        // idle | saving | saved | error
+  const [msg, setMsg] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setMsg('');
+    try {
+      const res = await getConversationalAutomation();
+      if (res?.ok) {
+        setPrompts(Array.isArray(res.prompts) ? res.prompts : []);
+        setCommands(Array.isArray(res.commands) ? res.commands : []);
+        setLoaded(true);
+      } else {
+        setMsg(res?.error || 'No se pudo leer el menú de inicio.');
+      }
+    } catch (e) {
+      setMsg(e?.message || 'No se pudo leer el menú de inicio.');
+    } finally {
+      setLoading(false);
+    }
+  }
+  function expand() { setOpen(true); if (!loaded && !loading) load(); }
+
+  async function save() {
+    setState('saving');
+    setMsg('');
+    try {
+      const res = await saveConversationalAutomation({
+        prompts: prompts.map((p) => p.trim()).filter(Boolean),
+        commands: commands.map((c) => ({ name: c.name.trim(), description: c.description.trim() })).filter((c) => c.name && c.description),
+      });
+      if (res?.ok) {
+        setState('saved');
+        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+      } else {
+        setState('error');
+        setMsg(res?.error || 'No se pudo guardar.');
+      }
+    } catch (e) {
+      setState('error');
+      setMsg(e?.message || 'No se pudo guardar.');
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <button type="button" onClick={expand} className="btn-ghost text-xs inline-flex items-center gap-1.5">
+          <MessageCircle size={13} /> Menú de inicio (atajos y bienvenida)
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-ink-100 p-3">
+      <div className="label inline-flex items-center gap-1.5"><MessageCircle size={12} className="text-emerald-600" /> Menú de inicio</div>
+      <p className="text-[11px] text-ink-500 mb-2.5">
+        Lo que ve un cliente nuevo al abrir el chat: <strong>botones de inicio</strong> (máx. 4) y{' '}
+        <strong>comandos «/»</strong>. Se guardan en el número de WhatsApp.
+      </p>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-ink-400 py-3"><Loader2 size={14} className="animate-spin" /> Cargando…</div>
+      ) : (
+        <>
+          {/* Ice breakers */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-ink-600">Botones de inicio</div>
+            {prompts.map((p, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={p}
+                  maxLength={80}
+                  onChange={(e) => setPrompts((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))}
+                  placeholder="p. ej. Ver catálogo"
+                  className="input text-sm"
+                  aria-label={`Botón de inicio ${i + 1}`}
+                />
+                <button type="button" onClick={() => setPrompts((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0" aria-label="Quitar botón">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            {prompts.length < 4 && (
+              <button type="button" onClick={() => setPrompts((arr) => [...arr, ''])} className="btn-ghost text-xs inline-flex items-center gap-1">
+                <Plus size={12} /> Añadir botón
+              </button>
+            )}
+          </div>
+
+          {/* Commands */}
+          <div className="space-y-1.5 mt-3">
+            <div className="text-[11px] font-semibold text-ink-600">Comandos «/»</div>
+            {commands.map((c, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className="text-ink-400 text-sm">/</span>
+                <input
+                  type="text"
+                  value={c.name}
+                  maxLength={32}
+                  onChange={(e) => setCommands((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                  placeholder="cotizar"
+                  className="input text-sm w-28 shrink-0"
+                  aria-label={`Comando ${i + 1}`}
+                />
+                <input
+                  type="text"
+                  value={c.description}
+                  maxLength={256}
+                  onChange={(e) => setCommands((arr) => arr.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))}
+                  placeholder="Solicitar una cotización"
+                  className="input text-sm"
+                  aria-label={`Descripción del comando ${i + 1}`}
+                />
+                <button type="button" onClick={() => setCommands((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0" aria-label="Quitar comando">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            {commands.length < 30 && (
+              <button type="button" onClick={() => setCommands((arr) => [...arr, { name: '', description: '' }])} className="btn-ghost text-xs inline-flex items-center gap-1">
+                <Plus size={12} /> Añadir comando
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 mt-3">
+            <button type="button" onClick={save} disabled={state === 'saving'} className="btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-40">
+              {state === 'saving' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar menú
+            </button>
+            {state === 'saved' && <span className="text-[11px] text-emerald-700">Guardado en WhatsApp.</span>}
+          </div>
+        </>
+      )}
+      {msg && (
+        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-amber-700'}`}>
+          <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
+        </p>
+      )}
     </div>
   );
 }

@@ -64,6 +64,14 @@ type SendBody = {
   };
   /** Browse the WABA's connected Commerce catalog (paged; optional name search). */
   listCatalog?: { q?: string; after?: string };
+  /** Read the number's conversational components (ice breakers + commands). */
+  getConversationalAutomation?: boolean;
+  /** Set the number's ice breakers (≤4 prompts) and slash-commands (≤30). */
+  setConversationalAutomation?: {
+    prompts?: string[];
+    commands?: { name?: string; description?: string }[];
+    enableWelcome?: boolean;
+  };
   /** Send product(s) from the connected catalog — 1 item ⇒ single-product
    *  message, 2+ ⇒ product_list. `names` ride along only for our chat log. */
   products?: { items?: string[]; names?: string[]; text?: string };
@@ -355,6 +363,59 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: metaError(data, r.status) }, 502);
     }
     return json({ ok: true });
+  }
+
+  // ── Conversational components (ice breakers + slash commands) ────────────
+  // The first-contact menu: ice breakers are tappable prompts a NEW chatter
+  // sees before typing; commands are the "/" autocomplete shortcuts. Both are
+  // set per phone number. Read via fields=conversational_automation; written by
+  // POSTing the full desired state (the API replaces, not merges).
+  if (body.getConversationalAutomation) {
+    const r = await fetch(`${GRAPH}/${phoneNumberId}?fields=conversational_automation`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    const ca = (data as {
+      conversational_automation?: {
+        enable_welcome_message?: boolean;
+        prompts?: string[];
+        commands?: { command_name?: string; command_description?: string }[];
+      };
+    }).conversational_automation || {};
+    return json({
+      ok: true,
+      enableWelcome: !!ca.enable_welcome_message,
+      prompts: Array.isArray(ca.prompts) ? ca.prompts : [],
+      commands: (ca.commands || []).map((c) => ({ name: c.command_name || '', description: c.command_description || '' })),
+    });
+  }
+
+  if (body.setConversationalAutomation) {
+    const s = body.setConversationalAutomation;
+    // Ice breakers: ≤4 prompts, each ≤80 chars (Meta's cap).
+    const prompts = (Array.isArray(s.prompts) ? s.prompts : [])
+      .map((p) => String(p || '').trim().slice(0, 80)).filter(Boolean).slice(0, 4);
+    // Commands: lowercase a-z0-9_ name (≤32) + a description (≤256); ≤30 total.
+    const commands = (Array.isArray(s.commands) ? s.commands : [])
+      .map((c) => ({
+        command_name: String(c?.name || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 32),
+        command_description: String(c?.description || '').trim().slice(0, 256),
+      }))
+      .filter((c) => c.command_name && c.command_description)
+      .slice(0, 30);
+    const payload: Record<string, unknown> = { prompts, commands };
+    // Only include the welcome flag when explicitly enabled — the field is
+    // being phased out on some account types, and sending it false/blank can
+    // reject the whole update; the common path (breakers + commands) omits it.
+    if (s.enableWelcome === true) payload.enable_welcome_message = true;
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/conversational_automation`, {
+      method: 'POST', headers: graphJson, body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[wa-send] setConversationalAutomation failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    return json({ ok: true, prompts, commands });
   }
 
   // ── Commerce catalog (the WABA's connected Meta catalog) ─────────────────
