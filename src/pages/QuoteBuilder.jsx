@@ -658,23 +658,31 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       {/* Scroll-position anchor — its scroll parent is the app-shell <main>,
           which changeView snapshots/restores across mode switches. */}
       <div ref={topRef} className="hidden" aria-hidden />
-      <QuoteHeader
-        quote={quote}
-        invoice={invoice}
-        customers={customers}
-        professionals={professionals}
-        profileId={profileId}
-        view={view}
-        onViewChange={changeView}
-        onUpdateQuote={hx(updateQuote)}
-        onUndo={undo}
-        onRedo={redo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        savedAt={savedAt}
-        saving={saving}
-        buildPdf={generatePdf}
-      />
+      {/* The quote-editing chrome (identity, customer/seller chips, undo/redo,
+          view toggle) belongs to the editor. On a phone the Cliente and
+          WhatsApp tabs are stand-alone mini-apps — they get the WHOLE pane, so
+          the header is dropped there and the bottom ModeBar owns navigation
+          between the three surfaces. Desktop always shows it (the only place the
+          client toggle lives) and chat is mobile-only, so it never strands. */}
+      {(!isMobile || view === 'compose') && (
+        <QuoteHeader
+          quote={quote}
+          invoice={invoice}
+          customers={customers}
+          professionals={professionals}
+          profileId={profileId}
+          view={view}
+          onViewChange={changeView}
+          onUpdateQuote={hx(updateQuote)}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          savedAt={savedAt}
+          saving={saving}
+          buildPdf={generatePdf}
+        />
+      )}
 
       {/* Surface PDF export failures inline. The export button used to
           fail silently in iOS-PWA standalone — now if anything throws
@@ -707,9 +715,12 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         </div>
       )}
 
-      {/* The stepper steps aside in chat mode — on a phone every vertical
-          pixel there belongs to the conversation. */}
-      {view !== 'chat' && (
+      {/* Lifecycle stepper + status switching belong to the EDITOR only. The
+          Cliente preview and the WhatsApp conversation are focused surfaces —
+          the dealer doesn't advance the quote's status from inside them, and on
+          a phone every vertical pixel there belongs to the content — so the
+          stepper renders only in compose. */}
+      {view === 'compose' && (
         <div className="mb-5">
           <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
         </div>
@@ -828,8 +839,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           safe-area inset. (Re-adding it double-counted the home indicator,
           leaving a dead gap under the bar.) Under md the ModeBar (3.5rem)
           stacks beneath the dock, so the clearance grows to dock + bar; in
-          chat mode the dock is hidden and only the bar needs clearing. */}
-      <div className={view === 'chat' ? 'h-14 md:h-0' : 'h-[6.5rem] md:h-12'} aria-hidden />
+          chat mode the dock is hidden and the chat pane already sizes itself to
+          end exactly at the ModeBar, so no extra clearance is needed there. */}
+      <div className={view === 'chat' ? 'h-0' : 'h-[6.5rem] md:h-12'} aria-hidden />
 
       {/* Persistent totals dock — pinned above the ModeBar on phones, at the
           screen bottom from md: up. Hidden in chat mode: the conversation's
@@ -968,9 +980,9 @@ function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
       </>
     );
   } else if (!customer) {
-    hint = <>Asigna un cliente a la cotización (chip <strong>Cliente</strong>, arriba) para abrir su conversación de WhatsApp.</>;
+    hint = <>Asigna un cliente a la cotización en la pestaña <strong>Cotización</strong> para abrir su conversación de WhatsApp.</>;
   } else if (!phone) {
-    hint = <>{customer.name || customer.company || 'El cliente'} no tiene número de WhatsApp. Agrégalo con el chip <strong>Agregar WhatsApp</strong> del encabezado.</>;
+    hint = <>{customer.name || customer.company || 'El cliente'} no tiene número de WhatsApp. Agrégalo desde la pestaña <strong>Cotización</strong> (chip <strong>Agregar WhatsApp</strong>).</>;
   }
 
   if (hint) {
@@ -983,10 +995,14 @@ function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
   }
 
   return (
-    // Fills the viewport between the header above and the ModeBar below.
-    // 100dvh minus the fixed chrome (topbar + page padding + header + bar);
-    // the min-h floor keeps the composer usable on short landscape phones.
-    <div className="card overflow-hidden flex flex-col h-[calc(100dvh-21rem)] min-h-[24rem]">
+    // A full-pane mini-app: the conversation fills the viewport between the
+    // app topbar above and the bottom ModeBar below. The quote header + stepper
+    // are hidden in this view, so the only chrome to subtract is the topbar +
+    // page top padding (~4.5rem) and the ModeBar (~3.5rem) — 8rem total, plus
+    // the safe-area insets that ride inside 100dvh. The pane ends exactly at the
+    // ModeBar's top edge (no dead gap, no composer hidden behind the bar); the
+    // min-h floor keeps the composer usable on short landscape phones.
+    <div className="card overflow-hidden flex flex-col h-[calc(100dvh-8rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
       <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2">
         <span className="text-[11px] text-ink-400 min-w-0 truncate">
           WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}
