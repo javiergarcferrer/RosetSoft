@@ -44,6 +44,20 @@ function focusInsideKeepZone() {
   return !!(ae && typeof ae.closest === 'function' && ae.closest('[data-kb-keep]'));
 }
 
+// The soft keyboard can only be up while an editable field holds focus. We gate
+// `kb-open` on this (not on the viewport inset alone) so the state clears the
+// instant focus leaves the field — even when iOS fails to shrink visualViewport
+// back to full on dismissal, or the focused field unmounts (e.g. switching the
+// quote workspace away from the WhatsApp tab). Without it a stale inset could
+// keep `kb-open` latched, stranding the bottom ModeBar off-screen with no way
+// to bring it back.
+function isEditableFocused() {
+  const ae = document.activeElement;
+  if (!ae) return false;
+  const tag = ae.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae.isContentEditable === true;
+}
+
 let installed = false;
 
 /**
@@ -60,11 +74,21 @@ export function installVirtualKeyboardWatcher() {
 
   const apply = () => {
     const inset = computeInset();
-    const open = inset > KB_OPEN_THRESHOLD;
+    const open = inset > KB_OPEN_THRESHOLD && isEditableFocused();
     const keep = open && focusInsideKeepZone();
     root.classList.toggle('kb-open', open && !keep);
     root.classList.toggle('kb-keep-open', keep);
     root.style.setProperty('--rs-keyboard', `${open ? inset : 0}px`);
+  };
+
+  // `focusout` fires with document.activeElement momentarily on <body> even when
+  // focus is just hopping to the next field — re-checking on the next frame lets
+  // it settle, so moving between two inputs never flickers the bottom chrome
+  // back in for a frame. A genuine dismissal (focus → nothing) clears it.
+  let rafId = 0;
+  const scheduleApply = () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => { rafId = 0; apply(); });
   };
 
   vv.addEventListener('resize', apply);
@@ -72,7 +96,7 @@ export function installVirtualKeyboardWatcher() {
   // Focus can move between the page and a keep-zone WITHOUT a viewport resize
   // (the keyboard stays up), so re-evaluate on focus changes too.
   document.addEventListener('focusin', apply);
-  document.addEventListener('focusout', apply);
+  document.addEventListener('focusout', scheduleApply);
   apply();
 }
 
