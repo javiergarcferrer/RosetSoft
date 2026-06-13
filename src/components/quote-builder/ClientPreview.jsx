@@ -749,29 +749,32 @@ function ClientLine({ line, quoteMarginPct, currency, rates, fmt, families, grou
           scale (w-44 / lg:w-52) so the on-screen preview reads at the same
           physical size as the printed PDF. */}
       <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-5">
-        <div className="flex-shrink-0">
-          {line.imageId ? (
-            <ImageZoom
-              id={line.imageId}
-              alt={line.name || ''}
-              className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
-            />
-          ) : (
-            <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100" />
-          )}
-          {extras.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
-              {extras.map((id) => (
-                <ImageZoom
-                  key={id}
-                  id={id}
-                  alt={line.name || ''}
-                  className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50"
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Image column — rendered ONLY when there's a photo. A photo-less line
+            used to reserve a near-full-bleed grey square on mobile (a big empty
+            void); now the text column simply takes the whole width instead. */}
+        {(line.imageId || extras.length > 0) && (
+          <div className="flex-shrink-0">
+            {line.imageId && (
+              <ImageZoom
+                id={line.imageId}
+                alt={line.name || ''}
+                className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
+              />
+            )}
+            {extras.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
+                {extras.map((id) => (
+                  <ImageZoom
+                    key={id}
+                    id={id}
+                    alt={line.name || ''}
+                    className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <LineContent
           entity={line}
           mf={mf}
@@ -1199,24 +1202,24 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
             visible while the customer scrolls a long component list beside
             it; `self-start` confines the sticky box to this row so a short
             list simply sits put — graceful degradation. */}
-        <div className="flex-shrink-0 self-start sm:sticky sm:top-20 w-full sm:w-auto">
-          {line.imageId ? (
-            <ImageZoom
-              id={line.imageId}
-              alt={line.name || ''}
-              className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
-            />
-          ) : (
-            <div className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 bg-ink-50 rounded-lg border border-ink-100" />
-          )}
-          {extras.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
-              {extras.map((id) => (
-                <ImageZoom key={id} id={id} alt={line.name || ''} className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50" />
-              ))}
-            </div>
-          )}
-        </div>
+        {(line.imageId || extras.length > 0) && (
+          <div className="flex-shrink-0 self-start sm:sticky sm:top-20 w-full sm:w-auto">
+            {line.imageId && (
+              <ImageZoom
+                id={line.imageId}
+                alt={line.name || ''}
+                className="w-full h-auto aspect-square max-h-72 sm:w-44 sm:h-44 sm:aspect-auto lg:w-52 lg:h-52 object-contain bg-ink-50 rounded-lg border border-ink-100"
+              />
+            )}
+            {extras.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 sm:w-44 lg:w-52">
+                {extras.map((id) => (
+                  <ImageZoom key={id} id={id} alt={line.name || ''} className="w-12 h-12 object-cover rounded-md border border-ink-100 bg-ink-50" />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           {/* Product identity (family eyebrow + name). A static header on every
               breakpoint — the previous mobile-only STICKY recap bar pinned itself
