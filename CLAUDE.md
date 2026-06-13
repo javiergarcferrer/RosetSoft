@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # RosetSoft — agent bootstrap
 
 React/Vite back-office for a Ligne Roset dealer (Dominican Republic): quoting,
