@@ -167,7 +167,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // CompoundClientLine and stop it following the page scroll.
   return (
     <>
-    <div className={`theme-light bg-white overflow-clip ${
+    <div className={`theme-light bg-white text-ink-900 overflow-clip ${
       // In the editor's mobile Cliente pane the preview is a full-pane mini-app:
       // break OUT of the shell's px-4/py-4 gutter (-mx-4/-mt-4) so the paper spans
       // the phone edge-to-edge and starts right under the topbar, dropping the
