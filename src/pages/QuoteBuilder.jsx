@@ -996,15 +996,19 @@ function ChatPaneCard({ quote, customer, settings, onUpdateQuote, buildPdf }) {
   }
 
   return (
-    // A full-pane mini-app: the conversation fills the viewport between the
-    // app topbar above and the bottom ModeBar below. The quote header + stepper
-    // are hidden in this view, so the only chrome to subtract is the topbar +
-    // page top padding (~4.5rem) and the ModeBar (~3.5rem) — 8rem total, plus
-    // the safe-area insets that ride inside 100dvh. The pane ends exactly at the
-    // ModeBar's top edge (no dead gap, no composer hidden behind the bar); the
-    // min-h floor keeps the composer usable on short landscape phones.
-    <div className="card overflow-hidden flex flex-col h-[calc(100dvh-8rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
-      <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2">
+    // A full-bleed mini-app: the conversation breaks OUT of the page's padding
+    // (-mx-4 cancels the shell's px-4, -mt-4 its top py-4) so the thread spans
+    // the whole phone width edge-to-edge and starts right under the app topbar —
+    // a native chat surface, not a card floating in a gutter. It fills the
+    // viewport between the topbar above and the bottom ModeBar below: the only
+    // chrome to subtract is the topbar (~3.5rem, the top padding now reclaimed)
+    // and the ModeBar (~3.5rem) = 7rem, plus the safe-area insets that ride
+    // inside 100dvh. Bottom lands exactly on the ModeBar's top edge (no dead
+    // gap, no composer hidden behind the bar); the min-h floor keeps the
+    // composer usable on short landscape phones. md:* resets are harmless
+    // belt-and-suspenders — chat is mobile-only and redirects to compose at md.
+    <div className="-mx-4 -mt-4 md:mx-0 md:mt-0 bg-surface overflow-hidden flex flex-col h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
+      <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <span className="text-[11px] text-ink-400 min-w-0 truncate">
           WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}
         </span>
