@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Hash, AlertCircle, Share2, Plus, Loader2, MessageCircle, Send, ExternalLink } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
@@ -55,6 +55,20 @@ import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
  * Lines are still free-form (typed from the price-list PDF), and the catalog
  * picker (⌘↵) surfaces real products to insert as a starting point.
  */
+
+// Nearest scrollable ancestor of a node — the app-shell <main> for anything
+// rendered inside a page. Used to snapshot/restore the page scroll position
+// across the workspace's mode switches so the dealer keeps their place.
+function findScrollParent(node) {
+  let el = node?.parentElement;
+  while (el) {
+    const oy = getComputedStyle(el).overflowY;
+    if (oy === 'auto' || oy === 'scroll') return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
 export default function QuoteBuilder() {
   const navigate = useNavigate();
   const { profileId, settings, currentProfile } = useApp();
@@ -544,14 +558,42 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
 
+  // Mode switching must not lose the dealer's place in a long quote. The three
+  // surfaces (compose / client / WhatsApp) share ONE page scroller — the app
+  // shell's <main> — so when the tall compose tree unmounts for the much
+  // shorter chat/client surface the browser clamps that scroller to ~0;
+  // returning to compose would then snap to the top. We snapshot the compose
+  // scrollTop the instant we leave it (DOM still tall, value still real) and
+  // restore it in a layout effect once compose is back in the tree, before
+  // paint, so the round-trip is seamless. Route EVERY view change through
+  // changeView (header toggle + mobile ModeBar) so both paths preserve scroll.
+  const topRef = useRef(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const composeScrollRef = useRef(0);
+  const restorePendingRef = useRef(false);
+  const changeView = useCallback((next) => {
+    if (next === viewRef.current) return;
+    const scroller = findScrollParent(topRef.current);
+    if (viewRef.current === 'compose' && scroller) composeScrollRef.current = scroller.scrollTop;
+    if (next === 'compose') restorePendingRef.current = true;
+    setView(next);
+  }, []);
+  useLayoutEffect(() => {
+    if (!restorePendingRef.current) return;
+    restorePendingRef.current = false;
+    const scroller = findScrollParent(topRef.current);
+    if (scroller) scroller.scrollTop = composeScrollRef.current;
+  }, [view]);
+
   // 'chat' is mobile-only (the bottom ModeBar's third tab — desktop has the
   // inline chat card instead). If the viewport grows past md while chat is
   // active, fall back to compose so the desktop layout never strands on a
   // mode it has no switcher for.
   const isMobile = !useMediaQuery('(min-width: 768px)');
   useEffect(() => {
-    if (!isMobile && view === 'chat') setView('compose');
-  }, [isMobile, view]);
+    if (!isMobile && view === 'chat') changeView('compose');
+  }, [isMobile, view, changeView]);
 
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
@@ -593,6 +635,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 
   return (
     <>
+      {/* Scroll-position anchor — its scroll parent is the app-shell <main>,
+          which changeView snapshots/restores across mode switches. */}
+      <div ref={topRef} className="hidden" aria-hidden />
       <QuoteHeader
         quote={quote}
         invoice={invoice}
@@ -600,7 +645,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         professionals={professionals}
         profileId={profileId}
         view={view}
-        onViewChange={setView}
+        onViewChange={changeView}
         onUpdateQuote={hx(updateQuote)}
         onUndo={undo}
         onRedo={redo}
@@ -788,7 +833,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       )}
 
       {/* Mobile mode switcher — compose / client preview / WhatsApp chat. */}
-      <ModeBar view={view} onChange={setView} customer={customer} />
+      <ModeBar view={view} onChange={changeView} customer={customer} />
 
       <CatalogPicker
         open={catalogOpen}

@@ -102,8 +102,16 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const typingAt = useRef(0);
   const fileRef = useRef(null);
   const composerRef = useRef(null);
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView?.({ block: 'end' }); }, [thread.items.length, contact.key]);
+  const listRef = useRef(null);
+  // Pin the conversation to its latest message by scrolling the thread's OWN
+  // container — NOT scrollIntoView, which on iOS also scrolls every ancestor
+  // (the app-shell <main>), yanking the host page when the thread mounts or a
+  // message lands. Scoped here, the inbox, the embedded card and the quote
+  // workspace's chat pane all keep their page scroll put behind the thread.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [thread.items.length, contact.key]);
   useEffect(() => { setText(''); setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0; }, [contact.key]);
   // Object URL for the staged file's preview, revoked when it changes.
   useEffect(() => {
@@ -334,7 +342,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 bg-ink-50/40">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 bg-ink-50/40">
         {thread.items.map((m, i) => (
           <Bubble
             key={m.id}
@@ -353,7 +361,6 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             Sin mensajes todavía. {contact.contactKind ? 'Escríbele para iniciar la conversación.' : ''}
           </p>
         )}
-        <div ref={endRef} />
       </div>
 
       {/* 24h-window state + composer */}
