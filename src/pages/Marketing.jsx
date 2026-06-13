@@ -5,7 +5,7 @@
 // Function (tokens never reach the browser) projected by resolveSocialPulse.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarClock, Megaphone, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
+  CalendarClock, Instagram, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -218,9 +218,7 @@ export default function Marketing() {
   const [pubImageUrl, setPubImageUrl] = useState('');
   const [pubVideoUrl, setPubVideoUrl] = useState('');
   const [pubCarousel, setPubCarousel] = useState(''); // one media URL per line
-  const [pubAt, setPubAt] = useState('');
-  const [pubIg, setPubIg] = useState(false);
-  const [pubIgMode, setPubIgMode] = useState('feed'); // 'feed' | 'reel' | 'story' | 'carousel'
+  const [pubMode, setPubMode] = useState('feed'); // 'feed' | 'reel' | 'story' | 'carousel'
   const [pubBusy, setPubBusy] = useState(false);
   const [pubNote, setPubNote] = useState(null);
   // An IG video container that was still processing when publish() returned —
@@ -229,12 +227,12 @@ export default function Marketing() {
   const [finishBusy, setFinishBusy] = useState(false);
 
   const carouselLines = useMemo(
-    () => (pubIg && pubIgMode === 'carousel'
+    () => (pubMode === 'carousel'
       ? pubCarousel.split('\n').map((s) => s.trim()).filter(Boolean)
       : []),
-    [pubIg, pubIgMode, pubCarousel],
+    [pubMode, pubCarousel],
   );
-  // Enough to publish: any text, single image/video, or a carousel of ≥2.
+  // Enough to publish: any caption, a single image/video, or a carousel of ≥2.
   const canPublish = !!(pubText.trim() || pubImageUrl.trim() || pubVideoUrl.trim() || carouselLines.length >= 2);
 
   const publish = useCallback(async () => {
@@ -243,10 +241,6 @@ export default function Marketing() {
     const video = pubVideoUrl.trim();
     const carousel = carouselLines.map((u) => (isVideoUrl(u) ? { videoUrl: u } : { imageUrl: u }));
     if (!canPublish || pubBusy) return;
-    // A carousel is IG-only — don't push an empty/text-only post to Facebook
-    // unless the user actually wrote text or attached a single media too.
-    let targets = pubIg ? ['facebook', 'instagram'] : ['facebook'];
-    if (pubIg && pubIgMode === 'carousel' && !message && !image && !video) targets = ['instagram'];
     setPubBusy(true);
     setPubNote(null);
     setPendingIg(null);
@@ -258,27 +252,23 @@ export default function Marketing() {
             imageUrl: image || undefined,
             videoUrl: video || undefined,
             carousel: carousel.length ? carousel : undefined,
-            scheduleAt: pubAt ? new Date(pubAt).getTime() : undefined,
-            igStory: pubIg && pubIgMode === 'story',
-            targets,
+            igStory: pubMode === 'story',
+            targets: ['instagram'],
           },
         },
       });
       if (error) throw new Error(error.message || 'sin respuesta');
-      const results = data?.results || {};
-      const parts = Object.entries(results).map(([t, r]) => {
-        const label = t === 'facebook' ? 'Facebook' : 'Instagram';
-        if (r.ok) return `${label} ✓`;
-        if (r.pending) return `${label}: procesando…`;
-        return `${label}: ${r.error}`;
-      });
+      const ig = (data?.results || {}).instagram || {};
       // IG video still processing → keep the creation id for the finish button.
-      if (results.instagram?.pending && results.instagram.creationId) {
-        setPendingIg({ creationId: results.instagram.creationId });
-      }
-      setPubNote({ ok: !!data?.ok, text: parts.join(' · ') || data?.error || 'sin respuesta' });
+      if (ig.pending && ig.creationId) setPendingIg({ creationId: ig.creationId });
+      setPubNote({
+        ok: !!data?.ok,
+        text: ig.ok ? 'Publicado en Instagram ✓'
+          : ig.pending ? 'Instagram: procesando…'
+            : (ig.error || data?.error || 'sin respuesta'),
+      });
       if (data?.ok) {
-        setPubText(''); setPubImageUrl(''); setPubVideoUrl(''); setPubCarousel(''); setPubAt('');
+        setPubText(''); setPubImageUrl(''); setPubVideoUrl(''); setPubCarousel('');
         load();
       }
     } catch (e) {
@@ -286,7 +276,7 @@ export default function Marketing() {
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubImageUrl, pubVideoUrl, carouselLines, canPublish, pubAt, pubIg, pubIgMode, pubBusy, load]);
+  }, [pubText, pubImageUrl, pubVideoUrl, carouselLines, canPublish, pubMode, pubBusy, load]);
 
   const finishPending = useCallback(async () => {
     if (!pendingIg?.creationId || finishBusy) return;
@@ -365,7 +355,7 @@ export default function Marketing() {
       <PageHeader
         title="Marketing"
         subtitle={linked
-          ? [m?.pageName, m?.igUsername && `@${m.igUsername}`].filter(Boolean).join(' · ') || 'Meta conectado'
+          ? (m?.igUsername ? `@${m.igUsername}` : m?.pageName || 'Instagram conectado')
           : 'Sin conectar — usa el usuario del sistema de WhatsApp'}
         actions={linked ? (
           <LivePill
@@ -422,28 +412,28 @@ export default function Marketing() {
                 : (m.kpis.cpc7 != null ? `CPC ${money(m.kpis.cpc7)}` : 'sin clics aún')}
             />
             <Stat
-              label="Audiencia"
+              label="Seguidores IG"
               value={(m.kpis.igFollowers ?? 0).toLocaleString('en-US')}
-              sub={`IG · FB ${(m.kpis.fbFollowers ?? 0).toLocaleString('en-US')} · perfil 7d: ${m.kpis.profileViews7.toLocaleString('en-US')}`}
+              sub={`${m.kpis.newFollowers7 >= 0 ? '+' : ''}${m.kpis.newFollowers7.toLocaleString('en-US')} · ${m.kpis.profileViews7.toLocaleString('en-US')} visitas al perfil · 7d`}
             />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 items-start">
             <div className="space-y-4">
-              {/* composer */}
+              {/* composer — Instagram only */}
               <div className="card">
                 <div className="card-header">
-                  <span className="flex items-center gap-2 font-medium"><Megaphone size={15} /> Publicar</span>
+                  <span className="flex items-center gap-2 font-medium"><Instagram size={15} /> Publicar en Instagram</span>
                 </div>
                 <div className="card-pad space-y-2.5">
                   <textarea
                     className="input w-full min-h-20"
                     value={pubText}
                     onChange={(e) => setPubText(e.target.value)}
-                    placeholder="Texto de la publicación…"
+                    placeholder={pubMode === 'story' ? 'Texto opcional…' : 'Pie de foto…'}
                     maxLength={2200}
                   />
-                  {pubIg && pubIgMode === 'carousel' ? (
+                  {pubMode === 'carousel' ? (
                     <textarea
                       className="input w-full min-h-20"
                       value={pubCarousel}
@@ -469,33 +459,18 @@ export default function Marketing() {
                       />
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      className="input w-52"
-                      type="datetime-local"
-                      value={pubAt}
-                      onChange={(e) => setPubAt(e.target.value)}
-                      aria-label="Programar (solo Facebook, sin video)"
-                    />
-                  </div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <label className="flex items-center gap-2 text-sm text-ink-500">
-                      <input type="checkbox" checked={pubIg} onChange={(e) => setPubIg(e.target.checked)} />
-                      También en Instagram
-                    </label>
-                    {pubIg && (
-                      <select
-                        className="input w-auto py-1 text-sm"
-                        value={pubIgMode}
-                        onChange={(e) => setPubIgMode(e.target.value)}
-                        aria-label="Tipo de publicación en Instagram"
-                      >
-                        <option value="feed">Feed</option>
-                        <option value="reel">Reel</option>
-                        <option value="story">Story (24 h)</option>
-                        <option value="carousel">Carrusel</option>
-                      </select>
-                    )}
+                    <select
+                      className="input w-auto py-1 text-sm"
+                      value={pubMode}
+                      onChange={(e) => setPubMode(e.target.value)}
+                      aria-label="Tipo de publicación"
+                    >
+                      <option value="feed">Feed</option>
+                      <option value="reel">Reel</option>
+                      <option value="story">Story (24 h)</option>
+                      <option value="carousel">Carrusel</option>
+                    </select>
                     <button
                       type="button"
                       className="btn-brand ml-auto"
@@ -503,13 +478,12 @@ export default function Marketing() {
                       disabled={!canPublish || pubBusy}
                     >
                       {pubBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                      {pubAt ? 'Programar' : 'Publicar'}
+                      Publicar
                     </button>
                   </div>
                   <p className="text-xs text-ink-400">
-                    Facebook admite programar texto e imágenes (10 min – 30 días); los Reels se publican al
-                    momento. Instagram publica al momento — Feed e historia aceptan imagen o video, el Reel
-                    necesita video y el carrusel 2–10 URLs.
+                    Se publica al momento (Instagram no programa por API). Feed e historia aceptan imagen o
+                    video, el Reel necesita video y el carrusel 2–10 URLs.
                   </p>
                   {pendingIg && (
                     <div className="flex items-center gap-2 text-sm text-ink-600">
@@ -587,9 +561,9 @@ export default function Marketing() {
             </div>
 
             <div className="space-y-4">
-              {/* comment triage — Instagram + (when present) Facebook */}
+              {/* comment triage — Instagram */}
               <CommentsCard
-                title="Comentarios IG"
+                title="Comentarios"
                 comments={m.recentComments}
                 platform="instagram"
                 atPrefix="@"
@@ -602,22 +576,6 @@ export default function Marketing() {
                 replyErr={replyErr}
                 sendReply={sendReply}
               />
-              {m.recentFbComments.length > 0 && (
-                <CommentsCard
-                  title="Comentarios Facebook"
-                  comments={m.recentFbComments}
-                  platform="facebook"
-                  atPrefix=""
-                  emptyLabel="Sin comentarios recientes."
-                  reply={reply}
-                  openReply={openReply}
-                  replyText={replyText}
-                  setReplyText={setReplyText}
-                  replyBusy={replyBusy}
-                  replyErr={replyErr}
-                  sendReply={sendReply}
-                />
-              )}
 
               {/* scheduled */}
               <div className="card">

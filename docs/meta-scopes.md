@@ -24,8 +24,8 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 | `pages_manage_posts` | ✅ | Page feed posts + scheduled posts (`/{page}/feed`, `scheduled_posts`). |
 | `pages_read_engagement` | ✅ | Page profile + daily engagement/reach insights in the snapshot. |
 | `read_insights` | ✅ | Underpins the Page + IG insights reads. |
-| `pages_read_user_content` | ✅ | Read comments on recent Page posts (the FB comment triage feed). |
-| `pages_manage_engagement` | 🟡 | Reply to a Page comment as the Page (Marketing triage; reads work, replies may need App Review). |
+| `pages_read_user_content` | 🟡 | Read user comments/posts on the Page (server can; the IG-first Marketing UI doesn't surface FB). |
+| `pages_manage_engagement` | ⬜ | Like/comment/moderate as the Page (server `replyComment` supports it; not surfaced). |
 | `pages_manage_metadata` | 🟡 | Page settings + webhook subscriptions. |
 | `pages_messaging` | ⬜ | Messenger send/receive → Messenger thread in the CRM. |
 | `pages_utility_messaging` | ⬜ | Messenger utility/templated messages. |
@@ -62,7 +62,7 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 ## Other surfaces — headroom
 | Scope | Status | What it backs |
 |---|---|---|
-| `publish_video` | ✅ | Facebook Page Reels (`/video_reels`) + IG Reels/video — backed by `pages_manage_posts`/`instagram_content_publish`. |
+| `publish_video` | 🟡 | IG Reels/video are live (via `instagram_content_publish`). The server can also post FB Page Reels (`/video_reels`), but the IG-first Marketing UI doesn't surface FB publishing. |
 | `threads_business_basic` | ⬜ | Threads read/post for the business account. |
 
 ### Notes for future loops

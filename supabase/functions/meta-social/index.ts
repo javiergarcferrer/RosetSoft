@@ -514,7 +514,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled, fbPosts] = await Promise.all([
+    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
       safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
       cfg.ig_user_id
         ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
@@ -566,13 +566,6 @@ Deno.serve(async (req) => {
       safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {
         fields: 'message,scheduled_publish_time', limit: '10',
       })),
-      // Recent Page posts with their comments nested — the FB comment triage
-      // feed, the Facebook twin of the IG one above. `from{name}` rides along
-      // (needs pages_read_user_content; absent → the row just shows no author).
-      safe('fbPosts', () => graph(`${cfg.page_id}/published_posts`, pageToken, {
-        fields: 'message,created_time,permalink_url,comments.limit(5){id,message,from{name},created_time}',
-        limit: '6',
-      })),
     ]);
 
     // Product catalogs owned by the business — visibility, not sync (Shopify's
@@ -599,7 +592,6 @@ Deno.serve(async (req) => {
       adsDaily: adsDaily?.data || null,
       adCampaigns: adCampaigns?.data || null,
       scheduled: scheduled?.data || null,
-      fbPosts: fbPosts?.data || null,
       businesses: catalogs?.data || null,
       errors,
     });

@@ -163,34 +163,6 @@ test('recent IG comments flatten across posts, newest first, capped at 8', () =>
   assert.ok(recentComments[0].ago);
 });
 
-test('recent FB comments flatten the Page-post shape (message/from.name/created_time)', () => {
-  const fbPosts = [
-    {
-      message: 'Oferta de sala',
-      permalink_url: 'https://fb.com/p/1',
-      comments: { data: [
-        { id: 'f1', message: '¿precio?', from: { name: 'María' }, created_time: new Date(NOW - 1000).toISOString() },
-        { id: 'f2', message: 'me encanta', from: { name: 'José' }, created_time: new Date(NOW - 2 * DAY).toISOString() },
-      ] },
-    },
-    // a comment with no `from` (author hidden without pages_read_user_content)
-    { message: 'Mesa nueva', comments: { data: [{ id: 'f3', message: 'hola', created_time: new Date(NOW - 3 * DAY).toISOString() }] } },
-  ];
-  const { recentFbComments } = resolveSocialPulse({ fbPosts }, { now: NOW });
-  assert.equal(recentFbComments.length, 3);
-  assert.equal(recentFbComments[0].id, 'f1'); // newest first
-  assert.equal(recentFbComments[0].username, 'María');
-  assert.equal(recentFbComments[0].postText, 'Oferta de sala');
-  assert.equal(recentFbComments[0].permalink, 'https://fb.com/p/1');
-  assert.equal(recentFbComments[2].username, ''); // hidden author → empty, never crashes
-  assert.ok(recentFbComments[0].ago);
-});
-
-test('no FB posts → recentFbComments is an empty array (not undefined)', () => {
-  const { recentFbComments } = resolveSocialPulse({}, { now: NOW });
-  assert.deepEqual(recentFbComments, []);
-});
-
 test('campaigns map the campaigns-edge shape (id + status + nested insights)', () => {
   const adCampaigns = [
     {
