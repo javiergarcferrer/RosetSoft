@@ -177,13 +177,6 @@
 /* In-flight probe (a response to pressing Diagnóstico). */
 .jv-int-row.is-scanning .idot { color: var(--jv-scan); }
 
-/* ── status map (radar without the theatrics) ────────────────────────── */
-.jv-radar circle.grid-ring {
-  fill: none;
-  stroke: var(--jv-border);
-  stroke-width: 0.4;
-}
-
 /* ── uplink console ──────────────────────────────────────────────────── */
 .jv-console {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
@@ -608,6 +601,39 @@
   font-size: 0.62rem;
   color: var(--jv-faint);
 }
+
+/* ── responsive — phones get one clean column, money pulse on top ─────── */
+/* Below xl the grid collapses to a single column (Tailwind only sets the
+   3-col template at xl). Keep every block from forcing a sideways scroll, and
+   reorder them so the commercial pulse — the headline — sits first on a phone
+   and the integration diagnostics last. Above xl the explicit template wins
+   and `order` is moot (each block is its own column anyway). */
+.jv-grid,
+.jv-col-left,
+.jv-col-center,
+.jv-col-right { min-width: 0; }
+
+@media (max-width: 1279px) {
+  .jv-col-center { order: 1; }
+  .jv-col-left { order: 2; }
+  .jv-col-right { order: 3; }
+}
+
+@media (max-width: 640px) {
+  /* Tighter gutters reclaim ~0.5rem each side for content on a 360px phone. */
+  .jarvis { padding: 0.75rem 0.75rem calc(2.5rem + env(safe-area-inset-bottom, 0px)); }
+  /* The reactor gauge is a glance metric, not the headline — shrink it so it
+     doesn't eat a whole screen above the numbers that matter. */
+  .jv-gauge { width: 132px; height: 132px; }
+  .jv-gauge .reading b { font-size: 1.4rem; }
+  /* Ease big numerals down so 2-up stat/KPI grids never clip. */
+  .jv-stat b { font-size: 1.2rem; }
+  .jv-kpi b { font-size: 1.2rem; }
+}
+
+/* Long commit lines in the deploy feed wrap instead of forcing a sideways
+   scroll on narrow screens. */
+.jv-feed .item > span { min-width: 0; overflow-wrap: anywhere; }
 
 @media (prefers-reduced-motion: reduce) {
   .jv-caret { animation: none; }

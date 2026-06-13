@@ -4,7 +4,6 @@ export {
   resolveUplinkFeed,
   resolveActivityFeed,
   systemIntegrity,
-  radarPoints,
   agoLabel,
   STATUS_LABELS,
 } from './board.js';

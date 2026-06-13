@@ -158,7 +158,7 @@ export function resolveWaBrief(messages = [], now = Date.now()) {
 
 /**
  * Sparkline geometry for a weekly series: `values` → an SVG polyline `points`
- * string in a w×h viewbox (same VM-owns-geometry rule as radarPoints).
+ * string in a w×h viewbox (the VM owns the geometry, the View just renders it).
  * Pass a shared `max` when two series render on one chart, so their scales
  * are comparable — each scaling to its own peak would lie visually.
  */

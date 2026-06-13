@@ -3,9 +3,8 @@
  *
  * `resolveIntegrationBoard` turns team settings + live probe results into the
  * card grid (one card per external integration, with a derived status), and
- * the small helpers below project the uplink thread, the activity feed and
- * the decorative radar from the same inputs. No React, no db — the page
- * fetches and passes rows in.
+ * the small helpers below project the uplink thread and the activity feed
+ * from the same inputs. No React, no db — the page fetches and passes rows in.
  */
 
 const HOUR = 3_600_000;
@@ -183,19 +182,6 @@ export function systemIntegrity(cards) {
   const score = { online: 1, standby: 1, scanning: 1, stale: 0.5, offline: 0, fail: 0 };
   const total = cards.reduce((s, c) => s + (score[c.status] ?? 0), 0);
   return Math.round((total / cards.length) * 100);
-}
-
-/**
- * Decorative radar projection: each card becomes a blip on a 0–100 viewbox,
- * angle by position, radius by health (closer to center = healthier).
- */
-export function radarPoints(cards) {
-  const radius = { online: 18, scanning: 30, standby: 30, stale: 38, offline: 45, fail: 45 };
-  return cards.map((c, i) => {
-    const a = (i / Math.max(1, cards.length)) * Math.PI * 2 - Math.PI / 2;
-    const r = radius[c.status] ?? 45;
-    return { id: c.id, name: c.name, status: c.status, x: 50 + Math.cos(a) * r, y: 50 + Math.sin(a) * r };
-  });
 }
 
 /** The uplink thread — conversation rows only, oldest first. */

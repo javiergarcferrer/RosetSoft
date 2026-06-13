@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Megaphone,
-  Package, Radar, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp,
+  Package, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp,
   Users, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -21,7 +21,6 @@ import {
   resolveAdsSalesWeeks,
   resolveWaBrief,
   systemIntegrity,
-  radarPoints,
   sparkPoints,
   agoLabel,
 } from '../core/jarvis/index.js';
@@ -472,7 +471,6 @@ export default function Jarvis() {
     [settings, probes, now],
   );
   const integrity = useMemo(() => systemIntegrity(board), [board]);
-  const blips = useMemo(() => radarPoints(board), [board]);
   const thread = useMemo(() => resolveUplinkFeed(messages), [messages]);
   const activity = useMemo(
     () => resolveActivityFeed({ commits: BUILD.log || [], messages, now }),
@@ -542,41 +540,45 @@ export default function Jarvis() {
   return (
     <div className="jarvis">
       {/* ── HUD header ─────────────────────────────────────────────── */}
-      <header className="flex flex-wrap items-end justify-between gap-3 px-1 pb-4">
-        <div>
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1 pb-4">
+        <div className="min-w-0">
           <div className="jv-kicker">Roset Ops Core · v{String(BUILD.sha || '').slice(0, 7) || 'dev'}</div>
           <h1 className="jv-title">JARVIS</h1>
         </div>
-        <div className="flex items-start gap-4">
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
           <div className="jv-mono text-right text-xs" style={{ color: 'var(--jv-muted)' }}>
-            <div style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
-              {clock.toLocaleTimeString('es-DO', { hour12: false })}
-            </div>
-            <div>{clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-            <div className="mt-1">
+            <div className="flex items-center justify-end gap-2">
+              <span style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
+                {clock.toLocaleTimeString('es-DO', { hour12: false })}
+              </span>
               <StatusChip
                 status={navigator.onLine ? 'online' : 'fail'}
-                label={navigator.onLine ? 'Enlace activo' : 'Sin red'}
+                label={navigator.onLine ? 'Enlace' : 'Sin red'}
               />
             </div>
+            <div className="hidden sm:block">
+              {clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
           </div>
-          <button
-            type="button"
-            className="jv-btn flex-none"
-            onClick={() => setPaletteOpen(true)}
-            aria-label="Abrir paleta de comandos"
-          >
-            <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
-          </button>
-          <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
-            <X size={14} /> Salir
-          </Link>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="jv-btn flex-none"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Abrir paleta de comandos"
+            >
+              <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
+            </button>
+            <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
+              <X size={14} /> Salir
+            </Link>
+          </div>
         </div>
       </header>
 
-      <div className="grid gap-3 xl:grid-cols-[280px_1fr_300px]">
+      <div className="jv-grid grid gap-3 xl:grid-cols-[280px_1fr_300px]">
         {/* ── left rail: reactor + stats + integration status list ──── */}
-        <div className="flex flex-col gap-3 min-h-0">
+        <div className="jv-col-left flex flex-col gap-3 min-h-0">
           <section className="jv-panel p-3">
             <div className="jv-gauge">
               <svg viewBox="0 0 120 120" aria-hidden="true">
@@ -662,7 +664,7 @@ export default function Jarvis() {
         </div>
 
         {/* ── center: business pulse + social ──────────────────────── */}
-        <div className="flex flex-col gap-3 min-h-0">
+        <div className="jv-col-center flex flex-col gap-3 min-h-0">
         <section className="jv-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
@@ -1014,35 +1016,8 @@ export default function Jarvis() {
         </section>
         </div>
 
-        {/* ── right column: radar + live feeds ─────────────────────── */}
-        <div className="flex flex-col gap-3 min-h-0">
-          <section className="jv-panel p-3">
-            <div className="jv-panel-head -m-3 mb-2"><Radar size={12} /> Mapa de estado</div>
-            <svg viewBox="0 0 100 100" className="jv-radar w-full">
-              {[18, 30, 42].map((r) => (
-                <circle key={r} className="grid-ring" cx="50" cy="50" r={r} />
-              ))}
-              {blips.map((b) => (
-                <circle
-                  key={b.id}
-                  cx={b.x}
-                  cy={b.y}
-                  r="1.8"
-                  fill={
-                    b.status === 'online' ? 'var(--jv-success)'
-                      : b.status === 'fail' ? 'var(--jv-danger)'
-                        : b.status === 'stale' ? 'var(--jv-warning)'
-                          : b.status === 'offline' ? 'var(--jv-faint)'
-                            : 'var(--jv-muted)'
-                  }
-                >
-                  <title>{b.name}</title>
-                </circle>
-              ))}
-              <circle cx="50" cy="50" r="2" fill="var(--jv-fg)" />
-            </svg>
-          </section>
-
+        {/* ── right column: live feeds ─────────────────────────────── */}
+        <div className="jv-col-right flex flex-col gap-3 min-h-0">
           <section className="jv-panel">
             <div className="jv-panel-head"><Activity size={12} /> Actividad comercial</div>
             <div className="jv-timeline p-3 max-h-64 overflow-y-auto">
