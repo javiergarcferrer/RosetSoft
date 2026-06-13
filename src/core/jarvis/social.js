@@ -205,6 +205,24 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     .slice(0, 8)
     .map((c) => ({ ...c, ago: agoLabel(c.at, now) }));
 
+  // The Facebook twin: comments on recent Page posts. Same shape as the IG
+  // feed so the View renders them identically — the only differences are the
+  // source fields (Graph spells them `message`/`from.name`/`created_time` on a
+  // Page, vs `text`/`username`/`timestamp` on IG) and that a FB reply posts to
+  // the `comments` edge (the View passes platform:'facebook').
+  const recentFbComments = (s.fbPosts || [])
+    .flatMap((post) => ((post.comments?.data) || []).map((c) => ({
+      id: c.id || null,
+      text: (c.message || '').slice(0, 100),
+      username: c.from?.name || '',
+      at: toMs(c.created_time),
+      postText: (post.message || '').slice(0, 40) || '(publicación)',
+      permalink: post.permalink_url || null,
+    })))
+    .sort((a, b) => (b.at || 0) - (a.at || 0))
+    .slice(0, 8)
+    .map((c) => ({ ...c, ago: agoLabel(c.at, now) }));
+
   return {
     pageName: s.page?.name || s.pageName || '',
     igUsername: s.ig?.username || s.igUsername || '',
@@ -237,6 +255,7 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     scheduled,
     posts,
     recentComments,
+    recentFbComments,
     // Meta product catalogs across the business portfolios the token sees.
     catalogs: (s.businesses || []).flatMap((b) => ((b.owned_product_catalogs?.data) || []).map((c) => ({
       name: c.name || '—',

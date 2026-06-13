@@ -11,9 +11,12 @@
 //                          Page (+ page token), its IG business account and
 //                          the ad account, persist everything, stamp settings.
 //   { test: true }       → verify the stored credentials still answer.
-//   { publish: {...} }   → post to the FB Page (now or scheduled 10min–30d)
-//                          and/or IG (image required, no scheduling) — one
-//                          result per target, partial success allowed.
+//   { publish: {...} }   → post to the FB Page (text/link/photo now or
+//                          scheduled 10min–30d, or a Reel) and/or IG (image,
+//                          Reel, Story or carousel; no scheduling) — one result
+//                          per target, partial success allowed. A still-
+//                          processing IG video comes back { pending, creationId }.
+//   { finishPublish }    → publish a pending IG video container once it's done.
 //   { snapshot: true }   → one consolidated read: profile counts, IG daily
 //                          reach (28d), recent IG posts, daily ad results
 //                          (28d) + per-campaign rollup, scheduled posts.
@@ -32,17 +35,27 @@ const CORS = {
 const json = (b: unknown, s = 200): Response =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-const GRAPH = 'https://graph.facebook.com/v23.0';
+const GRAPH_VERSION = 'v23.0';
+const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const TEAM = 'team';
 
 type LinkBody = { token?: string; pageId?: string; adAccountId?: string };
+type CarouselItem = { imageUrl?: string; videoUrl?: string };
 type PublishBody = {
   message?: string;
   link?: string;
   imageUrl?: string;
-  /** JS-ms timestamp; FB only (10 min – 30 days out). Absent = publish now. */
+  /** A video URL → IG Reel (or video Story) and/or a Facebook Page Reel. */
+  videoUrl?: string;
+  /** Optional IG Reel cover image (else Meta picks a frame). */
+  coverUrl?: string;
+  /** IG Reel also shows in the feed grid (default true). */
+  shareToFeed?: boolean;
+  /** 2–10 media → an IG carousel (each item an image or a video URL). */
+  carousel?: CarouselItem[];
+  /** JS-ms timestamp; FB feed/photo only (10 min – 30 days out). Absent = now. */
   scheduleAt?: number;
-  /** Publish the IG side as a 24h Story (image only, no caption) instead of a feed post. */
+  /** Publish the IG side as a 24h Story (image or video, no caption) instead of a feed post. */
   igStory?: boolean;
   targets?: Array<'facebook' | 'instagram'>;
 };
@@ -51,8 +64,10 @@ type Body = {
   test?: boolean;
   snapshot?: boolean;
   publish?: PublishBody;
-  /** Reply to an IG comment from the triage list. */
-  replyComment?: { commentId?: string; message?: string };
+  /** Resume publishing a still-processing IG video container (Reel/Story). */
+  finishPublish?: { creationId?: string };
+  /** Reply to a comment from the triage list (IG replies edge vs FB comments edge). */
+  replyComment?: { commentId?: string; message?: string; platform?: 'instagram' | 'facebook' };
   /** Pause/resume an ad campaign (Marketing page, behind an explicit confirm). */
   setCampaignStatus?: { campaignId?: string; status?: string };
 };
@@ -89,6 +104,117 @@ async function graphPost(path: string, token: string, params: Record<string, str
     throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
   }
   return data;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type PublishResult = { ok: boolean; id?: string; error?: string; pending?: boolean; creationId?: string };
+
+/**
+ * Poll an IG media container to FINISHED. Image containers are ready on the
+ * first check; VIDEO/REELS/CAROUSEL-with-video are processed async, so we wait
+ * (bounded — ~36s, comfortably under the function budget). If it's still
+ * IN_PROGRESS we return that and hand the creation id back: the View finishes
+ * the publish a few seconds later via `finishPublish`, rather than us blocking
+ * a request for minutes.
+ */
+async function igWaitReady(creationId: string, token: string, tries = 9, delayMs = 4000): Promise<string> {
+  for (let i = 0; i < tries; i++) {
+    const r = await graph(creationId, token, { fields: 'status_code' });
+    const s = String(r?.status_code || '');
+    if (s === 'FINISHED' || s === '') return 'FINISHED';
+    if (s === 'ERROR' || s === 'EXPIRED') return s;
+    await sleep(delayMs);
+  }
+  return 'IN_PROGRESS';
+}
+
+/**
+ * Publish to Instagram. Picks the media kind from the body: a ≥2-item carousel,
+ * else a Reel (video, not story), else a Story (image/video), else the original
+ * single-image feed post. Every path is the same 2-step container → publish
+ * dance; video paths wait for processing first.
+ */
+async function publishInstagram(igId: string, token: string, pub: PublishBody): Promise<PublishResult> {
+  const caption = String(pub.message || '').trim();
+  const carousel = (pub.carousel || []).filter((it) => it && (it.videoUrl || it.imageUrl)).slice(0, 10);
+
+  // CAROUSEL — each child its own container, then a parent that ties them.
+  if (carousel.length >= 2) {
+    const childIds: string[] = [];
+    for (const it of carousel) {
+      const params = it.videoUrl
+        ? { media_type: 'VIDEO', video_url: String(it.videoUrl), is_carousel_item: 'true' }
+        : { image_url: String(it.imageUrl), is_carousel_item: 'true' };
+      const c = await graphPost(`${igId}/media`, token, params);
+      if (it.videoUrl) {
+        const s = await igWaitReady(String(c?.id), token);
+        if (s !== 'FINISHED') return { ok: false, error: `Un video del carrusel no terminó de procesar (${s})` };
+      }
+      childIds.push(String(c?.id || ''));
+    }
+    if (childIds.length < 2) return { ok: false, error: 'El carrusel necesita al menos 2 elementos válidos' };
+    const parent = await graphPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(',') });
+    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(parent?.id || '') });
+    return { ok: true, id: out?.id };
+  }
+
+  // REEL — a video feed post (async processing).
+  if (pub.videoUrl && !pub.igStory) {
+    const params: Record<string, string> = { media_type: 'REELS', video_url: String(pub.videoUrl), caption };
+    if (pub.coverUrl) params.cover_url = String(pub.coverUrl);
+    if (pub.shareToFeed === false) params.share_to_feed = 'false';
+    const c = await graphPost(`${igId}/media`, token, params);
+    const s = await igWaitReady(String(c?.id), token);
+    if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'El Reel sigue procesando — pulsa “Finalizar” en unos segundos.' };
+    if (s !== 'FINISHED') return { ok: false, error: `El Reel no se pudo procesar (${s})` };
+    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+    return { ok: true, id: out?.id };
+  }
+
+  // STORY — image or video, 24h, no caption.
+  if (pub.igStory) {
+    const params = pub.videoUrl
+      ? { media_type: 'STORIES', video_url: String(pub.videoUrl) }
+      : pub.imageUrl ? { media_type: 'STORIES', image_url: String(pub.imageUrl) } : null;
+    if (!params) return { ok: false, error: 'La Story requiere una imagen o un video' };
+    const c = await graphPost(`${igId}/media`, token, params);
+    if (pub.videoUrl) {
+      const s = await igWaitReady(String(c?.id), token);
+      if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'La Story de video sigue procesando — pulsa “Finalizar”.' };
+      if (s !== 'FINISHED') return { ok: false, error: `La Story no se pudo procesar (${s})` };
+    }
+    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+    return { ok: true, id: out?.id };
+  }
+
+  // FEED IMAGE — the original path.
+  if (!pub.imageUrl) return { ok: false, error: 'Instagram requiere una imagen o un video (URL pública)' };
+  const c = await graphPost(`${igId}/media`, token, { image_url: String(pub.imageUrl), caption });
+  const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+  return { ok: true, id: out?.id };
+}
+
+/**
+ * Publish a Facebook Page Reel from a hosted video URL — the 3-phase
+ * video_reels flow (start → hosted-file upload via rupload → finish). No bytes
+ * stream through us: rupload pulls the public URL we pass in the `file_url`
+ * header, the same "Meta fetches your URL" model as IG.
+ */
+async function publishFacebookReel(pageId: string, token: string, videoUrl: string, description: string): Promise<{ id: string }> {
+  const start = await graphPost(`${pageId}/video_reels`, token, { upload_phase: 'start' });
+  const videoId = String(start?.video_id || '');
+  if (!videoId) throw new Error('No se pudo iniciar la subida del Reel');
+  const up = await fetch(`https://rupload.facebook.com/video-upload/${GRAPH_VERSION}/${videoId}`, {
+    method: 'POST',
+    headers: { Authorization: `OAuth ${token}`, file_url: videoUrl },
+  });
+  const upData = await up.json().catch(() => ({}));
+  if (!up.ok || upData?.error) throw new Error(String(upData?.error?.message || `rupload ${up.status}`).slice(0, 200));
+  await graphPost(`${pageId}/video_reels`, token, {
+    upload_phase: 'finish', video_id: videoId, video_state: 'PUBLISHED', description,
+  });
+  return { id: videoId };
 }
 
 Deno.serve(async (req) => {
@@ -268,32 +394,38 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── replyComment: answer an IG comment in-thread ──────────────────────
+  // ── replyComment: answer a comment in-thread. IG nests replies under the
+  // comment's `replies` edge; Facebook nests them under `comments`.
   if (body.replyComment) {
     const commentId = String(body.replyComment.commentId || '').trim();
     const message = String(body.replyComment.message || '').trim();
     if (!commentId || !message) return json({ ok: false, error: 'commentId y message requeridos' }, 400);
+    const edge = body.replyComment.platform === 'facebook' ? 'comments' : 'replies';
     try {
-      const r = await graphPost(`${commentId}/replies`, pageToken, { message });
+      const r = await graphPost(`${commentId}/${edge}`, pageToken, { message });
       return json({ ok: true, id: r?.id });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
   }
 
-  // ── publish: FB Page post (now or scheduled) + optional IG image post ──
-  // Per-target results: one network failing doesn't waste the other's post.
+  // ── publish: FB Page (text/link/photo/Reel, now or scheduled) + IG
+  // (image/Reel/Story/carousel). Per-target results: one network failing
+  // doesn't waste the other's post.
   if (body.publish) {
-    const message = String(body.publish.message || '').trim();
-    const targets = body.publish.targets?.length ? body.publish.targets : ['facebook' as const];
-    const link = String(body.publish.link || '').trim();
-    const imageUrl = String(body.publish.imageUrl || '').trim();
-    const scheduleAt = Number(body.publish.scheduleAt) || 0;
-    const igStory = !!body.publish.igStory;
-    // A Story carries no caption — an image-only IG Story is a valid publish
-    // with no message; everything else still requires text.
-    const storyOnly = igStory && !targets.includes('facebook');
-    if (!message && !(storyOnly && imageUrl)) return json({ ok: false, error: 'mensaje requerido' }, 400);
+    const pub = body.publish;
+    const message = String(pub.message || '').trim();
+    const targets = pub.targets?.length ? pub.targets : ['facebook' as const];
+    const link = String(pub.link || '').trim();
+    const imageUrl = String(pub.imageUrl || '').trim();
+    const videoUrl = String(pub.videoUrl || '').trim();
+    const carousel = (pub.carousel || []).filter((it) => it && (it.videoUrl || it.imageUrl));
+    const scheduleAt = Number(pub.scheduleAt) || 0;
+
+    // A media-only publish (Reel/Story/photo/carousel) needs no caption; a
+    // text post still does.
+    const hasMedia = !!(imageUrl || videoUrl || carousel.length);
+    if (!message && !hasMedia) return json({ ok: false, error: 'Escribe un texto o adjunta una imagen/video' }, 400);
 
     if (scheduleAt) {
       const min = Date.now() + 10 * 60_000;
@@ -303,40 +435,47 @@ Deno.serve(async (req) => {
       }
     }
 
-    const results: Record<string, { ok: boolean; id?: string; error?: string }> = {};
+    const results: Record<string, PublishResult> = {};
 
     if (targets.includes('facebook')) {
       try {
-        const params: Record<string, string> = { message };
-        if (link) params.link = link;
-        if (scheduleAt) {
-          params.published = 'false';
-          params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
+        if (videoUrl) {
+          // FB Reel — no API scheduling for Reels, publishes now.
+          const r = await publishFacebookReel(cfg.page_id, pageToken, videoUrl, message);
+          results.facebook = { ok: true, id: r.id };
+        } else if (imageUrl) {
+          // Photo post (schedulable like a feed post).
+          const params: Record<string, string> = { url: imageUrl, caption: message };
+          if (scheduleAt) {
+            params.published = 'false';
+            params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
+          }
+          const r = await graphPost(`${cfg.page_id}/photos`, pageToken, params);
+          results.facebook = { ok: true, id: r?.post_id || r?.id };
+        } else {
+          const params: Record<string, string> = { message };
+          if (link) params.link = link;
+          if (scheduleAt) {
+            params.published = 'false';
+            params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
+          }
+          const r = await graphPost(`${cfg.page_id}/feed`, pageToken, params);
+          results.facebook = { ok: true, id: r?.id };
         }
-        const r = await graphPost(`${cfg.page_id}/feed`, pageToken, params);
-        results.facebook = { ok: true, id: r?.id };
       } catch (e) {
         results.facebook = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
       }
     }
 
     if (targets.includes('instagram')) {
-      // IG Content Publishing requires media and has no native scheduling.
       if (!cfg.ig_user_id) {
         results.instagram = { ok: false, error: 'Sin cuenta de Instagram vinculada' };
-      } else if (!imageUrl) {
-        results.instagram = { ok: false, error: 'Instagram requiere una imagen (URL pública)' };
       } else if (scheduleAt) {
+        // IG Content Publishing has no native scheduling.
         results.instagram = { ok: false, error: 'Instagram no admite programación por API — publícalo al momento' };
       } else {
         try {
-          // Feed post = image + caption; Story = image only, 24h, no caption.
-          const params = igStory
-            ? { media_type: 'STORIES', image_url: imageUrl }
-            : { image_url: imageUrl, caption: message };
-          const c = await graphPost(`${cfg.ig_user_id}/media`, pageToken, params);
-          const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: String(c?.id || '') });
-          results.instagram = { ok: true, id: p?.id };
+          results.instagram = await publishInstagram(cfg.ig_user_id, pageToken, { ...pub, message, imageUrl, videoUrl, carousel });
         } catch (e) {
           results.instagram = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
         }
@@ -345,6 +484,23 @@ Deno.serve(async (req) => {
 
     const anyOk = Object.values(results).some((r) => r.ok);
     return json({ ok: anyOk, results });
+  }
+
+  // ── finishPublish: publish an IG video container that was still processing
+  // when `publish` returned (the View polls this for Reels/video Stories).
+  if (body.finishPublish) {
+    if (!cfg.ig_user_id) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
+    const creationId = String(body.finishPublish.creationId || '').trim();
+    if (!creationId) return json({ ok: false, error: 'creationId requerido' }, 400);
+    try {
+      const s = await igWaitReady(creationId, pageToken);
+      if (s === 'IN_PROGRESS') return json({ ok: false, pending: true, creationId, error: 'Sigue procesando — intenta de nuevo en unos segundos.' });
+      if (s !== 'FINISHED') return json({ ok: false, error: `No se pudo procesar (${s})` });
+      const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: creationId });
+      return json({ ok: true, id: p?.id });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
   }
 
   if (body.snapshot) {
@@ -358,7 +514,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
+    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled, fbPosts] = await Promise.all([
       safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
       cfg.ig_user_id
         ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
@@ -410,6 +566,13 @@ Deno.serve(async (req) => {
       safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {
         fields: 'message,scheduled_publish_time', limit: '10',
       })),
+      // Recent Page posts with their comments nested — the FB comment triage
+      // feed, the Facebook twin of the IG one above. `from{name}` rides along
+      // (needs pages_read_user_content; absent → the row just shows no author).
+      safe('fbPosts', () => graph(`${cfg.page_id}/published_posts`, pageToken, {
+        fields: 'message,created_time,permalink_url,comments.limit(5){id,message,from{name},created_time}',
+        limit: '6',
+      })),
     ]);
 
     // Product catalogs owned by the business — visibility, not sync (Shopify's
@@ -436,6 +599,7 @@ Deno.serve(async (req) => {
       adsDaily: adsDaily?.data || null,
       adCampaigns: adCampaigns?.data || null,
       scheduled: scheduled?.data || null,
+      fbPosts: fbPosts?.data || null,
       businesses: catalogs?.data || null,
       errors,
     });

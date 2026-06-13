@@ -26,6 +26,69 @@ const deltaSub = (pct, fallback) => (pct != null
   ? `${pct >= 0 ? '+' : ''}${pct}% vs 7d anteriores`
   : fallback);
 
+// A URL the composer should treat as video (→ Reel / video Story) rather than
+// an image. Extension-based, tolerant of a query string.
+const isVideoUrl = (u) => /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(String(u || '').trim());
+
+// One comment-triage card, used for both Instagram and Facebook — same markup,
+// the platform only changes the @-prefix and which edge a reply posts to. The
+// reply composer is lifted to the parent so a single open editor is shared.
+function CommentsCard({
+  title, comments, platform, atPrefix, emptyLabel,
+  reply, openReply, replyText, setReplyText, replyBusy, replyErr, sendReply,
+}) {
+  return (
+    <div className="card">
+      <div className="card-header">
+        <span className="flex items-center gap-2 font-medium"><MessageSquare size={15} /> {title}</span>
+      </div>
+      <div className="divide-y divide-ink-100">
+        {comments.length === 0 && <div className="px-5 py-3 text-sm text-ink-400">{emptyLabel}</div>}
+        {comments.map((c) => {
+          const open = reply?.platform === platform && reply?.id === c.id;
+          return (
+            <div key={c.id || `${c.username}-${c.at}`} className="px-5 py-2.5">
+              <div className="flex items-baseline gap-2 text-sm">
+                <span className="min-w-0 truncate">
+                  <span className="font-medium text-ink-900">{atPrefix}{c.username || 'Anónimo'}</span>{' '}
+                  <span className="text-ink-600">{c.text}</span>
+                </span>
+                <span className="ml-auto flex-none text-xs text-ink-400">{c.ago || ''}</span>
+                {c.id && (
+                  <button
+                    type="button"
+                    className="flex-none text-xs text-brand-700 hover:underline"
+                    onClick={() => openReply(open ? null : { id: c.id, platform, username: c.username })}
+                  >
+                    Responder
+                  </button>
+                )}
+              </div>
+              {open && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    className="input flex-1"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendReply(); }}
+                    placeholder={`Responder a ${atPrefix}${c.username || ''}…`}
+                    maxLength={500}
+                    autoFocus
+                  />
+                  <button type="button" className="btn-brand" onClick={sendReply} disabled={!replyText.trim() || replyBusy} aria-label="Enviar respuesta" title="Enviar respuesta">
+                    {replyBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {replyErr && reply?.platform === platform && <div className="px-5 py-2 text-sm text-red-600">{replyErr}</div>}
+      </div>
+    </div>
+  );
+}
+
 // "hace 12 s" → "hace 3 min" → "hace 2 h". Drives the live freshness pill.
 const freshLabel = (ms, now) => {
   if (!ms) return null;
@@ -153,36 +216,69 @@ export default function Marketing() {
   // ── composer ─────────────────────────────────────────────────────────
   const [pubText, setPubText] = useState('');
   const [pubImageUrl, setPubImageUrl] = useState('');
+  const [pubVideoUrl, setPubVideoUrl] = useState('');
+  const [pubCarousel, setPubCarousel] = useState(''); // one media URL per line
   const [pubAt, setPubAt] = useState('');
   const [pubIg, setPubIg] = useState(false);
-  const [pubIgMode, setPubIgMode] = useState('feed'); // 'feed' | 'story'
+  const [pubIgMode, setPubIgMode] = useState('feed'); // 'feed' | 'reel' | 'story' | 'carousel'
   const [pubBusy, setPubBusy] = useState(false);
   const [pubNote, setPubNote] = useState(null);
+  // An IG video container that was still processing when publish() returned —
+  // surfaced as a one-tap "Finalizar" so the user never loses the upload.
+  const [pendingIg, setPendingIg] = useState(null); // { creationId }
+  const [finishBusy, setFinishBusy] = useState(false);
+
+  const carouselLines = useMemo(
+    () => (pubIg && pubIgMode === 'carousel'
+      ? pubCarousel.split('\n').map((s) => s.trim()).filter(Boolean)
+      : []),
+    [pubIg, pubIgMode, pubCarousel],
+  );
+  // Enough to publish: any text, single image/video, or a carousel of ≥2.
+  const canPublish = !!(pubText.trim() || pubImageUrl.trim() || pubVideoUrl.trim() || carouselLines.length >= 2);
+
   const publish = useCallback(async () => {
     const message = pubText.trim();
-    const storyOnly = pubIg && pubIgMode === 'story' && pubImageUrl.trim();
-    if ((!message && !storyOnly) || pubBusy) return;
+    const image = pubImageUrl.trim();
+    const video = pubVideoUrl.trim();
+    const carousel = carouselLines.map((u) => (isVideoUrl(u) ? { videoUrl: u } : { imageUrl: u }));
+    if (!canPublish || pubBusy) return;
+    // A carousel is IG-only — don't push an empty/text-only post to Facebook
+    // unless the user actually wrote text or attached a single media too.
+    let targets = pubIg ? ['facebook', 'instagram'] : ['facebook'];
+    if (pubIg && pubIgMode === 'carousel' && !message && !image && !video) targets = ['instagram'];
     setPubBusy(true);
     setPubNote(null);
+    setPendingIg(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', {
         body: {
           publish: {
             message,
-            imageUrl: pubImageUrl.trim() || undefined,
+            imageUrl: image || undefined,
+            videoUrl: video || undefined,
+            carousel: carousel.length ? carousel : undefined,
             scheduleAt: pubAt ? new Date(pubAt).getTime() : undefined,
             igStory: pubIg && pubIgMode === 'story',
-            targets: pubIg ? ['facebook', 'instagram'] : ['facebook'],
+            targets,
           },
         },
       });
       if (error) throw new Error(error.message || 'sin respuesta');
-      const parts = Object.entries(data?.results || {}).map(([t, r]) => (
-        r.ok ? `${t === 'facebook' ? 'Facebook' : 'Instagram'} ✓` : `${t === 'facebook' ? 'Facebook' : 'Instagram'}: ${r.error}`
-      ));
+      const results = data?.results || {};
+      const parts = Object.entries(results).map(([t, r]) => {
+        const label = t === 'facebook' ? 'Facebook' : 'Instagram';
+        if (r.ok) return `${label} ✓`;
+        if (r.pending) return `${label}: procesando…`;
+        return `${label}: ${r.error}`;
+      });
+      // IG video still processing → keep the creation id for the finish button.
+      if (results.instagram?.pending && results.instagram.creationId) {
+        setPendingIg({ creationId: results.instagram.creationId });
+      }
       setPubNote({ ok: !!data?.ok, text: parts.join(' · ') || data?.error || 'sin respuesta' });
       if (data?.ok) {
-        setPubText(''); setPubImageUrl(''); setPubAt('');
+        setPubText(''); setPubImageUrl(''); setPubVideoUrl(''); setPubCarousel(''); setPubAt('');
         load();
       }
     } catch (e) {
@@ -190,32 +286,53 @@ export default function Marketing() {
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubImageUrl, pubAt, pubIg, pubIgMode, pubBusy, load]);
+  }, [pubText, pubImageUrl, pubVideoUrl, carouselLines, canPublish, pubAt, pubIg, pubIgMode, pubBusy, load]);
 
-  // ── inline comment reply ─────────────────────────────────────────────
-  const [replyTo, setReplyTo] = useState(null);
+  const finishPending = useCallback(async () => {
+    if (!pendingIg?.creationId || finishBusy) return;
+    setFinishBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { finishPublish: { creationId: pendingIg.creationId } },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (data?.pending) { setPubNote({ ok: false, text: 'Instagram: sigue procesando — inténtalo de nuevo en unos segundos.' }); return; }
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo publicar');
+      setPendingIg(null);
+      setPubNote({ ok: true, text: 'Instagram ✓' });
+      load();
+    } catch (e) {
+      setPubNote({ ok: false, text: e?.message || 'No se pudo finalizar' });
+    } finally {
+      setFinishBusy(false);
+    }
+  }, [pendingIg, finishBusy, load]);
+
+  // ── inline comment reply (IG + FB share one open editor) ─────────────
+  const [reply, setReply] = useState(null); // { id, platform, username }
   const [replyText, setReplyText] = useState('');
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyErr, setReplyErr] = useState(null);
+  const openReply = useCallback((target) => { setReply(target); setReplyText(''); setReplyErr(null); }, []);
   const sendReply = useCallback(async () => {
     const message = replyText.trim();
-    if (!message || !replyTo || replyBusy) return;
+    if (!message || !reply?.id || replyBusy) return;
     setReplyBusy(true);
     setReplyErr(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { replyComment: { commentId: replyTo, message } },
+        body: { replyComment: { commentId: reply.id, message, platform: reply.platform } },
       });
       if (error) throw new Error(error.message || 'sin respuesta');
       if (!data?.ok) throw new Error(data?.error || 'No se pudo responder');
-      setReplyTo(null);
+      setReply(null);
       setReplyText('');
     } catch (e) {
       setReplyErr(e?.message || 'No se pudo responder');
     } finally {
       setReplyBusy(false);
     }
-  }, [replyText, replyTo, replyBusy]);
+  }, [replyText, reply, replyBusy]);
 
   // ── campaign pause/resume — two-step confirm (real money moves) ──────
   const [campArm, setCampArm] = useState(null); // campaign id awaiting confirm
@@ -324,22 +441,41 @@ export default function Marketing() {
                     value={pubText}
                     onChange={(e) => setPubText(e.target.value)}
                     placeholder="Texto de la publicación…"
-                    maxLength={2000}
+                    maxLength={2200}
                   />
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      className="input flex-1 min-w-44"
-                      value={pubImageUrl}
-                      onChange={(e) => setPubImageUrl(e.target.value)}
-                      placeholder="URL de imagen (obligatoria para IG)"
+                  {pubIg && pubIgMode === 'carousel' ? (
+                    <textarea
+                      className="input w-full min-h-20"
+                      value={pubCarousel}
+                      onChange={(e) => setPubCarousel(e.target.value)}
+                      placeholder={'Carrusel: una URL por línea (imágenes o videos, 2–10)'}
                       spellCheck={false}
                     />
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        className="input flex-1 min-w-44"
+                        value={pubImageUrl}
+                        onChange={(e) => setPubImageUrl(e.target.value)}
+                        placeholder="URL de imagen"
+                        spellCheck={false}
+                      />
+                      <input
+                        className="input flex-1 min-w-44"
+                        value={pubVideoUrl}
+                        onChange={(e) => setPubVideoUrl(e.target.value)}
+                        placeholder="URL de video (Reel)"
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
                     <input
                       className="input w-52"
                       type="datetime-local"
                       value={pubAt}
                       onChange={(e) => setPubAt(e.target.value)}
-                      aria-label="Programar (solo Facebook)"
+                      aria-label="Programar (solo Facebook, sin video)"
                     />
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
@@ -355,23 +491,34 @@ export default function Marketing() {
                         aria-label="Tipo de publicación en Instagram"
                       >
                         <option value="feed">Feed</option>
+                        <option value="reel">Reel</option>
                         <option value="story">Story (24 h)</option>
+                        <option value="carousel">Carrusel</option>
                       </select>
                     )}
                     <button
                       type="button"
                       className="btn-brand ml-auto"
                       onClick={publish}
-                      disabled={(!pubText.trim() && !(pubIg && pubIgMode === 'story' && pubImageUrl.trim())) || pubBusy}
+                      disabled={!canPublish || pubBusy}
                     >
                       {pubBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                       {pubAt ? 'Programar' : 'Publicar'}
                     </button>
                   </div>
                   <p className="text-xs text-ink-400">
-                    Facebook admite programar (10 min – 30 días). Instagram publica al momento y
-                    requiere imagen{pubIg && pubIgMode === 'story' ? '; la Story dura 24 h y no lleva texto' : ''}.
+                    Facebook admite programar texto e imágenes (10 min – 30 días); los Reels se publican al
+                    momento. Instagram publica al momento — Feed e historia aceptan imagen o video, el Reel
+                    necesita video y el carrusel 2–10 URLs.
                   </p>
+                  {pendingIg && (
+                    <div className="flex items-center gap-2 text-sm text-ink-600">
+                      <span>El video de Instagram sigue procesando.</span>
+                      <button type="button" className="btn-brand py-1" onClick={finishPending} disabled={finishBusy}>
+                        {finishBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />} Finalizar
+                      </button>
+                    </div>
+                  )}
                   {pubNote && (
                     <div className={`text-sm ${pubNote.ok ? 'text-emerald-700' : 'text-red-600'}`}>{pubNote.text}</div>
                   )}
@@ -440,54 +587,37 @@ export default function Marketing() {
             </div>
 
             <div className="space-y-4">
-              {/* comments + reply */}
-              <div className="card">
-                <div className="card-header">
-                  <span className="flex items-center gap-2 font-medium"><MessageSquare size={15} /> Comentarios IG</span>
-                </div>
-                <div className="divide-y divide-ink-100">
-                  {m.recentComments.length === 0 && (
-                    <div className="px-5 py-3 text-sm text-ink-400">Sin comentarios recientes.</div>
-                  )}
-                  {m.recentComments.map((c) => (
-                    <div key={c.id || `${c.username}-${c.at}`} className="px-5 py-2.5">
-                      <div className="flex items-baseline gap-2 text-sm">
-                        <span className="min-w-0 truncate">
-                          <span className="font-medium text-ink-900">@{c.username}</span>{' '}
-                          <span className="text-ink-600">{c.text}</span>
-                        </span>
-                        <span className="ml-auto flex-none text-xs text-ink-400">{c.ago || ''}</span>
-                        {c.id && (
-                          <button
-                            type="button"
-                            className="flex-none text-xs text-brand-700 hover:underline"
-                            onClick={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText(''); setReplyErr(null); }}
-                          >
-                            Responder
-                          </button>
-                        )}
-                      </div>
-                      {replyTo === c.id && (
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            className="input flex-1"
-                            value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') sendReply(); }}
-                            placeholder={`Responder a @${c.username}…`}
-                            maxLength={500}
-                            autoFocus
-                          />
-                          <button type="button" className="btn-brand" onClick={sendReply} disabled={!replyText.trim() || replyBusy} aria-label="Enviar respuesta" title="Enviar respuesta">
-                            {replyBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {replyErr && <div className="px-5 py-2 text-sm text-red-600">{replyErr}</div>}
-                </div>
-              </div>
+              {/* comment triage — Instagram + (when present) Facebook */}
+              <CommentsCard
+                title="Comentarios IG"
+                comments={m.recentComments}
+                platform="instagram"
+                atPrefix="@"
+                emptyLabel="Sin comentarios recientes."
+                reply={reply}
+                openReply={openReply}
+                replyText={replyText}
+                setReplyText={setReplyText}
+                replyBusy={replyBusy}
+                replyErr={replyErr}
+                sendReply={sendReply}
+              />
+              {m.recentFbComments.length > 0 && (
+                <CommentsCard
+                  title="Comentarios Facebook"
+                  comments={m.recentFbComments}
+                  platform="facebook"
+                  atPrefix=""
+                  emptyLabel="Sin comentarios recientes."
+                  reply={reply}
+                  openReply={openReply}
+                  replyText={replyText}
+                  setReplyText={setReplyText}
+                  replyBusy={replyBusy}
+                  replyErr={replyErr}
+                  sendReply={sendReply}
+                />
+              )}
 
               {/* scheduled */}
               <div className="card">

@@ -24,8 +24,8 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 | `pages_manage_posts` | ✅ | Page feed posts + scheduled posts (`/{page}/feed`, `scheduled_posts`). |
 | `pages_read_engagement` | ✅ | Page profile + daily engagement/reach insights in the snapshot. |
 | `read_insights` | ✅ | Underpins the Page + IG insights reads. |
-| `pages_read_user_content` | 🟡 | Read user comments/posts on the Page. |
-| `pages_manage_engagement` | ⬜ | Like/comment/moderate as the Page. |
+| `pages_read_user_content` | ✅ | Read comments on recent Page posts (the FB comment triage feed). |
+| `pages_manage_engagement` | 🟡 | Reply to a Page comment as the Page (Marketing triage; reads work, replies may need App Review). |
 | `pages_manage_metadata` | 🟡 | Page settings + webhook subscriptions. |
 | `pages_messaging` | ⬜ | Messenger send/receive → Messenger thread in the CRM. |
 | `pages_utility_messaging` | ⬜ | Messenger utility/templated messages. |
@@ -35,7 +35,7 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 | Scope | Status | What it backs |
 |---|---|---|
 | `instagram_basic` | ✅ | Read the linked IG business account (username, counts). |
-| `instagram_content_publish` | ✅ | IG feed posts + Stories (`/media` → `/media_publish`). |
+| `instagram_content_publish` | ✅ | IG feed posts, Reels, video/image Stories + carousels (`/media` → `/media_publish`, video containers polled). |
 | `instagram_manage_comments` | ✅ | Read + reply to IG comments (`replyComment`, nested triage). |
 | `instagram_manage_insights` | ✅ | IG reach / follower / profile-view / per-post insights. |
 | `instagram_manage_contents` | ⬜ | Manage existing IG content (newer edit/management surface). |
@@ -62,7 +62,7 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 ## Other surfaces — headroom
 | Scope | Status | What it backs |
 |---|---|---|
-| `publish_video` | ⬜ | Video / Reels publishing (current publish path is image-only). |
+| `publish_video` | ✅ | Facebook Page Reels (`/video_reels`) + IG Reels/video — backed by `pages_manage_posts`/`instagram_content_publish`. |
 | `threads_business_basic` | ⬜ | Threads read/post for the business account. |
 
 ### Notes for future loops
