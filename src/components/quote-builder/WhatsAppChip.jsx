@@ -285,7 +285,11 @@ function FormatOption({ icon: Icon, label, hint, active, disabled, onPick }) {
       <span className={`flex items-center gap-1.5 text-sm font-medium ${active ? 'text-emerald-800' : 'text-ink-800'}`}>
         <Icon size={14} className={active ? 'text-emerald-600' : 'text-ink-400'} /> {label}
       </span>
-      <span className="block text-[11px] text-ink-500 mt-0.5">{hint}</span>
+      {/* Active card sits on the always-light bg-emerald-50/60, which doesn't
+          flip in dark mode; the hint must use a fixed emerald tone too, or the
+          theme-following text-ink-500 turns light-gray-on-light-green and the
+          line washes out (same class as the dark-mode Subtotal invisibility). */}
+      <span className={`block text-[11px] mt-0.5 ${active ? 'text-emerald-700' : 'text-ink-500'}`}>{hint}</span>
     </button>
   );
 }
