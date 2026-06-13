@@ -50,7 +50,7 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSaveContact, onCreateQuote, showHeader = true, contextQuoteId = null }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -663,6 +663,11 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           if (res?.ok) setProductsOpen(false);
           return res;
         }}
+        onSendCatalog={onSendCatalog ? async (spec) => {
+          const res = await onSendCatalog(spec);
+          if (res?.ok) setProductsOpen(false);
+          return res;
+        } : null}
       />
 
       {onSaveContact && (
@@ -1211,7 +1216,7 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
  */
 const MAX_PRODUCT_ITEMS = 30;
 
-function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
+function ProductPickerModal({ open, onClose, windowOpen, onSend, onSendCatalog }) {
   const [q, setQ] = useState('');
   const [products, setProducts] = useState(null); // null = loading
   const [after, setAfter] = useState('');
@@ -1281,6 +1286,16 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
     const res = await onSend({ items, names, text: text.trim() });
     setSending(false);
     if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+  }
+
+  // Send the WHOLE catalog (no selection needed) — the "View catalog" message.
+  async function sendCatalog() {
+    if (sending || !onSendCatalog) return;
+    setSending(true);
+    setError(null);
+    const res = await onSendCatalog({ text: text.trim() });
+    setSending(false);
+    if (!res?.ok) setError(res?.error || 'No se pudo enviar el catálogo.');
   }
 
   return (
@@ -1373,9 +1388,17 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend }) {
           <span className="text-xs text-ink-500">
             {selected.size} seleccionado{selected.size === 1 ? '' : 's'}{selected.size >= MAX_PRODUCT_ITEMS ? ` (máx. ${MAX_PRODUCT_ITEMS})` : ''}
           </span>
-          <button type="button" onClick={submit} disabled={sending || !selected.size} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Send everything — no selection needed. */}
+            {onSendCatalog && (
+              <button type="button" onClick={sendCatalog} disabled={sending} className="btn-ghost text-xs inline-flex items-center gap-1.5 disabled:opacity-40" title="Enviar el catálogo completo">
+                <ShoppingBag size={13} /> Catálogo completo
+              </button>
+            )}
+            <button type="button" onClick={submit} disabled={sending || !selected.size} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
+            </button>
+          </div>
         </div>
       </div>
     </Modal>

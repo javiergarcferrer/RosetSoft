@@ -82,6 +82,8 @@ type SendBody = {
   /** Send product(s) from the connected catalog — 1 item ⇒ single-product
    *  message, 2+ ⇒ product_list. `names` ride along only for our chat log. */
   products?: { items?: string[]; names?: string[]; text?: string };
+  /** Send the WHOLE connected catalog as a "View catalog" message. */
+  catalogMessage?: { text?: string };
   broadcast?: { name?: string; template?: string; lang?: string; audience?: string; recipients?: Recipient[] };
   to?: string;
   text?: string;
@@ -1024,6 +1026,29 @@ Deno.serve(async (req: Request) => {
       logKind: 'contacts',
       logBody: cName,
       logPayload: { ...(contextLog || {}), contact: { name: cName, phone: cPhone, org } },
+      customerId: body.customerId || null,
+      professionalId: body.professionalId || null,
+      quoteId: body.quoteId || null,
+    });
+    if (!res.ok) return json({ ok: false, error: res.error }, 502);
+    return json({ ok: true, id: res.id });
+  }
+
+  // "View catalog" message — the whole connected catalog in one tap. Free-form
+  // interactive, same 24h window rule as products/text.
+  if (body.catalogMessage) {
+    const cat = await connectedCatalogId();
+    if (!cat.id) return json({ ok: false, error: cat.error }, 502);
+    const text = String(body.catalogMessage.text || '').trim();
+    const res = await sendOne({
+      to,
+      payload: {
+        messaging_product: 'whatsapp', to, type: 'interactive', ...contextPart,
+        interactive: { type: 'catalog_message', body: { text: text || 'Mira nuestro catálogo completo.' }, action: { name: 'catalog_message' } },
+      },
+      logKind: 'catalog',
+      logBody: text || 'Catálogo completo',
+      logPayload: { ...(contextLog || {}), catalog: true },
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,

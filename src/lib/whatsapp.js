@@ -190,6 +190,12 @@ export async function sendWhatsappProducts({ to, items, names, text, customerId,
   return invokeWaSend({ to: waDigits(to), products: { items, names, text }, customerId, professionalId, quoteId });
 }
 
+/** Send the WHOLE connected catalog as a "View catalog" message — the client
+ *  browses everything in one tap. Free-form interactive (24h window rule). */
+export async function sendWhatsappCatalog({ to, text, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ to: waDigits(to), catalogMessage: { text }, customerId, professionalId, quoteId });
+}
+
 /** Read the number's conversational components (ice breakers + commands). */
 export async function getConversationalAutomation() {
   return invokeWaSend({ getConversationalAutomation: true });
