@@ -126,6 +126,15 @@ verify_jwt = false
 [functions.claude-chat]
 verify_jwt = false
 
+# wa-draft suggests a reply for the WhatsApp inbox: it relays a compact
+# conversation transcript to the Claude API (Anthropic) and returns a draft for
+# the dealer to review and send themselves — it never sends or persists.
+# Verifies the caller ITSELF (auth.getUser on the Authorization header) — gateway
+# check off so the CORS preflight passes, same as wa-send. Reads the Anthropic
+# key from the write-only claude_config table via the service role.
+[functions.wa-draft]
+verify_jwt = false
+
 # meta-social links + reads the team's Facebook Page / Instagram / Ads data
 # for the JARVIS social pulse. Verifies the caller ITSELF (auth.getUser on the
 # Authorization header) — gateway check off so the CORS preflight passes, same

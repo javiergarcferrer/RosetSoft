@@ -196,6 +196,26 @@ export async function sendWhatsappCatalog({ to, text, customerId, professionalId
   return invokeWaSend({ to: waDigits(to), catalogMessage: { text }, customerId, professionalId, quoteId });
 }
 
+/**
+ * Ask Claude (Haiku) for a suggested reply to the conversation. Returns
+ * { ok:true, draft } with the suggested text, or { ok:false, error }. The
+ * caller drops the draft into the composer — it is NEVER sent automatically
+ * (human-in-the-loop, see CLAUDE.md). `turns` is the compact transcript from
+ * `buildDraftTurns`; the `wa-draft` function only relays it to Claude with the
+ * server-held API key, so no conversation bytes touch the bundle's API path.
+ */
+export async function suggestWhatsappReply({ turns, contactName, contextNote } = {}) {
+  const { data, error } = await supabase.functions.invoke('wa-draft', {
+    body: { turns, contactName, contextNote },
+  });
+  if (!error) return data;
+  const ctx = error.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { return await ctx.json(); } catch { /* not a JSON body — fall through */ }
+  }
+  return { ok: false, error: error.message || 'No se pudo contactar con el asistente.' };
+}
+
 /** Read the number's conversational components (ice breakers + commands). */
 export async function getConversationalAutomation() {
   return invokeWaSend({ getConversationalAutomation: true });

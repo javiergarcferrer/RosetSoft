@@ -41,6 +41,13 @@ Legend: ✅ already in the codebase · ⚡ shipped on this branch · 🟢 safe n
 
 ## 2. Shipped on this branch ⚡
 
+- ⚡ **WhatsApp AI draft replies** — a Sparkles button in the inbox composer
+  asks Claude (Haiku) for a suggested reply and drops it into the composer for
+  the dealer to edit and send. Human-in-the-loop: it NEVER auto-sends and never
+  persists. New `wa-draft` Edge Function (thin relay over the server-held
+  Anthropic key, JWT-verified); the transcript builder is the pure Model
+  `core/crm/buildDraftTurns` (pinned in `tests/whatsappDraft.test.js`).
+  ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
 - ⚡ **Covering indexes** for 46 relational FKs (advisor lint 0001). `profile_id`
   FKs excluded — single value, an index can't help.
   ([Supabase RLS perf](https://supabase.com/docs/guides/database/postgres/row-level-security))

@@ -5,10 +5,10 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Paperclip, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
-import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
+import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser } from '../../lib/whatsapp.js';
 import { startVoiceRecording, canRecordVoice, preloadVoiceRecorder } from '../../lib/loadOpusRecorder.js';
@@ -48,8 +48,9 @@ function recClock(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, showHeader = true, contextQuoteId = null }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
+  const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -173,6 +174,27 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     const filled = fillQuickReply(qr.text, quickVars);
     setQuickOpen(false);
     setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')} ${filled}` : filled));
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
+    });
+  }
+
+  // AI reply suggestion — only offered when there's an inbound message worth
+  // answering. Built from the same transcript the inbox would show, sent to the
+  // `wa-draft` function, and dropped into the composer like a quick reply:
+  // never auto-sent (human-in-the-loop), the dealer edits before sending.
+  const { canDraft } = useMemo(() => buildDraftTurns(thread.items), [thread.items]);
+  async function suggestReply() {
+    if (drafting || !onSuggestReply) return;
+    setDrafting(true);
+    setError(null);
+    const { turns } = buildDraftTurns(thread.items);
+    const res = await onSuggestReply({ turns, contactName: contact.name || null });
+    setDrafting(false);
+    if (!res?.ok || !res.draft) { setError(res?.error || 'No se pudo sugerir una respuesta.'); return; }
+    // Replace an empty composer; otherwise append so a half-typed draft survives.
+    setText((t) => (t.trim() ? `${t.replace(/\s+$/, '')} ${res.draft}` : res.draft));
     requestAnimationFrame(() => {
       const el = composerRef.current;
       if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
@@ -492,6 +514,22 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         ) : (
           <>
+            {/* AI reply suggestion — drops a draft into the composer (never
+                sends). Shown only with an inbound message to answer and the
+                24h window open, so it's zero clutter on cold threads. */}
+            {onSuggestReply && canDraft && thread.windowOpen && (
+              <button
+                type="button"
+                onClick={suggestReply}
+                disabled={!connected || sending || drafting}
+                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+                title="Sugerir respuesta con IA"
+                aria-label="Sugerir respuesta con IA"
+                aria-busy={drafting}
+              >
+                {drafting ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
+              </button>
+            )}
             {/* Quick replies — leftmost so the upward popover (w-72) stays
                 on-screen on a phone. Rendered only once the team has saved
                 some (Settings → WhatsApp), so it's zero clutter by default. */}

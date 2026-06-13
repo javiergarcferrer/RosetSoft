@@ -17,6 +17,7 @@ import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
   sendWhatsappProducts, sendWhatsappCatalog, saveChatContact, markThreadRead, draftOutboundMessage,
+  suggestWhatsappReply,
 } from '../lib/whatsapp.js';
 
 /**
@@ -348,6 +349,8 @@ export default function Chats() {
                 invalidate();
                 return res;
               }}
+              onSuggestReply={(payload) =>
+                suggestWhatsappReply(payload).catch((e) => ({ ok: false, error: e?.message }))}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center">

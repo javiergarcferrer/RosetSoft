@@ -21,4 +21,5 @@ export {
   fillTemplateBody,
   resolveCampaignsList,
 } from './views/campaigns.js';
+export { buildDraftTurns } from './views/draft.js';
 export { waDigits, phoneKey, displayPhone } from '../../lib/phone.js';
