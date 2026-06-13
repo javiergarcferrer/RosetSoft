@@ -319,8 +319,10 @@ Deno.serve(async (req: Request) => {
           verify_token: verifyToken,
           // messages = inbound + statuses; the smb_* / history fields are the
           // COEXISTENCE feeds: echoes of what the team sends from the phone
-          // app, the chat-history sync at onboarding, and contact sync.
-          fields: 'messages,smb_message_echoes,history,smb_app_state_sync',
+          // app, the chat-history sync at onboarding, and contact sync. The
+          // template_* fields proactively flag an approved template that Meta
+          // later pauses/disables or downgrades (it silently breaks sends).
+          fields: 'messages,smb_message_echoes,history,smb_app_state_sync,message_template_status_update,message_template_quality_update',
           access_token: `${appId}|${appSecret}`,
         }),
       });

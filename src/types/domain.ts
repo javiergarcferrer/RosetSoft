@@ -234,6 +234,11 @@ export interface Settings {
    *  The text may carry {{nombre}} / {{negocio}} placeholders, filled at insert
    *  time (core/crm fillQuickReply). */
   whatsappQuickReplies?: { id: string; label: string; text: string }[];
+  /** Latest status/quality per message template (keyed by template name),
+   *  written by wa-webhook from Meta's template webhooks. A template Meta
+   *  approved can later be PAUSED/DISABLED — surfaced so quote sends don't
+   *  fail silently. `at` is JS ms (opaque to rowMapping inside the JSON). */
+  whatsappTemplateStatus?: Record<string, { status?: string; quality?: string; reason?: string; at?: number }>;
 }
 
 /**

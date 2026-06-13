@@ -498,6 +498,16 @@ function TemplateRow({ settings, saveSettings }) {
   // select to "free text".
   const savedMissing = !!value && templates !== null && !selected;
 
+  // Proactive health: wa-webhook records the latest status/quality per template
+  // (Meta can PAUSE/DISABLE an approved one for complaints). Surface the ones
+  // Meta is throttling so the dealer fixes them before sends fail silently.
+  const BAD_STATUS = ['PAUSED', 'DISABLED', 'REJECTED', 'FLAGGED', 'PENDING_DELETION'];
+  const BAD_QUALITY = ['RED', 'LOW'];
+  const statusMap = settings?.whatsappTemplateStatus || {};
+  const alerts = Object.entries(statusMap)
+    .map(([name, s]) => ({ name, ...(s || {}) }))
+    .filter((a) => BAD_STATUS.includes((a.status || '').toUpperCase()) || BAD_QUALITY.includes((a.quality || '').toUpperCase()));
+
   return (
     <div className="mt-3">
       <div className="label inline-flex items-center gap-2">
@@ -506,6 +516,21 @@ function TemplateRow({ settings, saveSettings }) {
         {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
         {state === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
       </div>
+      {alerts.length > 0 && (
+        <div className="mb-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+          <div className="font-semibold inline-flex items-center gap-1"><AlertTriangle size={12} /> Plantillas con problemas</div>
+          <ul className="mt-1 space-y-0.5">
+            {alerts.map((a) => (
+              <li key={a.name}>
+                <span className="font-mono">{a.name}</span> — {BAD_STATUS.includes((a.status || '').toUpperCase()) ? a.status : `calidad ${a.quality}`}
+                {a.reason ? ` · ${a.reason}` : ''}
+                {a.name === value ? <strong> (es tu plantilla de cotización)</strong> : ''}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-amber-700">Meta las limita o bloquea. Revísalas en WhatsApp Manager; mientras tanto, los envíos con ellas pueden fallar.</p>
+        </div>
+      )}
       {templates === null ? (
         <p className="text-xs text-ink-400 inline-flex items-center gap-1.5">
           <Loader2 size={13} className="animate-spin" /> Cargando plantillas…

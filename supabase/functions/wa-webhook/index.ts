@@ -186,6 +186,31 @@ Deno.serve(async (req: Request) => {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
         const value = change.value || {};
+
+        // Template status / quality updates → record the latest per template on
+        // settings, so Configuración warns the dealer BEFORE a paused/disabled
+        // template silently fails their quote sends. These changes carry no
+        // messages/statuses, so we record and move on.
+        if (change.field === 'message_template_status_update' || change.field === 'message_template_quality_update') {
+          const v = value as Record<string, any>;
+          const name = v.message_template_name || v.template_name || '';
+          if (name) {
+            const { data: st } = await admin.from('settings').select('whatsapp_template_status').eq('profile_id', TEAM).maybeSingle();
+            const map = ((st as { whatsapp_template_status?: Record<string, any> } | null)?.whatsapp_template_status) || {};
+            const next: Record<string, unknown> = { ...(map[name] || {}), at: Date.now() };
+            if (change.field === 'message_template_status_update') {
+              next.status = String(v.event || v.new_status || '').toUpperCase();
+              next.reason = v.reason ? String(v.reason) : null;
+            } else {
+              next.quality = String(v.new_quality_score || '').toUpperCase();
+            }
+            map[name] = next;
+            const { error } = await admin.from('settings').update({ whatsapp_template_status: map }).eq('profile_id', TEAM);
+            if (error) console.error('[wa-webhook] template status update failed:', error.message);
+          }
+          continue;
+        }
+
         const contacts: Record<string, any>[] = value.contacts || [];
 
         // Inbound messages → wa_messages (dedupe on wa_id: Meta retries).
