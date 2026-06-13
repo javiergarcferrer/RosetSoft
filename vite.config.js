@@ -130,6 +130,13 @@ export default defineConfig(({ mode }) => {
             // container tracking), so it gets its own on-demand chunk.
             leaflet: ['leaflet'],
             react: ['react', 'react-dom', 'react-router-dom'],
+            // Stable vendor tiers split out of the app's `index` chunk: these
+            // change far less often than our code (which rebuilds every
+            // deploy), so giving them their own hashed files lets the browser
+            // keep them cached across releases instead of re-downloading them
+            // on every push.
+            supabase: ['@supabase/supabase-js'],
+            icons: ['lucide-react'],
           },
         },
       },
