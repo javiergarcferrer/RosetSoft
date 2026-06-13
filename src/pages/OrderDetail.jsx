@@ -305,14 +305,11 @@ export default function OrderDetail() {
         cancelled={isCancelled}
       />
 
-      {/* Dispatch threshold widget — shown until the order is placed. After
-          'placed' the threshold has served its purpose (the LR order is
-          out the door) so we hide it to reduce visual clutter. */}
-      {/* Threshold widget is useful while the dealer is still building
-          the order toward the LR-side minimum. Once the order is
-          actually placed with LR ('placed' and beyond), the minimum
-          has served its purpose and the widget would just be clutter. */}
-      {!isCancelled && idx < orderStageIndex('placed') && (
+      {/* Dispatch threshold widget — the dealer wants the dispatch minimum
+          visible in every active stage as a persistent reference, not just
+          while building toward it in Borrador. Only a cancelled order hides
+          it (the minimum is moot once the order is dead). */}
+      {!isCancelled && (
         <DispatchThresholdCard
           containerCount={containerCount}
           threshold={threshold}
