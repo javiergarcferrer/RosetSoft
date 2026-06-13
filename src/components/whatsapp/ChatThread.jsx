@@ -11,6 +11,7 @@ import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser } from '../../lib/whatsapp.js';
+import { startVoiceRecording, canRecordVoice, preloadVoiceRecorder } from '../../lib/loadOpusRecorder.js';
 import { db } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -34,16 +35,13 @@ import { useApp } from '../../context/AppContext.jsx';
  * hosts that already carry their own (the quote editor's collapsible card).
  */
 /**
- * The first recordable format Meta's audio upload accepts, probed once: Meta
- * takes ogg-opus (the native voice-note format), m4a/aac and mp3 — but NOT
- * webm. Null (webm-only recorder, no MediaRecorder) hides the mic entirely.
+ * Whether this browser can record a voice note, probed once. We don't rely on
+ * the native MediaRecorder's formats (Chrome only does webm, Safari only
+ * fragmented mp4 — Meta rejects both); the opus-recorder WASM encoder records
+ * Ogg/Opus everywhere, so the only gate is mic + Web Audio + wasm support.
+ * False hides the mic entirely.
  */
-const VOICE_MIME = (() => {
-  const M = typeof window !== 'undefined' ? window.MediaRecorder : undefined;
-  if (!M || typeof M.isTypeSupported !== 'function') return null;
-  return ['audio/ogg;codecs=opus', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac']
-    .find((t) => { try { return M.isTypeSupported(t); } catch { return false; } }) || null;
-})();
+const VOICE_SUPPORTED = canRecordVoice();
 
 function recClock(ms) {
   const s = Math.floor(ms / 1000);
@@ -99,6 +97,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const [recElapsed, setRecElapsed] = useState(0);
   const recRef = useRef(null);
   const recCancelled = useRef(false);
+  const recStarting = useRef(false);
   const typingAt = useRef(0);
   const fileRef = useRef(null);
   const composerRef = useRef(null);
@@ -120,11 +119,19 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setPendingUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [pendingFile]);
-  // Switching threads or unmounting abandons an in-flight recording.
+  // Switching threads or unmounting abandons an in-flight recording (and any
+  // mid-load start — recCancelled tells startRecording to drop the controller
+  // once the encoder finishes loading).
   useEffect(() => () => {
     recCancelled.current = true;
-    try { recRef.current?.recorder.stop(); } catch { /* idle */ }
+    try { recRef.current?.cancel(); } catch { /* idle */ }
+    recRef.current = null;
   }, [contact.key]);
+  // Warm the (code-split) Opus encoder once a connected thread is open, so the
+  // mic tap can start recording within iOS's user-gesture window.
+  useEffect(() => {
+    if (VOICE_SUPPORTED && connected) preloadVoiceRecorder().catch(() => {});
+  }, [connected]);
   useEffect(() => {
     if (!rec) { setRecElapsed(0); return undefined; }
     const t0 = Date.now();
@@ -202,47 +209,50 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     );
   }
 
-  // Voice notes — record in a format Meta's audio upload accepts and ship
-  // through the same media path as attachments. Browsers that only record
-  // webm (which Meta rejects) never see the mic button at all (VOICE_MIME).
+  // Voice notes — record straight to Ogg/Opus (Meta's native voice-note format)
+  // via the opus-recorder WASM encoder and ship through the same media path as
+  // attachments. See lib/loadOpusRecorder.js for why the native MediaRecorder
+  // can't be used. Browsers without mic/Web-Audio/wasm never see the mic button
+  // at all (VOICE_SUPPORTED).
   async function startRecording() {
-    if (!VOICE_MIME || sending || recRef.current) return;
+    if (!VOICE_SUPPORTED || sending || recRef.current || recStarting.current) return;
     setError(null);
-    let stream;
+    recCancelled.current = false;
+    recStarting.current = true;
+    let controller;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError('Sin acceso al micrófono — permítelo en el navegador para grabar notas de voz.');
+      controller = await startVoiceRecording();
+    } catch (err) {
+      recStarting.current = false;
+      if (recCancelled.current) return; // thread switched mid-load — stay quiet
+      const denied = /notallowed|permission/i.test(String(err?.name || err?.message || ''));
+      setError(denied
+        ? 'Sin acceso al micrófono — permítelo en el navegador para grabar notas de voz.'
+        : 'No se pudo iniciar la grabación de voz.');
       return;
     }
-    const recorder = new MediaRecorder(stream, { mimeType: VOICE_MIME });
-    const chunks = [];
-    recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-    recorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      recRef.current = null;
-      setRec(null);
-      if (recCancelled.current) return;
-      const type = VOICE_MIME.split(';')[0];
-      sendVoiceNote(new Blob(chunks, { type }), type);
-    };
-    recCancelled.current = false;
-    recorder.start();
-    recRef.current = { recorder };
-    setRec({ recorder });
+    recStarting.current = false;
+    // Thread switched / unmounted while the encoder loaded — abandon it.
+    if (recCancelled.current) { try { controller.cancel(); } catch { /* idle */ } return; }
+    recRef.current = controller;
+    setRec(controller);
   }
 
-  function stopRecording(cancel) {
-    if (!recRef.current) return;
-    recCancelled.current = !!cancel;
-    try { recRef.current.recorder.stop(); } catch { recRef.current = null; setRec(null); }
+  async function stopRecording(cancel) {
+    const controller = recRef.current;
+    if (!controller) return;
+    recRef.current = null;
+    setRec(null);
+    if (cancel) { try { controller.cancel(); } catch { /* idle */ } return; }
+    let blob = null;
+    try { blob = await controller.stop(); } catch { /* nothing recorded */ }
+    if (blob) sendVoiceNote(blob);
   }
 
-  async function sendVoiceNote(blob, type) {
+  async function sendVoiceNote(blob) {
     // A tap shorter than ~½s yields a header-only blob — discard, don't send.
-    if (blob.size < 1024) return;
-    const ext = { 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/aac': 'aac' }[type] || 'm4a';
-    const file = new File([blob], `nota-de-voz.${ext}`, { type });
+    if (!blob || blob.size < 1024) return;
+    const file = new File([blob], 'nota-de-voz.ogg', { type: 'audio/ogg' });
     setSending(true);
     const res = await onSendMedia(file, '', replyTo?.waId || null);
     setReplyTo(null);
@@ -592,7 +602,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               aria-label="Mensaje"
             />
             {/* WhatsApp Web pattern: mic on an empty composer, send once there's a draft. */}
-            {!text.trim() && VOICE_MIME && !sending ? (
+            {!text.trim() && VOICE_SUPPORTED && !sending ? (
               <button
                 type="button"
                 onClick={startRecording}

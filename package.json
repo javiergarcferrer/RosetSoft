@@ -18,6 +18,7 @@
     "@supabase/supabase-js": "^2.45.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.451.0",
+    "opus-recorder": "^8.0.5",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
