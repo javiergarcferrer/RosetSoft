@@ -549,7 +549,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
                 {quickOpen && (
                   <>
                     <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setQuickOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
-                    <div className="absolute bottom-full left-0 mb-2 z-20 w-[min(18rem,calc(100vw-2rem))] max-h-72 overflow-y-auto rounded-xl bg-white border border-ink-100 shadow-lg py-1">
+                    <div className="absolute bottom-full left-0 mb-2 z-20 w-[min(18rem,calc(100vw-2rem))] max-h-72 overflow-y-auto rounded-xl bg-surface border border-ink-100 shadow-lg py-1">
                       <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">Respuestas rápidas</div>
                       {quickReplies.map((qr) => (
                         <button
@@ -1490,7 +1490,7 @@ function BlockMenu({ phone, onError }) {
       {open && (
         <>
           <button type="button" className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} aria-label="Cerrar menú" tabIndex={-1} />
-          <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl bg-white border border-ink-100 shadow-lg overflow-hidden py-1">
+          <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl bg-surface border border-ink-100 shadow-lg overflow-hidden py-1">
             <button
               type="button"
               onClick={toggle}
@@ -1553,7 +1553,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             <Link
               to={`/quotes/${quoteChip.id}`}
               className={`flex items-center gap-1 text-[10px] font-semibold rounded-md px-1.5 py-0.5 mb-1 max-w-full transition-colors ${
-                out ? 'text-brand-800 bg-white/60 hover:bg-white' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'
+                out ? 'text-brand-800 bg-white/60 hover:bg-white dark:bg-white/10 dark:hover:bg-white/20' : 'text-brand-700 bg-brand-50 hover:bg-brand-100'
               }`}
               title="Abrir la cotización"
             >
@@ -1585,7 +1585,7 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
           {/* A cart the client built from our catalog cards and sent back —
               the bridge from a WhatsApp Commerce browse to a quote. */}
           {order && (
-            <div className="mt-1 rounded-lg bg-white/70 border border-ink-200 overflow-hidden">
+            <div className="mt-1 rounded-lg bg-white/70 dark:bg-white/[0.06] border border-ink-200 overflow-hidden">
               <div className="px-2.5 py-1.5 flex items-center gap-1.5 border-b border-ink-100 bg-emerald-50/70">
                 <ShoppingBag size={12} className="text-emerald-700 shrink-0" aria-hidden />
                 <span className="text-[11px] font-semibold text-emerald-800">Pedido del catálogo · {order.items.length} producto(s)</span>

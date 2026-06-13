@@ -391,7 +391,7 @@ function FilterChip({ label, active, onClick, count, tone }) {
       onClick={onClick}
       aria-pressed={active}
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 min-h-7 coarse:min-h-9 text-[11px] font-medium transition-colors ${
-        active ? activeTone : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
+        active ? activeTone : 'bg-surface border-ink-200 text-ink-600 hover:bg-ink-50'
       }`}
     >
       {label}
