@@ -118,6 +118,45 @@ export function parseGrantResponse(rawBody: string): {
   return { accessToken: null, expiresIn: null, reason: snippet };
 }
 
+/**
+ * Scan a GraphQL `errors` array for an ACCESS_DENIED failure — a missing scope
+ * or un-granted protected-data access, NOT an auth/token failure (those arrive
+ * as HTTP 401/403). Returns the denied field path joined with '.' (e.g.
+ * 'orders'), '' when denied without a path, or null when there is no
+ * ACCESS_DENIED error. PURE — pinned by tests/shopifySync.test.js.
+ *
+ * Why it earns a helper: ACCESS_DENIED rides an HTTP-200 body, so client.ts's
+ * 401/403 re-mint never fires for it. A token cached BEFORE the dealer granted
+ * the scope keeps failing for up to 24h. Detecting it lets the client bust the
+ * cache, re-mint, and pick the new scope up on the very next call.
+ */
+export function accessDeniedField(errors: unknown): string | null {
+  if (!Array.isArray(errors)) return null;
+  for (const e of errors) {
+    if (!e || typeof e !== 'object') continue;
+    const code = (e as { extensions?: { code?: unknown } }).extensions?.code;
+    if (code !== 'ACCESS_DENIED') continue;
+    const path = (e as { path?: unknown }).path;
+    return Array.isArray(path) ? path.map(String).join('.') : '';
+  }
+  return null;
+}
+
+/**
+ * The dealer-facing explanation for an ACCESS_DENIED that survives a token
+ * re-mint: the scope genuinely isn't on the app. Names the likely scope and —
+ * for orders/customers/fulfillment — the extra "Protected customer data"
+ * approval Shopify gates that PII behind (the scope alone is NOT enough). PURE.
+ */
+export function accessDeniedMessage(domain: string, field: string): string {
+  const f = field || 'este recurso';
+  const isOrders = /order|customer|fulfillment/i.test(field);
+  const fix = isOrders
+    ? 'los scopes de pedidos (read_orders, write_fulfillments) Y solicita acceso a «Protected customer data» — Shopify protege los datos de pedidos/clientes detrás de esa aprobación, no basta el scope'
+    : 'el scope que falta';
+  return `La app de Shopify para ${domain} no tiene permiso para «${f}» (ACCESS_DENIED). En el Dev Dashboard de Shopify, en la configuración de la app, habilita ${fix}. Una vez concedido, el siguiente intento renueva el token y toma el permiso automáticamente.`;
+}
+
 /** Stable Shopify handle for an inventory item — the idempotent upsert key.
  *  MIRRORS src/lib/inventoryShopify.ts:pieceHandle across the Deno↔Vite wall;
  *  tests/shopifySync.test.js pins the two equivalent. */

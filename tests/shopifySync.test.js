@@ -23,6 +23,8 @@ import {
   isTokenCacheValid,
   tokenCacheExpiryIso,
   parseGrantResponse,
+  accessDeniedField,
+  accessDeniedMessage,
   TOKEN_EXPIRY_SKEW_MS,
   pieceHandle as denoPieceHandle,
 } from '../supabase/functions/shopify-sync/stores.ts';
@@ -104,6 +106,50 @@ test('parseGrantResponse: surfaces every error shape Shopify answers with', () =
   const html = parseGrantResponse('<html>\n  <body>Something   went wrong</body></html>');
   assert.ok(html.reason.includes('Something went wrong'));
   assert.equal(parseGrantResponse('').reason, '');
+});
+
+test('accessDeniedField: detects ACCESS_DENIED on an HTTP-200 body (the orders trap)', () => {
+  // The exact shape Shopify returns when a granted-but-not-yet-on-the-token
+  // scope hits the orders connection — the error the dealer pasted.
+  const ordersDenied = [{
+    message: 'Access denied for orders field.',
+    locations: [{ line: 2, column: 9 }],
+    extensions: { code: 'ACCESS_DENIED', documentation: 'https://shopify.dev/api/usage/access-scopes' },
+    path: ['orders'],
+  }];
+  assert.equal(accessDeniedField(ordersDenied), 'orders');
+  // A nested path joins with '.', so the message can name the exact field.
+  assert.equal(
+    accessDeniedField([{ extensions: { code: 'ACCESS_DENIED' }, path: ['order', 'customer', 'firstName'] }]),
+    'order.customer.firstName',
+  );
+  // Denied without a path → '' (still a denial, not null).
+  assert.equal(accessDeniedField([{ extensions: { code: 'ACCESS_DENIED' } }]), '');
+  // A NON-access error must stay null so the client surfaces it verbatim and
+  // does NOT pointlessly re-mint the token.
+  assert.equal(accessDeniedField([{ message: 'Field x does not exist', extensions: { code: 'undefinedField' } }]), null);
+  assert.equal(accessDeniedField([]), null);
+  assert.equal(accessDeniedField(null), null);
+  assert.equal(accessDeniedField('nope'), null);
+  // First ACCESS_DENIED wins even when mixed with other errors.
+  assert.equal(
+    accessDeniedField([{ extensions: { code: 'THROTTLED' } }, { extensions: { code: 'ACCESS_DENIED' }, path: ['orders'] }]),
+    'orders',
+  );
+});
+
+test('accessDeniedMessage: names the scope + the protected-customer-data approval for orders', () => {
+  const m = accessDeniedMessage('alcoversdq.myshopify.com', 'orders');
+  assert.ok(m.includes('alcoversdq.myshopify.com'));
+  assert.ok(m.includes('«orders»'));
+  assert.ok(m.includes('read_orders'));
+  // Orders/customers PII is gated behind protected-customer-data approval, not
+  // just the scope — the message must say so or the dealer re-checks scopes in
+  // circles.
+  assert.ok(/Protected customer data/i.test(m));
+  // A non-PII field (e.g. products) gets the generic scope hint, no PCD noise.
+  const p = accessDeniedMessage('alcoversrl.myshopify.com', 'products');
+  assert.ok(!/Protected customer data/i.test(p));
 });
 
 test('pieceHandle: Deno and Vite copies cannot drift (cross-wall parity)', () => {

@@ -8,7 +8,7 @@
 //   • a 401/403 on a cached token gets ONE re-mint + retry — the cache may
 //     simply be a token revoked by a secret rotation.
 
-import { isTokenCacheValid, parseGrantResponse, tokenCacheExpiryIso } from './stores.ts';
+import { accessDeniedField, accessDeniedMessage, isTokenCacheValid, parseGrantResponse, tokenCacheExpiryIso } from './stores.ts';
 
 // Latest stable Admin API version (2026-04 GA'd April 2026).
 const API_VERSION = '2026-04';
@@ -97,7 +97,21 @@ export async function connectShopify(admin: any, team: string, store: string): P
     try { b = await r.json(); } catch {
       throw new Error(`respuesta inesperada de ${domain} (HTTP ${r.status}) — ¿es el dominio .myshopify.com correcto?`);
     }
-    if (b.errors) throw new Error(JSON.stringify(b.errors));
+    if (b.errors) {
+      // ACCESS_DENIED rides an HTTP-200 body, so the 401/403 re-mint above
+      // never fires for it. A token cached BEFORE the dealer granted the scope
+      // can't see it — re-mint ONCE so a freshly-granted scope/approval takes
+      // effect on the very next call (no 24h wait for the cache to lapse).
+      const denied = accessDeniedField(b.errors);
+      if (denied !== null && !retried) {
+        token = await mintToken();
+        return call(query, variables, true);
+      }
+      // Re-mint didn't help → the scope genuinely isn't on the app. Say exactly
+      // what to enable instead of leaking the raw GraphQL array.
+      if (denied !== null) throw new Error(accessDeniedMessage(domain, denied));
+      throw new Error(JSON.stringify(b.errors));
+    }
     return b.data as T;
   }
 
