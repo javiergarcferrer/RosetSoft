@@ -17,7 +17,7 @@ import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
   sendWhatsappProducts, sendWhatsappCatalog, saveChatContact, markThreadRead, draftOutboundMessage,
-  suggestWhatsappReply,
+  suggestWhatsappReply, saveConversationState,
 } from '../lib/whatsapp.js';
 
 /**
@@ -54,6 +54,21 @@ export default function Chats() {
     () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  // Per-conversation CRM state (labels / note / snooze), keyed by phoneKey.
+  const { data: convStates } = useLiveQueryStatus(
+    () => db.waConversationState.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
+  const stateByKey = useMemo(() => {
+    const m = new Map();
+    for (const s of convStates) m.set(s.phoneKey, s);
+    return m;
+  }, [convStates]);
+  const allLabels = useMemo(() => {
+    const set = new Set();
+    for (const s of convStates) for (const l of (s.labels || [])) set.add(l);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [convStates]);
 
   // Near-live: refetch on an interval while the inbox is open.
   useEffect(() => {
@@ -78,26 +93,35 @@ export default function Chats() {
   // dedupe all read THIS (never the status-filtered view, so filtering the
   // list never closes an open thread or un-dedupes the picker).
   const allConversations = useMemo(
-    () => resolveConversations(messages, customers, professionals, { needle }),
-    [messages, customers, professionals, needle],
+    () => resolveConversations(messages, customers, professionals, { needle }).map((c) => {
+      const s = stateByKey.get(c.key) || null;
+      return { ...c, state: s, labels: s?.labels || [], snoozeExpiresAt: s?.snoozeExpiresAt || null };
+    }),
+    [messages, customers, professionals, needle, stateByKey],
   );
+  // A snoozed conversation drops out of the active inbox until its expiry
+  // passes (the 10s poll re-renders and it returns on its own).
+  const isSnoozed = (c) => !!(c.snoozeExpiresAt && c.snoozeExpiresAt > Date.now());
   const filterCounts = useMemo(() => ({
-    all: allConversations.length,
-    unread: allConversations.reduce((n, c) => n + (c.unread > 0 ? 1 : 0), 0),
-    awaiting: allConversations.reduce((n, c) => n + (c.awaitingReply ? 1 : 0), 0),
-  }), [allConversations]);
+    all: allConversations.reduce((n, c) => n + (isSnoozed(c) ? 0 : 1), 0),
+    unread: allConversations.reduce((n, c) => n + (c.unread > 0 && !isSnoozed(c) ? 1 : 0), 0),
+    awaiting: allConversations.reduce((n, c) => n + (c.awaitingReply && !isSnoozed(c) ? 1 : 0), 0),
+    snoozed: allConversations.reduce((n, c) => n + (isSnoozed(c) ? 1 : 0), 0),
+  }), [allConversations]); // eslint-disable-line react-hooks/exhaustive-deps
   const conversations = useMemo(() => {
-    if (filter === 'unread') return allConversations.filter((c) => c.unread > 0);
+    if (filter === 'snoozed') {
+      return allConversations.filter(isSnoozed).sort((a, b) => (a.snoozeExpiresAt || 0) - (b.snoozeExpiresAt || 0));
+    }
+    const active = allConversations.filter((c) => !isSnoozed(c));
+    if (filter === 'unread') return active.filter((c) => c.unread > 0);
     if (filter === 'awaiting') {
       // "Sin responder" is an SLA view, so order it longest-waiting-first
       // (oldest last activity on top) rather than most-recent — the client
       // who has waited the longest is the one to answer next.
-      return allConversations
-        .filter((c) => c.awaitingReply)
-        .sort((a, b) => (a.lastAt || 0) - (b.lastAt || 0));
+      return active.filter((c) => c.awaitingReply).sort((a, b) => (a.lastAt || 0) - (b.lastAt || 0));
     }
-    return allConversations;
-  }, [allConversations, filter]);
+    return active;
+  }, [allConversations, filter]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected = useMemo(() => {
     if (!selectedKey) return null;
     return allConversations.find((c) => c.key === selectedKey)
@@ -216,10 +240,13 @@ export default function Chats() {
               />
             </div>
             {/* Status filter — "Sin responder" is the ball-in-our-court view. */}
-            <div className="flex items-center gap-1.5" role="group" aria-label="Filtrar conversaciones">
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar conversaciones">
               <FilterChip label="Todas" active={filter === 'all'} onClick={() => setFilter('all')} count={filterCounts.all} />
               <FilterChip label="Sin leer" active={filter === 'unread'} onClick={() => setFilter('unread')} count={filterCounts.unread} tone="emerald" />
               <FilterChip label="Sin responder" active={filter === 'awaiting'} onClick={() => setFilter('awaiting')} count={filterCounts.awaiting} tone="amber" />
+              {filterCounts.snoozed > 0 && (
+                <FilterChip label="Pospuestas" active={filter === 'snoozed'} onClick={() => setFilter('snoozed')} count={filterCounts.snoozed} />
+              )}
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -358,6 +385,13 @@ export default function Chats() {
               }}
               onSuggestReply={(payload) =>
                 suggestWhatsappReply(payload).catch((e) => ({ ok: false, error: e?.message }))}
+              convState={selected ? (stateByKey.get(selected.key) || null) : null}
+              allLabels={allLabels}
+              onSaveState={async (patch) => {
+                const res = await saveConversationState(selected.phone, patch);
+                invalidate();
+                return res;
+              }}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center">
@@ -442,6 +476,15 @@ function ConversationRow({ c, active, onOpen }) {
             </span>
           ) : null}
         </span>
+        {c.labels?.length > 0 && (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {c.labels.slice(0, 3).map((l) => (
+              <span key={l} className="inline-flex max-w-[8rem] truncate rounded-full bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 text-[10px] font-medium">
+                {l}
+              </span>
+            ))}
+          </span>
+        )}
       </span>
     </button>
   );

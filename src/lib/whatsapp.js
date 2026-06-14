@@ -510,3 +510,35 @@ export function draftOutboundMessage({ phone, text, customerId, professionalId, 
     createdAt: Date.now(),
   };
 }
+
+// ── Per-conversation CRM state (labels / internal note / snooze) ─────────────
+// Upsert the state row for a conversation, keyed by phoneKey within the team
+// profile. Fire-and-forget from the UI, which reloads the live query after.
+// `patch` carries any of { labels, note, snoozeExpiresAt }.
+export async function saveConversationState(phone, patch) {
+  const key = phoneKey(phone);
+  if (!key) return { ok: false };
+  try {
+    const existing = (await db.waConversationState.where('phoneKey').equals(key).toArray())
+      .find((r) => r.profileId === TEAM_PROFILE_ID) || null;
+    const now = Date.now();
+    if (existing) {
+      await db.waConversationState.update(existing.id, { ...patch, updatedAt: now });
+    } else {
+      await db.waConversationState.put({
+        id: newId(),
+        profileId: TEAM_PROFILE_ID,
+        phoneKey: key,
+        labels: [],
+        note: null,
+        snoozeExpiresAt: null,
+        ...patch,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message };
+  }
+}

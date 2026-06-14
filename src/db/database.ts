@@ -33,6 +33,7 @@ import type {
   PayrollRun,
   WaMessage,
   WaCampaign,
+  WaConversationState,
   ClaudeMessage,
 } from '../types/domain.ts';
 
@@ -99,6 +100,7 @@ const TABLES = {
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
   waMessages:         { db: 'wa_messages',         pk: 'id' },
   waCampaigns:        { db: 'wa_campaigns',        pk: 'id' },
+  waConversationState:{ db: 'wa_conversation_state', pk: 'id' },
   claudeMessages:     { db: 'claude_messages',     pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
@@ -141,6 +143,7 @@ export interface TableRowMap {
   payrollRuns: PayrollRun;
   waMessages: WaMessage;
   waCampaigns: WaCampaign;
+  waConversationState: WaConversationState;
   claudeMessages: ClaudeMessage;
 }
 

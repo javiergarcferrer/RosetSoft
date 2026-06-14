@@ -5,7 +5,7 @@ import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown, Tag,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
@@ -118,8 +118,9 @@ function ComposerActions({ actions, disabled }) {
   );
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, showHeader = true, contextQuoteId = null }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, convState = null, allLabels = [], onSaveState = null, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -548,6 +549,21 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             <UserPlus size={13} /> Guardar
           </button>
         )}
+        {/* Conversation tools — labels / internal note / snooze. */}
+        {onSaveState && contact.phone && (
+          <button
+            type="button"
+            onClick={() => setToolsOpen(true)}
+            className={`relative shrink-0 p-1.5 rounded text-ink-500 hover:bg-ink-50 ${convState?.labels?.length || convState?.note || convState?.snoozeExpiresAt ? 'text-brand-700' : ''}`}
+            aria-label="Etiquetas, nota y posponer"
+            title="Etiquetas, nota y posponer"
+          >
+            <Tag size={16} />
+            {(convState?.labels?.length || convState?.note || (convState?.snoozeExpiresAt && convState.snoozeExpiresAt > Date.now())) && (
+              <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-brand-600" />
+            )}
+          </button>
+        )}
         {/* Overflow actions (block / unblock). Only in the inbox header. */}
         {connected && contact.phone && <BlockMenu phone={contact.phone} onError={setError} />}
       </div>
@@ -882,7 +898,116 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           onSave={onSaveContact}
         />
       )}
+      {onSaveState && (
+        <ConversationToolsModal
+          open={toolsOpen}
+          onClose={() => setToolsOpen(false)}
+          state={convState}
+          allLabels={allLabels}
+          onSave={onSaveState}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Conversation tools — per-conversation labels, a private internal note (never
+ * sent to the customer) and snooze. All changes persist immediately via
+ * onSave(patch); the note saves on blur. Snoozing closes the sheet so the
+ * thread drops out of the active inbox.
+ */
+function ConversationToolsModal({ open, onClose, state, allLabels = [], onSave }) {
+  const [note, setNote] = useState('');
+  const [labels, setLabels] = useState([]);
+  const [newLabel, setNewLabel] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    setNote(state?.note || '');
+    setLabels(Array.isArray(state?.labels) ? state.labels : []);
+    setNewLabel('');
+  }, [open, state]);
+
+  const snoozeUntil = state?.snoozeExpiresAt && state.snoozeExpiresAt > Date.now() ? state.snoozeExpiresAt : null;
+  const save = async (patch) => { setBusy(true); await onSave(patch); setBusy(false); };
+  const addLabel = async () => {
+    const l = newLabel.trim();
+    setNewLabel('');
+    if (!l || labels.includes(l)) return;
+    const next = [...labels, l];
+    setLabels(next);
+    await save({ labels: next });
+  };
+  const removeLabel = async (l) => {
+    const next = labels.filter((x) => x !== l);
+    setLabels(next);
+    await save({ labels: next });
+  };
+  const saveNote = () => { if ((state?.note || '') !== note.trim()) save({ note: note.trim() || null }); };
+  const doSnooze = async (ms) => { await save({ snoozeExpiresAt: ms ? Date.now() + ms : null }); onClose(); };
+  const tomorrow8 = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); return d.getTime() - Date.now(); };
+  const suggestions = allLabels.filter((l) => !labels.includes(l));
+
+  return (
+    <Modal open={open} onClose={onClose} title="Herramientas de conversación" size="sm">
+      <div className="space-y-4">
+        <div>
+          <div className="eyebrow-xs mb-1.5">Etiquetas</div>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {labels.length === 0 && <span className="text-xs text-ink-400">Sin etiquetas.</span>}
+            {labels.map((l) => (
+              <span key={l} className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 text-xs font-medium">
+                {l}
+                <button type="button" onClick={() => removeLabel(l)} className="hover:text-red-600" aria-label={`Quitar ${l}`}><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="input flex-1 text-sm"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLabel(); } }}
+              placeholder="Nueva etiqueta…"
+              list="wa-label-suggestions"
+              maxLength={24}
+            />
+            <button type="button" className="btn-secondary text-sm" onClick={addLabel} disabled={!newLabel.trim()}>Añadir</button>
+          </div>
+          {suggestions.length > 0 && (
+            <datalist id="wa-label-suggestions">{suggestions.map((l) => (<option key={l} value={l} />))}</datalist>
+          )}
+        </div>
+
+        <div>
+          <div className="eyebrow-xs mb-1.5">Nota interna (no se envía al cliente)</div>
+          <textarea
+            className="input w-full min-h-20 text-sm"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onBlur={saveNote}
+            placeholder="Anota algo sobre este cliente…"
+            maxLength={1000}
+          />
+        </div>
+
+        <div>
+          <div className="eyebrow-xs mb-1.5">Posponer</div>
+          {snoozeUntil && (
+            <div className="text-xs text-ink-500 mb-1.5">
+              Pospuesta hasta {new Date(snoozeUntil).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary text-xs" onClick={() => doSnooze(3600000)} disabled={busy}>1 hora</button>
+            <button type="button" className="btn-secondary text-xs" onClick={() => doSnooze(3 * 3600000)} disabled={busy}>3 horas</button>
+            <button type="button" className="btn-secondary text-xs" onClick={() => doSnooze(tomorrow8())} disabled={busy}>Mañana 8 am</button>
+            {snoozeUntil && <button type="button" className="btn-ghost text-xs text-red-600" onClick={() => doSnooze(null)} disabled={busy}>Quitar</button>}
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

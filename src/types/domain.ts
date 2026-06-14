@@ -287,6 +287,24 @@ export interface WaMessage {
 }
 
 /**
+ * Per-conversation CRM state for the WhatsApp inbox — labels, an internal note
+ * (never sent to the customer), and a snooze expiry. Keyed by the
+ * conversation's phoneKey (threads are derived from wa_messages, not their own
+ * entity). `snoozeExpiresAt` rides the auto ms↔ISO coercion (ends in `At`).
+ */
+export interface WaConversationState {
+  id: string;
+  profileId: string;
+  phoneKey: string;
+  labels: string[];
+  note?: string | null;
+  /** ms epoch; while > now the conversation is hidden from the active inbox. */
+  snoozeExpiresAt?: number | null;
+  updatedAt?: number;
+  createdAt?: number;
+}
+
+/**
  * A WhatsApp broadcast campaign (Difusión) — one approved template sent to a
  * chosen audience. Header row only; the per-recipient sends live in
  * wa_messages (joined by campaignId) so delivery/read rollups always reflect
