@@ -29,6 +29,28 @@ export function phoneKey(phone) {
 }
 
 /**
+ * Thread key for a WhatsApp GROUP — the Meta group id behind a `g:` prefix.
+ * Group threads live in the same inbox as 1:1 chats, so they share the `key`
+ * namespace; the prefix keeps a group id from ever colliding with a phoneKey
+ * (10 digits, no prefix) and lets `isGroupKey` tell the two apart.
+ */
+export function groupKey(groupId) {
+  const id = String(groupId || '').trim();
+  return id ? `g:${id}` : '';
+}
+
+/** True when a thread key names a group (vs a 1:1 phone thread). */
+export function isGroupKey(key) {
+  return typeof key === 'string' && key.startsWith('g:');
+}
+
+/** The Meta group id behind a group thread key (inverse of groupKey); '' for a
+ *  non-group key. */
+export function groupIdFromKey(key) {
+  return isGroupKey(key) ? key.slice(2) : '';
+}
+
+/**
  * The contact (customer or professional) that already holds `phone`, matched by
  * phoneKey — the SINGLE source of truth for "is this WhatsApp number taken?".
  *

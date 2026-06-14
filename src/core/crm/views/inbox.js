@@ -9,7 +9,7 @@
 // number today. Numbers are unique per contact (enforced at every write, see
 // lib/phone:findPhoneOwner), so the current owner is unambiguous.
 
-import { phoneKey, displayPhone } from '../../../lib/phone.js';
+import { phoneKey, displayPhone, groupKey, isGroupKey, groupIdFromKey } from '../../../lib/phone.js';
 
 /** Meta's customer-service window: free-form replies are allowed for 24h
  *  after the contact's LAST inbound message; outside it only approved
@@ -19,25 +19,32 @@ export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 /**
  * Group the message log into a conversation list, newest-activity first.
  *
- *   resolveConversations(messages, customers, professionals, { needle, now })
- *     → [{ key, phone, name, contactKind, customerId, professionalId,
- *          lastBody, lastAt, lastDirection, lastStatus, unread, windowOpen }]
+ *   resolveConversations(messages, customers, professionals, { needle, now, groups })
+ *     → [{ key, groupId, phone, name, contactKind, customerId, professionalId,
+ *          participantCount, lastBody, lastSenderName, lastAt, lastDirection,
+ *          lastStatus, unread, windowOpen }]
  *
- * `needle` filters by contact name / phone digits. `now` is injectable for
- * tests; defaults to Date.now().
+ * A message with a `groupId` lands in its GROUP thread (key `g:<id>`, name from
+ * the `groups` mirror, contactKind 'group') instead of a phone thread — so 1:1
+ * chats and groups share one inbox. Archived groups are dropped from the active
+ * list. `needle` filters by contact/group name and phone digits; `now` and
+ * `groups` are injectable for tests.
  */
-export function resolveConversations(messages, customers, professionals, { needle = '', now = Date.now() } = {}) {
+export function resolveConversations(messages, customers, professionals, { needle = '', now = Date.now(), groups = [] } = {}) {
   const customerByKey = indexByPhone(customers);
   const professionalByKey = indexByPhone(professionals);
+  const groupById = new Map((groups || []).map((g) => [g.id, g]));
 
   const threads = new Map();
   for (const m of messages || []) {
-    const key = phoneKey(m.phone);
+    const isGroup = !!m.groupId;
+    const key = isGroup ? groupKey(m.groupId) : phoneKey(m.phone);
     if (!key) continue;
     let t = threads.get(key);
     if (!t) {
-      t = { key, phone: '', profileName: null, customerId: null, professionalId: null,
-            lastBody: '', lastAt: 0, lastDirection: null, lastStatus: null, lastInboundAt: 0, unread: 0 };
+      t = { key, isGroup, groupId: isGroup ? m.groupId : null, phone: '', profileName: null,
+            customerId: null, professionalId: null, lastBody: '', lastSenderName: null,
+            lastAt: 0, lastDirection: null, lastStatus: null, lastInboundAt: 0, unread: 0 };
       threads.set(key, t);
     }
     const at = m.createdAt || 0;
@@ -47,6 +54,9 @@ export function resolveConversations(messages, customers, professionals, { needl
       t.lastBody = m.templateName && !m.body ? `Plantilla · ${m.templateName}` : (m.body || labelForKind(m.kind));
       t.lastDirection = m.direction;
       t.lastStatus = m.status || null;
+      // In a group, the inbox row shows WHO spoke last ("Ana: …"); a 1:1 thread
+      // has one counterpart, so it stays null.
+      t.lastSenderName = isGroup && m.direction === 'in' ? (m.profileName || null) : null;
     }
     if (m.direction === 'in') {
       if (at > t.lastInboundAt) t.lastInboundAt = at;
@@ -59,6 +69,30 @@ export function resolveConversations(messages, customers, professionals, { needl
 
   const out = [];
   for (const t of threads.values()) {
+    if (t.isGroup) {
+      const g = groupById.get(t.groupId) || null;
+      // Archived groups leave the active inbox (a local hide; see wa_groups.status).
+      if (g && g.status === 'archived') continue;
+      out.push({
+        key: t.key,
+        groupId: t.groupId,
+        phone: '',
+        name: g?.subject || 'Grupo',
+        contactKind: 'group',
+        customerId: null,
+        professionalId: null,
+        participantCount: g?.participantCount ?? null,
+        lastBody: t.lastBody,
+        lastSenderName: t.lastSenderName,
+        lastAt: t.lastAt,
+        lastDirection: t.lastDirection,
+        lastStatus: t.lastStatus,
+        unread: t.unread,
+        awaitingReply: t.lastDirection === 'in',
+        windowOpen: !!t.lastInboundAt && now - t.lastInboundAt < WA_WINDOW_MS,
+      });
+      continue;
+    }
     // The thread's identity is its PHONE NUMBER, so the contact is whoever
     // CURRENTLY owns that number (customerByKey/professionalByKey — unique per
     // key, the relation is watertight at write time). The id stamped on a
@@ -75,12 +109,15 @@ export function resolveConversations(messages, customers, professionals, { needl
       || t.profileName || displayPhone(t.phone);
     out.push({
       key: t.key,
+      groupId: null,
       phone: t.phone,
       name,
       contactKind: customer ? 'customer' : professional ? 'professional' : null,
       customerId: customer?.id || null,
       professionalId: professional?.id || null,
+      participantCount: null,
       lastBody: t.lastBody,
+      lastSenderName: null,
       lastAt: t.lastAt,
       lastDirection: t.lastDirection,
       lastStatus: t.lastStatus,
@@ -107,7 +144,12 @@ export function resolveConversations(messages, customers, professionals, { needl
  * One conversation, oldest-first, plus the state the composer needs:
  *
  *   resolveThread(messages, { key, now })
- *     → { items, lastInboundAt, windowOpen, windowExpiresAt }
+ *     → { items, isGroup, groupId, lastInboundAt, windowOpen, windowExpiresAt }
+ *
+ * `key` is a phoneKey (1:1) or a `g:<id>` group key (isGroupKey). For a group
+ * thread the items are filtered by `groupId` and each inbound bubble carries a
+ * `senderName` (who in the group spoke) — a 1:1 thread excludes any group rows
+ * that happen to share the counterpart's phoneKey.
  *
  * `windowOpen` ⇒ free-form text delivers; closed ⇒ only an approved template
  * will (Meta error 131047 otherwise).
@@ -121,8 +163,10 @@ export function resolveConversations(messages, customers, professionals, { needl
  *     shows above the text.
  */
 export function resolveThread(messages, { key, now = Date.now() } = {}) {
+  const isGroup = isGroupKey(key);
+  const gid = isGroup ? groupIdFromKey(key) : '';
   const raw = (messages || [])
-    .filter((m) => phoneKey(m.phone) === key)
+    .filter((m) => (isGroup ? m.groupId === gid : (!m.groupId && phoneKey(m.phone) === key)))
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   let lastInboundAt = 0;
   for (const m of raw) {
@@ -163,13 +207,19 @@ export function resolveThread(messages, { key, now = Date.now() } = {}) {
     const quoted = target
       ? { direction: target.direction, body: target.body || labelForKind(target.kind), kind: target.kind, waId: target.waId || ctxId }
       : null;
-    if (!reactions && !quoted) return m;
-    return { ...m, reactions, quoted };
+    // In a group, every inbound bubble names its sender (there are many
+    // counterparts); a 1:1 thread has just one, so it stays unlabeled.
+    const senderName = isGroup && m.direction === 'in'
+      ? (m.profileName || displayPhone(m.phone) || '') : null;
+    if (!reactions && !quoted && !senderName) return m;
+    return { ...m, reactions, quoted, ...(senderName ? { senderName } : {}) };
   });
 
   const windowOpen = !!lastInboundAt && now - lastInboundAt < WA_WINDOW_MS;
   return {
     items,
+    isGroup,
+    groupId: gid || null,
     lastInboundAt: lastInboundAt || null,
     windowOpen,
     windowExpiresAt: windowOpen ? lastInboundAt + WA_WINDOW_MS : null,

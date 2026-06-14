@@ -263,6 +263,9 @@ export interface WaMessage {
   customerId?: string | null;
   professionalId?: string | null;
   quoteId?: string | null;
+  /** When set, the message belongs to a GROUP thread (wa_groups.id). `phone`
+   *  then carries the participant who sent it (inbound) / is blank (outbound). */
+  groupId?: string | null;
   kind?: string;
   body?: string;
   templateName?: string | null;
@@ -321,6 +324,47 @@ export interface WaCampaign {
   recipientCount?: number;
   sentCount?: number;
   failedCount?: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * A WhatsApp group the business number belongs to — the local mirror of a Cloud
+ * API group (the inbox renders group threads off wa_messages.groupId; this row
+ * carries the subject/roster/state those threads need). Created either by us
+ * (createWaGroup) or on first contact via the group lifecycle webhook.
+ */
+export interface WaGroup {
+  id: string;
+  profileId: string;
+  subject?: string | null;
+  description?: string | null;
+  iconPath?: string | null;
+  inviteLink?: string | null;
+  /** 'active' | 'archived' — archiving is a LOCAL inbox hide, not a Meta leave. */
+  status: string;
+  participantCount?: number | null;
+  /** Whether OUR number is an admin of the group (gates the manage actions). */
+  isAdmin?: boolean | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * One member of a WhatsApp group, kept live from the group_participants_update
+ * webhook. `id` is `${groupId}:${phoneKey}`. `leftAt` set ⇒ no longer a member
+ * (kept for history, dropped from the active roster).
+ */
+export interface WaGroupParticipant {
+  id: string;
+  profileId: string;
+  groupId: string;
+  phone: string;
+  name?: string | null;
+  /** 'admin' | 'member'. */
+  role: string;
+  joinedAt?: number | null;
+  leftAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
 }

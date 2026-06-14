@@ -22,14 +22,22 @@ and the SQL in `supabase/migrations/`.
   `main` auto-applies them** (see root CLAUDE.md) — never ask the user to run
   them.
 
-## Live tables (32 in `TABLES`)
+## Live tables (38 in `TABLES`)
 CRM side: `profiles · settings · images · customers · professionals · orders ·
 quotes · quote_lines · quote_groups · containers · materials · products ·
 model_fabrics`. Accounting side: `accounts · journal_entries · journal_lines ·
 suppliers · expenses · sales_postings · inventory_items · inventory_movements ·
 purchases · import_liquidations · import_expedientes · ecf_sequences ·
 payments · fiscal_periods · employees · payroll_runs`. Comms/AI:
-`wa_messages · wa_campaigns · claude_messages`. Outside `TABLES` sit the
+`wa_messages · wa_campaigns · wa_conversation_state · wa_groups ·
+wa_group_participants · wa_template_rejections · scheduled_posts · ig_events ·
+claude_messages`. **WhatsApp groups** (Cloud API Groups): `wa_groups` mirrors
+each group the number belongs to (subject/description/invite_link/`status`
+active|archived — archive is a LOCAL inbox hide, never a Meta leave),
+`wa_group_participants` (`id = ${group_id}:${phoneKey}`, `left_at` null ⇒ active)
+is the roster kept live from the `group_participants_update` webhook, and
+`wa_messages.group_id` files a message under its group thread (`phone` then
+carries the participant who sent it; blank for our outbound). Outside `TABLES` sit the
 WRITE-ONLY credential stores (service-role/`save_*` RPC only — guarded by
 `tests/credentialDurability.test.js`): `shopify_config · whatsapp_config ·
 ecf_credentials · meta_social_config`. Field-by-field shapes are in
