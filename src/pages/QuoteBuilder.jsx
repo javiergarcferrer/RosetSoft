@@ -30,7 +30,7 @@ import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.j
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import { displayPhone, waDigits } from '../lib/phone.js';
-import { shareLinkUrl, newShareToken } from '../lib/quoteShare.js';
+import { shareLinkUrl, newShareToken, shareLink } from '../lib/quoteShare.js';
 import { quoteSlug } from '../lib/quoteNaming.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
@@ -563,6 +563,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // rendered once at page level — there is no OS share-sheet fallback, so the
   // send never bypasses the dealer's WhatsApp number.
   const [sendOpen, setSendOpen] = useState(false);
+  // While the WhatsApp send flow is in admin-only testing, non-admins get a
+  // neutral "Compartir" instead: it mints the quote's public link and hands it
+  // to the OS share sheet (clipboard fallback). `shareBusy` debounces it;
+  // `shareNote` flashes the clipboard-copied / error feedback.
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareNote, setShareNote] = useState(null); // { msg, tone } | null
+  useEffect(() => {
+    if (!shareNote) return undefined;
+    const t = setTimeout(() => setShareNote(null), 4000);
+    return () => clearTimeout(t);
+  }, [shareNote]);
 
   // Heal legacy quotes that lost their sequence number to the old
   // updateQuote write-back race (it persisted the stale in-memory quote,
@@ -629,6 +640,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (scroller) scroller.scrollTop = composeScrollRef.current;
   }, [view]);
 
+  // While the WhatsApp inbox is in admin-only testing, non-admins have no chat
+  // surface (the ModeBar hides the WhatsApp tab) — so if `view` is ever 'chat'
+  // for them, fall back to compose so the editor never strands on it.
+  useEffect(() => {
+    if (!isAdmin && view === 'chat') changeView('compose');
+  }, [isAdmin, view, changeView]);
+
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
    *   ⌘↵       — open the catalog to add a product (works even inside an input)
@@ -692,6 +710,31 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     }
     return shareLinkUrl(token, quoteSlug(quote, customer));
   };
+
+  // The dock's send/share action. Admins open the WhatsApp send modal (the real
+  // flow under test); everyone else gets a neutral share of the public quote
+  // link — reuse getShareLink to mint it, then hand it to the OS share sheet,
+  // falling back to the clipboard.
+  async function handleShare() {
+    if (isAdmin) { setSendOpen(true); return; }
+    if (shareBusy) return;
+    setShareBusy(true);
+    setShareNote(null);
+    try {
+      const url = await getShareLink();
+      const res = await shareLink({
+        url,
+        title: 'Cotización',
+        text: customer?.name ? `Cotización para ${customer.name}` : 'Cotización',
+      });
+      if (res === 'copied') setShareNote({ msg: 'Enlace copiado al portapapeles.', tone: 'ok' });
+      else if (res === 'error') setShareNote({ msg: 'No se pudo compartir el enlace.', tone: 'err' });
+    } catch {
+      setShareNote({ msg: 'No se pudo compartir el enlace.', tone: 'err' });
+    } finally {
+      setShareBusy(false);
+    }
+  }
 
   return (
     <>
@@ -909,12 +952,19 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           exporting={exporting}
           onPrint={printPdf}
           printing={printing}
-          onShare={() => setSendOpen(true)}
+          onShare={handleShare}
+          shareLabel={isAdmin ? 'Enviar' : 'Compartir'}
+          shareAriaLabel={isAdmin ? 'Enviar la cotización por WhatsApp' : 'Compartir el enlace de la cotización'}
+          shareTitle={isAdmin
+            ? 'Enviar la cotización por WhatsApp (enlace interactivo o PDF)'
+            : 'Compartir el enlace de la cotización'}
+          shareBusy={shareBusy}
         />
       )}
 
-      {/* Mobile mode switcher — compose / client preview / WhatsApp chat. */}
-      <ModeBar view={view} onChange={changeView} customer={customer} />
+      {/* Mobile mode switcher — compose / client preview / WhatsApp chat (the
+          WhatsApp tab shows for admins only while the inbox is in testing). */}
+      <ModeBar view={view} onChange={changeView} customer={customer} showChat={isAdmin} />
 
       <CatalogPicker
         open={catalogOpen}
@@ -938,21 +988,38 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         />
       )}
 
-      {/* The single send surface — opened by the dock's share/send action.
-          Ships the quote from the dealer's WhatsApp Business number as the
-          interactive link or the exported PDF; it persists the share token
-          through updateQuote and self-explains when the quote can't be sent
-          yet (no customer / no number / API not connected). */}
-      <SendQuoteModal
-        open={sendOpen}
-        onClose={() => setSendOpen(false)}
-        customer={customer}
-        professional={professional}
-        quote={quote}
-        settings={settings}
-        onUpdateQuote={hx(updateQuote)}
-        buildPdf={generatePdf}
-      />
+      {/* The WhatsApp send surface — opened by the dock's send action for
+          admins only while the WhatsApp flow is in testing. Ships the quote
+          from the dealer's WhatsApp Business number as the interactive link or
+          the exported PDF; it persists the share token through updateQuote and
+          self-explains when the quote can't be sent yet (no customer / no
+          number / API not connected). Non-admins use the neutral share action
+          (handleShare) instead, so this never mounts for them. */}
+      {isAdmin && (
+        <SendQuoteModal
+          open={sendOpen}
+          onClose={() => setSendOpen(false)}
+          customer={customer}
+          professional={professional}
+          quote={quote}
+          settings={settings}
+          onUpdateQuote={hx(updateQuote)}
+          buildPdf={generatePdf}
+        />
+      )}
+
+      {/* Transient feedback for the neutral "Compartir" action's clipboard
+          fallback (the OS share sheet gives its own feedback natively). */}
+      {shareNote && (
+        <div
+          role="status"
+          className={`fixed left-1/2 -translate-x-1/2 z-40 bottom-24 md:bottom-6 rounded-lg shadow-pop px-4 py-2.5 text-sm w-max max-w-[calc(100vw-2rem)] ${
+            shareNote.tone === 'err' ? 'bg-red-600 text-white' : 'bg-ink-900 text-ink-50'
+          }`}
+        >
+          {shareNote.msg}
+        </div>
+      )}
 
       {undoToast}
     </>

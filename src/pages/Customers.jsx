@@ -601,13 +601,16 @@ function QuickAction({ href, to, icon: Icon, label }) {
 // repeated in a band. Shared by the mobile card and the desktop sheet row
 // so both surfaces stay identical.
 function CustomerPanel({ c, rollup, onCommit, onRemove }) {
+  const { isAdmin } = useApp();
   const groups = rollup?.groups || [];
   const wa = waDigits(c.phone);
   return (
     <div className="divide-y divide-ink-100">
-      {/* Contact bar — the channels this client actually has, ficha right. */}
+      {/* Contact bar — the channels this client actually has, ficha right.
+          The WhatsApp deep-link opens our inbox, which is admin-only while in
+          testing — so it shows for admins only. */}
       <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
-        {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
+        {wa && isAdmin && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
         {c.phone && <QuickAction href={`tel:${c.phone}`} icon={Phone} label="Llamar" />}
         {c.email && <QuickAction href={`mailto:${c.email}`} icon={Mail} label="Correo" />}
         <span className="flex-1" />

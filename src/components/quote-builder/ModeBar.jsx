@@ -43,34 +43,39 @@ function Badge({ count }) {
  * carries the thread's unread count so an unanswered client is visible from
  * any mode.
  */
-export default function ModeBar({ view, onChange, customer }) {
+export default function ModeBar({ view, onChange, customer, showChat = true }) {
   const { profileId, settings } = useApp();
   const connected = !!settings?.whatsappConnectedAt;
   const key = phoneKey(customer?.phone);
   const messages = useLiveQuery(
-    () => (profileId && key ? db.waMessages.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
-    [profileId, key],
+    () => (profileId && key && showChat ? db.waMessages.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId, key, showChat],
     [],
   );
   const unread = key
     ? messages.reduce((n, m) => n + (phoneKey(m.phone) === key && m.direction === 'in' && !m.readAt ? 1 : 0), 0)
     : 0;
 
+  // The WhatsApp conversation tab is gated to its own surface — while the
+  // inbox is in admin-only testing, employees get only compose / client and
+  // the bar collapses to a two-up switch.
   const tabs = [
     { id: 'compose', label: 'Cotización', icon: Pencil, badge: 0 },
     { id: 'client', label: 'Cliente', icon: Eye, badge: 0 },
-    { id: 'chat', label: 'WhatsApp', icon: MessageCircle, badge: connected ? unread : 0 },
+    ...(showChat ? [{ id: 'chat', label: 'WhatsApp', icon: MessageCircle, badge: connected ? unread : 0 }] : []),
   ];
 
   return createPortal(
     <>
-      {/* Phones — bottom bar across the thumb's reach. */}
+      {/* Phones — bottom bar across the thumb's reach. Collapses to a two-up
+          switch when the WhatsApp tab is gated out (employees, while the inbox
+          is in admin-only testing). */}
       <nav
         aria-label="Modo de la cotización"
         className="fixed inset-x-0 bottom-0 z-30 md:hidden print:hidden kb-hide-when-open"
       >
         <div className="bg-surface border-t border-ink-200 shadow-pop pb-safe-standalone">
-          <div className="grid grid-cols-3">
+          <div className={`grid ${tabs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {tabs.map(({ id, label, icon: Icon, badge }) => {
               const active = view === id;
               return (
@@ -93,7 +98,6 @@ export default function ModeBar({ view, onChange, customer }) {
               );
             })}
           </div>
-        </div>
       </nav>
 
       {/* Desktop — a thin icon-only rail flush against the right edge of the

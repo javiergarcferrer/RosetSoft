@@ -21,17 +21,23 @@ export const ROLES = ['admin', 'employee', 'accounting', 'team'];
 // ── nav building blocks ──────────────────────────────────────────────────
 const HOME = { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] };
 
-const CRM_GROUP = {
-  label: 'Ventas',
-  items: [
-    { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-    { to: '/togo', label: 'Configurador Togo', icon: Sofa, sub: true },
-    { to: '/orders', label: 'Pedidos', icon: Package },
-    { to: '/chats', label: 'WhatsApp', icon: MessageCircle },
-    { to: '/customers', label: 'Clientes', icon: Users },
-    { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
-  ],
-};
+// The CRM "Ventas" group. WhatsApp (the inbox) is in admin-only testing for
+// now, so the inbox link only joins the group for admins; employees get the
+// rest of Ventas without it. Drop the `role` gate on the WhatsApp item once
+// testing ends to bring it back for everyone.
+function crmGroup(role) {
+  return {
+    label: 'Ventas',
+    items: [
+      { to: '/quotes', label: 'Cotizaciones', icon: FileText },
+      { to: '/togo', label: 'Configurador Togo', icon: Sofa, sub: true },
+      { to: '/orders', label: 'Pedidos', icon: Package },
+      ...(role === 'admin' ? [{ to: '/chats', label: 'WhatsApp', icon: MessageCircle }] : []),
+      { to: '/customers', label: 'Clientes', icon: Users },
+      { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
+    ],
+  };
+}
 
 // The bridge surface — commissions sit between a CRM sale and an accounting
 // payout, so every role that earns or pays them can reach it.
@@ -97,12 +103,12 @@ export function navForRole(role, { accountingOpen = true } = {}) {
     // primitive, and GlobalSearch flattens them so every destination stays
     // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
-      HOME, CRM_GROUP, COMMISSIONS, ADMIN_GROUP,
+      HOME, crmGroup('admin'), COMMISSIONS, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
       CONFIG_GROUP,
     ];
   }
-  if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
+  if (role === 'employee') return [HOME, crmGroup('employee'), COMMISSIONS];
   return [];
 }
 

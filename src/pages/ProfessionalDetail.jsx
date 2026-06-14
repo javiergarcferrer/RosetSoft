@@ -35,7 +35,7 @@ const STATUS_LABELS = {
 };
 export default function ProfessionalDetail() {
   const { professionalId } = useParams();
-  const { profileId } = useApp();
+  const { profileId, isAdmin } = useApp();
   const navigate = useNavigate();
   // Local state for the edit modal. The same ProfessionalModal
   // component the list page uses opens here too — passing
@@ -158,10 +158,13 @@ export default function ProfessionalDetail() {
       )}
 
       {/* The professional's WhatsApp conversation, right on their card —
-          renders only with a phone + the Business API connected. */}
-      <div className="mb-5">
-        <ContactChatCard contact={pro} contactKind="professional" />
-      </div>
+          renders only with a phone + the Business API connected. Admin-only
+          while the WhatsApp inbox is in testing. */}
+      {isAdmin && (
+        <div className="mb-5">
+          <ContactChatCard contact={pro} contactKind="professional" />
+        </div>
+      )}
 
       {/* Roll-up cards: total pipeline + accepted (committed).
           Headline value is the base imponible — the amount commissions

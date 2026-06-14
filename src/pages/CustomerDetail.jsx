@@ -46,7 +46,7 @@ const QUOTE_STATUS_LABELS = {
 
 export default function CustomerDetail() {
   const { customerId } = useParams();
-  const { profileId } = useApp();
+  const { profileId, isAdmin } = useApp();
   const navigate = useNavigate();
   // Local state for the edit modal. The same CustomerModal the list
   // page uses opens here too — passing onAfterDelete navigates back
@@ -168,10 +168,13 @@ export default function CustomerDetail() {
       <ContactCard customer={customer} />
 
       {/* The customer's WhatsApp conversation, right on their card — renders
-          only with a phone + the Business API connected. */}
-      <div className="mb-5">
-        <ContactChatCard contact={customer} contactKind="customer" />
-      </div>
+          only with a phone + the Business API connected. Admin-only while the
+          WhatsApp inbox is in testing. */}
+      {isAdmin && (
+        <div className="mb-5">
+          <ContactChatCard contact={customer} contactKind="customer" />
+        </div>
+      )}
 
       {/* Summary stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">

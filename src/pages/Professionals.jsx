@@ -138,7 +138,7 @@ const PROFESSIONAL_COLS_STORAGE_KEY = 'rs.professionals.cols.v1';
  * row is a permanently-open blank: type a name and the professional exists.
  */
 export default function Professionals() {
-  const { profileId } = useApp();
+  const { profileId, isAdmin } = useApp();
   // useLiveQueryStatus → gate the "Sin profesionales" empty state on
   // the first fetch having completed, so a user navigating into this
   // page doesn't see the false empty state flicker before their real
@@ -299,14 +299,18 @@ export default function Professionals() {
         actions={
           <div className="flex items-center gap-2">
             {/* Difusión, woven in where the audience lives: lands on the
-                campaign wizard already targeting the professionals list. */}
-            <Link
-              to="/chats/difusion?campana=profesionales"
-              className="btn-secondary"
-              title="Enviar una plantilla de WhatsApp a profesionales (Difusión)"
-            >
-              <Megaphone size={14} /> Difusión
-            </Link>
+                campaign wizard already targeting the professionals list.
+                WhatsApp campaigns are admin-only while the feature is in
+                testing. */}
+            {isAdmin && (
+              <Link
+                to="/chats/difusion?campana=profesionales"
+                className="btn-secondary"
+                title="Enviar una plantilla de WhatsApp a profesionales (Difusión)"
+              >
+                <Megaphone size={14} /> Difusión
+              </Link>
+            )}
             <button onClick={focusNewRow} className="btn-brand">
               <Plus size={14} /> Agregar profesional
             </button>
@@ -737,13 +741,16 @@ function QuickAction({ href, to, icon: Icon, label }) {
 // header, never repeated in a band. Shared by the mobile card and the
 // desktop sheet row so both surfaces stay identical.
 function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
+  const { isAdmin } = useApp();
   const groups = rollup?.groups || [];
   const wa = waDigits(pro.phone);
   return (
     <div className="divide-y divide-ink-100">
-      {/* Contact bar — the channels this professional has, perfil right. */}
+      {/* Contact bar — the channels this professional has, perfil right. The
+          WhatsApp deep-link opens our inbox, which is admin-only while in
+          testing — so it shows for admins only. */}
       <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
-        {wa && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
+        {wa && isAdmin && <QuickAction to={`/chats?chat=${wa}`} icon={MessageCircle} label="WhatsApp" />}
         {pro.phone && <QuickAction href={`tel:${pro.phone}`} icon={Phone} label="Llamar" />}
         {pro.email && <QuickAction href={`mailto:${pro.email}`} icon={Mail} label="Correo" />}
         <span className="flex-1" />

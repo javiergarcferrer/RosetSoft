@@ -47,6 +47,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
   onExport, exporting, onPrint, printing, onShare,
+  shareLabel = 'Enviar', shareTitle, shareAriaLabel, shareBusy = false,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
 
@@ -380,17 +381,21 @@ export default function TotalsDock({
                   stamped a redundant pair on mobile. The dock keeps only the
                   cross-cutting actions: Share / Print / Export. */}
 
-              {/* The single SEND surface — opens the WhatsApp Business API send
-                  modal (interactive link or exported PDF). This is the one place
-                  the quote goes to the client; nothing here bypasses the dealer's
-                  WhatsApp number. Pinned at every width. */}
+              {/* The SEND / SHARE surface. For admins this opens the WhatsApp
+                  Business API send modal (interactive link or exported PDF) —
+                  the one place the quote goes to the client through the dealer's
+                  WhatsApp number. While that flow is in admin-only testing,
+                  employees instead get a neutral "Compartir" that hands the
+                  public link to the OS share sheet (label/title come from the
+                  caller). Pinned at every width. */}
               <DockAction
                 icon={Share2}
-                label="Enviar"
+                label={shareLabel}
                 onClick={onShare}
-                disabled={exporting || printing}
-                ariaLabel="Enviar la cotización por WhatsApp"
-                title="Enviar la cotización por WhatsApp (enlace interactivo o PDF)"
+                disabled={exporting || printing || shareBusy}
+                busy={shareBusy}
+                ariaLabel={shareAriaLabel || shareLabel}
+                title={shareTitle}
               />
 
               {/* Print the PDF straight to the printer (no download). */}

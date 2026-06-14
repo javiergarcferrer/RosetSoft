@@ -84,10 +84,12 @@ export default function Layout() {
   });
   // Unread WhatsApp badge on the nav entry — inbound messages not yet opened
   // in the inbox. Rides the same live-query invalidation as the rest of the
-  // app, so opening a thread (which stamps readAt) clears it everywhere.
+  // app, so opening a thread (which stamps readAt) clears it everywhere. The
+  // WhatsApp inbox is admin-only while in testing, so only admins carry the
+  // nav entry (and need this query) — skip it for everyone else.
   const waMessages = useLiveQuery(
-    () => db.waMessages.where('profileId').equals(profileId || '').toArray(),
-    [profileId],
+    () => (isAdmin ? db.waMessages.where('profileId').equals(profileId || '').toArray() : Promise.resolve([])),
+    [profileId, isAdmin],
     [],
   );
   const waUnread = waMessages.reduce((n, m) => n + (m.direction === 'in' && !m.readAt ? 1 : 0), 0);

@@ -99,6 +99,36 @@ export async function applyClientPick(token, pick) {
   return r.json();
 }
 
+/**
+ * Share an arbitrary URL through the OS share sheet, with a clipboard fallback.
+ * Used by the employee-facing "Compartir" action while the WhatsApp quote-send
+ * flow is in admin-only testing — a neutral share (no dealer WhatsApp number)
+ * that still hands the client the public quote link.
+ *
+ * Returns 'shared' (native sheet completed) | 'copied' (clipboard fallback) |
+ * 'cancelled' (user dismissed the sheet) | 'error'.
+ */
+export async function shareLink({ url, title, text } = {}) {
+  if (!url) return 'error';
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text, url });
+      return 'shared';
+    } catch (err) {
+      // Dismissing the sheet is a deliberate cancel, not a failure — don't then
+      // copy a link the user chose not to send.
+      if (err && err.name === 'AbortError') return 'cancelled';
+      // Any other share failure (payload rejected, permission) → clipboard.
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    return 'copied';
+  } catch {
+    return 'error';
+  }
+}
+
 /** Mint an unguessable share token (122 bits via crypto.randomUUID). */
 export function newShareToken() {
   try {
