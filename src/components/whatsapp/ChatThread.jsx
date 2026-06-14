@@ -6,13 +6,14 @@ import {
   AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
   Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown, Tag,
-  Languages, ScrollText,
+  Languages, ScrollText, Eye,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
 import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser, translateWhatsappDraft, summarizeWhatsappThread } from '../../lib/whatsapp.js';
 import { startVoiceRecording, canRecordVoice, preloadVoiceRecorder } from '../../lib/loadOpusRecorder.js';
+import { useThreadPresence } from '../../lib/useThreadPresence.js';
 import { db } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -142,7 +143,11 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // to the human #number so the thread shows WHICH deal a message was about
   // and deep-links to it. Bubbles of the quote being edited (contextQuoteId,
   // set by the workspace's embedded pane) skip the chip — there it's noise.
-  const { profileId, settings } = useApp();
+  const { profileId, settings, currentProfile } = useApp();
+  // Collision detection — other team members viewing this same thread. Only in
+  // the inbox (onSaveState present); the embedded quote-pane chat opts out.
+  const presenceMe = currentProfile ? { id: currentProfile.id, name: currentProfile.name || 'Agente' } : null;
+  const viewers = useThreadPresence(onSaveState ? contact.key : null, presenceMe);
   // Quick replies (canned snippets) the dealer inserts with one tap — only the
   // composer button appears once any are configured (Settings → WhatsApp), so
   // the cluster stays uncluttered until the team opts in. {{nombre}}/{{negocio}}
@@ -567,9 +572,17 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             {detailLink ? <Link to={detailLink} className="hover:underline">{contact.name}</Link> : contact.name}
           </div>
           <div className="text-[11px] text-ink-400 flex items-center gap-1.5">
-            {displayPhone(contact.phone)}
-            {contact.contactKind === 'customer' && <span className="inline-flex items-center gap-0.5"><Users size={10} /> Cliente</span>}
-            {contact.contactKind === 'professional' && <span className="inline-flex items-center gap-0.5"><UserSquare2 size={10} /> Profesional</span>}
+            {viewers.length > 0 ? (
+              <span className="inline-flex items-center gap-1 text-amber-600 font-medium" title={`Viendo ahora: ${viewers.join(', ')}`}>
+                <Eye size={11} /> {viewers[0]}{viewers.length > 1 ? ` +${viewers.length - 1}` : ''} {viewers.length > 1 ? 'están viendo' : 'está viendo'}
+              </span>
+            ) : (
+              <>
+                {displayPhone(contact.phone)}
+                {contact.contactKind === 'customer' && <span className="inline-flex items-center gap-0.5"><Users size={10} /> Cliente</span>}
+                {contact.contactKind === 'professional' && <span className="inline-flex items-center gap-0.5"><UserSquare2 size={10} /> Profesional</span>}
+              </>
+            )}
           </div>
         </div>
         {/* Unknown chatter → save them into the CRM (the official app's "Add to contacts"). */}

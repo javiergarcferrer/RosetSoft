@@ -27,7 +27,7 @@ const CODE = /\.(jsx?|tsx?)$/;
 
 // Sanctioned exceptions, documented in CLAUDE.md.
 const CORE_HOOK_VM = 'core/tracking/useContainerTracking.js'; // owns its effectful fetch
-const LIB_UI_HOOKS = ['lib/useKeyboardShortcut.ts', 'lib/useExchangeRatePull.js', 'lib/useVirtualKeyboard.js'];
+const LIB_UI_HOOKS = ['lib/useKeyboardShortcut.ts', 'lib/useExchangeRatePull.js', 'lib/useVirtualKeyboard.js', 'lib/useThreadPresence.js'];
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
