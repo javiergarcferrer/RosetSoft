@@ -6,6 +6,15 @@
 // answer 200 fast — the Studio reads the table for a live activity feed instead
 // of polling the Graph API.
 //
+// POST payloads are authenticated by the X-Hub-Signature-256 header — an
+// HMAC-SHA256 of the raw body with the Meta App Secret, exactly as wa-webhook
+// does. Instagram + WhatsApp live under the SAME Meta Business app here, so the
+// signing key is the same App Secret the dealer pasted for WhatsApp
+// (whatsapp_config.app_secret, service-role read). No valid signature → 401, so
+// nobody who merely knows the URL can inject forged comments/mentions into the
+// JARVIS live feed. Without the secret saved we can't authenticate Meta, so
+// inbound processing stays off until it's pasted in Configuración.
+//
 // Setup (Meta App Dashboard → Webhooks): callback URL = this function's URL,
 // verify token = META_WEBHOOK_VERIFY_TOKEN (defaults to 'rosetsoft-ig').
 
@@ -13,6 +22,24 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || 'rosetsoft-ig';
 const TEAM = 'team';
+
+/** HMAC-SHA256 verify of the raw body against the App Secret (the twin of
+ *  wa-webhook's check — the Deno functions don't share modules, so the rule is
+ *  copied verbatim and kept equivalent on purpose). */
+async function validSignature(raw: string, header: string | null, secret: string): Promise<boolean> {
+  if (!header || !header.startsWith('sha256=') || !secret) return false;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const given = header.slice('sha256='.length).toLowerCase();
+  // Constant-time-ish compare (same length, XOR accumulate).
+  if (given.length !== hex.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -35,8 +62,18 @@ Deno.serve(async (req) => {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return new Response('ok', { status: 200 });
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
+  // Authenticate the payload BEFORE trusting (or persisting) any of it. Read the
+  // raw bytes (not req.json()) so the HMAC is over exactly what Meta signed.
+  const raw = await req.text();
+  const { data: cfg } = await admin
+    .from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle();
+  const secret = (cfg as { app_secret?: string } | null)?.app_secret || '';
+  if (!(await validSignature(raw, req.headers.get('x-hub-signature-256'), secret))) {
+    return new Response('invalid signature', { status: 401 });
+  }
+
   let body: { object?: string; entry?: Array<{ changes?: Array<{ field?: string; value?: Record<string, unknown> }> }> } = {};
-  try { body = await req.json(); } catch { /* tolerate empty */ }
+  try { body = JSON.parse(raw); } catch { /* tolerate empty */ }
 
   const rows: Array<Record<string, unknown>> = [];
   for (const entry of body.entry || []) {
