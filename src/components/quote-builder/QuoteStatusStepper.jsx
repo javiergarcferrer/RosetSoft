@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, ChevronRight, ChevronDown, Undo2, X, Archive } from 'lucide-react';
+import { Check, CheckCircle2, ChevronRight, ChevronDown, Undo2, X, Archive } from 'lucide-react';
 import {
   QUOTE_STAGES, QUOTE_STAGE_BY_KEY, QUOTE_TERMINAL_STAGES,
   quoteStageIndex, nextQuoteStage, currentQuoteStage, isTerminalStage,
@@ -27,6 +27,15 @@ export default function QuoteStatusStepper({ quote, onTransition, profileId, onA
   // visual override so the terminal label shows. This way users in those
   // states still see the journey context.
   const trackIdx = terminal ? QUOTE_STAGES.length - 1 : idx;
+
+  // Rail geometry. Dots sit at the centre of their equal-width columns, i.e.
+  // at (i+0.5)/N across the row — NOT at 0/…/100%. So inset the rail by half a
+  // column (`edge`) on each side to run exactly first-dot-centre → last-dot-
+  // centre (no poke-out past the ends), and size the fill as a fraction of
+  // that span so its head lands precisely on the active dot.
+  const stepCount = QUOTE_STAGES.length;
+  const edge = 50 / stepCount;
+  const fillPct = stepCount > 1 ? (trackIdx / (stepCount - 1)) * 100 : 0;
 
   function advance(stageKey) {
     const def = QUOTE_STAGE_BY_KEY[stageKey];
@@ -57,61 +66,98 @@ export default function QuoteStatusStepper({ quote, onTransition, profileId, onA
 
   return (
     <div className="card card-pad space-y-4">
-      {/* Step track — connector bar + dots */}
-      <div className="relative">
-        {/* Background rail */}
-        <div className="absolute top-[11px] left-0 right-0 h-0.5 bg-ink-100 rounded-full" />
-        {/* Progress fill — brand terracotta */}
+      {/* ── Progress track ──────────────────────────────────────────────
+          A single rounded rail with an animated brand fill plus the step
+          dots. Both share this one relative box so the rail's percentage
+          insets line up with the dot columns below. */}
+      <div className="relative" role="list" aria-label="Progreso de la cotización">
+        {/* Rail: inset to the first/last dot centres so it never pokes past
+            the end dots; overflow-hidden + rounded clips the fill cleanly. */}
         <div
-          className="absolute top-[11px] left-0 h-0.5 bg-brand-500 rounded-full transition-all duration-300 ease-out"
-          style={{ width: `${(trackIdx / (QUOTE_STAGES.length - 1)) * 100}%` }}
-        />
-        {/* On very narrow phones each step column gets a minimum guaranteed
-            width so the rail dot + label never collapse to zero. The
-            track itself is `overflow-x-auto` so if the four columns still
-            can't fit (e.g. a translated label is unusually long) they
-            scroll horizontally WITHOUT leaking to the page. */}
-        <div className="relative flex justify-between gap-0.5 overflow-x-auto">
+          className="absolute top-[13px] h-1.5 rounded-full bg-ink-100 overflow-hidden"
+          style={{ left: `${edge}%`, right: `${edge}%` }}
+        >
+          <div
+            className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out
+              ${terminal ? 'bg-gradient-to-r from-red-400 to-red-500' : 'bg-gradient-to-r from-brand-400 to-brand-500'}`}
+            style={{ width: `${fillPct}%` }}
+          />
+        </div>
+
+        {/* Dots + labels. Deliberately NO overflow-x box here — an `overflow-x`
+            container forces `overflow-y` to clip too, which would shear the
+            active dot's ring/halo. Four columns always fit; long labels wrap
+            to two reserved lines so the date row stays aligned. */}
+        <div className="relative flex justify-between gap-1">
           {QUOTE_STAGES.map((s, i) => {
             const isPast = i < trackIdx;
             const isCurrent = i === trackIdx;
+            const isLast = i === stepCount - 1;
+            // Reaching the final stage reads as "done" (filled + check), not an
+            // in-progress ring.
+            const isDone = isPast || (isCurrent && isLast);
+            // On a terminal alternate the current (last) dot turns red with an X.
+            const isTermCur = terminal && isCurrent;
             const ts = s.timestampField ? quote?.[s.timestampField] : quote?.createdAt;
-            // Override label & color when sitting on a terminal alternate.
-            const label = (terminal && isCurrent) ? stageDef.label : s.label;
-            const accent = terminal && isCurrent ? 'red' : 'brand';
-            const labelMute = terminal && isCurrent
-              ? 'text-red-700 font-semibold'
+            const label = isTermCur ? stageDef.label : s.label;
+            const labelCls = isTermCur
+              ? 'text-red-600 font-bold'
               : isCurrent
-                ? 'text-brand-700 font-semibold'
+                ? 'text-brand-700 font-bold'
                 : isPast
-                  ? 'text-ink-600 font-medium'
-                  : 'text-ink-400';
+                  ? 'text-ink-700 font-semibold'
+                  : 'text-ink-400 font-medium';
             return (
-              // min-w-[60px] guarantees the dot + short label always render;
-              // flex-1 distributes any extra space evenly across all steps.
-              <div key={s.key} className="flex flex-col items-center text-center flex-1 min-w-[60px] px-0.5">
-                <div
-                  className={`w-[22px] h-[22px] shrink-0 rounded-full border-2 z-10 flex items-center justify-center transition-all duration-200
-                    ${isPast || (isCurrent && i === QUOTE_STAGES.length - 1)
-                      ? (accent === 'red'
-                          ? 'bg-red-500 border-red-500 text-white shadow-sm'
-                          : 'bg-brand-500 border-brand-500 text-white shadow-sm')
-                      : isCurrent
-                        ? `bg-surface ${accent === 'red' ? 'border-red-500 ring-2 ring-red-200' : 'border-brand-500 ring-[3px] ring-brand-100'}`
-                        : 'bg-surface border-ink-200'}`}
-                >
-                  {(isPast || (isCurrent && i === QUOTE_STAGES.length - 1)) && (
-                    accent === 'red' ? <X size={11} strokeWidth={2.5} /> : <CheckCircle2 size={11} strokeWidth={2.5} />
+              <div
+                key={s.key}
+                role="listitem"
+                aria-current={isCurrent ? 'step' : undefined}
+                className="relative z-10 flex flex-col items-center text-center flex-1 basis-0 min-w-0 px-0.5"
+              >
+                {/* Dot */}
+                <span className="relative grid place-items-center w-7 h-7">
+                  {/* Soft live glow on the active (still-pending) step. */}
+                  {isCurrent && !isDone && (
+                    <span
+                      className={`absolute -inset-1 rounded-full animate-pulse ${isTermCur ? 'bg-red-400/25' : 'bg-brand-400/25'}`}
+                      aria-hidden="true"
+                    />
                   )}
-                </div>
-                <div className={`mt-2 eyebrow-xs tracking-wide truncate w-full leading-snug ${labelMute}`} title={label}>
+                  <span
+                    className={`relative w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300
+                      ${isDone
+                        ? isTermCur
+                          ? 'bg-red-500 border-red-500 text-white shadow-sm shadow-red-500/30'
+                          : 'bg-brand-500 border-brand-500 text-white shadow-sm shadow-brand-500/30'
+                        : isCurrent
+                          ? isTermCur
+                            ? 'bg-surface border-red-500 ring-4 ring-red-100'
+                            : 'bg-surface border-brand-500 ring-4 ring-brand-100'
+                          : 'bg-surface border-ink-200'}`}
+                  >
+                    {isDone ? (
+                      isTermCur ? <X size={14} strokeWidth={3} /> : <Check size={14} strokeWidth={3} />
+                    ) : isCurrent ? (
+                      <span className={`w-2 h-2 rounded-full ${isTermCur ? 'bg-red-500' : 'bg-brand-500'}`} />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink-200" />
+                    )}
+                  </span>
+                </span>
+
+                {/* Label — reserves two lines so the date row never jitters
+                    when "Depósito recibido" wraps. */}
+                <span
+                  className={`mt-2.5 flex w-full items-start justify-center min-h-[2.5em] eyebrow-xs tracking-wide leading-tight ${labelCls}`}
+                  title={label}
+                >
                   {label}
-                </div>
-                {/* Date: hidden on the smallest phones (< sm) to save vertical
-                    space and avoid cramping the label row — visible from sm up. */}
-                <div className="text-[10px] text-ink-400 mt-0.5 tabular-nums hidden sm:block">
+                </span>
+
+                {/* Date — hidden on the smallest phones to save vertical space. */}
+                <span className="text-[10px] text-ink-400 -mt-1 tabular-nums hidden sm:block">
                   {ts ? new Date(ts).toLocaleDateString('es-DO') : '—'}
-                </div>
+                </span>
               </div>
             );
           })}
