@@ -24,22 +24,6 @@ export interface SyncRequest {
   cron?: boolean;
   /** LSG inventory write-back: decrement Shopify when sold in ALCOVER. */
   lsgAdjust?: Array<{ productId?: string; variantId?: string; delta: number }>;
-  /** Orders mode (Alcover store): READ + FULFILL. */
-  ordersMode?: boolean;
-  /** Orders dispatch: 'list' (default) or 'fulfill'. */
-  action?: string;
-  /** list: pagination cursor. */
-  cursor?: string | null;
-  /** list: page size (clamped 1..50). */
-  limit?: number;
-  /** list: Shopify search fragment, e.g. 'fulfillment_status:unfulfilled'. */
-  status?: string | null;
-  /** fulfill: the fulfillmentOrder to fulfill. */
-  fulfillmentOrderId?: string;
-  /** fulfill: optional subset of lines. */
-  lineItems?: Array<{ id: string; quantity: number }>;
-  /** fulfill: optional tracking info. */
-  tracking?: { number?: string; company?: string; url?: string };
 }
 
 /**
@@ -54,19 +38,17 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
 
 /**
  * The scopes a store's app installation must carry, per direction. The
- * LifestyleGarden link is now TWO-WAY: it PULLS the catalog (read_products,
+ * LifestyleGarden link is TWO-WAY: it PULLS the catalog (read_products,
  * read_inventory) AND pushes inventory decrements back when an LSG product is
- * sold inside ALCOVER (write_inventory + read_locations to resolve the location).
- * The Alcover mirror writes products + quantities AND now READS + FULFILLS
- * orders (the Shopify control center), so it also needs read_orders +
- * write_fulfillments. Surfacing the full list makes the Settings connection
- * test flag the (one-time) re-auth the dealer must do in the Shopify Dev
- * Dashboard for the new scopes to work.
+ * sold inside ALCOVER (write_inventory + read_locations to resolve the
+ * location). The Alcover mirror writes products + quantities. Surfacing the
+ * full list makes the Settings connection test flag any re-auth the dealer
+ * must do in the Shopify Dev Dashboard for the scopes to work.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
     ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
-    : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory', 'read_orders', 'write_fulfillments'];
+    : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
 }
 
 /** Refresh ahead of the deadline so a token can't die mid-sync. */
@@ -144,17 +126,12 @@ export function accessDeniedField(errors: unknown): string | null {
 
 /**
  * The dealer-facing explanation for an ACCESS_DENIED that survives a token
- * re-mint: the scope genuinely isn't on the app. Names the likely scope and —
- * for orders/customers/fulfillment — the extra "Protected customer data"
- * approval Shopify gates that PII behind (the scope alone is NOT enough). PURE.
+ * re-mint: the scope genuinely isn't on the app. Names the denied field so the
+ * dealer knows which permission to enable in the Dev Dashboard. PURE.
  */
 export function accessDeniedMessage(domain: string, field: string): string {
   const f = field || 'este recurso';
-  const isOrders = /order|customer|fulfillment/i.test(field);
-  const fix = isOrders
-    ? 'los scopes de pedidos (read_orders, write_fulfillments) Y solicita acceso a «Protected customer data» — Shopify protege los datos de pedidos/clientes detrás de esa aprobación, no basta el scope'
-    : 'el scope que falta';
-  return `La app de Shopify para ${domain} no tiene permiso para «${f}» (ACCESS_DENIED). En el Dev Dashboard de Shopify, en la configuración de la app, habilita ${fix}. Una vez concedido, el siguiente intento renueva el token y toma el permiso automáticamente.`;
+  return `La app de Shopify para ${domain} no tiene permiso para «${f}» (ACCESS_DENIED). En el Dev Dashboard de Shopify, en la configuración de la app, habilita el scope que falta. Una vez concedido, el siguiente intento renueva el token y toma el permiso automáticamente.`;
 }
 
 /** Stable Shopify handle for an inventory item — the idempotent upsert key.

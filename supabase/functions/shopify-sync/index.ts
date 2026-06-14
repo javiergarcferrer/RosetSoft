@@ -29,8 +29,6 @@ import { connectShopify } from './client.ts';
 import { pullCatalog } from './catalogPull.ts';
 import { mirrorInventory } from './inventoryMirror.ts';
 import { adjustLsgInventory } from './lsgInventory.ts';
-import { listOrders, fulfillOrder } from './ordersHandler.ts';
-import { STORE_ALCOVER } from './stores.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -107,28 +105,6 @@ Deno.serve(async (req: Request) => {
       return json({ configured: true, store: STORE_LSG, ...r }, r.ok ? 200 : 502);
     } catch (e) {
       return json({ configured: true, ok: false, store: STORE_LSG, error: `No se pudo ajustar el inventario LSG: ${(e as Error).message}` }, 502);
-    }
-  }
-
-  // Orders mode — READ + FULFILL against the Alcover store, where the team's
-  // real orders live. Hard-wired to STORE_ALCOVER regardless of the default
-  // routing; dispatches list vs fulfill by `action`.
-  if (body?.ordersMode === true) {
-    const conn = await connectShopify(admin, TEAM, STORE_ALCOVER);
-    if (!conn.configured) return json({ configured: false, store: STORE_ALCOVER, message: 'Shopify no conectado' });
-    try {
-      if (body?.action === 'fulfill') {
-        const r = await fulfillOrder(conn.gql, {
-          fulfillmentOrderId: body.fulfillmentOrderId as string,
-          lineItems: body.lineItems,
-          tracking: body.tracking,
-        });
-        return json({ configured: true, store: STORE_ALCOVER, ...r }, r.ok ? 200 : 502);
-      }
-      const r = await listOrders(conn.gql, { cursor: body.cursor, limit: body.limit, status: body.status });
-      return json({ configured: true, store: STORE_ALCOVER, ...r }, r.ok ? 200 : 502);
-    } catch (e) {
-      return json({ configured: true, ok: false, store: STORE_ALCOVER, error: `No se pudo procesar los pedidos: ${(e as Error).message}` }, 502);
     }
   }
 

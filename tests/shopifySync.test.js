@@ -49,8 +49,8 @@ test('storeForRequest: test mode checks whichever store the caller names', () =>
   assert.equal(storeForRequest({ test: true, store: STORE_LSG }), STORE_LSG);
 });
 
-test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirror also writes', () => {
-  // LSG now PULLS the catalog AND pushes inventory decrements back when an LSG
+test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirror writes inventory only', () => {
+  // LSG PULLS the catalog AND pushes inventory decrements back when an LSG
   // product is sold in ALCOVER, so it needs write_inventory + read_locations on
   // top of the read scopes — this is what makes the connection test flag the
   // one-time Shopify re-auth.
@@ -59,9 +59,13 @@ test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirr
     ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
   );
   const mirror = requiredScopes(STORE_ALCOVER);
-  for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory', 'read_orders', 'write_fulfillments']) {
+  for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {
     assert.ok(mirror.includes(s), `mirror needs ${s}`);
   }
+  // The orders control center is gone — the mirror must NOT demand order scopes
+  // (which gate behind protected-customer-data approval and tripped the test).
+  assert.ok(!mirror.includes('read_orders'), 'mirror must not need read_orders');
+  assert.ok(!mirror.includes('write_fulfillments'), 'mirror must not need write_fulfillments');
 });
 
 test('isTokenCacheValid: usable only beyond the refresh skew', () => {
@@ -138,18 +142,14 @@ test('accessDeniedField: detects ACCESS_DENIED on an HTTP-200 body (the orders t
   );
 });
 
-test('accessDeniedMessage: names the scope + the protected-customer-data approval for orders', () => {
-  const m = accessDeniedMessage('alcoversdq.myshopify.com', 'orders');
-  assert.ok(m.includes('alcoversdq.myshopify.com'));
-  assert.ok(m.includes('«orders»'));
-  assert.ok(m.includes('read_orders'));
-  // Orders/customers PII is gated behind protected-customer-data approval, not
-  // just the scope — the message must say so or the dealer re-checks scopes in
-  // circles.
-  assert.ok(/Protected customer data/i.test(m));
-  // A non-PII field (e.g. products) gets the generic scope hint, no PCD noise.
-  const p = accessDeniedMessage('alcoversrl.myshopify.com', 'products');
-  assert.ok(!/Protected customer data/i.test(p));
+test('accessDeniedMessage: names the domain + denied field and points to the Dev Dashboard', () => {
+  const m = accessDeniedMessage('alcoversrl.myshopify.com', 'inventoryLevel');
+  assert.ok(m.includes('alcoversrl.myshopify.com'));
+  assert.ok(m.includes('«inventoryLevel»'));
+  assert.ok(/Dev Dashboard/i.test(m));
+  assert.ok(/ACCESS_DENIED/.test(m));
+  // Empty field still yields a sensible, non-broken sentence.
+  assert.ok(accessDeniedMessage('x.myshopify.com', '').includes('este recurso'));
 });
 
 test('pieceHandle: Deno and Vite copies cannot drift (cross-wall parity)', () => {
