@@ -3,10 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import {
-  Plus, FileText, Trash2, Truck, Send, CheckCircle2, Wallet, Archive, Check, Minus,
+  Plus, FileText, Trash2, Truck, Archive, Check, Minus,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
-import StatCard from '../components/StatCard.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
@@ -22,11 +21,6 @@ import { quoteStagePill } from '../lib/statusPill.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { currentQuoteStage } from '../lib/quoteStages.js';
 import { isTradeDiscount } from '../lib/commissions.js';
-
-// Aggregate (cross-quote) sums are USD-base — no single per-quote rate applies,
-// so the summary cards render them as plain USD, the same convention the
-// dashboard KPI strip uses.
-const usd = (v) => formatMoney(v, 'USD', { USD: 1 });
 
 /**
  * Small amber flag for quotes settled as a decorator trade discount —
@@ -287,7 +281,7 @@ export default function Quotes() {
   // inputs the old per-derivation useMemos depended on so render behavior is
   // unchanged.
   const {
-    scopedCount, summary, tabs, creatorFilter, rows: filtered, orderGroups,
+    scopedCount, tabs, creatorFilter, rows: filtered, orderGroups,
     trackingByQuoteId, totalByQuoteId, clientByQuoteId, profileById,
     ordersById, trackableByOrderId,
   } = useMemo(
@@ -398,38 +392,6 @@ export default function Quotes() {
           </div>
         }
       />
-
-      {/* Summary strip (Shopify-orders-style). A stable overview of the current
-          Mías/Equipo scope — every figure derived in the VM and agreeing to the
-          cent with the per-row Total column. Independent of the search/tab below
-          so the headline numbers don't jump as you drill in. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <StatCard
-          label="Cotizaciones"
-          value={summary.count}
-          icon={FileText}
-          hint={effectiveScope === SCOPE_TEAM ? 'del equipo' : 'tuyas'}
-        />
-        <StatCard
-          label="Pipeline"
-          value={usd(summary.openValue)}
-          icon={Send}
-          hint={`${summary.openCount} en juego`}
-        />
-        <StatCard
-          label="Ganadas"
-          value={usd(summary.wonValue)}
-          icon={CheckCircle2}
-          tone="emerald"
-          hint={`${summary.wonCount} aceptada${summary.wonCount === 1 ? '' : 's'}`}
-        />
-        <StatCard
-          label="Valor total"
-          value={usd(summary.totalValue)}
-          icon={Wallet}
-          hint="cartera completa"
-        />
-      </div>
 
       <ListSearchHeader
         searchValue={q}
