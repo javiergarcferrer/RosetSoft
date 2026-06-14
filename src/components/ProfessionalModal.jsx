@@ -42,6 +42,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       __id: professional?.id || 'new',
       name: professional?.name || '',
       rnc: professional?.rnc || '',
+      rncStatus: professional?.rncStatus || '',
       company: professional?.company || '',
       email: professional?.email || '',
       phone: professional?.phone || '',
@@ -78,6 +79,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       // Carried through (set from the Profesionales panel's RNC auto-fill) so a
       // modal edit never drops it — the upsert sends the whole record.
       rnc: data.rnc || '',
+      rncStatus: data.rncStatus || '',
       company: data.company.trim(),
       email: data.email.trim(),
       phone,

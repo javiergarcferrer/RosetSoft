@@ -674,8 +674,15 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
       <section className="px-4 py-3 space-y-2.5">
         <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del cliente</h4>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <RncPanelField value={c.rnc} onCommitRnc={(v) => onCommit('rnc', v)} onResolveCompany={(v) => onCommit('company', v)} />
-          <PanelField label="Empresa" value={c.company} onCommit={(v) => onCommit('company', v)} className="col-span-1 sm:col-span-2" />
+          <RncPanelField
+            value={c.rnc}
+            companyName={c.company}
+            verified={c.rncStatus}
+            onCommitRnc={(v) => onCommit('rnc', v)}
+            onResolveCompany={(v) => onCommit('company', v)}
+            onSetStatus={(v) => onCommit('rncStatus', v)}
+          />
+          <PanelField label="Empresa" value={c.company} onCommit={(v) => onCommit('company', v)} className="col-span-1 sm:col-span-2" locked={!!c.rncStatus} />
           <PanelField label="Dirección" value={c.address} onCommit={(v) => onCommit('address', v)} className="col-span-2 sm:col-span-3" />
           <PanelField label="Ciudad" value={c.city} onCommit={(v) => onCommit('city', v)} />
           <PanelField label="Provincia" value={c.state} onCommit={(v) => onCommit('state', v)} />

@@ -53,6 +53,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
       __id: customer?.id || 'new',
       name: customer?.name || '',
       rnc: customer?.rnc || '',
+      rncStatus: customer?.rncStatus || '',
       company: customer?.company || '',
       contactName: customer?.contactName || '',
       email: customer?.email || '',
@@ -77,9 +78,10 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
     try {
       const r = await lookupRnc(data.rnc);
       if (r.found) {
-        setData((d) => ({ ...d, name: r.name || d.name, company: r.commercialName || d.company }));
+        setData((d) => ({ ...d, name: r.name || d.name, company: r.commercialName || r.name || d.company, rncStatus: r.status || 'Verificado' }));
         setLookupMsg(`✓ ${r.name}${r.status ? ` · ${r.status}` : ''}`);
       } else {
+        setData((d) => ({ ...d, rncStatus: '' }));
         setLookupMsg(r.message || 'No encontrado.');
       }
     } catch (e) {
@@ -107,6 +109,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
         profileId,
         name: data.name.trim(),
         rnc: cleanRnc(data.rnc),
+        rncStatus: data.rncStatus || '',
         company: data.company.trim(),
         contactName: data.contactName.trim(),
         email: data.email.trim(),
@@ -160,7 +163,7 @@ export default function CustomerModal({ customer, onClose, onAfterDelete, onSave
             <input
               className="input flex-1 min-w-0"
               value={data.rnc}
-              onChange={(e) => set('rnc', e.target.value)}
+              onChange={(e) => { set('rnc', e.target.value); if (data.rncStatus) set('rncStatus', ''); }}
               inputMode="numeric"
               autoComplete="off"
               placeholder="RNC (9 dígitos) o cédula (11)"

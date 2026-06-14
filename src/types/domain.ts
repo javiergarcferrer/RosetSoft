@@ -883,6 +883,9 @@ export interface Customer {
   name: string;
   /** Fiscal id (RNC / cédula) for the 607. Optional — consumidor final has none. */
   rnc?: string;
+  /** DGII estado (e.g. "ACTIVO") cached on a successful RNC lookup — drives the
+   *  permanent verification badge + locks the Empresa field. Empty ⇒ unverified. */
+  rncStatus?: string;
   /** Nombre comercial (the razón social goes in `name`). */
   company?: string;
   /** Person dealt with at the company — distinct from the razón social. */
@@ -906,6 +909,8 @@ export interface Professional {
   name: string;
   /** Fiscal id (RNC / cédula) — drives the DGII company-name auto-fill. */
   rnc?: string;
+  /** DGII estado cached on a successful lookup — permanent badge + Empresa lock. */
+  rncStatus?: string;
   company?: string;
   email?: string;
   phone?: string;

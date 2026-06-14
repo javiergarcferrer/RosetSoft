@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X, Loader2 } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X, Loader2, Lock } from 'lucide-react';
 import { lookupRnc, cleanRnc, isValidRncOrCedula } from '../../lib/rncLookup.js';
 
 // Shared primitives for the inline-editable "sheet" list pages
@@ -131,11 +131,35 @@ export function ContactCell({ icon: Icon, value, ...cellProps }) {
  * secondary fields — RNC, dirección, provincia…). Same draft/commit
  * semantics as a Cell, form-field chrome because the panel reads as the
  * full record, not a sheet row.
+ *
+ * `locked` makes it read-only with a lock glyph + muted chrome — used by the
+ * Empresa field once a DGII RNC lookup has verified the name, so the
+ * authoritative razón social can't be edited away (data integrity).
  */
-export function PanelField({ label, value, onCommit, type = 'text', inputMode, placeholder, className = '' }) {
+export function PanelField({ label, value, onCommit, type = 'text', inputMode, placeholder, className = '', locked = false }) {
   const [draft, setDraft] = useState(value ?? '');
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
+  if (locked) {
+    return (
+      <div className={className}>
+        <span className="eyebrow-xs text-ink-400">{label}</span>
+        <div className="relative mt-1">
+          <input
+            type={type}
+            readOnly
+            tabIndex={-1}
+            className="w-full rounded-lg border border-ink-100 bg-ink-50 px-2.5 py-1.5 pr-8 text-sm text-ink-500 cursor-default focus:outline-none"
+            value={value ?? ''}
+            placeholder={placeholder || '—'}
+            aria-label={`${label} (verificado, no editable)`}
+            title="Nombre verificado en DGII — no editable"
+          />
+          <Lock size={12} aria-hidden className="text-ink-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={className}>
       <span className="eyebrow-xs text-ink-400">{label}</span>
@@ -168,30 +192,40 @@ export function PanelField({ label, value, onCommit, type = 'text', inputMode, p
 }
 
 /**
- * RNC / cédula field with DGII auto-fill, for the expanded-panel grid. Same
- * draft/commit chrome as PanelField, plus: as soon as a COMPLETE rnc/cédula is
- * typed (or pasted), it auto-looks-up the taxpayer in the DGII registry —
- * ~500ms after the digits settle, no button and no need to blur — and writes
- * the resolved name into the Empresa field via `onResolveCompany` (razón
- * social, falling back to nombre comercial). A spinner shows while it queries;
- * a tiny status line echoes the match (or "no encontrado"). Shared by the
- * Clientes and Profesionales panels so both auto-fill identically.
+ * RNC / cédula field with DGII auto-fill + a PERMANENT verification badge, for
+ * the expanded-panel grid. As soon as a COMPLETE rnc/cédula is typed or pasted
+ * it auto-looks-up the taxpayer (~500ms after the digits settle — no button, no
+ * need to blur), writes the razón social into the Empresa field via
+ * `onResolveCompany`, and caches the DGII estado via `onSetStatus`.
+ *
+ * The green "✓ RAZÓN SOCIAL · ACTIVO" line is derived from PERSISTED data
+ * (`verified` + `companyName`), so it survives repaints / panel reopen — a
+ * standing trust signal, not ephemeral UI state. A successful verification also
+ * locks the Empresa field (the parent gates that on `verified`). Editing the
+ * RNC to a new/blank value clears the estado (unlock + re-verify).
  *
  *   value             — the stored RNC/cédula.
+ *   companyName       — the stored Empresa value (shown in the badge).
+ *   verified          — the stored DGII estado; truthy ⇒ show the badge.
  *   onCommitRnc(v)    — persists the id; may return false to reject (revert).
  *   onResolveCompany(name) — persists the looked-up company name.
+ *   onSetStatus(s)    — persists (or clears) the DGII estado.
  */
-export function RncPanelField({ value, onCommitRnc, onResolveCompany, className = '' }) {
+export function RncPanelField({ value, companyName, verified, onCommitRnc, onResolveCompany, onSetStatus, className = '' }) {
   const [draft, setDraft] = useState(value ?? '');
   const focused = useRef(false);
   const [looking, setLooking] = useState(false);
-  const [status, setStatus] = useState('');
+  // Transient feedback (not-found / error / the success line before the live
+  // query repaints the persisted badge in). The PERMANENT green comes from props.
+  const [msg, setMsg] = useState('');
   // The id we've already resolved from — dedupes the debounce-vs-blur double
   // fire and stops a re-render from re-querying the same number.
   const resolved = useRef('');
   useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
 
-  // Persist the id (when it changed) then DGII-fill Empresa from the registry.
+  const isVerified = (clean) => !!verified && clean === String(value ?? '');
+
+  // Persist the id (when changed) then DGII-fill Empresa + cache the estado.
   // Guarded so the auto-fire and the blur never query the same id twice.
   async function resolve(clean) {
     if (!isValidRncOrCedula(clean) || resolved.current === clean) return;
@@ -204,45 +238,53 @@ export function RncPanelField({ value, onCommitRnc, onResolveCompany, className 
     try {
       const r = await lookupRnc(clean);
       if (r.found) {
-        const name = r.commercialName || r.name || '';
+        // Razón social first — the authoritative fiscal name we lock + badge.
+        const name = r.name || r.commercialName || '';
         if (name) await onResolveCompany(name);
-        setStatus(`✓ ${r.name}${r.status ? ` · ${r.status}` : ''}`);
+        await onSetStatus(r.status || 'Verificado');
+        setMsg(`✓ ${name}${r.status ? ` · ${r.status}` : ''}`);
       } else {
-        setStatus(r.message || 'No encontrado.');
+        await onSetStatus('');          // drop any stale verification
+        setMsg(r.message || 'No encontrado.');
       }
     } catch {
-      resolved.current = '';   // transient failure — let a retry through
-      setStatus('No se pudo consultar el RNC.');
+      resolved.current = '';            // transient failure — let a retry through
+      setMsg('No se pudo consultar el RNC.');
     } finally {
       setLooking(false);
     }
   }
 
   // Auto-fill: ~500ms after the digits settle on a COMPLETE, NEW rnc/cédula,
-  // look it up automatically (only while the user is editing — never on an
-  // external value change). This is what "automatically fills" means: no
-  // button, no need to blur.
+  // look it up automatically (only while editing; skip an already-verified id).
   useEffect(() => {
     const clean = cleanRnc(draft);
-    if (!focused.current || !isValidRncOrCedula(clean) || clean === resolved.current) return;
+    if (!focused.current || !isValidRncOrCedula(clean) || clean === resolved.current || isVerified(clean)) return;
     const t = setTimeout(() => resolve(clean), 500);
     return () => clearTimeout(t);
     // resolve closes over the latest props each render; gate is `draft`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
 
-  // Blur: resolve a valid id immediately (no debounce wait); otherwise just
-  // persist whatever partial was typed, same as any panel field.
+  // Blur: resolve a valid id immediately; otherwise persist the partial and drop
+  // any stale verification so the Empresa field unlocks.
   async function commit() {
     focused.current = false;
     const clean = cleanRnc(draft);
     if (clean !== draft) setDraft(clean);
+    const changed = clean !== String(value ?? '');
+    if (!changed && isVerified(clean)) return;          // already verified — leave it
     if (isValidRncOrCedula(clean)) { resolve(clean); return; }
-    if (clean !== String(value ?? '')) {
+    if (changed) {
       const ok = await onCommitRnc(clean);
-      if (ok === false) setDraft(value ?? '');
+      if (ok === false) { setDraft(value ?? ''); return; }
+      if (verified) await onSetStatus('');
     }
   }
+
+  // Permanent badge from persisted data; transient msg only when not verified.
+  const badge = verified ? `✓ ${companyName || ''}${verified ? ` · ${verified}` : ''}` : msg;
+  const good = badge.startsWith('✓');
 
   return (
     <div className={className}>
@@ -256,13 +298,13 @@ export function RncPanelField({ value, onCommitRnc, onResolveCompany, className 
           aria-label="RNC"
           enterKeyHint="search"
           onFocus={(e) => { focused.current = true; e.target.select(); }}
-          onChange={(e) => { setDraft(e.target.value); if (status) setStatus(''); }}
+          onChange={(e) => { setDraft(e.target.value); if (msg) setMsg(''); }}
           onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
             if (e.key === 'Escape') {
               const el = e.currentTarget;
-              setDraft(value ?? ''); setStatus('');
+              setDraft(value ?? ''); setMsg('');
               requestAnimationFrame(() => el.blur());
             }
           }}
@@ -271,9 +313,9 @@ export function RncPanelField({ value, onCommitRnc, onResolveCompany, className 
           <Loader2 size={14} aria-hidden className="animate-spin text-ink-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
         )}
       </div>
-      {status && (
-        <p className={`mt-1 text-[11px] leading-tight ${status.startsWith('✓') ? 'text-emerald-600' : 'text-ink-400'}`}>
-          {status}
+      {badge && (
+        <p className={`mt-1 text-[11px] leading-tight ${good ? 'text-emerald-600 font-medium' : 'text-ink-400'}`}>
+          {badge}
         </p>
       )}
     </div>
