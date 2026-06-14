@@ -336,26 +336,7 @@ export function resolveProfessionalsList({
     { key: 'incomplete', label: 'Datos incompletos', count: incompleteN },
   ];
 
-  // Empresa options: the distinct companies actually on file (deduped
-  // case-insensitively, first-seen casing as the label) — the dropdown never
-  // lists a company nobody belongs to.
-  const companySeen = new Map();
-  for (const p of pros) {
-    const raw = String(p.company || '').trim();
-    if (!raw) continue;
-    const key = raw.toLowerCase();
-    if (!companySeen.has(key)) companySeen.set(key, raw);
-  }
   const filterDefs = [
-    {
-      key: 'company',
-      label: 'Empresa',
-      type: 'select',
-      placeholder: 'Todas',
-      options: [...companySeen.entries()]
-        .map(([value, label]) => ({ value, label }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    },
     {
       key: 'contact',
       label: 'Datos de contacto',
@@ -369,7 +350,6 @@ export function resolveProfessionalsList({
       ],
     },
     { key: 'activity', label: 'Última cotización', type: 'date-range' },
-    { key: 'created', label: 'Fecha de alta', type: 'date-range' },
   ];
 
   // Date-range filters arrive as {from,to} 'YYYY-MM-DD' strings; widen the
@@ -379,7 +359,6 @@ export function resolveProfessionalsList({
     to: r?.to ? Date.parse(`${r.to}T23:59:59.999`) : null,
   });
   const activity = parseRange(filters.activity);
-  const created = parseRange(filters.created);
 
   const needle = String(q || '').trim().toLowerCase();
   // Digit-only view of the needle so a phone search hits regardless of how
@@ -393,7 +372,6 @@ export function resolveProfessionalsList({
     if (tab === 'idle' && r.count > 0) return false;
     if (tab === 'incomplete' && !r.incomplete) return false;
 
-    if (filters.company && String(p.company || '').trim().toLowerCase() !== filters.company) return false;
     if (filters.contact === 'sin-correo' && !r.missingEmail) return false;
     if (filters.contact === 'sin-telefono' && !r.missingPhone) return false;
     if (filters.contact === 'incompleto' && !r.incomplete) return false;
@@ -406,8 +384,6 @@ export function resolveProfessionalsList({
       if (activity.from != null && r.lastActivityAt < activity.from) return false;
       if (activity.to != null && r.lastActivityAt > activity.to) return false;
     }
-    if (created.from != null && (p.createdAt || 0) < created.from) return false;
-    if (created.to != null && (p.createdAt || 0) > created.to) return false;
 
     if (!needle) return true;
     const corpus = [
