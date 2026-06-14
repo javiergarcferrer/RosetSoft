@@ -285,20 +285,30 @@ export default function InstagramStudio() {
       setEvents(rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 15));
     } catch { /* table may not exist pre-deploy */ }
   }, []);
-  useEffect(() => { if (linked) loadEvents(); }, [linked, loadEvents]);
+  // meta-webhook writes ig_events server-side, so the feed only updates if we
+  // re-read the table — poll while visible + on focus (no manual reload).
+  useEffect(() => {
+    if (!linked) return undefined;
+    loadEvents();
+    const onVisible = () => { if (document.visibilityState === 'visible') loadEvents(); };
+    window.addEventListener('focus', onVisible);
+    const id = setInterval(() => { if (document.visibilityState === 'visible') loadEvents(); }, 15000);
+    return () => { window.removeEventListener('focus', onVisible); clearInterval(id); };
+  }, [linked, loadEvents]);
   const activateRealtime = useCallback(async () => {
     setRtBusy(true);
     setRtNote(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', { body: { subscribeWebhooks: true } });
       if (error || !data?.ok) throw new Error(data?.error || error?.message || 'No se pudo activar');
-      setRtNote({ ok: true, text: 'Tiempo real activado — comentarios y menciones llegarán al instante.' });
+      setRtNote({ ok: true, text: 'Tiempo real activado — los comentarios y menciones aparecerán en segundos.' });
+      loadEvents();
     } catch (e) {
       setRtNote({ ok: false, text: e?.message || 'No se pudo activar' });
     } finally {
       setRtBusy(false);
     }
-  }, []);
+  }, [loadEvents]);
 
   // ── hashtag listening ────────────────────────────────────────────────
   const [hq, setHq] = useState('');
@@ -614,7 +624,7 @@ export default function InstagramStudio() {
               {rtNote && <div className={`mb-2 text-sm ${rtNote.ok ? 'text-emerald-700' : 'text-red-600'}`}>{rtNote.text}</div>}
               {events.length === 0 ? (
                 <p className="text-sm text-ink-400">
-                  Activa el tiempo real para recibir comentarios y menciones al instante (sin recargar).
+                  Activa el tiempo real para recibir comentarios y menciones en segundos (sin recargar).
                 </p>
               ) : (
                 <div className="divide-y divide-ink-100 -mx-5">

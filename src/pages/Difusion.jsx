@@ -370,7 +370,16 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
             </p>
           ))}
           <p className="text-xs text-ink-400">La entrega y lectura se actualizan en la lista de campañas a medida que llegan los recibos.</p>
-          <button type="button" onClick={onClose} className="btn-primary text-sm">Listo</button>
+          <div className="flex items-center justify-center gap-2">
+            {result.failed > 0 && (
+              // Return to the composer with template/recipients/variables still
+              // selected so a failed batch can be resent without rebuilding it.
+              <button type="button" onClick={() => { setResult(null); setProgress(null); setError(null); }} className="btn-ghost text-sm">
+                Volver y reintentar
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="btn-primary text-sm">Listo</button>
+          </div>
         </div>
       ) : !template ? (
         <div className="space-y-2">

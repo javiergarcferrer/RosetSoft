@@ -286,6 +286,10 @@ export default function Marketing() {
 
   const publish = useCallback(async () => {
     if (!canPublish || pubBusy) return;
+    // A still-processing IG video holds a creationId that only "Finalizar" can
+    // resolve. Starting another publish used to clear it (orphaning the upload
+    // with no way to finish it), so refuse until the user finishes or discards.
+    if (pendingIg) { setPubNote({ ok: false, text: 'Hay un video de Instagram pendiente — finalízalo o descártalo antes de publicar otro.' }); return; }
     const pubBody = buildBody();
 
     // Scheduled? Queue it for the worker instead of publishing now.
@@ -315,7 +319,6 @@ export default function Marketing() {
 
     setPubBusy(true);
     setPubNote(null);
-    setPendingIg(null);
     try {
       const { data, error } = await supabase.functions.invoke('meta-social', { body: { publish: pubBody } });
       if (error) throw new Error(error.message || 'sin respuesta');
@@ -334,7 +337,12 @@ export default function Marketing() {
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubMedia, pubMode, altText, collaborators, firstComment, tags, pubAt, canPublish, pubBusy, load, loadAgenda]);
+  }, [pubText, pubMedia, pubMode, altText, collaborators, firstComment, tags, pubAt, canPublish, pubBusy, pendingIg, load, loadAgenda]);
+
+  const discardPending = useCallback(() => {
+    setPendingIg(null);
+    setPubNote(null);
+  }, []);
 
   const cancelScheduled = useCallback(async (id) => {
     try { await db.scheduledPosts.delete(id); loadAgenda(); } catch { /* ignore */ }
@@ -585,6 +593,9 @@ export default function Marketing() {
                       <span>El video de Instagram sigue procesando.</span>
                       <button type="button" className="btn-brand py-1 min-h-[44px]" onClick={finishPending} disabled={finishBusy}>
                         {finishBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />} Finalizar
+                      </button>
+                      <button type="button" className="btn-ghost py-1 min-h-[44px]" onClick={discardPending} disabled={finishBusy}>
+                        Descartar
                       </button>
                     </div>
                   )}

@@ -37,9 +37,23 @@ export default function Nomina() {
     [empQ.data]);
   const totals = useMemo(() => payrollTotals(items), [items]);
 
+  // A payroll run can't be voided/undone, so a posted period is final — guard
+  // against posting the same month twice (a second click, or a return visit
+  // since the form defaults to the current month) which would double-count
+  // salaries/TSS/ISR in the ledger, IT-1 and dashboards.
+  const period = useMemo(() => {
+    const d = new Date(date);
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }, [date]);
+  const existingRun = useMemo(
+    () => runsQ.data.find((r) => r.periodYear === period.year && r.periodMonth === period.month),
+    [runsQ.data, period],
+  );
+
   async function post() {
     setErr('');
     if (items.length === 0) { setErr('No hay empleados activos con salario.'); return; }
+    if (existingRun) { setErr(`La nómina de ${MONTHS_ES[period.month - 1]} ${period.year} ya fue registrada (#${existingRun.number}).`); return; }
     setPosting(true);
     try {
       const id = newId();
@@ -76,11 +90,17 @@ export default function Nomina() {
                 <div className="label">Fecha de pago</div>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto" />
               </div>
-              <button type="button" onClick={post} disabled={posting || items.length === 0}
+              <button type="button" onClick={post} disabled={posting || items.length === 0 || !!existingRun}
                 className="btn-primary ml-auto">
-                {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar nómina
+                {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                {existingRun ? ' Nómina registrada' : ' Registrar nómina'}
               </button>
             </div>
+            {existingRun && !err && (
+              <p className="text-sm text-ink-500 mb-2">
+                La nómina de {MONTHS_ES[period.month - 1]} {period.year} ya fue registrada (#{existingRun.number}).
+              </p>
+            )}
             {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
             {items.length === 0 ? (
               <EmptyState icon={Wallet} title="Sin empleados activos" description="Agrega empleados con salario en la página de Empleados." />

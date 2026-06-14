@@ -315,6 +315,10 @@ export default function Chats() {
                   to: selected.phone, text, replyTo,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
+                // On failure no server row will ever arrive to reconcile the
+                // optimistic copy, so it would hang forever as "Enviando" —
+                // drop it here and let ChatThread surface the error banner.
+                if (!res?.ok) setPending((rows) => rows.filter((p) => p.id !== draft.id));
                 invalidate();
                 return res;
               }}

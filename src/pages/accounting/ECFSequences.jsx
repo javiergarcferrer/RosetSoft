@@ -28,14 +28,16 @@ export default function ECFSequences() {
   const [editing, setEditing] = useState(null); // null | 'new' | id
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
 
   const rows = useMemo(
     () => seqQ.data.slice().sort((a, b) => (a.ecfType || '').localeCompare(b.ecfType || '') || Number(a.seqFrom) - Number(b.seqFrom)),
     [seqQ.data],
   );
 
-  function openNew() { setForm(blank()); setEditing('new'); }
+  function openNew() { setErr(''); setForm(blank()); setEditing('new'); }
   function openEdit(s) {
+    setErr('');
     setForm({
       ecfType: s.ecfType, seqFrom: String(s.seqFrom), seqTo: String(s.seqTo),
       nextSeq: String(s.nextSeq), expires: s.expiresAt ? isoDate(s.expiresAt) : '', active: !!s.active,
@@ -44,9 +46,13 @@ export default function ECFSequences() {
   }
 
   async function save() {
+    setErr('');
     const from = Math.trunc(Number(form.seqFrom) || 0);
     const to = Math.trunc(Number(form.seqTo) || 0);
-    if (to < from || to <= 0) return;
+    if (from <= 0 || to <= 0 || to < from) {
+      setErr('Ingresa un rango válido: "Desde" y "Hasta" deben ser mayores a 0 y "Hasta" no puede ser menor que "Desde".');
+      return;
+    }
     setSaving(true);
     try {
       const next = form.nextSeq ? Math.trunc(Number(form.nextSeq)) : from;
@@ -77,7 +83,7 @@ export default function ECFSequences() {
         <div className="card p-4 mb-4 border-ink-300">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-display font-semibold">{editing === 'new' ? 'Nueva secuencia' : 'Editar secuencia'}</h3>
-            <button type="button" onClick={() => setEditing(null)} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
+            <button type="button" onClick={() => { setErr(''); setEditing(null); }} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-sm">Tipo e-CF<br />
@@ -96,6 +102,7 @@ export default function ECFSequences() {
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
             </button>
           </div>
+          {err && <p className="text-sm text-rose-600 mt-3">{err}</p>}
         </div>
       )}
 

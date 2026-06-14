@@ -180,12 +180,17 @@ export default function OrderDetail() {
     await db.orders.update(orderId, patch);
   }
 
-  async function undo(current) {
+  async function undo() {
+    // Stepper passes the PREVIOUS stage to onUndo, but the timestamp we must
+    // clear is the CURRENT stage's (the one we're leaving) — derive both from
+    // `stage` so the arg can't push us into nulling the wrong field. Mirrors
+    // QuoteStatusStepper.undo, which nulls the current stageDef.timestampField.
     const currentIdx = orderStageIndex(stage);
+    const cur = ORDER_STAGES[currentIdx] || null;
     const prev = currentIdx > 0 ? ORDER_STAGES[currentIdx - 1] : null;
     if (!prev) return;
     const patch = { status: prev.key, updatedAt: Date.now() };
-    if (current.timestampField) patch[current.timestampField] = null;
+    if (cur?.timestampField) patch[cur.timestampField] = null;
     await db.orders.update(orderId, patch);
   }
 
