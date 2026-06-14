@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 React/Vite back-office for a Ligne Roset dealer (Dominican Republic): quoting,
 orders + container tracking, full accounting (ledger, DGII 606/607, e-CF,
-payroll, imports), WhatsApp CRM (inbox + campaigns), a public storefront, and
-the JARVIS ops dashboard. Prices in USD, displayed in DOP via a live exchange
-rate. Single-tenant Supabase backend.
+payroll, imports), WhatsApp CRM (inbox + campaigns), Instagram/Meta marketing
+(Studio + post scheduling + social pulse), a public storefront, and the JARVIS
+ops dashboard. Prices in USD, displayed in DOP via a live exchange rate.
+Single-tenant Supabase backend.
 This file is the fast-start; trust it, don't re-derive what's here. Reply in the
 user's language; keep code/comments/commits in English.
 
@@ -66,10 +67,11 @@ CLI, dashboard, secret, endpoint, or schema reload. Need one? You misdiagnosed.
 ### Pinned invariants (the tests ARE the durable memory)
 State worth keeping across sessions lives in a test or in this file — never in
 conversation. Two kinds:
-- **Money/parsing/data-integrity tests**: ~40 files in `tests/` — nearly every
+- **Money/parsing/data-integrity tests**: ~55 files in `tests/` — nearly every
   `lib`/`core` module has a same-named test (pricing, commissions, ledger,
-  payroll, ecf, imports, inventory, whatsapp, store, jarvisPulse, …); match the
-  module by name and run just that one. Special pins worth knowing:
+  payroll, ecf, imports, inventory, whatsapp, store, jarvisPulse, igStudio,
+  scheduler, socialPulse, …); match the module by name and run just that one.
+  Special pins worth knowing:
   `lsgCatalogBook` pins the client catalog PDF's in-stock gate (only
   stockQty > 0 prints; all-null stock flags `hasStockData` instead of
   rendering an empty book).
@@ -99,6 +101,11 @@ conversation. Two kinds:
     (`shopify_config`, `whatsapp_config`, `ecf_credentials`) fails — a deploy
     must never erase what the dealer pasted into Configuración. Evolve those
     schemas additively; need to migrate credential DATA? Don't — add a column.
+  - `tests/migrationOrder.test.js` walks git history and FAILS if any migration
+    is back-dated — a file added later must carry a filename timestamp ≥ every
+    migration added before it (an out-of-order name jams `db push` and aborts
+    the whole pending chain). A red means RENAME your new file later than the
+    current max; never relax it or join the single grandfathered entry.
 
 ## Architecture = MVVM (Model → ViewModel → View; the View derives NOTHING)
 - **Model** — pure logic+data, no React/Supabase/pdf-lib. `src/lib/*` (pricing,
@@ -107,7 +114,8 @@ conversation. Two kinds:
   from the barrel, never the file: `core/quote`, `core/tracking`, `core/crm`
   (WhatsApp inbox/campaigns), `core/store` (public storefront), `core/catalog`
   (brand catalog books), `core/search` (⌘K palette), `core/jarvis` (ops
-  dashboard), `core/accounting`.
+  dashboard + Instagram Studio, post scheduler, social pulse),
+  `core/accounting`.
 - **Two cores, one bridge** — the CRM core (`core/{quote,tracking,store,crm}`)
   and the Accounting core (`core/accounting` + `lib/accounting`) NEVER import
   each other; every cross-core translation lives in `core/bridge`
@@ -139,8 +147,9 @@ conversation. Two kinds:
   editor/lists/detail/registration in `core/quote/views/*`; the Contabilidad
   pages via `core/accounting` (sales/commissions, ledger, expenses+606,
   imports, inventory, payments, payroll, reconciliation, analytics, lrSales);
-  WhatsApp via `core/crm`; storefront via `core/store`; JARVIS via
-  `core/jarvis`. Grep the barrel's exports to find a page's resolver.
+  WhatsApp via `core/crm` (inbox/threads, broadcast campaigns, AI draft turns);
+  storefront via `core/store`; JARVIS + Instagram Studio + scheduler + social
+  pulse via `core/jarvis`. Grep the barrel's exports to find a page's resolver.
 
 ## Data layer
 Supabase Postgres + Storage, one shared `'team'` profile (`TEAM_PROFILE_ID`) + RLS.
@@ -154,7 +163,11 @@ facts: `supabase/CLAUDE.md` — read it before DB work.**
 Server side = Deno Edge Functions (`supabase/functions/*`): public surfaces
 `quote-share` (client quote link + picks) and `store` (storefront data);
 integrations `shopify-sync` (inventory mirror + LSG catalog import),
-`wa-send`/`wa-webhook` (WhatsApp), `meta-social`, `ecf-send` (DGII e-CF),
+`wa-send`/`wa-webhook` (WhatsApp send + inbound), `wa-draft` (Claude reply
+suggestions — never sends, human-in-the-loop), `meta-social` (Instagram +
+Facebook + Ads into JARVIS), `meta-webhook` (IG comments/mentions → `ig_events`,
+live feed), `ig-publish-worker` (IG scheduler worker — pg_cron fires due
+`scheduled_posts`, since IG has no native scheduling), `ecf-send` (DGII e-CF),
 `bpd-rate` (USD→DOP rate), `hl-track` (container tracking), `lr-catalog`,
 `rnc-lookup`, `swatch-proxy`, `claude-chat` (JARVIS chat), `invite-user`,
 `delete-user`. See the Deno↔Vite wall in Traps before touching them.
@@ -197,6 +210,10 @@ ranges via `priceMin`/`priceMax`. USD→DOP rate locks at ACCEPT, single source
   blocks you? say so before touching.)
 - **Parallelize**: batch independent tool calls in one turn; fan out agents for big
   sweeps (see Traps).
+- **Never auto-send AI-drafted customer messages**: AI features over the inbox
+  (`wa-draft` reply suggestions, ES⇄EN translate, thread summary) are
+  human-in-the-loop by design — they SUGGEST, the dealer reviews/edits/sends.
+  Don't wire an AI draft straight to `wa-send`; keep the human in the loop.
 
 ## Theming (light/dark — variable-driven, light is FROZEN)
 One toggle re-skins the whole app; the mechanism is CSS variables, not a
