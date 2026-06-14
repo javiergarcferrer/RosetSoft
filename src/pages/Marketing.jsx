@@ -480,8 +480,8 @@ export default function Marketing() {
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2 items-start">
-            <div className="space-y-4">
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 items-start">
+            <div className="space-y-4 min-w-0">
               {/* composer — Instagram only */}
               <div className="card">
                 <div className="card-header">
@@ -681,7 +681,7 @@ export default function Marketing() {
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               {/* comment triage — Instagram */}
               <CommentsCard
                 title="Comentarios"
