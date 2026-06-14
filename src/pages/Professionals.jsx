@@ -245,7 +245,7 @@ export default function Professionals() {
 
           {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops the
               quotes panel. Same commit semantics as the desktop grid. */}
-          <div className="md:hidden space-y-2">
+          <div className="md:hidden space-y-2.5">
             {noMatches && <NoMatchesCard />}
             {rows.map((p) => (
               <MobileRow
@@ -451,35 +451,110 @@ function NewSheetRow({ row, onCreate }) {
   );
 }
 
-/** Mobile: a card whose fields are the same in-place cells, stacked. */
+// Curated monogram palette — the app's tint tiles, each with a dark-mode
+// variant (index.css), so a colour-coded avatar stays theme-correct. A
+// professional's tint is derived from their name (below), giving the
+// directory a second, pre-attentive scanning dimension beyond the text.
+const MONO_TINTS = ['tint-brand', 'tint-sky', 'tint-emerald', 'tint-rose', 'tint-ink'];
+
+/**
+ * Editorial monogram plate — the identity anchor of the mobile card. Initials
+ * in the Söhne display cut on a soft tinted squircle; the tint is a stable
+ * hash of the name so the same person always reads the same colour. An amber
+ * corner badge flags missing contact data (the maintenance signal the desktop
+ * row carries as ContactGapDot).
+ */
+function Monogram({ name, rollup }) {
+  const clean = String(name || '').trim();
+  const initials = clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((n) => n.charAt(0).toUpperCase())
+    .join('') || '?';
+  let h = 0;
+  for (let i = 0; i < clean.length; i++) h = (h * 31 + clean.charCodeAt(i)) >>> 0;
+  const tint = MONO_TINTS[h % MONO_TINTS.length];
+  const missing = rollup?.incomplete
+    ? [rollup.missingEmail ? 'correo' : null, rollup.missingPhone ? 'teléfono' : null]
+        .filter(Boolean).join(' y ')
+    : '';
+  return (
+    <div className="relative shrink-0">
+      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl font-display text-sm font-semibold ring-1 ring-inset ring-black/5 shadow-xs ${tint}`}>
+        {initials}
+      </span>
+      {missing && (
+        <span
+          className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-surface"
+          role="img"
+          title={`Faltan datos de contacto: ${missing}`}
+          aria-label={`Faltan datos de contacto: ${missing}`}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A contact channel row in the card footer — an icon labels the inline Cell
+ *  so an empty field reads as "tap to add", never as orphaned grey text. */
+function ContactCell({ icon: Icon, value, ...cellProps }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      <Icon size={14} aria-hidden className={`shrink-0 ${value ? 'text-ink-400' : 'text-ink-300'}`} />
+      <Cell value={value} align="!text-ink-700" {...cellProps} />
+    </div>
+  );
+}
+
+/**
+ * Mobile professional card — an editorial, monogram-led record. The identity
+ * block (monogram + name + empresa) and an at-a-glance metric (quote count, won
+ * total) sit above a hairline; the contact channels read as a labelled list
+ * below, with a full-height chevron rail dropping the quotes + datos panel.
+ * Every text field is the SAME in-place Cell as the desktop sheet, so editing
+ * semantics never diverge between the two surfaces.
+ */
 function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
+  const count = rollup?.count || 0;
+  const acceptedTotal = rollup?.acceptedTotal || 0;
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex items-center gap-1.5">
-            <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
-            <ContactGapDot rollup={rollup} />
-          </div>
-          <div className="grid grid-cols-2 gap-x-2">
-            <Cell value={p.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${p.name}`} align="text-[12px] text-ink-500" />
-            <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${p.name}`} align="text-[12px] text-ink-500" />
-          </div>
-          <Cell value={p.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${p.name}`} align="text-[12px] text-ink-500" />
+      <div className="flex items-start gap-3 p-3.5 pb-3">
+        <Monogram name={p.name} rollup={rollup} />
+        <div className="min-w-0 flex-1 pt-0.5">
+          <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} align="font-medium" />
+          <Cell value={p.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${p.name}`} align="!text-ink-500" />
         </div>
-        <div className="text-right shrink-0">
-          <div className="eyebrow-xs text-ink-400">{rollup?.count || 0} cotiz.</div>
+        {/* At-a-glance metric — pipeline volume, and won money when there is any. */}
+        <div className="flex shrink-0 flex-col items-end text-right">
+          <span className={`font-display text-lg font-semibold leading-none tabular-nums ${count ? 'text-ink-900' : 'text-ink-300'}`}>
+            {count}
+          </span>
+          <span className={`eyebrow-xs mt-1 ${count ? 'text-ink-400' : 'text-ink-300'}`}>cotiz.</span>
+          {acceptedTotal > 0 && (
+            <span className="mt-1.5 text-[11px] font-semibold tabular-nums text-emerald-700">
+              {formatMoney(acceptedTotal, 'USD', { USD: 1 })}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-stretch border-t border-ink-100">
+        <div className="min-w-0 flex-1 divide-y divide-ink-100/70 px-3.5">
+          <ContactCell icon={Phone} value={p.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${p.name}`} />
+          <ContactCell icon={Mail} value={p.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${p.name}`} />
         </div>
         <button
           type="button"
           onClick={onToggle}
-          className="p-2 -mr-1 rounded text-ink-300 hover:text-brand-600 transition-colors shrink-0"
+          className="flex shrink-0 items-center border-l border-ink-100 px-4 text-ink-300 transition-colors hover:bg-brand-50/60 hover:text-brand-600"
           aria-expanded={isOpen}
           aria-label="Ver cotizaciones y notas"
         >
-          <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
+
       {isOpen && (
         <div className="border-t border-ink-100">
           <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} onRemove={onRemove} />
@@ -489,7 +564,8 @@ function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
   );
 }
 
-/** Mobile: the blank "type a name" card — the new-row, stacked. */
+/** Mobile: the blank "type a name" card — the new-row, in the card family
+ *  (a dashed monogram-shaped plate so it reads as the next record to fill). */
 function MobileNewCard({ onCreate }) {
   const [name, setName] = useState('');
   async function commit() {
@@ -498,11 +574,13 @@ function MobileNewCard({ onCreate }) {
     if (ok) setName('');
   }
   return (
-    <div className="card bg-brand-50/30 p-3 flex items-center gap-2">
-      <Plus size={15} className="text-ink-300 shrink-0" />
+    <div className="card flex items-center gap-3 bg-brand-50/30 p-3.5">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-brand-300 text-brand-400">
+        <Plus size={18} />
+      </span>
       <input
         data-newrow-name
-        className={CELL_CLS}
+        className={`${CELL_CLS} font-medium`}
         value={name}
         placeholder="Nuevo profesional…"
         aria-label="Nombre del nuevo profesional"
