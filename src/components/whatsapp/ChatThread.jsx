@@ -200,6 +200,32 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setShowJump(!bottom);
     if (bottom) setNewCount(0);
   }, []);
+
+  // ── Tap a quoted reply to jump to the original ───────────────────────────
+  // Each bubble registers its node by wamid; tapping a reply's quote snippet
+  // smooth-scrolls the original into view (~⅓ down) and briefly flashes it.
+  // We scroll the list container itself (getBoundingClientRect delta) rather
+  // than scrollIntoView, which on iOS would also scroll the host page.
+  const bubbleRefs = useRef(new Map());
+  const [flashId, setFlashId] = useState(null);
+  const flashTimer = useRef(null);
+  const registerBubble = useCallback((waId, node) => {
+    if (!waId) return;
+    if (node) bubbleRefs.current.set(waId, node);
+    else bubbleRefs.current.delete(waId);
+  }, []);
+  const jumpToMessage = useCallback((waId) => {
+    const node = waId && bubbleRefs.current.get(waId);
+    const list = listRef.current;
+    if (!node || !list) return;
+    const top = list.scrollTop + (node.getBoundingClientRect().top - list.getBoundingClientRect().top) - list.clientHeight / 3;
+    list.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    setFlashId(waId);
+    clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashId(null), 1300);
+  }, []);
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
+
   useLayoutEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -538,6 +564,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               onReact={onReact ? react : null}
               onSaveCard={onSaveContact ? setSaveTarget : null}
               onCreateOrder={onCreateQuote || null}
+              registerRef={registerBubble}
+              onJumpTo={jumpToMessage}
+              flash={!!m.waId && flashId === m.waId}
               quoteChip={m.quoteId && m.quoteId !== contextQuoteId
                 ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
                 : null}
@@ -1607,10 +1636,16 @@ function BlockMenu({ phone, onError }) {
   );
 }
 
-function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, quoteChip = null }) {
+function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, quoteChip = null, registerRef = null, onJumpTo = null, flash = false }) {
   const out = m.direction === 'out';
   const day = dayLabel(m.createdAt);
   const showDay = !prev || dayLabel(prev.createdAt) !== day;
+  // Group consecutive same-sender messages within 5 min: tighter top gap +
+  // hide the redundant day chip's neighbour spacing, exactly like the official
+  // app (a cluster reads as one turn). A new sender or a day break starts a
+  // fresh cluster with a wider gap.
+  const grouped = !showDay && !!prev && prev.direction === m.direction
+    && (m.createdAt || 0) - (prev.createdAt || 0) < 5 * 60000;
   const referral = resolveReferral(m);
   // A non-inline attachment renders as a chip that already carries m.body
   // (the filename/caption) — don't repeat it as text below.
@@ -1630,10 +1665,15 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
           <span className="text-[10px] font-medium text-ink-400 bg-surface border border-ink-100 rounded-full px-2.5 py-0.5">{day}</span>
         </div>
       )}
-      <div className={`group flex items-center gap-1 ${out ? 'justify-end' : 'justify-start'}`}>
+      <div
+        ref={(node) => registerRef?.(m.waId, node)}
+        className={`group flex items-center gap-1 scroll-mt-4 ${grouped ? '' : 'mt-1'} ${out ? 'justify-end' : 'justify-start'}`}
+      >
         {out && canAct && <BubbleActions m={m} onReply={onReply} onReact={onReact} />}
         {/* tabIndex: a tap focuses the bubble, revealing the actions on touch. */}
-        <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] text-sm break-words whitespace-pre-wrap focus:outline-none ${
+        <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] text-sm break-words whitespace-pre-wrap focus:outline-none transition-shadow ${
+          flash ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-ink-50/40 rounded-2xl' : ''
+        } ${
           isSticker
             ? 'px-1 py-0.5'
             : `rounded-2xl px-3 py-2 shadow-xs ${
@@ -1665,10 +1705,22 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
             <div className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-0.5">Plantilla · {m.templateName}</div>
           )}
           {m.quoted && (
-            <div className="border-l-2 border-emerald-500/60 bg-black/5 dark:bg-white/[0.06] rounded-r-md pl-2 pr-2.5 py-1 mb-1">
-              <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
-              <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
-            </div>
+            m.quoted.waId && onJumpTo ? (
+              <button
+                type="button"
+                onClick={() => onJumpTo(m.quoted.waId)}
+                className="block w-full text-left border-l-2 border-emerald-500/60 bg-black/5 dark:bg-white/[0.06] rounded-r-md pl-2 pr-2.5 py-1 mb-1 transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+                title="Ir al mensaje citado"
+              >
+                <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
+                <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
+              </button>
+            ) : (
+              <div className="border-l-2 border-emerald-500/60 bg-black/5 dark:bg-white/[0.06] rounded-r-md pl-2 pr-2.5 py-1 mb-1">
+                <div className="text-[10px] font-semibold text-emerald-700">{m.quoted.direction === 'out' ? 'Tú' : 'Cliente'}</div>
+                <div className="text-xs opacity-70 truncate max-w-[260px]">{m.quoted.body}</div>
+              </div>
+            )
           )}
           {m.mediaPath && <MediaAttachment m={m} />}
           {/* Catalog products WE sent — compact chips showing what the client saw. */}

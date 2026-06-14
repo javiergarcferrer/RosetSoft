@@ -161,7 +161,7 @@ export function resolveThread(messages, { key, now = Date.now() } = {}) {
     const ctxId = m.payload?.context?.id;
     const target = ctxId ? byWaId.get(ctxId) : null;
     const quoted = target
-      ? { direction: target.direction, body: target.body || labelForKind(target.kind), kind: target.kind }
+      ? { direction: target.direction, body: target.body || labelForKind(target.kind), kind: target.kind, waId: target.waId || ctxId }
       : null;
     if (!reactions && !quoted) return m;
     return { ...m, reactions, quoted };
