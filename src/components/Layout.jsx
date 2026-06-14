@@ -71,22 +71,28 @@ export default function Layout() {
     return () => { document.body.style.overflow = prev; };
   }, [navOpen, isMobile]);
 
-  // The desktop sidebar's horizontal footprint, published as a CSS variable so
-  // position:fixed chrome — the quote TotalsDock — can offset past the sidebar AND
-  // follow it when collapsed. It's set on the DOCUMENT ROOT (<html>), not the
-  // shell div below, because the TotalsDock portals to document.body: it lives
-  // OUTSIDE this React subtree, so a var scoped to the shell div would never reach
-  // it (CSS custom properties inherit through the DOM tree, not the React tree —
-  // the portaled dock is a sibling of #root, so it only ever saw the 15rem
-  // fallback and stayed wedged there once the sidebar collapsed). Setting it on
-  // <html> lets it cascade to body and thus into the portal. Expanded = the
-  // sidebar's w-60 (15rem); collapsed = the md:pl-12 gutter the floating
-  // show-toggle sits in (3rem). Consumed only via md:-gated utilities, so the
-  // mobile drawer layout ignores it.
-  const sidebarOffset = collapsed ? '3rem' : '15rem';
+  // Two CSS vars published on the DOCUMENT ROOT (<html>) let the portaled
+  // TotalsDock MIRROR <main>'s left geometry. They must live on the root, not the
+  // shell div below: the dock portals to document.body — OUTSIDE this React
+  // subtree (a sibling of #root) — and CSS custom properties inherit through the
+  // DOM tree, not the React tree, so a var scoped to the shell div would never
+  // reach it (it would silently fall back and wedge the dock at one position).
+  //   --rs-dock-left : the dock box's left edge = the sidebar's OCCUPIED width
+  //                    (15rem expanded; 0 when collapsed — the sidebar is hidden,
+  //                    so the dock runs full-bleed to the screen edge with NO dead
+  //                    gutter, and it still never covers the sidebar when shown).
+  //   --rs-dock-pad  : extra left padding that re-insets the dock's CONTENT to sit
+  //                    under the page columns (0 expanded; 3rem collapsed = the
+  //                    md:pl-12 gutter <main> reserves for the floating show-toggle).
+  //                    Surface fills to the edge; the figures stay column-aligned.
+  // Consumed only via md:-gated utilities, so the mobile drawer layout ignores them.
+  const dockLeft = collapsed ? '0px' : '15rem';
+  const dockPad = collapsed ? '3rem' : '0px';
   useLayoutEffect(() => {
-    document.documentElement.style.setProperty('--rs-sidebar-offset', sidebarOffset);
-  }, [sidebarOffset]);
+    const root = document.documentElement.style;
+    root.setProperty('--rs-dock-left', dockLeft);
+    root.setProperty('--rs-dock-pad', dockPad);
+  }, [dockLeft, dockPad]);
 
   return (
     <div className="h-full flex flex-col md:flex-row">

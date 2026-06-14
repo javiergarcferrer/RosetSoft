@@ -16,15 +16,17 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * width, so the running total is never out of view. Replaces the old desktop
  * right-rail + the separate mobile totals bar with one responsive control.
  *
- * Anchored bottom, offset past the static sidebar on desktop via the
- * `--rs-sidebar-offset` CSS variable Layout publishes on the document root (the
- * sidebar's live width — 15rem expanded, 3rem when collapsed — so the dock tracks
- * it instead of stranding a 15rem gap once the sidebar is hidden). It must come
- * from the root: this dock portals to document.body, so a var scoped to Layout's
- * shell div (a sibling subtree) would never reach it. Full-bleed on mobile (where
- * the sidebar is an off-canvas drawer). Its inner content lines up with
- * the page's `max-w-[1400px]` container so the figures sit under the columns
- * above.
+ * Anchored bottom. On desktop it MIRRORS <main>'s left geometry via two CSS vars
+ * Layout publishes on the document root: `--rs-dock-left` (the box's left edge =
+ * the sidebar's occupied width — 15rem expanded, 0 collapsed) and `--rs-dock-pad`
+ * (extra content inset — 0 expanded, 3rem collapsed). So the terracotta SURFACE
+ * runs flush to the sidebar's edge when expanded and full-bleed to the screen edge
+ * when collapsed (no dead gutter), while the CONTENT stays inset under the page
+ * columns either way. The vars must come from the root: this dock portals to
+ * document.body, so a var scoped to Layout's shell div (a sibling subtree) would
+ * never reach it. Full-bleed on mobile (where the sidebar is an off-canvas
+ * drawer). Its inner content lines up with the page's `max-w-[1400px]` container
+ * so the figures sit under the columns above.
  *
  * Two states:
  *   • Collapsed bar — the grand total + live DOP conversion (USD and DOP on a
@@ -272,7 +274,7 @@ export default function TotalsDock({
     // (index.css) is the bar's true height: 3.5rem, PLUS the home-indicator
     // inset the bar pads in an installed PWA. From md: up there is no ModeBar
     // and the dock returns to bottom-0.
-    <div data-kb-keep className="fixed bottom-0 bottom-above-modebar left-0 right-0 md:left-[var(--rs-sidebar-offset,15rem)] z-30 print:hidden kb-hide-when-open">
+    <div data-kb-keep className="fixed bottom-0 bottom-above-modebar left-0 right-0 md:left-[var(--rs-dock-left,15rem)] z-30 print:hidden kb-hide-when-open">
       {/* Safe-area apron — a white fill that spills BELOW the dock to the
           physical screen edge. md+ ONLY: there the dock sits at the physical
           bottom (no ModeBar), so if iOS lays the standalone viewport SHORT (a
@@ -291,7 +293,7 @@ export default function TotalsDock({
           inset with white ONLY when installed as a PWA AND the dock sits at the
           physical bottom (md+) — under md the ModeBar below the dock carries
           that inset instead, so padding here would just be dead space. */}
-      <div className="border-t-[3px] border-brand-500 bg-surface shadow-pop md:pb-safe-standalone">
+      <div className="border-t-[3px] border-brand-500 bg-surface shadow-pop md:pb-safe-standalone md:pl-[var(--rs-dock-pad,0px)]">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8">
           {/* Sliding panel — grows the dock upward (anchored at bottom). The
               grid 0fr→1fr trick animates height without a fixed pixel target. */}
