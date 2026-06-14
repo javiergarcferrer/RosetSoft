@@ -24,6 +24,22 @@ export interface SyncRequest {
   cron?: boolean;
   /** LSG inventory write-back: decrement Shopify when sold in ALCOVER. */
   lsgAdjust?: Array<{ productId?: string; variantId?: string; delta: number }>;
+  /** Orders mode (Alcover store): READ + FULFILL. */
+  ordersMode?: boolean;
+  /** Orders dispatch: 'list' (default) or 'fulfill'. */
+  action?: string;
+  /** list: pagination cursor. */
+  cursor?: string | null;
+  /** list: page size (clamped 1..50). */
+  limit?: number;
+  /** list: Shopify search fragment, e.g. 'fulfillment_status:unfulfilled'. */
+  status?: string | null;
+  /** fulfill: the fulfillmentOrder to fulfill. */
+  fulfillmentOrderId?: string;
+  /** fulfill: optional subset of lines. */
+  lineItems?: Array<{ id: string; quantity: number }>;
+  /** fulfill: optional tracking info. */
+  tracking?: { number?: string; company?: string; url?: string };
 }
 
 /**
@@ -41,14 +57,16 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
  * LifestyleGarden link is now TWO-WAY: it PULLS the catalog (read_products,
  * read_inventory) AND pushes inventory decrements back when an LSG product is
  * sold inside ALCOVER (write_inventory + read_locations to resolve the location).
- * The Alcover mirror writes products + quantities. Surfacing write_inventory in
- * the LSG list makes the Settings connection test flag the (one-time) re-auth
- * the dealer must do in the Shopify Dev Dashboard for the push to work.
+ * The Alcover mirror writes products + quantities AND now READS + FULFILLS
+ * orders (the Shopify control center), so it also needs read_orders +
+ * write_fulfillments. Surfacing the full list makes the Settings connection
+ * test flag the (one-time) re-auth the dealer must do in the Shopify Dev
+ * Dashboard for the new scopes to work.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
     ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
-    : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
+    : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory', 'read_orders', 'write_fulfillments'];
 }
 
 /** Refresh ahead of the deadline so a token can't die mid-sync. */

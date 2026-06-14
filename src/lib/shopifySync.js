@@ -138,3 +138,25 @@ export async function pushLsgInventoryAdjust(items) {
 export async function pingShopify(store = SHOPIFY_STORE_ALCOVER) {
   return invokeShopify({ test: true, store });
 }
+
+/**
+ * List recent orders from the Alcover store (the Shopify control center read
+ * side). `opts` = { cursor?, limit?, status? } where `status` is an optional
+ * Shopify search fragment (e.g. 'fulfillment_status:unfulfilled'). Returns the
+ * function's body ({ ok, orders, nextCursor } or { configured:false } /
+ * { ok:false, error }).
+ */
+export async function listShopifyOrders(opts = {}) {
+  const { cursor = null, limit, status = null } = opts;
+  return invokeShopify({ ordersMode: true, action: 'list', cursor, limit, status });
+}
+
+/**
+ * Fulfill one fulfillmentOrder on the Alcover store ("Marcar como preparado").
+ * `{ fulfillmentOrderId, lineItems?, tracking? }`; omit lineItems to fulfill all
+ * remaining. Returns ({ ok, fulfillment } or { configured:false } /
+ * { ok:false, error }).
+ */
+export async function fulfillShopifyOrder({ fulfillmentOrderId, lineItems, tracking } = {}) {
+  return invokeShopify({ ordersMode: true, action: 'fulfill', fulfillmentOrderId, lineItems, tracking });
+}

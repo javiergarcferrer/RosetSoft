@@ -269,12 +269,21 @@ export async function unblockWhatsappUser({ to } = {}) {
   return invokeWaSend({ unblockUser: { to: waDigits(to) } });
 }
 
-/** Read the number's public business profile (about, address, email, web…). */
+/**
+ * Read the number's public business profile (what the client sees when opening
+ * the chat). Returns { ok, profile } where profile carries about, address,
+ * description, email, vertical, websites[] and the read-only profilePictureUrl
+ * (Meta serves the avatar URL; it can only be CHANGED in WhatsApp Manager).
+ */
 export async function getWaBusinessProfile() {
   return invokeWaSend({ getBusinessProfile: true });
 }
 
-/** Update the number's public business profile. Only the passed fields change. */
+/**
+ * Update the number's public business profile. Only the passed fields change
+ * (about, address, description, email, vertical, websites[]). The profile photo
+ * is NOT settable through this API — it's read-only here.
+ */
 export async function saveWaBusinessProfile(profile) {
   return invokeWaSend({ setBusinessProfile: profile });
 }
@@ -308,9 +317,9 @@ function blobToBase64(blob) {
 
 /**
  * List the WABA's message templates (name, status, category, language, body
- * text, variable count). Live from Meta — the picker and the Difusión page
- * always show the current approval state. { ok, templates } or
- * { ok:false, error, needWaba? }.
+ * text, variable count, quality, and — for REJECTED ones — rejectedReason).
+ * Live from Meta — the picker and the Difusión page always show the current
+ * approval state. { ok, templates } or { ok:false, error, needWaba? }.
  */
 export async function listWaTemplates() {
   return invokeWaSend({ listTemplates: true });

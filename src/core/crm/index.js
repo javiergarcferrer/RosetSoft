@@ -22,4 +22,5 @@ export {
   resolveCampaignsList,
 } from './views/campaigns.js';
 export { buildDraftTurns } from './views/draft.js';
+export { resolveTemplateHealth } from './views/templates.js';
 export { waDigits, phoneKey, displayPhone } from '../../lib/phone.js';

@@ -57,7 +57,7 @@ test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirr
     ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
   );
   const mirror = requiredScopes(STORE_ALCOVER);
-  for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {
+  for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory', 'read_orders', 'write_fulfillments']) {
     assert.ok(mirror.includes(s), `mirror needs ${s}`);
   }
 });

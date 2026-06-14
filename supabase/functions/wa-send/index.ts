@@ -361,7 +361,10 @@ Deno.serve(async (req: Request) => {
   // ── Business profile (what clients see when they open the chat) ──────────
   if (body.getBusinessProfile) {
     const r = await fetch(
-      `${GRAPH}/${phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,vertical,websites`,
+      // profile_picture_url is a read-only signed URL Meta serves for the
+      // current avatar (settable only in WhatsApp Manager). The rest are the
+      // editable public-profile fields.
+      `${GRAPH}/${phoneNumberId}/whatsapp_business_profile?fields=about,address,description,email,vertical,websites,profile_picture_url`,
       { headers: graphHeaders },
     );
     const data = await r.json().catch(() => ({}));
@@ -694,7 +697,7 @@ Deno.serve(async (req: Request) => {
 
     if (body.listTemplates) {
       const r = await fetch(
-        `${GRAPH}/${wabaId}/message_templates?fields=name,status,category,language,components,quality_score&limit=200`,
+        `${GRAPH}/${wabaId}/message_templates?fields=name,status,category,language,components,quality_score,rejected_reason&limit=200`,
         { headers: graphHeaders },
       );
       const data = await r.json().catch(() => ({}));
@@ -706,6 +709,11 @@ Deno.serve(async (req: Request) => {
         name?: string; status?: string; category?: string; language?: string;
         components?: { type?: string; text?: string; format?: string; buttons?: { type?: string; text?: string; url?: string }[] }[];
         quality_score?: { score?: string };
+        // Meta's machine reason a template was rejected (e.g.
+        // INVALID_FORMAT, TAG_CONTENT_MISMATCH, SCAM, ABUSIVE_CONTENT,
+        // NONE when not rejected). Surfaced so Difusión can tell the dealer
+        // WHY a REJECTED template failed instead of just the red pill.
+        rejected_reason?: string;
       };
       const templates = (((data as { data?: RawTpl[] }).data) || []).map((t) => {
         const find = (type: string) => (t.components || []).find((c) => (c.type || '').toUpperCase() === type);
@@ -727,6 +735,10 @@ Deno.serve(async (req: Request) => {
           buttonText: urlBtn?.text || '',
           buttonUrlVar: !!urlBtn && /\{\{1\}\}/.test(urlBtn.url || ''),
           quality: t.quality_score?.score || null,
+          // 'NONE' is Meta's not-rejected sentinel — normalize it to '' so the
+          // client only sees a real reason. Additive: existing consumers ignore it.
+          rejectedReason: t.rejected_reason && t.rejected_reason.toUpperCase() !== 'NONE'
+            ? t.rejected_reason : '',
         };
       });
       return json({ ok: true, templates });

@@ -94,6 +94,12 @@ type Body = {
   catalogSearch?: { q?: string };
   /** Subscribe the Page/IG account to comment + mention webhooks (admin). */
   subscribeWebhooks?: boolean;
+  /** DM inbox: list conversations (IG + FB Messenger), newest first. */
+  readDms?: { limit?: number; after?: string };
+  /** DM inbox: one conversation's messages (oldest→newest as Meta returns). */
+  readDmThread?: { conversationId?: string; after?: string; platform?: 'instagram' | 'facebook' };
+  /** DM inbox: send a reply within the 24h window (HUMAN-TRIGGERED only). */
+  sendDm?: { conversationId?: string; recipientId?: string; text?: string; platform?: 'instagram' | 'facebook' };
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -469,6 +475,91 @@ Deno.serve(async (req) => {
     try {
       const r = await graphPost(`${commentId}/${edge}`, pageToken, { message });
       return json({ ok: true, id: r?.id });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── readDms: the DM inbox. Lists IG Direct + FB Messenger conversations,
+  // each with the participant and a one-message preview. Both platforms are
+  // read with the PAGE token (IG messaging is Page-mediated). The two edges
+  // fail independently — one platform erroring still returns the other's
+  // threads. Replies stay human-triggered (sendDm), never automated.
+  if (body.readDms) {
+    const limit = Math.min(Math.max(Number(body.readDms.limit) || 25, 1), 50);
+    const params: Record<string, string> = {
+      fields: 'id,participants,updated_time,unread_count,messages.limit(1){id,message,from,created_time}',
+      limit: String(limit),
+    };
+    if (body.readDms.after) params.after = String(body.readDms.after);
+
+    const errors: Record<string, string> = {};
+    const safe = async <T>(key: string, fn: () => Promise<T>): Promise<T | null> => {
+      try { return await fn(); } catch (e) {
+        errors[key] = friendly(String((e as Error)?.message || e).slice(0, 160));
+        return null;
+      }
+    };
+    const [ig, fb] = await Promise.all([
+      cfg.ig_user_id
+        ? safe('instagram', () => graph(`${cfg.ig_user_id}/conversations`, pageToken, { ...params, platform: 'instagram' }))
+        : Promise.resolve(null),
+      cfg.page_id
+        ? safe('facebook', () => graph(`${cfg.page_id}/conversations`, pageToken, params))
+        : Promise.resolve(null),
+    ]);
+    const tag = (rows: unknown[], platform: string) =>
+      (rows || []).map((c) => ({ ...(c as Record<string, unknown>), platform }));
+    return json({
+      ok: true,
+      fetchedAt: Date.now(),
+      conversations: [
+        ...tag(ig?.data || [], 'instagram'),
+        ...tag(fb?.data || [], 'facebook'),
+      ],
+      paging: { instagram: ig?.paging?.cursors?.after || null, facebook: fb?.paging?.cursors?.after || null },
+      errors,
+    });
+  }
+
+  // ── readDmThread: one conversation's messages (id, body, sender, time +
+  // attachments). Meta returns them newest-first within a conversation.
+  if (body.readDmThread) {
+    const conversationId = String(body.readDmThread.conversationId || '').trim();
+    if (!conversationId) return json({ ok: false, error: 'conversationId requerido' }, 400);
+    const params: Record<string, string> = {
+      fields: 'id,message,from,to,created_time,attachments{id,image_data,mime_type,name,file_url}',
+      limit: '40',
+    };
+    if (body.readDmThread.after) params.after = String(body.readDmThread.after);
+    try {
+      const r = await graph(`${conversationId}/messages`, pageToken, params);
+      return json({ ok: true, messages: r?.data || [], paging: r?.paging?.cursors?.after || null });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── sendDm: a HUMAN-TRIGGERED reply within the 24h messaging window. The
+  // Send API posts to /{ig-or-page-id}/messages with messaging_product +
+  // recipient + message. Never wired to any automation — the dealer presses
+  // send. IG and FB both go through the linked Page's send surface.
+  if (body.sendDm) {
+    const recipientId = String(body.sendDm.recipientId || '').trim();
+    const text = String(body.sendDm.text || '').trim();
+    if (!recipientId || !text) return json({ ok: false, error: 'recipientId y text requeridos' }, 400);
+    // IG sends through the IG user id; FB Messenger through the Page id.
+    const senderId = body.sendDm.platform === 'instagram'
+      ? (cfg.ig_user_id || cfg.page_id)
+      : cfg.page_id;
+    if (!senderId) return json({ ok: false, error: 'Sin cuenta vinculada para enviar' });
+    try {
+      const r = await graphPost(`${senderId}/messages`, pageToken, {
+        messaging_product: body.sendDm.platform === 'instagram' ? 'instagram' : 'messenger',
+        recipient: JSON.stringify({ id: recipientId }),
+        message: JSON.stringify({ text }),
+      });
+      return json({ ok: true, messageId: r?.message_id || r?.id || null, recipientId: r?.recipient_id || recipientId });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }

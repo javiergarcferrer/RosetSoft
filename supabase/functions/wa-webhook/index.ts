@@ -208,6 +208,34 @@ Deno.serve(async (req: Request) => {
             map[name] = next;
             const { error } = await admin.from('settings').update({ whatsapp_template_status: map }).eq('profile_id', TEAM);
             if (error) console.error('[wa-webhook] template status update failed:', error.message);
+
+            // On a REJECTION, also persist the durable rejection record so the
+            // Difusión panel can show the dealer the exact reason Meta gave (the
+            // settings map above is overwritten on the next status event; this
+            // upsert keeps the last rejection per template+language). Best-effort:
+            // a failure here must never throw out of the webhook (Meta would
+            // retry / disable it).
+            if (change.field === 'message_template_status_update') {
+              const status = String(next.status || '');
+              if (status === 'REJECTED') {
+                const language = String(v.language || v.message_template_language || '');
+                const reason = v.reason ? String(v.reason) : '';
+                try {
+                  const { error: rejErr } = await admin.from('wa_template_rejections').upsert({
+                    id: `${TEAM}:${name}:${language}`,
+                    profile_id: TEAM,
+                    template_name: name,
+                    language,
+                    rejected_reason: reason || null,
+                    status,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'profile_id,template_name,language' });
+                  if (rejErr) console.error('[wa-webhook] template rejection upsert failed:', rejErr.message);
+                } catch (e) {
+                  console.error('[wa-webhook] template rejection persist error:', (e as Error).message);
+                }
+              }
+            }
           }
           continue;
         }
