@@ -769,10 +769,10 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
   }
 
   return (
-    <div className="flex-1 min-w-0 space-y-2.5">
+    <div className="flex-1 min-w-0 space-y-2">
       <div className="flex items-start gap-3">
         <CoverPhoto line={line} onChange={onChange} />
-        <div className="flex-1 min-w-0 space-y-2.5">
+        <div className="flex-1 min-w-0 space-y-2">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <HeroInput
@@ -1331,7 +1331,7 @@ function GradeFabricRow({ line, onChange, currency = 'USD', rates, nameFilter, s
             // as the material name (or the placeholder when empty), never
             // stretched across the row. Capped at 100% so a very long name
             // still wraps/scrolls within the row instead of overflowing.
-            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-1 coarse:min-h-11 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
+            className="qli-grow bg-transparent border-0 border-b border-transparent hover:border-ink-200 focus:!border-ink-900 px-1 py-0.5 coarse:min-h-9 text-[13px] coarse:text-sm text-ink-700 placeholder:text-ink-300 focus:outline-none focus:ring-0 transition-colors"
           />
           {/* Catalog picker — opens the swatch modal so the dealer can pick a
               material + color instead of typing the name and guessing the
@@ -2164,7 +2164,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   // stacking vertically reads cleaner and gives the name the full
   // row width unconditionally.
   return (
-    <div className={`group/comprow relative px-3 sm:px-4 py-3 bg-surface space-y-2 ${
+    <div className={`group/comprow relative px-3 sm:px-4 py-2.5 bg-surface space-y-1.5 ${
       optional ? 'border-l-2 border-dashed border-ink-300' : ''
     } ${
       inGroup ? 'border-l-2 border-solid border-brand-300' : ''

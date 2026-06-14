@@ -50,7 +50,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select({
   //             clickable text, not a control. Use when the picker is one
   //             of several inline editors (Linear / Notion property style).
   const base = variant === 'ghost'
-    ? 'pl-1.5 pr-5 py-1 text-[13px] coarse:text-sm coarse:py-1.5 coarse:min-h-10 font-medium rounded-md bg-transparent border-0 hover:bg-ink-100/70'
+    ? 'pl-1.5 pr-5 py-1 text-[13px] coarse:text-sm coarse:py-1 coarse:min-h-8 font-medium rounded-md bg-transparent border-0 hover:bg-ink-100/70'
     : variant === 'chip'
       ? 'pl-3 pr-7 py-1.5 text-[13px] coarse:text-sm coarse:py-2 font-medium rounded-md bg-surface border border-ink-200 hover:border-ink-300 focus:border-brand-500 focus:shadow-focus min-h-9 coarse:min-h-10'
       : 'w-full px-3 pr-9 py-2 min-h-9 coarse:min-h-11 text-sm rounded-md bg-surface border border-ink-200 hover:border-ink-300 focus:border-brand-500 focus:shadow-focus';
