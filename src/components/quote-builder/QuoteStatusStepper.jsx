@@ -138,33 +138,40 @@ export default function QuoteStatusStepper({ quote, onTransition, profileId, onA
           </div>
           <div className="text-xs text-ink-500 mt-1 leading-relaxed">{(terminal ? stageDef.description : QUOTE_STAGE_BY_KEY[stage]?.description) || ''}</div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {(idx > 0 || terminal) && (
-            <button
-              type="button"
-              onClick={undo}
-              className="btn-secondary text-xs shrink-0"
-              title="Revertir al estado anterior"
-            >
-              <Undo2 size={12} /> Volver
-            </button>
-          )}
+        {/* Primary CTA on its own row on mobile (full-width, prominent), with
+            the secondary choices (Volver + Más) sharing the row below so they
+            distribute evenly instead of wrapping one-per-line. From sm up the
+            whole cluster collapses back into a right-aligned button row. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           {!terminal && next && (
             <button
               type="button"
               onClick={() => advance(next.key)}
-              className="btn-primary active:scale-[0.98] shrink-0 whitespace-nowrap"
+              className="btn-primary active:scale-[0.98] w-full sm:w-auto justify-center whitespace-nowrap"
               title={`Avanzar a ${next.label}`}
             >
-              Marcar {next.label.toLowerCase()} <ChevronRight size={14} />
+              {next.key === 'deposito_recibido' ? 'Registrar depósito' : `Marcar ${next.label.toLowerCase()}`}
+              <ChevronRight size={14} />
             </button>
           )}
           {!terminal && !next && (
-            <span className="inline-flex items-center gap-1.5 text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 shrink-0">
+            <span className="inline-flex items-center justify-center gap-1.5 text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1 w-full sm:w-auto">
               <CheckCircle2 size={14} /> {stageDef?.label || 'Listo'}
             </span>
           )}
-          <TerminalMenu stage={stage} terminal={terminal} onPick={advance} />
+          <div className="flex items-center gap-2">
+            {(idx > 0 || terminal) && (
+              <button
+                type="button"
+                onClick={undo}
+                className="btn-secondary text-xs flex-1 sm:flex-none justify-center"
+                title="Revertir al estado anterior"
+              >
+                <Undo2 size={12} /> Volver
+              </button>
+            )}
+            <TerminalMenu stage={stage} terminal={terminal} onPick={advance} />
+          </div>
         </div>
       </div>
     </div>
@@ -187,18 +194,20 @@ function TerminalMenu({ stage, terminal, onPick }) {
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex-1 sm:flex-none" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="btn-secondary text-xs"
+        className="btn-secondary text-xs w-full justify-center"
         aria-expanded={open}
         aria-haspopup="menu"
       >
         Más <ChevronDown size={12} className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-surface shadow-pop py-1 z-30 overflow-hidden" role="menu">
+        // Opens upward so the menu never collides with the bottom nav bar on
+        // phones (the stepper sits low on the screen).
+        <div className="absolute right-0 bottom-full mb-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-surface shadow-pop py-1 z-30 overflow-hidden" role="menu">
           {QUOTE_TERMINAL_STAGES.map((t) => (
             <button
               key={t.key}
