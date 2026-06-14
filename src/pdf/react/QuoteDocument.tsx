@@ -213,6 +213,13 @@ function LineRow({
                 UNIT") — directly under the name so it reads as part of the
                 title, matching the editor + client preview. */}
             {!compound && line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
+            {/* The dealer-authored Descripción — directly beneath the identity
+                (name + Description 2), the same position the editor and the
+                client preview use. SIMPLE lines only: a compound keeps its
+                whole-composition blurb OUT of this wrap={false} identity row
+                (below, in wrappable flow) so a long paragraph can't jam
+                pagination. */}
+            {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
             {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
             {(line.reference || line.dimensions) && (
               <View style={s.lineRefRow}>
@@ -222,13 +229,20 @@ function LineRow({
             )}
             {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
             <MaterialGrid cells={cells} images={images} />
-            {/* The dealer-authored Descripción (the read-only catalog
-                Description 2 now prints up under the name). */}
-            {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
           </View>
           <MoneyCell line={line} fmt={fmt} />
         </View>
       </View>
+
+      {/* Compound's whole-composition Descripción — beneath the identity card,
+          above the component list, and in WRAPPABLE flow (outside the
+          wrap={false} identity row) so a long blurb paginates instead of jamming
+          the row. Indented to align under the product name, like the rail. */}
+      {compound && line.description && (
+        <View style={{ marginTop: 6, marginLeft: 134 }}>
+          <Text style={s.lineDesc}>{line.description}</Text>
+        </View>
+      )}
 
       {/* Component list — pulled OUT of the identity row's flex-row layout into
           normal block flow so a tall modular/compound paginates cleanly across
@@ -262,7 +276,6 @@ function LineRow({
             }
             return <ComponentList components={line.components} fmt={fmt} families={families} currency={currency} rates={rates} images={images} />;
           })()}
-          {line.description && <Text style={s.lineDesc}>{line.description}</Text>}
         </View>
       )}
     </View>

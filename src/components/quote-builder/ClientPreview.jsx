@@ -604,6 +604,15 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
             {entity.productDescription}
           </div>
         )}
+        {/* The dealer's editable Descripción — directly beneath the product
+            identity (name + catalog Description 2), the same position the editor,
+            the public link and the PDF use, so it reads as the product's blurb
+            rather than a footnote under the specs. */}
+        {entity.description && (
+          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+            {entity.description}
+          </div>
+        )}
         {((entity.subtype && !hideSwatch) || entity.reference || entity.dimensions) && (
           <div className="min-w-0 mt-1">
             {/* Fabric line — suppressed when the compound hero already names it. */}
@@ -638,13 +647,6 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
         />
         {/* No standalone swatch (a grid showed instead) → controls render here. */}
         {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
-        {/* The dealer's editable Descripción (the read-only catalog Description 2
-            now renders up under the name). */}
-        {entity.description && (
-          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
-            {entity.description}
-          </div>
-        )}
       </div>
       <LinePriceCell priced={priced} fmt={fmt} />
     </div>
@@ -1239,6 +1241,15 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               mid-scroll and overlapped the rows beneath it; the per-module headers
               already carry the structure as the client scrolls a long list. */}
           <LineIdentity family={line.family} name={line.name} />
+          {/* Dealer-authored Descripción for the composition as a whole, parked
+              directly beneath the identity (a compound has no single product
+              line) — the same position the simple line, the PDF and the editor
+              use. */}
+          {line.description && (
+            <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
+              {line.description}
+            </div>
+          )}
           {/* Uniform compound → state the shared fabric ONCE here (swatch +
               "Tapizado · …"), instead of repeating it on every row below. In
               edit mode the hero swatch is itself a whole-compound picker. */}
@@ -1413,14 +1424,6 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
             <ul className="mt-2 divide-y divide-ink-100 border-t border-ink-100">
               {(line.components || []).map((c, i) => renderComponentRow(c, i, hideSwatch, !hideSwatch))}
             </ul>
-          )}
-          {/* Dealer-authored Descripción for the composition as a whole — a
-              compound/modular has no single product line, so its description
-              lives on the parent and renders here (and on the PDF). */}
-          {line.description && (
-            <div className="text-[11px] text-ink-600 mt-2 max-w-xl whitespace-pre-line">
-              {line.description}
-            </div>
           )}
           {/* Compound roll-up — a neutral "Total compuesto" caption +
               bold total anchor, matching the redesigned PDF footer. The

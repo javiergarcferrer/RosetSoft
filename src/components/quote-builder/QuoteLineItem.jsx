@@ -819,6 +819,19 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           <ExtraPhotos line={line} onChange={onChange} />
         </div>
       </div>
+      {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
+          inline icons — the least vertical space — each expanding its field on
+          click. Parked directly beneath the product identity card (matching the
+          client preview + PDF), above the spec/material rows. Shown on every
+          line, INCLUDING compound/modular, so the dealer can describe a
+          composition as a whole (renders on the client PDF + preview). */}
+      <LineNotes
+        showDescription
+        description={line.description || ''}
+        onChangeDescription={(v) => onChange({ description: v })}
+        note={line.notes || ''}
+        onChangeNote={(v) => onChange({ notes: v })}
+      />
       {!compound && (
         <SpecStrip
           reference={line.reference}
@@ -834,18 +847,6 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
           every component within (the components inherit this link). */}
       {modelKey && <ModelLinkBar root={modelKey} record={modelRec} />}
       {!compound && <GradeFabricRow line={line} onChange={onChange} currency={currency} rates={rates} nameFilter={nameFilter} sourceUrl={sourceUrl} />}
-      {/* Descripción (PDF-facing) + Nota interna (private) collapse to two
-          inline icons — the least vertical space — each expanding its field on
-          click. Shown on every line, INCLUDING compound/modular, so the dealer
-          can describe a composition as a whole (renders on the client PDF +
-          preview). */}
-      <LineNotes
-        showDescription
-        description={line.description || ''}
-        onChangeDescription={(v) => onChange({ description: v })}
-        note={line.notes || ''}
-        onChangeNote={(v) => onChange({ notes: v })}
-      />
       {!compound && (
         <CatalogPicker
           open={productPickerOpen}
