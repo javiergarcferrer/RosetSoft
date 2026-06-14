@@ -169,12 +169,13 @@ export function PanelField({ label, value, onCommit, type = 'text', inputMode, p
 
 /**
  * RNC / cédula field with DGII auto-fill, for the expanded-panel grid. Same
- * draft/commit chrome as PanelField, plus: when a VALID, CHANGED id is
- * committed (blur/Enter) it looks the taxpayer up in the DGII registry and
- * writes the resolved name into the Empresa field via `onResolveCompany`
- * (razón social, falling back to nombre comercial). A tiny status line under
- * the input echoes the match (or "no encontrado"). Shared by the Clientes and
- * Profesionales panels so both auto-fill identically.
+ * draft/commit chrome as PanelField, plus: as soon as a COMPLETE rnc/cédula is
+ * typed (or pasted), it auto-looks-up the taxpayer in the DGII registry —
+ * ~500ms after the digits settle, no button and no need to blur — and writes
+ * the resolved name into the Empresa field via `onResolveCompany` (razón
+ * social, falling back to nombre comercial). A spinner shows while it queries;
+ * a tiny status line echoes the match (or "no encontrado"). Shared by the
+ * Clientes and Profesionales panels so both auto-fill identically.
  *
  *   value             — the stored RNC/cédula.
  *   onCommitRnc(v)    — persists the id; may return false to reject (revert).
@@ -185,18 +186,20 @@ export function RncPanelField({ value, onCommitRnc, onResolveCompany, className 
   const focused = useRef(false);
   const [looking, setLooking] = useState(false);
   const [status, setStatus] = useState('');
+  // The id we've already resolved from — dedupes the debounce-vs-blur double
+  // fire and stops a re-render from re-querying the same number.
+  const resolved = useRef('');
   useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
 
-  async function commit() {
-    focused.current = false;
-    const clean = cleanRnc(draft);
-    if (clean !== draft) setDraft(clean);
-    // Persist the id only when it actually changed — and gate the lookup on the
-    // same, so tabbing through an unchanged RNC never re-overwrites Empresa.
-    if (clean === String(value ?? '')) return;
-    const ok = await onCommitRnc(clean);
-    if (ok === false) { setDraft(value ?? ''); return; }
-    if (!isValidRncOrCedula(clean)) { setStatus(''); return; }
+  // Persist the id (when it changed) then DGII-fill Empresa from the registry.
+  // Guarded so the auto-fire and the blur never query the same id twice.
+  async function resolve(clean) {
+    if (!isValidRncOrCedula(clean) || resolved.current === clean) return;
+    resolved.current = clean;
+    if (clean !== String(value ?? '')) {
+      const ok = await onCommitRnc(clean);
+      if (ok === false) { resolved.current = ''; setDraft(value ?? ''); return; }
+    }
     setLooking(true);
     try {
       const r = await lookupRnc(clean);
@@ -208,9 +211,36 @@ export function RncPanelField({ value, onCommitRnc, onResolveCompany, className 
         setStatus(r.message || 'No encontrado.');
       }
     } catch {
+      resolved.current = '';   // transient failure — let a retry through
       setStatus('No se pudo consultar el RNC.');
     } finally {
       setLooking(false);
+    }
+  }
+
+  // Auto-fill: ~500ms after the digits settle on a COMPLETE, NEW rnc/cédula,
+  // look it up automatically (only while the user is editing — never on an
+  // external value change). This is what "automatically fills" means: no
+  // button, no need to blur.
+  useEffect(() => {
+    const clean = cleanRnc(draft);
+    if (!focused.current || !isValidRncOrCedula(clean) || clean === resolved.current) return;
+    const t = setTimeout(() => resolve(clean), 500);
+    return () => clearTimeout(t);
+    // resolve closes over the latest props each render; gate is `draft`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
+  // Blur: resolve a valid id immediately (no debounce wait); otherwise just
+  // persist whatever partial was typed, same as any panel field.
+  async function commit() {
+    focused.current = false;
+    const clean = cleanRnc(draft);
+    if (clean !== draft) setDraft(clean);
+    if (isValidRncOrCedula(clean)) { resolve(clean); return; }
+    if (clean !== String(value ?? '')) {
+      const ok = await onCommitRnc(clean);
+      if (ok === false) setDraft(value ?? '');
     }
   }
 
