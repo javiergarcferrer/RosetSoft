@@ -29,4 +29,3 @@ export {
   describePost,
   resolveCatalogProducts,
 } from './scheduler.js';
-export { resolveDmConversations, resolveDmThread } from './messaging.js';

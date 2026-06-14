@@ -45,7 +45,6 @@ const ADMIN_GROUP = {
     { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
     { to: '/marketing', label: 'Marketing', icon: Megaphone },
     { to: '/instagram-studio', label: 'Instagram Studio', icon: Instagram },
-    { to: '/messaging', label: 'Mensajes IG/FB', icon: MessageCircle },
     { to: '/shopify/orders', label: 'Pedidos Shopify', icon: ShoppingBag },
     // Single entry point — the full accounting section nav only joins the
     // sidebar while the admin is INSIDE /accounting/* (see navForRole).
