@@ -209,6 +209,10 @@ function LineRow({
             {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
             {line.family && <Text style={s.familyEyebrow}>{line.family}</Text>}
             <Text style={s.lineName}>{line.name || '—'}</Text>
+            {/* Catalog Description 2 (read-only product identity, e.g. "W/SHORT
+                UNIT") — directly under the name so it reads as part of the
+                title, matching the editor + client preview. */}
+            {!compound && line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
             {!hideSwatch && line.subtype && <Text style={s.lineSub}>{fabricDisplay(line.subtype)}</Text>}
             {(line.reference || line.dimensions) && (
               <View style={s.lineRefRow}>
@@ -218,9 +222,8 @@ function LineRow({
             )}
             {showSwatch && <View style={{ marginTop: 6 }}><Swatch src={swatchSrc} images={images} size={40} /></View>}
             <MaterialGrid cells={cells} images={images} />
-            {/* Catalog Description 2 (read-only product identity) then the
-                dealer-authored Descripción — two distinct fields. */}
-            {!compound && line.productDescription && <Text style={s.lineDesc}>{line.productDescription}</Text>}
+            {/* The dealer-authored Descripción (the read-only catalog
+                Description 2 now prints up under the name). */}
             {!compound && line.description && <Text style={s.lineDesc}>{line.description}</Text>}
           </View>
           <MoneyCell line={line} fmt={fmt} />
