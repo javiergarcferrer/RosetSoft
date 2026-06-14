@@ -88,7 +88,14 @@ export default function Chats() {
   }), [allConversations]);
   const conversations = useMemo(() => {
     if (filter === 'unread') return allConversations.filter((c) => c.unread > 0);
-    if (filter === 'awaiting') return allConversations.filter((c) => c.awaitingReply);
+    if (filter === 'awaiting') {
+      // "Sin responder" is an SLA view, so order it longest-waiting-first
+      // (oldest last activity on top) rather than most-recent — the client
+      // who has waited the longest is the one to answer next.
+      return allConversations
+        .filter((c) => c.awaitingReply)
+        .sort((a, b) => (a.lastAt || 0) - (b.lastAt || 0));
+    }
     return allConversations;
   }, [allConversations, filter]);
   const selected = useMemo(() => {

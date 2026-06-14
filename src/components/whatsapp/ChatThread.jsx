@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
@@ -256,6 +256,11 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // in a ref so the persist effect always writes under the CURRENT thread's
   // key, never the previous one during a switch render.
   const draftKeyRef = useRef(null);
+  // Unread divider: snapshot the first still-unread inbound message at the
+  // moment the thread opens, BEFORE the parent marks it read. The line stays
+  // pinned there for the visit (it doesn't chase new arrivals) and clears on
+  // the next thread switch.
+  const [unreadAnchorId, setUnreadAnchorId] = useState(null);
   useEffect(() => {
     const key = `rs.wa.draft.${contact.key}`;
     draftKeyRef.current = key;
@@ -263,7 +268,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     try { saved = localStorage.getItem(key) || ''; } catch { /* storage unavailable */ }
     setText(saved);
     setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0;
-  }, [contact.key]);
+    const firstUnread = thread.items.find((mm) => mm.direction === 'in' && !mm.readAt);
+    setUnreadAnchorId(firstUnread?.id || null);
+  }, [contact.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const key = draftKeyRef.current;
     if (!key) return;
@@ -556,8 +563,15 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       <div ref={listRef} onScroll={onListScroll} className="flex-1 overflow-y-auto px-4 py-4 bg-ink-50/40">
         <div className="flex min-h-full flex-col justify-end gap-1.5">
           {thread.items.map((m, i) => (
-            <Bubble
-              key={m.id}
+            <Fragment key={m.id}>
+              {m.id === unreadAnchorId && (
+                <div className="flex items-center gap-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                  <span className="h-px flex-1 bg-emerald-500/30" />
+                  Mensajes no leídos
+                  <span className="h-px flex-1 bg-emerald-500/30" />
+                </div>
+              )}
+              <Bubble
               m={m}
               prev={thread.items[i - 1]}
               onReply={setReplyTo}
@@ -570,7 +584,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               quoteChip={m.quoteId && m.quoteId !== contextQuoteId
                 ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
                 : null}
-            />
+              />
+            </Fragment>
           ))}
           {!thread.items.length && (
             <p className="text-xs text-ink-400 text-center py-8">
