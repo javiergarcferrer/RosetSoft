@@ -12,7 +12,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import useColumns from '../components/search/useColumns.js';
 import {
-  Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+  Cell, CELL_CLS, PanelField, PanelTextArea, RncPanelField, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
 } from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
@@ -769,6 +769,8 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
       <section className="px-4 py-3 space-y-2.5">
         <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del profesional</h4>
         <div className="grid grid-cols-2 gap-2">
+          <RncPanelField value={pro.rnc} onCommitRnc={(v) => onCommit('rnc', v)} onResolveCompany={(v) => onCommit('company', v)} />
+          <PanelField label="Empresa" value={pro.company} onCommit={(v) => onCommit('company', v)} />
           <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} className="col-span-2" />
           <PanelField label="Ciudad" value={pro.city} onCommit={(v) => onCommit('city', v)} className="col-span-2 sm:col-span-1" />
         </div>

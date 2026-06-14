@@ -904,6 +904,8 @@ export interface Professional {
   profileId: string;
   number?: number;
   name: string;
+  /** Fiscal id (RNC / cédula) — drives the DGII company-name auto-fill. */
+  rnc?: string;
   company?: string;
   email?: string;
   phone?: string;
