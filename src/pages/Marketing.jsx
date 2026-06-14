@@ -664,7 +664,7 @@ export default function Marketing() {
             <Stat
               label="Seguidores IG"
               value={(m.kpis.igFollowers ?? 0).toLocaleString('en-US')}
-              sub={`${m.kpis.newFollowers7 >= 0 ? '+' : ''}${m.kpis.newFollowers7.toLocaleString('en-US')} · ${m.kpis.profileViews7.toLocaleString('en-US')} visitas al perfil · 7d`}
+              sub={`${m.kpis.newFollowers7 >= 0 ? '+' : ''}${m.kpis.newFollowers7.toLocaleString('en-US')} · ${m.kpis.profileActions7.toLocaleString('en-US')} acciones en el perfil · 7d`}
             />
           </div>
 

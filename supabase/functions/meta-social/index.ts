@@ -577,6 +577,7 @@ Deno.serve(async (req) => {
 
   if (body.snapshot) {
     const since = Math.floor((Date.now() - 28 * 86_400_000) / 1000);
+    const since7 = Math.floor((Date.now() - 7 * 86_400_000) / 1000);
     const until = Math.floor(Date.now() / 1000);
     const errors: Record<string, string> = {};
     const safe = async <T>(key: string, fn: () => Promise<T>): Promise<T | null> => {
@@ -586,7 +587,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igAudience, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
+    const [profile, igProfile, igReach, igAudience, igProfileActions, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
       safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
       cfg.ig_user_id
         ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
@@ -596,12 +597,22 @@ Deno.serve(async (req) => {
           metric: 'reach', period: 'day', since: String(since), until: String(until),
         }))
         : Promise.resolve(null),
-      // Daily audience metrics — follower growth + profile views. Separate
+      // Daily follower growth — the time_series shape (period=day). Its own
       // call: mixing metric families 400s the whole insights request.
       cfg.ig_user_id
         ? safe('igAudience', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
-          metric: 'follower_count,profile_views',
+          metric: 'follower_count',
           period: 'day', since: String(since), until: String(until),
+        }))
+        : Promise.resolve(null),
+      // Profile actions, 7d total. `profile_views` was REMOVED in v22 —
+      // `profile_links_taps` (the modern total_value metric) is the live
+      // "people acting on your profile" signal; total_value collapses the
+      // window to one number, so we ask for exactly the last 7 days.
+      cfg.ig_user_id
+        ? safe('igProfileActions', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
+          metric: 'profile_links_taps', metric_type: 'total_value',
+          period: 'day', since: String(since7), until: String(until),
         }))
         : Promise.resolve(null),
       cfg.ig_user_id
@@ -663,6 +674,7 @@ Deno.serve(async (req) => {
       adAccount,
       igReach: igReach?.data || null,
       igAudience: igAudience?.data || null,
+      igProfileActions: igProfileActions?.data || null,
       igMedia: igMedia?.data || null,
       pageInsights: pageInsights?.data || null,
       adsDaily: adsDaily?.data || null,

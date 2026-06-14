@@ -90,17 +90,21 @@ test('no actions at all → null results label and no cost per result', () => {
   assert.equal(kpis.costPerResult7, null);
 });
 
-test('IG audience and Page insights series sum the right metric rows', () => {
+test('IG audience: follower_count is a daily series; profile actions a total_value', () => {
+  // follower_count stays the time_series shape; profile_views was removed in
+  // v22, so profile actions come from profile_links_taps' total_value (one #).
   const igAudience = [
     { name: 'follower_count', values: [{ value: 2 }, { value: 3 }] },
-    { name: 'profile_views', values: [{ value: 10 }, { value: 5 }] },
+  ];
+  const igProfileActions = [
+    { name: 'profile_links_taps', total_value: { value: 42 } },
   ];
   const pageInsights = [
     { name: 'page_post_engagements', values: Array.from({ length: 14 }, (_, i) => ({ value: i < 7 ? 1 : 4 })) },
   ];
-  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, pageInsights }, { now: NOW });
+  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, igProfileActions, pageInsights }, { now: NOW });
   assert.equal(kpis.newFollowers7, 5);
-  assert.equal(kpis.profileViews7, 15);
+  assert.equal(kpis.profileActions7, 42);
   assert.deepEqual(followerSeries, [2, 3]);
   assert.equal(kpis.pageEngagement7, 28);
   assert.equal(kpis.pageEngagementDeltaPct, 300); // 28 vs 7

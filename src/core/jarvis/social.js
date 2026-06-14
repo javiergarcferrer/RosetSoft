@@ -80,6 +80,11 @@ const RESULT_TYPES = [
 const metricRows = (insights, name) =>
   ((insights || []).find((m) => m.name === name)?.values) || [];
 
+// A `metric_type=total_value` insight collapses its window to one figure under
+// `total_value.value` (no per-day `values` array) — the modern IG shape.
+const totalValue = (insights, name) =>
+  num((insights || []).find((m) => m.name === name)?.total_value?.value);
+
 /**
  * Marketing API `date_start` ("YYYY-MM-DD") as a LOCAL-midnight timestamp.
  * `Date.parse` would read it as UTC midnight — in Santo Domingo (UTC-4)
@@ -140,11 +145,11 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const reach7 = sumTail(reachRows, 'value', 7);
   const reach7Prev = sumTail(reachRows, 'value', 7, 7);
 
-  // IG audience: net new followers per day + profile views.
+  // IG audience: net new followers per day (time series) + profile actions
+  // (profile_links_taps, a 7d total_value — `profile_views` was removed in v22).
   const followerRows = metricRows(s.igAudience, 'follower_count');
-  const profileViewRows = metricRows(s.igAudience, 'profile_views');
-  const profileViews7 = sumTail(profileViewRows, 'value', 7);
   const newFollowers7 = sumTail(followerRows, 'value', 7);
+  const profileActions7 = totalValue(s.igProfileActions, 'profile_links_taps');
 
   // Facebook Page daily engagement + unique reach (when Meta still answers
   // this metric family — absent otherwise).
@@ -259,7 +264,7 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       results7,
       resultsLabel: resultType ? resultType[1] : null,
       costPerResult7: results7 > 0 ? spend7 / results7 : null,
-      profileViews7,
+      profileActions7,
       newFollowers7,
       pageEngagement7,
       pageEngagementDeltaPct: deltaPct(pageEngagement7, pageEngagement7Prev),

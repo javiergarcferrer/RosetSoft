@@ -1001,9 +1001,9 @@ export default function Jarvis() {
                 {social.hasIg && (
                   <div className="jv-kpi">
                     <span className="label">Perfil IG · 7d</span>
-                    <b className="jv-mono">{social.kpis.profileViews7.toLocaleString('en-US')}</b>
+                    <b className="jv-mono">{social.kpis.profileActions7.toLocaleString('en-US')}</b>
                     <span className="sub">
-                      visitas · {social.kpis.newFollowers7 >= 0 ? '+' : ''}{social.kpis.newFollowers7} seguidores
+                      acciones · {social.kpis.newFollowers7 >= 0 ? '+' : ''}{social.kpis.newFollowers7} seguidores
                     </span>
                   </div>
                 )}
