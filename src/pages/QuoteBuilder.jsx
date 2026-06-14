@@ -27,6 +27,8 @@ import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.j
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import { displayPhone, waDigits } from '../lib/phone.js';
+import { shareLinkUrl, newShareToken } from '../lib/quoteShare.js';
+import { quoteSlug } from '../lib/quoteNaming.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
 import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
@@ -647,6 +649,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   const professional = quote.professionalId ? professionals.find((p) => p.id === quote.professionalId) : null;
   const seller = quote.createdByUserId ? (profiles || []).find((p) => p.id === quote.createdByUserId) : null;
 
+  // Public share link for the preview header's "Copiar enlace" button. Mints +
+  // enables the share token on first use (same as sending it), then returns the
+  // `/#/q/<slug>/<token>` URL — so the dealer can copy the LIVE quote link from
+  // the Cliente preview and send it however they like. Editor-only (the public
+  // view never gets this prop).
+  const getShareLink = async () => {
+    let token = quote.shareToken;
+    if (!token || !quote.shareEnabled) {
+      token = token || newShareToken();
+      await updateQuote({ shareToken: token, shareEnabled: true });
+    }
+    return shareLinkUrl(token, quoteSlug(quote, customer));
+  };
+
   return (
     <>
       {/* Scroll-position anchor — its scroll parent is the app-shell <main>,
@@ -730,6 +746,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           modelFabrics={modelFabrics}
           gradePricesFor={editorGradePricesFor}
           inEditor
+          getShareLink={getShareLink}
           // The picks the public link wires, so the preview is live too. hx joins
           // each into undo/redo + autosave (one snapshot per gesture), matching the
           // editor's other actions (QuoteActionsContext). onPickMaterialMany batches

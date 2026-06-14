@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Pencil } from 'lucide-react';
+import { Boxes, GitFork, ChevronDown, Plus, X, Check, Sparkles, Truck, Pencil, Link2 } from 'lucide-react';
 import ImageView from '../ImageView.jsx';
 import ImageZoom from './ImageZoom.jsx';
 import Modal from '../Modal.jsx';
@@ -110,7 +110,7 @@ function moduleAlternativeInfo(modules) {
   return map;
 }
 
-export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, inEditor, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
+export default function ClientPreview({ quote, settings, lines, quoteGroups, totals, customer, professional, seller, families, materials, modelFabrics, gradePricesFor, inEditor, getShareLink, materialSelections, onSelectMaterial, onPickMaterial, onPickMaterialMany, onToggleOptional, onSelectAlternative }) {
   const currency = quote.currencyCode || 'USD';
   const rates = quote.rates || { USD: 1 };
   const dopRate = rates.DOP || null;
@@ -128,6 +128,32 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
   // surface renders byte-identical to the read-only one.
   const [mode, setMode] = useState('view'); // 'view' | 'edit'
   const editable = interactive && mode === 'edit';
+  // "Copiar enlace" — only the dealer's editor preview passes getShareLink (the
+  // public link never does, so the button is editor-only). It mints/enables the
+  // share token if needed and returns the public `/#/q/<token>` URL, which we
+  // copy so the dealer can send the live quote anywhere they like.
+  const [linkCopied, setLinkCopied] = useState(false);
+  async function copyShareLink() {
+    if (!getShareLink) return;
+    let url = '';
+    try { url = await getShareLink(); } catch { url = ''; }
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard API blocked (older / non-secure context) → hidden-textarea fallback.
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* give up silently */ }
+      document.body.removeChild(ta);
+    }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1800);
+  }
   // The full fabric picker is available only when its catalog + commit handler
   // are both wired. The per-line price source differs by surface but the picker
   // is identical: the share link carries baked `gradePrices` on each line; the
@@ -182,12 +208,28 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           a floating pill pinned to the screen (rendered after this card) so it
           never scrolls away — the banner just states the mode + date here. */}
       <div className="bg-ink-900 text-ink-50 px-5 py-2 text-[11px] flex items-center justify-between gap-3">
-        <span>
+        <span className="min-w-0 truncate">
           {interactive
             ? (mode === 'edit' ? 'Personaliza tu cotización · elige opciones y telas' : 'Tu propuesta · toca el lápiz para personalizar')
             : 'Vista previa del cliente · de solo lectura'}
         </span>
-        <span className="opacity-60 flex-shrink-0">{formatDate(quote.updatedAt)}</span>
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          {/* Copiar enlace — grab the public share link straight from the preview
+              header to send it freely (WhatsApp, email, anywhere). Editor-only. */}
+          {getShareLink && (
+            <button
+              type="button"
+              onClick={copyShareLink}
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 -my-0.5 font-medium text-ink-50 hover:bg-white/10 active:bg-white/15 transition-colors"
+              title="Copiar el enlace para compartir esta cotización"
+              aria-label="Copiar enlace de la cotización"
+            >
+              {linkCopied ? <Check size={12} aria-hidden /> : <Link2 size={12} aria-hidden />}
+              {linkCopied ? 'Enlace copiado' : 'Copiar enlace'}
+            </button>
+          )}
+          <span className="opacity-60">{formatDate(quote.updatedAt)}</span>
+        </div>
       </div>
 
       {/* Header — the quote number sits to the RIGHT of the logo at EVERY width

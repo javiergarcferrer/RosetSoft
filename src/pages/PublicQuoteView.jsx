@@ -1,7 +1,7 @@
 import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin, Download, Link2 } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin, Download } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 // Derivations + the one mutation reducer come from the quote Model.
@@ -29,7 +29,6 @@ export default function PublicQuoteView() {
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
   const [pdf, setPdf] = useState('idle'); // idle | working | error — PDF download
-  const [copied, setCopied] = useState(false); // "Copiar enlace" feedback
   // The bundle we're currently showing (kept in a ref too, so the optimistic
   // chain can build each pick on the latest local state without waiting for a
   // re-render).
@@ -124,28 +123,6 @@ export default function PublicQuoteView() {
   // Edge Function reprice each piece at its own model's price in a single write.
   const pickMaterialFreeMany = (selsById) => applyPick({ materialPick: selsById });
 
-  // Copy THIS page's URL so the dealer (or the client) can paste it anywhere —
-  // WhatsApp, email, a text — and share the live quote freely. Prefers the async
-  // Clipboard API; falls back to a hidden-textarea execCommand for older or
-  // non-secure contexts so the button never silently does nothing.
-  async function copyLink() {
-    const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = url;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); } catch { /* give up silently */ }
-      document.body.removeChild(ta);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  }
-
   // Download the quote as a branded PDF. The link is anonymous, so the renderer
   // resolves images through public bucket URLs (publicImages). react-pdf is
   // lazy-imported via safeDynamicImport — the heavy renderer loads only on
@@ -211,17 +188,6 @@ export default function PublicQuoteView() {
           {pdf === 'error' && (
             <p role="alert" className="text-xs text-red-600 min-w-0">No se pudo generar el PDF. Inténtalo de nuevo.</p>
           )}
-          {/* Copy this quote's share link to send it freely (WhatsApp, email,
-              anywhere) — the dealer can grab the link straight from the header. */}
-          <button
-            type="button"
-            onClick={copyLink}
-            className="btn-secondary flex-shrink-0"
-            aria-label="Copiar el enlace de la cotización"
-          >
-            {copied ? <Check size={14} aria-hidden /> : <Link2 size={14} aria-hidden />}
-            {copied ? 'Enlace copiado' : 'Copiar enlace'}
-          </button>
           <button
             type="button"
             onClick={downloadPdf}
