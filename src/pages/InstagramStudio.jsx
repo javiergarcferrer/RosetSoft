@@ -59,40 +59,76 @@ function BarList({ rows, max, accent = '#c96a2a' }) {
   );
 }
 
-// The best-time-to-post heatmap: 7 rows (days) × 24 cols (hours), opacity from
-// the normalized engagement the VM computed. The peak cell gets a ring.
+// Best-time-to-post heatmap. Desktop renders the full 7×24 (weekday × hour);
+// a phone can't fit 24 columns at a usable size, so below md it folds into the
+// VM's 7×6 four-hour buckets — reduce density rather than scroll sideways.
+const heatBg = (norm) => (norm > 0 ? `rgb(var(--brand-500) / ${(0.15 + norm * 0.85).toFixed(2)})` : 'rgb(var(--ink-100))');
+
 function Heatmap({ bestTimes }) {
-  const byKey = useMemo(() => {
+  const cellByKey = useMemo(() => {
     const m = new Map();
     for (const c of bestTimes.cells) m.set(`${c.day}:${c.hour}`, c);
     return m;
   }, [bestTimes]);
+  const bucketByKey = useMemo(() => {
+    const m = new Map();
+    for (const b of bestTimes.buckets) m.set(`${b.day}:${b.bucket}`, b);
+    return m;
+  }, [bestTimes]);
   return (
-    <div className="space-y-[3px]">
-      {bestTimes.dayLabels.map((label, day) => (
-        <div key={day} className="flex items-center gap-1.5">
-          <div className="w-8 shrink-0 text-[10px] uppercase tracking-wide text-ink-400">{label}</div>
-          <div className="flex gap-[2px] flex-1">
-            {Array.from({ length: 24 }, (_, hour) => {
-              const c = byKey.get(`${day}:${hour}`);
-              const norm = c?.norm || 0;
-              const isPeak = bestTimes.peak && bestTimes.peak.day === day && bestTimes.peak.hour === hour;
-              return (
-                <div
-                  key={hour}
-                  className={`h-4 flex-1 rounded-[2px] ${isPeak ? 'ring-2 ring-brand-600' : ''}`}
-                  style={{ backgroundColor: norm > 0 ? `rgb(var(--brand-500) / ${(0.15 + norm * 0.85).toFixed(2)})` : 'rgb(var(--ink-100))' }}
-                  title={c && c.count ? `${label} ${String(hour).padStart(2, '0')}:00 · ${c.count} post${c.count > 1 ? 's' : ''} · ${fmt(c.engagement)} interacciones` : `${label} ${String(hour).padStart(2, '0')}:00`}
-                />
-              );
-            })}
+    <>
+      {/* desktop — 7×24 */}
+      <div className="hidden md:block space-y-[3px]">
+        {bestTimes.dayLabels.map((label, day) => (
+          <div key={day} className="flex items-center gap-1.5">
+            <div className="w-8 shrink-0 text-[10px] uppercase tracking-wide text-ink-400">{label}</div>
+            <div className="flex gap-[2px] flex-1">
+              {Array.from({ length: 24 }, (_, hour) => {
+                const c = cellByKey.get(`${day}:${hour}`);
+                const norm = c?.norm || 0;
+                const isPeak = bestTimes.peak && bestTimes.peak.day === day && bestTimes.peak.hour === hour;
+                return (
+                  <div
+                    key={hour}
+                    className={`h-4 flex-1 rounded-[2px] ${isPeak ? 'ring-2 ring-brand-600' : ''}`}
+                    style={{ backgroundColor: heatBg(norm) }}
+                    title={c && c.count ? `${label} ${String(hour).padStart(2, '0')}:00 · ${c.count} post${c.count > 1 ? 's' : ''} · ${fmt(c.engagement)} interacciones` : `${label} ${String(hour).padStart(2, '0')}:00`}
+                  />
+                );
+              })}
+            </div>
           </div>
+        ))}
+        <div className="flex items-center gap-1.5 pl-9 text-[10px] text-ink-400">
+          <span>0h</span><span className="flex-1 text-center">6h</span><span className="flex-1 text-center">12h</span><span className="flex-1 text-center">18h</span><span>23h</span>
         </div>
-      ))}
-      <div className="flex items-center gap-1.5 pl-9 text-[10px] text-ink-400">
-        <span>0h</span><span className="flex-1 text-center">6h</span><span className="flex-1 text-center">12h</span><span className="flex-1 text-center">18h</span><span>23h</span>
       </div>
-    </div>
+      {/* mobile — 7×6 four-hour buckets */}
+      <div className="md:hidden space-y-1">
+        {bestTimes.dayLabels.map((label, day) => (
+          <div key={day} className="flex items-center gap-1.5">
+            <div className="w-8 shrink-0 text-[10px] uppercase tracking-wide text-ink-400">{label}</div>
+            <div className="flex gap-1 flex-1">
+              {Array.from({ length: 6 }, (_, bucket) => {
+                const b = bucketByKey.get(`${day}:${bucket}`);
+                const norm = b?.norm || 0;
+                return (
+                  <div
+                    key={bucket}
+                    className="h-6 flex-1 rounded-[3px]"
+                    style={{ backgroundColor: heatBg(norm) }}
+                    title={b && b.count ? `${label} ${bestTimes.bucketLabels[bucket]}h · ${fmt(b.engagement)} interacciones` : `${label} ${bestTimes.bucketLabels[bucket]}h`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        <div className="flex gap-1 pl-9 text-[9px] text-ink-400">
+          {bestTimes.bucketLabels.map((l) => <span key={l} className="flex-1 text-center">{l}</span>)}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -316,88 +352,109 @@ export default function InstagramStudio() {
                 </div>
                 {m.profile.biography && <div className="text-xs text-ink-400 truncate max-w-md mt-0.5">{m.profile.biography}</div>}
               </div>
-              {m.reachSeries.length > 1 && (
-                <div className="ml-auto hidden sm:block w-40">
-                  <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Alcance · 28d</div>
-                  <Sparkline points={m.reachSeries} color="rgb(var(--brand-500))" height={34} />
-                </div>
-              )}
+              <div className="ml-auto hidden sm:block w-40 text-right">
+                {m.reachSeries.length > 1 && (
+                  <>
+                    <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Alcance · 28d</div>
+                    <Sparkline points={m.reachSeries} color="rgb(var(--brand-500))" height={34} />
+                  </>
+                )}
+                {m.publishLimit?.remaining != null && (
+                  <div className="text-[11px] text-ink-400 mt-1">{m.publishLimit.remaining}/{m.publishLimit.total} publicaciones hoy</div>
+                )}
+              </div>
             </div>
             <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mt-4">
-              <Stat label="Alcance · 28d" value={fmt(m.kpis.reach28)} sub="cuentas alcanzadas" />
-              <Stat label="Cuentas activadas" value={m.kpis.engaged28 != null ? fmt(m.kpis.engaged28) : '—'} sub="interactuaron · 28d" />
+              <Stat label="Alcance · 28d" value={fmt(m.kpis.reach28)} sub={m.kpis.hasReachSplit ? `${m.kpis.followerReachPct}% seguidores` : 'cuentas alcanzadas'} />
+              <Stat label="Visualizaciones · 28d" value={m.kpis.views28 != null ? fmt(m.kpis.views28) : '—'} sub="impresiones" />
               <Stat label="Interacciones · 28d" value={m.kpis.interactions28 != null ? fmt(m.kpis.interactions28) : '—'} sub={`tasa ${pctFmt(m.kpis.engagementRatePct)}`} />
-              <Stat label="Visitas al perfil" value={m.kpis.profileViews28 != null ? fmt(m.kpis.profileViews28) : '—'} sub="28d" />
+              <Stat label="Toques al perfil · 28d" value={m.kpis.profileTaps28 != null ? fmt(m.kpis.profileTaps28) : '—'} sub="enlaces y botones" />
             </div>
+            {m.kpis.hasReachSplit && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-ink-500 mb-1">
+                  <span>Alcance por audiencia</span>
+                  <span className="tabular-nums">{fmt(m.kpis.followerReach)} seguidores · {fmt(m.kpis.nonFollowerReach)} nuevos</span>
+                </div>
+                <BulletBar value={m.kpis.followerReach} max={m.kpis.reach28} color="#c96a2a" height={8} />
+                <div className="mt-1 flex items-center gap-4 text-[11px] text-ink-400">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: '#c96a2a' }} /> Seguidores {m.kpis.followerReachPct}%</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-ink-200" /> No seguidores {100 - m.kpis.followerReachPct}%</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* selected-post drill-down */}
+          {/* selected-post drill-down — bottom sheet on mobile, modal on desktop */}
           {selected && (
-            <div className="card">
-              <div className="card-header flex items-center">
-                <span className="flex items-center gap-2 font-medium"><Sparkles size={15} /> Rendimiento de la publicación</span>
-                <button type="button" className="ml-auto text-ink-400 hover:text-ink-700" onClick={() => setSelected(null)} aria-label="Cerrar"><X size={16} /></button>
-              </div>
-              <div className="card-pad grid gap-4 md:grid-cols-2">
-                <div>
-                  <div className="aspect-square w-full overflow-hidden rounded-lg bg-ink-100">
-                    <ImageView id={null} fallbackUrl={selected.thumb} alt={selected.excerpt} className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 text-sm text-ink-500">
-                    <span className="inline-flex items-center gap-1"><Heart size={13} /> {fmt(selected.likes)}</span>
-                    <span className="inline-flex items-center gap-1"><MessageCircle size={13} /> {fmt(selected.comments)}</span>
-                    <span className="text-xs text-ink-400">{selected.ago}</span>
-                    {selected.permalink && <a href={selected.permalink} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-brand-700 hover:underline"><ExternalLink size={13} /> Ver</a>}
-                  </div>
-                  {selected.caption && <p className="mt-2 text-sm text-ink-600 line-clamp-3">{selected.caption}</p>}
-                  {/* insights */}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {insights.loading && <div className="text-sm text-ink-400 col-span-2">Cargando métricas…</div>}
-                    {insights.error && <div className="text-xs text-amber-700 col-span-2">{insights.error}</div>}
-                    {insights.rows.map((r) => (
-                      <div key={r.key} className="rounded-lg border border-ink-100 px-3 py-2">
-                        <div className="text-[11px] uppercase tracking-wider text-ink-400">{r.label}</div>
-                        <div className="font-display text-lg font-semibold tabular-nums text-ink-900">{fmt(r.value)}</div>
-                      </div>
-                    ))}
-                  </div>
+            <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setSelected(null)} />
+              <div className="relative max-h-[88vh] w-full overflow-auto rounded-t-2xl bg-surface shadow-2xl sm:max-w-3xl sm:rounded-2xl">
+                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-ink-100 bg-surface px-5 py-3">
+                  <span className="flex items-center gap-2 font-medium"><Sparkles size={15} /> Rendimiento de la publicación</span>
+                  <button type="button" className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-400 hover:bg-ink-50 hover:text-ink-700" onClick={() => setSelected(null)} aria-label="Cerrar"><X size={18} /></button>
                 </div>
-                {/* comments + moderation */}
-                <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-2">Comentarios</div>
-                  {comments.loading && <div className="text-sm text-ink-400">Cargando…</div>}
-                  {comments.error && <div className="text-xs text-amber-700">{comments.error}</div>}
-                  {!comments.loading && !comments.error && comments.rows.length === 0 && <div className="text-sm text-ink-400">Sin comentarios.</div>}
-                  <div className="space-y-2.5 max-h-80 overflow-auto pr-1">
-                    {comments.rows.map((c) => (
-                      <div key={c.id} className={`text-sm ${c.hidden ? 'opacity-50' : ''}`}>
-                        <div className="flex items-baseline gap-2">
-                          <span className="min-w-0">
-                            <span className="font-medium text-ink-900">@{c.username || 'usuario'}</span>{' '}
-                            <span className="text-ink-600">{c.text}</span>
-                          </span>
-                          <span className="ml-auto shrink-0 text-[11px] text-ink-400">{c.ago}</span>
+                <div className="grid gap-4 p-5 md:grid-cols-2 [padding-bottom:calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+                  <div>
+                    <div className="aspect-square w-full overflow-hidden rounded-lg bg-ink-100">
+                      <ImageView id={null} fallbackUrl={selected.thumb} alt={selected.excerpt} className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-sm text-ink-500">
+                      <span className="inline-flex items-center gap-1"><Heart size={13} /> {fmt(selected.likes)}</span>
+                      <span className="inline-flex items-center gap-1"><MessageCircle size={13} /> {fmt(selected.comments)}</span>
+                      <span className="text-xs text-ink-400">{selected.ago}</span>
+                      {selected.permalink && <a href={selected.permalink} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-brand-700 hover:underline"><ExternalLink size={13} /> Ver</a>}
+                    </div>
+                    {selected.caption && <p className="mt-2 text-sm text-ink-600 line-clamp-3">{selected.caption}</p>}
+                    {/* insights */}
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {insights.loading && <div className="col-span-2 text-sm text-ink-400">Cargando métricas…</div>}
+                      {insights.error && <div className="col-span-2 text-xs text-amber-700">{insights.error}</div>}
+                      {insights.rows.map((r) => (
+                        <div key={r.key} className="rounded-lg border border-ink-100 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-wider text-ink-400">{r.label}</div>
+                          <div className="font-display text-lg font-semibold tabular-nums text-ink-900">{fmt(r.value)}{r.unit ? ` ${r.unit}` : ''}</div>
                         </div>
-                        <div className="mt-1 flex items-center gap-3 text-[11px] text-ink-400">
-                          {c.replyCount > 0 && <span>{c.replyCount} respuesta{c.replyCount > 1 ? 's' : ''}</span>}
-                          <button type="button" className="hover:text-brand-700" onClick={() => { setReplyId(replyId === c.id ? null : c.id); setReplyText(''); }} disabled={modBusy === c.id}>Responder</button>
-                          <button type="button" className="inline-flex items-center gap-1 hover:text-ink-800" onClick={() => toggleHide(c)} disabled={modBusy === c.id}>
-                            {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />} {c.hidden ? 'Mostrar' : 'Ocultar'}
-                          </button>
-                          <button type="button" className="inline-flex items-center gap-1 hover:text-red-600" onClick={() => removeComment(c)} disabled={modBusy === c.id}>
-                            <Trash2 size={12} /> Eliminar
-                          </button>
-                          {modBusy === c.id && <RefreshCw size={12} className="animate-spin" />}
-                        </div>
-                        {c.modError && <div className="text-[11px] text-red-600 mt-0.5">{c.modError}</div>}
-                        {replyId === c.id && (
-                          <div className="mt-1.5 flex gap-2">
-                            <input className="input flex-1" value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendReply(c.id); }} placeholder={`Responder a @${c.username}…`} maxLength={500} autoFocus />
-                            <button type="button" className="btn-brand" onClick={() => sendReply(c.id)} disabled={!replyText.trim() || modBusy === c.id} aria-label="Enviar"><Send size={14} /></button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* comments + moderation */}
+                  <div className="min-w-0">
+                    <div className="mb-2 text-[11px] uppercase tracking-wider text-ink-400">Comentarios</div>
+                    {comments.loading && <div className="text-sm text-ink-400">Cargando…</div>}
+                    {comments.error && <div className="text-xs text-amber-700">{comments.error}</div>}
+                    {!comments.loading && !comments.error && comments.rows.length === 0 && <div className="text-sm text-ink-400">Sin comentarios.</div>}
+                    <div className="max-h-80 space-y-2.5 overflow-auto pr-1">
+                      {comments.rows.map((c) => (
+                        <div key={c.id} className={`text-sm ${c.hidden ? 'opacity-50' : ''}`}>
+                          <div className="flex items-baseline gap-2">
+                            <span className="min-w-0">
+                              <span className="font-medium text-ink-900">@{c.username || 'usuario'}</span>{' '}
+                              <span className="text-ink-600">{c.text}</span>
+                            </span>
+                            <span className="ml-auto shrink-0 text-[11px] text-ink-400">{c.ago}</span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-ink-400">
+                            {c.replyCount > 0 && <span className="mr-1">{c.replyCount} resp.</span>}
+                            <button type="button" className="rounded px-2 py-1 hover:bg-ink-50 hover:text-brand-700" onClick={() => { setReplyId(replyId === c.id ? null : c.id); setReplyText(''); }} disabled={modBusy === c.id}>Responder</button>
+                            <button type="button" className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-ink-50 hover:text-ink-800" onClick={() => toggleHide(c)} disabled={modBusy === c.id}>
+                              {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />} {c.hidden ? 'Mostrar' : 'Ocultar'}
+                            </button>
+                            <button type="button" className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-ink-50 hover:text-red-600" onClick={() => removeComment(c)} disabled={modBusy === c.id}>
+                              <Trash2 size={12} /> Eliminar
+                            </button>
+                            {modBusy === c.id && <RefreshCw size={12} className="animate-spin" />}
+                          </div>
+                          {c.modError && <div className="mt-0.5 text-[11px] text-red-600">{c.modError}</div>}
+                          {replyId === c.id && (
+                            <div className="mt-1.5 flex gap-2">
+                              <input className="input flex-1" value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendReply(c.id); }} placeholder={`Responder a @${c.username}…`} maxLength={500} autoFocus />
+                              <button type="button" className="btn-brand min-h-[44px]" onClick={() => sendReply(c.id)} disabled={!replyText.trim() || modBusy === c.id} aria-label="Enviar"><Send size={14} /></button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

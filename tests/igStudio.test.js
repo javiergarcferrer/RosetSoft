@@ -56,22 +56,61 @@ test('no demographics → audience.hasData false, empty arrays (never crashes)',
   assert.deepEqual(audience.topCities, []);
 });
 
-test('KPIs read total_value metrics and sum the daily reach series', () => {
+test('KPIs: views/engaged/interactions + profile taps; reach from the follow split', () => {
   const { kpis, reachSeries } = resolveIgStudio({
     accountTotals: [
-      { name: 'reach', total_value: { value: 5000 } },
+      { name: 'views', total_value: { value: 9000 } },
       { name: 'accounts_engaged', total_value: { value: 800 } },
       { name: 'total_interactions', total_value: { value: 1500 } },
     ],
-    profileViews: [{ name: 'profile_views', total_value: { value: 240 } }],
+    profileTaps: [{ name: 'profile_links_taps', total_value: { value: 120 } }],
+    reachByFollow: [{ name: 'reach', total_value: { breakdowns: [{ results: [
+      { dimension_values: ['FOLLOWER'], value: 4000 },
+      { dimension_values: ['NON_FOLLOWER'], value: 900 },
+      { dimension_values: ['UNKNOWN'], value: 100 },
+    ] }] } }],
     reach: [{ name: 'reach', values: [{ value: '100' }, { value: '200' }, { value: '50' }] }],
   }, { now: NOW });
-  assert.equal(kpis.reach28, 5000); // prefers the total_value
+  assert.equal(kpis.views28, 9000);
   assert.equal(kpis.engaged28, 800);
   assert.equal(kpis.interactions28, 1500);
-  assert.equal(kpis.profileViews28, 240);
+  assert.equal(kpis.profileTaps28, 120);
+  assert.equal(kpis.reach28, 5000); // 4000 + 900 + 100
+  assert.equal(kpis.followerReach, 4000);
+  assert.equal(kpis.nonFollowerReach, 1000); // non-follower + unknown
+  assert.equal(kpis.followerReachPct, 80); // 4000 / 5000
   assert.ok(Math.abs(kpis.engagementRatePct - 30) < 1e-9); // 1500 / 5000
-  assert.deepEqual(reachSeries, [100, 200, 50]); // string values normalized
+  assert.deepEqual(reachSeries, [100, 200, 50]);
+});
+
+test('reach falls back to the daily series sum when the follow split is absent', () => {
+  const { kpis } = resolveIgStudio({ reach: [{ name: 'reach', values: [{ value: 100 }, { value: 200 }] }] }, { now: NOW });
+  assert.equal(kpis.reach28, 300);
+  assert.equal(kpis.hasReachSplit, false);
+});
+
+test('publish quota → used / total / remaining', () => {
+  const { publishLimit } = resolveIgStudio({
+    publishLimit: [{ quota_usage: 12, config: { quota_total: 50, quota_duration: 86400 } }],
+  }, { now: NOW });
+  assert.deepEqual(publishLimit, { used: 12, total: 50, remaining: 38 });
+});
+
+test('heatmap also folds into 7×6 four-hour buckets for mobile', () => {
+  // DR-local Friday 22:00 → day 5, hour 22 → bucket 5 (20–24).
+  const { bestTimes } = resolveIgStudio({ media: [{ id: 'x', like_count: '40', comments_count: '0', timestamp: '2026-06-13T02:00:00+0000' }] }, { now: NOW });
+  assert.equal(bestTimes.buckets.length, 42); // 7 × 6
+  assert.equal(bestTimes.bucketLabels.length, 6);
+  const b = bestTimes.buckets.find((x) => x.day === 5 && x.bucket === 5);
+  assert.equal(b.engagement, 40);
+  assert.equal(b.norm, 1);
+});
+
+test('reel watch time (ms) surfaces as seconds with a unit', () => {
+  const rows = resolveMediaInsights({ reach: 100, ig_reels_avg_watch_time: 8200 });
+  const wt = rows.find((r) => r.key === 'ig_reels_avg_watch_time');
+  assert.equal(wt.value, 8); // 8200 ms → 8 s
+  assert.equal(wt.unit, 's');
 });
 
 test('content grid normalizes string counts, marks reels, builds top-3 by engagement', () => {

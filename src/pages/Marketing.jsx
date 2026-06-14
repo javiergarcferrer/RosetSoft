@@ -8,6 +8,7 @@ import {
   CalendarClock, Instagram, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import MediaPicker from '../components/MediaPicker.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { resolveSocialPulse } from '../core/jarvis/index.js';
@@ -25,10 +26,6 @@ function Stat({ label, value, sub, tone }) {
 const deltaSub = (pct, fallback) => (pct != null
   ? `${pct >= 0 ? '+' : ''}${pct}% vs 7d anteriores`
   : fallback);
-
-// A URL the composer should treat as video (→ Reel / video Story) rather than
-// an image. Extension-based, tolerant of a query string.
-const isVideoUrl = (u) => /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(String(u || '').trim());
 
 // One comment-triage card, used for both Instagram and Facebook — same markup,
 // the platform only changes the @-prefix and which edge a reply posts to. The
@@ -215,9 +212,7 @@ export default function Marketing() {
 
   // ── composer ─────────────────────────────────────────────────────────
   const [pubText, setPubText] = useState('');
-  const [pubImageUrl, setPubImageUrl] = useState('');
-  const [pubVideoUrl, setPubVideoUrl] = useState('');
-  const [pubCarousel, setPubCarousel] = useState(''); // one media URL per line
+  const [pubMedia, setPubMedia] = useState([]); // [{ url, type, key }] from device upload
   const [pubMode, setPubMode] = useState('feed'); // 'feed' | 'reel' | 'story' | 'carousel'
   const [pubBusy, setPubBusy] = useState(false);
   const [pubNote, setPubNote] = useState(null);
@@ -225,22 +220,30 @@ export default function Marketing() {
   // surfaced as a one-tap "Finalizar" so the user never loses the upload.
   const [pendingIg, setPendingIg] = useState(null); // { creationId }
   const [finishBusy, setFinishBusy] = useState(false);
+  // Advanced options (alt text, collaborators, first comment).
+  const [showAdv, setShowAdv] = useState(false);
+  const [altText, setAltText] = useState('');
+  const [collaborators, setCollaborators] = useState('');
+  const [firstComment, setFirstComment] = useState('');
 
-  const carouselLines = useMemo(
-    () => (pubMode === 'carousel'
-      ? pubCarousel.split('\n').map((s) => s.trim()).filter(Boolean)
-      : []),
-    [pubMode, pubCarousel],
-  );
-  // Enough to publish: any caption, a single image/video, or a carousel of ≥2.
-  const canPublish = !!(pubText.trim() || pubImageUrl.trim() || pubVideoUrl.trim() || carouselLines.length >= 2);
+  const maxMedia = pubMode === 'carousel' ? 10 : 1;
+  // Drop extra media when switching from carousel to a single-item mode.
+  useEffect(() => { setPubMedia((prev) => (maxMedia === 1 ? prev.slice(0, 1) : prev)); }, [maxMedia]);
+
+  // Enough to publish: any caption, a single media, or a carousel of ≥2.
+  const canPublish = !!(pubText.trim() || (pubMode === 'carousel' ? pubMedia.length >= 2 : pubMedia.length >= 1));
+
+  const resetComposer = () => {
+    setPubText(''); setPubMedia([]); setAltText(''); setCollaborators(''); setFirstComment('');
+  };
 
   const publish = useCallback(async () => {
     const message = pubText.trim();
-    const image = pubImageUrl.trim();
-    const video = pubVideoUrl.trim();
-    const carousel = carouselLines.map((u) => (isVideoUrl(u) ? { videoUrl: u } : { imageUrl: u }));
     if (!canPublish || pubBusy) return;
+    const first = pubMedia[0];
+    const carousel = pubMode === 'carousel'
+      ? pubMedia.map((it) => (it.type === 'video' ? { videoUrl: it.url } : { imageUrl: it.url }))
+      : null;
     setPubBusy(true);
     setPubNote(null);
     setPendingIg(null);
@@ -249,10 +252,13 @@ export default function Marketing() {
         body: {
           publish: {
             message,
-            imageUrl: image || undefined,
-            videoUrl: video || undefined,
-            carousel: carousel.length ? carousel : undefined,
+            imageUrl: pubMode !== 'carousel' && first?.type === 'image' ? first.url : undefined,
+            videoUrl: pubMode !== 'carousel' && first?.type === 'video' ? first.url : undefined,
+            carousel: carousel && carousel.length ? carousel : undefined,
             igStory: pubMode === 'story',
+            altText: altText.trim() || undefined,
+            collaborators: collaborators.split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean).slice(0, 3),
+            firstComment: firstComment.trim() || undefined,
             targets: ['instagram'],
           },
         },
@@ -267,16 +273,13 @@ export default function Marketing() {
           : ig.pending ? 'Instagram: procesando…'
             : (ig.error || data?.error || 'sin respuesta'),
       });
-      if (data?.ok) {
-        setPubText(''); setPubImageUrl(''); setPubVideoUrl(''); setPubCarousel('');
-        load();
-      }
+      if (data?.ok) { resetComposer(); load(); }
     } catch (e) {
       setPubNote({ ok: false, text: e?.message || 'Fallo al publicar' });
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubImageUrl, pubVideoUrl, carouselLines, canPublish, pubMode, pubBusy, load]);
+  }, [pubText, pubMedia, pubMode, altText, collaborators, firstComment, canPublish, pubBusy, load]);
 
   const finishPending = useCallback(async () => {
     if (!pendingIg?.creationId || finishBusy) return;
@@ -425,7 +428,7 @@ export default function Marketing() {
                 <div className="card-header">
                   <span className="flex items-center gap-2 font-medium"><Instagram size={15} /> Publicar en Instagram</span>
                 </div>
-                <div className="card-pad space-y-2.5">
+                <div className="card-pad space-y-3">
                   <textarea
                     className="input w-full min-h-20"
                     value={pubText}
@@ -433,35 +436,29 @@ export default function Marketing() {
                     placeholder={pubMode === 'story' ? 'Texto opcional…' : 'Pie de foto…'}
                     maxLength={2200}
                   />
-                  {pubMode === 'carousel' ? (
-                    <textarea
-                      className="input w-full min-h-20"
-                      value={pubCarousel}
-                      onChange={(e) => setPubCarousel(e.target.value)}
-                      placeholder={'Carrusel: una URL por línea (imágenes o videos, 2–10)'}
-                      spellCheck={false}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input
-                        className="input w-full"
-                        value={pubImageUrl}
-                        onChange={(e) => setPubImageUrl(e.target.value)}
-                        placeholder="URL de imagen"
-                        spellCheck={false}
-                      />
-                      <input
-                        className="input w-full"
-                        value={pubVideoUrl}
-                        onChange={(e) => setPubVideoUrl(e.target.value)}
-                        placeholder="URL de video (Reel)"
-                        spellCheck={false}
-                      />
+                  <MediaPicker
+                    items={pubMedia}
+                    onChange={setPubMedia}
+                    max={maxMedia}
+                    accept={pubMode === 'reel' ? 'video/*' : 'image/*,video/*'}
+                  />
+
+                  {/* advanced options — alt text, collaborators, first comment */}
+                  <button type="button" className="text-xs text-brand-700 hover:underline" onClick={() => setShowAdv((v) => !v)}>
+                    {showAdv ? 'Ocultar opciones avanzadas' : 'Opciones avanzadas'}
+                  </button>
+                  {showAdv && (
+                    <div className="space-y-2 rounded-lg border border-ink-100 p-3">
+                      <input className="input w-full" value={collaborators} onChange={(e) => setCollaborators(e.target.value)} placeholder="Colaboradores: @usuario1, @usuario2 (máx. 3)" spellCheck={false} />
+                      <input className="input w-full" value={firstComment} onChange={(e) => setFirstComment(e.target.value)} placeholder="Primer comentario (p. ej. #hashtags)" />
+                      <input className="input w-full" value={altText} onChange={(e) => setAltText(e.target.value)} placeholder="Texto alternativo (accesibilidad, solo imagen)" maxLength={1000} />
                     </div>
                   )}
-                  <div className="flex items-center gap-3 flex-wrap">
+
+                  {/* action bar — sticky on mobile, clears the home indicator */}
+                  <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-3 border-t border-ink-100 bg-surface px-5 py-3 [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
                     <select
-                      className="input w-auto py-1 text-sm"
+                      className="input w-auto py-2 text-sm min-h-[44px]"
                       value={pubMode}
                       onChange={(e) => setPubMode(e.target.value)}
                       aria-label="Tipo de publicación"
@@ -473,7 +470,7 @@ export default function Marketing() {
                     </select>
                     <button
                       type="button"
-                      className="btn-brand ml-auto"
+                      className="btn-brand ml-auto min-h-[44px]"
                       onClick={publish}
                       disabled={!canPublish || pubBusy}
                     >
@@ -482,13 +479,13 @@ export default function Marketing() {
                     </button>
                   </div>
                   <p className="text-xs text-ink-400">
-                    Se publica al momento (Instagram no programa por API). Feed e historia aceptan imagen o
-                    video, el Reel necesita video y el carrusel 2–10 URLs.
+                    Se publica al momento (Instagram no programa por API). Sube imagen o video desde tu
+                    dispositivo; el Reel necesita video y el carrusel 2–10 elementos.
                   </p>
                   {pendingIg && (
                     <div className="flex items-center gap-2 text-sm text-ink-600">
                       <span>El video de Instagram sigue procesando.</span>
-                      <button type="button" className="btn-brand py-1" onClick={finishPending} disabled={finishBusy}>
+                      <button type="button" className="btn-brand py-1 min-h-[44px]" onClick={finishPending} disabled={finishBusy}>
                         {finishBusy ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />} Finalizar
                       </button>
                     </div>

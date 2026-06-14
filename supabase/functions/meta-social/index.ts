@@ -53,6 +53,12 @@ type PublishBody = {
   shareToFeed?: boolean;
   /** 2–10 media → an IG carousel (each item an image or a video URL). */
   carousel?: CarouselItem[];
+  /** Accessibility caption for a single feed image / story image (≤1000 chars). */
+  altText?: string;
+  /** Up to 3 IG usernames invited as collaborators (feed image / reel / carousel). */
+  collaborators?: string[];
+  /** Auto-post this as the first comment after publishing (e.g. hashtags). */
+  firstComment?: string;
   /** JS-ms timestamp; FB feed/photo only (10 min – 30 days out). Absent = now. */
   scheduleAt?: number;
   /** Publish the IG side as a 24h Story (image or video, no caption) instead of a feed post. */
@@ -150,6 +156,11 @@ async function igWaitReady(creationId: string, token: string, tries = 9, delayMs
 async function publishInstagram(igId: string, token: string, pub: PublishBody): Promise<PublishResult> {
   const caption = String(pub.message || '').trim();
   const carousel = (pub.carousel || []).filter((it) => it && (it.videoUrl || it.imageUrl)).slice(0, 10);
+  const altText = String(pub.altText || '').trim().slice(0, 1000);
+  // collaborators ride on the PARENT/feed/reel container (max 3) — never on a
+  // carousel child, which Meta rejects.
+  const collaborators = (pub.collaborators || []).map((u) => String(u).replace(/^@/, '').trim()).filter(Boolean).slice(0, 3);
+  const collabParam = collaborators.length ? { collaborators: JSON.stringify(collaborators) } : {};
 
   // CAROUSEL — each child its own container, then a parent that ties them.
   if (carousel.length >= 2) {
@@ -166,14 +177,14 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
       childIds.push(String(c?.id || ''));
     }
     if (childIds.length < 2) return { ok: false, error: 'El carrusel necesita al menos 2 elementos válidos' };
-    const parent = await graphPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(',') });
+    const parent = await graphPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(','), ...collabParam });
     const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(parent?.id || '') });
     return { ok: true, id: out?.id };
   }
 
   // REEL — a video feed post (async processing).
   if (pub.videoUrl && !pub.igStory) {
-    const params: Record<string, string> = { media_type: 'REELS', video_url: String(pub.videoUrl), caption };
+    const params: Record<string, string> = { media_type: 'REELS', video_url: String(pub.videoUrl), caption, ...collabParam };
     if (pub.coverUrl) params.cover_url = String(pub.coverUrl);
     if (pub.shareToFeed === false) params.share_to_feed = 'false';
     const c = await graphPost(`${igId}/media`, token, params);
@@ -200,9 +211,11 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
     return { ok: true, id: out?.id };
   }
 
-  // FEED IMAGE — the original path.
+  // FEED IMAGE — the original path (alt text + collaborators supported here).
   if (!pub.imageUrl) return { ok: false, error: 'Instagram requiere una imagen o un video (URL pública)' };
-  const c = await graphPost(`${igId}/media`, token, { image_url: String(pub.imageUrl), caption });
+  const params: Record<string, string> = { image_url: String(pub.imageUrl), caption, ...collabParam };
+  if (altText) params.alt_text = altText;
+  const c = await graphPost(`${igId}/media`, token, params);
   const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
   return { ok: true, id: out?.id };
 }
@@ -515,6 +528,13 @@ Deno.serve(async (req) => {
       }
     }
 
+    // First-comment automation (e.g. hashtags off the caption) — best-effort;
+    // a failure here never undoes the publish.
+    const firstComment = String(pub.firstComment || '').trim();
+    if (firstComment && results.instagram?.ok && results.instagram.id) {
+      try { await graphPost(`${results.instagram.id}/comments`, pageToken, { message: firstComment }); } catch { /* ignore */ }
+    }
+
     const anyOk = Object.values(results).some((r) => r.ok);
     return json({ ok: anyOk, results });
   }
@@ -660,23 +680,33 @@ Deno.serve(async (req) => {
       timeframe: 'last_30_days', breakdown,
     }));
 
-    const [profile, reach, accountTotals, profileViews, media, stories, mentions, gender, age, country, city] = await Promise.all([
+    const [profile, reach, accountTotals, profileTaps, reachByFollow, publishLimit, media, stories, mentions, gender, age, country, city] = await Promise.all([
       safe('profile', () => graph(igId, pageToken, {
         fields: 'username,name,biography,followers_count,follows_count,media_count,profile_picture_url',
       })),
-      // Daily reach series, 28d (the area chart).
+      // Daily reach series, 28d (the sparkline) — the time_series shape.
       safe('reach', () => graph(`${igId}/insights`, pageToken, {
         metric: 'reach', period: 'day', since: String(since), until: String(until),
       })),
-      // 28d account totals — the advanced engagement metrics (total_value form).
+      // 28d account totals — the modern engagement metrics. `views` replaced
+      // the retired `impressions`; all need metric_type=total_value.
       safe('accountTotals', () => graph(`${igId}/insights`, pageToken, {
-        metric: 'reach,accounts_engaged,total_interactions', metric_type: 'total_value',
+        metric: 'views,accounts_engaged,total_interactions', metric_type: 'total_value',
         period: 'day', since: String(since), until: String(until),
       })),
-      safe('profileViews', () => graph(`${igId}/insights`, pageToken, {
-        metric: 'profile_views', metric_type: 'total_value', period: 'day',
+      // `profile_views` was removed in v22 — `profile_links_taps` is the live
+      // "people acting on your profile" metric.
+      safe('profileTaps', () => graph(`${igId}/insights`, pageToken, {
+        metric: 'profile_links_taps', metric_type: 'total_value', period: 'day',
         since: String(since), until: String(until),
       })),
+      // Reach split follower vs non-follower — the discovery signal best tools surface.
+      safe('reachByFollow', () => graph(`${igId}/insights`, pageToken, {
+        metric: 'reach', metric_type: 'total_value', period: 'day',
+        breakdown: 'follow_type', since: String(since), until: String(until),
+      })),
+      // How many of today's publish slots remain (quota_total currently 50/24h).
+      safe('publishLimit', () => graph(`${igId}/content_publishing_limit`, pageToken, { fields: 'config,quota_usage' })),
       // The content grid.
       safe('media', () => graph(`${igId}/media`, pageToken, {
         fields: 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
@@ -701,7 +731,9 @@ Deno.serve(async (req) => {
       profile,
       reach: reach?.data || null,
       accountTotals: accountTotals?.data || null,
-      profileViews: profileViews?.data || null,
+      profileTaps: profileTaps?.data || null,
+      reachByFollow: reachByFollow?.data || null,
+      publishLimit: publishLimit?.data || null,
       media: media?.data || null,
       stories: stories?.data || null,
       mentions: mentions?.data || null,
@@ -723,8 +755,8 @@ Deno.serve(async (req) => {
     // Richest first → leaner fallbacks (metric names drift between media kinds
     // and API versions; the helper keeps whatever answers).
     const sets = isReel
-      ? ['reach,total_interactions,saved,shares,views', 'reach,total_interactions,saved,shares', 'reach,total_interactions']
-      : ['reach,total_interactions,saved,shares', 'reach,total_interactions,saved', 'reach,total_interactions'];
+      ? ['reach,views,total_interactions,saved,shares,ig_reels_avg_watch_time', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions']
+      : ['reach,views,total_interactions,saved,shares,profile_visits,follows', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions'];
     try {
       const metrics = await mediaInsightValues(mediaId, pageToken, sets);
       return json({ ok: true, metrics });

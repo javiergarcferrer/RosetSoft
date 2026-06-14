@@ -121,8 +121,22 @@ function bestTimes(grid) {
   }
   const flat = cells.flat().map((c) => ({ ...c, norm: max > 0 ? c.engagement / max : 0 }));
   const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  // Mobile view: 24 hourly cells don't fit a phone, so fold into six 4-hour
+  // blocks (7×6) — the data-viz guidance is to reduce density, not scroll.
+  const BUCKET_LABELS = ['0–4', '4–8', '8–12', '12–16', '16–20', '20–24'];
+  const buckets = Array.from({ length: 7 }, (_, day) => Array.from({ length: 6 }, (_, b) => {
+    const engagement = cells[day].slice(b * 4, b * 4 + 4).reduce((s, c) => s + c.engagement, 0);
+    const count = cells[day].slice(b * 4, b * 4 + 4).reduce((s, c) => s + c.count, 0);
+    return { day, bucket: b, engagement, count };
+  }));
+  const bucketMax = Math.max(0, ...buckets.flat().map((b) => b.engagement));
+  const bucketsFlat = buckets.flat().map((b) => ({ ...b, norm: bucketMax > 0 ? b.engagement / bucketMax : 0 }));
+
   return {
     cells: flat,
+    buckets: bucketsFlat,
+    bucketLabels: BUCKET_LABELS,
     hasData: max > 0,
     peak: peak ? { day: peak.day, hour: peak.hour, label: `${DAY_LABELS[peak.day]} ${String(peak.hour).padStart(2, '0')}:00`, engagement: peak.engagement } : null,
     dayLabels: DAY_LABELS,
@@ -135,11 +149,27 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
 
   const followers = num(p.followers_count);
   const reachSeries = metricValues(s.reach, 'reach');
-  const reach28 = reachSeries.reduce((a, b) => a + b, 0);
+  const reachSeriesSum = reachSeries.reduce((a, b) => a + b, 0);
   const engaged28 = totalValue(s.accountTotals, 'accounts_engaged');
   const interactions28 = totalValue(s.accountTotals, 'total_interactions');
-  const reachTotal28 = totalValue(s.accountTotals, 'reach');
-  const profileViews28 = totalValue(s.profileViews, 'profile_views');
+  const views28 = totalValue(s.accountTotals, 'views');
+  const profileTaps28 = totalValue(s.profileTaps, 'profile_links_taps');
+
+  // Reach split: follower vs non-follower (the discovery signal). Sum = truest
+  // 28d reach; fall back to the daily series if the breakdown didn't answer.
+  const reachByKey = Object.fromEntries(demoResults(s.reachByFollow).map((r) => [r.key, r.value]));
+  const followerReach = num(reachByKey.FOLLOWER);
+  const nonFollowerReach = num(reachByKey.NON_FOLLOWER) + num(reachByKey.UNKNOWN);
+  const hasReachSplit = Object.keys(reachByKey).length > 0;
+  const reachTotal28 = hasReachSplit ? followerReach + nonFollowerReach : reachSeriesSum;
+
+  // Publishing quota — IG containers per rolling 24h (Meta currently 50).
+  const limitRow = (s.publishLimit || [])[0];
+  const publishLimit = limitRow ? {
+    used: num(limitRow.quota_usage),
+    total: limitRow.config?.quota_total != null ? num(limitRow.config.quota_total) : null,
+    remaining: limitRow.config?.quota_total != null ? Math.max(0, num(limitRow.config.quota_total) - num(limitRow.quota_usage)) : null,
+  } : null;
 
   const d = s.demographics || {};
   const genderRows = demoResults(d.gender).map((r) => ({
@@ -186,14 +216,20 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
       avatarUrl: p.profile_picture_url || null,
     },
     kpis: {
-      reach28: reachTotal28 != null ? reachTotal28 : reach28,
+      reach28: reachTotal28,
+      views28,
       engaged28,
       interactions28,
-      profileViews28,
+      profileTaps28,
       // Engagement rate: interactions over reach (the honest denominator —
       // null when reach is unknown rather than dividing by followers).
       engagementRatePct: (interactions28 != null && reachTotal28) ? (interactions28 / reachTotal28) * 100 : null,
+      followerReach,
+      nonFollowerReach,
+      followerReachPct: reachTotal28 > 0 ? Math.round((followerReach / reachTotal28) * 100) : null,
+      hasReachSplit,
     },
+    publishLimit,
     reachSeries,
     audience: {
       gender: ranked(genderRows, 3).map((g) => ({ ...g, label: g.label, color: g.color })),
@@ -214,19 +250,26 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
 
 const INSIGHT_LABELS = {
   reach: 'Alcance',
-  views: 'Reproducciones',
+  views: 'Visualizaciones',
   total_interactions: 'Interacciones',
   saved: 'Guardados',
   shares: 'Compartidos',
+  profile_visits: 'Visitas al perfil',
+  follows: 'Seguidores ganados',
+  ig_reels_avg_watch_time: 'Tiempo medio visto',
 };
-const INSIGHT_ORDER = ['reach', 'views', 'total_interactions', 'saved', 'shares'];
+const INSIGHT_ORDER = ['reach', 'views', 'total_interactions', 'saved', 'shares', 'profile_visits', 'follows', 'ig_reels_avg_watch_time'];
+const MS_METRICS = new Set(['ig_reels_avg_watch_time']); // values arrive in milliseconds
 
-/** Per-post insight map → an ordered, labeled list for the drill-down panel. */
+/** Per-post insight map → an ordered, labeled list for the drill-down panel.
+ *  Watch-time arrives in ms — surface it as seconds so the panel reads cleanly. */
 export function resolveMediaInsights(metrics) {
   const m = metrics || {};
   return INSIGHT_ORDER
     .filter((k) => m[k] != null)
-    .map((k) => ({ key: k, label: INSIGHT_LABELS[k] || k, value: num(m[k]) }));
+    .map((k) => (MS_METRICS.has(k)
+      ? { key: k, label: INSIGHT_LABELS[k] || k, value: Math.round(num(m[k]) / 1000), unit: 's' }
+      : { key: k, label: INSIGHT_LABELS[k] || k, value: num(m[k]) }));
 }
 
 /** A post's comment thread → moderation rows (newest first, hidden flagged). */
