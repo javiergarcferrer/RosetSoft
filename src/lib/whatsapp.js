@@ -10,6 +10,7 @@
 import { supabase } from '../db/supabaseClient.js';
 import { updateSettings, db, newId, assignSequenceNumber } from '../db/database.js';
 import { waDigits, phoneKey, findPhoneOwner, phoneOwnerLabel } from './phone.js';
+import { normalizeImageOrientation } from './imageOrientation.js';
 
 const TEAM_PROFILE_ID = 'team';
 
@@ -297,10 +298,13 @@ export async function saveWaBusinessProfile(profile) {
 export async function sendWhatsappMedia({ to, file, caption, replyTo, customerId, professionalId, quoteId }) {
   if (!file) return { ok: false, error: 'Falta el archivo.' };
   if (file.size > 24 * 1024 * 1024) return { ok: false, error: 'El archivo supera el límite de 24 MB.' };
-  const base64 = await blobToBase64(file);
+  // Bake EXIF orientation into photos so they don't arrive sideways on the
+  // recipient's WhatsApp (Cloud API serves raw pixels, ignoring the tag).
+  const sendable = await normalizeImageOrientation(file);
+  const base64 = await blobToBase64(sendable);
   return invokeWaSend({
     to: waDigits(to),
-    media: { base64, mime: file.type || 'application/octet-stream', filename: file.name || '', caption: caption || '' },
+    media: { base64, mime: sendable.type || 'application/octet-stream', filename: sendable.name || '', caption: caption || '' },
     replyTo, customerId, professionalId, quoteId,
   });
 }
