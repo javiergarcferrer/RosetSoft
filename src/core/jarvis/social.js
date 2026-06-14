@@ -207,6 +207,16 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       at: toMs(m.timestamp),
       mediaUrl: mediaImage(m),
       permalink: m.permalink || null,
+      // The nested comments (newest first) for the full-post peek's thread.
+      commentList: ((m.comments?.data) || [])
+        .map((c) => ({
+          id: c.id || null,
+          username: c.username || '',
+          text: (c.text || '').slice(0, 200),
+          at: toMs(c.timestamp),
+        }))
+        .sort((a, b) => (b.at || 0) - (a.at || 0))
+        .map((c) => ({ ...c, ago: agoLabel(c.at, now) })),
     }))
     .map((m) => ({ ...m, ago: agoLabel(m.at, now) }));
 

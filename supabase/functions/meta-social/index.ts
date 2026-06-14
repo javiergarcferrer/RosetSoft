@@ -606,10 +606,11 @@ Deno.serve(async (req) => {
         : Promise.resolve(null),
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
-          // comments ride along nested — recent triage without N+1 calls.
-          // media_url/thumbnail_url power the post-peek popups (the image of
-          // the post a comment is on, or a recent post seen in context).
-          fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(3){id,text,username,timestamp}',
+          // comments ride along nested — recent triage + the full-post peek's
+          // comment list, without N+1 calls. media_url/thumbnail_url power the
+          // post-peek popups (the image of the post a comment is on, or a
+          // recent post seen in context).
+          fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(10){id,text,username,timestamp}',
           limit: '6',
         }))
         : Promise.resolve(null),

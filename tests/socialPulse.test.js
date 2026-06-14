@@ -185,6 +185,12 @@ test('post + comment image: a VIDEO shows its thumbnail, a photo its media_url',
   // a comment carries the parent post's image so the View can pop it up
   assert.equal(recentComments[0].mediaUrl, 'https://cdn/photo.jpg');
   assert.equal(recentComments[0].postCaption, 'Photo post');
+  // the post carries its nested comment thread for the full-view popup
+  assert.equal(posts[0].commentList.length, 1);
+  assert.equal(posts[0].commentList[0].username, 'ana');
+  assert.equal(posts[0].commentList[0].id, 'k1');
+  assert.ok(posts[0].commentList[0].ago);
+  assert.deepEqual(posts[1].commentList, []);
 });
 
 test('campaigns map the campaigns-edge shape (id + status + nested insights)', () => {
