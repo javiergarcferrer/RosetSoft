@@ -1,11 +1,11 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
   AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
-  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles,
+  Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
@@ -177,11 +177,88 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   // (the app-shell <main>), yanking the host page when the thread mounts or a
   // message lands. Scoped here, the inbox, the embedded card and the quote
   // workspace's chat pane all keep their page scroll put behind the thread.
-  useEffect(() => {
+  // ── Smart scroll anchoring + jump-to-bottom ──────────────────────────────
+  // Stick to the newest message only when the reader is already at the bottom
+  // (or just sent one). If they've scrolled up to read history, a new arrival
+  // bumps a floating "jump to latest" pill with an unread count instead of
+  // yanking the viewport down — the core anti-hijack rule of every chat app.
+  // Opening/switching a thread jumps to the latest instantly (no animation).
+  const atBottomRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const [newCount, setNewCount] = useState(0);
+  const prevKey = useRef(contact.key);
+  const prevLen = useRef(0);
+  const scrollToBottom = useCallback((behavior = 'auto') => {
     const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [thread.items.length, contact.key]);
-  useEffect(() => { setText(''); setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0; }, [contact.key]);
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+  const onListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    atBottomRef.current = bottom;
+    setShowJump(!bottom);
+    if (bottom) setNewCount(0);
+  }, []);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const items = thread.items;
+    const keyChanged = prevKey.current !== contact.key;
+    const added = items.length - prevLen.current;
+    if (keyChanged || prevLen.current === 0) {
+      el.scrollTop = el.scrollHeight; // open/switch → pin to latest, no animation
+      atBottomRef.current = true; setShowJump(false); setNewCount(0);
+    } else if (added > 0) {
+      const last = items[items.length - 1];
+      if (atBottomRef.current || last?.direction === 'out') {
+        el.scrollTop = el.scrollHeight; setNewCount(0);
+      } else {
+        const inbound = items.slice(prevLen.current).filter((m) => m.direction === 'in').length;
+        if (inbound) setNewCount((n) => n + inbound);
+      }
+    }
+    prevKey.current = contact.key;
+    prevLen.current = items.length;
+  }, [thread.items, contact.key]);
+
+  // ── Per-conversation draft persistence ───────────────────────────────────
+  // The composer text survives thread switches, reloads and accidental
+  // navigation: mirrored to localStorage keyed by the contact, cleared on a
+  // successful send (setText('') below removes it). Best-effort — storage can
+  // throw (private mode / quota), so every access is guarded. The key is held
+  // in a ref so the persist effect always writes under the CURRENT thread's
+  // key, never the previous one during a switch render.
+  const draftKeyRef = useRef(null);
+  useEffect(() => {
+    const key = `rs.wa.draft.${contact.key}`;
+    draftKeyRef.current = key;
+    let saved = '';
+    try { saved = localStorage.getItem(key) || ''; } catch { /* storage unavailable */ }
+    setText(saved);
+    setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0;
+  }, [contact.key]);
+  useEffect(() => {
+    const key = draftKeyRef.current;
+    if (!key) return;
+    try {
+      if (text.trim()) localStorage.setItem(key, text);
+      else localStorage.removeItem(key);
+    } catch { /* storage unavailable */ }
+  }, [text]);
+
+  // ── 24h-window countdown ─────────────────────────────────────────────────
+  // While the free-form window is open, tick a clock so the closing-soon
+  // warning stays live; paused when the window is closed (the static banner
+  // below covers that case) to avoid a needless timer.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!thread.windowOpen) return undefined;
+    const id = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [thread.windowOpen]);
+  const winRemaining = thread.windowOpen && thread.windowExpiresAt ? thread.windowExpiresAt - nowTick : 0;
+  const winClosingSoon = winRemaining > 0 && winRemaining < 6 * 3600000;
   // Object URL for the staged file's preview, revoked when it changes.
   useEffect(() => {
     if (!pendingFile) { setPendingUrl(null); return undefined; }
@@ -449,7 +526,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           floating at the top with a dead void below. Once the thread overflows,
           the wrapper grows past full height and scrolls normally (the
           scroll-to-bottom effect keeps the latest message in view). */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 bg-ink-50/40">
+      <div className="relative flex-1 flex flex-col min-h-0">
+      <div ref={listRef} onScroll={onListScroll} className="flex-1 overflow-y-auto px-4 py-4 bg-ink-50/40">
         <div className="flex min-h-full flex-col justify-end gap-1.5">
           {thread.items.map((m, i) => (
             <Bubble
@@ -472,8 +550,27 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           )}
         </div>
       </div>
+        {showJump && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom('smooth')}
+            className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 rounded-full border border-ink-200 bg-surface px-3 h-9 text-xs font-medium text-ink-700 shadow-md transition hover:bg-ink-50 active:scale-95"
+            aria-label="Ir al último mensaje"
+            title="Ir al último mensaje"
+          >
+            <ChevronDown size={16} />
+            {newCount > 0 && <span className="tabular-nums font-semibold text-brand-700">{newCount}</span>}
+          </button>
+        )}
+      </div>
 
       {/* 24h-window state + composer */}
+      {winClosingSoon && (
+        <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-950/40 border-t border-amber-100 dark:border-amber-900/40 text-[11px] text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+          <Clock size={12} className="shrink-0" />
+          <span>La ventana de 24 h cierra en {fmtRemaining(winRemaining)} — el cliente debe escribir para reabrirla.</span>
+        </div>
+      )}
       {!thread.windowOpen && (
         <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-t border-amber-100 dark:border-amber-900/40 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-1.5">
           <Clock size={12} className="mt-0.5 shrink-0" />
@@ -1818,6 +1915,16 @@ function MediaAttachment({ m }) {
     return <div className="text-[11px] italic opacity-60 mb-1">(archivo no disponible)</div>;
   }
   if (!url) {
+    // Reserve a media-sized box while bytes load so the bubble doesn't jump
+    // (CLS) when the image/video resolves; documents keep the slim text row.
+    const isVisualMedia = mime.startsWith('image/') || mime.startsWith('video/') || m.kind === 'sticker';
+    if (isVisualMedia) {
+      return (
+        <div className="mb-1 flex h-44 w-44 max-w-full items-center justify-center rounded-lg bg-black/5 dark:bg-white/[0.06] animate-pulse">
+          <Loader2 size={16} className="animate-spin opacity-50" />
+        </div>
+      );
+    }
     return <div className="flex items-center gap-1.5 text-[11px] opacity-60 mb-1"><Loader2 size={12} className="animate-spin" /> Cargando…</div>;
   }
   if (m.kind === 'sticker') {
@@ -1855,6 +1962,14 @@ export function StatusTicks({ status, className = '' }) {
   if (status === 'read') return <CheckCheck size={12} className={`text-sky-500 ${className}`} aria-label="Leído" />;
   if (status === 'delivered') return <CheckCheck size={12} className={`opacity-50 ${className}`} aria-label="Entregado" />;
   return <Check size={12} className={`opacity-50 ${className}`} aria-label="Enviado" />;
+}
+
+// "3 h 12 min" / "47 min" — the time left in the 24h customer-care window.
+function fmtRemaining(ms) {
+  const total = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
 }
 
 export function initials(name) {
