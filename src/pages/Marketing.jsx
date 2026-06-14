@@ -900,8 +900,8 @@ export default function Marketing() {
                   {m.scheduled.length === 0 && (
                     <div className="px-5 py-3 text-sm text-ink-400">Nada programado.</div>
                   )}
-                  {m.scheduled.map((p) => (
-                    <div key={p.at} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                  {m.scheduled.map((p, i) => (
+                    <div key={`${p.at}-${i}`} className="px-5 py-2.5 flex items-center gap-3 text-sm">
                       <PostThumb src={p.mediaUrl} onClick={() => peekScheduled(p)} className="w-9 h-9" />
                       <span className="min-w-0 truncate text-ink-800">{p.text}</span>
                       <span className="ml-auto flex-none text-xs text-ink-400">{p.inLabel}</span>

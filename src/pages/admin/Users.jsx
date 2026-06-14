@@ -436,7 +436,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
     // check_violation and the inline-edit handler would surface a
     // cryptic Postgres error. Capping at 50 keeps client + DB in
     // sync and the input's max="50" matches.
-    const pct = clampPct(raw, 50);
+    const pct = clampPct(raw);
     // The profiles list arrives through fromRow() which camelCases
     // every column — read + write both use the JS-side name. The
     // previous snake_case `commission_pct` here always read

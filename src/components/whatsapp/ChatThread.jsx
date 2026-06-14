@@ -342,9 +342,15 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setAttachOpen(false);
     setText('');
     const res = await onSend(body, replyTo?.waId || null);
-    setReplyTo(null);
     setSending(false);
-    if (!res?.ok) setError(res?.error || 'No se pudo enviar.');
+    if (!res?.ok) {
+      // Restore the typed message (the draft was already cleared) and keep the
+      // reply context so a failed send never silently destroys what was typed.
+      setText(body);
+      setError(res?.error || 'No se pudo enviar.');
+      return;
+    }
+    setReplyTo(null);
   }
 
   // Insert a quick reply into the composer (never auto-send) — the dealer can

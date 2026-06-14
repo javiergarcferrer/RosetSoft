@@ -80,8 +80,12 @@ export default function Nomina() {
   // since the form defaults to the current month) which would double-count
   // salaries/TSS/ISR in the ledger, IT-1 and dashboards.
   const period = useMemo(() => {
-    const d = new Date(date);
-    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    // Parse the YYYY-MM-DD parts directly. `new Date(date)` reads the string as
+    // UTC midnight, and getMonth()/getFullYear() then return LOCAL time — in DR
+    // (UTC-4) that rolls the 1st of a month back to the previous month, storing
+    // the run (and the dup-guard) one month behind what the user picked.
+    const [year, month] = date.split('-').map(Number);
+    return { year, month };
   }, [date]);
   const existingRun = useMemo(
     () => runsQ.data.find((r) => r.periodYear === period.year && r.periodMonth === period.month),
@@ -96,14 +100,15 @@ export default function Nomina() {
     try {
       const id = newId();
       const postedAt = new Date(date).getTime();
-      const d = new Date(date);
-      const built = buildPayrollEntry({ newId, config, items, postedAt, memo: `Nómina ${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}` });
+      // Period label + stored year/month come from `period` (string-parsed), not
+      // from a local-time Date, so the run lands in the month the user chose.
+      const built = buildPayrollEntry({ newId, config, items, postedAt, memo: `Nómina ${MONTHS_ES[period.month - 1]} ${period.year}` });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
       await assignSequenceNumber({
         table: 'payrollRuns', profileId: scope, start: 1,
         build: (n) => ({
-          id, profileId: scope, number: n, periodYear: d.getFullYear(), periodMonth: d.getMonth() + 1,
+          id, profileId: scope, number: n, periodYear: period.year, periodMonth: period.month,
           paidAt: postedAt, items, ...totals, status: 'posted', journalEntryId: built.entry.id,
         }),
       });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, Loader2, AlertTriangle, Store, RefreshCw } from 'lucide-react';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { getWaBusinessProfile, saveWaBusinessProfile } from '../../lib/whatsapp.js';

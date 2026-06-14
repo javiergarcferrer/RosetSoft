@@ -88,7 +88,14 @@ export async function applyClientPick(token, pick) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(pick || {}),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    // Surface the server's reason (a pick the share endpoint rejected), like
+    // fetchSharedQuote does — a bare "HTTP 400" tells the viewer nothing.
+    const body = await r.json().catch(() => ({}));
+    const e = new Error(body?.error || `HTTP ${r.status}`);
+    e.status = r.status;
+    throw e;
+  }
   return r.json();
 }
 

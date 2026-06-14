@@ -24,6 +24,9 @@ export function isSharedCatalogImage(id: string | null | undefined): boolean {
  */
 export function sizedExternalUrl(url: string, width: number): string {
   if (!/^https:\/\/cdn\.shopify\.com\//.test(url)) return url;
+  // Replace an existing width= rather than appending a duplicate (Shopify honours
+  // the last, but a pre-sized pointer url shouldn't grow ?width=A&width=B).
+  if (/[?&]width=\d+/.test(url)) return url.replace(/([?&]width=)\d+/, `$1${width}`);
   return url + (url.includes('?') ? '&' : '?') + `width=${width}`;
 }
 

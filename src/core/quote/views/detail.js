@@ -155,8 +155,10 @@ export function resolveCustomerDetail({ customerId, quotes, orders, lines }) {
   const relatedOrders = os.filter((o) => relevantOrderIds.has(o.id));
   // Sort orders by stage progression (in-flight first, archived last).
   relatedOrders.sort((a, b) => {
-    const ai = ORDER_STAGE_ORDER.indexOf(a.status);
-    const bi = ORDER_STAGE_ORDER.indexOf(b.status);
+    // Stage via currentOrderStage (defaults to 'draft'), not the raw status —
+    // a null/unknown status would otherwise indexOf to -1 and float to the top.
+    const ai = ORDER_STAGE_ORDER.indexOf(currentOrderStage(a));
+    const bi = ORDER_STAGE_ORDER.indexOf(currentOrderStage(b));
     if (ai !== bi) return ai - bi;
     return (b.updatedAt || 0) - (a.updatedAt || 0);
   });

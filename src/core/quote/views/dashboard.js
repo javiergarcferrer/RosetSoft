@@ -6,10 +6,7 @@
 // Pure: the page passes the quotes/customers/lines/orders/containers + the
 // resolved scope flag, and renders the result. `now` is injectable so the
 // time-derived numbers (staleness, "won this month") stay testable.
-import {
-  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
-} from '../../../lib/pricing.js';
-import { isPricedLine } from '../../../lib/constants.js';
+import { linesByQuoteId, quoteGrandTotal } from '../totals.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../../lib/orderStages.js';
 import { quoteOutstanding } from '../../../lib/quoteMilestones.js';
 import { normalizeContainerNo, isValidContainerNo } from '../../../lib/containerTracking.js';
@@ -44,20 +41,13 @@ export function resolveDashboard({
   const customersById = new Map();
   for (const c of customers || []) customersById.set(c.id, c);
 
-  const linesByQuote = new Map();
-  for (const ln of lines || []) {
-    if (!linesByQuote.has(ln.quoteId)) linesByQuote.set(ln.quoteId, []);
-    linesByQuote.get(ln.quoteId).push(ln);
-  }
+  // Route through the shared rollup like every other list/detail VM, so the
+  // dashboard KPIs agree to the cent — incl. settings, which prices a
+  // company-account quote at dealer cost (quoteGrandTotal applies the discount).
+  const linesByQuote = linesByQuoteId(lines);
   const totalByQuote = new Map();
   for (const q of qs) {
-    // settings → a company-account quote reads at dealer cost, so the dashboard
-    // KPIs agree to the cent with the quotes/orders lists for the same quote.
-    const pct = companyDiscountPctFor(q, settings);
-    const raw = linesByQuote.get(q.id) || [];
-    const eff = pct ? applyCompanyDiscount(raw, pct) : raw;
-    const ls = eff.filter(isPricedLine).map(lineForTotals);
-    totalByQuote.set(q.id, computeTotals(ls, q).grandTotal);
+    totalByQuote.set(q.id, quoteGrandTotal(q, linesByQuote.get(q.id) || [], settings));
   }
 
   const inScope = (q) => scopeIsTeam || q.createdByUserId === meId;

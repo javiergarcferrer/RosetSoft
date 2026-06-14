@@ -157,7 +157,7 @@ export function resolveCampaignsList({ campaigns, messages }) {
     }
     return {
       campaign,
-      recipients: campaign.recipientCount || rows.length,
+      recipients: campaign.recipientCount ?? rows.length,
       sent,
       delivered,
       read,

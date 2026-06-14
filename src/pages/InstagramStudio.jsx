@@ -234,7 +234,9 @@ export default function InstagramStudio() {
         body: { replyComment: { commentId, message, platform: 'instagram' } },
       });
       if (error || !data?.ok) throw new Error(data?.error || error?.message || 'No se pudo responder');
-      patchComment(commentId, { replyCount: 0 });
+      // A successful reply ADDS one — zeroing it would erase the "N resp." badge
+      // for a comment that already had replies.
+      setComments((s) => ({ ...s, rows: s.rows.map((c) => (c.id === commentId ? { ...c, replyCount: (c.replyCount || 0) + 1 } : c)) }));
       setReplyId(null);
       setReplyText('');
     } catch (e) {

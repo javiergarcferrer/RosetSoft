@@ -59,7 +59,8 @@ export function resolveKardex(movements: InventoryMovement[] | null | undefined)
       qty -= q;
     } else { // adjust — qty change at current average (q may be negative)
       qty += q;
-      if (qty <= 0) avg = qty === 0 ? avg : avg; // keep avg; emptying doesn't change unit cost
+      // Emptying/over-drawing the stock leaves the unit cost (avg) untouched —
+      // a quantity change never restates what each unit cost.
     }
     rows.push({ movement: m, qty: round4(qty), avgCost: round4(avg), value: round2(qty * avg), costOut });
   }

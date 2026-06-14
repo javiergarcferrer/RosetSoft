@@ -154,7 +154,7 @@ export default function Stepper({
         {!cancelled && (
           <div
             className="absolute top-4 left-0 h-0.5 bg-brand-500 transition-all"
-            style={{ width: `${Math.max(0, currentIndex / lastIdx) * 100}%` }}
+            style={{ width: `${(lastIdx > 0 ? Math.max(0, currentIndex / lastIdx) : (currentIndex > 0 ? 1 : 0)) * 100}%` }}
           />
         )}
         <div className="relative flex justify-between gap-1">

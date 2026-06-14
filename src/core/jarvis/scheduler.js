@@ -39,7 +39,9 @@ export function resolveScheduleAgenda(rows, { now = Date.now() } = {}) {
     error: r.lastError || null,
     pending: r.status === 'queued' || r.status === 'publishing',
   }));
-  const upcoming = items.filter((i) => i.pending).sort((a, b) => a.at - b.at);
+  // A dateless pending row (missing scheduledAt → at 0) sorts to the END, not
+  // the front, so it can't masquerade as the "next" post or hijack nextAt.
+  const upcoming = items.filter((i) => i.pending).sort((a, b) => (a.at || Infinity) - (b.at || Infinity));
   const recent = items.filter((i) => !i.pending).sort((a, b) => b.at - a.at).slice(0, 20);
   return { upcoming, recent, nextAt: upcoming[0]?.at || null };
 }

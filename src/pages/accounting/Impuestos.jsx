@@ -26,7 +26,7 @@ export default function Impuestos() {
   const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = salesQ.loaded && expensesQ.loaded && purchasesQ.loaded;
+  const loaded = salesQ.loaded && expensesQ.loaded && purchasesQ.loaded && importsQ.loaded && expedientesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
   const win = useMemo(() => ({

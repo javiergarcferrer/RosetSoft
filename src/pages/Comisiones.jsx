@@ -237,7 +237,7 @@ export default function Comisiones() {
   const linesQ = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
   const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(profileId || '').toArray(), [profileId], []);
   const professionalsQ = useLiveQueryStatus(() => db.professionals.where('profileId').equals(profileId || '').toArray(), [profileId], []);
-  const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded;
+  const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && professionalsQ.loaded;
 
   const linesByQuote = useMemo(() => {
     const m = new Map();

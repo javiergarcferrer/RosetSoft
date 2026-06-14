@@ -81,7 +81,7 @@ export function sequenceState(seq: ECFSequence | null | undefined, now: number =
     expired,
     exhausted,
     nextENcf: usable ? formatENcf(seq.ecfType, seq.nextSeq) : null,
-    remaining: Math.max(0, Number(seq.seqTo) - Number(seq.nextSeq) + 1),
+    remaining: Math.max(0, (Number(seq.seqTo) || 0) - (Number(seq.nextSeq) || 0) + 1),
   };
 }
 

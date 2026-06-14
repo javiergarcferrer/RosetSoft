@@ -428,7 +428,7 @@ export default function OrderDetail() {
                     order={order}
                     settings={settings}
                     customer={q.customerId ? customerById.get(q.customerId) : null}
-                    creator={q.createdByUserId ? profiles.find((p) => p.id === q.createdByUserId) : null}
+                    creator={q.createdByUserId ? (profiles || []).find((p) => p.id === q.createdByUserId) : null}
                     total={totalByQuote.get(q.id) || 0}
                     onDetach={() => detachQuote(q.id)}
                   />
