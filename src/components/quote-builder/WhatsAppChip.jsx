@@ -69,7 +69,7 @@ export default function WhatsAppChip({ customer }) {
   if (editing) {
     return (
       <span className="inline-flex flex-col gap-1 min-w-0 max-w-full">
-        <span className={`inline-flex items-center gap-1 rounded-full border bg-surface px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset max-w-full min-w-0 ${phoneErr ? 'border-rose-300 ring-rose-200/60' : 'border-emerald-300 ring-emerald-200/50'}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full border bg-surface px-2 min-h-6 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset max-w-full min-w-0 ${phoneErr ? 'border-rose-300 ring-rose-200/60' : 'border-emerald-300 ring-emerald-200/50'}`}>
           <WhatsAppGlyph className={`h-3 w-3 flex-shrink-0 ${phoneErr ? 'text-rose-500' : 'text-[#25D366]'}`} />
           <input
             autoFocus
@@ -105,7 +105,7 @@ export default function WhatsAppChip({ customer }) {
         onClick={startEdit}
         title="Agregar WhatsApp"
         aria-label="Agregar número de WhatsApp"
-        className="inline-flex h-6 w-6 coarse:h-11 coarse:w-11 items-center justify-center rounded-full border border-dashed border-ink-300 text-ink-300 hover:border-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10 transition-all active:scale-[0.95]"
+        className="inline-flex h-6 w-6 coarse:h-9 coarse:w-9 items-center justify-center rounded-full border border-dashed border-ink-300 text-ink-300 hover:border-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10 transition-all active:scale-[0.95]"
       >
         <WhatsAppGlyph className="h-3.5 w-3.5" />
       </button>
@@ -121,7 +121,7 @@ export default function WhatsAppChip({ customer }) {
       onClick={startEdit}
       title={`Editar WhatsApp · ${phone}`}
       aria-label={`Editar número de WhatsApp de ${phone}`}
-      className="inline-flex h-6 w-6 coarse:h-10 coarse:w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm ring-1 ring-inset ring-black/5 transition-transform active:scale-95 hover:brightness-105"
+      className="inline-flex h-6 w-6 coarse:h-9 coarse:w-9 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm ring-1 ring-inset ring-black/5 transition-transform active:scale-95 hover:brightness-105"
     >
       <WhatsAppGlyph className="h-3.5 w-3.5 coarse:h-5 coarse:w-5" />
     </button>

@@ -173,7 +173,7 @@ function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
     <Dropdown
       ariaLabel="Vendedor asignado"
       chevron={false}
-      triggerClassName="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 active:scale-[0.98] transition-all px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
+      triggerClassName="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 active:scale-[0.98] transition-all px-2 min-h-6 coarse:min-h-9 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
       label={(
         <>
           <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
@@ -239,7 +239,7 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
         type="button"
         onClick={onUndo}
         disabled={!canUndo}
-        className="px-2.5 min-h-7 coarse:min-h-11 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
+        className="px-2.5 min-h-6 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Deshacer (${shortcutLabel('mod+z')})`}
         aria-label="Deshacer"
       >
@@ -249,7 +249,7 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
         type="button"
         onClick={onRedo}
         disabled={!canRedo}
-        className="px-2.5 min-h-7 coarse:min-h-11 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 border-l border-ink-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
+        className="px-2.5 min-h-6 coarse:min-h-9 inline-flex items-center text-ink-500 hover:bg-ink-50 hover:text-ink-900 border-l border-ink-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 active:bg-ink-100 active:scale-[0.96]"
         title={`Rehacer (${shortcutLabel('mod+shift+z')})`}
         aria-label="Rehacer"
       >
