@@ -119,12 +119,12 @@ function TierSegments({ quote, onUpdateQuote }) {
                 ? 'Piso — comisión base del profesional al 15%'
                 : 'Especial — comisión base del profesional al 20%'
             }
-            className={`px-2 min-h-6 coarse:min-h-9 inline-flex items-center font-semibold transition-all focus-visible:outline-none ${
+            className={`px-2 min-h-6 coarse:min-h-9 inline-flex items-center font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500/50 ${
               i > 0 ? 'border-l border-ink-200' : ''
             } ${
               active
                 ? 'bg-amber-600 text-white'
-                : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900 active:bg-ink-100 focus-visible:bg-ink-100'
+                : 'text-ink-500 hover:text-ink-800 hover:bg-ink-500/10'
             }`}
           >
             {opt.label}
