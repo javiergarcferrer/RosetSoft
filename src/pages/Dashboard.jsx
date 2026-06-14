@@ -117,11 +117,12 @@ export default function Dashboard() {
       lines: allLinesQ.data,
       orders: allOrdersQ.data,
       containers: allContainersQ.data,
+      settings,
       scopeIsTeam: effectiveScope === SCOPE_TEAM,
       meId,
       etaByCode,
     }),
-    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, effectiveScope, meId, etaByCode],
+    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, settings, effectiveScope, meId, etaByCode],
   );
 
   // Track only what's on screen (the capped strip), not the whole order book.

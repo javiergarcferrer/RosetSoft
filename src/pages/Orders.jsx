@@ -84,7 +84,7 @@ const ORDER_COLS_STORAGE_KEY = 'rs.orders.cols.v1';
  */
 
 export default function Orders() {
-  const { profileId } = useApp();
+  const { profileId, settings } = useApp();
 
   // Gate the empty state on `loaded` — same reason as Customers / Quotes:
   // don't flash "Sin pedidos" on every navigation, only once we know it's
@@ -126,9 +126,9 @@ export default function Orders() {
     customerLabelByOrderId, totalByOrder, quoteCountByOrder, containerCountByOrder,
   } = useMemo(
     () => resolveOrdersList({
-      orders, customers, quotes: allQuotes, containers: allContainers, lines: allLines,
+      orders, customers, quotes: allQuotes, containers: allContainers, lines: allLines, settings,
     }),
-    [orders, customers, allQuotes, allContainers, allLines],
+    [orders, customers, allQuotes, allContainers, allLines, settings],
   );
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The

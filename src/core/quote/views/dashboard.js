@@ -6,7 +6,9 @@
 // Pure: the page passes the quotes/customers/lines/orders/containers + the
 // resolved scope flag, and renders the result. `now` is injectable so the
 // time-derived numbers (staleness, "won this month") stay testable.
-import { computeTotals, lineForTotals } from '../../../lib/pricing.js';
+import {
+  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
+} from '../../../lib/pricing.js';
 import { isPricedLine } from '../../../lib/constants.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../../lib/orderStages.js';
 import { quoteOutstanding } from '../../../lib/quoteMilestones.js';
@@ -31,7 +33,7 @@ function acceptedNextStep(q) {
 }
 
 export function resolveDashboard({
-  quotes, customers, lines, orders, containers, scopeIsTeam, meId, now = Date.now(),
+  quotes, customers, lines, orders, containers, settings, scopeIsTeam, meId, now = Date.now(),
   // Map<containerNo, { etaAt, etaLocation }> from useContainerEtas — optional;
   // absent/empty just leaves every order's `eta` null (the strip renders
   // immediately, ETAs hydrate in when the tracking calls land).
@@ -49,7 +51,12 @@ export function resolveDashboard({
   }
   const totalByQuote = new Map();
   for (const q of qs) {
-    const ls = (linesByQuote.get(q.id) || []).filter(isPricedLine).map(lineForTotals);
+    // settings → a company-account quote reads at dealer cost, so the dashboard
+    // KPIs agree to the cent with the quotes/orders lists for the same quote.
+    const pct = companyDiscountPctFor(q, settings);
+    const raw = linesByQuote.get(q.id) || [];
+    const eff = pct ? applyCompanyDiscount(raw, pct) : raw;
+    const ls = eff.filter(isPricedLine).map(lineForTotals);
     totalByQuote.set(q.id, computeTotals(ls, q).grandTotal);
   }
 

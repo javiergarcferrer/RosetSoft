@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
+  companyDiscountPctFor, applyCompanyDiscount,
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
@@ -637,11 +638,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   }
 
   const totalsQuote = { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping };
-  const totals = computeTotals(lines.filter(isPricedLine).map(lineForTotals), totalsQuote);
+  // Company (house) account: this quote is an internal store-stock order, so the
+  // ORDER figures the dealer reads — the totals dock and the client-preview/PDF
+  // document — are priced at dealer cost (every product price scaled by the
+  // permanent companyDiscountPct). The editable line cards below keep the LIST
+  // price (an honest qty × unit = total worksheet); the banner explains the gap.
+  const companyDiscountPct = companyDiscountPctFor(quote, settings);
+  const orderLines = companyDiscountPct ? applyCompanyDiscount(lines, companyDiscountPct) : lines;
+  const totals = computeTotals(orderLines.filter(isPricedLine).map(lineForTotals), totalsQuote);
   // Range twin of the grand total — widens to "min … max" while any priced
   // line is quoted by range (material-less). Collapses to a point (and the UI
   // falls back to the single figure) once every line carries a real price.
-  const totalsRange = computeTotalsRange(lines, totalsQuote);
+  const totalsRange = computeTotalsRange(orderLines, totalsQuote);
 
   /* ---------------------------- render ---------------------------- */
 
@@ -734,7 +742,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         <ClientPreview
           quote={quote}
           settings={settings}
-          lines={lines}
+          // The order document shows dealer-cost prices for a company-account
+          // quote (orderLines === lines when it isn't one), so the per-line
+          // figures and the totals agree with the dock.
+          lines={orderLines}
           quoteGroups={groups}
           totals={totals}
           totalsRange={totalsRange}
@@ -763,6 +774,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // `min-w-0` lets the column shrink below its content's intrinsic width,
         // so a long money value / dimension spec can't force a horizontal scroll.
         <div className="space-y-5 min-w-0">
+          {/* Company-account orders: the line cards below show LIST price (the
+              catalog figure you type), but the total + client view are priced
+              at dealer cost. Spell out the gap so the two never read as a bug. */}
+          {companyDiscountPct > 0 && (
+            <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 flex items-start gap-2.5">
+              <Hash size={15} className="mt-0.5 flex-shrink-0 text-brand-500" aria-hidden />
+              <p className="min-w-0">
+                <span className="font-semibold">Cuenta empresa.</span>{' '}
+                Las líneas muestran el precio de lista; el total y la Vista cliente
+                aplican <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
+                (precio de costo del pedido para la tienda).
+              </p>
+            </div>
+          )}
           {/* Provide catalog families to every line item below (through the
               LineItemList, which doesn't thread per-line catalog props) so
               the material-options chips can show list-price deltas. */}

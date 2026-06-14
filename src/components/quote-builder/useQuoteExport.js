@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { computeTotals, lineForTotals } from '../../lib/pricing.js';
+import {
+  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
+} from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
@@ -62,12 +64,17 @@ export function useQuoteExport({
     const seller = quote.createdByUserId
       ? (profiles || []).find((p) => p.id === quote.createdByUserId)
       : null;
+    // Company-account quote → the PDF order document is priced at dealer cost
+    // (every product price scaled), so the per-line figures and the totals
+    // match the on-screen client preview. A normal quote: pct 0, lines untouched.
+    const companyPct = companyDiscountPctFor(quote, settings);
+    const orderLines = companyPct ? applyCompanyDiscount(lines, companyPct) : lines;
     const totals = computeTotals(
-      lines.filter(isPricedLine).map(lineForTotals),
+      orderLines.filter(isPricedLine).map(lineForTotals),
       { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },
     );
     const mod = await safeDynamicImport(() => import('../../pdf/react/index.js'));
-    const blob = await mod.generateQuotePdf({ quote, settings, lines, totals, customer, professional, seller, quoteGroups: groups, families });
+    const blob = await mod.generateQuotePdf({ quote, settings, lines: orderLines, totals, customer, professional, seller, quoteGroups: groups, families });
     if (!blob || !blob.size) {
       throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
     }

@@ -74,6 +74,81 @@ export function clampPct(v: unknown, max = 100): number {
   return n;
 }
 
+/* --------------------------- company (house) account --------------------------- */
+
+/**
+ * The configured COMPANY account id — the dealer's own customer
+ * (`settings.storeCustomerId`), whose quotes are internal store-stock orders.
+ * Null ⇒ no company account configured. (Same customer that stocks the public
+ * storefront; the storefront shows RETAIL, the dealer's quote views show cost.)
+ */
+export function companyAccountId(
+  settings: { storeCustomerId?: string | null } | null | undefined,
+): string | null {
+  return settings?.storeCustomerId || null;
+}
+
+/** True when `quote` belongs to the configured company account. */
+export function isCompanyAccountQuote(
+  quote: { customerId?: string | null } | null | undefined,
+  settings: { storeCustomerId?: string | null } | null | undefined,
+): boolean {
+  const acct = companyAccountId(settings);
+  return !!acct && !!quote && quote.customerId === acct;
+}
+
+/**
+ * The cost discount % to apply to `quote`'s product prices: the configured
+ * `companyDiscountPct` (clamped 0–100) when the quote is a company-account
+ * quote, else 0. The single gate every surface routes through so the dealer's
+ * cost view can't drift from the company-account rule.
+ */
+export function companyDiscountPctFor(
+  quote: { customerId?: string | null } | null | undefined,
+  settings: { storeCustomerId?: string | null; companyDiscountPct?: number } | null | undefined,
+): number {
+  if (!isCompanyAccountQuote(quote, settings)) return 0;
+  return clampPct(settings?.companyDiscountPct);
+}
+
+/**
+ * Apply a company-account cost discount to a set of quote lines — scale EVERY
+ * base price (the line's `unitPrice`/`priceMin`/`priceMax` and each component's)
+ * by (1 − pct/100), returning fresh line objects. Because every pricing
+ * primitive derives from these base prices, scaling them is enough to discount
+ * unit, subtotal, ranges, compounds, modules and the grand total uniformly —
+ * one transform, zero changes to the math. Pure: never mutates the input; pct 0
+ * returns a shallow copy untouched. Display/totals only — the STORED line, the
+ * public storefront and accounting always keep the list price.
+ */
+export function applyCompanyDiscount(
+  lines: readonly QuoteLine[] | null | undefined,
+  pct: unknown,
+): QuoteLine[] {
+  const arr = (lines || []) as QuoteLine[];
+  const p = clampPct(pct);
+  if (!p) return arr.slice();
+  const f = 1 - p / 100;
+  const scale = (v: unknown): number => safeNum(v) * f;
+  const scaleComponent = (c: LineComponent): LineComponent => {
+    const out: LineComponent = { ...c, unitPrice: scale(c.unitPrice) };
+    if (c.priceMin != null) out.priceMin = scale(c.priceMin);
+    if (c.priceMax != null) out.priceMax = scale(c.priceMax);
+    return out;
+  };
+  return arr.map((l) => {
+    if (!l) return l;
+    const out: QuoteLine = { ...l };
+    if (l.unitPrice != null) out.unitPrice = scale(l.unitPrice);
+    if (l.priceMin != null) out.priceMin = scale(l.priceMin);
+    if (l.priceMax != null) out.priceMax = scale(l.priceMax);
+    if (Array.isArray(l.components) && l.components.length) {
+      out.components = l.components.map(scaleComponent);
+    }
+    return out;
+  });
+}
+
 /**
  * Compute totals for a quote.
  *

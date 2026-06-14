@@ -61,7 +61,8 @@ export function resolveOrderDetail({
   const totalByQuote = new Map();
   for (const q of [...qs, ...candidates]) {
     if (totalByQuote.has(q.id)) continue;
-    totalByQuote.set(q.id, quoteGrandTotal(q, linesByQuote.get(q.id) || []));
+    // settings → a company-account quote on this order reads at dealer cost.
+    totalByQuote.set(q.id, quoteGrandTotal(q, linesByQuote.get(q.id) || [], settings));
   }
 
   // Stage machine for the header + stepper.

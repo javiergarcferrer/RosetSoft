@@ -29,7 +29,7 @@ function creatorDisplay(creator) {
 // exactly as the page used to so the whole projection reflects the toggle.
 export function resolveQuotesList({
   quotes, customers, professionals, profiles, orders, containers, lines,
-  scope, meId, q, tab, filters, sort,
+  settings, scope, meId, q, tab, filters, sort,
 }) {
   const customerById = new Map();
   for (const c of customers) customerById.set(c.id, c);
@@ -81,7 +81,8 @@ export function resolveQuotesList({
   const linesByQuote = linesByQuoteId(lines);
   const totalByQuoteId = new Map();
   for (const qu of quotes) {
-    totalByQuoteId.set(qu.id, quoteGrandTotal(qu, linesByQuote.get(qu.id) || []));
+    // settings → company-account quotes (the house account) read at dealer cost.
+    totalByQuoteId.set(qu.id, quoteGrandTotal(qu, linesByQuote.get(qu.id) || [], settings));
   }
 
   // Apply the Mías / Equipo scope FIRST — every downstream view (tab
@@ -626,7 +627,7 @@ export function resolveCustomersList({
 // ViewModel for pages/Orders.jsx. Pure projection off the raw rows: the
 // customer label each order shows, plus the per-order rollups (total, quote
 // count, container count) the list reads straight through.
-export function resolveOrdersList({ orders, customers, quotes, containers, lines }) {
+export function resolveOrdersList({ orders, customers, quotes, containers, lines, settings }) {
   const customerById = new Map();
   for (const c of customers) customerById.set(c.id, c);
 
@@ -681,7 +682,7 @@ export function resolveOrdersList({ orders, customers, quotes, containers, lines
   const quoteCountByOrder = new Map();
   for (const q of quotes) {
     if (!q.orderId) continue;
-    const t = quoteGrandTotal(q, linesByQuote.get(q.id) || []);
+    const t = quoteGrandTotal(q, linesByQuote.get(q.id) || [], settings);
     totalByOrder.set(q.orderId, (totalByOrder.get(q.orderId) || 0) + t);
     quoteCountByOrder.set(q.orderId, (quoteCountByOrder.get(q.orderId) || 0) + 1);
   }

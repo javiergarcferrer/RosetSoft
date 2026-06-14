@@ -154,15 +154,24 @@ const CUSTOMER_COLS_STORAGE_KEY = 'rs.customers.cols.v1';
  * name, which a blank sheet row can't offer.
  */
 export default function Customers() {
-  const { profileId } = useApp();
+  const { profileId, settings } = useApp();
   // useLiveQueryStatus lets us distinguish "fetch still in flight on
   // first mount" from "user really has zero customers" — without that
   // the page would flash the empty-state UI for one frame on every
   // navigation here, which read as a disingenuous "you have no data".
-  const { data: customers, loaded } = useLiveQueryStatus(
+  const { data: allCustomers, loaded } = useLiveQueryStatus(
     () => db.customers.where('profileId').equals(profileId || '').toArray(),
     [profileId],
     []
+  );
+
+  // The COMPANY account (settings.storeCustomerId — the dealer's own account
+  // that stocks the store and prices at cost) is configured in Configuración,
+  // not a real client: keep it out of the directory entirely (count, list,
+  // empty state). Its ficha is still reachable by direct link from a quote.
+  const customers = useMemo(
+    () => (allCustomers || []).filter((c) => c.id !== settings?.storeCustomerId),
+    [allCustomers, settings?.storeCustomerId],
   );
 
   // The rows behind the per-client dropdown and the pipeline/compras

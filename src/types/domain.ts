@@ -166,8 +166,22 @@ export interface Settings {
    * line items become the store's products. Chosen once in Settings; null ⇒ the
    * storefront is unconfigured and shows nothing. FK → customers (set null on
    * delete). See `supabase/functions/store` + `core/store`.
+   *
+   * This is ALSO the COMPANY account: the dealer's own account (Alcover quoting
+   * itself for store stock). It's hidden from the Clientes directory and its
+   * quotes are priced at dealer cost via `companyDiscountPct` — see
+   * `lib/pricing:companyDiscountPctFor`.
    */
   storeCustomerId?: string | null;
+  /**
+   * Permanent cost discount (0–100%) taken OFF every product price on a
+   * COMPANY-account quote (a quote whose customer is `storeCustomerId`) across
+   * the dealer's surfaces — the client-preview/PDF order document, the totals
+   * dock, the quotes/orders lists and the order detail — so the figures read as
+   * dealer cost, not list. Default 60. Never touches the public storefront
+   * (retail), regular customer quotes, or accounting/commission math.
+   */
+  companyDiscountPct?: number;
   /** Shopify connections — domain + last connection time per store (the Admin
    *  tokens live in the write-only shopify_config table, never here).
    *  shopify* = the alcover.do inventory-mirror store; shopifyLsg* = the

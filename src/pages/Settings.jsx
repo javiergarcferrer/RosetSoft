@@ -217,23 +217,32 @@ export default function Settings() {
   );
 }
 
-// Public storefront ("Tienda") config: pick the house-account customer whose
-// quotes stock the store, and surface the shareable public link.
+// Company account + public storefront config. ONE account, two roles:
+//   1. It's the dealer's OWN account (Alcover quoting itself for store stock) —
+//      hidden from the Clientes directory; its quotes are internal store-stock
+//      orders priced at DEALER COST via the cost-discount field below.
+//   2. Its quotes also stock the public storefront ("Tienda"), which shows
+//      RETAIL prices (the cost discount never reaches it).
 //
-// The customer choice AUTO-SAVES the instant it changes — it does NOT ride the
-// page-level "Guardar". It used to live in the shared `local` form state, which
-// the parent resets from `settings` on every refresh (the realtime settings
-// channel, the rate pull, …), so a pick made before pressing Guardar got wiped
-// and "couldn't be saved". Persisting on change, like the rate card does, fixes
-// that and gives immediate feedback. Self-contained: reads the saved value off
-// `settings`, writes through `saveSettings`.
+// Both fields AUTO-SAVE the instant they change — they do NOT ride the
+// page-level "Guardar". They used to live in the shared `local` form state,
+// which the parent resets from `settings` on every refresh (the realtime
+// settings channel, the rate pull, …), so a pick made before pressing Guardar
+// got wiped. Persisting on change, like the rate card does, fixes that and gives
+// immediate feedback. Self-contained: reads the saved values off `settings`,
+// writes through `saveSettings`.
 function StoreCard({ settings, saveSettings, customers }) {
   const url = storeLinkUrl();
   const [copied, setCopied] = useState(false);
   const [value, setValue] = useState(settings?.storeCustomerId || '');
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
-  // Re-sync to the persisted value when it changes elsewhere / after a save.
+  // Cost discount %: local while editing, persisted on blur. Default 60 mirrors
+  // the column default so a fresh install reads the standing dealer discount.
+  const [disc, setDisc] = useState(String(settings?.companyDiscountPct ?? 60));
+  const [discStatus, setDiscStatus] = useState('idle');
+  // Re-sync to the persisted values when they change elsewhere / after a save.
   useEffect(() => { setValue(settings?.storeCustomerId || ''); }, [settings?.storeCustomerId]);
+  useEffect(() => { setDisc(String(settings?.companyDiscountPct ?? 60)); }, [settings?.companyDiscountPct]);
 
   const sorted = [...(customers || [])].sort((a, b) =>
     (a.company || a.name || '').localeCompare(b.company || b.name || ''));
@@ -252,6 +261,21 @@ function StoreCard({ settings, saveSettings, customers }) {
     }
   }
 
+  async function saveDiscount() {
+    const next = clampPct(disc);
+    setDisc(String(next));      // reflect the clamp
+    if (next === (settings?.companyDiscountPct ?? 60)) { setDiscStatus('idle'); return; }
+    setDiscStatus('saving');
+    try {
+      await saveSettings({ companyDiscountPct: next });
+      setDiscStatus('saved');
+      setTimeout(() => setDiscStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (err) {
+      console.error('company discount save failed', err);
+      setDiscStatus('error');
+    }
+  }
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
@@ -261,11 +285,12 @@ function StoreCard({ settings, saveSettings, customers }) {
   }
 
   return (
-    <SettingsSection title="Tienda pública">
+    <SettingsSection title="Cuenta de la empresa y tienda">
       <p className="text-xs text-ink-500 mb-4">
-        La tienda muestra los productos de las cotizaciones cuyo cliente sea la
-        cuenta de la casa (ALCOVER). Elige ese cliente y comparte el enlace —
-        cualquiera puede verlo sin iniciar sesión.{' '}
+        La cuenta de la empresa es tu propia cuenta (ALCOVER): no aparece en
+        Clientes y sus cotizaciones son los pedidos de la tienda, valorados a
+        precio de costo con el descuento de abajo. Esas mismas cotizaciones
+        surten la tienda pública, que muestra precios de venta.{' '}
         <a href="#/tienda" target="_blank" rel="noopener"
           className="text-brand-600 hover:text-brand-700 font-medium whitespace-nowrap">
           Ver tienda →
@@ -274,7 +299,7 @@ function StoreCard({ settings, saveSettings, customers }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <div className="label inline-flex items-center gap-2">
-            Cliente de la casa
+            Cuenta de la empresa
             {status === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
             {status === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
             {status === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
@@ -293,10 +318,35 @@ function StoreCard({ settings, saveSettings, customers }) {
             ))}
           </select>
           <p className="text-[11px] text-ink-500 mt-1.5">
-            Se guarda automáticamente. Sus cotizaciones (excepto rechazadas y archivadas) surten la tienda.
+            Se guarda automáticamente. Se oculta de Clientes y sus cotizaciones
+            (excepto rechazadas y archivadas) surten la tienda.
           </p>
         </div>
         <div>
+          <div className="label inline-flex items-center gap-2">
+            Descuento de costo (%)
+            {discStatus === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
+            {discStatus === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+            {discStatus === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+          </div>
+          <input
+            className="input"
+            type="number"
+            min="0"
+            max="100"
+            inputMode="decimal"
+            enterKeyHint="done"
+            value={disc}
+            onChange={(e) => setDisc(e.target.value)}
+            onBlur={saveDiscount}
+          />
+          <p className="text-[11px] text-ink-500 mt-1.5">
+            Se descuenta de cada precio en las cotizaciones de esta cuenta (total,
+            Vista cliente y PDF) para reflejar tu costo. No afecta la tienda
+            pública ni a otros clientes.
+          </p>
+        </div>
+        <div className="sm:col-span-2">
           <div className="label">Enlace público</div>
           <div className="flex flex-col gap-2 min-[400px]:flex-row min-[400px]:flex-wrap min-[400px]:items-center">
             <input

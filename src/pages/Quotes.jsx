@@ -308,9 +308,9 @@ export default function Quotes() {
   } = useMemo(
     () => resolveQuotesList({
       quotes, customers, professionals, profiles, orders, containers, lines: allLines,
-      scope, meId, q, tab, filters, sort,
+      settings, scope, meId, q, tab, filters, sort,
     }),
-    [quotes, customers, professionals, profiles, orders, containers, allLines, scope, meId, q, tab, filters, sort],
+    [quotes, customers, professionals, profiles, orders, containers, allLines, settings, scope, meId, q, tab, filters, sort],
   );
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The
