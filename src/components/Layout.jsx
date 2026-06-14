@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, PanelLeftClose, PanelLeft, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -9,6 +9,7 @@ import ListLoading from './ListLoading.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
 import QuickCreate from './QuickCreate.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
+import { useScrollRestoration } from '../context/NavMemory.jsx';
 import { navForRole } from '../lib/access.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
 import { useLiveQuery } from '../db/hooks.js';
@@ -52,6 +53,13 @@ export default function Layout() {
   // keyboard shortcut; the overlay itself owns Escape-to-close.
   const [searchOpen, setSearchOpen] = useState(false);
   useKeyboardShortcut('mod+k', () => setSearchOpen((o) => !o));
+
+  // Smart-back scroll memory: <main> is the app's single scroll container, so
+  // Back/Forward restores the offset here (the window never scrolls, so the
+  // browser's native restoration can't). Pages restore their filter/search
+  // state via useStickyState; this restores where you were on the page.
+  const mainRef = useRef(null);
+  useScrollRestoration(mainRef);
 
   // Remember the collapse preference across sessions.
   useEffect(() => {
@@ -300,7 +308,7 @@ export default function Layout() {
           would otherwise show a 1-pixel bounce flicker). When the sidebar is
           collapsed, a small left gutter (md:pl-12) keeps content clear of the
           floating show-toggle. */}
-      <main className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-12' : ''}`}>
+      <main ref={mainRef} className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-12' : ''}`}>
         <MainContent />
       </main>
 

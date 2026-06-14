@@ -16,6 +16,7 @@ import {
 } from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
+import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { waDigits } from '../lib/phone.js';
 import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
@@ -76,16 +77,19 @@ export default function Professionals() {
     [],
   );
 
-  const [q, setQ] = useState('');
-  const [tab, setTab] = useState('all');
-  const [filters, setFilters] = useState({});
-  const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
+  // Search/filter/sort + expanded rows are sticky (useStickyState): leave this
+  // page (a contact's WhatsApp quick action, a quote, ⌘K) and Back restores the
+  // exact view — same pill, same search, same open rows — instead of resetting.
+  const [q, setQ] = useStickyState('q', '');
+  const [tab, setTab] = useStickyState('tab', 'all');
+  const [filters, setFilters] = useStickyState('filters', {});
+  const [sort, setSort] = useStickyState('sort', { key: 'name', dir: 'asc' });
   // Last failed write, surfaced in a banner — a cell reverting silently
-  // reads as data loss; this says WHY it didn't stick.
+  // reads as data loss; this says WHY it didn't stick. Transient, NOT sticky.
   const [writeError, setWriteError] = useState('');
   // Which rows are dropped open. A Set so several professionals can be
   // compared side by side; toggled by the chevron (cells own the click).
-  const [expanded, setExpanded] = useState(() => new Set());
+  const [expanded, setExpanded] = useStickyState('expanded', () => new Set());
 
   function toggleExpanded(id) {
     setExpanded((prev) => {

@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import {
@@ -11,6 +11,7 @@ import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.j
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
+import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveQuotesList } from '../core/quote/views/lists.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
@@ -203,7 +204,12 @@ export default function Quotes() {
   // Honor a `?scope=` deep-link (the dashboard carries its Mías/Equipo
   // state across when you tap a status card) — else default to "mine".
   const [searchParams] = useSearchParams();
-  const [scope, setScope] = useState(() => {
+  const navType = useNavigationType(); // 'PUSH' | 'REPLACE' | 'POP' (back/fwd/load)
+  // scope / search / status-tab / vendedor filter / sort are sticky
+  // (useStickyState): leave Cotizaciones and Back restores the exact view you
+  // left. A `?scope=` / `?status=` deep-link (dashboard cards) still wins — see
+  // the override effect below — so those links always land pre-filtered.
+  const [scope, setScope] = useStickyState('scope', () => {
     const s = searchParams.get('scope');
     return s === SCOPE_TEAM || s === SCOPE_MINE ? s : SCOPE_MINE;
   });
@@ -257,15 +263,36 @@ export default function Quotes() {
   // Search header query state. The status dimension is the primary tab
   // strip ('all' = Todas); secondary filters (currently just vendedor)
   // live in `activeFilters` as {key: value}; sort defaults to most-recent.
-  const [q, setQ] = useState('');
+  const [q, setQ] = useStickyState('q', '');
   // Initialize the status tab from `?status=` so deep-links (dashboard
   // "Ver enviadas / aceptadas / borradores") land pre-filtered.
-  const [tab, setTab] = useState(() => {
+  const [tab, setTab] = useStickyState('tab', () => {
     const s = searchParams.get('status');
     return s && VALID_TABS.has(s) ? s : 'all';
   });
-  const [filters, setFilters] = useState({}); // { creator: <profileId> }
-  const [sort, setSort] = useState({ key: 'recent', dir: 'desc' });
+  const [filters, setFilters] = useStickyState('filters', {}); // { creator: <profileId> }
+  const [sort, setSort] = useStickyState('sort', { key: 'recent', dir: 'desc' });
+
+  // Deep-link override: a `?scope=` / `?status=` param (dashboard cards) must
+  // win over the sticky remembered view, so the link lands pre-filtered even if
+  // you'd left Cotizaciones on a different scope/pill. Only on a genuine arrival
+  // (PUSH/REPLACE) — on a POP (Back/Forward, or initial load) we trust the
+  // sticky store instead, so going Back to a page whose URL still carries an old
+  // `?status=` doesn't clobber the view you'd switched to (the first-load case is
+  // already covered by the sticky lazy-init reading the param). Applied once per
+  // distinct param set so it doesn't fight later manual changes.
+  const appliedDeepLink = useRef('');
+  useEffect(() => {
+    if (navType === 'POP') return; // Back/Forward/load → respect the sticky view
+    const sScope = searchParams.get('scope');
+    const sStatus = searchParams.get('status');
+    if (!sScope && !sStatus) return; // no deep-link → respect the sticky view
+    const sig = `${sScope || ''}|${sStatus || ''}`;
+    if (appliedDeepLink.current === sig) return;
+    appliedDeepLink.current = sig;
+    if (sScope === SCOPE_TEAM || sScope === SCOPE_MINE) setScope(sScope);
+    if (sStatus && VALID_TABS.has(sStatus)) setTab(sStatus);
+  }, [navType, searchParams, setScope, setTab]);
 
   const sortOptions = [
     { key: 'recent', label: 'Más reciente' },
