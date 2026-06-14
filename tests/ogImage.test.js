@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const OG_PATH = new URL('../public/og-card.jpg', import.meta.url);
+const OG_PATH = new URL('../public/og-card-v2.jpg', import.meta.url);
 
 test('og image is a baseline (non-progressive) JPEG', () => {
   const bytes = readFileSync(OG_PATH);
@@ -36,9 +36,10 @@ test('og image stays inside WhatsApp size limits', () => {
 
 test('index.html references the og image that exists', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /og:image" content="%VITE_PUBLIC_ORIGIN%\/og-card\.jpg"/);
-  // No tag may still POINT at the old name (the comment may mention it).
+  assert.match(html, /og:image" content="%VITE_PUBLIC_ORIGIN%\/og-card-v2\.jpg"/);
+  // No tag may still POINT at an old name (the comment may mention it).
   assert.ok(!/content="[^"]*og-claro/.test(html), 'a meta tag still points at og-claro.jpg');
+  assert.ok(!/content="[^"]*\/og-card\.jpg"/.test(html), 'a meta tag still points at the un-versioned og-card.jpg');
   // No og:url canonical: Meta's crawler keys its cached link object by the
   // canonical, so one stale object would swallow every quote link again.
   assert.ok(!/property="og:url"/.test(html), 'og:url canonical collapses the preview cache — keep it out');

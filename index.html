@@ -68,8 +68,9 @@
          VITE_PUBLIC_ORIGIN (Vercel) and falls back to the production host.
          The image MUST be a BASELINE jpeg — WhatsApp renders progressive
          JPEGs as garbled noise in the preview card (tests/ogImage.test.js
-         pins this). Renamed from og-claro.jpg when fixing that: WhatsApp
-         caches the card per-URL for weeks, so a fix must change the URL.
+         pins this). The filename is bumped (…-v2) on every re-encode fix:
+         WhatsApp caches the card per-URL for weeks, so a fix must change the
+         URL to bust that cache.
          There is deliberately NO og:url tag: Meta's crawler keys its cached
          link object by the og:url CANONICAL, so one stale canonical object
          swallowed every quote link (any domain, any cache-buster) and kept
@@ -80,8 +81,8 @@
     <meta property="og:locale" content="es_DO" />
     <meta property="og:title" content="Su propuesta de diseño · ALCOVER" />
     <meta property="og:description" content="Telas, dimensiones y total. Ábrela para cotizar en vivo." />
-    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-card.jpg" />
-    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-card.jpg" />
+    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-card-v2.jpg" />
+    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-card-v2.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -89,7 +90,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Su propuesta de diseño · ALCOVER" />
     <meta name="twitter:description" content="Telas, dimensiones y total. Ábrela para cotizar en vivo." />
-    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-card.jpg" />
+    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-card-v2.jpg" />
 
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
