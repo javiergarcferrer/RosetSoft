@@ -1050,17 +1050,11 @@
   }
 }
 
-/* Composer action fan-out (ChatThread): the single "+" primitive expands into a
-   staggered speed-dial — each item springs up with a slight overshoot, the scrim
-   fades in. Kept as global keyframes (not Tailwind config) so the inline
-   per-item animation-delay can stagger them. */
-@keyframes rs-fan-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.8); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
-}
-@keyframes rs-fan-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* The composer attachment tray rising into the keyboard's place (ChatThread):
+   tapping "+" drops the keyboard and raises a 4-up action grid in its footprint. */
+@keyframes rs-sheet-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ===================================================================

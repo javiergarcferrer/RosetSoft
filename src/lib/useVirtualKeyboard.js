@@ -122,6 +122,12 @@ export function installVirtualKeyboardWatcher() {
     // the column is full-height at rest. (`offsetTop` is folded in so a Safari
     // tab that pushes the visual viewport down still measures the visible band.)
     root.style.setProperty('--rs-vvh', `${Math.round(vv.height + vv.offsetTop)}px`);
+    // Record the keyboard's own height the moment it's up, so the WhatsApp-style
+    // attachment tray (ChatThread) can take its EXACT footprint when the box is
+    // blurred to raise it. Only published on a real measurement (open) and left
+    // sticky otherwise — the tray reads the last-known height; before the
+    // keyboard has ever opened the var is unset and CSS falls back to a sheet.
+    if (open) root.style.setProperty('--rs-kb-height', `${Math.round(inset)}px`);
   };
 
   // `focusout` fires with document.activeElement momentarily on <body> even when

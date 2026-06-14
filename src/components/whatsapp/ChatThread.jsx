@@ -6,7 +6,7 @@ import {
   AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
   Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown, Tag,
-  Languages, ScrollText, Eye,
+  Languages, ScrollText, Eye, Camera, Keyboard,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
@@ -51,77 +51,55 @@ function recClock(ms) {
 }
 
 /**
- * The composer's single action primitive. Collapses every "to the left of the
- * box" action (attach a file · share location · send a contact · template ·
- * interactive · catalog products · quick reply · AI draft) behind ONE button
- * that fans the choices up in a staggered spring — modern speed-dial, zero
- * clutter at rest. Each action is `{ key, icon, label, onClick, tone?, busy?,
- * disabled? }`; falsy entries are dropped so callers can gate items inline. The
- * fan closes itself before running an action, so handlers never have to.
- */
-function ComposerActions({ actions, disabled }) {
-  const [open, setOpen] = useState(false);
+ * The attachment tray — WhatsApp's "+" grid, recreated with our look. Tapping the
+ * composer's "+" dismisses the keyboard and raises THIS in its place, sized to the
+ * keyboard's own footprint (`--rs-kb-height`, published by useVirtualKeyboard) so
+ * nothing jumps. A 4-up grid of every "left of the box" action (attach · location
+ * · contact · template · interactive · catalog · quick reply · AI draft); each is
+ * `{ key, icon, label, onClick, tone?, busy?, disabled? }`, falsy entries dropped
+ * so callers gate inline. Picking one closes the tray first, then runs — handlers
+ * never have to. Before the keyboard has ever opened (no measured height) it falls
+ * back to a sensible half-screen sheet. */
+function ComposerAttachPanel({ actions, onClose }) {
   const items = actions.filter(Boolean);
   useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
-  if (!items.length) return null;
+  }, [onClose]);
   return (
-    <div className="relative shrink-0">
-      {open && (
-        <>
-          {/* Tap-away scrim — a hair of dim so the fan reads as a layer. */}
+    <div
+      className="overflow-y-auto overscroll-contain border-t border-ink-100 bg-surface px-4 pt-4 pb-3"
+      style={{ height: 'var(--rs-kb-height, min(50vh, 20rem))', animation: 'rs-sheet-up .2s ease' }}
+    >
+      <div className="grid grid-cols-4 gap-x-3 gap-y-4">
+        {items.map((a) => (
           <button
+            key={a.key}
             type="button"
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-20 cursor-default bg-black/10 backdrop-blur-[1px]"
-            style={{ animation: 'rs-fan-fade .18s ease' }}
-            aria-label="Cerrar acciones"
-            tabIndex={-1}
-          />
-          <div className="absolute bottom-full left-0 mb-3 z-30 flex flex-col-reverse items-start gap-2.5">
-            {items.map((a, i) => (
-              <button
-                key={a.key}
-                type="button"
-                onClick={() => { setOpen(false); a.onClick(); }}
-                disabled={a.disabled}
-                style={{ animation: 'rs-fan-in .26s cubic-bezier(.34,1.56,.64,1) backwards', animationDelay: `${i * 38}ms` }}
-                className="flex items-center gap-2.5 rounded-full bg-surface border border-ink-100 shadow-pop pl-1.5 pr-4 py-1.5 text-left transition-colors hover:border-brand-200 hover:bg-brand-50/50 active:scale-95 disabled:opacity-50"
-              >
-                <span className={`flex h-8 w-8 items-center justify-center rounded-full shrink-0 ${
-                  a.tone === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-brand-100 text-brand-700'
-                }`}>
-                  {a.busy ? <Loader2 size={15} className="animate-spin" /> : <a.icon size={15} />}
-                </span>
-                <span className="text-sm font-medium text-ink-800 whitespace-nowrap">{a.label}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={disabled}
-        className={`relative z-30 flex h-[42px] w-[42px] items-center justify-center rounded-full text-white shadow-pop transition-all duration-300 disabled:opacity-40 ${
-          open ? 'bg-brand-700 scale-95' : 'bg-gradient-to-br from-brand-500 to-brand-700 hover:from-brand-600 hover:to-brand-800'
-        }`}
-        title="Acciones"
-        aria-label="Acciones"
-        aria-expanded={open}
-      >
-        <Plus size={20} className={`transition-transform duration-300 ${open ? 'rotate-[135deg]' : ''}`} />
-      </button>
+            onClick={() => { onClose(); a.onClick(); }}
+            disabled={a.disabled}
+            className="flex flex-col items-center gap-1.5 transition-transform active:scale-95 disabled:opacity-40"
+          >
+            <span className={`flex h-14 w-14 items-center justify-center rounded-full ${
+              a.tone === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-brand-100 text-brand-700'
+            }`}>
+              {a.busy ? <Loader2 size={20} className="animate-spin" /> : <a.icon size={22} />}
+            </span>
+            <span className="text-[11px] font-medium text-ink-600 text-center leading-tight">{a.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, convState = null, allLabels = [], onSaveState = null, showHeader = true, contextQuoteId = null }) {
   const [text, setText] = useState('');
+  // Attachment tray (the "+" grid) open state — mutually exclusive with the
+  // keyboard, WhatsApp-style: opening it blurs the box (keyboard down), and
+  // focusing the box again closes it (keyboard up). See toggleAttach below.
+  const [attachOpen, setAttachOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
@@ -177,7 +155,21 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
   const recStarting = useRef(false);
   const typingAt = useRef(0);
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
   const composerRef = useRef(null);
+
+  // The "+" ⇄ keyboard toggle. Opening the tray dismisses the soft keyboard
+  // (blur) so the grid can take its exact place; closing it puts focus back so
+  // the keyboard returns — the native WhatsApp choreography. Both run inside a
+  // user gesture, so iOS honors the focus() re-open.
+  function toggleAttach() {
+    setAttachOpen((open) => {
+      const next = !open;
+      if (next) composerRef.current?.blur();
+      else composerRef.current?.focus();
+      return next;
+    });
+  }
   const listRef = useRef(null);
   // Pin the conversation to its latest message by scrolling the thread's OWN
   // container — NOT scrollIntoView, which on iOS also scrolls every ancestor
@@ -274,7 +266,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     let saved = '';
     try { saved = localStorage.getItem(key) || ''; } catch { /* storage unavailable */ }
     setText(saved);
-    setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0;
+    setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); setAttachOpen(false); typingAt.current = 0;
     const firstUnread = thread.items.find((mm) => mm.direction === 'in' && !mm.readAt);
     setUnreadAnchorId(firstUnread?.id || null);
     setSummaryText(null);
@@ -346,6 +338,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     if (!body || sending) return;
     setSending(true);
     setError(null);
+    setAttachOpen(false);
     setText('');
     const res = await onSend(body, replyTo?.waId || null);
     setReplyTo(null);
@@ -721,6 +714,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
         </div>
       )}
       <input ref={fileRef} type="file" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
+      {/* Dedicated camera capture — opens the device camera straight to the
+          staging preview, like WhatsApp's in-composer camera icon. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickFile} aria-hidden="true" tabIndex={-1} />
       {pendingFile ? (
         <div className="border-t border-ink-100 bg-surface px-3 py-3 space-y-2.5">
           <div className="flex items-start gap-3">
@@ -773,7 +769,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </div>
         </div>
       ) : (
-      <div className="flex items-end gap-1.5 px-3 py-3 border-t border-ink-100 bg-surface">
+      <div className="border-t border-ink-100 bg-surface">
+        <div className="flex items-end gap-1.5 px-3 py-3">
         {rec ? (
           <>
             <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 border border-red-100 px-3">
@@ -802,54 +799,31 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           </>
         ) : (
           <>
-            {/* One primitive, fanned out — every "left of the box" action
-                (attach · location · contact · template · interactive · catalog
-                · quick reply · AI draft) behind a single speed-dial. Falsy
-                entries drop, so each item stays gated exactly as before. */}
-            <ComposerActions
+            {/* The "+" / keyboard toggle — WhatsApp's single left primitive.
+                "+" raises the attachment tray (and drops the keyboard); while
+                the tray is up it flips to a keyboard glyph that brings the box
+                back into focus. Every action now lives in the tray, so the row
+                stays the four WhatsApp elements: action · box · camera · send. */}
+            <button
+              type="button"
+              onClick={toggleAttach}
               disabled={!connected || sending}
-              actions={[
-                onSuggestReply && canDraft && thread.windowOpen && {
-                  key: 'ai', icon: Sparkles, label: 'Sugerir con IA',
-                  onClick: suggestReply, busy: drafting, disabled: drafting,
-                },
-                text.trim() && {
-                  key: 'translate', icon: Languages, label: 'Traducir (ES⇄EN)',
-                  onClick: translateDraft, busy: translating, disabled: translating,
-                },
-                thread.items.length > 0 && {
-                  key: 'summary', icon: ScrollText, label: 'Resumen para retomar',
-                  onClick: summarize, busy: summarizing, disabled: summarizing,
-                },
-                quickReplies.length > 0 && {
-                  key: 'quick', icon: Zap, label: 'Respuestas rápidas',
-                  onClick: () => setQuickOpen(true),
-                },
-                { key: 'file', icon: FileText, label: 'Archivo', onClick: () => fileRef.current?.click() },
-                onSendLocation && {
-                  key: 'location', icon: MapPin, label: 'Ubicación actual', onClick: sendCurrentLocation,
-                },
-                onSendContact && {
-                  key: 'contact', icon: ContactRound, label: 'Contacto', onClick: () => setContactOpen(true),
-                },
-                {
-                  key: 'template', icon: LayoutTemplate,
-                  label: thread.windowOpen ? 'Plantilla' : 'Plantilla aprobada',
-                  onClick: () => setTemplateOpen(true), tone: thread.windowOpen ? null : 'amber',
-                },
-                { key: 'interactive', icon: SquareMenu, label: 'Mensaje interactivo', onClick: () => setInteractiveOpen(true) },
-                {
-                  key: 'products', icon: ShoppingBag, label: 'Productos del catálogo',
-                  onClick: () => setProductsOpen(true), tone: thread.windowOpen ? null : 'amber',
-                },
-              ]}
-            />
+              className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white shadow-pop transition-all duration-200 disabled:opacity-40 ${
+                attachOpen ? 'bg-brand-700 scale-95' : 'bg-gradient-to-br from-brand-500 to-brand-700 hover:from-brand-600 hover:to-brand-800'
+              }`}
+              title={attachOpen ? 'Mostrar teclado' : 'Acciones'}
+              aria-label={attachOpen ? 'Mostrar teclado' : 'Acciones'}
+              aria-expanded={attachOpen}
+            >
+              {attachOpen ? <Keyboard size={20} /> : <Plus size={20} />}
+            </button>
             <textarea
               ref={composerRef}
               className="input flex-1 min-h-[42px] max-h-32 resize-none text-sm"
               rows={1}
               value={text}
               onChange={(e) => { setText(e.target.value); notifyTyping(); }}
+              onFocus={() => setAttachOpen(false)}
               onPaste={pasteFile}
               onKeyDown={(e) => {
                 // Desktop: Enter sends, Shift+Enter newlines. Touch keyboards
@@ -865,7 +839,21 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               disabled={!connected}
               aria-label="Mensaje"
             />
-            {/* WhatsApp Web pattern: mic on an empty composer, send once there's a draft. */}
+            {/* Camera — like WhatsApp, it sits beside the mic on an empty box
+                and folds away the moment you start typing (Send takes the slot). */}
+            {!text.trim() && !sending && (
+              <button
+                type="button"
+                onClick={() => cameraRef.current?.click()}
+                disabled={!connected}
+                className="p-2.5 min-h-[42px] rounded-lg text-ink-400 hover:text-brand-700 hover:bg-brand-50 disabled:opacity-40 transition-colors shrink-0"
+                title="Cámara"
+                aria-label="Tomar una foto"
+              >
+                <Camera size={19} />
+              </button>
+            )}
+            {/* WhatsApp pattern: mic on an empty composer, send once there's a draft. */}
             {!text.trim() && VOICE_SUPPORTED && !sending ? (
               <button
                 type="button"
@@ -890,6 +878,48 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               </button>
             )}
           </>
+        )}
+        </div>
+        {/* The attachment tray fills the keyboard's footprint when "+" is tapped. */}
+        {attachOpen && !rec && (
+          <ComposerAttachPanel
+            onClose={() => setAttachOpen(false)}
+            actions={[
+              onSuggestReply && canDraft && thread.windowOpen && {
+                key: 'ai', icon: Sparkles, label: 'Sugerir con IA',
+                onClick: suggestReply, busy: drafting, disabled: drafting,
+              },
+              text.trim() && {
+                key: 'translate', icon: Languages, label: 'Traducir (ES⇄EN)',
+                onClick: translateDraft, busy: translating, disabled: translating,
+              },
+              thread.items.length > 0 && {
+                key: 'summary', icon: ScrollText, label: 'Resumen',
+                onClick: summarize, busy: summarizing, disabled: summarizing,
+              },
+              quickReplies.length > 0 && {
+                key: 'quick', icon: Zap, label: 'Respuestas rápidas',
+                onClick: () => setQuickOpen(true),
+              },
+              { key: 'file', icon: FileText, label: 'Archivo', onClick: () => fileRef.current?.click() },
+              onSendLocation && {
+                key: 'location', icon: MapPin, label: 'Ubicación', onClick: sendCurrentLocation,
+              },
+              onSendContact && {
+                key: 'contact', icon: ContactRound, label: 'Contacto', onClick: () => setContactOpen(true),
+              },
+              {
+                key: 'template', icon: LayoutTemplate,
+                label: thread.windowOpen ? 'Plantilla' : 'Plantilla aprobada',
+                onClick: () => setTemplateOpen(true), tone: thread.windowOpen ? null : 'amber',
+              },
+              { key: 'interactive', icon: SquareMenu, label: 'Interactivo', onClick: () => setInteractiveOpen(true) },
+              {
+                key: 'products', icon: ShoppingBag, label: 'Catálogo',
+                onClick: () => setProductsOpen(true), tone: thread.windowOpen ? null : 'amber',
+              },
+            ]}
+          />
         )}
       </div>
       )}
