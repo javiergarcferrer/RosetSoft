@@ -16,6 +16,7 @@ import CatalogPicker from './CatalogPicker.jsx';
 import MultiAddPicker from './MultiAddPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
+import { applyCompanyDiscount } from '../../lib/pricing.js';
 import { FamiliesContext } from './FamiliesContext.js';
 import { MaterialsContext } from './MaterialsContext.js';
 import { CompanyDiscountContext } from './CompanyDiscountContext.js';
@@ -1648,16 +1649,20 @@ function CalculatorBand({
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
   const companyDiscountPct = useContext(CompanyDiscountContext);
+  // Company account: the Unitario READS at dealer cost (list × factor) so the
+  // whole equation is cost; edits divide back out so the STORED price stays the
+  // list value (the storefront's retail basis). factor 1 ⇒ a normal quote.
+  const factor = companyDiscountPct > 0 ? 1 - companyDiscountPct / 100 : 1;
   return (
     <div className="qli-pricing">
       <PricingRow
         qty={line.qty}
-        unitPrice={line.unitPrice}
+        unitPrice={factor !== 1 ? (Number(line.unitPrice) || 0) * factor : line.unitPrice}
         total={lineTotal}
         fmt={fmt}
         currency={currency}
         onQtyChange={(q) => onChange({ qty: q })}
-        onUnitChange={(v) => onChange({ unitPrice: v })}
+        onUnitChange={(v) => onChange({ unitPrice: factor !== 1 ? (Number(v) || 0) / factor : v })}
         totalSize="lg"
         totalLabel="Total"
         companyDiscountPct={companyDiscountPct}
@@ -1668,7 +1673,7 @@ function CalculatorBand({
         adjustmentLine={line}
         breakdown={(
           <LineBreakdownPopover
-            line={line}
+            line={factor !== 1 ? applyCompanyDiscount([line], companyDiscountPct)[0] : line}
             currency={currency}
             rates={rates}
             onClose={onCloseBreakdown}
@@ -1687,6 +1692,7 @@ function CalculatorBand({
 // reads identically to a normal row.
 // ---------------------------------------------------------------------------
 function RangeBand({ line, totalRange, fmt, onChange }) {
+  const companyDiscountPct = useContext(CompanyDiscountContext);
   return (
     <div className="qli-pricing">
       <div className="flex items-end justify-between gap-3 flex-wrap">
@@ -1703,7 +1709,12 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
           />
         </CalcCell>
         <div className="text-right ml-auto">
-          <div className="eyebrow-xs tracking-wide text-brand-700">Rango · sin material</div>
+          <div className="eyebrow-xs tracking-wide text-brand-700">
+            Rango · sin material
+            {companyDiscountPct > 0 && (
+              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+            )}
+          </div>
           <div className="qli-total-val text-lg font-bold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
             {fmt(totalRange.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(totalRange.max)}
           </div>
@@ -1733,6 +1744,7 @@ function CompoundCalculatorBand({
   const count = compound.count;
   const ranged = compound.hasRange;
   const tr = compound.range;
+  const companyDiscountPct = useContext(CompanyDiscountContext);
   return (
     <div className="qli-pricing">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1742,6 +1754,9 @@ function CompoundCalculatorBand({
         <div className="relative text-right ml-auto">
           <div className="eyebrow-xs tracking-wide mb-0.5">
             {ranged ? 'Total modular · rango' : 'Total modular'}
+            {companyDiscountPct > 0 && (
+              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+            )}
           </div>
           <button
             type="button"
@@ -1763,7 +1778,7 @@ function CompoundCalculatorBand({
           </button>
           {breakdownOpen && (
             <LineBreakdownPopover
-              line={line}
+              line={companyDiscountPct > 0 ? applyCompanyDiscount([line], companyDiscountPct)[0] : line}
               currency={currency}
               rates={rates}
               onClose={onCloseBreakdown}
@@ -2148,8 +2163,10 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const families = useContext(FamiliesContext);
   // Component total (from the parent VM) is already at dealer cost on a company
-  // quote; badge it "−N%" while the unit-price input stays at list.
+  // quote; show the Unitario at cost too so the equation reads consistently, and
+  // divide edits back out so the STORED price stays list. factor 1 ⇒ normal quote.
   const companyDiscountPct = useContext(CompanyDiscountContext);
+  const factor = companyDiscountPct > 0 ? 1 - companyDiscountPct / 100 : 1;
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
   // The catalog seed is applied to the component (dropping the line-only family
@@ -2376,12 +2393,12 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <div className="qli-pricing">
           <PricingRow
             qty={component.qty}
-            unitPrice={component.unitPrice}
+            unitPrice={factor !== 1 ? (Number(component.unitPrice) || 0) * factor : component.unitPrice}
             total={total}
             fmt={fmt}
             currency={currency}
             onQtyChange={(q) => onChange({ qty: q })}
-            onUnitChange={(v) => onChange({ unitPrice: v })}
+            onUnitChange={(v) => onChange({ unitPrice: factor !== 1 ? (Number(v) || 0) / factor : v })}
             totalSize="md"
             totalLabel="Total"
             companyDiscountPct={companyDiscountPct}

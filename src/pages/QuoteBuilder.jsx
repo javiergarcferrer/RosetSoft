@@ -775,18 +775,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // `min-w-0` lets the column shrink below its content's intrinsic width,
         // so a long money value / dimension spec can't force a horizontal scroll.
         <div className="space-y-5 min-w-0">
-          {/* Company-account orders: each line/component TOTAL reads at dealer
-              cost (badged −N%); the editable Unitario stays at the catalog LIST
-              price. Spell that out so qty × unit ≠ total never reads as a bug. */}
+          {/* Company-account orders: EVERY price (unit + total) reads at dealer
+              cost, badged −N%. Edits are stored back as the list price so the
+              public storefront keeps its retail basis. */}
           {companyDiscountPct > 0 && (
             <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 flex items-start gap-2.5">
               <Hash size={15} className="mt-0.5 flex-shrink-0 text-brand-500" aria-hidden />
               <p className="min-w-0">
                 <span className="font-semibold">Cuenta empresa.</span>{' '}
-                Los totales muestran el costo con{' '}
+                Todos los precios muestran tu costo, con{' '}
                 <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
-                aplicado (precio del pedido para la tienda); el precio unitario
-                editable sigue siendo el de lista.
+                aplicado (precio del pedido para la tienda).
               </p>
             </div>
           )}
