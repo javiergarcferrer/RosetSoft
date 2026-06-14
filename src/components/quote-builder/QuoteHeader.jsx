@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ArrowLeft, Briefcase, Eye, Pencil, Undo2, Redo2 } from 'lucide-react';
+import { ArrowLeft, Briefcase, Check, Eye, Pencil, Undo2, Redo2, UserX } from 'lucide-react';
 import { useGoBack } from '../../context/NavMemory.jsx';
+import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import WhatsAppChip from './WhatsAppChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
@@ -143,41 +144,86 @@ export default function QuoteHeader({
   );
 }
 
+/** Display name for a seller profile, with a graceful e-mail/id fallback. */
+function sellerName(p) {
+  return p?.name?.trim() || p?.email?.split('@')[0] || p?.id || '';
+}
+
 /**
- * Compact seller (Vendedor) select rendered as a chip in the breadcrumb row
+ * Compact seller (Vendedor) picker rendered as a chip in the breadcrumb row
  * beside the order pill, away from the customer/professional meta strip. A
- * leading briefcase icon denotes it — no text label, no native dropdown arrow
- * (we drop the arrow with appearance-none; the team knows the name is a
- * picker). Visually matches the chip vocabulary (rounded, ink-200 border,
- * hover state) so the eye reads the row as a single horizontal group.
+ * leading briefcase icon denotes it; visually matches the chip vocabulary
+ * (rounded-full, ink-200 border, ring + hover state) so the eye reads the row
+ * as a single horizontal group — twinned with the ProfessionalChip pill.
  *
- * The blank option lets an admin explicitly null out attribution for
- * training / sandbox quotes. Inactive sellers stay listed only when
- * they're the current attribution so the row labels itself honestly
- * — picking someone else effectively "unassigns" the inactive one.
+ * Built on the shared <Dropdown> primitive so the menu is OUR menu — a
+ * portaled, flip-aware panel with the `dropdown-pop` animation, keyboard
+ * roving and click-outside — instead of the browser's native `<select>` popup
+ * (the grey, OS-styled list that ignored our theme). The chip itself owns the
+ * trigger look via `triggerClassName`.
+ *
+ * The "— sin vendedor —" row lets an admin explicitly null out attribution for
+ * training / sandbox quotes. Inactive sellers stay listed only when they're the
+ * current attribution so the row labels itself honestly — picking someone else
+ * effectively "unassigns" the inactive one.
  */
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
+  const currentId = quote?.createdByUserId || null;
+  const current = currentId ? assignableSellers.find((p) => p.id === currentId) : null;
   return (
-    <label
-      className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
-      title="Vendedor"
+    <Dropdown
+      ariaLabel="Vendedor asignado"
+      chevron={false}
+      triggerClassName="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 active:scale-[0.98] transition-all px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
+      label={(
+        <>
+          <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
+          <span
+            className={`truncate min-w-0 max-w-[88px] sm:max-w-[180px] lg:max-w-[220px] ${
+              current ? 'text-ink-900 font-medium' : 'text-ink-400 italic'
+            }`}
+          >
+            {current ? sellerName(current) : 'sin vendedor'}
+          </span>
+        </>
+      )}
     >
-      <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
-      <select
-        value={quote?.createdByUserId || ''}
-        onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
-        className="appearance-none bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer min-w-0 max-w-[88px] sm:max-w-[180px] lg:max-w-[220px] truncate"
-        aria-label="Vendedor asignado"
-      >
-        <option value="">— sin vendedor —</option>
-        {assignableSellers.map((p) => (
-          <option key={p.id} value={p.id}>
-            {(p.name?.trim() || p.email?.split('@')[0] || p.id)}
-            {p.id === quote?.createdByUserId && !p.active ? ' (inactivo)' : ''}
-          </option>
-        ))}
-      </select>
-    </label>
+      {({ close }) => (
+        <>
+          <DropdownItem
+            active={!currentId}
+            onSelect={() => { onUpdateQuote({ createdByUserId: null }); close(); }}
+          >
+            <span className="flex w-3.5 flex-shrink-0 justify-center pt-0.5">
+              {!currentId && <Check size={14} className="text-brand-600" aria-hidden />}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-ink-500">
+              <UserX size={14} className="text-ink-400" aria-hidden /> Sin vendedor
+            </span>
+          </DropdownItem>
+
+          {assignableSellers.map((p) => {
+            const isCurrent = p.id === currentId;
+            const inactive = isCurrent && !p.active;
+            return (
+              <DropdownItem
+                key={p.id}
+                active={isCurrent}
+                onSelect={() => { onUpdateQuote({ createdByUserId: p.id }); close(); }}
+              >
+                <span className="flex w-3.5 flex-shrink-0 justify-center pt-0.5">
+                  {isCurrent && <Check size={14} className="text-brand-600" aria-hidden />}
+                </span>
+                <span className="min-w-0 truncate">
+                  {sellerName(p)}
+                  {inactive && <span className="ml-1.5 text-[11px] text-ink-400">(inactivo)</span>}
+                </span>
+              </DropdownItem>
+            );
+          })}
+        </>
+      )}
+    </Dropdown>
   );
 }
 

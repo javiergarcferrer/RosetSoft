@@ -34,6 +34,7 @@ import { ChevronDown } from 'lucide-react';
  *   align?: 'left' | 'right',
  *   disabled?: boolean,
  *   className?: string,
+ *   triggerClassName?: string,
  *   panelClassName?: string,
  *   chevron?: boolean,
  *   ariaLabel?: string,
@@ -45,6 +46,13 @@ export default function Dropdown({
   align = 'left',
   disabled = false,
   className = '',
+  // triggerClassName fully REPLACES the default menu-button styling when set,
+  // so a caller can dress the trigger in another part of our vocabulary (e.g.
+  // the rounded-full chip the quote header's seller picker wears to match its
+  // sibling chips) while still inheriting the portal/flip/keyboard machinery.
+  // Leave it unset for the standard bordered menu button (`className` then
+  // appends as usual).
+  triggerClassName,
   panelClassName = '',
   // chevron=false makes an icon-only trigger (the "⋯" overflow menus of the
   // quote editor) — the chevron would just be noise next to a glyph.
@@ -143,7 +151,7 @@ export default function Dropdown({
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-surface px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+        className={triggerClassName ?? `inline-flex items-center gap-1.5 rounded-md border border-ink-200 bg-surface px-2.5 py-1.5 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-700 shadow-xs transition-colors hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 active:scale-[0.97] active:bg-ink-100 disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
       >
         {label}
         {chevron && (
