@@ -160,6 +160,98 @@ export function ContactGapDot({ rollup }) {
   );
 }
 
+// ── Contact identity + status (Clientes / Profesionales) ────────────────────
+// One source of truth for the per-row "where does this contact stand" read,
+// so the avatar tint, the status chip and the two sheets can never disagree.
+// Presentational only (label + Tailwind tones); no money math lives here — it
+// reads the rollup the list VM already computed.
+const STATUS_TONES = {
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
+  brand: 'bg-brand-50 text-brand-700 ring-brand-100',
+  muted: 'bg-ink-100 text-ink-500 ring-ink-200',
+};
+
+/**
+ * The single salient pipeline status for a contact, derived from its rollup.
+ * Clientes read by money (comprador → pipeline → cotizado → frío); the
+ * Profesionales referral story is simpler (con ventas → activo → frío).
+ * Returns { label, tone, cls } — `cls` is the ring+tint shared by chip+avatar.
+ */
+export function contactStatusInfo(rollup, kind = 'customer') {
+  const r = rollup || {};
+  let label;
+  let tone;
+  if (kind === 'professional') {
+    if (r.acceptedTotal > 0) { label = 'Con ventas'; tone = 'emerald'; }
+    else if (r.count > 0) { label = 'Activo'; tone = 'sky'; }
+    else { label = 'Sin actividad'; tone = 'muted'; }
+  } else {
+    if (r.acceptedTotal > 0) { label = 'Comprador'; tone = 'emerald'; }
+    else if (r.openCount > 0) { label = 'En pipeline'; tone = 'sky'; }
+    else if (r.count > 0) { label = 'Cotizado'; tone = 'brand'; }
+    else { label = 'Sin actividad'; tone = 'muted'; }
+  }
+  return { label, tone, cls: STATUS_TONES[tone] };
+}
+
+/** Glanceable pipeline-status pill (the "Estado" column / mobile sub-line). */
+export function ContactStatusChip({ rollup, kind }) {
+  const { label, cls } = contactStatusInfo(rollup, kind);
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+/** Two-letter monogram from a contact name (first + last initial). */
+function monogram(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '·';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Circular initials avatar, tinted by the contact's status so identity and
+ * standing read together at a glance. Decorative (the name sits beside it),
+ * so aria-hidden.
+ */
+export function ContactAvatar({ name, rollup, kind, size = 'md' }) {
+  const { cls } = contactStatusInfo(rollup, kind);
+  const dim = size === 'sm' ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-[11px]';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold uppercase tracking-tight ring-1 ring-inset ${cls} ${dim}`}
+      aria-hidden
+    >
+      {monogram(name)}
+    </span>
+  );
+}
+
+/**
+ * The Shopify-style summary band that sits above the search header: a quiet
+ * rounded card with a few headline facts (count + money rollups). `stats` is
+ * an array of { label, value, tone? } — the page passes the figures its VM
+ * already summed so the band derives nothing.
+ */
+export function ListSummaryBand({ stats }) {
+  return (
+    <div className="card mb-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 px-4 py-3">
+      {stats.map((s, i) => (
+        <div key={i} className="flex items-baseline gap-1.5">
+          <span className={`font-display text-lg font-semibold tabular-nums leading-none ${s.tone || 'text-ink-900'}`}>
+            {s.value}
+          </span>
+          <span className="text-xs text-ink-500">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Failed-write banner. A sheet cell that can't save reverts its draft — but
  * a revert alone reads as "the app ate my edit". The page catches the DB

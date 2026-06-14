@@ -317,16 +317,21 @@ export function resolveProfessionalsList({
 
   // Primary tabs: pipeline activity + data completeness. Counts off the full
   // directory, independent of search/filters (same convention as Quotes).
+  // The same pass sums the money rollups the summary band shows.
   let activeN = 0;
   let wonN = 0;
   let idleN = 0;
   let incompleteN = 0;
+  let quotedTotal = 0;
+  let acceptedTotalAll = 0;
   for (const p of pros) {
     const r = rollupByProfessionalId.get(p.id);
     if (r.count > 0) activeN += 1;
     else idleN += 1;
     if (r.acceptedTotal > 0) wonN += 1;
     if (r.incomplete) incompleteN += 1;
+    quotedTotal += r.allTimeTotal;
+    acceptedTotalAll += r.acceptedTotal;
   }
   const tabs = [
     { key: 'all', label: 'Todos', count: pros.length },
@@ -438,7 +443,17 @@ export function resolveProfessionalsList({
       .localeCompare(String(b.name || '').toLowerCase()) * mul;
   });
 
-  return { rollupByProfessionalId, rows, tabs, filterDefs, totalCount: pros.length };
+  const summary = {
+    total: pros.length,
+    active: activeN,
+    won: wonN,
+    idle: idleN,
+    incomplete: incompleteN,
+    quotedTotal,
+    acceptedTotal: acceptedTotalAll,
+  };
+
+  return { rollupByProfessionalId, rows, tabs, filterDefs, summary, totalCount: pros.length };
 }
 
 // ViewModel for pages/Customers.jsx — the seller-facing client directory.
@@ -517,12 +532,16 @@ export function resolveCustomersList({
   let buyersN = 0;
   let idleN = 0;
   let incompleteN = 0;
+  let pipelineTotal = 0;
+  let boughtTotal = 0;
   for (const c of rows0) {
     const r = rollupByCustomerId.get(c.id);
     if (r.openCount > 0) pipelineN += 1;
     if (r.acceptedTotal > 0) buyersN += 1;
     if (r.count === 0) idleN += 1;
     if (r.incomplete) incompleteN += 1;
+    pipelineTotal += r.openTotal;
+    boughtTotal += r.acceptedTotal;
   }
   const tabs = [
     { key: 'all', label: 'Todos', count: rows0.length },
@@ -640,7 +659,17 @@ export function resolveCustomersList({
       .localeCompare(String(b.name || '').toLowerCase()) * mul;
   });
 
-  return { rollupByCustomerId, rows, tabs, filterDefs, totalCount: rows0.length };
+  const summary = {
+    total: rows0.length,
+    pipeline: pipelineN,
+    buyers: buyersN,
+    idle: idleN,
+    incomplete: incompleteN,
+    pipelineTotal,
+    boughtTotal,
+  };
+
+  return { rollupByCustomerId, rows, tabs, filterDefs, summary, totalCount: rows0.length };
 }
 
 // ViewModel for pages/Orders.jsx. Pure projection off the raw rows: the

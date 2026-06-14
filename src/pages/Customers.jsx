@@ -13,6 +13,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import {
   Cell, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+  ContactAvatar, ContactStatusChip, ListSummaryBand,
 } from '../components/sheet/cells.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -94,7 +95,7 @@ export default function Customers() {
     });
   }
 
-  const { rollupByCustomerId, rows, tabs, filterDefs } = useMemo(
+  const { rollupByCustomerId, rows, tabs, filterDefs, summary } = useMemo(
     () => resolveCustomersList({ customers, quotes, lines: allLines, q, tab, filters, sort }),
     [customers, quotes, allLines, q, tab, filters, sort],
   );
@@ -141,7 +142,7 @@ export default function Customers() {
     <>
       <PageHeader
         title="Clientes"
-        subtitle={loaded ? `${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'} · edita directamente en la tabla` : ' '}
+        subtitle={loaded ? 'Edita directamente en la tabla' : ' '}
         actions={
           <button onClick={() => setCreating({})} className="btn-brand">
             <Plus size={14} /> Agregar cliente
@@ -160,6 +161,18 @@ export default function Customers() {
         />
       ) : (
         <>
+          <ListSummaryBand
+            stats={[
+              { value: summary.total, label: summary.total === 1 ? 'cliente' : 'clientes' },
+              { value: summary.buyers, label: 'compradores', tone: 'text-emerald-700' },
+              ...(summary.pipelineTotal > 0
+                ? [{ value: formatMoney(summary.pipelineTotal, 'USD', { USD: 1 }), label: 'en pipeline' }]
+                : []),
+              ...(summary.boughtTotal > 0
+                ? [{ value: formatMoney(summary.boughtTotal, 'USD', { USD: 1 }), label: 'comprado', tone: 'text-emerald-700' }]
+                : []),
+            ]}
+          />
           <ListSearchHeader
             searchValue={q}
             onSearchChange={setQ}
@@ -203,6 +216,7 @@ export default function Customers() {
                 <tr>
                   <th className="w-8"></th>
                   <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={setSort} />
+                  <th>Estado</th>
                   <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
@@ -217,7 +231,7 @@ export default function Customers() {
               <tbody>
                 {noMatches && (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={10}>
                       <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
                         <SearchX size={15} className="flex-shrink-0" aria-hidden />
                         Sin resultados — ajusta la búsqueda o los filtros.
@@ -275,11 +289,17 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
         </td>
-        <td className="font-medium max-w-[200px]">
-          <div className="flex items-center gap-1.5">
-            <Cell value={c.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
-            <ContactGapDot rollup={rollup} />
+        <td className="font-medium max-w-[220px]">
+          <div className="flex items-center gap-2.5">
+            <ContactAvatar name={c.name} rollup={rollup} kind="customer" />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Cell value={c.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
+              <ContactGapDot rollup={rollup} />
+            </div>
           </div>
+        </td>
+        <td className="whitespace-nowrap">
+          <ContactStatusChip rollup={rollup} kind="customer" />
         </td>
         <td className="max-w-[180px]">
           <Cell value={c.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${c.name}`} />
@@ -336,7 +356,7 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={9} className="!p-0 bg-ink-50/50">
+          <td colSpan={10} className="!p-0 bg-ink-50/50">
             <CustomerPanel c={c} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>
@@ -349,11 +369,15 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
 function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
+      <div className="flex items-center gap-2.5 p-3">
+        <ContactAvatar name={c.name} rollup={rollup} kind="customer" />
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-1.5">
             <Cell value={c.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
             <ContactGapDot rollup={rollup} />
+          </div>
+          <div className="pt-0.5">
+            <ContactStatusChip rollup={rollup} kind="customer" />
           </div>
           <div className="grid grid-cols-2 gap-x-2">
             <Cell value={c.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${c.name}`} align="text-[12px] text-ink-500" />

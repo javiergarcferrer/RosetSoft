@@ -12,6 +12,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import {
   Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+  ContactAvatar, ContactStatusChip, ListSummaryBand,
 } from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -95,7 +96,7 @@ export default function Professionals() {
     });
   }
 
-  const { rollupByProfessionalId, rows, tabs, filterDefs } = useMemo(
+  const { rollupByProfessionalId, rows, tabs, filterDefs, summary } = useMemo(
     () => resolveProfessionalsList({
       professionals: pros, quotes, lines: allLines, customers, q, tab, filters, sort,
     }),
@@ -190,7 +191,7 @@ export default function Professionals() {
     <>
       <PageHeader
         title="Profesionales"
-        subtitle={loaded ? `${pros.length} ${pros.length === 1 ? 'profesional' : 'profesionales'} · edita directamente en la tabla` : ' '}
+        subtitle={loaded ? 'Edita directamente en la tabla' : ' '}
         actions={
           <div className="flex items-center gap-2">
             {/* Difusión, woven in where the audience lives: lands on the
@@ -213,6 +214,20 @@ export default function Professionals() {
         <div className="card overflow-hidden"><ListLoading rows={5} /></div>
       ) : (
         <>
+          {pros.length > 0 && (
+            <ListSummaryBand
+              stats={[
+                { value: summary.total, label: summary.total === 1 ? 'profesional' : 'profesionales' },
+                { value: summary.won, label: 'con ventas', tone: 'text-emerald-700' },
+                ...(summary.quotedTotal > 0
+                  ? [{ value: formatMoney(summary.quotedTotal, 'USD', { USD: 1 }), label: 'cotizado' }]
+                  : []),
+                ...(summary.acceptedTotal > 0
+                  ? [{ value: formatMoney(summary.acceptedTotal, 'USD', { USD: 1 }), label: 'aceptado', tone: 'text-emerald-700' }]
+                  : []),
+              ]}
+            />
+          )}
           {pros.length > 0 && (
             <ListSearchHeader
               searchValue={q}
@@ -268,6 +283,7 @@ export default function Professionals() {
                 <tr>
                   <th className="w-8"></th>
                   <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={setSort} />
+                  <th>Estado</th>
                   <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
@@ -278,7 +294,7 @@ export default function Professionals() {
               <tbody>
                 {noMatches && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
                         <SearchX size={15} className="flex-shrink-0" aria-hidden />
                         Sin resultados — ajusta la búsqueda o los filtros.
@@ -335,11 +351,17 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
         </td>
-        <td className="font-medium max-w-[220px]">
-          <div className="flex items-center gap-1.5">
-            <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
-            <ContactGapDot rollup={rollup} />
+        <td className="font-medium max-w-[240px]">
+          <div className="flex items-center gap-2.5">
+            <ContactAvatar name={p.name} rollup={rollup} kind="professional" />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+              <ContactGapDot rollup={rollup} />
+            </div>
           </div>
+        </td>
+        <td className="whitespace-nowrap">
+          <ContactStatusChip rollup={rollup} kind="professional" />
         </td>
         <td className="max-w-[200px]">
           <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
@@ -384,7 +406,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={7} className="!p-0 bg-ink-50/50">
+          <td colSpan={8} className="!p-0 bg-ink-50/50">
             <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>
@@ -429,19 +451,25 @@ function NewSheetRow({ row, onCreate }) {
   return (
     <tr className="bg-brand-50/30">
       <td className="!pr-0 text-ink-300"><Plus size={14} className="ml-1" /></td>
-      <td className="max-w-[220px]">
-        <input
-          data-newrow-name
-          data-cell={`${row}:name`}
-          className={CELL_CLS}
-          value={draft.name}
-          placeholder="Nuevo profesional…"
-          aria-label="Nombre del nuevo profesional"
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          onBlur={() => maybeCreate({})}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-        />
+      <td className="max-w-[240px]">
+        <div className="flex items-center gap-2.5">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-300 ring-1 ring-inset ring-ink-200" aria-hidden>
+            <Plus size={14} />
+          </span>
+          <input
+            data-newrow-name
+            data-cell={`${row}:name`}
+            className={CELL_CLS}
+            value={draft.name}
+            placeholder="Nuevo profesional…"
+            aria-label="Nombre del nuevo profesional"
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            onBlur={() => maybeCreate({})}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+          />
+        </div>
       </td>
+      <td></td>
       <td className="max-w-[200px]">{cell('company', { placeholder: 'Empresa' })}</td>
       <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
       <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
@@ -455,11 +483,15 @@ function NewSheetRow({ row, onCreate }) {
 function MobileRow({ p, rollup, isOpen, onToggle, onCommit, onRemove }) {
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
+      <div className="flex items-center gap-2.5 p-3">
+        <ContactAvatar name={p.name} rollup={rollup} kind="professional" />
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-1.5">
             <Cell value={p.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
             <ContactGapDot rollup={rollup} />
+          </div>
+          <div className="pt-0.5">
+            <ContactStatusChip rollup={rollup} kind="professional" />
           </div>
           <div className="grid grid-cols-2 gap-x-2">
             <Cell value={p.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${p.name}`} align="text-[12px] text-ink-500" />
@@ -498,8 +530,10 @@ function MobileNewCard({ onCreate }) {
     if (ok) setName('');
   }
   return (
-    <div className="card bg-brand-50/30 p-3 flex items-center gap-2">
-      <Plus size={15} className="text-ink-300 shrink-0" />
+    <div className="card bg-brand-50/30 p-3 flex items-center gap-2.5">
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-300 ring-1 ring-inset ring-ink-200" aria-hidden>
+        <Plus size={14} />
+      </span>
       <input
         data-newrow-name
         className={CELL_CLS}
