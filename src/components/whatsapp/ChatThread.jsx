@@ -1171,8 +1171,7 @@ function ContactSendModal({ open, onClose, excludeKey, onSend }) {
     [open], [],
   );
   const picks = (open ? resolveNewChatContacts(customers, professionals, [], { needle }) : [])
-    .filter((c) => c.key !== excludeKey)
-    .slice(0, 30);
+    .filter((c) => c.key !== excludeKey);
 
   function pick(c) {
     const row = c.customerId
@@ -1208,7 +1207,7 @@ function ContactSendModal({ open, onClose, excludeKey, onSend }) {
           />
         </div>
         {picks.length > 0 && (
-          <div className="max-h-44 overflow-y-auto -mx-1 px-1 rounded-lg border border-ink-100 divide-y divide-ink-50">
+          <div className="max-h-60 overflow-y-auto -mx-1 px-1 rounded-lg border border-ink-100 divide-y divide-ink-50">
             {picks.map((c) => (
               <button
                 key={c.key}
