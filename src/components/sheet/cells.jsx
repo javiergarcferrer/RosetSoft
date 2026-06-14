@@ -66,6 +66,65 @@ export function Cell({ value, onCommit, row, col, type = 'text', inputMode, plac
   );
 }
 
+// ── Monogram + contact-channel primitives ───────────────────────────────────
+// Shared by the Profesionales and Clientes mobile cards so the two directories
+// can't drift on their card chrome (same rationale as the Cell above).
+
+// Curated monogram palette — the app's tint tiles, each with a dark-mode
+// variant (index.css), so a colour-coded avatar stays theme-correct. A
+// contact's tint is a stable hash of their name (below), giving the list a
+// second, pre-attentive scanning dimension beyond the text.
+const MONO_TINTS = ['tint-brand', 'tint-sky', 'tint-emerald', 'tint-rose', 'tint-ink'];
+
+/**
+ * Editorial monogram plate — the identity anchor of a mobile directory card.
+ * Initials in the Söhne display cut on a soft tinted squircle; the tint is a
+ * stable hash of the name so the same person always reads the same colour. An
+ * amber corner badge flags missing contact data (the maintenance signal the
+ * desktop row carries as ContactGapDot).
+ */
+export function Monogram({ name, rollup }) {
+  const clean = String(name || '').trim();
+  const initials = clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((n) => n.charAt(0).toUpperCase())
+    .join('') || '?';
+  let h = 0;
+  for (let i = 0; i < clean.length; i++) h = (h * 31 + clean.charCodeAt(i)) >>> 0;
+  const tint = MONO_TINTS[h % MONO_TINTS.length];
+  const missing = rollup?.incomplete
+    ? [rollup.missingEmail ? 'correo' : null, rollup.missingPhone ? 'teléfono' : null]
+        .filter(Boolean).join(' y ')
+    : '';
+  return (
+    <div className="relative shrink-0">
+      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl font-display text-sm font-semibold ring-1 ring-inset ring-black/5 shadow-xs ${tint}`}>
+        {initials}
+      </span>
+      {missing && (
+        <span
+          className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-surface"
+          role="img"
+          title={`Faltan datos de contacto: ${missing}`}
+          aria-label={`Faltan datos de contacto: ${missing}`}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A contact channel row in a card footer — an icon labels the inline Cell so
+ *  an empty field reads as "tap to add", never as orphaned grey text. */
+export function ContactCell({ icon: Icon, value, ...cellProps }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      <Icon size={14} aria-hidden className={`shrink-0 ${value ? 'text-ink-400' : 'text-ink-300'}`} />
+      <Cell value={value} align="!text-ink-700" {...cellProps} />
+    </div>
+  );
+}
+
 /**
  * Labeled bordered input for the expanded-panel field grid (the record's
  * secondary fields — RNC, dirección, provincia…). Same draft/commit

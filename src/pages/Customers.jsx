@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, Users, ArrowRight, ChevronDown, ExternalLink, FileText, Mail, MessageCircle,
-  Phone, SearchX, Trash2,
+  Phone, SearchX, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -13,6 +13,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import {
   Cell, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+  Monogram, ContactCell,
 } from '../components/sheet/cells.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -143,9 +144,20 @@ export default function Customers() {
         title="Clientes"
         subtitle={loaded ? `${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'} · edita directamente en la tabla` : ' '}
         actions={
-          <button onClick={() => setCreating({})} className="btn-brand">
-            <Plus size={14} /> Agregar cliente
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Difusión, woven in where the audience lives: lands on the
+                campaign wizard already targeting the clients list. */}
+            <Link
+              to="/chats/difusion?campana=clientes"
+              className="btn-secondary"
+              title="Enviar una plantilla de WhatsApp a clientes (Difusión)"
+            >
+              <Megaphone size={14} /> Difusión
+            </Link>
+            <button onClick={() => setCreating({})} className="btn-brand">
+              <Plus size={14} /> Agregar cliente
+            </button>
+          </div>
         }
       />
 
@@ -181,7 +193,7 @@ export default function Customers() {
 
           {/* Mobile sheet-cards — the fields ARE inputs, the chevron drops
               the full record. Same commit semantics as the desktop grid. */}
-          <div className="md:hidden space-y-2">
+          <div className="md:hidden space-y-2.5">
             {noMatches && <NoMatchesCard />}
             {rows.map((c) => (
               <MobileRow
@@ -345,40 +357,61 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
   );
 }
 
-/** Mobile: a card whose fields are the same in-place cells, stacked. */
+/**
+ * Mobile client card — the monogram-led record shared with Profesionales
+ * (Monogram + ContactCell live in cells.jsx so the two directories can't
+ * drift). Identity (monogram + name + empresa) sits beside the seller's money
+ * metric — pipeline (ink) and purchased (emerald), colour-matched to the
+ * desktop Pipeline/Compras columns; the contact channels read as a labelled
+ * list under a hairline, with a full-height chevron rail dropping the ficha.
+ * Every field is the SAME in-place Cell as the desktop sheet.
+ */
 function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
+  const count = rollup?.count || 0;
+  const openTotal = rollup?.openTotal || 0;
+  const acceptedTotal = rollup?.acceptedTotal || 0;
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex items-center gap-1.5">
-            <Cell value={c.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
-            <ContactGapDot rollup={rollup} />
-          </div>
-          <div className="grid grid-cols-2 gap-x-2">
-            <Cell value={c.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${c.name}`} align="text-[12px] text-ink-500" />
-            <Cell value={c.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${c.name}`} align="text-[12px] text-ink-500" />
-          </div>
-          <Cell value={c.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${c.name}`} align="text-[12px] text-ink-500" />
+      <div className="flex items-start gap-3 p-3.5 pb-3">
+        <Monogram name={c.name} rollup={rollup} />
+        <div className="min-w-0 flex-1 pt-0.5">
+          <Cell value={c.name} onCommit={(v) => onCommit('name', v)} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} align="font-medium" />
+          <Cell value={c.company} onCommit={(v) => onCommit('company', v)} col="company" placeholder="Empresa" label={`Empresa de ${c.name}`} align="!text-ink-500" />
         </div>
-        <div className="text-right shrink-0">
-          {rollup?.openCount > 0 ? (
-            <div className="text-[11px] tabular-nums text-ink-700 font-medium">
-              {formatMoney(rollup.openTotal, 'USD', { USD: 1 })}
-            </div>
-          ) : null}
-          <div className="eyebrow-xs text-ink-400">{rollup?.count || 0} cotiz.</div>
+        <div className="flex shrink-0 flex-col items-end text-right">
+          <span className={`font-display text-lg font-semibold leading-none tabular-nums ${count ? 'text-ink-900' : 'text-ink-300'}`}>
+            {count}
+          </span>
+          <span className={`eyebrow-xs mt-1 ${count ? 'text-ink-400' : 'text-ink-300'}`}>cotiz.</span>
+          {openTotal > 0 && (
+            <span className="mt-1.5 text-[11px] font-semibold tabular-nums text-ink-600">
+              {formatMoney(openTotal, 'USD', { USD: 1 })}
+            </span>
+          )}
+          {acceptedTotal > 0 && (
+            <span className="mt-0.5 text-[11px] font-semibold tabular-nums text-emerald-700">
+              {formatMoney(acceptedTotal, 'USD', { USD: 1 })}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-stretch border-t border-ink-100">
+        <div className="min-w-0 flex-1 divide-y divide-ink-100/70 px-3.5">
+          <ContactCell icon={Phone} value={c.phone} onCommit={(v) => onCommit('phone', v)} col="phone" type="tel" inputMode="tel" placeholder="Teléfono" label={`Teléfono de ${c.name}`} />
+          <ContactCell icon={Mail} value={c.email} onCommit={(v) => onCommit('email', v)} col="email" type="email" inputMode="email" placeholder="Correo" label={`Correo de ${c.name}`} />
         </div>
         <button
           type="button"
           onClick={onToggle}
-          className="p-2 -mr-1 rounded text-ink-300 hover:text-brand-600 transition-colors shrink-0"
+          className="flex shrink-0 items-center border-l border-ink-100 px-4 text-ink-300 transition-colors hover:bg-brand-50/60 hover:text-brand-600"
           aria-expanded={isOpen}
           aria-label="Ver ficha y cotizaciones"
         >
-          <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </div>
+
       {isOpen && (
         <div className="border-t border-ink-100">
           <CustomerPanel c={c} rollup={rollup} onCommit={onCommit} onRemove={onRemove} />

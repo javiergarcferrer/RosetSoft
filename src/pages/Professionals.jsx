@@ -12,6 +12,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import {
   Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
+  Monogram, ContactCell,
 } from '../components/sheet/cells.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -454,61 +455,6 @@ function NewSheetRow({ row, onCreate }) {
       <td className="text-right text-[11px] text-ink-300">—</td>
       <td></td>
     </tr>
-  );
-}
-
-// Curated monogram palette — the app's tint tiles, each with a dark-mode
-// variant (index.css), so a colour-coded avatar stays theme-correct. A
-// professional's tint is derived from their name (below), giving the
-// directory a second, pre-attentive scanning dimension beyond the text.
-const MONO_TINTS = ['tint-brand', 'tint-sky', 'tint-emerald', 'tint-rose', 'tint-ink'];
-
-/**
- * Editorial monogram plate — the identity anchor of the mobile card. Initials
- * in the Söhne display cut on a soft tinted squircle; the tint is a stable
- * hash of the name so the same person always reads the same colour. An amber
- * corner badge flags missing contact data (the maintenance signal the desktop
- * row carries as ContactGapDot).
- */
-function Monogram({ name, rollup }) {
-  const clean = String(name || '').trim();
-  const initials = clean
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((n) => n.charAt(0).toUpperCase())
-    .join('') || '?';
-  let h = 0;
-  for (let i = 0; i < clean.length; i++) h = (h * 31 + clean.charCodeAt(i)) >>> 0;
-  const tint = MONO_TINTS[h % MONO_TINTS.length];
-  const missing = rollup?.incomplete
-    ? [rollup.missingEmail ? 'correo' : null, rollup.missingPhone ? 'teléfono' : null]
-        .filter(Boolean).join(' y ')
-    : '';
-  return (
-    <div className="relative shrink-0">
-      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl font-display text-sm font-semibold ring-1 ring-inset ring-black/5 shadow-xs ${tint}`}>
-        {initials}
-      </span>
-      {missing && (
-        <span
-          className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-surface"
-          role="img"
-          title={`Faltan datos de contacto: ${missing}`}
-          aria-label={`Faltan datos de contacto: ${missing}`}
-        />
-      )}
-    </div>
-  );
-}
-
-/** A contact channel row in the card footer — an icon labels the inline Cell
- *  so an empty field reads as "tap to add", never as orphaned grey text. */
-function ContactCell({ icon: Icon, value, ...cellProps }) {
-  return (
-    <div className="flex items-center gap-2.5 py-1.5">
-      <Icon size={14} aria-hidden className={`shrink-0 ${value ? 'text-ink-400' : 'text-ink-300'}`} />
-      <Cell value={value} align="!text-ink-700" {...cellProps} />
-    </div>
   );
 }
 
