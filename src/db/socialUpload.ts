@@ -20,7 +20,10 @@ const toBlob = (canvas: HTMLCanvasElement, quality: number): Promise<Blob> =>
  *  surfaced as a friendly error so the dealer exports a JPG instead). */
 async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number }> {
   try {
-    const bmp = await createImageBitmap(file);
+    // Apply EXIF orientation explicitly (not the browser-default, which was
+    // historically 'none') so portrait phone photos bake upright into the
+    // re-encoded JPEG instead of posting sideways.
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
     return { source: bmp, width: bmp.width, height: bmp.height };
   } catch {
     const url = URL.createObjectURL(file);
