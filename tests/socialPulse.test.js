@@ -163,6 +163,30 @@ test('recent IG comments flatten across posts, newest first, capped at 8', () =>
   assert.ok(recentComments[0].ago);
 });
 
+test('post + comment image: a VIDEO shows its thumbnail, a photo its media_url', () => {
+  const igMedia = [
+    {
+      caption: 'Photo post', media_type: 'IMAGE',
+      media_url: 'https://cdn/photo.jpg', thumbnail_url: 'https://cdn/photo-thumb.jpg',
+      like_count: '5', comments_count: '1', timestamp: new Date(NOW - 1000).toISOString(),
+      comments: { data: [{ id: 'k1', text: 'nice', username: 'ana', timestamp: new Date(NOW - 500).toISOString() }] },
+    },
+    {
+      caption: 'Reel', media_type: 'VIDEO',
+      media_url: 'https://cdn/reel.mp4', thumbnail_url: 'https://cdn/reel-thumb.jpg',
+      timestamp: new Date(NOW - 2000).toISOString(),
+    },
+  ];
+  const { posts, recentComments } = resolveSocialPulse({ igMedia }, { now: NOW });
+  // photo serves straight from media_url; reel shows its thumbnail, never the mp4
+  assert.equal(posts[0].mediaUrl, 'https://cdn/photo.jpg');
+  assert.equal(posts[1].mediaUrl, 'https://cdn/reel-thumb.jpg');
+  assert.equal(posts[0].caption, 'Photo post');
+  // a comment carries the parent post's image so the View can pop it up
+  assert.equal(recentComments[0].mediaUrl, 'https://cdn/photo.jpg');
+  assert.equal(recentComments[0].postCaption, 'Photo post');
+});
+
 test('campaigns map the campaigns-edge shape (id + status + nested insights)', () => {
   const adCampaigns = [
     {

@@ -19,6 +19,19 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * The image to SHOW for an IG media item: a VIDEO's `media_url` is the raw
+ * .mp4, so its `thumbnail_url` is the picture; a photo / carousel serves the
+ * image straight from `media_url`. These are short-lived signed CDN URLs —
+ * fine for a live, polled dashboard where each fetch refreshes them.
+ */
+function mediaImage(m) {
+  if (!m) return null;
+  return m.media_type === 'VIDEO'
+    ? (m.thumbnail_url || m.media_url || null)
+    : (m.media_url || m.thumbnail_url || null);
+}
+
 /** ISO string or unix seconds → JS ms (null when unparseable). */
 function toMs(v) {
   if (v == null || v === '') return null;
@@ -175,7 +188,12 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     .sort((a, b) => b.spend - a.spend);
 
   const scheduled = (s.scheduled || [])
-    .map((p) => ({ at: toMs(p.scheduled_publish_time), text: (p.message || '').slice(0, 120) || '(sin texto)' }))
+    .map((p) => ({
+      at: toMs(p.scheduled_publish_time),
+      text: (p.message || '').slice(0, 120) || '(sin texto)',
+      mediaUrl: p.full_picture || null,
+      permalink: p.permalink_url || null,
+    }))
     .filter((p) => p.at && p.at > now)
     .sort((a, b) => a.at - b.at)
     .map((p) => ({ ...p, inLabel: inLabel(p.at, now) }));
@@ -183,15 +201,19 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const posts = (s.igMedia || [])
     .map((m) => ({
       text: (m.caption || '').slice(0, 90) || `(${m.media_type || 'post'})`,
+      caption: m.caption || '',
       likes: num(m.like_count),
       comments: num(m.comments_count),
       at: toMs(m.timestamp),
+      mediaUrl: mediaImage(m),
       permalink: m.permalink || null,
     }))
     .map((m) => ({ ...m, ago: agoLabel(m.at, now) }));
 
   // Recent comments flattened across the recent posts, newest first — the
-  // triage feed (what people are saying that may deserve a reply).
+  // triage feed (what people are saying that may deserve a reply). Each
+  // carries the parent post's image + caption so the View can pop up the
+  // post being spoken of for context.
   const recentComments = (s.igMedia || [])
     .flatMap((m) => ((m.comments?.data) || []).map((c) => ({
       id: c.id || null,
@@ -199,6 +221,8 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       username: c.username || '',
       at: toMs(c.timestamp),
       postText: (m.caption || '').slice(0, 40) || `(${m.media_type || 'post'})`,
+      postCaption: m.caption || '',
+      mediaUrl: mediaImage(m),
       permalink: m.permalink || null,
     })))
     .sort((a, b) => (b.at || 0) - (a.at || 0))

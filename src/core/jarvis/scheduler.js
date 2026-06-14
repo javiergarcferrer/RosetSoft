@@ -13,6 +13,14 @@ const STATUS_LABEL = {
   canceled: 'Cancelado',
 };
 
+/** First displayable image in a queued publish payload (null for video-only). */
+function payloadThumb(payload) {
+  if (!payload) return null;
+  if (payload.imageUrl) return payload.imageUrl;
+  const item = (payload.carousel || []).find((c) => c?.imageUrl);
+  return item?.imageUrl || null;
+}
+
 /**
  * Split the queue into an upcoming agenda (soonest first) and recent history
  * (newest first). `kind`/`preview`/`error` ride along for the calendar cell.
@@ -25,6 +33,9 @@ export function resolveScheduleAgenda(rows, { now = Date.now() } = {}) {
     statusLabel: STATUS_LABEL[r.status] || r.status || '',
     kind: r.kind || 'Publicación',
     preview: r.preview || '',
+    // A thumbnail for the post-peek popup, pulled from the queued payload (a
+    // single feed/story image, or the first image of a carousel).
+    thumb: payloadThumb(r.payload),
     error: r.lastError || null,
     pending: r.status === 'queued' || r.status === 'publishing',
   }));

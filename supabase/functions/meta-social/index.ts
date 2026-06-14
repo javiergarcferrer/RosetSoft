@@ -606,8 +606,10 @@ Deno.serve(async (req) => {
         : Promise.resolve(null),
       cfg.ig_user_id
         ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
-          // comments ride along nested — recent triage without N+1 calls
-          fields: 'caption,like_count,comments_count,timestamp,media_type,permalink,comments.limit(3){id,text,username,timestamp}',
+          // comments ride along nested — recent triage without N+1 calls.
+          // media_url/thumbnail_url power the post-peek popups (the image of
+          // the post a comment is on, or a recent post seen in context).
+          fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(3){id,text,username,timestamp}',
           limit: '6',
         }))
         : Promise.resolve(null),
@@ -636,7 +638,8 @@ Deno.serve(async (req) => {
         }))
         : Promise.resolve(null),
       safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {
-        fields: 'message,scheduled_publish_time', limit: '10',
+        // full_picture gives the queued post a thumbnail for its peek popup.
+        fields: 'message,scheduled_publish_time,full_picture,permalink_url', limit: '10',
       })),
     ]);
 

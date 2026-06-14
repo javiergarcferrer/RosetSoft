@@ -5,10 +5,11 @@
 // Function (tokens never reach the browser) projected by resolveSocialPulse.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarClock, Instagram, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
+  CalendarClock, ExternalLink, Instagram, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import MediaPicker from '../components/MediaPicker.jsx';
+import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { db, newId } from '../db/database.js';
@@ -28,11 +29,75 @@ const deltaSub = (pct, fallback) => (pct != null
   ? `${pct >= 0 ? '+' : ''}${pct}% vs 7d anteriores`
   : fallback);
 
+// A small, clickable post thumbnail that opens the peek popup. Renders nothing
+// when there's no image (e.g. a video-only scheduled post with no preview).
+function PostThumb({ src, onClick, className = 'w-11 h-11' }) {
+  if (!src) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-none ${className} rounded-md overflow-hidden bg-ink-100 border border-ink-100 cursor-zoom-in hover:ring-2 hover:ring-brand-300 transition`}
+      aria-label="Ver la publicación"
+      title="Ver la publicación"
+    >
+      <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
+    </button>
+  );
+}
+
+// A read-only "peek" at the post behind a row — the photo, caption and
+// engagement, mirroring the materials-catalog image popup. Built from a
+// comment (with the comment highlighted), a recent post, or a scheduled item.
+function PostPeek({ post, onClose }) {
+  return (
+    <Modal open={!!post} onClose={onClose} title={post?.title || 'Publicación'} size="lg">
+      {post && (
+        <div className="space-y-4">
+          {post.mediaUrl ? (
+            <div className="flex items-center justify-center overflow-hidden rounded-xl bg-ink-50">
+              <img src={post.mediaUrl} alt="" className="max-h-[58vh] w-auto max-w-full object-contain" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-40 rounded-xl bg-ink-100 text-sm text-ink-400">
+              Sin imagen disponible
+            </div>
+          )}
+          {post.highlight && (
+            <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+              <span className="font-medium text-ink-900">@{post.highlight.username || 'Anónimo'}</span>{' '}
+              <span className="text-ink-700">{post.highlight.text}</span>
+            </div>
+          )}
+          {post.caption && (
+            <p className="text-sm leading-relaxed text-ink-700 whitespace-pre-wrap">{post.caption}</p>
+          )}
+          <div className="flex items-center gap-4 text-xs text-ink-400">
+            {post.likes != null && <span className="tabular-nums">♥ {post.likes}</span>}
+            {post.comments != null && <span className="tabular-nums">💬 {post.comments}</span>}
+            {post.when && <span>{post.when}</span>}
+            {post.permalink && (
+              <a
+                href={post.permalink}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-auto flex items-center gap-1 text-brand-700 hover:underline"
+              >
+                <ExternalLink size={13} /> Ver publicación
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // One comment-triage card, used for both Instagram and Facebook — same markup,
 // the platform only changes the @-prefix and which edge a reply posts to. The
 // reply composer is lifted to the parent so a single open editor is shared.
 function CommentsCard({
-  title, comments, platform, atPrefix, emptyLabel,
+  title, comments, platform, atPrefix, emptyLabel, onPeek,
   reply, openReply, replyText, setReplyText, replyBusy, replyErr, sendReply,
 }) {
   return (
@@ -45,7 +110,9 @@ function CommentsCard({
         {comments.map((c) => {
           const open = reply?.platform === platform && reply?.id === c.id;
           return (
-            <div key={c.id || `${c.username}-${c.at}`} className="px-5 py-2.5">
+            <div key={c.id || `${c.username}-${c.at}`} className="px-5 py-2.5 flex items-start gap-3">
+              <PostThumb src={c.mediaUrl} onClick={() => onPeek?.(c)} />
+              <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 text-sm">
                 <span className="min-w-0 truncate">
                   <span className="font-medium text-ink-900">{atPrefix}{c.username || 'Anónimo'}</span>{' '}
@@ -78,6 +145,7 @@ function CommentsCard({
                   </button>
                 </div>
               )}
+              </div>
             </div>
           );
         })}
@@ -368,6 +436,32 @@ export default function Marketing() {
     }
   }, [pendingIg, finishBusy, load]);
 
+  // ── post peek popup (the post behind a comment / row, for context) ────
+  const [peek, setPeek] = useState(null);
+  const peekComment = useCallback((c) => setPeek({
+    title: 'Publicación comentada',
+    mediaUrl: c.mediaUrl,
+    caption: c.postCaption,
+    permalink: c.permalink,
+    highlight: { username: c.username, text: c.text },
+  }), []);
+  const peekPost = useCallback((p) => setPeek({
+    title: 'Publicación',
+    mediaUrl: p.mediaUrl,
+    caption: p.caption,
+    permalink: p.permalink,
+    likes: p.likes,
+    comments: p.comments,
+    when: p.ago,
+  }), []);
+  const peekScheduled = useCallback((p) => setPeek({
+    title: 'Programado',
+    mediaUrl: p.mediaUrl || p.thumb,
+    caption: p.text || p.preview,
+    permalink: p.permalink,
+    when: p.inLabel || (p.at ? new Date(p.at).toLocaleString('es-DO') : null),
+  }), []);
+
   // ── inline comment reply (IG + FB share one open editor) ─────────────
   const [reply, setReply] = useState(null); // { id, platform, username }
   const [replyText, setReplyText] = useState('');
@@ -614,6 +708,7 @@ export default function Marketing() {
                   <div className="divide-y divide-ink-100">
                     {agenda.upcoming.map((p) => (
                       <div key={p.id} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                        <PostThumb src={p.thumb} onClick={() => peekScheduled(p)} className="w-9 h-9" />
                         <span className="flex-none rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-800">{p.kind}</span>
                         <span className="min-w-0 truncate text-ink-700">{p.preview || '(sin texto)'}</span>
                         <span className="ml-auto flex-none text-xs text-ink-400">{new Date(p.at).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
@@ -700,6 +795,7 @@ export default function Marketing() {
                 platform="instagram"
                 atPrefix="@"
                 emptyLabel="Sin comentarios recientes."
+                onPeek={peekComment}
                 reply={reply}
                 openReply={openReply}
                 replyText={replyText}
@@ -719,7 +815,8 @@ export default function Marketing() {
                     <div className="px-5 py-3 text-sm text-ink-400">Nada programado.</div>
                   )}
                   {m.scheduled.map((p) => (
-                    <div key={p.at} className="px-5 py-2.5 flex items-baseline gap-3 text-sm">
+                    <div key={p.at} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                      <PostThumb src={p.mediaUrl} onClick={() => peekScheduled(p)} className="w-9 h-9" />
                       <span className="min-w-0 truncate text-ink-800">{p.text}</span>
                       <span className="ml-auto flex-none text-xs text-ink-400">{p.inLabel}</span>
                     </div>
@@ -733,9 +830,12 @@ export default function Marketing() {
                   <div className="card-header"><span className="font-medium">Últimas publicaciones IG</span></div>
                   <div className="divide-y divide-ink-100">
                     {m.posts.slice(0, 5).map((p) => (
-                      <div key={p.permalink || p.at} className="px-5 py-2.5 flex items-baseline gap-3 text-sm">
+                      <div key={p.permalink || p.at} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                        <PostThumb src={p.mediaUrl} onClick={() => peekPost(p)} className="w-9 h-9" />
                         <span className="min-w-0 truncate text-ink-800">
-                          {p.permalink ? (
+                          {p.mediaUrl ? (
+                            <button type="button" className="text-left hover:underline" onClick={() => peekPost(p)}>{p.text}</button>
+                          ) : p.permalink ? (
                             <a href={p.permalink} target="_blank" rel="noreferrer" className="hover:underline">{p.text}</a>
                           ) : p.text}
                         </span>
@@ -757,6 +857,7 @@ export default function Marketing() {
           )}
         </div>
       )}
+      <PostPeek post={peek} onClose={() => setPeek(null)} />
     </>
   );
 }
