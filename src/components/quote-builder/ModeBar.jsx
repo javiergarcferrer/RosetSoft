@@ -96,12 +96,14 @@ export default function ModeBar({ view, onChange, customer }) {
         </div>
       </nav>
 
-      {/* Desktop — floating vertical siderail on the right edge. Same three
-          tabs, stacked; the left accent bar mirrors the bottom bar's top
-          accent so the active mode reads the same in both chromes. */}
+      {/* Desktop — a thin icon-only rail flush against the right edge of the
+          viewport (rounded on the inner side only, so it reads as a tab pinned
+          to the screen edge). Same three modes; the left accent bar marks the
+          active one, and the label rides a native tooltip (title) instead of
+          taking width. */}
       <nav
         aria-label="Modo de la cotización"
-        className="hidden md:flex fixed right-3 top-1/2 -translate-y-1/2 z-30 print:hidden flex-col gap-1 p-1.5 rounded-2xl bg-surface/95 supports-[backdrop-filter]:bg-surface/80 backdrop-blur border border-ink-200 shadow-pop"
+        className="hidden md:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 print:hidden flex-col gap-0.5 p-1 rounded-l-xl border border-r-0 border-ink-200 bg-surface/95 supports-[backdrop-filter]:bg-surface/80 backdrop-blur shadow-pop"
       >
         {tabs.map(({ id, label, icon: Icon, badge }) => {
           const active = view === id;
@@ -112,16 +114,16 @@ export default function ModeBar({ view, onChange, customer }) {
               onClick={() => onChange(id)}
               aria-pressed={active}
               title={label}
-              className={`relative w-[4.5rem] py-2.5 inline-flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold whitespace-nowrap transition-colors ${
+              aria-label={label}
+              className={`relative w-9 h-9 inline-flex items-center justify-center rounded-lg transition-colors ${
                 active ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50'
               }`}
             >
-              {active && <span aria-hidden className="absolute left-0 inset-y-3 w-0.5 rounded-r bg-brand-grad" />}
+              {active && <span aria-hidden className="absolute left-0 inset-y-2 w-0.5 rounded-r bg-brand-grad" />}
               <span className="relative">
-                <Icon size={19} aria-hidden />
+                <Icon size={18} aria-hidden />
                 <Badge count={badge} />
               </span>
-              {label}
             </button>
           );
         })}
