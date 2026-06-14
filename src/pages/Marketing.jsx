@@ -442,16 +442,16 @@ export default function Marketing() {
                       spellCheck={false}
                     />
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <input
-                        className="input flex-1 min-w-44"
+                        className="input w-full"
                         value={pubImageUrl}
                         onChange={(e) => setPubImageUrl(e.target.value)}
                         placeholder="URL de imagen"
                         spellCheck={false}
                       />
                       <input
-                        className="input flex-1 min-w-44"
+                        className="input w-full"
                         value={pubVideoUrl}
                         onChange={(e) => setPubVideoUrl(e.target.value)}
                         placeholder="URL de video (Reel)"
