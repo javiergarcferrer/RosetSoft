@@ -26,7 +26,7 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 | `read_insights` | ✅ | Underpins the Page + IG insights reads. |
 | `pages_read_user_content` | 🟡 | Read user comments/posts on the Page (server can; the IG-first Marketing UI doesn't surface FB). |
 | `pages_manage_engagement` | ⬜ | Like/comment/moderate as the Page (server `replyComment` supports it; not surfaced). |
-| `pages_manage_metadata` | 🟡 | Page settings + webhook subscriptions. |
+| `pages_manage_metadata` | 🟡 | Page settings + webhook subscriptions (meta-social `subscribeWebhooks` → comments/mentions → `meta-webhook` → `ig_events`; needs App Review to fire for non-role accounts). |
 | `pages_messaging` | ⬜ | Messenger send/receive → Messenger thread in the CRM. |
 | `pages_utility_messaging` | ⬜ | Messenger utility/templated messages. |
 | `pages_manage_ads` | 🟡 | Page-level ad management (complements the Marketing API below). |
@@ -40,7 +40,7 @@ Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not
 | `instagram_manage_insights` | ✅ | IG reach / follower / profile-view / per-post insights, the Studio's **follower demographics** (gender/age/country/city) and **hashtag search** (discovery). |
 | `instagram_manage_contents` | ⬜ | Manage existing IG content (newer edit/management surface). |
 | `instagram_manage_messages` | ⬜ | IG DMs → Instagram thread in the CRM inbox. |
-| `instagram_shopping_tag_products` | ⬜ | Tag Shopify catalog products in IG posts. |
+| `instagram_shopping_tag_products` | 🟡 | Tag catalog products on a feed image (composer `catalogSearch` + `product_tags`) — code shipped; needs App Review + an approved IG Shop to go live. |
 
 ## Ads & Business — `meta-social` snapshot + campaign control (Marketing API)
 | Scope | Status | What it backs |

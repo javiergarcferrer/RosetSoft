@@ -142,3 +142,13 @@ verify_jwt = false
 # table via the service role; the token never reaches the browser.
 [functions.meta-social]
 verify_jwt = false
+
+# Instagram webhooks (comments + mentions). Public callback — Meta calls it
+# unauthenticated; it verifies the hub token and persists to ig_events.
+[functions.meta-webhook]
+verify_jwt = false
+
+# The scheduling-engine worker. pg_cron pings it with the service-role key;
+# its ensureCron action self-registers that cron job.
+[functions.ig-publish-worker]
+verify_jwt = false

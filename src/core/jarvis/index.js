@@ -24,3 +24,8 @@ export {
   resolveMediaComments,
   resolveHashtagMedia,
 } from './igStudio.js';
+export {
+  resolveScheduleAgenda,
+  describePost,
+  resolveCatalogProducts,
+} from './scheduler.js';

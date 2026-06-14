@@ -326,6 +326,54 @@ export interface WaCampaign {
 }
 
 /**
+ * A queued Instagram post the scheduling engine publishes at `scheduledAt`.
+ * The client writes the row (status 'queued'); the `ig-publish-worker` Edge
+ * Function (driven by pg_cron) claims due rows, publishes via meta-social, and
+ * advances the status. `payload` is the meta-social `publish` body.
+ */
+export interface ScheduledPost {
+  id: string;
+  profileId: string;
+  /** queued → publishing → published, or failed / canceled. */
+  status: 'queued' | 'publishing' | 'published' | 'failed' | 'canceled';
+  scheduledAt: number;
+  /** The meta-social publish body (caption, media URLs, mode, options). */
+  payload: unknown;
+  /** Human label of the post type ("Reel", "Carrusel", …) for the calendar. */
+  kind?: string;
+  /** A short preview of the caption for the calendar cell. */
+  preview?: string;
+  igCreationId?: string | null;
+  igMediaId?: string | null;
+  attempts?: number;
+  lastError?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * A persisted Instagram webhook event (comment / mention). Written by the
+ * `meta-webhook` Edge Function on receipt; the Studio reads them for a live
+ * activity feed without polling the Graph API.
+ */
+export interface IgEvent {
+  id: string;
+  profileId: string;
+  /** 'comment' | 'mention'. */
+  kind: string;
+  /** The IG comment/media id the event concerns. */
+  objectId?: string | null;
+  mediaId?: string | null;
+  username?: string | null;
+  text?: string | null;
+  permalink?: string | null;
+  /** Raw webhook value, for anything the columns don't carry. */
+  payload?: unknown;
+  handledAt?: number | null;
+  createdAt?: number;
+}
+
+/**
  * One frame on the Claude uplink — the JARVIS dashboard's channel to the
  * Claude agent. `role:'user'` rows are directives typed in the dashboard
  * (status: pending → seen → done as the agent picks them up); `role:'claude'`

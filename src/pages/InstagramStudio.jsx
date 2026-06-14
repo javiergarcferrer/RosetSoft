@@ -14,6 +14,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.tsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
+import { db } from '../db/database.js';
 import {
   resolveIgStudio, resolveMediaInsights, resolveMediaComments, resolveHashtagMedia,
 } from '../core/jarvis/index.js';
@@ -271,6 +272,31 @@ export default function InstagramStudio() {
       patchComment(c.id, { modError: e?.message || 'Error' });
     } finally {
       setModBusy(null);
+    }
+  }, []);
+
+  // ── real-time activity (webhooks → ig_events) ────────────────────────
+  const [events, setEvents] = useState([]);
+  const [rtBusy, setRtBusy] = useState(false);
+  const [rtNote, setRtNote] = useState(null);
+  const loadEvents = useCallback(async () => {
+    try {
+      const rows = await db.igEvents.where('profileId').equals('team').toArray();
+      setEvents(rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 15));
+    } catch { /* table may not exist pre-deploy */ }
+  }, []);
+  useEffect(() => { if (linked) loadEvents(); }, [linked, loadEvents]);
+  const activateRealtime = useCallback(async () => {
+    setRtBusy(true);
+    setRtNote(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', { body: { subscribeWebhooks: true } });
+      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'No se pudo activar');
+      setRtNote({ ok: true, text: 'Tiempo real activado — comentarios y menciones llegarán al instante.' });
+    } catch (e) {
+      setRtNote({ ok: false, text: e?.message || 'No se pudo activar' });
+    } finally {
+      setRtBusy(false);
     }
   }, []);
 
@@ -575,6 +601,34 @@ export default function InstagramStudio() {
               </div>
             </div>
           )}
+
+          {/* real-time activity */}
+          <div className="card">
+            <div className="card-header flex items-center">
+              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} /> Actividad en tiempo real</span>
+              <button type="button" className="ml-auto btn-ghost text-xs min-h-[36px]" onClick={activateRealtime} disabled={rtBusy}>
+                {rtBusy ? <RefreshCw size={14} className="animate-spin" /> : 'Activar'}
+              </button>
+            </div>
+            <div className="card-pad">
+              {rtNote && <div className={`mb-2 text-sm ${rtNote.ok ? 'text-emerald-700' : 'text-red-600'}`}>{rtNote.text}</div>}
+              {events.length === 0 ? (
+                <p className="text-sm text-ink-400">
+                  Activa el tiempo real para recibir comentarios y menciones al instante (sin recargar).
+                </p>
+              ) : (
+                <div className="divide-y divide-ink-100 -mx-5">
+                  {events.map((e) => (
+                    <div key={e.id} className="px-5 py-2 text-sm">
+                      <span className="rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-500">{e.kind === 'mention' ? 'mención' : 'comentario'}</span>{' '}
+                      {e.username && <span className="font-medium text-ink-900">@{e.username}</span>}{' '}
+                      <span className="text-ink-600">{e.text || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* hashtag listening */}
           <div className="card">

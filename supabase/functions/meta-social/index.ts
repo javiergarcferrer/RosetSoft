@@ -59,6 +59,8 @@ type PublishBody = {
   collaborators?: string[];
   /** Auto-post this as the first comment after publishing (e.g. hashtags). */
   firstComment?: string;
+  /** Tag Shopping catalog products on a single feed image: [{ productId, x, y }]. */
+  productTags?: Array<{ productId?: string; x?: number; y?: number }>;
   /** JS-ms timestamp; FB feed/photo only (10 min – 30 days out). Absent = now. */
   scheduleAt?: number;
   /** Publish the IG side as a 24h Story (image or video, no caption) instead of a feed post. */
@@ -88,6 +90,10 @@ type Body = {
   deleteComment?: { commentId?: string };
   /** Hashtag listening — discover top media for a tag. */
   hashtagSearch?: { q?: string };
+  /** Search the linked Shopping catalog for products to tag. */
+  catalogSearch?: { q?: string };
+  /** Subscribe the Page/IG account to comment + mention webhooks (admin). */
+  subscribeWebhooks?: boolean;
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -211,10 +217,15 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
     return { ok: true, id: out?.id };
   }
 
-  // FEED IMAGE — the original path (alt text + collaborators supported here).
+  // FEED IMAGE — the original path (alt text, collaborators + product tags here).
   if (!pub.imageUrl) return { ok: false, error: 'Instagram requiere una imagen o un video (URL pública)' };
   const params: Record<string, string> = { image_url: String(pub.imageUrl), caption, ...collabParam };
   if (altText) params.alt_text = altText;
+  const tags = (pub.productTags || [])
+    .filter((t) => t && t.productId)
+    .map((t) => ({ product_id: String(t.productId), ...(t.x != null && t.y != null ? { x: t.x, y: t.y } : {}) }))
+    .slice(0, 5);
+  if (tags.length) params.product_tags = JSON.stringify(tags);
   const c = await graphPost(`${igId}/media`, token, params);
   const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
   return { ok: true, id: out?.id };
@@ -274,15 +285,23 @@ Deno.serve(async (req) => {
   }
 
   // Verify the caller ourselves (gateway verify_jwt is off for the CORS
-  // preflight) — same as wa-send / claude-chat.
+  // preflight) — same as wa-send / claude-chat. The scheduler worker calls us
+  // server-to-server with the service-role key in x-internal-secret (it has no
+  // user JWT) — that bypass is for the publish path only; link/subscribe still
+  // require an admin user below.
   const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Authorization header required' }, 401);
+  const internal = (req.headers.get('x-internal-secret') || '') === SERVICE_ROLE_KEY;
   const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userErr } = await caller.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: 'Invalid or expired session' }, 401);
+  let userId = '';
+  if (!internal) {
+    if (!authHeader.startsWith('Bearer ')) return json({ error: 'Authorization header required' }, 401);
+    const { data: userData, error: userErr } = await caller.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: 'Invalid or expired session' }, 401);
+    userId = userData.user.id;
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -303,7 +322,7 @@ Deno.serve(async (req) => {
     const { data: prof } = await caller
       .from('profiles')
       .select('role, active')
-      .eq('id', userData.user.id)
+      .eq('id', userId)
       .maybeSingle();
     if (!prof || prof.role !== 'admin' || !prof.active) {
       return json({ ok: false, error: 'Solo un administrador puede conectar Meta.' }, 403);
@@ -657,7 +676,7 @@ Deno.serve(async (req) => {
   // _manage_comments / _content_publish).
   // ════════════════════════════════════════════════════════════════════
   const igId = cfg.ig_user_id || '';
-  const needIg = body.igStudio || body.mediaInsights || body.mediaComments || body.hashtagSearch;
+  const needIg = body.igStudio || body.mediaInsights || body.mediaComments || body.hashtagSearch || body.catalogSearch;
   if (needIg && !igId) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
 
   // ── igStudio: one consolidated read, sections fail independently ──────
@@ -818,6 +837,38 @@ Deno.serve(async (req) => {
         limit: '24',
       });
       return json({ ok: true, hashtag: { id: hashtagId, name: q }, media: top?.data || [] });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── catalogSearch: find Shopping products to tag (discovery) ─────────
+  if (body.catalogSearch) {
+    const q = String(body.catalogSearch.q || '').trim();
+    try {
+      const cats = await graph(`${igId}/available_catalogs`, pageToken, {});
+      const catalogId = String(cats?.data?.[0]?.catalog_id || '');
+      if (!catalogId) return json({ ok: false, error: 'Sin catálogo de compras vinculado en Instagram' });
+      const res = await graph(`${igId}/catalog_product_search`, pageToken, q ? { catalog_id: catalogId, q } : { catalog_id: catalogId });
+      return json({ ok: true, catalogId, products: res?.data || [] });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── subscribeWebhooks: turn on real-time comment/mention delivery (admin) ─
+  if (body.subscribeWebhooks) {
+    const { data: prof } = userId
+      ? await caller.from('profiles').select('role, active').eq('id', userId).maybeSingle()
+      : { data: null };
+    if (!prof || prof.role !== 'admin' || !prof.active) {
+      return json({ ok: false, error: 'Solo un administrador puede activar tiempo real.' }, 403);
+    }
+    try {
+      const r = await graphPost(`${cfg.page_id}/subscribed_apps`, pageToken, {
+        subscribed_fields: 'comments,mentions,live_comments,story_insights',
+      });
+      return json({ ok: !!r?.success, fields: 'comments,mentions,live_comments,story_insights' });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
