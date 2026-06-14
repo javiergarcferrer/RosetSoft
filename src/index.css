@@ -1048,6 +1048,37 @@
       height: calc(var(--rs-vvh, 100dvh) - 55px - env(safe-area-inset-top));
     }
   }
+
+  /* ─── Mobile WhatsApp thread = a visual-viewport-locked overlay ───────────
+     The open conversation on a phone is pinned `position: fixed` to the EXACT
+     rectangle the soft keyboard leaves visible (`--rs-vv-top` / `--rs-vv-height`,
+     published live by useVirtualKeyboard from window.visualViewport). This is the
+     production-grade replacement for the old flow-based `calc(--rs-vvh - 55px -
+     insets)` sizing: that formula floated the composer above a dead gap whenever
+     the magic topbar constant, the safe-area insets or the `dvh` shell height
+     diverged from reality on a given device. By anchoring to the visual viewport
+     directly, the composer (the overlay's bottom child) rests flush on the
+     keyboard's top edge on EVERY engine — iOS Safari overlay, iOS PWA resize and
+     Android `interactive-widget` alike — with no height arithmetic at all. The
+     overlay covers the app topbar (the conversation is full-screen, like native
+     WhatsApp; ChatThread's own header carries Back). Phones only — md+ keeps the
+     split-pane via the desktop classes on the same element. */
+  @media (max-width: 767.98px) {
+    .rs-thread-mobile {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--rs-vv-top, 0px);
+      height: var(--rs-vv-height, 100dvh);
+      z-index: 45;
+    }
+    /* Keyboard down → the conversation owns the whole window, so reserve the
+       home-indicator inset under the composer. Keyboard up → the home indicator
+       hides behind the keyboard, so drop it and let the composer sit flush. */
+    html:not(.kb-open) .rs-thread-mobile {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
 }
 
 /* The composer attachment tray rising into the keyboard's place (ChatThread):

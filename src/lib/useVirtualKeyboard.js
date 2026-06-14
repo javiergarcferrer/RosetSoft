@@ -122,6 +122,15 @@ export function installVirtualKeyboardWatcher() {
     // the column is full-height at rest. (`offsetTop` is folded in so a Safari
     // tab that pushes the visual viewport down still measures the visible band.)
     root.style.setProperty('--rs-vvh', `${Math.round(vv.height + vv.offsetTop)}px`);
+    // The visual viewport as a fixed-positioning RECTANGLE: its top edge
+    // (`offsetTop`, non-zero when a Safari tab pushes the viewport down) and its
+    // raw height (NOT folded with offsetTop). A surface that pins itself
+    // `position: fixed; top: var(--rs-vv-top); height: var(--rs-vv-height)` then
+    // covers EXACTLY the area not hidden by the keyboard, on every engine — so a
+    // composer at its bottom rests flush on the keyboard with zero magic-number
+    // height math (the mobile WhatsApp thread, see .rs-thread-mobile in index.css).
+    root.style.setProperty('--rs-vv-top', `${Math.round(vv.offsetTop)}px`);
+    root.style.setProperty('--rs-vv-height', `${Math.round(vv.height)}px`);
     // Record the keyboard's own height the moment it's up, so the WhatsApp-style
     // attachment tray (ChatThread) can take its EXACT footprint when the box is
     // blurred to raise it. Only published on a real measurement (open) and left

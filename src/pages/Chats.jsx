@@ -278,8 +278,11 @@ export default function Chats() {
           </div>
         </div>
 
-        {/* Thread */}
-        <div className={`${selectedKey ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
+        {/* Thread — on a phone an open conversation is a visual-viewport-locked
+            fixed overlay (rs-thread-mobile, see index.css) so the composer rests
+            flush on the keyboard with no magic-number height math; md+ keeps the
+            in-flow split-pane (rs-thread-mobile is a no-op above the breakpoint). */}
+        <div className={`${selectedKey ? 'flex rs-thread-mobile bg-surface' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
           {selected && thread ? (
             <ChatThread
               contact={selected}
