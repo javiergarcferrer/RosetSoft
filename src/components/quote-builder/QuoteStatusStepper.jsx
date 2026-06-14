@@ -4,6 +4,7 @@ import {
   QUOTE_STAGES, QUOTE_STAGE_BY_KEY, QUOTE_TERMINAL_STAGES,
   quoteStageIndex, nextQuoteStage, currentQuoteStage, isTerminalStage,
 } from '../../lib/quoteStages.js';
+import OrderChip from './OrderChip.jsx';
 
 /**
  * The quote lifecycle stepper — same visual language as the container
@@ -14,7 +15,7 @@ import {
  * Archivada). Advancing fires the timestamp on the target stage; "Volver"
  * clears it and falls back to the previous stage.
  */
-export default function QuoteStatusStepper({ quote, onTransition }) {
+export default function QuoteStatusStepper({ quote, onTransition, profileId, onAttachOrder }) {
   const stage = currentQuoteStage(quote);
   const terminal = isTerminalStage(stage);
   const idx = quoteStageIndex(stage);
@@ -129,7 +130,12 @@ export default function QuoteStatusStepper({ quote, onTransition }) {
       <div className="pt-3 border-t border-ink-100 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 sm:flex-1">
           <div className="eyebrow text-brand-600">Estado</div>
-          <div className="font-display text-sm font-bold mt-0.5 text-ink-900">{(terminal ? stageDef.label : QUOTE_STAGE_BY_KEY[stage]?.label) || 'Borrador'}</div>
+          {/* Status label + the order pill to its right (renders nothing until
+              the quote is accepted — then "Agregar a pedido" / "Pedido #…"). */}
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            <div className="font-display text-sm font-bold text-ink-900">{(terminal ? stageDef.label : QUOTE_STAGE_BY_KEY[stage]?.label) || 'Borrador'}</div>
+            <OrderChip quote={quote} profileId={profileId} onAttach={onAttachOrder} inline />
+          </div>
           <div className="text-xs text-ink-500 mt-1 leading-relaxed">{(terminal ? stageDef.description : QUOTE_STAGE_BY_KEY[stage]?.description) || ''}</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

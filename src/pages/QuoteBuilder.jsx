@@ -716,7 +716,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           stepper renders only in compose. */}
       {view === 'compose' && (
         <div className="mb-5">
-          <QuoteStatusStepper quote={quote} onTransition={updateQuote} />
+          <QuoteStatusStepper quote={quote} onTransition={updateQuote} profileId={profileId} onAttachOrder={(orderId) => updateQuote({ orderId })} />
         </div>
       )}
 

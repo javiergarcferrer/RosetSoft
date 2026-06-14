@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
+import { Check, X, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import BrandName from '../BrandName.jsx';
 import { db } from '../../db/database.js';
@@ -112,31 +112,19 @@ export default function WhatsAppChip({ customer }) {
     );
   }
 
+  // Green = number on file. A single solid brand-green badge carrying the
+  // literal WhatsApp mark; tapping it opens the inline edit bubble directly
+  // (no separate pencil) — the digits never print, edit is one tap.
   return (
-    <span className="group inline-flex items-center rounded-full bg-[#25D366]/12 ring-1 ring-inset ring-[#25D366]/30 shadow-xs transition-shadow hover:shadow-sm">
-      {/* Green = number on file. Tap opens the WhatsApp chat — a solid
-          brand-green badge carries the literal WhatsApp mark in white. */}
-      <a
-        href={`https://wa.me/${waDigits(phone)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex h-6 w-6 coarse:h-10 coarse:w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm transition-transform active:scale-95 group-hover:brightness-105"
-        title={`Abrir WhatsApp · ${phone}`}
-        aria-label={`Abrir WhatsApp de ${phone}`}
-      >
-        <WhatsAppGlyph className="h-3.5 w-3.5 coarse:h-5 coarse:w-5" />
-      </a>
-      {/* Edit stays reachable (fix a typo) without ever printing the number. */}
-      <button
-        type="button"
-        onClick={startEdit}
-        title="Editar número"
-        aria-label="Editar número de WhatsApp"
-        className="inline-flex h-6 w-4 coarse:h-10 coarse:w-8 items-center justify-center rounded-r-full text-[#1f9e4d]/60 hover:text-[#1f9e4d] hover:bg-[#25D366]/15 transition-colors flex-shrink-0"
-      >
-        <Pencil size={9} />
-      </button>
-    </span>
+    <button
+      type="button"
+      onClick={startEdit}
+      title={`Editar WhatsApp · ${phone}`}
+      aria-label={`Editar número de WhatsApp de ${phone}`}
+      className="inline-flex h-6 w-6 coarse:h-10 coarse:w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm ring-1 ring-inset ring-black/5 transition-transform active:scale-95 hover:brightness-105"
+    >
+      <WhatsAppGlyph className="h-3.5 w-3.5 coarse:h-5 coarse:w-5" />
+    </button>
   );
 }
 

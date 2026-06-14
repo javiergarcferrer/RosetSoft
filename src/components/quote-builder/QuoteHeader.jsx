@@ -4,7 +4,6 @@ import { useGoBack } from '../../context/NavMemory.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import WhatsAppChip from './WhatsAppChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
-import OrderChip from './OrderChip.jsx';
 import SpecialOrderWarning from './SpecialOrderWarning.jsx';
 import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
@@ -73,11 +72,9 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      {/* ROW 1 — back · quote # + save STATE · seller · undo/redo, on ONE line;
-          the order affordance sits at the FAR RIGHT (ml-auto), opposite the
-          state, so the number/state and the order read as the two ends of a
-          single status row. Order renders nothing until the quote is accepted,
-          so a draft shows just #number · state · seller · undo/redo. */}
+      {/* ROW 1 — back · quote # + save STATE · seller · undo/redo, on ONE line.
+          (The order affordance lives in the status card below, beside the
+          status label — not here.) */}
       <div className="flex items-center gap-2 min-w-0">
         <button type="button" onClick={() => goBack('/quotes')} className="back-link mb-0 px-2 shrink-0" title="Volver a cotizaciones">
           <ArrowLeft size={14} />
@@ -99,13 +96,9 @@ export default function QuoteHeader({
             Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
           </span>
         ) : null}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
           <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
           <ViewToggle view={view} onChange={onViewChange} />
-        </div>
-        {/* Order — far right, opposite the state. */}
-        <div className="ml-auto shrink-0">
-          <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} inline />
         </div>
       </div>
 
@@ -166,14 +159,14 @@ export default function QuoteHeader({
 function SellerSelect({ quote, assignableSellers, onUpdateQuote }) {
   return (
     <label
-      className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
+      className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface hover:border-ink-400 hover:bg-ink-50 transition-colors px-2.5 min-h-7 coarse:min-h-11 text-xs ring-1 ring-inset ring-black/5 cursor-pointer"
       title="Vendedor"
     >
       <Briefcase size={12} className="text-ink-400 flex-shrink-0" aria-hidden />
       <select
         value={quote?.createdByUserId || ''}
         onChange={(e) => onUpdateQuote({ createdByUserId: e.target.value || null })}
-        className="appearance-none bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer max-w-[110px] sm:max-w-[180px] lg:max-w-[220px] truncate"
+        className="appearance-none bg-transparent border-0 p-0 text-xs text-ink-900 font-medium focus:outline-none focus:ring-0 cursor-pointer min-w-0 max-w-[88px] sm:max-w-[180px] lg:max-w-[220px] truncate"
         aria-label="Vendedor asignado"
       >
         <option value="">— sin vendedor —</option>
