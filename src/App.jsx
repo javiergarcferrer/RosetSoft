@@ -34,6 +34,8 @@ import NotFound from './pages/NotFound.jsx';
 const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
 const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
+const ShopifyOrders = lazyPage(() => import('./pages/ShopifyOrders.jsx'));
+const Messaging = lazyPage(() => import('./pages/Messaging.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
@@ -243,6 +245,8 @@ function ProtectedApp() {
             <Route path="chats/difusion" element={<Difusion />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="instagram-studio" element={<InstagramStudio />} />
+            <Route path="messaging" element={<Messaging />} />
+            <Route path="shopify/orders" element={<ShopifyOrders />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />

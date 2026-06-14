@@ -6,6 +6,7 @@ import {
   CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import TemplateRejectionsPanel from '../components/whatsapp/TemplateRejectionsPanel.jsx';
 import BackLink from '../components/BackLink.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
@@ -602,6 +603,8 @@ function TemplatesTab({ templates, templatesError, onReload }) {
       {(templatesError || actionError) && (
         <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{templatesError || actionError}</p>
       )}
+      {/* Rejected templates with Meta's reason (null when none). */}
+      <TemplateRejectionsPanel />
 
       {templates === null ? (
         <div className="card card-pad flex items-center justify-center py-10 text-ink-400">

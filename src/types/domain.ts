@@ -373,6 +373,49 @@ export interface IgEvent {
   createdAt?: number;
 }
 
+/** An Instagram/Facebook DM conversation, mirrored for the Messaging inbox. */
+export interface IgDmConversation {
+  id: string;
+  profileId: string;
+  platform?: string | null;
+  participantId?: string | null;
+  participantName?: string | null;
+  participantAvatar?: string | null;
+  lastMessageAt?: number | null;
+  lastMessageText?: string | null;
+  lastDirection?: string | null;
+  unreadCount?: number;
+  isArchived?: boolean;
+  syncedAt?: number | null;
+  updatedAt?: number | null;
+}
+
+/** One message within an IG/FB DM conversation. */
+export interface IgDmMessage {
+  id: string;
+  profileId: string;
+  conversationId?: string | null;
+  direction?: string | null;
+  authorId?: string | null;
+  authorName?: string | null;
+  text?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
+}
+
+/** A WhatsApp message-template rejection captured from the webhook, for display. */
+export interface WaTemplateRejection {
+  id: string;
+  profileId: string;
+  templateName: string;
+  language: string;
+  rejectedReason?: string | null;
+  status: string;
+  updatedAt?: number | null;
+}
+
 /**
  * One frame on the Claude uplink — the JARVIS dashboard's channel to the
  * Claude agent. `role:'user'` rows are directives typed in the dashboard
