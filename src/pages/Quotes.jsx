@@ -1,9 +1,12 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
-import { Plus, FileText, Trash2, Truck } from 'lucide-react';
+import {
+  Plus, FileText, Trash2, Truck, Send, CheckCircle2, Wallet, Archive, Check, Minus,
+} from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
+import StatCard from '../components/StatCard.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
@@ -19,6 +22,11 @@ import { quoteStagePill } from '../lib/statusPill.js';
 import { displayRatesFor } from '../lib/exchangeRate.js';
 import { currentQuoteStage } from '../lib/quoteStages.js';
 import { isTradeDiscount } from '../lib/commissions.js';
+
+// Aggregate (cross-quote) sums are USD-base — no single per-quote rate applies,
+// so the summary cards render them as plain USD, the same convention the
+// dashboard KPI strip uses.
+const usd = (v) => formatMoney(v, 'USD', { USD: 1 });
 
 /**
  * Small amber flag for quotes settled as a decorator trade discount —
@@ -66,6 +74,109 @@ const VALID_TABS = new Set([
 function describeQuote(q) {
   if (q.number != null) return `#${q.number}`;
   return 'borrador';
+}
+
+/**
+ * Desktop table columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives both the table render (`cell`) and the Columns menu
+ * (`label` / `canHide`). `number` is the fixed identity anchor (`canHide:
+ * false`) — it's never hidden and isn't offered in the menu; everything else
+ * the seller can toggle. Each `cell` is a pure render off the per-row `ctx`
+ * the row assembles, so adding a column is a one-entry edit here.
+ */
+const QUOTE_COLUMNS = [
+  {
+    key: 'number', label: 'Número', canHide: false,
+    tdClass: 'font-medium tabular-nums whitespace-nowrap',
+    cell: ({ qu }) => `#${qu.number || '—'}`,
+  },
+  {
+    key: 'client', label: 'Cliente',
+    tdClass: 'text-ink-700',
+    cell: ({ client }) => (
+      <div className="flex items-center gap-1 min-w-0 max-w-[180px]" title={client?.name || ''}>
+        <span className="truncate">{client?.name || '—'}</span>
+        {client?.isProfessional && <ProfessionalTag />}
+      </div>
+    ),
+  },
+  {
+    key: 'creator', label: 'Vendedor',
+    tdClass: 'text-ink-500',
+    cell: ({ creatorLabel }) => (
+      <span className="block truncate max-w-[150px]" title={creatorLabel}>{creatorLabel || '—'}</span>
+    ),
+  },
+  {
+    key: 'status', label: 'Estado',
+    cell: ({ qu }) => (
+      <div className="flex items-center gap-1.5">
+        <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
+        <TradeFlag quote={qu} />
+      </div>
+    ),
+  },
+  {
+    key: 'invoice', label: 'Factura',
+    cell: ({ invoice }) => (invoice ? <InvoiceChip invoice={invoice} /> : <span className="text-ink-300">—</span>),
+  },
+  {
+    key: 'updated', label: 'Actualizada',
+    tdClass: 'text-ink-400 tabular-nums whitespace-nowrap',
+    cell: ({ qu }) => formatDateTime(qu.updatedAt),
+  },
+  {
+    key: 'created', label: 'Creada',
+    tdClass: 'text-ink-400 tabular-nums whitespace-nowrap',
+    cell: ({ qu }) => formatDateTime(qu.createdAt),
+  },
+  {
+    key: 'total', label: 'Total', align: 'right',
+    thClass: 'text-right', tdClass: 'text-right font-semibold tabular-nums whitespace-nowrap',
+    cell: ({ qu, total, rates }) => formatMoney(total, qu.currencyCode || 'USD', rates),
+  },
+];
+
+// Default visibility for the hideable columns — the set the table shipped with
+// (number is always on). Persisted per-browser so a seller's column choice
+// sticks across sessions; bumped suffix (_v1) lets a future column set reset.
+const DEFAULT_VISIBLE_COLS = {
+  client: true, creator: false, status: true, invoice: true, updated: true, created: false, total: true,
+};
+const COLS_STORAGE_KEY = 'rs.quotes.cols.v1';
+
+function loadVisibleCols() {
+  try {
+    const raw = localStorage.getItem(COLS_STORAGE_KEY);
+    if (raw) return { ...DEFAULT_VISIBLE_COLS, ...JSON.parse(raw) };
+  } catch { /* storage unavailable — fall back to defaults */ }
+  return DEFAULT_VISIBLE_COLS;
+}
+
+/**
+ * Tri-state selection box (Shopify's row / select-all checkbox). A real
+ * checkbox can't render the "some but not all" dash with our theming, so this
+ * is a `role="checkbox"` button reporting `aria-checked="mixed"` for the
+ * indeterminate header state. The row's open-on-click is suppressed by the
+ * enclosing cell (it stops propagation), so ticking a box never opens a quote.
+ */
+function SelectBox({ checked, indeterminate = false, onChange, label }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label={label}
+      onClick={onChange}
+      className={`flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border transition-colors ${
+        checked || indeterminate
+          ? 'border-brand-500 bg-brand-500 text-white'
+          : 'border-ink-300 bg-surface hover:border-ink-400'
+      }`}
+    >
+      {indeterminate ? <Minus size={13} /> : (checked ? <Check size={13} /> : null)}
+    </button>
+  );
 }
 
 /**
@@ -176,7 +287,7 @@ export default function Quotes() {
   // inputs the old per-derivation useMemos depended on so render behavior is
   // unchanged.
   const {
-    scopedCount, tabs, creatorFilter, rows: filtered, orderGroups,
+    scopedCount, summary, tabs, creatorFilter, rows: filtered, orderGroups,
     trackingByQuoteId, totalByQuoteId, clientByQuoteId, profileById,
     ordersById, trackableByOrderId,
   } = useMemo(
@@ -186,6 +297,72 @@ export default function Quotes() {
     }),
     [quotes, customers, professionals, profiles, orders, containers, allLines, scope, meId, q, tab, filters, sort],
   );
+
+  // Column visibility (Shopify "edit columns") — persisted per browser. The
+  // table renders `cols` (number anchor + the toggled-on columns, in order);
+  // the Columns menu gets the full QUOTE_COLUMNS so hidden ones can return.
+  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
+  useEffect(() => {
+    try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(visibleCols)); } catch { /* ignore */ }
+  }, [visibleCols]);
+  const cols = useMemo(
+    () => QUOTE_COLUMNS.filter((c) => c.canHide === false || visibleCols[c.key]),
+    [visibleCols],
+  );
+  const colSpan = cols.length + 2; // checkbox + data columns + actions
+
+  // Bulk selection (Shopify row checkboxes + contextual action bar). Desktop
+  // table only. Selection is pruned to the CURRENT filter so a bulk action can
+  // only ever touch rows the seller can actually see — flip a tab or search and
+  // anything that scrolled out drops out of the selection.
+  const [selected, setSelected] = useState(() => new Set());
+  const visibleIdKey = filtered.map((qu) => qu.id).join(',');
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filtered.map((qu) => qu.id));
+      let changed = false;
+      const next = new Set();
+      for (const id of prev) { if (visible.has(id)) next.add(id); else changed = true; }
+      return changed ? next : prev;
+    });
+    // visibleIdKey is the stable signature of `filtered`; depend on it alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleIdKey]);
+
+  const allSelected = filtered.length > 0 && filtered.every((qu) => selected.has(qu.id));
+  const someSelected = selected.size > 0 && !allSelected;
+  const toggleOne = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(filtered.map((qu) => qu.id)));
+  const clearSel = () => setSelected(new Set());
+
+  // Bulk archive mirrors the manual stepper write (status + archivedAt), so a
+  // bulk-archive and a hand-archive are indistinguishable — "Volver" un-archives
+  // either the same way. Reversible, so no confirm.
+  async function bulkArchive() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const now = Date.now();
+    await Promise.all(ids.map((id) => db.quotes.update(id, { status: 'archived', archivedAt: now })));
+    clearSel();
+  }
+  // Bulk delete mirrors the per-row delete (cascade the quote's lines first).
+  // Destructive → confirm with the count.
+  async function bulkDelete() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!confirm(`¿Eliminar ${ids.length} cotización${ids.length === 1 ? '' : 'es'}? Esta acción no se puede deshacer.`)) return;
+    for (const id of ids) {
+      const qlines = await db.quoteLines.where('quoteId').equals(id).toArray();
+      await db.quoteLines.bulkDelete(qlines.map((l) => l.id));
+      await db.quotes.delete(id);
+    }
+    clearSel();
+  }
 
   if (!loaded) {
     return (
@@ -222,6 +399,38 @@ export default function Quotes() {
         }
       />
 
+      {/* Summary strip (Shopify-orders-style). A stable overview of the current
+          Mías/Equipo scope — every figure derived in the VM and agreeing to the
+          cent with the per-row Total column. Independent of the search/tab below
+          so the headline numbers don't jump as you drill in. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard
+          label="Cotizaciones"
+          value={summary.count}
+          icon={FileText}
+          hint={effectiveScope === SCOPE_TEAM ? 'del equipo' : 'tuyas'}
+        />
+        <StatCard
+          label="Pipeline"
+          value={usd(summary.openValue)}
+          icon={Send}
+          hint={`${summary.openCount} en juego`}
+        />
+        <StatCard
+          label="Ganadas"
+          value={usd(summary.wonValue)}
+          icon={CheckCircle2}
+          tone="emerald"
+          hint={`${summary.wonCount} aceptada${summary.wonCount === 1 ? '' : 's'}`}
+        />
+        <StatCard
+          label="Valor total"
+          value={usd(summary.totalValue)}
+          icon={Wallet}
+          hint="cartera completa"
+        />
+      </div>
+
       <ListSearchHeader
         searchValue={q}
         onSearchChange={setQ}
@@ -235,6 +444,10 @@ export default function Quotes() {
         sortOptions={sortOptions}
         sort={sort}
         onSortChange={setSort}
+        columns={QUOTE_COLUMNS}
+        visibleColumns={visibleCols}
+        onColumnsChange={setVisibleCols}
+        onColumnsReset={() => setVisibleCols(DEFAULT_VISIBLE_COLS)}
         resultCount={filtered.length}
         resultNoun={['cotización', 'cotizaciones']}
       />
@@ -267,80 +480,123 @@ export default function Quotes() {
         )}
       </div>
 
-      {/* Desktop: table. No overflow wrapper — columns compress to the
-          container, and low-priority columns hide below lg so the table
-          stays within its width regardless of viewport / PDF panel state. */}
+      {/* Contextual bulk-action bar (Shopify) — appears only with a selection,
+          desktop table only. Archivar is reversible (no confirm); Eliminar
+          confirms with the count. */}
+      {selected.size > 0 && (
+        <div className="hidden md:flex items-center justify-between gap-3 mb-3 rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="tabular-nums font-semibold text-brand-700">{selected.size}</span>
+            <span className="text-ink-600">seleccionada{selected.size === 1 ? '' : 's'}</span>
+            <button
+              type="button"
+              onClick={clearSel}
+              className="text-xs text-ink-500 underline-offset-2 hover:text-ink-800 hover:underline"
+            >
+              Limpiar
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={bulkArchive} className="btn-secondary">
+              <Archive size={14} /> Archivar
+            </button>
+            <button
+              type="button"
+              onClick={bulkDelete}
+              className="btn-secondary text-red-600 hover:border-red-300 hover:text-red-700"
+            >
+              <Trash2 size={14} /> Eliminar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop: table. Columns are user-customizable (Columnas menu) so it
+          scrolls horizontally when many are on, rather than crushing cells. */}
       <div className="hidden md:block card overflow-hidden">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Número</th>
-              <th>Cliente</th>
-              <th className="hidden xl:table-cell">Creada por</th>
-              <th>Estado</th>
-              <th className="hidden lg:table-cell">Actualizada</th>
-              <th className="text-right">Total</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {orderGroups.map((u) => (u.type === 'group' ? (
-              <Fragment key={`order-${u.order.id}`}>
-                <tr className="bg-ink-50/80">
-                  <td colSpan={7} className="border-l-2 border-t border-ink-200 px-3 py-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Link
-                        to={`/orders/${u.order.id}`}
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700 hover:text-brand-600 transition-colors"
-                      >
-                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-50 ring-1 ring-inset ring-brand-200/60">
-                          <Truck size={11} className="text-brand-600" />
-                        </span>
-                        Pedido #{u.order.number ?? u.order.id.slice(-4)}
-                        {u.order.name ? <span className="font-normal text-ink-400">· {u.order.name}</span> : null}
-                      </Link>
-                      <span className="text-[11px] text-ink-400">
-                        {u.quotes.length} cotización{u.quotes.length === 1 ? '' : 'es'}
-                      </span>
-                    </div>
-                    {/* Full cell width below the header line, so the opened
-                        tracker can use the whole row (not a squished column). */}
-                    {trackableByOrderId.get(u.order.id)?.length > 0 && (
-                      <ShipmentTracking containers={trackableByOrderId.get(u.order.id)} collapsible className="mt-2" />
-                    )}
-                  </td>
-                </tr>
-                {u.quotes.map((qu) => (
-                  <QuoteRow
-                    key={qu.id}
-                    qu={qu}
-                    grouped
-                    client={clientByQuoteId.get(qu.id)}
-                    creator={profileById.get(qu.createdByUserId)}
-                    total={totalByQuoteId.get(qu.id) || 0}
-                    rates={displayRatesFor(qu, settings)}
-                    invoice={invoiceByQuoteId.get(qu.id)}
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th className="w-10">
+                  <SelectBox
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onChange={toggleAll}
+                    label="Seleccionar todas las cotizaciones"
                   />
+                </th>
+                {cols.map((col) => (
+                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
                 ))}
-                {/* Closing floor — left bar + bottom border seal the group so
-                    the rows beneath it clearly aren't part of it. */}
-                <tr aria-hidden="true" className="bg-ink-50/40">
-                  <td colSpan={7} className="h-1.5 p-0 border-l-2 border-b-2 border-ink-300" />
-                </tr>
-              </Fragment>
-            ) : (
-              <QuoteRow
-                key={u.quote.id}
-                qu={u.quote}
-                client={clientByQuoteId.get(u.quote.id)}
-                creator={profileById.get(u.quote.createdByUserId)}
-                total={totalByQuoteId.get(u.quote.id) || 0}
-                rates={displayRatesFor(u.quote, settings)}
-                invoice={invoiceByQuoteId.get(u.quote.id)}
-              />
-            )))}
-          </tbody>
-        </table>
+                <th className="w-12" />
+              </tr>
+            </thead>
+            <tbody>
+              {orderGroups.map((u) => (u.type === 'group' ? (
+                <Fragment key={`order-${u.order.id}`}>
+                  <tr className="bg-ink-50/80">
+                    <td colSpan={colSpan} className="border-l-2 border-t border-ink-200 px-3 py-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                          to={`/orders/${u.order.id}`}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700 hover:text-brand-600 transition-colors"
+                        >
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-50 ring-1 ring-inset ring-brand-200/60">
+                            <Truck size={11} className="text-brand-600" />
+                          </span>
+                          Pedido #{u.order.number ?? u.order.id.slice(-4)}
+                          {u.order.name ? <span className="font-normal text-ink-400">· {u.order.name}</span> : null}
+                        </Link>
+                        <span className="text-[11px] text-ink-400">
+                          {u.quotes.length} cotización{u.quotes.length === 1 ? '' : 'es'}
+                        </span>
+                      </div>
+                      {/* Full cell width below the header line, so the opened
+                          tracker can use the whole row (not a squished column). */}
+                      {trackableByOrderId.get(u.order.id)?.length > 0 && (
+                        <ShipmentTracking containers={trackableByOrderId.get(u.order.id)} collapsible className="mt-2" />
+                      )}
+                    </td>
+                  </tr>
+                  {u.quotes.map((qu) => (
+                    <QuoteRow
+                      key={qu.id}
+                      qu={qu}
+                      grouped
+                      cols={cols}
+                      selected={selected.has(qu.id)}
+                      onToggleSelect={() => toggleOne(qu.id)}
+                      client={clientByQuoteId.get(qu.id)}
+                      creator={profileById.get(qu.createdByUserId)}
+                      total={totalByQuoteId.get(qu.id) || 0}
+                      rates={displayRatesFor(qu, settings)}
+                      invoice={invoiceByQuoteId.get(qu.id)}
+                    />
+                  ))}
+                  {/* Closing floor — left bar + bottom border seal the group so
+                      the rows beneath it clearly aren't part of it. */}
+                  <tr aria-hidden="true" className="bg-ink-50/40">
+                    <td colSpan={colSpan} className="h-1.5 p-0 border-l-2 border-b-2 border-ink-300" />
+                  </tr>
+                </Fragment>
+              ) : (
+                <QuoteRow
+                  key={u.quote.id}
+                  qu={u.quote}
+                  cols={cols}
+                  selected={selected.has(u.quote.id)}
+                  onToggleSelect={() => toggleOne(u.quote.id)}
+                  client={clientByQuoteId.get(u.quote.id)}
+                  creator={profileById.get(u.quote.createdByUserId)}
+                  total={totalByQuoteId.get(u.quote.id) || 0}
+                  rates={displayRatesFor(u.quote, settings)}
+                  invoice={invoiceByQuoteId.get(u.quote.id)}
+                />
+              )))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
@@ -406,36 +662,34 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates, invoice
   );
 }
 
-function QuoteRow({ qu, client, creator, total, rates, grouped = false, invoice }) {
+function QuoteRow({ qu, client, creator, total, rates, grouped = false, invoice, cols, selected = false, onToggleSelect }) {
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
+  // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
+  const ctx = { qu, client, creatorLabel, total, rates, invoice };
 
   return (
     <tr
-      className={`cursor-pointer transition-all hover:bg-ink-50/80 hover:shadow-xs active:bg-ink-100 ${grouped ? 'bg-ink-50/40' : ''}`}
+      className={`cursor-pointer transition-colors hover:bg-ink-50/80 active:bg-ink-100 ${
+        selected ? 'bg-brand-50/60' : grouped ? 'bg-ink-50/40' : ''
+      }`}
       onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}
     >
-      <td className={`font-medium tabular-nums whitespace-nowrap ${grouped ? 'border-l-2 border-ink-300 pl-5' : ''}`}>
-        #{qu.number || '—'}
+      {/* Selection cell — stop the click here so ticking the box never opens
+          the quote (the rest of the row still navigates). */}
+      <td
+        className={grouped ? 'border-l-2 border-ink-300 pl-4' : ''}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <SelectBox
+          checked={selected}
+          onChange={onToggleSelect}
+          label={`Seleccionar cotización #${qu.number || ''}`}
+        />
       </td>
-      <td className="text-ink-700 max-w-[160px]" title={client?.name || ''}>
-        <div className="flex items-center gap-1 min-w-0">
-          <span className="truncate">{client?.name || '—'}</span>
-          {client?.isProfessional && <ProfessionalTag />}
-        </div>
-      </td>
-      <td className="hidden xl:table-cell text-ink-500 truncate max-w-[140px]" title={creatorLabel}>
-        {creatorLabel || '—'}
-      </td>
-      <td>
-        <div className="flex items-center gap-1.5">
-          <StatusPill {...quoteStagePill(currentQuoteStage(qu))} />
-          <InvoiceChip invoice={invoice} />
-          <TradeFlag quote={qu} />
-        </div>
-      </td>
-      <td className="hidden lg:table-cell text-ink-400 tabular-nums whitespace-nowrap">{formatDateTime(qu.updatedAt)}</td>
-      <td className="text-right font-semibold tabular-nums whitespace-nowrap">{formatMoney(total, qu.currencyCode || 'USD', rates)}</td>
+      {cols.map((col) => (
+        <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+      ))}
       <td className="text-right w-12">
         <button onClick={del} className="btn-icon-danger" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={14} />

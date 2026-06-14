@@ -92,6 +92,40 @@ export function resolveQuotesList({
     ? quotes
     : quotes.filter((qu) => qu.createdByUserId === meId);
 
+  // Summary KPIs for the stat strip (Shopify-orders-style). A STABLE overview
+  // of the current SCOPE (Mías/Equipo) — deliberately independent of the
+  // search/tab filter, the way Shopify's order stat cards carry their own
+  // range, so flipping tabs doesn't make the headline numbers jump. Money is
+  // the same USD-base grand total summed across quotes, routed through the same
+  // totalByQuoteId the rows read, so the cards agree to the cent with the Total
+  // column. Buckets follow the derived lifecycle stage: "open" = still in play
+  // (draft/sent), "won" = committed (accepted or deposit received).
+  let openCount = 0;
+  let openValue = 0;
+  let wonCount = 0;
+  let wonValue = 0;
+  let totalValue = 0;
+  for (const qu of scopedQuotes) {
+    const t = totalByQuoteId.get(qu.id) || 0;
+    totalValue += t;
+    const stage = currentQuoteStage(qu);
+    if (stage === 'draft' || stage === 'sent') {
+      openCount += 1;
+      openValue += t;
+    } else if (stage === 'accepted' || stage === 'deposito_recibido') {
+      wonCount += 1;
+      wonValue += t;
+    }
+  }
+  const summary = {
+    count: scopedQuotes.length,
+    openCount,
+    openValue,
+    wonCount,
+    wonValue,
+    totalValue,
+  };
+
   // Tabs for the primary status dimension. Counts are computed off the
   // scoped list so each tab shows "how many would I see if I tapped this"
   // within the current scope, independent of the search needle.
@@ -217,6 +251,7 @@ export function resolveQuotesList({
 
   return {
     scopedCount: scopedQuotes.length,
+    summary,
     tabs,
     creatorFilter,
     rows: filtered,

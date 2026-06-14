@@ -3,6 +3,7 @@ import { DebouncedInput } from '../DebouncedInput.jsx';
 import FilterTabs from './FilterTabs.jsx';
 import FilterBar from './FilterBar.jsx';
 import SortMenu from './SortMenu.jsx';
+import ColumnsMenu from './ColumnsMenu.jsx';
 
 /**
  * ListSearchHeader — the one Shopify-admin-inspired search / filter header
@@ -53,6 +54,11 @@ import SortMenu from './SortMenu.jsx';
  *   sort?: { key: string, dir: 'asc' | 'desc' }
  *   onSortChange?: ({ key, dir }) => void
  *
+ *   columns?: Array<{ key: string, label: string, canHide?: boolean }>
+ *   visibleColumns?: { [key: string]: boolean }
+ *   onColumnsChange?: (nextVisible: object) => void
+ *   onColumnsReset?: () => void
+ *
  *   resultCount?: number
  *   resultNoun?: [singular, plural]            // e.g. ['resultado','resultados']
  */
@@ -70,12 +76,19 @@ export default function ListSearchHeader({
   sortOptions,
   sort,
   onSortChange,
+  columns,
+  visibleColumns,
+  onColumnsChange,
+  onColumnsReset,
   resultCount,
   resultNoun = ['resultado', 'resultados'],
 }) {
   const hasFilters = Array.isArray(filters) && filters.length > 0;
   const hasSort = Array.isArray(sortOptions) && sortOptions.length > 0;
   const hasTabs = Array.isArray(tabs) && tabs.length > 0;
+  // Columns toggle tunes a wide desktop table; mobile renders cards, so it's
+  // wrapped desktop-only at render (below).
+  const hasColumns = Array.isArray(columns) && columns.length > 0 && typeof onColumnsChange === 'function';
 
   return (
     <div className="mb-5 space-y-2.5">
@@ -106,6 +119,17 @@ export default function ListSearchHeader({
 
         {hasSort && (
           <SortMenu sortOptions={sortOptions} sort={sort} onSortChange={onSortChange} />
+        )}
+
+        {hasColumns && (
+          <div className="hidden md:block">
+            <ColumnsMenu
+              columns={columns}
+              visible={visibleColumns}
+              onChange={onColumnsChange}
+              onReset={onColumnsReset}
+            />
+          </div>
         )}
       </div>
 
