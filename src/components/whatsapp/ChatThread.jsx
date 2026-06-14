@@ -1673,6 +1673,36 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
   // Reply/react address the message by wamid — without one (an optimistic
   // draft, a failed send) there is nothing to act on.
   const canAct = !!m.waId && !!(onReply || onReact);
+
+  // Swipe-to-reply (touch only) — drag a bubble rightward past a threshold to
+  // quote it, like WhatsApp/Telegram. Touch only (mouse keeps the hover
+  // actions); horizontal intent must beat vertical so the list still scrolls
+  // (the row also carries `touch-pan-y`). Snaps back on release.
+  const [dragX, setDragX] = useState(0);
+  const drag = useRef(null);
+  const swipeReply = canAct && !!onReply;
+  const onPointerDown = (e) => {
+    if (!swipeReply || e.pointerType === 'mouse') return;
+    drag.current = { x: e.clientX, y: e.clientY, decided: false, horizontal: false };
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      d.decided = true;
+      d.horizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
+    }
+    if (d.horizontal) setDragX(Math.max(0, Math.min(dx, 56)));
+  };
+  const endDrag = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.horizontal && dragX > 40 && onReply) onReply(m);
+    setDragX(0);
+  };
   return (
     <>
       {showDay && (
@@ -1682,8 +1712,18 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
       )}
       <div
         ref={(node) => registerRef?.(m.waId, node)}
-        className={`group flex items-center gap-1 scroll-mt-4 ${grouped ? '' : 'mt-1'} ${out ? 'justify-end' : 'justify-start'}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        style={dragX ? { transform: `translateX(${dragX}px)` } : undefined}
+        className={`group relative flex items-center gap-1 scroll-mt-4 touch-pan-y ${grouped ? '' : 'mt-1'} ${out ? 'justify-end' : 'justify-start'}`}
       >
+        {swipeReply && dragX > 0 && (
+          <span className="pointer-events-none absolute left-0 -translate-x-7 text-emerald-600" style={{ opacity: Math.min(1, dragX / 40) }} aria-hidden>
+            <Reply size={16} />
+          </span>
+        )}
         {out && canAct && <BubbleActions m={m} onReply={onReply} onReact={onReact} />}
         {/* tabIndex: a tap focuses the bubble, revealing the actions on touch. */}
         <div tabIndex={canAct ? 0 : undefined} className={`max-w-[78%] text-sm break-words whitespace-pre-wrap focus:outline-none transition-shadow ${
