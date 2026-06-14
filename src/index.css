@@ -1088,6 +1088,11 @@
       top: var(--rs-vv-top, 0px);
       height: var(--rs-vv-height, 100dvh);
       z-index: 45;
+      /* The overlay covers the app topbar, so it owns the status-bar inset:
+         pad the top by the safe area (its bg-surface fills the strip) so
+         ChatThread's own header clears the notch instead of hiding under it.
+         0 in a browser tab (portrait) — only standalone/landscape report one. */
+      padding-top: env(safe-area-inset-top);
     }
     /* Keyboard down → the conversation owns the whole window, so reserve the
        home-indicator inset under the composer. Keyboard up → the home indicator
