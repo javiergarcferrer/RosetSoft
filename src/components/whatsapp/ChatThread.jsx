@@ -443,27 +443,34 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       </div>
       )}
 
-      {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 bg-ink-50/40">
-        {thread.items.map((m, i) => (
-          <Bubble
-            key={m.id}
-            m={m}
-            prev={thread.items[i - 1]}
-            onReply={setReplyTo}
-            onReact={onReact ? react : null}
-            onSaveCard={onSaveContact ? setSaveTarget : null}
-            onCreateOrder={onCreateQuote || null}
-            quoteChip={m.quoteId && m.quoteId !== contextQuoteId
-              ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
-              : null}
-          />
-        ))}
-        {!thread.items.length && (
-          <p className="text-xs text-ink-400 text-center py-8">
-            Sin mensajes todavía. {contact.contactKind ? 'Escríbele para iniciar la conversación.' : ''}
-          </p>
-        )}
+      {/* Messages — bottom-anchored like every chat app: the inner wrapper is
+          at least the viewport tall (min-h-full) and justifies its content to
+          the END, so a short thread rests just above the composer instead of
+          floating at the top with a dead void below. Once the thread overflows,
+          the wrapper grows past full height and scrolls normally (the
+          scroll-to-bottom effect keeps the latest message in view). */}
+      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 bg-ink-50/40">
+        <div className="flex min-h-full flex-col justify-end gap-1.5">
+          {thread.items.map((m, i) => (
+            <Bubble
+              key={m.id}
+              m={m}
+              prev={thread.items[i - 1]}
+              onReply={setReplyTo}
+              onReact={onReact ? react : null}
+              onSaveCard={onSaveContact ? setSaveTarget : null}
+              onCreateOrder={onCreateQuote || null}
+              quoteChip={m.quoteId && m.quoteId !== contextQuoteId
+                ? { id: m.quoteId, number: quoteNumberById.get(m.quoteId) ?? null }
+                : null}
+            />
+          ))}
+          {!thread.items.length && (
+            <p className="text-xs text-ink-400 text-center py-8">
+              Sin mensajes todavía. {contact.contactKind ? 'Escríbele para iniciar la conversación.' : ''}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* 24h-window state + composer */}
