@@ -20,6 +20,7 @@ import ImageView from '../../components/ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
 
 /**
@@ -148,6 +149,10 @@ export default function Materials() {
   const {
     visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
   } = useColumns(MATERIAL_COLUMNS, MATERIAL_DEFAULT_COLS, MATERIAL_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.materials.widths.v1');
 
   // Category tabs (the primary dimension). Counts ride the full materials
   // list so each tab shows "how many would I see if I tapped this",
@@ -280,7 +285,7 @@ export default function Materials() {
         columns={MATERIAL_COLUMNS}
         visibleColumns={visibleCols}
         onColumnsChange={setVisibleCols}
-        onColumnsReset={resetCols}
+        onColumnsReset={() => { resetCols(); resetWidths(); }}
         resultCount={filtered.length}
         resultNoun={['material', 'materiales']}
       />
@@ -342,11 +347,14 @@ export default function Materials() {
         </div>
         <div className="hidden md:block card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="table">
+            <table ref={tableRef} style={tableStyle} className="table">
               <thead>
                 <tr>
                   {cols.map((col) => (
-                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                      {col.label}
+                      {ResizeHandle(col.key)}
+                    </th>
                   ))}
                   <th className="w-px" />
                 </tr>

@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -122,6 +123,10 @@ export default function LigneRosetSales() {
 
   // Column visibility (Shopify "edit columns"), persisted per browser.
   const cols = useColumns(LRSALES_COLUMNS, LRSALES_DEFAULT, 'rs.lrsales.cols.v1');
+  // Drag-to-resize widths (persisted) for the same visible columns. The hook is
+  // class-agnostic, so it works on this report's hand-rolled `w-full text-sm`
+  // table just as it does on a `.table`.
+  const colW = useColumnWidths(cols.cols, 'rs.lrsales.widths.v1');
 
   function exportAndSend() {
     if (report.lineCount === 0) return;
@@ -167,14 +172,14 @@ export default function LigneRosetSales() {
             {report.salesCount} venta{report.salesCount === 1 ? '' : 's'} · {report.lineCount} artículo{report.lineCount === 1 ? '' : 's'} · {label}
           </div>
           <div className="hidden md:flex justify-end px-3 pt-2 -mb-1">
-            <ColumnsMenu columns={cols.columns} visible={cols.visible} onChange={cols.setVisible} onReset={cols.reset} />
+            <ColumnsMenu columns={cols.columns} visible={cols.visible} onChange={cols.setVisible} onReset={() => { cols.reset(); colW.reset(); }} />
           </div>
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
+          <table ref={colW.tableRef} style={colW.tableStyle} className="w-full text-sm min-w-[640px]">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
                 {cols.cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  <th key={col.key} className={col.thClass || ''} {...colW.thProps(col.key)}>{col.label}{colW.ResizeHandle(col.key)}</th>
                 ))}
               </tr>
             </thead>

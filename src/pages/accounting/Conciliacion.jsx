@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveReconciliation } from '../../core/accounting/index.js';
@@ -66,6 +67,8 @@ export default function Conciliacion() {
   // the fixed anchor; #, concepto and monto toggle. The reconcile checkbox is a
   // fixed leading cell outside the column array (it closes over the toggle).
   const recCols = useColumns(RECON_COLUMNS, RECON_DEFAULT, 'rs.conciliacion.cols.v1');
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const recW = useColumnWidths(recCols.cols, 'rs.conciliacion.widths.v1');
 
   const rec = useMemo(
     () => (accountCode ? resolveReconciliation({ accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, accountCode, statementBalance: stmt }) : null),
@@ -121,16 +124,16 @@ export default function Conciliacion() {
               ) : (
                 <>
                 <div className="hidden md:flex justify-end mb-2">
-                  <ColumnsMenu columns={recCols.columns} visible={recCols.visible} onChange={recCols.setVisible} onReset={recCols.reset} />
+                  <ColumnsMenu columns={recCols.columns} visible={recCols.visible} onChange={recCols.setVisible} onReset={() => { recCols.reset(); recW.reset(); }} />
                 </div>
                 <div className="card overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="table min-w-[480px]">
+                    <table ref={recW.tableRef} style={recW.tableStyle} className="table min-w-[480px]">
                       <thead>
                         <tr>
                           <th className="w-10"></th>
                           {recCols.cols.map((col) => (
-                            <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                            <th key={col.key} className={col.thClass || ''} {...recW.thProps(col.key)}>{col.label}{recW.ResizeHandle(col.key)}</th>
                           ))}
                         </tr>
                       </thead>

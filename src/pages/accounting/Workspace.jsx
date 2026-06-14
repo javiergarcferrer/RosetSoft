@@ -32,6 +32,7 @@ import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sal
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 
 /**
  * Customizable columns (Shopify-style) for the payout rollup tables (Resumen
@@ -554,6 +555,7 @@ export default function AccountingWorkspace() {
           nameOf={(r) => r.user.name || r.user.email || '—'}
           subOf={(r) => (r.user.email && r.user.name ? r.user.email : null)}
           colsStorageKey="rs.workspace.vendedores.cols.v1"
+          widthsStorageKey="rs.workspace.vendedores.widths.v1"
         />
       )}
       {loaded && derived.profRows.length > 0 && (
@@ -565,6 +567,7 @@ export default function AccountingWorkspace() {
           nameOf={(r) => r.professional.name || '—'}
           subOf={(r) => r.professional.company || null}
           colsStorageKey="rs.workspace.profesionales.cols.v1"
+          widthsStorageKey="rs.workspace.profesionales.widths.v1"
         />
       )}
     </AccountingGate>
@@ -783,13 +786,19 @@ function CommissionLine({ role, who, badge, detail, action }) {
 }
 
 /** Payout rollup card — name, # ventas, comisión, pagado, pendiente. */
-function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf, colsStorageKey }) {
+function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf, colsStorageKey, widthsStorageKey }) {
   const pendingTotal = rows.reduce((s, r) => s + r.pending, 0);
   // Column visibility (Shopify "edit columns") — each rollup persists its own
   // choice via its storage key; both share the SUMMARY_COLUMNS definition.
   const {
     visible, setVisible, reset, cols,
   } = useColumns(SUMMARY_COLUMNS, SUMMARY_DEFAULT_COLS, colsStorageKey);
+  // Drag-to-resize widths (persisted) — the two rollups render this same
+  // component, so each instance gets its OWN widths state via its per-instance
+  // widthsStorageKey (mirrors how colsStorageKey isolates their visibility).
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, widthsStorageKey);
 
   // Footer: the "Pendiente total" label spans the leading columns up to the
   // first column carrying a total, then each remaining column renders its
@@ -824,14 +833,17 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf, colsStora
       <div className="hidden md:block">
         {/* Standalone columns control for this rollup table. */}
         <div className="hidden md:flex justify-end mb-2">
-          <ColumnsMenu columns={SUMMARY_COLUMNS} visible={visible} onChange={setVisible} onReset={reset} />
+          <ColumnsMenu columns={SUMMARY_COLUMNS} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
         </div>
         <div className="overflow-x-auto">
-          <table className="table">
+          <table ref={tableRef} style={tableStyle} className="table">
             <thead>
               <tr>
                 {cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                    {col.label}
+                    {ResizeHandle(col.key)}
+                  </th>
                 ))}
               </tr>
             </thead>

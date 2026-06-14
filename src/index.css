@@ -558,6 +558,23 @@
   .table td { @apply px-3 py-2 border-b border-ink-100; }
   .table tbody tr:hover { @apply bg-ink-50; }
 
+  /* Drag-to-resize handle (useColumnWidths) — a thin grab strip on the right
+     edge of a resizable header cell. The th is positioned relative by the hook;
+     the handle straddles the cell border and only shows its accent on hover/drag
+     so it stays invisible until reached for. Desktop pointer affordance; mobile
+     renders cards, not tables. */
+  .rs-col-resize {
+    @apply absolute top-0 right-0 z-10 h-full w-2 translate-x-1/2 cursor-col-resize select-none;
+    touch-action: none;
+  }
+  .rs-col-resize::after {
+    content: '';
+    @apply absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-transparent transition-colors;
+  }
+  .rs-col-resize:hover::after, .rs-col-resize:active::after { @apply bg-brand-400; }
+  /* While dragging, kill selection + force the resize cursor everywhere. */
+  body.rs-resizing { @apply cursor-col-resize select-none; }
+
   /* ===========================================================
      Design-system primitives derived from the four-agent audit
      of every view (May 18 2026). These patterns were duplicated

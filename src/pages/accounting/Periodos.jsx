@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -50,6 +51,7 @@ export default function Periodos() {
   }, []);
   const [busy, setBusy] = useState(null);
   const { columns, visible, setVisible, reset, cols } = useColumns(PERIODO_COLUMNS, PERIODO_DEFAULT, PERIODO_COLS_KEY);
+  const { tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths } = useColumnWidths(cols, 'rs.periodos.widths.v1');
 
   async function toggle(year, month) {
     const key = `${year}-${month}`;
@@ -75,12 +77,13 @@ export default function Periodos() {
       {!periodsQ.loaded ? <ListLoading /> : (
         <div className="card overflow-hidden max-w-xl">
           <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
-            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table ref={tableRef} style={tableStyle} className="w-full text-sm">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
-                {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
+                {cols.map((c) => <th key={c.key} className={c.thClass} {...thProps(c.key)}>{c.label}{ResizeHandle(c.key)}</th>)}
                 <th className="py-2 px-3"></th>
               </tr>
             </thead>
@@ -104,6 +107,7 @@ export default function Periodos() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </AccountingGate>

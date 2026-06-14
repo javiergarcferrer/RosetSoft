@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Mail,
-  MessageCircle, Phone, SearchX, Trash2, Megaphone,
+  MessageCircle, Phone, SearchX, Trash2, Megaphone, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import useColumns from '../components/search/useColumns.js';
+import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import {
   Cell, CELL_CLS, PanelField, PanelTextArea, RncPanelField, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
@@ -60,6 +61,7 @@ const PROFESSIONAL_COLUMNS = [
   {
     key: 'name', label: 'Nombre', canHide: false,
     tdClass: 'font-medium max-w-[220px]',
+    sortKey: 'name',
     th: ({ sort, onSort }) => <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={onSort} />,
     cell: ({ p, row, rollup, onCommit }) => (
       <div className="flex items-center gap-1.5">
@@ -71,6 +73,7 @@ const PROFESSIONAL_COLUMNS = [
   {
     key: 'company', label: 'Empresa',
     tdClass: 'max-w-[200px]',
+    sortKey: 'company',
     th: ({ sort, onSort }) => <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={onSort} />,
     cell: ({ p, row, onCommit }) => (
       <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
@@ -102,6 +105,7 @@ const PROFESSIONAL_COLUMNS = [
   {
     key: 'quotes', label: 'Cotizaciones',
     tdClass: 'text-right tabular-nums whitespace-nowrap text-ink-800',
+    sortKey: 'quotes', numeric: true, thClass: 'text-right',
     th: ({ sort, onSort }) => <SortableTh label="Cotizaciones" sortKey="quotes" sort={sort} onSort={onSort} numeric className="text-right" />,
     cell: ({ rollup }) => (
       <>
@@ -196,6 +200,10 @@ export default function Professionals() {
   const {
     visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
   } = useColumns(PROFESSIONAL_COLUMNS, PROFESSIONAL_DEFAULT_COLS, PROFESSIONAL_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.professionals.widths.v1');
   const colSpan = cols.length + 2; // chevron + data columns + actions
 
   // ── Sheet writes ───────────────────────────────────────────────────────────
@@ -327,7 +335,7 @@ export default function Professionals() {
               columns={PROFESSIONAL_COLUMNS}
               visibleColumns={visibleCols}
               onColumnsChange={setVisibleCols}
-              onColumnsReset={resetCols}
+              onColumnsReset={() => { resetCols(); resetWidths(); }}
               resultCount={rows.length}
               resultNoun={['profesional', 'profesionales']}
             />
@@ -366,14 +374,19 @@ export default function Professionals() {
               so it scrolls horizontally when many are on. */}
           <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table">
+              <table ref={tableRef} style={tableStyle} className="table">
                 <thead>
                   <tr>
                     <th className="w-8"></th>
                     {cols.map((col) => (
                       col.th
-                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} />
-                        : <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} thProps={thProps} ResizeHandle={ResizeHandle} />
+                        : (
+                          <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                            {col.label}
+                            {ResizeHandle(col.key)}
+                          </th>
+                        )
                     ))}
                     <th className="w-10"></th>
                   </tr>
@@ -425,12 +438,49 @@ function NoMatchesCard() {
 }
 
 /**
- * Renders one sortable header from a column definition — the `th(hctx)` from
- * PROFESSIONAL_COLUMNS reused so the desktop column headers keep their sort
- * affordance (SortableTh) while the column set is data-driven.
+ * Renders one sortable header from a column definition. It mirrors SortableTh's
+ * sort affordance but owns its own <th> so the resize hook can spread thProps
+ * (data-col-key + persisted width) onto it and render the drag handle as its
+ * last child — SortableTh's <th> isn't ours to augment. Non-sortable columns
+ * (no `col.sortKey`) fall back to a plain resizable header.
  */
-function ColumnTh({ col, sort, onSort }) {
-  return col.th({ sort, onSort });
+function ColumnTh({ col, sort, onSort, thProps, ResizeHandle }) {
+  if (!col.sortKey) {
+    return (
+      <th className={col.thClass || ''} {...thProps(col.key)}>
+        {col.label}
+        {ResizeHandle(col.key)}
+      </th>
+    );
+  }
+  const active = sort.key === col.sortKey;
+  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th
+      className={col.thClass || ''}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      {...thProps(col.key)}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(active
+          ? { key: col.sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: col.sortKey, dir: col.numeric ? 'desc' : 'asc' })}
+        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
+          col.numeric ? 'w-full justify-end' : ''
+        } ${active ? 'text-ink-900' : ''}`}
+        title={`Ordenar por ${col.label}`}
+      >
+        {col.label}
+        <Icon
+          size={11}
+          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
+          aria-hidden
+        />
+      </button>
+      {ResizeHandle(col.key)}
+    </th>
+  );
 }
 
 /** One professional as a sheet row + (when open) its quotes dropdown row. */

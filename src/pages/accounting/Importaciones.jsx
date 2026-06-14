@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveImportacionesList, resolveAccountingConfig } from '../../core/accounting/index.js';
@@ -186,6 +187,11 @@ export default function Importaciones() {
   const {
     visible: expVisible, setVisible: setExpVisible, reset: resetExpCols, cols: expCols,
   } = useColumns(EXPEDIENTE_COLUMNS, EXPEDIENTE_DEFAULT_COLS, EXPEDIENTE_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the Expedientes table.
+  const {
+    tableRef: expTableRef, tableStyle: expTableStyle, thProps: expThProps,
+    ResizeHandle: ExpResizeHandle, reset: resetExpWidths,
+  } = useColumnWidths(expCols, 'rs.importaciones.expedientes.widths.v1');
 
   if (!allowed) {
     return (
@@ -284,15 +290,18 @@ export default function Importaciones() {
               {/* Standalone columns control for this table (the search header
                   governs both tables, so each carries its own column menu). */}
               <div className="hidden md:flex justify-end mb-2">
-                <ColumnsMenu columns={EXPEDIENTE_COLUMNS} visible={expVisible} onChange={setExpVisible} onReset={resetExpCols} />
+                <ColumnsMenu columns={EXPEDIENTE_COLUMNS} visible={expVisible} onChange={setExpVisible} onReset={() => { resetExpCols(); resetExpWidths(); }} />
               </div>
               <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="table min-w-[680px]">
+                <table ref={expTableRef} style={expTableStyle} className="table min-w-[680px]">
                   <thead>
                     <tr>
                       {expCols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...expThProps(col.key)}>
+                          {col.label}
+                          {ExpResizeHandle(col.key)}
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -328,6 +337,10 @@ function LegacyTable({ list }) {
   const {
     visible: legVisible, setVisible: setLegVisible, reset: resetLegCols, cols: legCols,
   } = useColumns(LEGACY_COLUMNS, LEGACY_DEFAULT_COLS, LEGACY_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the Histórico table.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetLegWidths,
+  } = useColumnWidths(legCols, 'rs.importaciones.historico.widths.v1');
 
   // Per-column totals keyed by column key — the footer renders one cell per
   // visible column, so it stays coherent as columns toggle on/off.
@@ -371,15 +384,18 @@ function LegacyTable({ list }) {
       {/* Standalone columns control for this table (the search header governs
           both tables, so each carries its own column menu). */}
       <div className="hidden md:flex justify-end mb-2">
-        <ColumnsMenu columns={LEGACY_COLUMNS} visible={legVisible} onChange={setLegVisible} onReset={resetLegCols} />
+        <ColumnsMenu columns={LEGACY_COLUMNS} visible={legVisible} onChange={setLegVisible} onReset={() => { resetLegCols(); resetLegWidths(); }} />
       </div>
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="table min-w-[640px]">
+        <table ref={tableRef} style={tableStyle} className="table min-w-[640px]">
           <thead>
             <tr>
               {legCols.map((col) => (
-                <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                  {col.label}
+                  {ResizeHandle(col.key)}
+                </th>
               ))}
             </tr>
           </thead>

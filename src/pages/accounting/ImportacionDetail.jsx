@@ -9,6 +9,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
@@ -188,6 +189,18 @@ export default function ImportacionDetail() {
   // the full set to its <ColumnsMenu>.
   const lineCols = useColumns(LINE_COLUMNS, LINE_DEFAULT, LINE_COLS_KEY);
   const costCols = useColumns(COST_COLUMNS, COST_DEFAULT, COST_COLS_KEY);
+  // Drag-to-resize widths (persisted). The per-factura líneas tables share ONE
+  // widths state (one hook), same as they share one columns choice; the cost
+  // sheet has its own. tableRef points at the last-rendered líneas instance —
+  // fine, every instance reads the same widths/style/thProps.
+  const {
+    tableRef: lineTableRef, tableStyle: lineTableStyle, thProps: lineThProps,
+    ResizeHandle: LineResizeHandle, reset: resetLineWidths,
+  } = useColumnWidths(lineCols.cols, 'rs.importacion.detail.lines.widths.v1');
+  const {
+    tableRef: costTableRef, tableStyle: costTableStyle, thProps: costThProps,
+    ResizeHandle: CostResizeHandle, reset: resetCostWidths,
+  } = useColumnWidths(costCols.cols, 'rs.importacion.detail.costs.widths.v1');
 
   if (!allowed) {
     return (
@@ -293,14 +306,14 @@ export default function ImportacionDetail() {
                     <span className="ml-auto text-xs text-ink-500 tabular-nums">{f.lines.length} línea{f.lines.length === 1 ? '' : 's'}</span>
                   </div>
                   <div className="hidden md:flex justify-end mb-2">
-                    <ColumnsMenu columns={lineCols.columns} visible={lineCols.visible} onChange={lineCols.setVisible} onReset={lineCols.reset} />
+                    <ColumnsMenu columns={lineCols.columns} visible={lineCols.visible} onChange={lineCols.setVisible} onReset={() => { lineCols.reset(); resetLineWidths(); }} />
                   </div>
                   <div className="overflow-x-auto -mx-2.5">
-                  <table className="w-full text-sm min-w-[640px]">
+                  <table ref={lineTableRef} style={lineTableStyle} className="w-full text-sm min-w-[640px]">
                     <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                       <tr>
                         {lineCols.cols.map((col) => (
-                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          <th key={col.key} className={col.thClass || ''} {...lineThProps(col.key)}>{col.label}{LineResizeHandle(col.key)}</th>
                         ))}
                       </tr>
                     </thead>
@@ -342,14 +355,14 @@ export default function ImportacionDetail() {
         ) : (
           <>
           <div className="hidden md:flex justify-end px-3 pt-3">
-            <ColumnsMenu columns={costCols.columns} visible={costCols.visible} onChange={costCols.setVisible} onReset={costCols.reset} />
+            <ColumnsMenu columns={costCols.columns} visible={costCols.visible} onChange={costCols.setVisible} onReset={() => { costCols.reset(); resetCostWidths(); }} />
           </div>
           <div className="overflow-x-auto">
-          <table className="table min-w-[560px]">
+          <table ref={costTableRef} style={costTableStyle} className="table min-w-[560px]">
             <thead>
               <tr>
                 {costCols.cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  <th key={col.key} className={col.thClass || ''} {...costThProps(col.key)}>{col.label}{CostResizeHandle(col.key)}</th>
                 ))}
               </tr>
             </thead>

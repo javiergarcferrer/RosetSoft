@@ -14,6 +14,7 @@ import ListLoading from '../components/ListLoading.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import { orderStatusPill } from '../lib/statusPill.js';
 import useColumns from '../components/search/useColumns.js';
+import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../components/search/ColumnsMenu.jsx';
 
 /**
@@ -136,6 +137,10 @@ export default function Orders() {
   const {
     visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
   } = useColumns(ORDER_COLUMNS, ORDER_DEFAULT_COLS, ORDER_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.orders.widths.v1');
 
   async function newOrder() {
     const id = newId();
@@ -225,14 +230,18 @@ export default function Orders() {
       <div className="hidden md:block">
         {/* Standalone columns control (no search header on this page). */}
         <div className="hidden md:flex justify-end mb-2">
-          <ColumnsMenu columns={ORDER_COLUMNS} visible={visibleCols} onChange={setVisibleCols} onReset={resetCols} />
+          <ColumnsMenu columns={ORDER_COLUMNS} visible={visibleCols} onChange={setVisibleCols} onReset={() => { resetCols(); resetWidths(); }} />
         </div>
         <div className="card overflow-hidden">
-          <table className="table">
+          <div className="overflow-x-auto">
+          <table ref={tableRef} style={tableStyle} className="table">
             <thead>
               <tr>
                 {cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                    {col.label}
+                    {ResizeHandle(col.key)}
+                  </th>
                 ))}
                 <th />
               </tr>
@@ -252,6 +261,7 @@ export default function Orders() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </>

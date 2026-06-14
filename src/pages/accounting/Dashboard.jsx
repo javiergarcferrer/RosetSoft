@@ -14,6 +14,7 @@ import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx'
 import SegmentBar from '../../components/accounting/SegmentBar.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
@@ -300,6 +301,11 @@ export default function AccountingDashboard() {
   const segCols = useColumns(SEGMENT_COLUMNS, SEGMENT_DEFAULT, 'rs.dashboard.segment.cols.v1');
   const compCols = useColumns(COMP_COLUMNS, COMP_DEFAULT, 'rs.dashboard.comparativo.cols.v1');
   const recentCols = useColumns(RECENT_COLUMNS, RECENT_DEFAULT, 'rs.dashboard.asientos.cols.v1');
+  // Drag-to-resize widths (persisted) for the same visible columns, one key per
+  // desktop record table on this page.
+  const segW = useColumnWidths(segCols.cols, 'rs.dashboard.segment.widths.v1');
+  const compW = useColumnWidths(compCols.cols, 'rs.dashboard.comparativo.widths.v1');
+  const recentW = useColumnWidths(recentCols.cols, 'rs.dashboard.asientos.widths.v1');
 
   return (
     <AccountingGate title="Resumen del negocio">
@@ -585,14 +591,14 @@ export default function AccountingDashboard() {
               />
               <div className="hidden md:block">
                 <div className="flex justify-end mb-2">
-                  <ColumnsMenu columns={segCols.columns} visible={segCols.visible} onChange={segCols.setVisible} onReset={segCols.reset} />
+                  <ColumnsMenu columns={segCols.columns} visible={segCols.visible} onChange={segCols.setVisible} onReset={() => { segCols.reset(); segW.reset(); }} />
                 </div>
                 <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={segW.tableRef} style={segW.tableStyle} className="table">
                   <thead>
                     <tr>
                       {segCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.key === 'segment' ? segLabel : col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...segW.thProps(col.key)}>{col.key === 'segment' ? segLabel : col.label}{segW.ResizeHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -685,14 +691,14 @@ export default function AccountingDashboard() {
               />
               <div className="hidden md:block">
                 <div className="flex justify-end mb-2">
-                  <ColumnsMenu columns={compCols.columns} visible={compCols.visible} onChange={compCols.setVisible} onReset={compCols.reset} />
+                  <ColumnsMenu columns={compCols.columns} visible={compCols.visible} onChange={compCols.setVisible} onReset={() => { compCols.reset(); compW.reset(); }} />
                 </div>
                 <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={compW.tableRef} style={compW.tableStyle} className="table">
                   <thead>
                     <tr>
                       {compCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...compW.thProps(col.key)}>{col.label}{compW.ResizeHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -766,14 +772,14 @@ export default function AccountingDashboard() {
             ) : (
               <>
               <div className="hidden md:flex justify-end px-4 pb-2">
-                <ColumnsMenu columns={recentCols.columns} visible={recentCols.visible} onChange={recentCols.setVisible} onReset={recentCols.reset} />
+                <ColumnsMenu columns={recentCols.columns} visible={recentCols.visible} onChange={recentCols.setVisible} onReset={() => { recentCols.reset(); recentW.reset(); }} />
               </div>
               <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={recentW.tableRef} style={recentW.tableStyle} className="table">
                   <thead>
                     <tr>
                       {recentCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...recentW.thProps(col.key)}>{col.label}{recentW.ResizeHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>

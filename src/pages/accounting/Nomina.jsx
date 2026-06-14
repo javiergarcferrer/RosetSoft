@@ -11,6 +11,7 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import { computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig } from '../../core/accounting/index.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -54,6 +55,14 @@ export default function Nomina() {
 
   const previewCols = useColumns(PREVIEW_COLUMNS, PREVIEW_DEFAULT, PREVIEW_COLS_KEY);
   const runsCols = useColumns(RUNS_COLUMNS, RUNS_DEFAULT, RUNS_COLS_KEY);
+  const {
+    tableRef: previewTableRef, tableStyle: previewTableStyle, thProps: previewThProps,
+    ResizeHandle: PreviewResizeHandle, reset: resetPreviewWidths,
+  } = useColumnWidths(previewCols.cols, 'rs.nomina.preview.widths.v1');
+  const {
+    tableRef: runsTableRef, tableStyle: runsTableStyle, thProps: runsThProps,
+    ResizeHandle: RunsResizeHandle, reset: resetRunsWidths,
+  } = useColumnWidths(runsCols.cols, 'rs.nomina.runs.widths.v1');
 
   const today = useMemo(() => new Date(), []);
   const [date, setDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10));
@@ -156,12 +165,12 @@ export default function Nomina() {
                 </div>
                 <div className="hidden sm:block">
                   <div className="hidden md:flex justify-end mb-2">
-                    <ColumnsMenu columns={previewCols.columns} visible={previewCols.visible} onChange={previewCols.setVisible} onReset={previewCols.reset} />
+                    <ColumnsMenu columns={previewCols.columns} visible={previewCols.visible} onChange={previewCols.setVisible} onReset={() => { previewCols.reset(); resetPreviewWidths(); }} />
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table ref={previewTableRef} style={previewTableStyle} className="w-full text-sm">
                       <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                        <tr>{previewCols.cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}</tr>
+                        <tr>{previewCols.cols.map((c) => <th key={c.key} className={c.thClass} {...previewThProps(c.key)}>{c.label}{PreviewResizeHandle(c.key)}</th>)}</tr>
                       </thead>
                       <tbody>
                         {items.map((it) => {
@@ -212,12 +221,12 @@ export default function Nomina() {
               {/* Desktop: table */}
               <div className="hidden sm:block">
                 <div className="hidden md:flex justify-end mb-2 px-3">
-                  <ColumnsMenu columns={runsCols.columns} visible={runsCols.visible} onChange={runsCols.setVisible} onReset={runsCols.reset} />
+                  <ColumnsMenu columns={runsCols.columns} visible={runsCols.visible} onChange={runsCols.setVisible} onReset={() => { runsCols.reset(); resetRunsWidths(); }} />
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm mt-2">
+                  <table ref={runsTableRef} style={runsTableStyle} className="w-full text-sm mt-2">
                     <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                      <tr>{runsCols.cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}</tr>
+                      <tr>{runsCols.cols.map((c) => <th key={c.key} className={c.thClass} {...runsThProps(c.key)}>{c.label}{RunsResizeHandle(c.key)}</th>)}</tr>
                     </thead>
                     <tbody>
                       {runs.map((r) => {

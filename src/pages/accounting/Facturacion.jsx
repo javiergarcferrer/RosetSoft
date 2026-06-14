@@ -12,6 +12,7 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
@@ -338,6 +339,12 @@ export default function Facturacion() {
   const {
     visible: visible607, setVisible: setVisible607, reset: reset607, cols: cols607,
   } = useColumns(SALES607_COLUMNS, SALES607_DEFAULT, SALES607_COLS_KEY);
+  // Drag-to-resize widths (persisted) for the 607 columns. The e-CF actions
+  // column stays a fixed trailing cell — no handle.
+  const {
+    tableRef: tableRef607, tableStyle: tableStyle607, thProps: thProps607,
+    ResizeHandle: ResizeHandle607, reset: resetWidths607,
+  } = useColumnWidths(cols607, 'rs.facturacion.widths.v1');
 
   const setDraft = (id, patch) => setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
 
@@ -612,15 +619,18 @@ export default function Facturacion() {
             />
             <div className="hidden md:block">
               <div className="flex justify-end mb-2">
-                <ColumnsMenu columns={SALES607_COLUMNS} visible={visible607} onChange={setVisible607} onReset={reset607} />
+                <ColumnsMenu columns={SALES607_COLUMNS} visible={visible607} onChange={setVisible607} onReset={() => { reset607(); resetWidths607(); }} />
               </div>
               <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="table">
+                  <table ref={tableRef607} style={tableStyle607} className="table">
                     <thead>
                       <tr>
                         {cols607.map((col) => (
-                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          <th key={col.key} className={col.thClass || ''} {...thProps607(col.key)}>
+                            {col.label}
+                            {ResizeHandle607(col.key)}
+                          </th>
                         ))}
                         <th className="whitespace-nowrap">e-CF</th>
                       </tr>

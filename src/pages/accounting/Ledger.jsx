@@ -15,6 +15,7 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import {
   resolveJournal, resolveTrialBalance, resolveAccountLedger,
@@ -271,6 +272,16 @@ export default function Ledger() {
   // the full set so hidden columns can return.
   const mayorCols = useColumns(MAYOR_COLUMNS, MAYOR_DEFAULT, MAYOR_COLS_KEY);
   const balanzaCols = useColumns(BALANZA_COLUMNS, BALANZA_DEFAULT, BALANZA_COLS_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns. Only the
+  // header th get handles; the totals tfoot keys off `cols` unchanged.
+  const {
+    tableRef: mayorTableRef, tableStyle: mayorTableStyle, thProps: mayorThProps,
+    ResizeHandle: MayorHandle, reset: resetMayorWidths,
+  } = useColumnWidths(mayorCols.cols, 'rs.ledger.mayor.widths.v1');
+  const {
+    tableRef: balanzaTableRef, tableStyle: balanzaTableStyle, thProps: balanzaThProps,
+    ResizeHandle: BalanzaHandle, reset: resetBalanzaWidths,
+  } = useColumnWidths(balanzaCols.cols, 'rs.ledger.balanza.widths.v1');
 
   async function reverse(entry, lines) {
     if (typeof window !== 'undefined'
@@ -412,14 +423,14 @@ export default function Ledger() {
             />
             <div className="hidden md:block card overflow-hidden">
               <div className="flex justify-end px-3 pt-3">
-                <ColumnsMenu columns={mayorCols.columns} visible={mayorCols.visible} onChange={mayorCols.setVisible} onReset={mayorCols.reset} />
+                <ColumnsMenu columns={mayorCols.columns} visible={mayorCols.visible} onChange={mayorCols.setVisible} onReset={() => { mayorCols.reset(); resetMayorWidths(); }} />
               </div>
               <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[420px]">
+              <table ref={mayorTableRef} style={mayorTableStyle} className="w-full text-sm min-w-[420px]">
                 <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                   <tr>
                     {mayorCols.cols.map((col) => (
-                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      <th key={col.key} className={col.thClass || ''} {...mayorThProps(col.key)}>{col.label}{MayorHandle(col.key)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -477,14 +488,14 @@ export default function Ledger() {
           />
           <div className="hidden md:block card overflow-hidden">
             <div className="flex justify-end px-3 pt-3">
-              <ColumnsMenu columns={balanzaCols.columns} visible={balanzaCols.visible} onChange={balanzaCols.setVisible} onReset={balanzaCols.reset} />
+              <ColumnsMenu columns={balanzaCols.columns} visible={balanzaCols.visible} onChange={balanzaCols.setVisible} onReset={() => { balanzaCols.reset(); resetBalanzaWidths(); }} />
             </div>
             <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[360px]">
+            <table ref={balanzaTableRef} style={balanzaTableStyle} className="w-full text-sm min-w-[360px]">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                 <tr>
                   {balanzaCols.cols.map((col) => (
-                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    <th key={col.key} className={col.thClass || ''} {...balanzaThProps(col.key)}>{col.label}{BalanzaHandle(col.key)}</th>
                   ))}
                 </tr>
               </thead>

@@ -11,6 +11,7 @@ import { formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { ECF_TYPES, ecfTypeLabel, sequenceState } from '../../core/accounting/index.js';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 /**
@@ -42,6 +43,7 @@ export default function ECFSequences() {
 
   const seqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
   const { columns, visible, setVisible, reset, cols } = useColumns(ECF_COLUMNS, ECF_DEFAULT, ECF_COLS_KEY);
+  const { tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths } = useColumnWidths(cols, 'rs.ecf.widths.v1');
   const [editing, setEditing] = useState(null); // null | 'new' | id
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
@@ -129,13 +131,13 @@ export default function ECFSequences() {
       ) : (
         <div className="card overflow-hidden">
           <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
-            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
           <div className="overflow-x-auto">
-          <table className="table min-w-[560px]">
+          <table ref={tableRef} style={tableStyle} className="table min-w-[560px]">
             <thead>
               <tr>
-                {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
+                {cols.map((c) => <th key={c.key} className={c.thClass} {...thProps(c.key)}>{c.label}{ResizeHandle(c.key)}</th>)}
                 <th></th>
               </tr>
             </thead>

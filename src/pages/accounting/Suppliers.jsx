@@ -11,6 +11,7 @@ import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const KIND_LABEL = { fisica: 'Persona física', juridica: 'Persona jurídica', exterior: 'Exterior' };
@@ -89,6 +90,7 @@ export default function Suppliers() {
   const acctByCode = useMemo(() => new Map((accountsQ.data || []).map((a) => [a.code, a])), [accountsQ.data]);
 
   const { columns, visible, setVisible, reset, cols } = useColumns(SUPPLIER_COLUMNS, SUPPLIER_DEFAULT, SUPPLIER_COLS_KEY);
+  const { tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths } = useColumnWidths(cols, 'rs.suppliers.widths.v1');
 
   const [editing, setEditing] = useState(null); // null | 'new' | <id>
   const [form, setForm] = useState(blank());
@@ -216,14 +218,14 @@ export default function Suppliers() {
       ) : (
         <div className="card overflow-hidden">
           <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
-            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table ref={tableRef} style={tableStyle} className="w-full text-sm">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                 <tr>
                   {cols.map((c) => (
-                    <th key={c.key} className={c.thClass || 'text-left py-2 px-3'}>{c.label}</th>
+                    <th key={c.key} className={c.thClass || 'text-left py-2 px-3'} {...thProps(c.key)}>{c.label}{ResizeHandle(c.key)}</th>
                   ))}
                   <th className="py-2 px-3"></th>
                 </tr>

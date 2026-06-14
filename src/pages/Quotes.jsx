@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import useColumns from '../components/search/useColumns.js';
+import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
@@ -318,6 +319,10 @@ export default function Quotes() {
   const {
     visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
   } = useColumns(QUOTE_COLUMNS, DEFAULT_VISIBLE_COLS, COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.quotes.widths.v1');
   const colSpan = cols.length + 2; // checkbox + data columns + actions
 
   // Bulk selection (Shopify row checkboxes + contextual action bar). Desktop
@@ -424,7 +429,7 @@ export default function Quotes() {
         columns={QUOTE_COLUMNS}
         visibleColumns={visibleCols}
         onColumnsChange={setVisibleCols}
-        onColumnsReset={resetCols}
+        onColumnsReset={() => { resetCols(); resetWidths(); }}
         resultCount={filtered.length}
         resultNoun={['cotización', 'cotizaciones']}
       />
@@ -492,7 +497,7 @@ export default function Quotes() {
           scrolls horizontally when many are on, rather than crushing cells. */}
       <div className="hidden md:block card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="table">
+          <table ref={tableRef} style={tableStyle} className="table">
             <thead>
               <tr>
                 <th className="w-10">
@@ -504,7 +509,10 @@ export default function Quotes() {
                   />
                 </th>
                 {cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                    {col.label}
+                    {ResizeHandle(col.key)}
+                  </th>
                 ))}
                 <th className="w-12" />
               </tr>

@@ -12,6 +12,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
@@ -178,6 +179,10 @@ export default function CuentasCobrarPagar() {
   // column choice; the estado de cuenta has its own key.
   const aging = useColumns(AGING_COLUMNS, AGING_DEFAULT, tab === 'cxc' ? 'rs.cuentas.cobrar.cols.v1' : 'rs.cuentas.pagar.cols.v1');
   const stmtCols = useColumns(STATEMENT_COLUMNS, STATEMENT_DEFAULT, 'rs.cuentas.statement.cols.v1');
+  // Drag-to-resize widths (persisted) for the same visible columns — keyed per
+  // side so cobrar/pagar each keep their own widths, like the visibility keys.
+  const agingW = useColumnWidths(aging.cols, tab === 'cxc' ? 'rs.cuentas.cobrar.widths.v1' : 'rs.cuentas.pagar.widths.v1');
+  const stmtW = useColumnWidths(stmtCols.cols, 'rs.cuentas.statement.widths.v1');
 
   return (
     <AccountingGate title="Cuentas por cobrar y pagar">
@@ -236,15 +241,15 @@ export default function CuentasCobrarPagar() {
         />
         <div className="hidden md:block">
           <div className="flex justify-end mb-2">
-            <ColumnsMenu columns={aging.columns} visible={aging.visible} onChange={aging.setVisible} onReset={aging.reset} />
+            <ColumnsMenu columns={aging.columns} visible={aging.visible} onChange={aging.setVisible} onReset={() => { aging.reset(); agingW.reset(); }} />
           </div>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table min-w-[640px]">
+              <table ref={agingW.tableRef} style={agingW.tableStyle} className="table min-w-[640px]">
                 <thead>
                   <tr>
                     {aging.cols.map((col) => (
-                      <th key={col.key} className={col.thClass || ''}>{col.key === 'party' ? partyLabel : col.label}</th>
+                      <th key={col.key} className={col.thClass || ''} {...agingW.thProps(col.key)}>{col.key === 'party' ? partyLabel : col.label}{agingW.ResizeHandle(col.key)}</th>
                     ))}
                     <th></th>
                   </tr>
@@ -309,14 +314,14 @@ export default function CuentasCobrarPagar() {
           />
           <div className="hidden md:block">
             <div className="flex justify-end mb-2">
-              <ColumnsMenu columns={stmtCols.columns} visible={stmtCols.visible} onChange={stmtCols.setVisible} onReset={stmtCols.reset} />
+              <ColumnsMenu columns={stmtCols.columns} visible={stmtCols.visible} onChange={stmtCols.setVisible} onReset={() => { stmtCols.reset(); stmtW.reset(); }} />
             </div>
             <div className="overflow-x-auto">
-              <table className="table min-w-[560px]">
+              <table ref={stmtW.tableRef} style={stmtW.tableStyle} className="table min-w-[560px]">
                 <thead>
                   <tr>
                     {stmtCols.cols.map((col) => (
-                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      <th key={col.key} className={col.thClass || ''} {...stmtW.thProps(col.key)}>{col.label}{stmtW.ResizeHandle(col.key)}</th>
                     ))}
                   </tr>
                 </thead>

@@ -13,6 +13,7 @@ import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { resolveSales, resolveCommissionsOverview } from '../core/bridge/index.js';
 import useColumns from '../components/search/useColumns.js';
+import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../components/search/ColumnsMenu.jsx';
 
 /** How far back the cycle picker reaches (current + 5 closed cycles). */
@@ -286,6 +287,23 @@ export default function Comisiones() {
   const vendCols = useColumns(VENDEDOR_COLUMNS, VENDEDOR_DEFAULT, VENDEDOR_COLS_KEY);
   const profCols = useColumns(PROF_COLUMNS, PROF_DEFAULT, PROF_COLS_KEY);
   const detCols = useColumns(DETALLE_COLUMNS, DETALLE_DEFAULT, DETALLE_COLS_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns of each table.
+  const {
+    tableRef: myTableRef, tableStyle: myTableStyle, thProps: myThProps,
+    ResizeHandle: MyHandle, reset: resetMyWidths,
+  } = useColumnWidths(myCols.cols, 'rs.comisiones.mias.widths.v1');
+  const {
+    tableRef: vendTableRef, tableStyle: vendTableStyle, thProps: vendThProps,
+    ResizeHandle: VendHandle, reset: resetVendWidths,
+  } = useColumnWidths(vendCols.cols, 'rs.comisiones.vendedores.widths.v1');
+  const {
+    tableRef: profTableRef, tableStyle: profTableStyle, thProps: profThProps,
+    ResizeHandle: ProfHandle, reset: resetProfWidths,
+  } = useColumnWidths(profCols.cols, 'rs.comisiones.profesionales.widths.v1');
+  const {
+    tableRef: detTableRef, tableStyle: detTableStyle, thProps: detThProps,
+    ResizeHandle: DetHandle, reset: resetDetWidths,
+  } = useColumnWidths(detCols.cols, 'rs.comisiones.detalle.widths.v1');
 
   return (
     <>
@@ -348,14 +366,14 @@ export default function Comisiones() {
             </div>
             <div className="hidden md:block card overflow-hidden">
               <div className="flex justify-end px-3 pt-3">
-                <ColumnsMenu columns={myCols.columns} visible={myCols.visible} onChange={myCols.setVisible} onReset={myCols.reset} />
+                <ColumnsMenu columns={myCols.columns} visible={myCols.visible} onChange={myCols.setVisible} onReset={() => { myCols.reset(); resetMyWidths(); }} />
               </div>
               <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={myTableRef} style={myTableStyle} className="table">
                   <thead>
                     <tr>
                       {myCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...myThProps(col.key)}>{col.label}{MyHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -437,14 +455,14 @@ export default function Comisiones() {
             </div>
             <div className="hidden md:block">
               <div className="flex justify-end px-3 pt-3">
-                <ColumnsMenu columns={vendCols.columns} visible={vendCols.visible} onChange={vendCols.setVisible} onReset={vendCols.reset} />
+                <ColumnsMenu columns={vendCols.columns} visible={vendCols.visible} onChange={vendCols.setVisible} onReset={() => { vendCols.reset(); resetVendWidths(); }} />
               </div>
               <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={vendTableRef} style={vendTableStyle} className="table">
                   <thead>
                     <tr>
                       {vendCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...vendThProps(col.key)}>{col.label}{VendHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -494,14 +512,14 @@ export default function Comisiones() {
               </div>
               <div className="hidden md:block">
                 <div className="flex justify-end px-3 pt-3">
-                  <ColumnsMenu columns={profCols.columns} visible={profCols.visible} onChange={profCols.setVisible} onReset={profCols.reset} />
+                  <ColumnsMenu columns={profCols.columns} visible={profCols.visible} onChange={profCols.setVisible} onReset={() => { profCols.reset(); resetProfWidths(); }} />
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="table">
+                  <table ref={profTableRef} style={profTableStyle} className="table">
                     <thead>
                       <tr>
                         {profCols.cols.map((col) => (
-                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          <th key={col.key} className={col.thClass || ''} {...profThProps(col.key)}>{col.label}{ProfHandle(col.key)}</th>
                         ))}
                       </tr>
                     </thead>
@@ -571,14 +589,14 @@ export default function Comisiones() {
             </div>
             <div className="hidden md:block">
               <div className="flex justify-end px-3 pt-3">
-                <ColumnsMenu columns={detCols.columns} visible={detCols.visible} onChange={detCols.setVisible} onReset={detCols.reset} />
+                <ColumnsMenu columns={detCols.columns} visible={detCols.visible} onChange={detCols.setVisible} onReset={() => { detCols.reset(); resetDetWidths(); }} />
               </div>
               <div className="overflow-x-auto">
-                <table className="table">
+                <table ref={detTableRef} style={detTableStyle} className="table">
                   <thead>
                     <tr>
                       {detCols.cols.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...detThProps(col.key)}>{col.label}{DetHandle(col.key)}</th>
                       ))}
                     </tr>
                   </thead>

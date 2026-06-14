@@ -13,6 +13,7 @@ import InventorySubnav from '../../components/InventorySubnav.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
@@ -136,6 +137,15 @@ export default function Existencias() {
   // and feed the full set to their <ColumnsMenu>.
   const stockCols = useColumns(STOCK_COLUMNS, STOCK_DEFAULT, STOCK_COLS_KEY);
   const kardexCols = useColumns(KARDEX_COLUMNS, KARDEX_DEFAULT, KARDEX_COLS_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns of each table.
+  const {
+    tableRef: stockTableRef, tableStyle: stockTableStyle, thProps: stockThProps,
+    ResizeHandle: StockResizeHandle, reset: resetStockWidths,
+  } = useColumnWidths(stockCols.cols, 'rs.existencias.widths.v1');
+  const {
+    tableRef: kardexTableRef, tableStyle: kardexTableStyle, thProps: kardexThProps,
+    ResizeHandle: KardexResizeHandle, reset: resetKardexWidths,
+  } = useColumnWidths(kardexCols.cols, 'rs.existencias.kardex.widths.v1');
 
   async function createItem() {
     if (!itemForm.name.trim()) return;
@@ -242,14 +252,14 @@ export default function Existencias() {
           />
           <div className="hidden md:block card overflow-hidden">
             <div className="flex justify-end px-3 pt-3">
-              <ColumnsMenu columns={stockCols.columns} visible={stockCols.visible} onChange={stockCols.setVisible} onReset={stockCols.reset} />
+              <ColumnsMenu columns={stockCols.columns} visible={stockCols.visible} onChange={stockCols.setVisible} onReset={() => { stockCols.reset(); resetStockWidths(); }} />
             </div>
             <div className="overflow-x-auto">
-            <table className="table min-w-[320px]">
+            <table ref={stockTableRef} style={stockTableStyle} className="table min-w-[320px]">
               <thead>
                 <tr>
                   {stockCols.cols.map((col) => (
-                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    <th key={col.key} className={col.thClass || ''} {...stockThProps(col.key)}>{col.label}{StockResizeHandle(col.key)}</th>
                   ))}
                 </tr>
               </thead>
@@ -308,14 +318,14 @@ export default function Existencias() {
                 ) : (
                   <>
                   <div className="hidden md:flex justify-end mb-2">
-                    <ColumnsMenu columns={kardexCols.columns} visible={kardexCols.visible} onChange={kardexCols.setVisible} onReset={kardexCols.reset} />
+                    <ColumnsMenu columns={kardexCols.columns} visible={kardexCols.visible} onChange={kardexCols.setVisible} onReset={() => { kardexCols.reset(); resetKardexWidths(); }} />
                   </div>
                   <div className="overflow-x-auto -mx-4 px-4">
-                  <table className="w-full text-sm min-w-[300px]">
+                  <table ref={kardexTableRef} style={kardexTableStyle} className="w-full text-sm min-w-[300px]">
                     <thead className="text-ink-500 text-xs uppercase tracking-wide">
                       <tr>
                         {kardexCols.cols.map((col) => (
-                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          <th key={col.key} className={col.thClass || ''} {...kardexThProps(col.key)}>{col.label}{KardexResizeHandle(col.key)}</th>
                         ))}
                       </tr>
                     </thead>

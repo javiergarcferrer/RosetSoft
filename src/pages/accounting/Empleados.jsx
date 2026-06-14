@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 /** Empleados — payroll master. Self-gates on accounting/admin. */
@@ -37,6 +38,7 @@ export default function Empleados() {
 
   const empQ = useLiveQueryStatus(() => db.employees.where('profileId').equals(scope).toArray(), [scope], []);
   const { columns, visible, setVisible, reset, cols } = useColumns(EMPLEADO_COLUMNS, EMPLEADO_DEFAULT, EMPLEADO_COLS_KEY);
+  const { tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths } = useColumnWidths(cols, 'rs.empleados.widths.v1');
   const [params] = useSearchParams();
   const [editing, setEditing] = useState(params.get('new') ? 'new' : null);
   const [form, setForm] = useState(blank());
@@ -121,13 +123,13 @@ export default function Empleados() {
           {/* Desktop: table */}
           <div className="hidden sm:block">
             <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
-              <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+              <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
             </div>
             <div className="overflow-x-auto">
-              <table className="table">
+              <table ref={tableRef} style={tableStyle} className="table">
                 <thead>
                   <tr>
-                    {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
+                    {cols.map((c) => <th key={c.key} className={c.thClass} {...thProps(c.key)}>{c.label}{ResizeHandle(c.key)}</th>)}
                     <th></th>
                   </tr>
                 </thead>

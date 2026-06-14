@@ -12,6 +12,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   buildPurchaseEntry, computeExpenseTaxes, resolveAccountingConfig,
@@ -100,6 +101,10 @@ export default function Compras() {
 
   // Column visibility (Shopify "edit columns") — persisted per browser.
   const { visible, setVisible, reset, cols } = useColumns(COMPRAS_COLUMNS, COMPRAS_DEFAULT, COMPRAS_COLS_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.compras.widths.v1');
 
   const rows = purchasesQ.data.slice().sort((a, b) => (b.purchaseAt || 0) - (a.purchaseAt || 0));
 
@@ -134,15 +139,18 @@ export default function Compras() {
         />
         <div className="hidden md:block">
           <div className="flex justify-end mb-2">
-            <ColumnsMenu columns={COMPRAS_COLUMNS} visible={visible} onChange={setVisible} onReset={reset} />
+            <ColumnsMenu columns={COMPRAS_COLUMNS} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table min-w-[640px]">
+              <table ref={tableRef} style={tableStyle} className="table min-w-[640px]">
                 <thead>
                   <tr>
                     {cols.map((col) => (
-                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                        {col.label}
+                        {ResizeHandle(col.key)}
+                      </th>
                     ))}
                   </tr>
                 </thead>

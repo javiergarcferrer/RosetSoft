@@ -14,6 +14,7 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import PeriodPicker, { periodWindow } from '../../components/accounting/PeriodPicker.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
+import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
@@ -198,6 +199,15 @@ export default function Expenses() {
   const {
     visible: visible606, setVisible: setVisible606, reset: reset606, cols: cols606,
   } = useColumns(FORM606_COLUMNS, FORM606_DEFAULT, FORM606_COLS_KEY);
+  // Drag-to-resize widths (persisted), one set per table (Gastos list + 606).
+  const {
+    tableRef: tableRefList, tableStyle: tableStyleList, thProps: thPropsList,
+    ResizeHandle: ResizeHandleList, reset: resetWidthsList,
+  } = useColumnWidths(colsList, 'rs.expenses.widths.v1');
+  const {
+    tableRef: tableRef606, tableStyle: tableStyle606, thProps: thProps606,
+    ResizeHandle: ResizeHandle606, reset: resetWidths606,
+  } = useColumnWidths(cols606, 'rs.expenses.606.widths.v1');
 
   function export606() {
     const rows = [
@@ -277,15 +287,18 @@ export default function Expenses() {
           />
           <div className="hidden md:block">
             <div className="flex justify-end mb-2">
-              <ColumnsMenu columns={EXPENSES_COLUMNS} visible={visibleList} onChange={setVisibleList} onReset={resetList} />
+              <ColumnsMenu columns={EXPENSES_COLUMNS} visible={visibleList} onChange={setVisibleList} onReset={() => { resetList(); resetWidthsList(); }} />
             </div>
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="table min-w-[680px]">
+                <table ref={tableRefList} style={tableStyleList} className="table min-w-[680px]">
                   <thead>
                     <tr>
                       {colsList.map((col) => (
-                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        <th key={col.key} className={col.thClass || ''} {...thPropsList(col.key)}>
+                          {col.label}
+                          {ResizeHandleList(col.key)}
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -369,15 +382,18 @@ export default function Expenses() {
             />
             <div className="hidden md:block">
               <div className="flex justify-end mb-2">
-                <ColumnsMenu columns={FORM606_COLUMNS} visible={visible606} onChange={setVisible606} onReset={reset606} />
+                <ColumnsMenu columns={FORM606_COLUMNS} visible={visible606} onChange={setVisible606} onReset={() => { reset606(); resetWidths606(); }} />
               </div>
               <div className="card overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="table min-w-[760px]">
+                  <table ref={tableRef606} style={tableStyle606} className="table min-w-[760px]">
                     <thead>
                       <tr>
                         {cols606.map((col) => (
-                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          <th key={col.key} className={col.thClass || ''} {...thProps606(col.key)}>
+                            {col.label}
+                            {ResizeHandle606(col.key)}
+                          </th>
                         ))}
                       </tr>
                     </thead>

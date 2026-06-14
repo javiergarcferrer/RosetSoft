@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, Users, ArrowRight, ChevronDown, ExternalLink, FileText, Mail, MessageCircle,
-  Phone, SearchX, Trash2, Megaphone,
+  Phone, SearchX, Trash2, Megaphone, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -12,6 +12,7 @@ import CustomerModal from '../components/CustomerModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import useColumns from '../components/search/useColumns.js';
+import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import {
   Cell, PanelField, PanelTextArea, RncPanelField, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
@@ -59,6 +60,7 @@ const CUSTOMER_COLUMNS = [
   {
     key: 'name', label: 'Nombre', canHide: false,
     tdClass: 'font-medium max-w-[200px]',
+    sortKey: 'name',
     th: ({ sort, onSort }) => <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={onSort} />,
     cell: ({ c, row, rollup, onCommit }) => (
       <div className="flex items-center gap-1.5">
@@ -70,6 +72,7 @@ const CUSTOMER_COLUMNS = [
   {
     key: 'company', label: 'Empresa',
     tdClass: 'max-w-[180px]',
+    sortKey: 'company',
     th: ({ sort, onSort }) => <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={onSort} />,
     cell: ({ c, row, onCommit }) => (
       <Cell value={c.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${c.name}`} />
@@ -101,6 +104,7 @@ const CUSTOMER_COLUMNS = [
   {
     key: 'pipeline', label: 'Pipeline',
     tdClass: 'text-right tabular-nums whitespace-nowrap',
+    sortKey: 'pipeline', numeric: true, thClass: 'text-right',
     th: ({ sort, onSort }) => <SortableTh label="Pipeline" sortKey="pipeline" sort={sort} onSort={onSort} numeric className="text-right" />,
     cell: ({ rollup }) => (
       rollup?.openCount > 0 ? (
@@ -117,7 +121,8 @@ const CUSTOMER_COLUMNS = [
     // xl-only: at lg the column total exceeds the container and the squeeze
     // clips the phone digits.
     key: 'lifetime', label: 'Compras',
-    thClass: 'hidden xl:table-cell', tdClass: 'hidden xl:table-cell text-right tabular-nums whitespace-nowrap',
+    thClass: 'hidden xl:table-cell text-right', tdClass: 'hidden xl:table-cell text-right tabular-nums whitespace-nowrap',
+    sortKey: 'lifetime', numeric: true,
     th: ({ sort, onSort }) => <SortableTh label="Compras" sortKey="lifetime" sort={sort} onSort={onSort} numeric className="text-right hidden xl:table-cell" />,
     cell: ({ rollup }) => (
       rollup?.acceptedTotal > 0 ? (
@@ -206,6 +211,10 @@ export default function Customers() {
   const {
     visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
   } = useColumns(CUSTOMER_COLUMNS, CUSTOMER_DEFAULT_COLS, CUSTOMER_COLS_STORAGE_KEY);
+  // Drag-to-resize widths (persisted) for the same visible columns.
+  const {
+    tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
+  } = useColumnWidths(cols, 'rs.customers.widths.v1');
   const colSpan = cols.length + 2; // chevron + data columns + actions
 
   // One field per commit, straight to the row — same sheet semantics as
@@ -296,7 +305,7 @@ export default function Customers() {
             columns={CUSTOMER_COLUMNS}
             visibleColumns={visibleCols}
             onColumnsChange={setVisibleCols}
-            onColumnsReset={resetCols}
+            onColumnsReset={() => { resetCols(); resetWidths(); }}
             resultCount={rows.length}
             resultNoun={['cliente', 'clientes']}
           />
@@ -324,14 +333,19 @@ export default function Customers() {
               so it scrolls horizontally when many are on. */}
           <div className="hidden md:block card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table">
+              <table ref={tableRef} style={tableStyle} className="table">
                 <thead>
                   <tr>
                     <th className="w-8"></th>
                     {cols.map((col) => (
                       col.th
-                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} />
-                        : <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} thProps={thProps} ResizeHandle={ResizeHandle} />
+                        : (
+                          <th key={col.key} className={col.thClass || ''} {...thProps(col.key)}>
+                            {col.label}
+                            {ResizeHandle(col.key)}
+                          </th>
+                        )
                     ))}
                     <th className="w-10"></th>
                   </tr>
@@ -384,12 +398,49 @@ function NoMatchesCard() {
 }
 
 /**
- * Renders one sortable header from a column definition — the `th(hctx)` from
- * CUSTOMER_COLUMNS reused so the desktop column headers keep their sort
- * affordance (SortableTh) while the column set is data-driven.
+ * Renders one sortable header from a column definition. It mirrors SortableTh's
+ * sort affordance but owns its own <th> so the resize hook can spread thProps
+ * (data-col-key + persisted width) onto it and render the drag handle as its
+ * last child — SortableTh's <th> isn't ours to augment. Non-sortable columns
+ * (no `col.sortKey`) fall back to a plain resizable header.
  */
-function ColumnTh({ col, sort, onSort }) {
-  return col.th({ sort, onSort });
+function ColumnTh({ col, sort, onSort, thProps, ResizeHandle }) {
+  if (!col.sortKey) {
+    return (
+      <th className={col.thClass || ''} {...thProps(col.key)}>
+        {col.label}
+        {ResizeHandle(col.key)}
+      </th>
+    );
+  }
+  const active = sort.key === col.sortKey;
+  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th
+      className={col.thClass || ''}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      {...thProps(col.key)}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(active
+          ? { key: col.sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: col.sortKey, dir: col.numeric ? 'desc' : 'asc' })}
+        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
+          col.numeric ? 'w-full justify-end' : ''
+        } ${active ? 'text-ink-900' : ''}`}
+        title={`Ordenar por ${col.label}`}
+      >
+        {col.label}
+        <Icon
+          size={11}
+          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
+          aria-hidden
+        />
+      </button>
+      {ResizeHandle(col.key)}
+    </th>
+  );
 }
 
 /** One client as a sheet row + (when open) the full-record dropdown row. */
