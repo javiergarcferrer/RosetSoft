@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown, TriangleAlert, X, Loader2 } from 'lucide-react';
+import { lookupRnc, cleanRnc, isValidRncOrCedula } from '../../lib/rncLookup.js';
 
 // Shared primitives for the inline-editable "sheet" list pages
 // (Profesionales, Clientes). One home so the two sheets can't drift on
@@ -162,6 +163,89 @@ export function PanelField({ label, value, onCommit, type = 'text', inputMode, p
           }
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * RNC / cédula field with DGII auto-fill, for the expanded-panel grid. Same
+ * draft/commit chrome as PanelField, plus: when a VALID, CHANGED id is
+ * committed (blur/Enter) it looks the taxpayer up in the DGII registry and
+ * writes the resolved name into the Empresa field via `onResolveCompany`
+ * (razón social, falling back to nombre comercial). A tiny status line under
+ * the input echoes the match (or "no encontrado"). Shared by the Clientes and
+ * Profesionales panels so both auto-fill identically.
+ *
+ *   value             — the stored RNC/cédula.
+ *   onCommitRnc(v)    — persists the id; may return false to reject (revert).
+ *   onResolveCompany(name) — persists the looked-up company name.
+ */
+export function RncPanelField({ value, onCommitRnc, onResolveCompany, className = '' }) {
+  const [draft, setDraft] = useState(value ?? '');
+  const focused = useRef(false);
+  const [looking, setLooking] = useState(false);
+  const [status, setStatus] = useState('');
+  useEffect(() => { if (!focused.current) setDraft(value ?? ''); }, [value]);
+
+  async function commit() {
+    focused.current = false;
+    const clean = cleanRnc(draft);
+    if (clean !== draft) setDraft(clean);
+    // Persist the id only when it actually changed — and gate the lookup on the
+    // same, so tabbing through an unchanged RNC never re-overwrites Empresa.
+    if (clean === String(value ?? '')) return;
+    const ok = await onCommitRnc(clean);
+    if (ok === false) { setDraft(value ?? ''); return; }
+    if (!isValidRncOrCedula(clean)) { setStatus(''); return; }
+    setLooking(true);
+    try {
+      const r = await lookupRnc(clean);
+      if (r.found) {
+        const name = r.commercialName || r.name || '';
+        if (name) await onResolveCompany(name);
+        setStatus(`✓ ${r.name}${r.status ? ` · ${r.status}` : ''}`);
+      } else {
+        setStatus(r.message || 'No encontrado.');
+      }
+    } catch {
+      setStatus('No se pudo consultar el RNC.');
+    } finally {
+      setLooking(false);
+    }
+  }
+
+  return (
+    <div className={className}>
+      <span className="eyebrow-xs text-ink-400">RNC</span>
+      <div className="relative mt-1">
+        <input
+          inputMode="numeric"
+          className="w-full rounded-lg border border-ink-100 bg-surface px-2.5 py-1.5 pr-8 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-400/70 transition-shadow"
+          value={draft}
+          placeholder="—"
+          aria-label="RNC"
+          enterKeyHint="search"
+          onFocus={(e) => { focused.current = true; e.target.select(); }}
+          onChange={(e) => { setDraft(e.target.value); if (status) setStatus(''); }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+            if (e.key === 'Escape') {
+              const el = e.currentTarget;
+              setDraft(value ?? ''); setStatus('');
+              requestAnimationFrame(() => el.blur());
+            }
+          }}
+        />
+        {looking && (
+          <Loader2 size={14} aria-hidden className="animate-spin text-ink-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
+        )}
+      </div>
+      {status && (
+        <p className={`mt-1 text-[11px] leading-tight ${status.startsWith('✓') ? 'text-emerald-600' : 'text-ink-400'}`}>
+          {status}
+        </p>
+      )}
     </div>
   );
 }
