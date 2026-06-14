@@ -202,7 +202,7 @@ export default function Chats() {
           the thread scroll, inside the pane. Negative margins cancel the
           shared content-wrapper padding; `kb-inbox-pane` lets the keyboard
           shrink the column. Desktop keeps the original flow via the md heights. */}
-      <div className="flex flex-col kb-inbox-pane max-md:h-[calc(100dvh-55px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-md:-mt-4 max-md:-mb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col kb-inbox-pane max-md:h-[calc(var(--rs-vvh,100dvh)-55px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-md:-mt-4 max-md:-mb-[calc(1.5rem+env(safe-area-inset-bottom))]">
       {/* On a phone an OPEN thread takes the page over: the page header
           (Difusión, Nuevo chat — list-level actions) steps aside and
           ChatThread's own header carries Back; it returns with the list. */}

@@ -113,6 +113,15 @@ export function installVirtualKeyboardWatcher() {
     // Publish only the OVERLAY — in a resized webview (overlay ~0) the layout
     // already sits above the keyboard, so the lift must stay 0, not `inset`.
     root.style.setProperty('--rs-keyboard', `${open ? overlay : 0}px`);
+    // Publish the live visual-viewport HEIGHT — the one signal that is correct
+    // in BOTH engines: in a Safari tab it shrinks as the keyboard overlays, in a
+    // PWA it shrinks as the webview resizes. A viewport-locked surface (the
+    // WhatsApp inbox) sizes its column to this so the composer always rests flush
+    // on the keyboard's top edge, with no dvh guesswork and no dead gap. We don't
+    // gate it on `open`: it must stay accurate while the keyboard is down too, so
+    // the column is full-height at rest. (`offsetTop` is folded in so a Safari
+    // tab that pushes the visual viewport down still measures the visible band.)
+    root.style.setProperty('--rs-vvh', `${Math.round(vv.height + vv.offsetTop)}px`);
   };
 
   // `focusout` fires with document.activeElement momentarily on <body> even when

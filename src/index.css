@@ -1031,22 +1031,21 @@
      otherwise its composer floats a bar's-height above the keyboard. (No bottom
      safe-area inset here: the home indicator is hidden behind the keyboard.) */
   html.kb-open .kb-chat-pane {
-    height: calc(100dvh - 3.5rem - env(safe-area-inset-top));
+    height: calc(var(--rs-vvh, 100dvh) - 3.5rem - env(safe-area-inset-top));
   }
-  /* The WhatsApp inbox thread fills the viewport minus the app chrome AND both
-     safe-area insets (Chats.jsx, the selectedKey height). In an installed PWA
-     the webview RESIZES to exclude the keyboard when it opens, but the bottom
-     safe-area inset (the home indicator, now hidden behind the keyboard) is
-     still subtracted — floating the composer that inset ABOVE the keyboard as a
-     dead gap. Reclaim it while typing, exactly like the quote chat pane above.
-     Phones only (the bar's own breakpoint); md+ has no soft keyboard. */
+  /* The WhatsApp inbox thread fills the viewport minus the app chrome (Chats.jsx
+     sizes the locked column to `var(--rs-vvh) - topbar - both safe insets`).
+     `--rs-vvh` is the LIVE visual-viewport height published by useVirtualKeyboard
+     — the one measure that shrinks for the keyboard on BOTH engines (Safari-tab
+     overlay AND PWA resize), so the column's bottom edge always lands on the
+     keyboard's top edge and the composer sits flush, like native WhatsApp. The
+     ONLY thing this open-state rule changes is dropping the bottom safe-area
+     inset: with the keyboard up the home indicator hides behind it, so that inset
+     is no longer real space to reserve — reclaiming it removes the last sliver of
+     gap. Phones only (the bar's own breakpoint); md+ has no soft keyboard. */
   @media (max-width: 767.98px) {
     html.kb-open .kb-inbox-pane {
-      /* Keyboard up: the webview already excludes the keyboard, and the home
-         indicator is hidden behind it, so only the topbar (55px + safe-top) is
-         subtracted — no safe-area-inset-bottom. Matches the locked-column base
-         height in Chats.jsx (which drops the bottom inset when typing). */
-      height: calc(100dvh - 55px - env(safe-area-inset-top));
+      height: calc(var(--rs-vvh, 100dvh) - 55px - env(safe-area-inset-top));
     }
   }
 }
