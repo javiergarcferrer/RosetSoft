@@ -29,7 +29,6 @@ import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
 import { displayPhone, waDigits } from '../lib/phone.js';
 import TotalsDock from '../components/quote-builder/TotalsDock.jsx';
 import ModeBar from '../components/quote-builder/ModeBar.jsx';
-import { useMediaQuery } from '../components/Layout.jsx';
 import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
@@ -610,15 +609,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     if (scroller) scroller.scrollTop = composeScrollRef.current;
   }, [view]);
 
-  // 'chat' is mobile-only (the bottom ModeBar's third tab — desktop has the
-  // inline chat card instead). If the viewport grows past md while chat is
-  // active, fall back to compose so the desktop layout never strands on a
-  // mode it has no switcher for.
-  const isMobile = !useMediaQuery('(min-width: 768px)');
-  useEffect(() => {
-    if (!isMobile && view === 'chat') changeView('compose');
-  }, [isMobile, view, changeView]);
-
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
    *   ⌘↵       — open the catalog to add a product (works even inside an input)
@@ -662,21 +652,19 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
       {/* Scroll-position anchor — its scroll parent is the app-shell <main>,
           which changeView snapshots/restores across mode switches. */}
       <div ref={topRef} className="hidden" aria-hidden />
-      {/* The quote-editing chrome (identity, customer/seller chips, undo/redo,
-          view toggle) belongs to the editor. On a phone the Cliente and
-          WhatsApp tabs are stand-alone mini-apps — they get the WHOLE pane, so
-          the header is dropped there and the bottom ModeBar owns navigation
-          between the three surfaces. Desktop always shows it (the only place the
-          client toggle lives) and chat is mobile-only, so it never strands. */}
-      {(!isMobile || view === 'compose') && (
+      {/* The quote-editing chrome (identity, customer/seller chips, undo/redo)
+          belongs to the editor only. The Cliente and WhatsApp tabs are
+          stand-alone mini-apps — they get the WHOLE pane at every width — so
+          the header renders in compose alone and the ModeBar (bottom bar on
+          phones, floating siderail on desktop) owns navigation between the
+          three surfaces. */}
+      {view === 'compose' && (
         <QuoteHeader
           quote={quote}
           invoice={invoice}
           customers={customers}
           professionals={professionals}
           profileId={profileId}
-          view={view}
-          onViewChange={changeView}
           onUpdateQuote={hx(updateQuote)}
           onUndo={undo}
           onRedo={redo}
@@ -1003,18 +991,23 @@ function ChatPaneCard({ quote, customer, settings }) {
   }
 
   return (
-    // A full-bleed mini-app: the conversation breaks OUT of the page's padding
-    // (-mx-4 cancels the shell's px-4, -mt-4 its top py-4) so the thread spans
-    // the whole phone width edge-to-edge and starts right under the app topbar —
-    // a native chat surface, not a card floating in a gutter. It fills the
-    // viewport between the topbar above and the bottom ModeBar below: the only
-    // chrome to subtract is the topbar (~3.5rem, the top padding now reclaimed)
-    // and the ModeBar (~3.5rem) = 7rem, plus the safe-area insets that ride
-    // inside 100dvh. Bottom lands exactly on the ModeBar's top edge (no dead
-    // gap, no composer hidden behind the bar); the min-h floor keeps the
-    // composer usable on short landscape phones. md:* resets are harmless
-    // belt-and-suspenders — chat is mobile-only and redirects to compose at md.
-    <div className="kb-chat-pane -mx-4 -mt-4 md:mx-0 md:mt-0 bg-surface overflow-hidden flex flex-col h-[calc(var(--rs-vvh,100dvh)-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem]">
+    // A full-bleed mini-app on phones: the conversation breaks OUT of the
+    // page's padding (-mx-4 cancels the shell's px-4, -mt-4 its top py-4) so the
+    // thread spans the whole phone width edge-to-edge and starts right under the
+    // app topbar — a native chat surface, not a card floating in a gutter. It
+    // fills the viewport between the topbar above and the bottom ModeBar below:
+    // the chrome to subtract is the topbar (~3.5rem, the top padding now
+    // reclaimed) and the ModeBar (~3.5rem) = 7rem, plus the safe-area insets
+    // that ride inside 100dvh. Bottom lands exactly on the ModeBar's top edge
+    // (no dead gap, no composer hidden behind the bar); the min-h floor keeps
+    // the composer usable on short landscape phones.
+    // From md: up the WhatsApp tab is a first-class mode too (the floating
+    // siderail reaches it). The negative margins reset and it renders as a
+    // bordered panel inside the page; the same 7rem subtract (now with no
+    // mobile topbar or bottom bar to clear) leaves it short of the viewport, so
+    // it sits within the page padding with no scroll, and the siderail floats
+    // clear of it at mid-height.
+    <div className="kb-chat-pane -mx-4 -mt-4 md:mx-0 md:mt-0 bg-surface overflow-hidden flex flex-col h-[calc(var(--rs-vvh,100dvh)-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[20rem] md:rounded-2xl md:border md:border-ink-200 md:shadow-soft">
       <div className="px-4 py-2 border-b border-ink-100 flex items-center justify-between gap-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
         <span className="text-[11px] text-ink-400 min-w-0 truncate">
           WhatsApp · {customer.name || customer.company} · {displayPhone(phone)}

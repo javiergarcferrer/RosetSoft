@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Briefcase, Check, Eye, Pencil, Undo2, Redo2, UserX } from 'lucide-react';
+import { ArrowLeft, Briefcase, Check, Undo2, Redo2, UserX } from 'lucide-react';
 import { useGoBack } from '../../context/NavMemory.jsx';
 import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 import CustomerChip from './CustomerChip.jsx';
@@ -14,9 +14,11 @@ import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
 /**
  * Top of the quote workspace. Title (editable inline), customer chip,
- * container chip, save indicator, view toggle (compose / client preview),
- * and undo/redo. Export PDF and Share moved to the persistent bottom totals
- * dock so they're always reachable.
+ * container chip, save indicator, and undo/redo. Switching between the
+ * editor / client preview / WhatsApp surfaces lives in the ModeBar (the
+ * bottom bar on phones, the floating siderail on desktop), not here. Export
+ * PDF and Share moved to the persistent bottom totals dock so they're always
+ * reachable.
  *
  * The title is inline-editable: clicking the H1 swaps in an input. The "back
  * to quotes" link is a tiny breadcrumb above. This consolidates four
@@ -28,8 +30,6 @@ export default function QuoteHeader({
   customers,
   professionals,
   profileId,
-  view,
-  onViewChange,
   onUpdateQuote,
   onUndo,
   onRedo,
@@ -99,7 +99,6 @@ export default function QuoteHeader({
         ) : null}
         <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
           <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
-          <ViewToggle view={view} onChange={onViewChange} />
         </div>
       </div>
 
@@ -255,42 +254,6 @@ function UndoRedo({ onUndo, onRedo, canUndo, canRedo }) {
         aria-label="Rehacer"
       >
         <Redo2 size={14} />
-      </button>
-    </div>
-  );
-}
-
-function ViewToggle({ view, onChange }) {
-  // Hidden under md: the mobile bottom ModeBar owns mode switching there
-  // (compose / client / chat) — keeping this pair too would be a second,
-  // partial switcher fighting over the same state.
-  return (
-    <div className="hidden md:inline-flex rounded-md border border-ink-200 overflow-hidden bg-surface shadow-xs">
-      <button
-        type="button"
-        onClick={() => onChange('compose')}
-        aria-pressed={view === 'compose'}
-        className={`px-2.5 sm:px-3 py-1.5 min-h-7 coarse:min-h-11 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${
-          view === 'compose'
-            ? 'bg-ink-900 text-ink-50 shadow-sm'
-            : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
-        }`}
-        title="Vista de edición"
-      >
-        <Pencil size={12} /> <span className="hidden sm:inline">Edición</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange('client')}
-        aria-pressed={view === 'client'}
-        className={`px-2.5 sm:px-3 py-1.5 min-h-7 coarse:min-h-11 text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-150 border-l border-ink-200 active:scale-[0.97] ${
-          view === 'client'
-            ? 'bg-brand-grad text-white shadow-glow'
-            : 'text-ink-500 hover:bg-ink-50 hover:text-ink-900'
-        }`}
-        title="Vista del cliente"
-      >
-        <Eye size={12} /> <span className="hidden sm:inline">Cliente</span>
       </button>
     </div>
   );

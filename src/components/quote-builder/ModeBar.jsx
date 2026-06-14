@@ -5,20 +5,38 @@ import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { phoneKey } from '../../lib/phone.js';
 
+// Shared per-tab unread pill so the bottom bar and the siderail can't drift.
+// Absolutely positioned against the icon's `relative` wrapper in both layouts.
+function Badge({ count }) {
+  if (count <= 0) return null;
+  return (
+    <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold inline-flex items-center justify-center tabular-nums">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 /**
- * Mobile-only bottom mode bar for the quote workspace — one thumb-reach
- * switch between the page's three surfaces: the editor (Cotización), the
- * client preview (Cliente) and the customer's WhatsApp conversation
- * (WhatsApp). On desktop the header's ViewToggle and the inline chat card
- * cover the same ground, so the bar renders only under md.
+ * Mode switcher for the quote workspace — one tap between the page's three
+ * surfaces: the editor (Cotización), the client preview (Cliente) and the
+ * customer's WhatsApp conversation (WhatsApp). The three tabs are identical in
+ * both layouts; only the chrome flips with the viewport:
+ *   • phones (< md): a thumb-reach bottom bar — the native pattern there.
+ *   • desktop (md+): a floating vertical siderail pinned to the right edge,
+ *     clear of the left nav and the bottom TotalsDock.
+ * This is now the ONE switcher at every width (it replaced the header's old
+ * ViewToggle), so the WhatsApp mode — previously mobile-only — is reachable
+ * on desktop too.
  *
  * Portaled to <body> for the same reason as TotalsDock: position:fixed inside
  * the app shell's scroll container is scoped to that container on iOS WebKit,
  * which would strand the bar above the home indicator. z-30 keeps it under
  * the nav drawer's z-40 dim (the drawer should cover page chrome); the
- * TotalsDock sits at bottom-14 directly above, so the two never overlap.
- * pb-safe-standalone paints the home-indicator inset white in the installed
- * PWA; kb-hide-when-open slides the bar away while typing in the page.
+ * TotalsDock sits at bottom-14 directly above the phone bar, so the two never
+ * overlap, and on desktop the dock is at bottom-0 while the rail floats at
+ * mid-height, so they stay clear there too. pb-safe-standalone paints the
+ * home-indicator inset white in the installed PWA; kb-hide-when-open slides
+ * the bar away while typing in the page.
  *
  * The WhatsApp tab always switches — when something's missing (no customer,
  * no phone, not connected) the chat view itself explains the next step — and
@@ -45,40 +63,70 @@ export default function ModeBar({ view, onChange, customer }) {
   ];
 
   return createPortal(
-    <nav
-      aria-label="Modo de la cotización"
-      className="fixed inset-x-0 bottom-0 z-30 md:hidden print:hidden kb-hide-when-open"
-    >
-      <div className="bg-surface border-t border-ink-200 shadow-pop pb-safe-standalone">
-        <div className="grid grid-cols-3">
-          {tabs.map(({ id, label, icon: Icon, badge }) => {
-            const active = view === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onChange(id)}
-                aria-pressed={active}
-                className={`relative h-14 inline-flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors active:bg-ink-50 ${
-                  active ? 'text-brand-700' : 'text-ink-400'
-                }`}
-              >
-                {active && <span aria-hidden className="absolute top-0 inset-x-6 h-0.5 rounded-b bg-brand-grad" />}
-                <span className="relative">
-                  <Icon size={19} aria-hidden />
-                  {badge > 0 && (
-                    <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-bold inline-flex items-center justify-center tabular-nums">
-                      {badge > 99 ? '99+' : badge}
-                    </span>
-                  )}
-                </span>
-                {label}
-              </button>
-            );
-          })}
+    <>
+      {/* Phones — bottom bar across the thumb's reach. */}
+      <nav
+        aria-label="Modo de la cotización"
+        className="fixed inset-x-0 bottom-0 z-30 md:hidden print:hidden kb-hide-when-open"
+      >
+        <div className="bg-surface border-t border-ink-200 shadow-pop pb-safe-standalone">
+          <div className="grid grid-cols-3">
+            {tabs.map(({ id, label, icon: Icon, badge }) => {
+              const active = view === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onChange(id)}
+                  aria-pressed={active}
+                  className={`relative h-14 inline-flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors active:bg-ink-50 ${
+                    active ? 'text-brand-700' : 'text-ink-400'
+                  }`}
+                >
+                  {active && <span aria-hidden className="absolute top-0 inset-x-6 h-0.5 rounded-b bg-brand-grad" />}
+                  <span className="relative">
+                    <Icon size={19} aria-hidden />
+                    <Badge count={badge} />
+                  </span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </nav>,
+      </nav>
+
+      {/* Desktop — floating vertical siderail on the right edge. Same three
+          tabs, stacked; the left accent bar mirrors the bottom bar's top
+          accent so the active mode reads the same in both chromes. */}
+      <nav
+        aria-label="Modo de la cotización"
+        className="hidden md:flex fixed right-3 top-1/2 -translate-y-1/2 z-30 print:hidden flex-col gap-1 p-1.5 rounded-2xl bg-surface/95 supports-[backdrop-filter]:bg-surface/80 backdrop-blur border border-ink-200 shadow-pop"
+      >
+        {tabs.map(({ id, label, icon: Icon, badge }) => {
+          const active = view === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChange(id)}
+              aria-pressed={active}
+              title={label}
+              className={`relative w-[4.5rem] py-2.5 inline-flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold whitespace-nowrap transition-colors ${
+                active ? 'text-brand-700 bg-brand-50' : 'text-ink-400 hover:text-ink-700 hover:bg-ink-50'
+              }`}
+            >
+              {active && <span aria-hidden className="absolute left-0 inset-y-3 w-0.5 rounded-r bg-brand-grad" />}
+              <span className="relative">
+                <Icon size={19} aria-hidden />
+                <Badge count={badge} />
+              </span>
+              {label}
+            </button>
+          );
+        })}
+      </nav>
+    </>,
     document.body,
   );
 }
