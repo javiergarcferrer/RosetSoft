@@ -43,6 +43,17 @@ Reglas:
 - No prometas descuentos, plazos ni precios que no estén en la conversación.
 - Una o dos frases suelen bastar. Sin emojis salvo que el cliente los use.`;
 
+const TRANSLATE_PROMPT = `Eres un traductor para el CRM de WhatsApp de Alcover.
+Traduce el mensaje del usuario entre español e inglés: si está en español,
+tradúcelo al inglés; si está en inglés, tradúcelo al español. Conserva el tono,
+el significado y el formato. Responde SOLO con la traducción — sin comillas, sin
+notas, sin prefacios.`;
+
+const SUMMARY_PROMPT = `Resume esta conversación de WhatsApp entre la tienda
+Alcover y un cliente para que un compañero la retome de un vistazo. Responde en
+español con 2 a 4 viñetas breves: qué pide o pregunta el cliente, qué se acordó
+u ofreció, y qué queda pendiente. Sin preámbulos ni despedidas.`;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
 
@@ -68,15 +79,21 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let body: { turns?: Array<{ role?: string; text?: string }>; contactName?: string; contextNote?: string } = {};
+  let body: {
+    turns?: Array<{ role?: string; text?: string }>;
+    contactName?: string; contextNote?: string;
+    mode?: string; text?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
     /* handled below */
   }
 
-  const transcript = formatTranscript(body.turns);
-  if (!transcript) return json({ ok: false, error: 'No hay conversación para responder.' }, 400);
+  // suggest (default) drafts the next reply; translate flips a draft ES⇄EN;
+  // summary condenses the thread for a hand-off. All three share the auth +
+  // key path below and the same fast model.
+  const mode = body.mode === 'translate' || body.mode === 'summary' ? body.mode : 'suggest';
 
   // The key lives in the write-only claude_config table; only this service-role
   // read ever sees it.
@@ -90,33 +107,50 @@ Deno.serve(async (req) => {
   }
   const anthropic = new Anthropic({ apiKey: config.api_key });
 
-  const who = (body.contactName || '').trim();
-  const note = (body.contextNote || '').trim().slice(0, 500);
-  const userContent = [
-    who ? `Cliente: ${who}` : null,
-    note ? `Contexto: ${note}` : null,
-    'Conversación (más reciente al final):',
-    transcript,
-    '',
-    'Redacta la próxima respuesta de la tienda.',
-  ].filter(Boolean).join('\n');
+  let system = SYSTEM_PROMPT;
+  let userContent = '';
+  if (mode === 'translate') {
+    const text = String(body.text || '').trim().slice(0, 4000);
+    if (!text) return json({ ok: false, error: 'No hay texto para traducir.' }, 400);
+    system = TRANSLATE_PROMPT;
+    userContent = text;
+  } else if (mode === 'summary') {
+    const transcript = formatTranscript(body.turns);
+    if (!transcript) return json({ ok: false, error: 'No hay conversación para resumir.' }, 400);
+    system = SUMMARY_PROMPT;
+    userContent = `Conversación (más reciente al final):\n${transcript}`;
+  } else {
+    const transcript = formatTranscript(body.turns);
+    if (!transcript) return json({ ok: false, error: 'No hay conversación para responder.' }, 400);
+    const who = (body.contactName || '').trim();
+    const note = (body.contextNote || '').trim().slice(0, 500);
+    userContent = [
+      who ? `Cliente: ${who}` : null,
+      note ? `Contexto: ${note}` : null,
+      'Conversación (más reciente al final):',
+      transcript,
+      '',
+      'Redacta la próxima respuesta de la tienda.',
+    ].filter(Boolean).join('\n');
+  }
 
   try {
     const response = await anthropic.messages.create({
       model: DRAFT_MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system,
       messages: [{ role: 'user', content: userContent }],
     });
-    const draft = response.content
+    const out = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
       .join('\n')
       .trim();
-    if (response.stop_reason === 'refusal' || !draft) {
-      return json({ ok: false, error: 'El asistente no pudo redactar una respuesta para este mensaje.' });
+    if (response.stop_reason === 'refusal' || !out) {
+      return json({ ok: false, error: 'El asistente no pudo completar la solicitud.' });
     }
-    return json({ ok: true, draft, model: response.model });
+    if (mode === 'summary') return json({ ok: true, summary: out, model: response.model });
+    return json({ ok: true, draft: out, model: response.model });
   } catch (e) {
     return json({ ok: false, error: apiErrorMessage(e) }, 502);
   }

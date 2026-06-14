@@ -6,11 +6,12 @@ import {
   AlertTriangle, Clock, UserSquare2, Users, Plus, LayoutTemplate, Megaphone,
   FileText, Download, Reply, SmilePlus, SquareMenu, ShoppingBag, X, Search,
   Mic, Trash2, ExternalLink, MapPin, ContactRound, UserPlus, Zap, MoreVertical, Ban, Sparkles, ChevronDown, Tag,
+  Languages, ScrollText,
 } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import { resolveReferral, resolveOrderMessage, fillTemplateBody, fillQuickReply, resolveNewChatContacts, buildDraftTurns } from '../../core/crm/index.js';
 import { displayPhone, phoneKey } from '../../lib/phone.js';
-import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser } from '../../lib/whatsapp.js';
+import { listWaTemplates, listWaCatalog, fetchWaMediaUrl, sendWhatsappTyping, blockWhatsappUser, unblockWhatsappUser, translateWhatsappDraft, summarizeWhatsappThread } from '../../lib/whatsapp.js';
 import { startVoiceRecording, canRecordVoice, preloadVoiceRecorder } from '../../lib/loadOpusRecorder.js';
 import { db } from '../../db/database.js';
 import { useLiveQuery } from '../../db/hooks.js';
@@ -271,6 +272,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
     setError(null); setReplyTo(null); setPendingFile(null); setCaption(''); typingAt.current = 0;
     const firstUnread = thread.items.find((mm) => mm.direction === 'in' && !mm.readAt);
     setUnreadAnchorId(firstUnread?.id || null);
+    setSummaryText(null);
   }, [contact.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const key = draftKeyRef.current;
@@ -379,6 +381,40 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
       const el = composerRef.current;
       if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
     });
+  }
+
+  // Translate the current draft between Spanish and English in place — the
+  // dealer answers a foreign-language client without leaving the composer.
+  const [translating, setTranslating] = useState(false);
+  async function translateDraft() {
+    const body = text.trim();
+    if (!body || translating) return;
+    setTranslating(true);
+    setError(null);
+    const res = await translateWhatsappDraft(body);
+    setTranslating(false);
+    if (!res?.ok || !res.draft) { setError(res?.error || 'No se pudo traducir.'); return; }
+    setText(res.draft);
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); }
+    });
+  }
+
+  // Summarize the thread for a hand-off — shown as a dismissible banner above
+  // the composer, never sent to the customer.
+  const [summaryText, setSummaryText] = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+  async function summarize() {
+    if (summarizing) return;
+    setSummarizing(true);
+    setError(null);
+    setSummaryText(null);
+    const { turns } = buildDraftTurns(thread.items);
+    const res = await summarizeWhatsappThread({ turns, contactName: contact.name || null });
+    setSummarizing(false);
+    if (!res?.ok || !res.summary) { setError(res?.error || 'No se pudo resumir.'); return; }
+    setSummaryText(res.summary);
   }
 
   // Reactions fire straight from a bubble; failures surface on the shared
@@ -646,6 +682,13 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
         </div>
       )}
+      {summaryText && (
+        <div className="px-4 py-2 bg-sky-50 dark:bg-sky-950/40 border-t border-sky-100 dark:border-sky-900/40 text-[12px] text-sky-900 dark:text-sky-100 flex items-start gap-1.5">
+          <ScrollText size={13} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1 whitespace-pre-wrap">{summaryText}</div>
+          <button type="button" onClick={() => setSummaryText(null)} className="shrink-0 text-sky-700/70 hover:text-sky-900 dark:hover:text-sky-100" aria-label="Cerrar resumen"><X size={13} /></button>
+        </div>
+      )}
       {/* Quoted-reply preview — same visual language as the in-bubble quote. */}
       {replyTo && (
         <div className="flex items-center gap-2 px-3 py-2 border-t border-ink-100 bg-surface">
@@ -757,6 +800,14 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
                   key: 'ai', icon: Sparkles, label: 'Sugerir con IA',
                   onClick: suggestReply, busy: drafting, disabled: drafting,
                 },
+                text.trim() && {
+                  key: 'translate', icon: Languages, label: 'Traducir (ES⇄EN)',
+                  onClick: translateDraft, busy: translating, disabled: translating,
+                },
+                thread.items.length > 0 && {
+                  key: 'summary', icon: ScrollText, label: 'Resumen para retomar',
+                  onClick: summarize, busy: summarizing, disabled: summarizing,
+                },
                 quickReplies.length > 0 && {
                   key: 'quick', icon: Zap, label: 'Respuestas rápidas',
                   onClick: () => setQuickOpen(true),
@@ -788,7 +839,14 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               onChange={(e) => { setText(e.target.value); notifyTyping(); }}
               onPaste={pasteFile}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+                // Desktop: Enter sends, Shift+Enter newlines. Touch keyboards
+                // have no easy Shift, so there Enter inserts a newline and the
+                // send button is the only way out (the WhatsApp-mobile rule).
+                const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && !coarse) {
+                  e.preventDefault();
+                  submit();
+                }
               }}
               placeholder={connected ? 'Escribe un mensaje…' : 'Conecta WhatsApp en Configuración para enviar'}
               disabled={!connected}

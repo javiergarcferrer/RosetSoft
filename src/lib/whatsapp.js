@@ -216,6 +216,28 @@ export async function suggestWhatsappReply({ turns, contactName, contextNote } =
   return { ok: false, error: error.message || 'No se pudo contactar con el asistente.' };
 }
 
+/** Translate a composer draft between Spanish and English (server-held key). */
+export async function translateWhatsappDraft(text) {
+  const { data, error } = await supabase.functions.invoke('wa-draft', { body: { mode: 'translate', text } });
+  if (!error) return data;
+  const ctx = error.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { return await ctx.json(); } catch { /* not JSON — fall through */ }
+  }
+  return { ok: false, error: error.message || 'No se pudo traducir.' };
+}
+
+/** Summarize the thread for a hand-off (returns { ok, summary }). */
+export async function summarizeWhatsappThread({ turns, contactName } = {}) {
+  const { data, error } = await supabase.functions.invoke('wa-draft', { body: { mode: 'summary', turns, contactName } });
+  if (!error) return data;
+  const ctx = error.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { return await ctx.json(); } catch { /* not JSON — fall through */ }
+  }
+  return { ok: false, error: error.message || 'No se pudo resumir.' };
+}
+
 /** Read the number's conversational components (ice breakers + commands). */
 export async function getConversationalAutomation() {
   return invokeWaSend({ getConversationalAutomation: true });
