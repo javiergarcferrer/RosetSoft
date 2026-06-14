@@ -890,6 +890,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         open={sendOpen}
         onClose={() => setSendOpen(false)}
         customer={customer}
+        professional={professional}
         quote={quote}
         settings={settings}
         onUpdateQuote={hx(updateQuote)}

@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, X, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
+import { Check, X, Send, Loader2, AlertTriangle, Link2, FileText, User as UserIcon, DraftingCompass } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import BrandName from '../BrandName.jsx';
 import { db } from '../../db/database.js';
@@ -129,35 +129,47 @@ export default function WhatsAppChip({ customer }) {
 }
 
 /**
- * Confirm-and-send, in the dealer's choice of format:
- *   • Enlace — mints (once) the quote's public share link — same rule as
- *     useQuoteExport.mintClientLink, persisted through the caller's
- *     updateQuote — and ships it via the wa-send Edge Function (approved
- *     template outside the 24h window, free text inside it).
- *   • PDF — builds the same blob Exportar downloads (buildPdf =
- *     useQuoteExport.generatePdf) and ships it as a WhatsApp document.
- *     Documents are free-form media, so they only deliver inside the 24h
- *     window — the per-format hint below says so before the dealer sends.
+ * Confirm-and-send, in the dealer's choice of recipient AND format:
+ *   • Recipient — the client OR the assigned professional (architect /
+ *     decorator). Each is sent from the business number to THEIR own WhatsApp
+ *     and logged on THEIR thread (`recipientKind` → customerId / professionalId).
+ *     The toggle only appears when a professional is on the quote; otherwise
+ *     the client is the sole recipient as before.
+ *   • Format — Enlace mints (once) the quote's public share link — same rule as
+ *     useQuoteExport.mintClientLink, persisted through the caller's updateQuote
+ *     — and ships it via wa-send (approved template outside the 24h window,
+ *     free text inside it); PDF builds the same blob Exportar downloads
+ *     (buildPdf = useQuoteExport.generatePdf) and ships it as a WhatsApp
+ *     document (free-form media → 24h window only, as the per-format hint says).
  * Owns the in-flight/result state, and self-explains when the quote can't be
- * sent yet (no customer / no number / API not connected).
+ * sent yet (no recipient / no number / API not connected).
  *
  * The SINGLE send surface: rendered once at page level (QuoteBuilder) and
  * opened from the totals-dock action, so the whole app has ONE place that
- * sends a quote to the client — always through the dealer's WhatsApp number,
- * never an OS share-sheet that would bypass it.
+ * sends a quote — always through the dealer's WhatsApp number, never an OS
+ * share-sheet that would bypass it.
  */
-export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpdateQuote, buildPdf }) {
+export function SendQuoteModal({ open, onClose, customer, professional, quote, settings, onUpdateQuote, buildPdf }) {
   const [state, setState] = useState('idle'); // idle | sending | sent | error
   const [msg, setMsg] = useState('');
   const [format, setFormat] = useState('link'); // 'link' | 'pdf'
+  const [recipientKind, setRecipientKind] = useState('customer'); // 'customer' | 'professional'
   const template = (settings?.whatsappQuoteTemplate || '').trim();
   const canPdf = typeof buildPdf === 'function';
+
+  // The recipient toggle only matters when a professional is on the quote —
+  // otherwise the client is the only party. Force 'customer' when there's no
+  // professional so a stale toggle selection can never address a missing one.
+  const hasProfessional = !!professional;
+  const kind = hasProfessional ? recipientKind : 'customer';
+  const recipient = kind === 'professional' ? professional : customer;
 
   // Single send surface — opened from the totals dock for ANY quote, so a
   // prerequisite may still be missing. Explain the next step instead of
   // rendering a send form that would fail (no number to send to, no API).
   const connected = !!settings?.whatsappConnectedAt;
-  const phone = customer?.phone || '';
+  const phone = recipient?.phone || '';
+  const recipientNoun = kind === 'professional' ? 'el profesional' : 'el cliente';
   let blocker = null;
   if (!connected) {
     blocker = (
@@ -167,33 +179,35 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
         para enviar la cotización desde el número del negocio.
       </>
     );
-  } else if (!customer) {
-    blocker = <>Asigna un cliente a la cotización para poder enviarla por WhatsApp.</>;
+  } else if (!recipient) {
+    blocker = <>Asigna {kind === 'professional' ? 'un profesional' : 'un cliente'} a la cotización para poder enviarla por WhatsApp.</>;
   } else if (!phone) {
-    blocker = <>{customer.name || customer.company || 'El cliente'} no tiene número de WhatsApp. Agrégalo en el chip del cliente y vuelve a enviar.</>;
+    blocker = <>{recipient.name || recipient.company || (kind === 'professional' ? 'El profesional' : 'El cliente')} no tiene número de WhatsApp. Agrégalo en su ficha y vuelve a enviar.</>;
   }
 
   async function send() {
-    if (state === 'sending') return;
+    if (state === 'sending' || !recipient) return;
     setState('sending');
     setMsg('');
     try {
       let res;
       if (format === 'pdf' && canPdf) {
         const { blob, filename } = await buildPdf();
-        res = await sendQuotePdf({ to: customer.phone, blob, filename, customer, quoteId: quote.id });
+        res = await sendQuotePdf({ to: recipient.phone, blob, filename, recipient, recipientKind: kind, quoteId: quote.id });
       } else {
         let token = quote.shareToken;
         if (!token || !quote.shareEnabled) {
           token = token || newShareToken();
           await onUpdateQuote({ shareToken: token, shareEnabled: true });
         }
+        // The slug is the quote's own identity (client name + number), the same
+        // whether it goes to the client or the professional.
         const url = shareLinkUrl(token, quoteSlug(quote, customer));
-        res = await sendQuoteLink({ to: customer.phone, url, settings, customer, quoteId: quote.id });
+        res = await sendQuoteLink({ to: recipient.phone, url, settings, recipient, recipientKind: kind, quoteId: quote.id });
       }
       if (res?.ok) {
         setState('sent');
-        setMsg(`Enviado a ${displayPhone(waDigits(customer.phone))}.`);
+        setMsg(`Enviado a ${displayPhone(waDigits(recipient.phone))}.`);
       } else {
         setState('error');
         setMsg(res?.error || 'No se pudo enviar.');
@@ -209,10 +223,37 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
     setFormat(f);
     if (state === 'error') { setState('idle'); setMsg(''); }
   };
+  const pickRecipient = (k) => {
+    if (state === 'sending') return;
+    setRecipientKind(k);
+    if (state === 'error' || state === 'sent') { setState('idle'); setMsg(''); }
+  };
+
+  // The recipient toggle renders above both the blocker and the send form, so
+  // the dealer can switch parties even when one of them is missing a number.
+  const recipientToggle = hasProfessional ? (
+    <div className="grid grid-cols-2 gap-2 mb-3" role="radiogroup" aria-label="Destinatario">
+      <RecipientOption
+        icon={UserIcon}
+        label="Cliente"
+        name={customer?.name || customer?.company || 'Sin cliente'}
+        active={kind === 'customer'}
+        onPick={() => pickRecipient('customer')}
+      />
+      <RecipientOption
+        icon={DraftingCompass}
+        label="Profesional"
+        name={professional?.name || professional?.company || ''}
+        active={kind === 'professional'}
+        onPick={() => pickRecipient('professional')}
+      />
+    </div>
+  ) : null;
 
   if (blocker) {
     return (
       <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
+        {recipientToggle}
         <p className="text-sm text-ink-600 flex items-start gap-2">
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
           <span>{blocker}</span>
@@ -226,10 +267,11 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
 
   return (
     <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
+      {recipientToggle}
       <p className="text-sm text-ink-600">
         Se enviará la cotización a{' '}
-        <strong><BrandName name={customer.name || customer.company} /></strong> ({displayPhone(waDigits(customer.phone))})
-        desde el número del negocio{settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.
+        <strong><BrandName name={recipient.name || recipient.company} /></strong> ({displayPhone(waDigits(recipient.phone))})
+        {kind === 'professional' ? ' (profesional)' : ''} desde el número del negocio{settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.
       </p>
 
       {/* Format — the interactive client link or the exported PDF document. */}
@@ -276,6 +318,32 @@ export function SendQuoteModal({ open, onClose, customer, quote, settings, onUpd
         )}
       </div>
     </Modal>
+  );
+}
+
+/** One selectable recipient card in the send modal's client-or-professional
+ *  pair. Mirrors FormatOption's visual register; the second line carries the
+ *  contact's name so the dealer sees exactly who each side addresses. */
+function RecipientOption({ icon: Icon, label, name, active, onPick }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onPick}
+      className={`text-left rounded-lg border p-2.5 transition-colors ${
+        active
+          ? 'border-emerald-400 bg-emerald-50/60 ring-1 ring-inset ring-emerald-200'
+          : 'border-ink-200 hover:border-ink-300 hover:bg-ink-50'
+      }`}
+    >
+      <span className={`flex items-center gap-1.5 text-sm font-medium ${active ? 'text-emerald-800' : 'text-ink-800'}`}>
+        <Icon size={14} className={active ? 'text-emerald-600' : 'text-ink-400'} /> {label}
+      </span>
+      <span className={`block text-[11px] mt-0.5 truncate ${active ? 'text-emerald-700' : 'text-ink-500'}`}>
+        {name || '—'}
+      </span>
+    </button>
   );
 }
 

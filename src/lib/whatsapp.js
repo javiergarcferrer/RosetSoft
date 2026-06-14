@@ -358,18 +358,32 @@ export async function fetchWaMediaUrl(path) {
 }
 
 /**
- * Send a quote's public client link over the business number. Uses the
+ * Tag the chat-log row for a quote send on the right contact: the client
+ * (`customerId`) or the professional (`professionalId`). One quote can go to
+ * either party, so the recipient — not the quote's `customerId` — decides which
+ * thread the message is filed under.
+ */
+function recipientTag(recipient, recipientKind) {
+  return recipientKind === 'professional'
+    ? { professionalId: recipient?.id }
+    : { customerId: recipient?.id };
+}
+
+/**
+ * Send a quote's public link over the business number to the chosen recipient
+ * — the client OR the assigned professional (`recipientKind`). Uses the
  * approved template picked in Settings so it works outside the 24h window;
  * with no template configured it falls back to free-form text (24h window
  * only). Two template shapes, told apart by the metadata the picker stored:
  *   • body-variable — {{1}} in the body carries the full link.
  *   • URL button    — the link rides the button's {{1}} as the share-path
  *     suffix (everything after `/#/q/`); the body's {{1}}, if any, gets the
- *     client's first name.
+ *     recipient's first name.
  */
-export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
+export async function sendQuoteLink({ to, url, settings, recipient, recipientKind = 'customer', quoteId }) {
   const template = (settings?.whatsappQuoteTemplate || '').trim();
-  const name = (customer?.name || '').trim().split(/\s+/)[0];
+  const name = (recipient?.name || '').trim().split(/\s+/)[0];
+  const tag = recipientTag(recipient, recipientKind);
   if (template) {
     const lang = (settings?.whatsappQuoteTemplateLang || '').trim() || 'es';
     if (settings?.whatsappQuoteTemplateButton) {
@@ -381,27 +395,28 @@ export async function sendQuoteLink({ to, url, settings, customer, quoteId }) {
         to, template, lang,
         params: varCount > 0 ? [name || 'cliente'] : [],
         buttonParams: [suffix],
-        customerId: customer?.id, quoteId,
+        ...tag, quoteId,
       });
     }
-    return sendWhatsappTemplate({ to, template, lang, params: [url], customerId: customer?.id, quoteId });
+    return sendWhatsappTemplate({ to, template, lang, params: [url], ...tag, quoteId });
   }
   const text = `Hola${name ? ` ${name}` : ''}, aquí está su cotización de ${settings?.companyName || 'ALCOVER'}: ${url}`;
-  return sendWhatsappText({ to, text, customerId: customer?.id, quoteId });
+  return sendWhatsappText({ to, text, ...tag, quoteId });
 }
 
 /**
- * Send the quote's PDF as a WhatsApp document from the business number. The
- * blob comes from the same generator Exportar uses (the caller builds it), so
- * what lands in the chat is byte-for-byte the exported file; wa-send uploads
- * it to Meta, mirrors it into Storage for our own thread, and logs it tagged
- * with the quote. Documents are free-form media — they only deliver inside
- * the 24h customer-service window (the link path covers outside it via the
- * approved template).
+ * Send the quote's PDF as a WhatsApp document from the business number to the
+ * chosen recipient (client or professional, via `recipientKind`). The blob
+ * comes from the same generator Exportar uses (the caller builds it), so what
+ * lands in the chat is byte-for-byte the exported file; wa-send uploads it to
+ * Meta, mirrors it into Storage for our own thread, and logs it tagged with
+ * the quote. Documents are free-form media — they only deliver inside the 24h
+ * customer-service window (the link path covers outside it via the approved
+ * template).
  */
-export async function sendQuotePdf({ to, blob, filename, customer, quoteId }) {
+export async function sendQuotePdf({ to, blob, filename, recipient, recipientKind = 'customer', quoteId }) {
   const file = new File([blob], filename, { type: 'application/pdf' });
-  return sendWhatsappMedia({ to, file, customerId: customer?.id, quoteId });
+  return sendWhatsappMedia({ to, file, ...recipientTag(recipient, recipientKind), quoteId });
 }
 
 /**
