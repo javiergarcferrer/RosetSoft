@@ -243,7 +243,7 @@ export default function Orders() {
                     {ResizeHandle(col.key)}
                   </th>
                 ))}
-                <th />
+                <th className="w-12" />
               </tr>
             </thead>
             <tbody>

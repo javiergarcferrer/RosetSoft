@@ -31,6 +31,15 @@ import { useEffect, useMemo, useState } from 'react';
 export default function useColumns(allColumns, defaults, storageKey) {
   const [visible, setVisible] = useState(() => loadVisible(storageKey, defaults));
 
+  // Reload when the storage key changes at runtime (a per-tab table, e.g. the
+  // cobrar/pagar aging tables), BEFORE the persist effect runs — otherwise the
+  // outgoing tab's visibility map gets written onto the incoming tab's key.
+  const [prevKey, setPrevKey] = useState(storageKey);
+  if (storageKey !== prevKey) {
+    setPrevKey(storageKey);
+    setVisible(loadVisible(storageKey, defaults));
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(visible));

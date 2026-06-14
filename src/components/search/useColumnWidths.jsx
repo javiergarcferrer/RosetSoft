@@ -7,65 +7,93 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * filtered `cols` array it renders, plus its own storage key.
  *
  * How it works (kept generic so every table can opt in with ~3 lines):
- *  - The table starts in normal `table-layout: auto` so columns size to their
- *    content naturally. On first paint we MEASURE each header cell's rendered
- *    width, seed that as the column's width, then flip the table to
- *    `table-layout: fixed` — now the seeded widths are authoritative and a drag
- *    can shrink a column below its content (it clips), not just grow it.
- *  - A returning visitor with stored widths skips the measure and starts fixed.
- *  - Each resizable header renders {ResizeHandle(col.key)} on its right edge;
- *    dragging it updates that column's width live and persists on release.
+ *  - We MEASURE each header cell's natural width once (a column with no stored
+ *    width), then render the table `table-layout: fixed` so those widths are
+ *    authoritative and a drag can shrink a column below its content (it clips),
+ *    not just grow it. Measurement reads natural widths even after the switch to
+ *    fixed by briefly toggling the live `<table>` to `auto` inside a layout
+ *    effect (pre-paint, so it's invisible) — that way a column toggled ON later
+ *    gets its real content width, not a fixed-layout share.
+ *  - Measurement is (re)triggered when the <table> actually mounts (via a
+ *    callback ref, so tables gated behind a `loaded` check still get measured),
+ *    when the visible `cols` change, and on reset — never just "once on mount".
+ *  - A returning visitor with stored widths starts fixed immediately.
+ *  - A column that is display:none at measure time (a responsive
+ *    `hidden lg:table-cell`) measures 0; we skip it rather than pin it to 0, so
+ *    it isn't collapsed when a wider breakpoint later reveals it.
  *  - Fixed leading/trailing cells (select checkbox, row actions) are NOT in
- *    `cols`; they keep their existing `w-10`/`w-12` width utilities, which
- *    `table-layout: fixed` honours, so nothing about them changes.
- *  - Responsive columns (`hidden lg:table-cell`) collapse correctly: their
- *    <th> and <td> share the breakpoint class, so under fixed layout the whole
- *    column drops together and the rest stay aligned.
+ *    `cols`; they keep their existing `w-10`/`w-12` width utilities.
+ *  - `storageKey` may change at runtime (a per-tab table, e.g. cobrar/pagar):
+ *    we reload the widths for the new key during render so one tab never
+ *    overwrites the other's saved widths.
  *
  * PARAMS
- *   cols        the visibility-filtered column array the table renders (each
- *               entry has a stable `key`). Order/content may change as the user
- *               toggles columns — newly shown columns get measured & seeded.
+ *   cols        the visibility-filtered column array the table renders (stable
+ *               `key` per entry). Newly shown columns get measured & seeded.
  *   storageKey  per-view localStorage key, e.g. 'rs.quotes.widths.v1'.
  *
  * RETURNS
- *   tableRef     attach to the <table> (used to measure header cells).
- *   tableStyle   spread onto the <table> ({ tableLayout } — auto until seeded).
+ *   tableRef     callback ref for the <table> (measures header cells on mount).
+ *   tableStyle   spread onto the <table> ({ tableLayout } — auto until measured).
  *   thProps      thProps(key) → spread onto a resizable <th> (data attr +
  *                position:relative + the persisted width).
  *   ResizeHandle ResizeHandle(key) → the drag affordance; render inside the <th>.
- *   reset        () => void — clear all widths (back to auto-measured).
+ *   reset        () => void — clear widths and re-measure natural widths.
  *   hasWidths    whether any width is set (e.g. to enable a "reset" control).
  */
 export default function useColumnWidths(cols, storageKey) {
-  const tableRef = useRef(null);
+  const tableElRef = useRef(null);
   const [widths, setWidths] = useState(() => loadWidths(storageKey));
-  // Seeded once we either loaded stored widths or measured the natural layout.
-  const [seeded, setSeeded] = useState(() => Object.keys(loadWidths(storageKey)).length > 0);
+  // `ready` gates the auto→fixed switch: stay auto until we have widths to pin.
+  const [ready, setReady] = useState(() => Object.keys(loadWidths(storageKey)).length > 0);
+  // Bumped to request a (re)measure: table (re)mounted, or reset.
+  const [measureTick, setMeasureTick] = useState(0);
 
-  // Seed any unmeasured (currently-visible) column from its natural width, then
-  // switch to fixed layout. Runs on mount and whenever the visible set changes
-  // so a freshly-toggled-on column gets a sensible starting width.
+  // Mirror the latest widths into a ref so the measure effect can read them
+  // without depending on `widths` (which would defeat its run-once-per-change).
+  const widthsRef = useRef(widths);
+  widthsRef.current = widths;
+
+  // Reload state when the storage key changes at runtime (a per-tab table),
+  // BEFORE the persist effect runs — otherwise the outgoing tab's widths get
+  // written onto the incoming tab's key. React's "adjust state on prop change".
+  const [prevKey, setPrevKey] = useState(storageKey);
+  if (storageKey !== prevKey) {
+    setPrevKey(storageKey);
+    const loaded = loadWidths(storageKey);
+    setWidths(loaded);
+    setReady(Object.keys(loaded).length > 0);
+    setMeasureTick((t) => t + 1);
+  }
+
+  // Callback ref: when the <table> attaches (incl. after a `loaded` gate),
+  // request a measure. Stable identity, so it only fires on mount/unmount.
+  const tableRef = useCallback((node) => {
+    tableElRef.current = node;
+    if (node) setMeasureTick((t) => t + 1);
+  }, []);
+
+  // Measure any still-unmeasured visible columns at their natural width, then
+  // mark ready (→ fixed layout). Runs when cols change or a measure is requested.
   useLayoutEffect(() => {
-    const table = tableRef.current;
+    const table = tableElRef.current;
     if (!table) return;
-    let nextSeeded = false;
-    setWidths((cur) => {
-      const next = { ...cur };
-      let changed = false;
-      for (const col of cols) {
-        if (next[col.key] != null) continue;
+    const unmeasured = cols.filter((c) => widthsRef.current[c.key] == null);
+    if (unmeasured.length) {
+      const saved = table.style.tableLayout;
+      table.style.tableLayout = 'auto'; // read natural widths, even if rendered fixed
+      const measured = {};
+      for (const col of unmeasured) {
         const th = table.querySelector(`th[data-col-key="${cssEscape(col.key)}"]`);
-        if (th) {
-          next[col.key] = Math.round(th.getBoundingClientRect().width);
-          changed = true;
-        }
+        if (!th) continue;
+        const w = Math.round(th.getBoundingClientRect().width);
+        if (w > 0) measured[col.key] = w; // skip display:none columns (width 0)
       }
-      return changed ? next : cur;
-    });
-    nextSeeded = true;
-    if (nextSeeded) setSeeded(true);
-  }, [cols]);
+      table.style.tableLayout = saved;
+      if (Object.keys(measured).length) setWidths((cur) => ({ ...cur, ...measured }));
+    }
+    setReady(true);
+  }, [cols, measureTick]);
 
   useEffect(() => {
     try {
@@ -75,6 +103,10 @@ export default function useColumnWidths(cols, storageKey) {
     }
   }, [storageKey, widths]);
 
+  // Clean up a drag still in flight if the component unmounts mid-drag.
+  const dragCleanup = useRef(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
+
   const startResize = useCallback((key, e) => {
     // Pointer events cover mouse + touch; keep the header's own click (sort) from
     // firing and stop text selection while dragging.
@@ -83,18 +115,25 @@ export default function useColumnWidths(cols, storageKey) {
     const th = e.currentTarget.closest('th');
     const startX = e.clientX;
     const startW = th ? th.getBoundingClientRect().width : 120;
+    // Capture so we keep getting moves/up even if the pointer leaves the handle;
+    // pointercancel covers a lost/interrupted pointer (the up that never comes).
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* unsupported */ }
 
     const onMove = (ev) => {
       const w = Math.max(MIN_COL_PX, Math.round(startW + (ev.clientX - startX)));
       setWidths((cur) => (cur[key] === w ? cur : { ...cur, [key]: w }));
     };
-    const onUp = () => {
+    const end = () => {
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
       document.body.classList.remove('rs-resizing');
+      dragCleanup.current = null;
     };
+    dragCleanup.current = end;
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
     document.body.classList.add('rs-resizing');
   }, []);
 
@@ -125,11 +164,16 @@ export default function useColumnWidths(cols, storageKey) {
     [startResize],
   );
 
-  const reset = useCallback(() => setWidths({}), []);
+  // Clear widths and re-measure from scratch (back to natural widths).
+  const reset = useCallback(() => {
+    setWidths({});
+    setReady(false);
+    setMeasureTick((t) => t + 1);
+  }, []);
 
   return {
     tableRef,
-    tableStyle: { tableLayout: seeded ? 'fixed' : 'auto' },
+    tableStyle: { tableLayout: ready ? 'fixed' : 'auto' },
     thProps,
     ResizeHandle,
     reset,
@@ -153,7 +197,8 @@ function loadWidths(storageKey) {
   return {};
 }
 
-/** CSS.escape isn't on every target; a column key is alnum/._- so this is safe. */
+/** Prefer the platform CSS.escape; fall back to escaping selector metachars. */
 function cssEscape(s) {
-  return String(s).replace(/["\\]/g, '\\$&');
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s);
+  return String(s).replace(/["\\\][]/g, '\\$&');
 }
