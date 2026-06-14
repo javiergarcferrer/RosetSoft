@@ -39,8 +39,8 @@ export default function ProfessionalChip({ quote, professional, professionals, p
   if (!assigned) {
     return (
       <>
-        <span className={`${PILL} border-dashed hover:border-amber-400 hover:bg-amber-50/50`}>
-          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-amber-700 pl-3 pr-2.5`}>
+        <span className={`${PILL} border-dashed hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-400/10`}>
+          <button type="button" onClick={openPicker} className={`${SEG} text-ink-500 hover:text-amber-700 dark:hover:text-amber-300 pl-3 pr-2.5`}>
             <DraftingCompass size={12} />
             Asignar profesional
           </button>
