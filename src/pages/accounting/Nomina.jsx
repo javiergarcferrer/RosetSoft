@@ -10,8 +10,34 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig } from '../../core/accounting/index.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Customizable columns (Shopify-style show/hide, persisted per browser) for the
+// two desktop tables. Each `cell` is a pure render off the per-row ctx; the
+// preview's `foot` keeps the totals tfoot column-aligned when columns toggle.
+const PREVIEW_COLUMNS = [
+  { key: 'name', label: 'Empleado', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ it }) => it.name, foot: ({ items }) => `${items.length} empleados`, footClass: 'py-2 px-3' },
+  { key: 'gross', label: 'Salario', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ it }) => formatDop(it.gross), foot: ({ totals }) => formatDop(totals.gross), footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'sfs', label: 'SFS', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.sfsEmp), foot: ({ totals }) => `TSS emp. ${formatDop(totals.tssEmp)}`, footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'afp', label: 'AFP', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.afpEmp), foot: () => null, footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'isr', label: 'ISR', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.isr), foot: ({ totals }) => formatDop(totals.isr), footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'net', label: 'Neto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium', cell: ({ it }) => formatDop(it.net), foot: ({ totals }) => formatDop(totals.net), footClass: 'py-2 px-3 text-right tabular-nums' },
+];
+const PREVIEW_DEFAULT = { gross: true, sfs: true, afp: true, isr: true, net: true };
+const PREVIEW_COLS_KEY = 'rs.nomina.preview.cols.v1';
+
+const RUNS_COLUMNS = [
+  { key: 'period', label: 'Período', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ r }) => <>{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</> },
+  { key: 'paid', label: 'Pagada', thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3 text-ink-500', cell: ({ r }) => formatDate(r.paidAt) },
+  { key: 'gross', label: 'Bruto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ r }) => formatDop(r.gross) },
+  { key: 'isr', label: 'ISR', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ r }) => formatDop(r.isr) },
+  { key: 'net', label: 'Neto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium', cell: ({ r }) => formatDop(r.net) },
+];
+const RUNS_DEFAULT = { paid: true, gross: true, isr: true, net: true };
+const RUNS_COLS_KEY = 'rs.nomina.runs.cols.v1';
 
 /**
  * Nómina — generate a month's payroll from the active employees (DR TSS + ISR),
@@ -25,6 +51,9 @@ export default function Nomina() {
   const empQ = useLiveQueryStatus(() => db.employees.where('profileId').equals(scope).toArray(), [scope], []);
   const runsQ = useLiveQueryStatus(() => db.payrollRuns.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = empQ.loaded && runsQ.loaded;
+
+  const previewCols = useColumns(PREVIEW_COLUMNS, PREVIEW_DEFAULT, PREVIEW_COLS_KEY);
+  const runsCols = useColumns(RUNS_COLUMNS, RUNS_DEFAULT, RUNS_COLS_KEY);
 
   const today = useMemo(() => new Date(), []);
   const [date, setDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10));
@@ -125,33 +154,32 @@ export default function Nomina() {
                     <span>Neto total: <span className="tabular-nums">{formatDop(totals.net)}</span></span>
                   </div>
                 </div>
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                      <tr><th className="text-left py-2 px-3">Empleado</th><th className="text-right py-2 px-3">Salario</th><th className="text-right py-2 px-3">SFS</th><th className="text-right py-2 px-3">AFP</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
-                    </thead>
-                    <tbody>
-                      {items.map((it) => (
-                        <tr key={it.employeeId} className="border-t border-ink-50">
-                          <td className="py-1.5 px-3">{it.name}</td>
-                          <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(it.gross)}</td>
-                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.sfsEmp)}</td>
-                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.afpEmp)}</td>
-                          <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(it.isr)}</td>
-                          <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(it.net)}</td>
+                <div className="hidden sm:block">
+                  <div className="hidden md:flex justify-end mb-2">
+                    <ColumnsMenu columns={previewCols.columns} visible={previewCols.visible} onChange={previewCols.setVisible} onReset={previewCols.reset} />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                        <tr>{previewCols.cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {items.map((it) => {
+                          const ctx = { it };
+                          return (
+                            <tr key={it.employeeId} className="border-t border-ink-50">
+                              {previewCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-ink-200 font-semibold">
+                          {previewCols.cols.map((c) => <td key={c.key} className={c.footClass}>{c.foot?.({ items, totals })}</td>)}
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-ink-200 font-semibold">
-                        <td className="py-2 px-3">{items.length} empleados</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.gross)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums" colSpan={2}>TSS emp. {formatDop(totals.tssEmp)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.isr)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums">{formatDop(totals.net)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               </>
             )}
@@ -182,23 +210,27 @@ export default function Nomina() {
                 ))}
               </div>
               {/* Desktop: table */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm mt-2">
-                  <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                    <tr><th className="text-left py-2 px-3">Período</th><th className="text-left py-2 px-3">Pagada</th><th className="text-right py-2 px-3">Bruto</th><th className="text-right py-2 px-3">ISR</th><th className="text-right py-2 px-3">Neto</th></tr>
-                  </thead>
-                  <tbody>
-                    {runs.map((r) => (
-                      <tr key={r.id} className="border-t border-ink-50">
-                        <td className="py-1.5 px-3">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</td>
-                        <td className="py-1.5 px-3 text-ink-500">{formatDate(r.paidAt)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.gross)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{formatDop(r.isr)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.net)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="hidden sm:block">
+                <div className="hidden md:flex justify-end mb-2 px-3">
+                  <ColumnsMenu columns={runsCols.columns} visible={runsCols.visible} onChange={runsCols.setVisible} onReset={runsCols.reset} />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm mt-2">
+                    <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                      <tr>{runsCols.cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {runs.map((r) => {
+                        const ctx = { r };
+                        return (
+                          <tr key={r.id} className="border-t border-ink-50">
+                            {runsCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

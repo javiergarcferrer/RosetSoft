@@ -6,8 +6,27 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Customizable columns (Shopify-style show/hide, persisted per browser). Each
+// `cell` is a pure render off the per-row ctx; the Cerrar/Reabrir toggle stays a
+// fixed trailing cell outside this array (it closes over `toggle`/`busy`).
+const PERIODO_COLUMNS = [
+  { key: 'month', label: 'Mes', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ year, month }) => <>{MONTHS_ES[month - 1]} {year}</> },
+  {
+    key: 'status', label: 'Estado', thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3',
+    cell: ({ closed }) => (
+      <span className={`status-pill ${closed ? 'bg-rose-100 text-rose-700' : 'status-pill-active'}`}>
+        {closed ? 'Cerrado' : 'Abierto'}
+      </span>
+    ),
+  },
+];
+const PERIODO_DEFAULT = { status: true };
+const PERIODO_COLS_KEY = 'rs.periodos.cols.v1';
 
 /**
  * Períodos contables — close a month so nothing can post into it (enforced by a
@@ -30,6 +49,7 @@ export default function Periodos() {
     return out;
   }, []);
   const [busy, setBusy] = useState(null);
+  const { columns, visible, setVisible, reset, cols } = useColumns(PERIODO_COLUMNS, PERIODO_DEFAULT, PERIODO_COLS_KEY);
 
   async function toggle(year, month) {
     const key = `${year}-${month}`;
@@ -54,11 +74,13 @@ export default function Periodos() {
 
       {!periodsQ.loaded ? <ListLoading /> : (
         <div className="card overflow-hidden max-w-xl">
+          <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left py-2 px-3">Mes</th>
-                <th className="text-left py-2 px-3">Estado</th>
+                {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
                 <th className="py-2 px-3"></th>
               </tr>
             </thead>
@@ -66,14 +88,10 @@ export default function Periodos() {
               {months.map(({ year, month }) => {
                 const key = `${year}-${month}`;
                 const closed = byKey.get(key)?.status === 'closed';
+                const ctx = { year, month, closed };
                 return (
                   <tr key={key} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3">{MONTHS_ES[month - 1]} {year}</td>
-                    <td className="py-1.5 px-3">
-                      <span className={`status-pill ${closed ? 'bg-rose-100 text-rose-700' : 'status-pill-active'}`}>
-                        {closed ? 'Cerrado' : 'Abierto'}
-                      </span>
-                    </td>
+                    {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
                     <td className="py-1.5 px-3 text-right">
                       <button type="button" onClick={() => toggle(year, month)} disabled={busy === key}
                         className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-40">

@@ -13,6 +13,64 @@ import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import { orderStatusPill } from '../lib/statusPill.js';
+import useColumns from '../components/search/useColumns.js';
+import ColumnsMenu from '../components/search/ColumnsMenu.jsx';
+
+/**
+ * Desktop table columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives both the table render (`cell`) and the Columns menu
+ * (`label` / `canHide`). `number` is the fixed identity anchor (`canHide:
+ * false`) — never hidden, not offered in the menu; everything else toggles.
+ * Each `cell` is a pure render off the per-row `ctx` the row assembles.
+ */
+const ORDER_COLUMNS = [
+  {
+    key: 'number', label: 'Número', canHide: false,
+    tdClass: 'font-medium whitespace-nowrap tabular-nums',
+    cell: ({ o }) => `#${o.number || '—'}`,
+  },
+  {
+    key: 'name', label: 'Nombre',
+    tdClass: 'truncate max-w-[220px]',
+    cell: ({ o }) => <span title={o.name || ''}>{o.name || '—'}</span>,
+  },
+  {
+    key: 'customer', label: 'Cliente',
+    tdClass: 'text-ink-700 truncate max-w-[180px]',
+    cell: ({ customerLabel }) => <span title={customerLabel || ''}>{customerLabel || '—'}</span>,
+  },
+  {
+    key: 'status', label: 'Estado',
+    cell: ({ stg }) => <StatusBadge status={stg} />,
+  },
+  {
+    key: 'quotes', label: 'Cot.',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell text-ink-700 tabular-nums',
+    cell: ({ quoteCount }) => quoteCount,
+  },
+  {
+    key: 'containers', label: 'Cont.',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell text-ink-700 tabular-nums',
+    cell: ({ containerCount }) => containerCount,
+  },
+  {
+    key: 'updated', label: 'Actualizado',
+    thClass: 'hidden xl:table-cell', tdClass: 'hidden xl:table-cell text-ink-400 whitespace-nowrap tabular-nums',
+    cell: ({ o }) => formatDateTime(o.updatedAt),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right', tdClass: 'text-right font-semibold whitespace-nowrap tabular-nums',
+    cell: ({ total }) => formatMoney(total, 'USD', { USD: 1 }),
+  },
+];
+
+// Default visibility for the hideable columns — the set the table shipped with
+// (number is always on). Persisted per-browser so a column choice sticks.
+const ORDER_DEFAULT_COLS = {
+  name: true, customer: true, status: true, quotes: true, containers: true, updated: true, total: true,
+};
+const ORDER_COLS_STORAGE_KEY = 'rs.orders.cols.v1';
 
 /**
  * Orders list view — every order across the team, sorted by recency.
@@ -71,6 +129,13 @@ export default function Orders() {
     }),
     [orders, customers, allQuotes, allContainers, allLines],
   );
+
+  // Column visibility (Shopify "edit columns") — persisted per browser. The
+  // table renders `cols` (number anchor + the toggled-on columns, in order);
+  // the standalone menu gets the full ORDER_COLUMNS so hidden ones can return.
+  const {
+    visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
+  } = useColumns(ORDER_COLUMNS, ORDER_DEFAULT_COLS, ORDER_COLS_STORAGE_KEY);
 
   async function newOrder() {
     const id = newId();
@@ -157,35 +222,37 @@ export default function Orders() {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden md:block card overflow-hidden">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Número</th>
-              <th>Nombre</th>
-              <th>Cliente</th>
-              <th>Estado</th>
-              <th className="hidden lg:table-cell">Cot.</th>
-              <th className="hidden lg:table-cell">Cont.</th>
-              <th className="hidden xl:table-cell">Actualizado</th>
-              <th className="text-right">Total</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <OrderRow
-                key={o.id}
-                o={o}
-                customerLabel={customerLabelByOrderId.get(o.id)}
-                quoteCount={quoteCountByOrder.get(o.id) || 0}
-                containerCount={containerCountByOrder.get(o.id) || 0}
-                total={totalByOrder.get(o.id) || 0}
-                onDelete={() => del(o)}
-              />
-            ))}
-          </tbody>
-        </table>
+      <div className="hidden md:block">
+        {/* Standalone columns control (no search header on this page). */}
+        <div className="hidden md:flex justify-end mb-2">
+          <ColumnsMenu columns={ORDER_COLUMNS} visible={visibleCols} onChange={setVisibleCols} onReset={resetCols} />
+        </div>
+        <div className="card overflow-hidden">
+          <table className="table">
+            <thead>
+              <tr>
+                {cols.map((col) => (
+                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                ))}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o) => (
+                <OrderRow
+                  key={o.id}
+                  o={o}
+                  cols={cols}
+                  customerLabel={customerLabelByOrderId.get(o.id)}
+                  quoteCount={quoteCountByOrder.get(o.id) || 0}
+                  containerCount={containerCountByOrder.get(o.id) || 0}
+                  total={totalByOrder.get(o.id) || 0}
+                  onDelete={() => del(o)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
@@ -231,18 +298,15 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
   );
 }
 
-function OrderRow({ o, customerLabel, quoteCount, containerCount, total, onDelete }) {
+function OrderRow({ o, cols, customerLabel, quoteCount, containerCount, total, onDelete }) {
   const stg = currentOrderStage(o);
+  // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
+  const ctx = { o, stg, customerLabel, quoteCount, containerCount, total };
   return (
     <tr className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100" onClick={() => (window.location.hash = `#/orders/${o.id}`)}>
-      <td className="font-medium whitespace-nowrap tabular-nums">#{o.number || '—'}</td>
-      <td className="truncate max-w-[220px]" title={o.name || ''}>{o.name || '—'}</td>
-      <td className="text-ink-700 truncate max-w-[180px]" title={customerLabel || ''}>{customerLabel || '—'}</td>
-      <td><StatusBadge status={stg} /></td>
-      <td className="hidden lg:table-cell text-ink-700 tabular-nums">{quoteCount}</td>
-      <td className="hidden lg:table-cell text-ink-700 tabular-nums">{containerCount}</td>
-      <td className="hidden xl:table-cell text-ink-400 whitespace-nowrap tabular-nums">{formatDateTime(o.updatedAt)}</td>
-      <td className="text-right font-semibold whitespace-nowrap tabular-nums">{formatMoney(total, 'USD', { USD: 1 })}</td>
+      {cols.map((col) => (
+        <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+      ))}
       <td className="text-right w-12">
         <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="btn-icon-danger" title="Eliminar" aria-label="Eliminar">
           <Trash2 size={14} />

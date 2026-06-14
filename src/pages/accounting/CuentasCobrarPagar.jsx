@@ -11,6 +11,8 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { cleanRnc } from '../../lib/rncLookup.js';
@@ -19,6 +21,80 @@ import {
   resolveReceivables, resolvePayables, resolveStatementFor,
   buildPaymentEntry, paymentNet, resolveAccountingConfig,
 } from '../../core/accounting/index.js';
+
+// Aging table columns (Shopify "edit columns"). The party column is the fixed
+// identity anchor (`canHide: false`) — its header label is dynamic (Cliente /
+// Proveedor) so it's not offered in the menu; the buckets and balance toggle.
+// Each `cell` is a pure render off the per-row `ctx` the row assembles.
+const AGING_COLUMNS = [
+  {
+    key: 'party', label: 'Cliente/Proveedor', canHide: false,
+    tdClass: 'font-medium min-w-[120px]',
+    cell: ({ r }) => r.party?.name || '—',
+  },
+  {
+    key: 'd0_30', label: '0–30',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.buckets.d0_30),
+  },
+  {
+    key: 'd31_60', label: '31–60',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.buckets.d31_60),
+  },
+  {
+    key: 'd61_90', label: '61–90',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.buckets.d61_90),
+  },
+  {
+    key: 'd90', label: '+90',
+    thClass: 'text-right whitespace-nowrap',
+    tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => <span className={r.buckets.d90 > 0 ? 'text-rose-600' : ''}>{formatDop(r.buckets.d90)}</span>,
+  },
+  {
+    key: 'balance', label: 'Balance',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-semibold whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.balance),
+  },
+];
+const AGING_DEFAULT = { d0_30: true, d31_60: true, d61_90: true, d90: true, balance: true };
+
+// Estado de cuenta columns. The fecha column is the fixed anchor; concepto,
+// ref, cargo, abono and saldo toggle.
+const STATEMENT_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => formatDate(r.date),
+  },
+  {
+    key: 'concept', label: 'Concepto',
+    cell: ({ r }) => r.label,
+  },
+  {
+    key: 'ref', label: 'Ref.',
+    tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => r.ref || '—',
+  },
+  {
+    key: 'charge', label: 'Cargo',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => (r.charge ? formatDop(r.charge) : ''),
+  },
+  {
+    key: 'payment', label: 'Abono',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => (r.payment ? formatDop(r.payment) : ''),
+  },
+  {
+    key: 'balance', label: 'Saldo',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.balance),
+  },
+];
+const STATEMENT_DEFAULT = { concept: true, ref: true, charge: true, payment: true, balance: true };
 
 /**
  * Cuentas por cobrar y pagar — open balances with FIFO aging, register cobros
@@ -97,6 +173,12 @@ export default function CuentasCobrarPagar() {
   const partyLabel = tab === 'cxc' ? 'Cliente' : 'Proveedor';
   const docsByParty = new Map(view.rows.map((r) => [r.partyId, r.docs || []]));
 
+  // Column visibility (Shopify "edit columns"), persisted per browser. The
+  // aging table keys per tab (cobrar / pagar) so each side remembers its own
+  // column choice; the estado de cuenta has its own key.
+  const aging = useColumns(AGING_COLUMNS, AGING_DEFAULT, tab === 'cxc' ? 'rs.cuentas.cobrar.cols.v1' : 'rs.cuentas.pagar.cols.v1');
+  const stmtCols = useColumns(STATEMENT_COLUMNS, STATEMENT_DEFAULT, 'rs.cuentas.statement.cols.v1');
+
   return (
     <AccountingGate title="Cuentas por cobrar y pagar">
       <PageHeader title="Cuentas por cobrar y pagar" subtitle="Saldos, antigüedad y estados de cuenta — valores en RD$"
@@ -152,48 +234,49 @@ export default function CuentasCobrarPagar() {
             ['+90', formatDop(view.totals.d90)],
           ]}
         />
-        <div className="hidden md:block card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table min-w-[640px]">
-              <thead>
-                <tr>
-                  <th>{partyLabel}</th>
-                  <th className="text-right whitespace-nowrap">0–30</th>
-                  <th className="text-right whitespace-nowrap">31–60</th>
-                  <th className="text-right whitespace-nowrap">61–90</th>
-                  <th className="text-right whitespace-nowrap">+90</th>
-                  <th className="text-right whitespace-nowrap">Balance</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.rows.map((r) => (
-                  <tr key={r.partyId}>
-                    <td className="font-medium min-w-[120px]">{r.party?.name || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d0_30)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d31_60)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.buckets.d61_90)}</td>
-                    <td className={`text-right tabular-nums whitespace-nowrap ${r.buckets.d90 > 0 ? 'text-rose-600' : ''}`}>{formatDop(r.buckets.d90)}</td>
-                    <td className="text-right tabular-nums font-semibold whitespace-nowrap">{formatDop(r.balance)}</td>
-                    <td className="text-right">
-                      <button type="button" onClick={() => setSelected({ type: tab === 'cxc' ? 'customer' : 'supplier', id: r.partyId })}
-                        className="text-xs text-ink-600 hover:text-ink-900 active:text-ink-700 inline-flex items-center gap-1 min-h-8 coarse:min-h-11 whitespace-nowrap"><FileText size={13} /> Estado</button>
-                    </td>
+        <div className="hidden md:block">
+          <div className="flex justify-end mb-2">
+            <ColumnsMenu columns={aging.columns} visible={aging.visible} onChange={aging.setVisible} onReset={aging.reset} />
+          </div>
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="table min-w-[640px]">
+                <thead>
+                  <tr>
+                    {aging.cols.map((col) => (
+                      <th key={col.key} className={col.thClass || ''}>{col.key === 'party' ? partyLabel : col.label}</th>
+                    ))}
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-ink-200 font-semibold">
-                  <td>{view.count} {partyLabel.toLowerCase()}s</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d0_30)}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d31_60)}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d61_90)}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.d90)}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(view.totals.balance)}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody>
+                  {view.rows.map((r) => {
+                    const ctx = { r };
+                    return (
+                      <tr key={r.partyId}>
+                        {aging.cols.map((col) => (
+                          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                        ))}
+                        <td className="text-right">
+                          <button type="button" onClick={() => setSelected({ type: tab === 'cxc' ? 'customer' : 'supplier', id: r.partyId })}
+                            className="text-xs text-ink-600 hover:text-ink-900 active:text-ink-700 inline-flex items-center gap-1 min-h-8 coarse:min-h-11 whitespace-nowrap"><FileText size={13} /> Estado</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-ink-200 font-semibold">
+                    {aging.cols.map((col) => {
+                      if (col.key === 'party') return <td key={col.key}>{view.count} {partyLabel.toLowerCase()}s</td>;
+                      const total = col.key === 'balance' ? view.totals.balance : view.totals[col.key];
+                      return <td key={col.key} className="text-right tabular-nums whitespace-nowrap">{formatDop(total)}</td>;
+                    })}
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
         </>
@@ -224,31 +307,33 @@ export default function CuentasCobrarPagar() {
               ],
             }))}
           />
-          <div className="hidden md:block overflow-x-auto">
-            <table className="table min-w-[560px]">
-              <thead>
-                <tr>
-                  <th className="whitespace-nowrap">Fecha</th>
-                  <th>Concepto</th>
-                  <th>Ref.</th>
-                  <th className="text-right whitespace-nowrap">Cargo</th>
-                  <th className="text-right whitespace-nowrap">Abono</th>
-                  <th className="text-right whitespace-nowrap">Saldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statement.rows.map((r, i) => (
-                  <tr key={i}>
-                    <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                    <td>{r.label}</td>
-                    <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.ref || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{r.charge ? formatDop(r.charge) : ''}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{r.payment ? formatDop(r.payment) : ''}</td>
-                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.balance)}</td>
+          <div className="hidden md:block">
+            <div className="flex justify-end mb-2">
+              <ColumnsMenu columns={stmtCols.columns} visible={stmtCols.visible} onChange={stmtCols.setVisible} onReset={stmtCols.reset} />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table min-w-[560px]">
+                <thead>
+                  <tr>
+                    {stmtCols.cols.map((col) => (
+                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {statement.rows.map((r, i) => {
+                    const ctx = { r };
+                    return (
+                      <tr key={i}>
+                        {stmtCols.cols.map((col) => (
+                          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

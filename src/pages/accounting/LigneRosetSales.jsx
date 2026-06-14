@@ -8,6 +8,8 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatMoney, formatDate } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
 import { linesByQuoteId } from '../../core/quote/totals.js';
@@ -15,6 +17,62 @@ import { quoteFloorSaleRows } from '../../core/bridge/index.js';
 import {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from '../../core/accounting/index.js';
+
+// Sell-through table columns (Shopify "edit columns"). Fecha is the fixed
+// identity anchor (`canHide: false`); everything else toggles. This table uses
+// the report's own `w-full text-sm` styling (not the shared `.table`), so the
+// thead/td padding + alignment classes are carried verbatim on each column.
+// `cell` is a pure render off the per-row `ctx`.
+const LRSALES_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'text-left py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => formatDate(r.date),
+  },
+  {
+    key: 'number', label: '#',
+    thClass: 'text-left py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 tabular-nums text-ink-400 whitespace-nowrap',
+    cell: ({ r }) => r.quoteNumber ?? '—',
+  },
+  {
+    key: 'customer', label: 'Cliente',
+    thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3 min-w-0',
+    cell: ({ r }) => r.customer || '—',
+  },
+  {
+    key: 'reference', label: 'Referencia',
+    thClass: 'text-left py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => r.reference || '—',
+  },
+  {
+    key: 'product', label: 'Producto',
+    thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3 min-w-0',
+    cell: ({ r }) => r.product || '—',
+  },
+  {
+    key: 'fabric', label: 'Tela',
+    thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3 text-ink-500 min-w-0',
+    cell: ({ r }) => r.fabric || '—',
+  },
+  {
+    key: 'qty', label: 'Cant.',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => r.qty,
+  },
+  {
+    key: 'unitUsd', label: 'Unit. (USD)',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatMoney(r.unitUsd, 'USD'),
+  },
+  {
+    key: 'totalUsd', label: 'Total (USD)',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap', tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatMoney(r.totalUsd, 'USD'),
+  },
+];
+const LRSALES_DEFAULT = {
+  number: true, customer: true, reference: true, product: true, fabric: true, qty: true, unitUsd: true, totalUsd: true,
+};
 
 // "YYYY-MM" ⇄ { year, monthIndex } for the <input type="month"> control.
 function toMonthValue({ year, monthIndex }) {
@@ -62,6 +120,9 @@ export default function LigneRosetSales() {
 
   const recipient = settings?.lrReportEmail || '';
 
+  // Column visibility (Shopify "edit columns"), persisted per browser.
+  const cols = useColumns(LRSALES_COLUMNS, LRSALES_DEFAULT, 'rs.lrsales.cols.v1');
+
   function exportAndSend() {
     if (report.lineCount === 0) return;
     // 1) Download the CSV. 2) Open the email client with a prefilled draft to
@@ -105,43 +166,45 @@ export default function LigneRosetSales() {
           <div className="px-3 py-2 text-xs text-ink-500 bg-ink-50 border-b border-ink-100">
             {report.salesCount} venta{report.salesCount === 1 ? '' : 's'} · {report.lineCount} artículo{report.lineCount === 1 ? '' : 's'} · {label}
           </div>
+          <div className="hidden md:flex justify-end px-3 pt-2 -mb-1">
+            <ColumnsMenu columns={cols.columns} visible={cols.visible} onChange={cols.setVisible} onReset={cols.reset} />
+          </div>
           <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
-                <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
-                <th className="text-left py-2 px-3 whitespace-nowrap">#</th>
-                <th className="text-left py-2 px-3">Cliente</th>
-                <th className="text-left py-2 px-3 whitespace-nowrap">Referencia</th>
-                <th className="text-left py-2 px-3">Producto</th>
-                <th className="text-left py-2 px-3">Tela</th>
-                <th className="text-right py-2 px-3 whitespace-nowrap">Cant.</th>
-                <th className="text-right py-2 px-3 whitespace-nowrap">Unit. (USD)</th>
-                <th className="text-right py-2 px-3 whitespace-nowrap">Total (USD)</th>
+                {cols.cols.map((col) => (
+                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {report.rows.map((r) => (
-                <tr key={r.id} className="border-t border-ink-50">
-                  <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-400 whitespace-nowrap">{r.quoteNumber ?? '—'}</td>
-                  <td className="py-1.5 px-3 min-w-0">{r.customer || '—'}</td>
-                  <td className="py-1.5 px-3 tabular-nums text-ink-500 whitespace-nowrap">{r.reference || '—'}</td>
-                  <td className="py-1.5 px-3 min-w-0">{r.product || '—'}</td>
-                  <td className="py-1.5 px-3 text-ink-500 min-w-0">{r.fabric || '—'}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{r.qty}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatMoney(r.unitUsd, 'USD')}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatMoney(r.totalUsd, 'USD')}</td>
-                </tr>
-              ))}
+              {report.rows.map((r) => {
+                const ctx = { r };
+                return (
+                  <tr key={r.id} className="border-t border-ink-50">
+                    {cols.cols.map((col) => (
+                      <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
-              <tr className="border-t border-ink-200 font-semibold">
-                <td className="py-2 px-3" colSpan={6}>Total</td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{report.totals.qty}</td>
-                <td className="py-2 px-3"></td>
-                <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatMoney(report.totals.usd, 'USD')}</td>
-              </tr>
+              {(() => {
+                // "Total" label spans the visible columns BEFORE the qty column;
+                // qty / unit / total then carry their own footer cells (unit is
+                // blank). Hiding columns shrinks the colSpan to match.
+                const leading = cols.cols.filter((c) => !['qty', 'unitUsd', 'totalUsd'].includes(c.key)).length;
+                return (
+                  <tr className="border-t border-ink-200 font-semibold">
+                    {leading > 0 && <td className="py-2 px-3" colSpan={leading}>Total</td>}
+                    {cols.cols.some((c) => c.key === 'qty') && <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{report.totals.qty}</td>}
+                    {cols.cols.some((c) => c.key === 'unitUsd') && <td className="py-2 px-3"></td>}
+                    {cols.cols.some((c) => c.key === 'totalUsd') && <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatMoney(report.totals.usd, 'USD')}</td>}
+                  </tr>
+                );
+              })()}
             </tfoot>
           </table>
           </div>

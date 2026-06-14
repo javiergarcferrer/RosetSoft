@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ScopeToggle, { SCOPE_MINE, SCOPE_TEAM } from '../components/ScopeToggle.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
+import useColumns from '../components/search/useColumns.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
@@ -139,14 +140,6 @@ const DEFAULT_VISIBLE_COLS = {
   client: true, creator: false, status: true, invoice: true, updated: true, created: false, total: true,
 };
 const COLS_STORAGE_KEY = 'rs.quotes.cols.v1';
-
-function loadVisibleCols() {
-  try {
-    const raw = localStorage.getItem(COLS_STORAGE_KEY);
-    if (raw) return { ...DEFAULT_VISIBLE_COLS, ...JSON.parse(raw) };
-  } catch { /* storage unavailable — fall back to defaults */ }
-  return DEFAULT_VISIBLE_COLS;
-}
 
 /**
  * Tri-state selection box (Shopify's row / select-all checkbox). A real
@@ -322,14 +315,9 @@ export default function Quotes() {
   // Column visibility (Shopify "edit columns") — persisted per browser. The
   // table renders `cols` (number anchor + the toggled-on columns, in order);
   // the Columns menu gets the full QUOTE_COLUMNS so hidden ones can return.
-  const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
-  useEffect(() => {
-    try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(visibleCols)); } catch { /* ignore */ }
-  }, [visibleCols]);
-  const cols = useMemo(
-    () => QUOTE_COLUMNS.filter((c) => c.canHide === false || visibleCols[c.key]),
-    [visibleCols],
-  );
+  const {
+    visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
+  } = useColumns(QUOTE_COLUMNS, DEFAULT_VISIBLE_COLS, COLS_STORAGE_KEY);
   const colSpan = cols.length + 2; // checkbox + data columns + actions
 
   // Bulk selection (Shopify row checkboxes + contextual action bar). Desktop
@@ -436,7 +424,7 @@ export default function Quotes() {
         columns={QUOTE_COLUMNS}
         visibleColumns={visibleCols}
         onColumnsChange={setVisibleCols}
-        onColumnsReset={() => setVisibleCols(DEFAULT_VISIBLE_COLS)}
+        onColumnsReset={resetCols}
         resultCount={filtered.length}
         resultNoun={['cotización', 'cotizaciones']}
       />

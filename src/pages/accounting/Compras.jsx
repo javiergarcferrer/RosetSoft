@@ -10,6 +10,8 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
+import useColumns from '../../components/search/useColumns.js';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   buildPurchaseEntry, computeExpenseTaxes, resolveAccountingConfig,
@@ -18,6 +20,63 @@ import {
 
 const KIND_LABEL = { goods: 'Mercancía', asset: 'Activo fijo', service: 'Servicio' };
 const PAY_LABEL = { cash: 'Efectivo', bank: 'Banco', card: 'Tarjeta', credit: 'Crédito' };
+
+/**
+ * Desktop table columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives both the table render (`cell`) and the Columns menu. `date`
+ * is the fixed identity anchor (`canHide: false`); everything else toggles.
+ * Each `cell` is a pure render off the per-row `ctx` the row assembles.
+ */
+const COMPRAS_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ p }) => formatDate(p.purchaseAt),
+  },
+  {
+    key: 'supplier', label: 'Proveedor',
+    tdClass: 'min-w-[120px]',
+    cell: ({ supplierName }) => supplierName || '—',
+  },
+  {
+    key: 'kind', label: 'Tipo',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-600 whitespace-nowrap',
+    cell: ({ p }) => KIND_LABEL[p.kind] || p.kind,
+  },
+  {
+    key: 'ncf', label: 'NCF',
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ p }) => p.ncf || '—',
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ p }) => formatDop(p.base),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ p }) => formatDop(p.itbis),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ p }) => formatDop((p.base || 0) + (p.itbis || 0)),
+  },
+  {
+    key: 'payment', label: 'Pago',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-600 whitespace-nowrap',
+    cell: ({ p }) => PAY_LABEL[p.paymentMethod] || p.paymentMethod,
+  },
+];
+
+// Default visibility for the hideable columns — the set the table shipped with
+// (date is the always-on anchor). Persisted per-browser; bump the suffix to
+// force-reset after changing the column set.
+const COMPRAS_DEFAULT = {
+  supplier: true, kind: true, ncf: true, base: true, itbis: true, total: true, payment: true,
+};
+const COMPRAS_COLS_KEY = 'rs.compras.cols.v1';
 
 /**
  * Compras — purchase capture. Goods capitalize into inventory (and create a
@@ -38,6 +97,9 @@ export default function Compras() {
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
   const [params] = useSearchParams();
   const [showForm, setShowForm] = useState(!!params.get('new'));
+
+  // Column visibility (Shopify "edit columns") — persisted per browser.
+  const { visible, setVisible, reset, cols } = useColumns(COMPRAS_COLUMNS, COMPRAS_DEFAULT, COMPRAS_COLS_KEY);
 
   const rows = purchasesQ.data.slice().sort((a, b) => (b.purchaseAt || 0) - (a.purchaseAt || 0));
 
@@ -70,36 +132,34 @@ export default function Compras() {
             ],
           }))}
         />
-        <div className="hidden md:block card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table min-w-[640px]">
-              <thead>
-                <tr>
-                  <th className="whitespace-nowrap">Fecha</th>
-                  <th>Proveedor</th>
-                  <th className="whitespace-nowrap">Tipo</th>
-                  <th className="whitespace-nowrap">NCF</th>
-                  <th className="text-right whitespace-nowrap">Base</th>
-                  <th className="text-right whitespace-nowrap">ITBIS</th>
-                  <th className="text-right whitespace-nowrap">Total</th>
-                  <th className="whitespace-nowrap">Pago</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id}>
-                    <td className="text-ink-500 whitespace-nowrap">{formatDate(p.purchaseAt)}</td>
-                    <td className="min-w-[120px]">{suppliersById.get(p.supplierId)?.name || '—'}</td>
-                    <td className="text-ink-600 whitespace-nowrap">{KIND_LABEL[p.kind] || p.kind}</td>
-                    <td className="tabular-nums text-ink-500 whitespace-nowrap">{p.ncf || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(p.base)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(p.itbis)}</td>
-                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop((p.base || 0) + (p.itbis || 0))}</td>
-                    <td className="text-ink-600 whitespace-nowrap">{PAY_LABEL[p.paymentMethod] || p.paymentMethod}</td>
+        <div className="hidden md:block">
+          <div className="flex justify-end mb-2">
+            <ColumnsMenu columns={COMPRAS_COLUMNS} visible={visible} onChange={setVisible} onReset={reset} />
+          </div>
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="table min-w-[640px]">
+                <thead>
+                  <tr>
+                    {cols.map((col) => (
+                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((p) => {
+                    const ctx = { p, supplierName: suppliersById.get(p.supplierId)?.name };
+                    return (
+                      <tr key={p.id}>
+                        {cols.map((col) => (
+                          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
         </>

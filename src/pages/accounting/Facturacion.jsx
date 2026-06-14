@@ -10,6 +10,8 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
+import useColumns from '../../components/search/useColumns.js';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
@@ -32,6 +34,61 @@ function ymd(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/**
+ * Desktop 607 table columns (Shopify-orders-style customizable list). ONE
+ * ordered definition drives the header, the data rows, the footer totals AND
+ * the Columns menu. `rnc` is the fixed identity anchor (`canHide: false`). The
+ * e-CF actions column (status + Transmitir/Imprimir) closes over page handlers,
+ * so it stays a FIXED trailing cell OUTSIDE this array. Each `cell`/`foot` is a
+ * pure render off its `ctx` bag; `foot` marks a numeric total column so the
+ * footer can place it (columns without `foot` merge into the "N ventas" span).
+ */
+const SALES607_COLUMNS = [
+  {
+    key: 'rnc', label: 'RNC/Cédula', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums whitespace-nowrap',
+    cell: ({ r }) => r.rnc || '—',
+  },
+  {
+    key: 'name', label: 'Cliente',
+    tdClass: 'min-w-[120px]',
+    cell: ({ r }) => r.name || '—',
+  },
+  {
+    key: 'ncf', label: 'NCF',
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => r.ncf || '—',
+  },
+  {
+    key: 'date', label: 'Fecha',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => formatDate(r.date),
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.base),
+    foot: ({ totals }) => formatDop(totals.base),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.itbis),
+    foot: ({ totals }) => formatDop(totals.itbis),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.total),
+    foot: ({ totals }) => formatDop(totals.total),
+  },
+];
+
+const SALES607_DEFAULT = {
+  name: true, ncf: true, date: true, base: true, itbis: true, total: true,
+};
+const SALES607_COLS_KEY = 'rs.facturacion.cols.v1';
 
 // The "ready to invoice" gate + effective invoice date are SHARED with the
 // CRM dashboard's "Por facturar" tile — one rule, lib/quoteMilestones.
@@ -275,6 +332,12 @@ export default function Facturacion() {
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
+
+  // Column visibility (Shopify "edit columns") for the 607 table — persisted
+  // per browser. The e-CF actions column stays a fixed trailing cell.
+  const {
+    visible: visible607, setVisible: setVisible607, reset: reset607, cols: cols607,
+  } = useColumns(SALES607_COLUMNS, SALES607_DEFAULT, SALES607_COLS_KEY);
 
   const setDraft = (id, patch) => setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
 
@@ -547,45 +610,59 @@ export default function Facturacion() {
                 ['Total', formatDop(sales607View.totals.total)],
               ]}
             />
-            <div className="hidden md:block card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th className="whitespace-nowrap">RNC/Cédula</th>
-                      <th>Cliente</th>
-                      <th className="whitespace-nowrap">NCF</th>
-                      <th className="whitespace-nowrap">Fecha</th>
-                      <th className="text-right whitespace-nowrap">Base</th>
-                      <th className="text-right whitespace-nowrap">ITBIS</th>
-                      <th className="text-right whitespace-nowrap">Total</th>
-                      <th className="whitespace-nowrap">e-CF</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales607View.rows.map((r) => (
-                      <tr key={r.id}>
-                        <td className="tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
-                        <td className="min-w-[120px]">{r.name || '—'}</td>
-                        <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.ncf || '—'}</td>
-                        <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
-                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
-                        <td>{ecfActions(r)}</td>
+            <div className="hidden md:block">
+              <div className="flex justify-end mb-2">
+                <ColumnsMenu columns={SALES607_COLUMNS} visible={visible607} onChange={setVisible607} onReset={reset607} />
+              </div>
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        {cols607.map((col) => (
+                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ))}
+                        <th className="whitespace-nowrap">e-CF</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-ink-200 font-semibold">
-                      <td className="whitespace-nowrap" colSpan={4}>{sales607View.count} ventas</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.itbis)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(sales607View.totals.total)}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {sales607View.rows.map((r) => {
+                        const ctx = { r };
+                        return (
+                          <tr key={r.id}>
+                            {cols607.map((col) => (
+                              <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                            ))}
+                            <td>{ecfActions(r)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      {(() => {
+                        // The label cell ("N ventas") spans every leading column
+                        // up to the first visible total column; each total column
+                        // then renders its own `foot`, and the fixed e-CF column
+                        // closes with an empty cell.
+                        const footCtx = { totals: sales607View.totals };
+                        const labelSpan = cols607.findIndex((c) => c.foot);
+                        const leadSpan = labelSpan === -1 ? cols607.length : labelSpan;
+                        const totalCols = labelSpan === -1 ? [] : cols607.slice(labelSpan);
+                        return (
+                          <tr className="border-t border-ink-200 font-semibold">
+                            <td className="whitespace-nowrap" colSpan={leadSpan}>{sales607View.count} ventas</td>
+                            {totalCols.map((col) => (
+                              <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
+                                {col.foot ? col.foot(footCtx) : null}
+                              </td>
+                            ))}
+                            <td></td>
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
             </>

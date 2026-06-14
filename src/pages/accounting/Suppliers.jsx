@@ -10,12 +10,53 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const KIND_LABEL = { fisica: 'Persona física', juridica: 'Persona jurídica', exterior: 'Exterior' };
 // Classes a purchase from a supplier can debit: Activos (Inventario for
 // merchandise like Ligne Roset), Costos, Gastos (services). Pasivos/Ingresos
 // never apply as the default posting account.
 const CLASS_LABEL = { 1: 'Activos', 5: 'Costos', 6: 'Gastos' };
+
+// Customizable columns (Shopify-style show/hide, persisted per browser). Each
+// `cell` is a pure render off the per-row `ctx` the row assembles; the Editar
+// action stays a fixed trailing cell outside this array.
+const SUPPLIER_COLUMNS = [
+  {
+    key: 'name', label: 'Proveedor', canHide: false,
+    tdClass: 'py-1.5 px-3 font-medium min-w-[120px]',
+    cell: ({ s }) => s.name,
+  },
+  {
+    key: 'rnc', label: 'RNC / Cédula',
+    thClass: 'text-left py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 tabular-nums text-ink-600 whitespace-nowrap',
+    cell: ({ s }) => s.rnc || '—',
+  },
+  {
+    key: 'kind', label: 'Tipo',
+    thClass: 'text-left py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-ink-600 whitespace-nowrap',
+    cell: ({ s }) => KIND_LABEL[s.kind] || s.kind,
+  },
+  {
+    key: 'account', label: 'Cuenta',
+    thClass: 'text-left py-2 px-3',
+    tdClass: 'py-1.5 px-3 text-ink-600 min-w-[100px]',
+    cell: ({ s, acctByCode }) => (s.defaultAccountCode
+      ? <span title={s.defaultAccountCode}>{acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode}</span>
+      : '—'),
+  },
+  {
+    key: 'retention', label: 'Retención',
+    thClass: 'text-left py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-ink-600 whitespace-nowrap',
+    cell: ({ s }) => [s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—',
+  },
+];
+const SUPPLIER_DEFAULT = { rnc: true, kind: true, account: true, retention: true };
+const SUPPLIER_COLS_KEY = 'rs.suppliers.cols.v1';
 
 /**
  * Proveedores — supplier master for Gastos/Compras. Carries the RNC, tax
@@ -46,6 +87,8 @@ export default function Suppliers() {
     return [...byClass.entries()].sort((x, y) => x[0] - y[0]).map(([c, accts]) => ({ c, label: CLASS_LABEL[c], accts }));
   }, [accountsQ.data]);
   const acctByCode = useMemo(() => new Map((accountsQ.data || []).map((a) => [a.code, a])), [accountsQ.data]);
+
+  const { columns, visible, setVisible, reset, cols } = useColumns(SUPPLIER_COLUMNS, SUPPLIER_DEFAULT, SUPPLIER_COLS_KEY);
 
   const [editing, setEditing] = useState(null); // null | 'new' | <id>
   const [form, setForm] = useState(blank());
@@ -172,37 +215,31 @@ export default function Suppliers() {
         <EmptyState icon={Truck} title="Sin proveedores" description="Agrega tu primer proveedor." />
       ) : (
         <div className="card overflow-hidden">
+          <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                 <tr>
-                  <th className="text-left py-2 px-3">Proveedor</th>
-                  <th className="text-left py-2 px-3 whitespace-nowrap">RNC / Cédula</th>
-                  <th className="text-left py-2 px-3 whitespace-nowrap">Tipo</th>
-                  <th className="text-left py-2 px-3">Cuenta</th>
-                  <th className="text-left py-2 px-3 whitespace-nowrap">Retención</th>
+                  {cols.map((c) => (
+                    <th key={c.key} className={c.thClass || 'text-left py-2 px-3'}>{c.label}</th>
+                  ))}
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => (
-                  <tr key={s.id} className="border-t border-ink-50">
-                    <td className="py-1.5 px-3 font-medium min-w-[120px]">{s.name}</td>
-                    <td className="py-1.5 px-3 tabular-nums text-ink-600 whitespace-nowrap">{s.rnc || '—'}</td>
-                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">{KIND_LABEL[s.kind] || s.kind}</td>
-                    <td className="py-1.5 px-3 text-ink-600 min-w-[100px]">
-                      {s.defaultAccountCode
-                        ? <span title={s.defaultAccountCode}>{acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode}</span>
-                        : '—'}
-                    </td>
-                    <td className="py-1.5 px-3 text-ink-600 whitespace-nowrap">
-                      {[s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'}
-                    </td>
-                    <td className="py-1.5 px-3 text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar proveedor"><Pencil size={13} /> Editar</button>
-                    </td>
-                  </tr>
-                ))}
+                {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => {
+                  const ctx = { s, acctByCode };
+                  return (
+                    <tr key={s.id} className="border-t border-ink-50">
+                      {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
+                      <td className="py-1.5 px-3 text-right">
+                        <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar proveedor"><Pencil size={13} /> Editar</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

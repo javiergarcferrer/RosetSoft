@@ -10,6 +10,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
+import useColumns from '../components/search/useColumns.js';
 import {
   Cell, CELL_CLS, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
@@ -40,6 +41,88 @@ const STATUS_LABELS = {
   declined: 'Rechazadas',
   archived: 'Archivadas',
 };
+
+/**
+ * Desktop sheet columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives the table render (`cell`), the sortable headers (`th`) and
+ * the Columns menu (`label` / `canHide`). `name` is the fixed identity anchor
+ * (`canHide: false`) — never hidden, not offered in the menu; everything else
+ * the seller can toggle. Each `cell` is a pure render off the per-row `ctx` the
+ * row assembles ({ p, row, rollup, onCommit }) so the inline-edit semantics are
+ * unchanged. `th(hctx)` renders the full <th> for sortable columns (reusing
+ * SortableTh); plain columns fall back to <th>{label}</th>. The chevron, the
+ * row-action buttons and the blank new-row cells stay FIXED leading/trailing
+ * cells (they close over the row's handlers), outside this array. The new-row's
+ * placeholder data cells still key off this array (see NewSheetRow) so the blank
+ * row stays column-aligned whatever the admin hides.
+ */
+const PROFESSIONAL_COLUMNS = [
+  {
+    key: 'name', label: 'Nombre', canHide: false,
+    tdClass: 'font-medium max-w-[220px]',
+    th: ({ sort, onSort }) => <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={onSort} />,
+    cell: ({ p, row, rollup, onCommit }) => (
+      <div className="flex items-center gap-1.5">
+        <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
+        <ContactGapDot rollup={rollup} />
+      </div>
+    ),
+  },
+  {
+    key: 'company', label: 'Empresa',
+    tdClass: 'max-w-[200px]',
+    th: ({ sort, onSort }) => <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={onSort} />,
+    cell: ({ p, row, onCommit }) => (
+      <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
+    ),
+  },
+  {
+    key: 'email', label: 'Correo',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell min-w-[9rem] max-w-[220px]',
+    cell: ({ p, row, onCommit }) => (
+      <Cell value={p.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${p.name}`} />
+    ),
+  },
+  {
+    // min-w: phone digits must never clip — name/empresa absorb the squeeze
+    // instead (they truncate gracefully, numbers don't).
+    key: 'phone', label: 'Teléfono',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell min-w-[8rem] max-w-[150px]',
+    cell: ({ p, row, onCommit }) => (
+      <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${p.name}`} />
+    ),
+  },
+  {
+    key: 'city', label: 'Ciudad',
+    thClass: 'hidden xl:table-cell', tdClass: 'hidden xl:table-cell max-w-[140px]',
+    cell: ({ p, row, onCommit }) => (
+      <Cell value={p.city} onCommit={(v) => onCommit('city', v)} row={row} col="city" placeholder="—" label={`Ciudad de ${p.name}`} />
+    ),
+  },
+  {
+    key: 'quotes', label: 'Cotizaciones',
+    tdClass: 'text-right tabular-nums whitespace-nowrap text-ink-800',
+    th: ({ sort, onSort }) => <SortableTh label="Cotizaciones" sortKey="quotes" sort={sort} onSort={onSort} numeric className="text-right" />,
+    cell: ({ rollup }) => (
+      <>
+        {rollup?.count || 0}
+        {rollup?.acceptedTotal > 0 && (
+          <span className="text-[11px] text-emerald-700 ml-1.5">
+            {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
+          </span>
+        )}
+      </>
+    ),
+  },
+];
+
+// Default visibility for the hideable columns — the set the sheet shipped with
+// (name is always on). Persisted per-browser; the _v1 suffix lets a future
+// column set reset.
+const PROFESSIONAL_DEFAULT_COLS = {
+  company: true, email: true, phone: true, city: true, quotes: true,
+};
+const PROFESSIONAL_COLS_STORAGE_KEY = 'rs.professionals.cols.v1';
 
 /**
  * Professionals — an Excel-like sheet over the full search/filter header.
@@ -106,6 +189,14 @@ export default function Professionals() {
     }),
     [pros, quotes, allLines, customers, q, tab, filters, sort],
   );
+
+  // Column visibility (Shopify "edit columns") — persisted per browser. The
+  // sheet renders `cols` (name anchor + the toggled-on columns, in order); the
+  // Columns menu gets the full PROFESSIONAL_COLUMNS so hidden ones can return.
+  const {
+    visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
+  } = useColumns(PROFESSIONAL_COLUMNS, PROFESSIONAL_DEFAULT_COLS, PROFESSIONAL_COLS_STORAGE_KEY);
+  const colSpan = cols.length + 2; // chevron + data columns + actions
 
   // ── Sheet writes ───────────────────────────────────────────────────────────
   // One field per commit, straight to the row. The live query repaints the
@@ -233,6 +324,10 @@ export default function Professionals() {
               sortOptions={SORT_OPTIONS}
               sort={sort}
               onSortChange={setSort}
+              columns={PROFESSIONAL_COLUMNS}
+              visibleColumns={visibleCols}
+              onColumnsChange={setVisibleCols}
+              onColumnsReset={resetCols}
               resultCount={rows.length}
               resultNoun={['profesional', 'profesionales']}
             />
@@ -267,47 +362,51 @@ export default function Professionals() {
             <MobileNewCard onCreate={createFromDraft} />
           </div>
 
-          {/* Desktop sheet */}
+          {/* Desktop sheet. Columns are user-customizable (Columnas menu),
+              so it scrolls horizontally when many are on. */}
           <div className="hidden md:block card overflow-hidden">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="w-8"></th>
-                  <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={setSort} />
-                  <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
-                  <th className="hidden lg:table-cell">Correo</th>
-                  <th className="hidden lg:table-cell">Teléfono</th>
-                  <th className="hidden xl:table-cell">Ciudad</th>
-                  <SortableTh label="Cotizaciones" sortKey="quotes" sort={sort} onSort={setSort} numeric className="text-right" />
-                  <th className="w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {noMatches && (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
                   <tr>
-                    <td colSpan={8}>
-                      <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
-                        <SearchX size={15} className="flex-shrink-0" aria-hidden />
-                        Sin resultados — ajusta la búsqueda o los filtros.
-                      </div>
-                    </td>
+                    <th className="w-8"></th>
+                    {cols.map((col) => (
+                      col.th
+                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} />
+                        : <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    ))}
+                    <th className="w-10"></th>
                   </tr>
-                )}
-                {rows.map((p, i) => (
-                  <SheetRow
-                    key={p.id}
-                    p={p}
-                    row={i}
-                    rollup={rollupByProfessionalId.get(p.id)}
-                    isOpen={expanded.has(p.id)}
-                    onToggle={() => toggleExpanded(p.id)}
-                    onCommit={(field, v) => commitField(p, field, v)}
-                    onRemove={() => removePro(p)}
-                  />
-                ))}
-                <NewSheetRow row={rows.length} onCreate={createFromDraft} />
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {noMatches && (
+                    <tr>
+                      <td colSpan={colSpan}>
+                        <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
+                          <SearchX size={15} className="flex-shrink-0" aria-hidden />
+                          Sin resultados — ajusta la búsqueda o los filtros.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {rows.map((p, i) => (
+                    <SheetRow
+                      key={p.id}
+                      p={p}
+                      row={i}
+                      cols={cols}
+                      colSpan={colSpan}
+                      rollup={rollupByProfessionalId.get(p.id)}
+                      isOpen={expanded.has(p.id)}
+                      onToggle={() => toggleExpanded(p.id)}
+                      onCommit={(field, v) => commitField(p, field, v)}
+                      onRemove={() => removePro(p)}
+                    />
+                  ))}
+                  <NewSheetRow row={rows.length} cols={cols} onCreate={createFromDraft} />
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -325,8 +424,19 @@ function NoMatchesCard() {
   );
 }
 
+/**
+ * Renders one sortable header from a column definition — the `th(hctx)` from
+ * PROFESSIONAL_COLUMNS reused so the desktop column headers keep their sort
+ * affordance (SortableTh) while the column set is data-driven.
+ */
+function ColumnTh({ col, sort, onSort }) {
+  return col.th({ sort, onSort });
+}
+
 /** One professional as a sheet row + (when open) its quotes dropdown row. */
-function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
+function SheetRow({ p, row, cols, colSpan, rollup, isOpen, onToggle, onCommit, onRemove }) {
+  // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
+  const ctx = { p, row, rollup, onCommit };
   return (
     <>
       <tr className="group/row hover:bg-ink-50/40 transition-colors">
@@ -342,34 +452,9 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
         </td>
-        <td className="font-medium max-w-[220px]">
-          <div className="flex items-center gap-1.5">
-            <Cell value={p.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${p.name}`} />
-            <ContactGapDot rollup={rollup} />
-          </div>
-        </td>
-        <td className="max-w-[200px]">
-          <Cell value={p.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${p.name}`} />
-        </td>
-        <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">
-          <Cell value={p.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${p.name}`} />
-        </td>
-        {/* min-w: phone digits must never clip — name/empresa absorb the
-            squeeze instead (they truncate gracefully, numbers don't). */}
-        <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">
-          <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${p.name}`} />
-        </td>
-        <td className="hidden xl:table-cell max-w-[140px]">
-          <Cell value={p.city} onCommit={(v) => onCommit('city', v)} row={row} col="city" placeholder="—" label={`Ciudad de ${p.name}`} />
-        </td>
-        <td className="text-right tabular-nums whitespace-nowrap text-ink-800">
-          {rollup?.count || 0}
-          {rollup?.acceptedTotal > 0 && (
-            <span className="text-[11px] text-emerald-700 ml-1.5">
-              {formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}
-            </span>
-          )}
-        </td>
+        {cols.map((col) => (
+          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+        ))}
         <td className="!pl-0 text-right">
           <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
             <Link
@@ -394,7 +479,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={8} className="!p-0 bg-ink-50/50">
+          <td colSpan={colSpan} className="!p-0 bg-ink-50/50">
             <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>
@@ -403,12 +488,26 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
   );
 }
 
+// Per-column draft-input config for the blank new-row. Keyed by column key so
+// the new row renders ONLY the columns currently visible (staying aligned with
+// the data rows whatever the admin hides). 'name' is rendered specially (it
+// carries the create-on-commit + data-newrow-name focus hook); the 'quotes'
+// column has no input (a quiet em-dash), and there's no draft field for it.
+const NEWROW_FIELDS = {
+  company: { placeholder: 'Empresa' },
+  email: { placeholder: 'Correo', type: 'email', inputMode: 'email' },
+  phone: { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' },
+  city: { placeholder: 'Ciudad' },
+};
+
 /**
  * The permanently-open blank row at the bottom of the sheet. Drafts are
  * local; committing a non-empty NAME creates the professional with whatever
- * else was typed, then the row resets for the next one.
+ * else was typed, then the row resets for the next one. Renders one cell per
+ * VISIBLE data column (off `cols`) so it never drifts out of alignment when
+ * the admin hides a column.
  */
-function NewSheetRow({ row, onCreate }) {
+function NewSheetRow({ row, cols, onCreate }) {
   const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '', city: '' });
   const creating = useRef(false);
 
@@ -426,7 +525,7 @@ function NewSheetRow({ row, onCreate }) {
     }
   }
 
-  const cell = (field, props = {}) => (
+  const draftCell = (field, props = {}) => (
     <Cell
       value={draft[field]}
       onCommit={(v) => maybeCreate({ [field]: v })}
@@ -439,24 +538,34 @@ function NewSheetRow({ row, onCreate }) {
   return (
     <tr className="bg-brand-50/30">
       <td className="!pr-0 text-ink-300"><Plus size={14} className="ml-1" /></td>
-      <td className="max-w-[220px]">
-        <input
-          data-newrow-name
-          data-cell={`${row}:name`}
-          className={CELL_CLS}
-          value={draft.name}
-          placeholder="Nuevo profesional…"
-          aria-label="Nombre del nuevo profesional"
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          onBlur={() => maybeCreate({})}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
-        />
-      </td>
-      <td className="max-w-[200px]">{cell('company', { placeholder: 'Empresa' })}</td>
-      <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
-      <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
-      <td className="hidden xl:table-cell max-w-[140px]">{cell('city', { placeholder: 'Ciudad' })}</td>
-      <td className="text-right text-[11px] text-ink-300">—</td>
+      {cols.map((col) => {
+        if (col.key === 'name') {
+          return (
+            <td key="name" className="max-w-[220px]">
+              <input
+                data-newrow-name
+                data-cell={`${row}:name`}
+                className={CELL_CLS}
+                value={draft.name}
+                placeholder="Nuevo profesional…"
+                aria-label="Nombre del nuevo profesional"
+                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                onBlur={() => maybeCreate({})}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+              />
+            </td>
+          );
+        }
+        if (NEWROW_FIELDS[col.key]) {
+          return (
+            <td key={col.key} className={col.tdClass || ''}>
+              {draftCell(col.key, NEWROW_FIELDS[col.key])}
+            </td>
+          );
+        }
+        // No-input columns (e.g. Cotizaciones) get a quiet placeholder.
+        return <td key={col.key} className="text-right text-[11px] text-ink-300">—</td>;
+      })}
       <td></td>
     </tr>
   );

@@ -9,15 +9,34 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 /** Empleados — payroll master. Self-gates on accounting/admin. */
 function blank() { return { name: '', cedula: '', position: '', monthlySalary: '', active: true }; }
+
+// Customizable columns (Shopify-style show/hide, persisted per browser) for the
+// desktop table; each `cell` is a pure render off the per-row ctx. The Editar
+// action stays a fixed trailing cell outside this array.
+const EMPLEADO_COLUMNS = [
+  { key: 'name', label: 'Empleado', canHide: false, tdClass: 'font-medium', cell: ({ e }) => e.name },
+  { key: 'cedula', label: 'Cédula', tdClass: 'tabular-nums text-ink-600 whitespace-nowrap', cell: ({ e }) => e.cedula || '—' },
+  { key: 'position', label: 'Cargo', tdClass: 'text-ink-600', cell: ({ e }) => e.position || '—' },
+  { key: 'salary', label: 'Salario', thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap', cell: ({ e }) => formatDop(e.monthlySalary) },
+  {
+    key: 'status', label: 'Estado',
+    cell: ({ e }) => <span className={`status-pill ${e.active !== false ? 'status-pill-active' : 'status-pill-inactive'}`}>{e.active !== false ? 'Activo' : 'Inactivo'}</span>,
+  },
+];
+const EMPLEADO_DEFAULT = { cedula: true, position: true, salary: true, status: true };
+const EMPLEADO_COLS_KEY = 'rs.empleados.cols.v1';
 
 export default function Empleados() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const empQ = useLiveQueryStatus(() => db.employees.where('profileId').equals(scope).toArray(), [scope], []);
+  const { columns, visible, setVisible, reset, cols } = useColumns(EMPLEADO_COLUMNS, EMPLEADO_DEFAULT, EMPLEADO_COLS_KEY);
   const [params] = useSearchParams();
   const [editing, setEditing] = useState(params.get('new') ? 'new' : null);
   const [form, setForm] = useState(blank());
@@ -100,24 +119,31 @@ export default function Empleados() {
             ))}
           </div>
           {/* Desktop: table */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr><th>Empleado</th><th>Cédula</th><th>Cargo</th><th className="text-right">Salario</th><th>Estado</th><th></th></tr>
-              </thead>
-              <tbody>
-                {empQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((e) => (
-                  <tr key={e.id}>
-                    <td className="font-medium">{e.name}</td>
-                    <td className="tabular-nums text-ink-600 whitespace-nowrap">{e.cedula || '—'}</td>
-                    <td className="text-ink-600">{e.position || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(e.monthlySalary)}</td>
-                    <td><span className={`status-pill ${e.active !== false ? 'status-pill-active' : 'status-pill-inactive'}`}>{e.active !== false ? 'Activo' : 'Inactivo'}</span></td>
-                    <td className="text-right"><button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar empleado"><Pencil size={13} /> Editar</button></td>
+          <div className="hidden sm:block">
+            <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
+              <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {empQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((e) => {
+                    const ctx = { e };
+                    return (
+                      <tr key={e.id}>
+                        {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
+                        <td className="text-right"><button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar empleado"><Pencil size={13} /> Editar</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

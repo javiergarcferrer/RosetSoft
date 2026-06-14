@@ -30,6 +30,53 @@ import {
 } from '../../lib/commissions.js';
 import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sales.js';
 import RowCards from '../../components/RowCards.jsx';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
+import useColumns from '../../components/search/useColumns.js';
+
+/**
+ * Customizable columns (Shopify-style) for the payout rollup tables (Resumen
+ * por vendedor / por profesional). Both rollups share this one ordered
+ * definition but persist independently via their own storage key. The name is
+ * the fixed identity anchor (`canHide: false`); each `cell` is a pure render
+ * off the per-row `ctx` the row builds, and `foot` returns this column's value
+ * in the totals row (null = no total, render an empty cell).
+ */
+const SUMMARY_COLUMNS = [
+  {
+    key: 'name', label: 'Nombre', canHide: false,
+    tdClass: 'font-medium',
+    cell: ({ name, sub }) => (
+      <>
+        {name}
+        {sub && <div className="text-[11px] text-ink-400">{sub}</div>}
+      </>
+    ),
+  },
+  {
+    key: 'count', label: '# ventas',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ r }) => r.count,
+  },
+  {
+    key: 'commission', label: 'Comisión',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatMoney(r.commission, 'USD', { USD: 1 }),
+  },
+  {
+    key: 'paid', label: 'Pagado',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap text-emerald-700',
+    cell: ({ r }) => formatMoney(r.paid, 'USD', { USD: 1 }),
+  },
+  {
+    key: 'pending', label: 'Pendiente',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap font-medium text-amber-700',
+    cell: ({ r }) => formatMoney(r.pending, 'USD', { USD: 1 }),
+    foot: ({ pendingTotal }) => formatMoney(pendingTotal, 'USD', { USD: 1 }),
+  },
+];
+const SUMMARY_DEFAULT_COLS = {
+  count: true, commission: true, paid: true, pending: true,
+};
 
 /**
  * Contabilidad — single-pane accounting workspace, organized around the
@@ -506,6 +553,7 @@ export default function AccountingWorkspace() {
           keyOf={(r) => r.user.id}
           nameOf={(r) => r.user.name || r.user.email || '—'}
           subOf={(r) => (r.user.email && r.user.name ? r.user.email : null)}
+          colsStorageKey="rs.workspace.vendedores.cols.v1"
         />
       )}
       {loaded && derived.profRows.length > 0 && (
@@ -516,6 +564,7 @@ export default function AccountingWorkspace() {
           keyOf={(r) => r.professional.id}
           nameOf={(r) => r.professional.name || '—'}
           subOf={(r) => r.professional.company || null}
+          colsStorageKey="rs.workspace.profesionales.cols.v1"
         />
       )}
     </AccountingGate>
@@ -734,8 +783,21 @@ function CommissionLine({ role, who, badge, detail, action }) {
 }
 
 /** Payout rollup card — name, # ventas, comisión, pagado, pendiente. */
-function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
+function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf, colsStorageKey }) {
   const pendingTotal = rows.reduce((s, r) => s + r.pending, 0);
+  // Column visibility (Shopify "edit columns") — each rollup persists its own
+  // choice via its storage key; both share the SUMMARY_COLUMNS definition.
+  const {
+    visible, setVisible, reset, cols,
+  } = useColumns(SUMMARY_COLUMNS, SUMMARY_DEFAULT_COLS, colsStorageKey);
+
+  // Footer: the "Pendiente total" label spans the leading columns up to the
+  // first column carrying a total, then each remaining column renders its
+  // total (or an empty cell). Stays coherent as columns toggle.
+  const footCtx = { pendingTotal };
+  const firstFootIdx = cols.findIndex((c) => typeof c.foot === 'function');
+  const labelSpan = firstFootIdx === -1 ? cols.length : firstFootIdx;
+
   return (
     <section className="card overflow-hidden mt-6">
       <header className="card-header">
@@ -759,51 +821,46 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf }) {
         }))}
         footer={[['Pendiente total', formatMoney(pendingTotal, 'USD', { USD: 1 })]]}
       />
-      <div className="hidden md:block overflow-x-auto">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th className="text-right whitespace-nowrap"># ventas</th>
-              <th className="text-right whitespace-nowrap">Comisión</th>
-              <th className="text-right whitespace-nowrap">Pagado</th>
-              <th className="text-right whitespace-nowrap">Pendiente</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const sub = subOf(r);
-              return (
-                <tr key={keyOf(r)} className="hover:bg-ink-50 transition-colors">
-                  <td className="font-medium">
-                    {nameOf(r)}
-                    {sub && <div className="text-[11px] text-ink-400">{sub}</div>}
+      <div className="hidden md:block">
+        {/* Standalone columns control for this rollup table. */}
+        <div className="hidden md:flex justify-end mb-2">
+          <ColumnsMenu columns={SUMMARY_COLUMNS} visible={visible} onChange={setVisible} onReset={reset} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                {cols.map((col) => (
+                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const ctx = { r, name: nameOf(r), sub: subOf(r) };
+                return (
+                  <tr key={keyOf(r)} className="hover:bg-ink-50 transition-colors">
+                    {cols.map((col) => (
+                      <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-ink-50 border-t border-ink-200">
+                <td colSpan={labelSpan || 1} className="text-right text-[11px] font-semibold uppercase tracking-wide text-ink-500 py-2 px-4">
+                  Pendiente total
+                </td>
+                {cols.slice(labelSpan).map((col) => (
+                  <td key={col.key} className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700 py-2 px-4">
+                    {typeof col.foot === 'function' ? col.foot(footCtx) : ''}
                   </td>
-                  <td className="text-right tabular-nums">{r.count}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">
-                    {formatMoney(r.commission, 'USD', { USD: 1 })}
-                  </td>
-                  <td className="text-right tabular-nums whitespace-nowrap text-emerald-700">
-                    {formatMoney(r.paid, 'USD', { USD: 1 })}
-                  </td>
-                  <td className="text-right tabular-nums whitespace-nowrap font-medium text-amber-700">
-                    {formatMoney(r.pending, 'USD', { USD: 1 })}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="bg-ink-50 border-t border-ink-200">
-              <td colSpan={4} className="text-right text-[11px] font-semibold uppercase tracking-wide text-ink-500 py-2 px-4">
-                Pendiente total
-              </td>
-              <td className="text-right tabular-nums whitespace-nowrap font-semibold text-amber-700 py-2 px-4">
-                {formatMoney(pendingTotal, 'USD', { USD: 1 })}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </section>
   );

@@ -7,8 +7,37 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveReconciliation } from '../../core/accounting/index.js';
+
+// Reconciliation table columns (Shopify "edit columns"). The reconcile
+// checkbox is a fixed leading cell (closes over the toggle handler), outside
+// this array; fecha is the identity anchor; #, concepto and monto toggle.
+const RECON_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ row }) => formatDate(row.postedAt),
+  },
+  {
+    key: 'number', label: '#',
+    tdClass: 'tabular-nums text-ink-400 whitespace-nowrap',
+    cell: ({ row }) => row.number ?? '—',
+  },
+  {
+    key: 'memo', label: 'Concepto',
+    tdClass: 'min-w-[120px]',
+    cell: ({ row }) => row.memo || '—',
+  },
+  {
+    key: 'amount', label: 'Monto',
+    thClass: 'text-right whitespace-nowrap',
+    cell: ({ row }) => <span className={`block text-right tabular-nums whitespace-nowrap ${row.amount < 0 ? 'text-rose-700' : ''}`}>{formatDop(row.amount)}</span>,
+  },
+];
+const RECON_DEFAULT = { number: true, memo: true, amount: true };
 
 /**
  * Conciliación bancaria — pick a bank account, tick the ledger lines that
@@ -32,6 +61,11 @@ export default function Conciliacion() {
   const [accountCode, setAccountCode] = useState('');
   const [stmt, setStmt] = useState('');
   const [busy, setBusy] = useState(null);
+
+  // Column visibility (Shopify "edit columns"), persisted per browser. Fecha is
+  // the fixed anchor; #, concepto and monto toggle. The reconcile checkbox is a
+  // fixed leading cell outside the column array (it closes over the toggle).
+  const recCols = useColumns(RECON_COLUMNS, RECON_DEFAULT, 'rs.conciliacion.cols.v1');
 
   const rec = useMemo(
     () => (accountCode ? resolveReconciliation({ accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, accountCode, statementBalance: stmt }) : null),
@@ -85,40 +119,46 @@ export default function Conciliacion() {
               {rec.count === 0 ? (
                 <EmptyState icon={Landmark} title="Sin movimientos" description="Esta cuenta no tiene movimientos en el mayor." />
               ) : (
+                <>
+                <div className="hidden md:flex justify-end mb-2">
+                  <ColumnsMenu columns={recCols.columns} visible={recCols.visible} onChange={recCols.setVisible} onReset={recCols.reset} />
+                </div>
                 <div className="card overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="table min-w-[480px]">
                       <thead>
                         <tr>
                           <th className="w-10"></th>
-                          <th className="whitespace-nowrap">Fecha</th>
-                          <th>#</th>
-                          <th>Concepto</th>
-                          <th className="text-right whitespace-nowrap">Monto</th>
+                          {recCols.cols.map((col) => (
+                            <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {rec.rows.map((row) => (
-                          <tr key={row.line.id} className={row.reconciled ? 'bg-emerald-50/40' : ''}>
-                            <td>
-                              <button type="button" onClick={() => toggle(row)} disabled={busy === row.line.id}
-                                className={`w-6 h-6 coarse:w-11 coarse:h-11 rounded border inline-flex items-center justify-center transition-colors coarse:rounded-lg ${row.reconciled ? 'bg-emerald-600 border-emerald-600 text-white active:bg-emerald-700' : 'border-ink-300 text-transparent hover:border-ink-500 active:bg-ink-100'}`}
-                                title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
-                                aria-label={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
-                                aria-pressed={row.reconciled}>
-                                <Check size={13} />
-                              </button>
-                            </td>
-                            <td className="text-ink-500 whitespace-nowrap">{formatDate(row.postedAt)}</td>
-                            <td className="tabular-nums text-ink-400 whitespace-nowrap">{row.number ?? '—'}</td>
-                            <td className="min-w-[120px]">{row.memo || '—'}</td>
-                            <td className={`text-right tabular-nums whitespace-nowrap ${row.amount < 0 ? 'text-rose-700' : ''}`}>{formatDop(row.amount)}</td>
-                          </tr>
-                        ))}
+                        {rec.rows.map((row) => {
+                          const ctx = { row };
+                          return (
+                            <tr key={row.line.id} className={row.reconciled ? 'bg-emerald-50/40' : ''}>
+                              <td>
+                                <button type="button" onClick={() => toggle(row)} disabled={busy === row.line.id}
+                                  className={`w-6 h-6 coarse:w-11 coarse:h-11 rounded border inline-flex items-center justify-center transition-colors coarse:rounded-lg ${row.reconciled ? 'bg-emerald-600 border-emerald-600 text-white active:bg-emerald-700' : 'border-ink-300 text-transparent hover:border-ink-500 active:bg-ink-100'}`}
+                                  title={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
+                                  aria-label={row.reconciled ? 'Quitar conciliación' : 'Marcar conciliado'}
+                                  aria-pressed={row.reconciled}>
+                                  <Check size={13} />
+                                </button>
+                              </td>
+                              {recCols.cols.map((col) => (
+                                <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                              ))}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
+                </>
               )}
             </>
           )}

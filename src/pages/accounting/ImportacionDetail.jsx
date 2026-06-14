@@ -8,6 +8,8 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal,
@@ -33,6 +35,110 @@ function Meta({ label, children }) {
     </div>
   );
 }
+
+/**
+ * Per-factura líneas columns (Shopify-style customizable list). ONE ordered
+ * definition drives the read-only landed-cost cascade table (`cell`), its
+ * subtotal footer (`foot`) and the Columns menu (`label`/`canHide`). `name` is
+ * the fixed identity anchor (never hidden); the rest the team can toggle. Each
+ * `cell`/`foot` is a pure render off the per-line `ctx` bag (or the factura bag)
+ * the table assembles.
+ */
+const LINE_COLUMNS = [
+  {
+    key: 'name', label: 'Artículo', canHide: false,
+    thClass: 'text-left font-medium pb-1 pl-2.5', tdClass: 'py-1.5 pr-2 pl-2.5 min-w-0',
+    cell: ({ l }) => (
+      <>
+        {l.name}
+        {l.reference && <span className="ml-1.5 font-mono text-xs text-ink-400">{l.reference}</span>}
+        {!l.inInventory && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-amber-700"><Plus size={10} /> sin artículo</span>}
+      </>
+    ),
+    footClass: 'py-1.5 pl-2.5', foot: () => 'Subtotal factura',
+  },
+  {
+    key: 'qty', label: 'Cant.',
+    thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => l.qty || '—',
+  },
+  {
+    key: 'fob', label: 'FOB',
+    thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.fob),
+    footClass: 'py-1.5 text-right tabular-nums whitespace-nowrap', foot: ({ f }) => formatDop(f.fob),
+  },
+  {
+    key: 'cif', label: 'CIF',
+    thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.cif),
+  },
+  {
+    key: 'taxes', label: 'Impuestos',
+    thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap text-ink-500',
+    cell: ({ l }) => <span title={`Gravamen ${formatDop(l.gravamen)} · Selectivo ${formatDop(l.selectivo)} · ITBIS ${formatDop(l.itbis)}`}>{formatDop(l.taxes)}</span>,
+  },
+  {
+    key: 'landedTotal', label: 'C. destino',
+    thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.landedTotal),
+    footClass: 'py-1.5 text-right tabular-nums font-medium whitespace-nowrap', foot: ({ f }) => formatDop(f.landed),
+  },
+  {
+    key: 'landedUnitCost', label: 'C. unit.',
+    thClass: 'text-right font-medium pb-1 pr-2.5 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap pr-2.5',
+    cell: ({ l }) => (l.landedUnitCost > 0 ? formatDop(l.landedUnitCost) : '—'),
+  },
+];
+const LINE_DEFAULT = { qty: true, fob: true, cif: true, taxes: true, landedTotal: true, landedUnitCost: true };
+const LINE_COLS_KEY = 'rs.importacion.detail.lines.cols.v1';
+
+/**
+ * Cost-sheet columns (Shopify-style customizable list). Read-only list of the
+ * expediente's extra costs — `concept` is the fixed anchor; the rest toggle.
+ * `cell`/`foot` are pure over the per-cost `ctx` (or the totals bag).
+ */
+const COST_COLUMNS = [
+  {
+    key: 'concept', label: 'Concepto', canHide: false,
+    cell: ({ c }) => c.label,
+  },
+  {
+    key: 'supplier', label: 'Proveedor',
+    tdClass: 'min-w-0',
+    cell: ({ c }) => c.supplierName || '—',
+  },
+  {
+    key: 'ncf', label: 'NCF',
+    thClass: 'whitespace-nowrap', tdClass: 'font-mono text-xs whitespace-nowrap',
+    cell: ({ c }) => c.ncf || '—',
+  },
+  {
+    key: 'payment', label: 'Pago',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ c }) => c.payment,
+  },
+  {
+    key: 'amount', label: 'Monto',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ c }) => formatDop(c.amount),
+    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.gross),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ c }) => formatDop(c.itbis),
+    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.itbis),
+  },
+  {
+    key: 'net', label: 'Neto al costo',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ c }) => formatDop(c.net),
+    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.net),
+  },
+];
+const COST_DEFAULT = { supplier: true, ncf: true, payment: true, amount: true, itbis: true, net: true };
+const COST_COLS_KEY = 'rs.importacion.detail.costs.cols.v1';
 
 /**
  * Detalle de un expediente de importación — the full drill-down of one saved
@@ -75,6 +181,13 @@ export default function ImportacionDetail() {
     () => jLinesQ.data.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
     [jLinesQ.data],
   );
+
+  // Customizable columns (Shopify "Columnas") — persisted per browser. The
+  // per-factura líneas tables all share ONE choice (one hook); the cost sheet
+  // has its own. Each renders `cols` (anchor + toggled-on, in order) and feeds
+  // the full set to its <ColumnsMenu>.
+  const lineCols = useColumns(LINE_COLUMNS, LINE_DEFAULT, LINE_COLS_KEY);
+  const costCols = useColumns(COST_COLUMNS, COST_DEFAULT, COST_COLS_KEY);
 
   if (!allowed) {
     return (
@@ -179,43 +292,37 @@ export default function ImportacionDetail() {
                     {f.ncf && <span className="font-mono text-xs text-ink-500">{f.ncf}</span>}
                     <span className="ml-auto text-xs text-ink-500 tabular-nums">{f.lines.length} línea{f.lines.length === 1 ? '' : 's'}</span>
                   </div>
+                  <div className="hidden md:flex justify-end mb-2">
+                    <ColumnsMenu columns={lineCols.columns} visible={lineCols.visible} onChange={lineCols.setVisible} onReset={lineCols.reset} />
+                  </div>
                   <div className="overflow-x-auto -mx-2.5">
                   <table className="w-full text-sm min-w-[640px]">
                     <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                       <tr>
-                        <th className="text-left font-medium pb-1 pl-2.5">Artículo</th>
-                        <th className="text-right font-medium pb-1 whitespace-nowrap">Cant.</th>
-                        <th className="text-right font-medium pb-1 whitespace-nowrap">FOB</th>
-                        <th className="text-right font-medium pb-1 whitespace-nowrap">CIF</th>
-                        <th className="text-right font-medium pb-1 whitespace-nowrap">Impuestos</th>
-                        <th className="text-right font-medium pb-1 whitespace-nowrap">C. destino</th>
-                        <th className="text-right font-medium pb-1 pr-2.5 whitespace-nowrap">C. unit.</th>
+                        {lineCols.cols.map((col) => (
+                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {f.lines.map((l) => (
-                        <tr key={l.id} className="border-t border-ink-50">
-                          <td className="py-1.5 pr-2 pl-2.5 min-w-0">
-                            {l.name}
-                            {l.reference && <span className="ml-1.5 font-mono text-xs text-ink-400">{l.reference}</span>}
-                            {!l.inInventory && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-amber-700"><Plus size={10} /> sin artículo</span>}
-                          </td>
-                          <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{l.qty || '—'}</td>
-                          <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{formatDop(l.fob)}</td>
-                          <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{formatDop(l.cif)}</td>
-                          <td className="py-1.5 text-right tabular-nums whitespace-nowrap text-ink-500" title={`Gravamen ${formatDop(l.gravamen)} · Selectivo ${formatDop(l.selectivo)} · ITBIS ${formatDop(l.itbis)}`}>{formatDop(l.taxes)}</td>
-                          <td className="py-1.5 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(l.landedTotal)}</td>
-                          <td className="py-1.5 text-right tabular-nums whitespace-nowrap pr-2.5">{l.landedUnitCost > 0 ? formatDop(l.landedUnitCost) : '—'}</td>
-                        </tr>
-                      ))}
+                      {f.lines.map((l) => {
+                        const ctx = { l };
+                        return (
+                          <tr key={l.id} className="border-t border-ink-50">
+                            {lineCols.cols.map((col) => (
+                              <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-ink-100 text-xs text-ink-500">
-                        <td className="py-1.5 pl-2.5" colSpan={2}>Subtotal factura</td>
-                        <td className="py-1.5 text-right tabular-nums whitespace-nowrap">{formatDop(f.fob)}</td>
-                        <td colSpan={2}></td>
-                        <td className="py-1.5 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(f.landed)}</td>
-                        <td></td>
+                        {lineCols.cols.map((col) => (
+                          <td key={col.key} className={col.footClass || ''}>
+                            {col.foot ? col.foot({ f }) : null}
+                          </td>
+                        ))}
                       </tr>
                     </tfoot>
                   </table>
@@ -233,42 +340,43 @@ export default function ImportacionDetail() {
         {costs.length === 0 ? (
           <p className="text-xs text-ink-400 px-3 py-3">Sin costos adicionales — el costo en destino es CIF + impuestos capitalizables.</p>
         ) : (
+          <>
+          <div className="hidden md:flex justify-end px-3 pt-3">
+            <ColumnsMenu columns={costCols.columns} visible={costCols.visible} onChange={costCols.setVisible} onReset={costCols.reset} />
+          </div>
           <div className="overflow-x-auto">
           <table className="table min-w-[560px]">
             <thead>
               <tr>
-                <th>Concepto</th>
-                <th>Proveedor</th>
-                <th className="whitespace-nowrap">NCF</th>
-                <th className="whitespace-nowrap">Pago</th>
-                <th className="text-right whitespace-nowrap">Monto</th>
-                <th className="text-right whitespace-nowrap">ITBIS</th>
-                <th className="text-right whitespace-nowrap">Neto al costo</th>
+                {costCols.cols.map((col) => (
+                  <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {costs.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.label}</td>
-                  <td className="min-w-0">{c.supplierName || '—'}</td>
-                  <td className="font-mono text-xs whitespace-nowrap">{c.ncf || '—'}</td>
-                  <td className="text-ink-500 whitespace-nowrap">{c.payment}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(c.amount)}</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(c.itbis)}</td>
-                  <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.net)}</td>
-                </tr>
-              ))}
+              {costs.map((c) => {
+                const ctx = { c };
+                return (
+                  <tr key={c.id}>
+                    {costCols.cols.map((col) => (
+                      <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-ink-200 font-semibold">
-                <td colSpan={4}>{costs.length} costo{costs.length === 1 ? '' : 's'}</td>
-                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.gross)}</td>
-                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.itbis)}</td>
-                <td className="text-right tabular-nums whitespace-nowrap">{formatDop(costTotals.net)}</td>
+                {costCols.cols.map((col, i) => (
+                  i === 0
+                    ? <td key={col.key} className={col.footClass || ''}>{costs.length} costo{costs.length === 1 ? '' : 's'}</td>
+                    : <td key={col.key} className={col.footClass || ''}>{col.foot ? col.foot({ costTotals }) : null}</td>
+                ))}
               </tr>
             </tfoot>
           </table>
           </div>
+          </>
         )}
       </div>
 

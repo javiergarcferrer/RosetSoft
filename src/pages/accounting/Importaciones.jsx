@@ -8,6 +8,8 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
+import useColumns from '../../components/search/useColumns.js';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveImportacionesList, resolveAccountingConfig } from '../../core/accounting/index.js';
@@ -22,6 +24,116 @@ function Stat({ label, value, accent }) {
     </div>
   );
 }
+
+/**
+ * Customizable columns (Shopify-style) for the two desktop tables. ONE ordered
+ * definition per table drives both the render (`cell`) and the Columns menu
+ * (`label` / `canHide`). The first column is the fixed anchor (`canHide:
+ * false`); each `cell` is a pure render off the per-row `ctx` the row builds.
+ */
+const EXPEDIENTE_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => formatDate(r.date),
+  },
+  {
+    key: 'number', label: 'No.',
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => (r.number != null ? `#${r.number}` : '—'),
+  },
+  {
+    key: 'bl', label: 'BL / Contenedor',
+    thClass: 'whitespace-nowrap', tdClass: 'whitespace-nowrap',
+    cell: ({ r }) => (
+      <>
+        <span className="font-mono text-xs">{r.bl || '—'}</span>
+        {r.blExtra > 0 && <span className="text-ink-400 text-xs"> +{r.blExtra}</span>}
+        {r.containerCode && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-ink-400"><Container size={11} />{r.containerCode}</span>}
+      </>
+    ),
+  },
+  {
+    key: 'supplier', label: 'Proveedor',
+    tdClass: 'min-w-0',
+    cell: ({ r }) => (
+      <>{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</>
+    ),
+  },
+  {
+    key: 'lines', label: 'Líneas',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ r }) => r.lineCount,
+  },
+  {
+    key: 'cif', label: 'CIF',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.cif),
+  },
+  {
+    key: 'landed', label: 'Costo destino',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.landed),
+  },
+  {
+    key: 'itbisCred', label: 'ITBIS créd.',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.itbisCred),
+  },
+];
+const EXPEDIENTE_DEFAULT_COLS = {
+  number: true, bl: true, supplier: true, lines: true, cif: true, landed: true, itbisCred: true,
+};
+const EXPEDIENTE_COLS_STORAGE_KEY = 'rs.importaciones.expedientes.cols.v1';
+
+const LEGACY_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ l }) => formatDate(l.liquidatedAt),
+  },
+  {
+    key: 'supplier', label: 'Proveedor',
+    tdClass: 'min-w-0',
+    cell: ({ supplier }) => (supplier?.name || '—'),
+  },
+  {
+    key: 'item', label: 'Artículo',
+    tdClass: 'min-w-0',
+    cell: ({ l, item }) => (
+      <>{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</>
+    ),
+  },
+  {
+    key: 'cif', label: 'CIF',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.cif),
+  },
+  {
+    key: 'duty', label: 'Gravamen',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.duty),
+  },
+  {
+    key: 'importItbis', label: 'ITBIS imp.',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ l }) => formatDop(l.importItbis),
+  },
+  {
+    key: 'landed', label: 'Costo destino',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ landed }) => formatDop(landed),
+  },
+  {
+    key: 'unitCost', label: 'C. unit.',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ unitCost }) => formatDop(unitCost),
+  },
+];
+const LEGACY_DEFAULT_COLS = {
+  supplier: true, item: true, cif: true, duty: true, importItbis: true, landed: true, unitCost: true,
+};
+const LEGACY_COLS_STORAGE_KEY = 'rs.importaciones.historico.cols.v1';
 
 /**
  * Importaciones — the import-expediente workspace (DGA customs). An expediente
@@ -67,6 +179,13 @@ export default function Importaciones() {
       .map((s) => ({ value: s.id, label: s.name })),
     [suppliersQ.data],
   );
+
+  // Column visibility (Shopify "edit columns") for the Expedientes table —
+  // persisted per browser. Each table on this page (Expedientes / Histórico)
+  // has its own column set + standalone menu since they share no schema.
+  const {
+    visible: expVisible, setVisible: setExpVisible, reset: resetExpCols, cols: expCols,
+  } = useColumns(EXPEDIENTE_COLUMNS, EXPEDIENTE_DEFAULT_COLS, EXPEDIENTE_COLS_STORAGE_KEY);
 
   if (!allowed) {
     return (
@@ -161,44 +280,37 @@ export default function Importaciones() {
                 ],
               }))}
             />
-            <div className="hidden md:block card overflow-hidden">
-              <div className="overflow-x-auto">
-              <table className="table min-w-[680px]">
-                <thead>
-                  <tr>
-                    <th className="whitespace-nowrap">Fecha</th>
-                    <th className="whitespace-nowrap">No.</th>
-                    <th className="whitespace-nowrap">BL / Contenedor</th>
-                    <th>Proveedor</th>
-                    <th className="text-right whitespace-nowrap">Líneas</th>
-                    <th className="text-right whitespace-nowrap">CIF</th>
-                    <th className="text-right whitespace-nowrap">Costo destino</th>
-                    <th className="text-right whitespace-nowrap">ITBIS créd.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vm.rows.map((r) => (
-                    <tr key={r.id}
-                      onClick={() => navigate(`/accounting/importaciones/${r.id}`)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/importaciones/${r.id}`); }}
-                      tabIndex={0}
-                      className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
-                      <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                      <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.number != null ? `#${r.number}` : '—'}</td>
-                      <td className="whitespace-nowrap">
-                        <span className="font-mono text-xs">{r.bl || '—'}</span>
-                        {r.blExtra > 0 && <span className="text-ink-400 text-xs"> +{r.blExtra}</span>}
-                        {r.containerCode && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-ink-400"><Container size={11} />{r.containerCode}</span>}
-                      </td>
-                      <td className="min-w-0">{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</td>
-                      <td className="text-right tabular-nums">{r.lineCount}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.cif)}</td>
-                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.landed)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbisCred)}</td>
+            <div className="hidden md:block">
+              {/* Standalone columns control for this table (the search header
+                  governs both tables, so each carries its own column menu). */}
+              <div className="hidden md:flex justify-end mb-2">
+                <ColumnsMenu columns={EXPEDIENTE_COLUMNS} visible={expVisible} onChange={setExpVisible} onReset={resetExpCols} />
+              </div>
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                <table className="table min-w-[680px]">
+                  <thead>
+                    <tr>
+                      {expCols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {vm.rows.map((r) => (
+                      <tr key={r.id}
+                        onClick={() => navigate(`/accounting/importaciones/${r.id}`)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/importaciones/${r.id}`); }}
+                        tabIndex={0}
+                        className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
+                        {expCols.map((col) => (
+                          <td key={col.key} className={col.tdClass || ''}>{col.cell({ r })}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
               </div>
             </div>
             </>
@@ -211,6 +323,26 @@ export default function Importaciones() {
 
 /** The pre-expediente single liquidations, read-only (Histórico tab). */
 function LegacyTable({ list }) {
+  // Column visibility (Shopify "edit columns") for the Histórico table —
+  // its own set + standalone menu, separate from Expedientes.
+  const {
+    visible: legVisible, setVisible: setLegVisible, reset: resetLegCols, cols: legCols,
+  } = useColumns(LEGACY_COLUMNS, LEGACY_DEFAULT_COLS, LEGACY_COLS_STORAGE_KEY);
+
+  // Per-column totals keyed by column key — the footer renders one cell per
+  // visible column, so it stays coherent as columns toggle on/off.
+  const footTotals = {
+    cif: formatDop(list.totals.cif),
+    duty: formatDop(list.totals.duty),
+    importItbis: formatDop(list.totals.importItbis),
+    landed: formatDop(list.totals.landed),
+  };
+  // The leading text columns (everything before the first total column) merge
+  // into the "N liquidaciones" label cell; each remaining column gets its own
+  // total cell (or an empty cell when it has none).
+  const firstTotalIdx = legCols.findIndex((c) => footTotals[c.key] != null);
+  const labelSpan = firstTotalIdx === -1 ? legCols.length : firstTotalIdx;
+
   return (
     <>
     <RowCards
@@ -235,46 +367,46 @@ function LegacyTable({ list }) {
         ['Costo destino', formatDop(list.totals.landed)],
       ]}
     />
-    <div className="hidden md:block card overflow-hidden">
-      <div className="overflow-x-auto">
-      <table className="table min-w-[640px]">
-        <thead>
-          <tr>
-            <th className="whitespace-nowrap">Fecha</th>
-            <th>Proveedor</th>
-            <th>Artículo</th>
-            <th className="text-right whitespace-nowrap">CIF</th>
-            <th className="text-right whitespace-nowrap">Gravamen</th>
-            <th className="text-right whitespace-nowrap">ITBIS imp.</th>
-            <th className="text-right whitespace-nowrap">Costo destino</th>
-            <th className="text-right whitespace-nowrap">C. unit.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.rows.map(({ liq: l, supplier, item, landed, unitCost }) => (
-            <tr key={l.id}>
-              <td className="text-ink-500 whitespace-nowrap">{formatDate(l.liquidatedAt)}</td>
-              <td className="min-w-0">{supplier?.name || '—'}</td>
-              <td className="min-w-0">{item?.name || '—'}{l.qty ? <span className="text-ink-400"> ×{l.qty}</span> : null}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.cif)}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.duty)}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.importItbis)}</td>
-              <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(landed)}</td>
-              <td className="text-right tabular-nums whitespace-nowrap">{formatDop(unitCost)}</td>
+    <div className="hidden md:block">
+      {/* Standalone columns control for this table (the search header governs
+          both tables, so each carries its own column menu). */}
+      <div className="hidden md:flex justify-end mb-2">
+        <ColumnsMenu columns={LEGACY_COLUMNS} visible={legVisible} onChange={setLegVisible} onReset={resetLegCols} />
+      </div>
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="table min-w-[640px]">
+          <thead>
+            <tr>
+              {legCols.map((col) => (
+                <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-ink-200 font-semibold">
-            <td colSpan={3}>{list.count} liquidaciones</td>
-            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.cif)}</td>
-            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.duty)}</td>
-            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.importItbis)}</td>
-            <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.landed)}</td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody>
+            {list.rows.map(({ liq: l, supplier, item, landed, unitCost }) => {
+              const ctx = { l, supplier, item, landed, unitCost };
+              return (
+                <tr key={l.id}>
+                  {legCols.map((col) => (
+                    <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-ink-200 font-semibold">
+              <td colSpan={labelSpan || 1}>{list.count} liquidaciones</td>
+              {legCols.slice(labelSpan).map((col) => (
+                <td key={col.key} className="text-right tabular-nums whitespace-nowrap">
+                  {footTotals[col.key] != null ? footTotals[col.key] : ''}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+        </div>
       </div>
     </div>
     </>

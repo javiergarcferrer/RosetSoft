@@ -10,6 +10,8 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { ECF_TYPES, ecfTypeLabel, sequenceState } from '../../core/accounting/index.js';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 /**
  * Secuencias e-NCF — the DGII-authorized e-NCF ranges per e-CF type. The app
@@ -20,11 +22,26 @@ function blank() {
   return { ecfType: '31', seqFrom: '1', seqTo: '', nextSeq: '', expires: '', active: true };
 }
 
+// Customizable columns (Shopify-style show/hide, persisted per browser). Each
+// `cell` is a pure render off the per-row ctx (the row precomputes sequenceState
+// + status/pill); the Editar action stays a fixed trailing cell.
+const ECF_COLUMNS = [
+  { key: 'type', label: 'Tipo', canHide: false, tdClass: 'min-w-0', cell: ({ s }) => <>{s.ecfType} · {ecfTypeLabel(s.ecfType)}</> },
+  { key: 'range', label: 'Rango', thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-600 whitespace-nowrap', cell: ({ s }) => <>{s.seqFrom}–{s.seqTo}</> },
+  { key: 'next', label: 'Próximo e-NCF', thClass: 'whitespace-nowrap', tdClass: 'tabular-nums whitespace-nowrap', cell: ({ st }) => st.nextENcf || '—' },
+  { key: 'remaining', label: 'Restan', thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap', cell: ({ st }) => st.remaining },
+  { key: 'expires', label: 'Vence', thClass: 'whitespace-nowrap', tdClass: 'text-ink-600 whitespace-nowrap', cell: ({ s }) => (s.expiresAt ? formatDate(s.expiresAt) : '—') },
+  { key: 'status', label: 'Estado', tdClass: 'whitespace-nowrap', cell: ({ status, pill }) => <span className={`status-pill ${pill}`}>{status}</span> },
+];
+const ECF_DEFAULT = { range: true, next: true, remaining: true, expires: true, status: true };
+const ECF_COLS_KEY = 'rs.ecf.cols.v1';
+
 export default function ECFSequences() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
 
   const seqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
+  const { columns, visible, setVisible, reset, cols } = useColumns(ECF_COLUMNS, ECF_DEFAULT, ECF_COLS_KEY);
   const [editing, setEditing] = useState(null); // null | 'new' | id
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
@@ -111,16 +128,14 @@ export default function ECFSequences() {
           description="Carga los rangos de e-NCF que la DGII te autorizó." />
       ) : (
         <div className="card overflow-hidden">
+          <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
+            <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={reset} />
+          </div>
           <div className="overflow-x-auto">
           <table className="table min-w-[560px]">
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th className="whitespace-nowrap">Rango</th>
-                <th className="whitespace-nowrap">Próximo e-NCF</th>
-                <th className="text-right whitespace-nowrap">Restan</th>
-                <th className="whitespace-nowrap">Vence</th>
-                <th>Estado</th>
+                {cols.map((c) => <th key={c.key} className={c.thClass}>{c.label}</th>)}
                 <th></th>
               </tr>
             </thead>
@@ -129,14 +144,10 @@ export default function ECFSequences() {
                 const st = sequenceState(s);
                 const status = !s.active ? 'Inactiva' : st.expired ? 'Vencida' : st.exhausted ? 'Agotada' : 'Activa';
                 const pill = status === 'Activa' ? 'status-pill-active' : status === 'Inactiva' ? 'status-pill-inactive' : 'status-pill-declined';
+                const ctx = { s, st, status, pill };
                 return (
                   <tr key={s.id}>
-                    <td className="min-w-0">{s.ecfType} · {ecfTypeLabel(s.ecfType)}</td>
-                    <td className="tabular-nums text-ink-600 whitespace-nowrap">{s.seqFrom}–{s.seqTo}</td>
-                    <td className="tabular-nums whitespace-nowrap">{st.nextENcf || '—'}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{st.remaining}</td>
-                    <td className="text-ink-600 whitespace-nowrap">{s.expiresAt ? formatDate(s.expiresAt) : '—'}</td>
-                    <td className="whitespace-nowrap"><span className={`status-pill ${pill}`}>{status}</span></td>
+                    {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
                     <td className="text-right">
                       <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar secuencia"><Pencil size={13} /> Editar</button>
                     </td>

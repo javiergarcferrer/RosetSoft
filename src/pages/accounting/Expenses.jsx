@@ -12,6 +12,8 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import PeriodPicker, { periodWindow } from '../../components/accounting/PeriodPicker.jsx';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
+import useColumns from '../../components/search/useColumns.js';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
@@ -27,6 +29,129 @@ function ymd(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/**
+ * Desktop "Gastos" table columns (Shopify-orders-style customizable list). ONE
+ * ordered definition drives the header, the data rows, the footer totals AND the
+ * Columns menu. `date` is the fixed identity anchor (`canHide: false`). Each
+ * `cell`/`foot` is a pure render off its `ctx` bag; `foot` marks a numeric total
+ * column so the footer can place it (columns without `foot` merge into the
+ * "N gastos" span).
+ */
+const EXPENSES_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ e }) => formatDate(e.expenseAt),
+  },
+  {
+    key: 'supplier', label: 'Proveedor',
+    tdClass: 'min-w-[120px]',
+    cell: ({ supplier }) => supplier?.name || '—',
+  },
+  {
+    key: 'account', label: 'Cuenta',
+    tdClass: 'text-ink-600 min-w-[140px]',
+    cell: ({ e, accountName }) => (<><code className="text-[11px] text-ink-400 mr-1">{e.accountCode}</code>{accountName}</>),
+  },
+  {
+    key: 'ncf', label: 'NCF',
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ e }) => e.ncf || '—',
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ e }) => formatDop(e.base),
+    foot: ({ totals }) => formatDop(totals.base),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ e }) => formatDop(e.itbis),
+    foot: ({ totals }) => formatDop(totals.itbis),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ total }) => formatDop(total),
+    foot: ({ totals }) => formatDop(totals.total),
+  },
+  {
+    key: 'payment', label: 'Pago',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-600 whitespace-nowrap',
+    cell: ({ e }) => PAY_LABEL[e.paymentMethod] || e.paymentMethod,
+  },
+];
+
+const EXPENSES_DEFAULT = {
+  supplier: true, account: true, ncf: true, base: true, itbis: true, total: true, payment: true,
+};
+const EXPENSES_COLS_KEY = 'rs.expenses.cols.v1';
+
+/**
+ * Desktop 606 table columns — same customizable-list shape as the Gastos table
+ * above. `rnc` is the fixed identity anchor (`canHide: false`); each `foot`
+ * marks a numeric total column so the footer can place it (columns without
+ * `foot` merge into the "N comprobantes" span).
+ */
+const FORM606_COLUMNS = [
+  {
+    key: 'rnc', label: 'RNC/Cédula', canHide: false,
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums whitespace-nowrap',
+    cell: ({ r }) => r.rnc || '—',
+  },
+  {
+    key: 'name', label: 'Nombre',
+    tdClass: 'min-w-[120px]',
+    cell: ({ r }) => r.name,
+  },
+  {
+    key: 'ncf', label: 'NCF',
+    thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => r.ncf || '—',
+  },
+  {
+    key: 'date', label: 'Fecha',
+    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
+    cell: ({ r }) => formatDate(r.date),
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.base),
+    foot: ({ totals }) => formatDop(totals.base),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.itbis),
+    foot: ({ totals }) => formatDop(totals.itbis),
+  },
+  {
+    key: 'retIsr', label: 'Ret. ISR',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.retIsr),
+    foot: ({ totals }) => formatDop(totals.retIsr),
+  },
+  {
+    key: 'retItbis', label: 'Ret. ITBIS',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.retItbis),
+    foot: ({ totals }) => formatDop(totals.retItbis),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.total),
+    foot: ({ totals }) => formatDop(totals.total),
+  },
+];
+
+const FORM606_DEFAULT = {
+  name: true, ncf: true, date: true, base: true, itbis: true, retIsr: true, retItbis: true, total: true,
+};
+const FORM606_COLS_KEY = 'rs.expenses.606.cols.v1';
 
 /**
  * Gastos — capture an operating expense (it posts a balanced asiento to the
@@ -64,6 +189,15 @@ export default function Expenses() {
     [expensesQ.data, suppliersQ.data, accountsQ.data, listQuery, from, to]);
   const form606 = useMemo(() => resolve606({ expenses: expensesQ.data, purchases: purchasesQ.data, expedientes: expedientesQ.data, suppliers: suppliersQ.data, ...win }),
     [expensesQ.data, purchasesQ.data, expedientesQ.data, suppliersQ.data, from, to]);
+
+  // Column visibility (Shopify "edit columns") — persisted per browser, one set
+  // per table (Gastos list + 606).
+  const {
+    visible: visibleList, setVisible: setVisibleList, reset: resetList, cols: colsList,
+  } = useColumns(EXPENSES_COLUMNS, EXPENSES_DEFAULT, EXPENSES_COLS_KEY);
+  const {
+    visible: visible606, setVisible: setVisible606, reset: reset606, cols: cols606,
+  } = useColumns(FORM606_COLUMNS, FORM606_DEFAULT, FORM606_COLS_KEY);
 
   function export606() {
     const rows = [
@@ -141,45 +275,56 @@ export default function Expenses() {
               ['Total', formatDop(list.totals.total)],
             ]}
           />
-          <div className="hidden md:block card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="table min-w-[680px]">
-                <thead>
-                  <tr>
-                    <th className="whitespace-nowrap">Fecha</th>
-                    <th>Proveedor</th>
-                    <th>Cuenta</th>
-                    <th className="whitespace-nowrap">NCF</th>
-                    <th className="text-right whitespace-nowrap">Base</th>
-                    <th className="text-right whitespace-nowrap">ITBIS</th>
-                    <th className="text-right whitespace-nowrap">Total</th>
-                    <th className="whitespace-nowrap">Pago</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.rows.map(({ expense: e, supplier, accountName, total }) => (
-                    <tr key={e.id}>
-                      <td className="text-ink-500 whitespace-nowrap">{formatDate(e.expenseAt)}</td>
-                      <td className="min-w-[120px]">{supplier?.name || '—'}</td>
-                      <td className="text-ink-600 min-w-[140px]"><code className="text-[11px] text-ink-400 mr-1">{e.accountCode}</code>{accountName}</td>
-                      <td className="tabular-nums text-ink-500 whitespace-nowrap">{e.ncf || '—'}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(e.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(e.itbis)}</td>
-                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(total)}</td>
-                      <td className="text-ink-600 whitespace-nowrap">{PAY_LABEL[e.paymentMethod] || e.paymentMethod}</td>
+          <div className="hidden md:block">
+            <div className="flex justify-end mb-2">
+              <ColumnsMenu columns={EXPENSES_COLUMNS} visible={visibleList} onChange={setVisibleList} onReset={resetList} />
+            </div>
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="table min-w-[680px]">
+                  <thead>
+                    <tr>
+                      {colsList.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-ink-200 font-semibold">
-                    <td colSpan={4}>{list.count} gastos</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.base)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.itbis)}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{formatDop(list.totals.total)}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {list.rows.map(({ expense: e, supplier, accountName, total }) => {
+                      const ctx = { e, supplier, accountName, total };
+                      return (
+                        <tr key={e.id}>
+                          {colsList.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    {(() => {
+                      // The label cell ("N gastos") spans every leading column up
+                      // to the first visible total column; each column from there
+                      // renders its own `foot`, and any trailing non-total column
+                      // (e.g. Pago) closes with an empty cell.
+                      const footCtx = { totals: list.totals };
+                      const labelSpan = colsList.findIndex((c) => c.foot);
+                      const leadSpan = labelSpan === -1 ? colsList.length : labelSpan;
+                      const tailCols = labelSpan === -1 ? [] : colsList.slice(labelSpan);
+                      return (
+                        <tr className="border-t border-ink-200 font-semibold">
+                          <td colSpan={leadSpan}>{list.count} gastos</td>
+                          {tailCols.map((col) => (
+                            <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
+                              {col.foot ? col.foot(footCtx) : null}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })()}
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
           </>
@@ -222,48 +367,56 @@ export default function Expenses() {
                 ['Total', formatDop(form606.totals.total)],
               ]}
             />
-            <div className="hidden md:block card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="table min-w-[760px]">
-                  <thead>
-                    <tr>
-                      <th className="whitespace-nowrap">RNC/Cédula</th>
-                      <th>Nombre</th>
-                      <th className="whitespace-nowrap">NCF</th>
-                      <th className="whitespace-nowrap">Fecha</th>
-                      <th className="text-right whitespace-nowrap">Base</th>
-                      <th className="text-right whitespace-nowrap">ITBIS</th>
-                      <th className="text-right whitespace-nowrap">Ret. ISR</th>
-                      <th className="text-right whitespace-nowrap">Ret. ITBIS</th>
-                      <th className="text-right whitespace-nowrap">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {form606.rows.map((r) => (
-                      <tr key={r.id}>
-                        <td className="tabular-nums whitespace-nowrap">{r.rnc || '—'}</td>
-                        <td className="min-w-[120px]">{r.name}</td>
-                        <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.ncf || '—'}</td>
-                        <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.base)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.itbis)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.retIsr)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(r.retItbis)}</td>
-                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.total)}</td>
+            <div className="hidden md:block">
+              <div className="flex justify-end mb-2">
+                <ColumnsMenu columns={FORM606_COLUMNS} visible={visible606} onChange={setVisible606} onReset={reset606} />
+              </div>
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="table min-w-[760px]">
+                    <thead>
+                      <tr>
+                        {cols606.map((col) => (
+                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-ink-200 font-semibold">
-                      <td colSpan={4}>{form606.count} comprobantes</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.itbis)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.retIsr)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.retItbis)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(form606.totals.total)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {form606.rows.map((r) => {
+                        const ctx = { r };
+                        return (
+                          <tr key={r.id}>
+                            {cols606.map((col) => (
+                              <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      {(() => {
+                        // The label cell ("N comprobantes") spans every leading
+                        // column up to the first visible total column; each column
+                        // from there renders its own `foot` (all trailing 606
+                        // columns are totals).
+                        const footCtx = { totals: form606.totals };
+                        const labelSpan = cols606.findIndex((c) => c.foot);
+                        const leadSpan = labelSpan === -1 ? cols606.length : labelSpan;
+                        const tailCols = labelSpan === -1 ? [] : cols606.slice(labelSpan);
+                        return (
+                          <tr className="border-t border-ink-200 font-semibold">
+                            <td colSpan={leadSpan}>{form606.count} comprobantes</td>
+                            {tailCols.map((col) => (
+                              <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
+                                {col.foot ? col.foot(footCtx) : null}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
             </>

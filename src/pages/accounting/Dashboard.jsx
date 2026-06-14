@@ -13,6 +13,8 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
 import SegmentBar from '../../components/accounting/SegmentBar.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
@@ -43,6 +45,115 @@ const SOURCE = {
   payment: 'Pago', import: 'Importación', opening: 'Apertura', payroll: 'Nómina',
   adjustment: 'Ajuste', depreciation: 'Depreciación', fx: 'Cambio', tax: 'Impuestos', gateway: 'Pasarela',
 };
+
+// Segmented-sales table columns (Shopify "edit columns"). The segment column is
+// the fixed identity anchor (`canHide: false`) — its header is dynamic (Cliente
+// / Vendedor / Canal / Comprobante) so it's not offered in the menu; the metric
+// columns toggle. Each `cell` is a pure render off the per-row `ctx`.
+const SEGMENT_COLUMNS = [
+  {
+    key: 'segment', label: 'Segmento', canHide: false,
+    tdClass: 'text-ink-700 min-w-0 truncate max-w-56',
+    cell: ({ s }) => s.label,
+  },
+  {
+    key: 'count', label: 'Ventas',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ s }) => s.count,
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ s }) => formatDop(s.base),
+  },
+  {
+    key: 'itbis', label: 'ITBIS',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ s }) => formatDop(s.itbis),
+  },
+  {
+    key: 'total', label: 'Total',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ s }) => formatDop(s.total),
+  },
+  {
+    key: 'share', label: '% del total',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ s }) => `${Math.round(s.share * 100)}%`,
+  },
+];
+const SEGMENT_DEFAULT = { count: true, base: true, itbis: true, total: true, share: true };
+
+// Comparativo-mensual table columns. Mes is the fixed anchor; the rest toggle.
+const COMP_COLUMNS = [
+  {
+    key: 'month', label: 'Mes', canHide: false,
+    tdClass: 'text-ink-700 whitespace-nowrap capitalize',
+    cell: ({ m }) => m.label,
+  },
+  {
+    key: 'ventas', label: 'Ventas',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.ventas),
+  },
+  {
+    key: 'ventasYoy', label: 'Año anterior',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.ventasYoy),
+  },
+  {
+    key: 'deltaYoy', label: 'Δ año',
+    thClass: 'text-right', tdClass: 'text-right whitespace-nowrap',
+    cell: ({ m }) => <DeltaChip delta={m.deltaYoy} />,
+  },
+  {
+    key: 'cobrado', label: 'Cobrado',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.cobrado),
+  },
+  {
+    key: 'gastos', label: 'Gastos',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.gastos),
+  },
+  {
+    key: 'compras', label: 'Compras',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.compras),
+  },
+  {
+    key: 'importado', label: 'Importado',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => formatDop(m.importado),
+  },
+];
+const COMP_DEFAULT = { ventas: true, ventasYoy: true, deltaYoy: true, cobrado: true, gastos: true, compras: true, importado: true };
+
+// Asientos recientes table columns. Fecha is the fixed anchor; origen/detalle
+// and débito toggle.
+const RECENT_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'w-24', tdClass: 'text-ink-500 whitespace-nowrap tabular-nums',
+    cell: ({ entry }) => formatDate(entry.postedAt),
+  },
+  {
+    key: 'memo', label: 'Origen / Detalle',
+    tdClass: 'min-w-0',
+    cell: ({ entry }) => (
+      <>
+        <span className="chip bg-ink-100 text-ink-600 mr-2">{SOURCE[entry.source] || entry.source}</span>
+        <span className="text-ink-700 break-words">{entry.memo || '—'}</span>
+      </>
+    ),
+  },
+  {
+    key: 'debit', label: 'Débito',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums font-semibold text-ink-900 whitespace-nowrap',
+    cell: ({ debit }) => formatDop(debit),
+  },
+];
+const RECENT_DEFAULT = { memo: true, debit: true };
 
 /**
  * Card chrome — title row with an optional right-aligned element. `to` renders
@@ -183,6 +294,12 @@ export default function AccountingDashboard() {
   const pnlMax = Math.max(d.ingresosMonth, d.egresosMonth, 1);
   const arTotal = Math.max(d.ar.unpaid, 1);
   const segLabel = { customer: 'Cliente', seller: 'Vendedor', canal: 'Canal', ecfType: 'Comprobante' }[groupBy];
+
+  // Column visibility (Shopify "edit columns"), persisted per browser, one key
+  // per desktop record table on this page.
+  const segCols = useColumns(SEGMENT_COLUMNS, SEGMENT_DEFAULT, 'rs.dashboard.segment.cols.v1');
+  const compCols = useColumns(COMP_COLUMNS, COMP_DEFAULT, 'rs.dashboard.comparativo.cols.v1');
+  const recentCols = useColumns(RECENT_COLUMNS, RECENT_DEFAULT, 'rs.dashboard.asientos.cols.v1');
 
   return (
     <AccountingGate title="Resumen del negocio">
@@ -466,32 +583,43 @@ export default function AccountingDashboard() {
                   ['Total', formatDop(segmented.totals.total)],
                 ]}
               />
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden md:block">
+                <div className="flex justify-end mb-2">
+                  <ColumnsMenu columns={segCols.columns} visible={segCols.visible} onChange={segCols.setVisible} onReset={segCols.reset} />
+                </div>
+                <div className="overflow-x-auto">
                 <table className="table">
-                  <thead><tr><th>{segLabel}</th><th className="text-right">Ventas</th><th className="text-right">Base</th><th className="text-right">ITBIS</th><th className="text-right">Total</th><th className="text-right">% del total</th></tr></thead>
+                  <thead>
+                    <tr>
+                      {segCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.key === 'segment' ? segLabel : col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {segmented.rows.slice(0, 10).map((s) => (
-                      <tr key={s.key} className="hover:bg-ink-50 transition-colors">
-                        <td className="text-ink-700 min-w-0 truncate max-w-56">{s.label}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{s.count}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(s.base)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(s.itbis)}</td>
-                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(s.total)}</td>
-                        <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{Math.round(s.share * 100)}%</td>
-                      </tr>
-                    ))}
+                    {segmented.rows.slice(0, 10).map((s) => {
+                      const ctx = { s };
+                      return (
+                        <tr key={s.key} className="hover:bg-ink-50 transition-colors">
+                          {segCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className="border-t border-ink-200 font-semibold">
-                      <td>{segmented.rows.length} segmentos</td>
-                      <td className="text-right tabular-nums">{segmented.totals.count}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.itbis)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(segmented.totals.total)}</td>
-                      <td />
+                      {segCols.cols.map((col) => {
+                        if (col.key === 'segment') return <td key={col.key}>{segmented.rows.length} segmentos</td>;
+                        if (col.key === 'share') return <td key={col.key} />;
+                        const total = col.key === 'count' ? segmented.totals.count : formatDop(segmented.totals[col.key]);
+                        return <td key={col.key} className="text-right tabular-nums whitespace-nowrap">{total}</td>;
+                      })}
                     </tr>
                   </tfoot>
                 </table>
+                </div>
               </div>
               </>
             )}
@@ -555,24 +683,33 @@ export default function AccountingDashboard() {
                   ],
                 }))}
               />
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden md:block">
+                <div className="flex justify-end mb-2">
+                  <ColumnsMenu columns={compCols.columns} visible={compCols.visible} onChange={compCols.setVisible} onReset={compCols.reset} />
+                </div>
+                <div className="overflow-x-auto">
                 <table className="table">
-                  <thead><tr><th>Mes</th><th className="text-right">Ventas</th><th className="text-right">Año anterior</th><th className="text-right">Δ año</th><th className="text-right">Cobrado</th><th className="text-right">Gastos</th><th className="text-right">Compras</th><th className="text-right">Importado</th></tr></thead>
+                  <thead>
+                    <tr>
+                      {compCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {monthly.map((m) => (
-                      <tr key={m.key} className="hover:bg-ink-50 transition-colors">
-                        <td className="text-ink-700 whitespace-nowrap capitalize">{m.label}</td>
-                        <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(m.ventas)}</td>
-                        <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(m.ventasYoy)}</td>
-                        <td className="text-right whitespace-nowrap"><DeltaChip delta={m.deltaYoy} /></td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.cobrado)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.gastos)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.compras)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(m.importado)}</td>
-                      </tr>
-                    ))}
+                    {monthly.map((m) => {
+                      const ctx = { m };
+                      return (
+                        <tr key={m.key} className="hover:bg-ink-50 transition-colors">
+                          {compCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                </div>
               </div>
               </>
             )}
@@ -627,29 +764,34 @@ export default function AccountingDashboard() {
             {d.recent.length === 0 ? (
               <p className="text-sm text-ink-400 px-4 py-6">Aún no hay asientos.</p>
             ) : (
+              <>
+              <div className="hidden md:flex justify-end px-4 pb-2">
+                <ColumnsMenu columns={recentCols.columns} visible={recentCols.visible} onChange={recentCols.setVisible} onReset={recentCols.reset} />
+              </div>
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th className="w-24">Fecha</th>
-                      <th>Origen / Detalle</th>
-                      <th className="text-right">Débito</th>
+                      {recentCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {d.recent.map(({ entry, debit }) => (
-                      <tr key={entry.id} className="hover:bg-ink-50 transition-colors">
-                        <td className="text-ink-500 whitespace-nowrap tabular-nums">{formatDate(entry.postedAt)}</td>
-                        <td className="min-w-0">
-                          <span className="chip bg-ink-100 text-ink-600 mr-2">{SOURCE[entry.source] || entry.source}</span>
-                          <span className="text-ink-700 break-words">{entry.memo || '—'}</span>
-                        </td>
-                        <td className="text-right tabular-nums font-semibold text-ink-900 whitespace-nowrap">{formatDop(debit)}</td>
-                      </tr>
-                    ))}
+                    {d.recent.map(({ entry, debit }) => {
+                      const ctx = { entry, debit };
+                      return (
+                        <tr key={entry.id} className="hover:bg-ink-50 transition-colors">
+                          {recentCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         </div>

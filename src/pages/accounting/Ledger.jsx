@@ -14,6 +14,8 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import {
   resolveJournal, resolveTrialBalance, resolveAccountLedger,
   postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
@@ -36,6 +38,85 @@ const SOURCE_LABEL = {
 };
 
 function emptyLine() { return { accountCode: '', debit: '', credit: '' }; }
+
+/**
+ * Customizable desktop columns (Shopify "edit columns" pattern) for the Mayor
+ * and Balanza record-list tables. ONE ordered definition drives both the table
+ * render (`cell`) and the Columns menu (`label` / `canHide`). The identity/first
+ * column is the fixed anchor (`canHide: false`). Each `cell` is pure over the
+ * per-row `ctx` bag the row assembles. Defaults mirror the columns each table
+ * shipped with. The Diario journal-entry breakdown stays a fixed mini-table —
+ * it's a per-asiento line summary, not a record list.
+ */
+
+// "Mayor" — one row per movement of the selected account, running balance.
+const MAYOR_COLUMNS = [
+  {
+    key: 'fecha', label: 'Fecha', canHide: false,
+    thClass: 'text-left py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-ink-500 whitespace-nowrap',
+    cell: ({ line }) => formatDate(line.postedAt),
+  },
+  {
+    key: 'concepto', label: 'Concepto',
+    thClass: 'text-left py-2 px-3',
+    tdClass: 'py-1.5 px-3 min-w-0',
+    cell: ({ line }) => line.entryMemo || '—',
+  },
+  {
+    key: 'debito', label: 'Débito',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ line }) => (line.debit ? formatDop(line.debit) : ''),
+  },
+  {
+    key: 'credito', label: 'Crédito',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ line }) => (line.credit ? formatDop(line.credit) : ''),
+  },
+  {
+    key: 'saldo', label: 'Saldo',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ balance }) => formatDop(balance),
+  },
+];
+const MAYOR_DEFAULT = { concepto: true, debito: true, credito: true, saldo: true };
+const MAYOR_COLS_KEY = 'rs.ledger.mayor.cols.v1';
+
+// "Balanza" — the trial balance, one row per account. Row click drills into the
+// Mayor (handler stays fixed on the <tr>, so every cell is pure).
+const BALANZA_COLUMNS = [
+  {
+    key: 'cuenta', label: 'Cuenta', canHide: false,
+    thClass: 'text-left py-2 px-3',
+    tdClass: 'py-1.5 px-3 min-w-0',
+    cell: ({ r }) => (
+      <><code className="text-[11px] text-ink-400 mr-2 tabular-nums">{r.code}</code>{r.name}</>
+    ),
+  },
+  {
+    key: 'debito', label: 'Débito',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.debit),
+  },
+  {
+    key: 'credito', label: 'Crédito',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.credit),
+  },
+  {
+    key: 'saldo', label: 'Saldo',
+    thClass: 'text-right py-2 px-3 whitespace-nowrap',
+    tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ r }) => formatDop(r.balance),
+  },
+];
+const BALANZA_DEFAULT = { debito: true, credito: true, saldo: true };
+const BALANZA_COLS_KEY = 'rs.ledger.balanza.cols.v1';
 
 function NewEntryForm({ accounts, profileId, userId, onClose }) {
   const today = useMemo(() => isoDate(Date.now()), []);
@@ -185,6 +266,12 @@ export default function Ledger() {
     [accountsQ.data],
   );
 
+  // Column visibility (Shopify "edit columns") — one per desktop record-list
+  // table, persisted per browser. Each table renders `cols` and feeds the menu
+  // the full set so hidden columns can return.
+  const mayorCols = useColumns(MAYOR_COLUMNS, MAYOR_DEFAULT, MAYOR_COLS_KEY);
+  const balanzaCols = useColumns(BALANZA_COLUMNS, BALANZA_DEFAULT, BALANZA_COLS_KEY);
+
   async function reverse(entry, lines) {
     if (typeof window !== 'undefined'
       && !window.confirm(`¿Reversar el asiento #${entry.number ?? ''}? Se creará un asiento espejo.`)) return;
@@ -324,34 +411,39 @@ export default function Ledger() {
               ]}
             />
             <div className="hidden md:block card overflow-hidden">
+              <div className="flex justify-end px-3 pt-3">
+                <ColumnsMenu columns={mayorCols.columns} visible={mayorCols.visible} onChange={mayorCols.setVisible} onReset={mayorCols.reset} />
+              </div>
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[420px]">
                 <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                   <tr>
-                    <th className="text-left py-2 px-3 whitespace-nowrap">Fecha</th>
-                    <th className="text-left py-2 px-3">Concepto</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">Débito</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">Crédito</th>
-                    <th className="text-right py-2 px-3 whitespace-nowrap">Saldo</th>
+                    {mayorCols.cols.map((col) => (
+                      <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {mayor.rows.map(({ line, balance }) => (
-                    <tr key={line.id} className="border-t border-ink-50">
-                      <td className="py-1.5 px-3 text-ink-500 whitespace-nowrap">{formatDate(line.postedAt)}</td>
-                      <td className="py-1.5 px-3 min-w-0">{line.entryMemo || '—'}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{line.debit ? formatDop(line.debit) : ''}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{line.credit ? formatDop(line.credit) : ''}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(balance)}</td>
-                    </tr>
-                  ))}
+                  {mayor.rows.map(({ line, balance }) => {
+                    const ctx = { line, balance };
+                    return (
+                      <tr key={line.id} className="border-t border-ink-50">
+                        {mayorCols.cols.map((col) => (
+                          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-ink-200 font-semibold">
-                    <td className="py-2 px-3" colSpan={2}>Totales</td>
-                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.debit)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.credit)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.balance)}</td>
+                    {mayorCols.cols.map((col) => {
+                      if (col.key === 'fecha') return <td key={col.key} className="py-2 px-3">Totales</td>;
+                      if (col.key === 'debito') return <td key={col.key} className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.debit)}</td>;
+                      if (col.key === 'credito') return <td key={col.key} className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.credit)}</td>;
+                      if (col.key === 'saldo') return <td key={col.key} className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(mayor.balance)}</td>;
+                      return <td key={col.key} className="py-2 px-3" />;
+                    })}
                   </tr>
                 </tfoot>
               </table>
@@ -384,35 +476,43 @@ export default function Ledger() {
             ]}
           />
           <div className="hidden md:block card overflow-hidden">
+            <div className="flex justify-end px-3 pt-3">
+              <ColumnsMenu columns={balanzaCols.columns} visible={balanzaCols.visible} onChange={balanzaCols.setVisible} onReset={balanzaCols.reset} />
+            </div>
             <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[360px]">
               <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
                 <tr>
-                  <th className="text-left py-2 px-3">Cuenta</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Débito</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Crédito</th>
-                  <th className="text-right py-2 px-3 whitespace-nowrap">Saldo</th>
+                  {balanzaCols.cols.map((col) => (
+                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {trial.rows.map((r) => (
-                  <tr key={r.code} onClick={() => { setTab('mayor'); setMayorCode(r.code); }}
-                    className="border-t border-ink-50 cursor-pointer hover:bg-ink-50" title="Ver mayor">
-                    <td className="py-1.5 px-3 min-w-0"><code className="text-[11px] text-ink-400 mr-2 tabular-nums">{r.code}</code>{r.name}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.debit)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(r.credit)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums font-medium whitespace-nowrap">{formatDop(r.balance)}</td>
-                  </tr>
-                ))}
+                {trial.rows.map((r) => {
+                  const ctx = { r };
+                  return (
+                    <tr key={r.code} onClick={() => { setTab('mayor'); setMayorCode(r.code); }}
+                      className="border-t border-ink-50 cursor-pointer hover:bg-ink-50" title="Ver mayor">
+                      {balanzaCols.cols.map((col) => (
+                        <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
-                  <td className="py-2 px-3 whitespace-nowrap">Totales {trial.balanced
-                    ? <span className="ml-2 text-xs text-emerald-700">✓ cuadrado</span>
-                    : <span className="ml-2 text-xs text-rose-600">descuadrado</span>}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(trial.totalDebit)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(trial.totalCredit)}</td>
-                  <td className="py-2 px-3"></td>
+                  {balanzaCols.cols.map((col) => {
+                    if (col.key === 'cuenta') return (
+                      <td key={col.key} className="py-2 px-3 whitespace-nowrap">Totales {trial.balanced
+                        ? <span className="ml-2 text-xs text-emerald-700">✓ cuadrado</span>
+                        : <span className="ml-2 text-xs text-rose-600">descuadrado</span>}</td>
+                    );
+                    if (col.key === 'debito') return <td key={col.key} className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(trial.totalDebit)}</td>;
+                    if (col.key === 'credito') return <td key={col.key} className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{formatDop(trial.totalCredit)}</td>;
+                    return <td key={col.key} className="py-2 px-3" />;
+                  })}
                 </tr>
               </tfoot>
             </table>

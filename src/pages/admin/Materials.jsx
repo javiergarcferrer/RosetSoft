@@ -19,7 +19,93 @@ import Thumbnail from '../../components/primitives/Thumbnail.jsx';
 import ImageView from '../../components/ImageView.jsx';
 import { swatchUrl, heroSwatchUrl } from '../../lib/swatchImage.js';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import useColumns from '../../components/search/useColumns.js';
 import { GRADE_GROUPS, SPECIAL_GRADES } from '../../lib/subtype.js';
+
+/**
+ * Desktop table columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives both the table render (`cell`) and the Columns menu
+ * (`label` / `canHide`). `photo` is the fixed identity anchor (`canHide:
+ * false`) — it's never hidden and isn't offered in the menu; everything else
+ * the admin can toggle. Each `cell` is a pure render off the per-row `ctx`
+ * the row assembles. The Editar/Eliminar actions stay a FIXED trailing cell
+ * (they close over component handlers), outside this array.
+ */
+const MATERIAL_COLUMNS = [
+  {
+    key: 'photo', label: 'Foto', canHide: false, thClass: 'w-12',
+    cell: ({ m }) => (
+      <ImageView
+        id={heroImageId(m)}
+        fallbackUrl={heroSwatchUrl(m)}
+        alt={m.name}
+        hoverPreview
+        className="w-10 h-10 object-cover rounded-lg border border-ink-100 bg-white shadow-xs"
+        placeholderClassName="w-10 h-10 rounded-lg border border-dashed border-ink-200 bg-ink-50"
+      />
+    ),
+  },
+  {
+    key: 'category', label: 'Categoría',
+    tdClass: 'eyebrow font-normal tracking-wide text-ink-500',
+    cell: ({ m }) => categoryLabel(m.category),
+  },
+  {
+    key: 'name', label: 'Nombre',
+    tdClass: 'font-medium text-ink-900',
+    cell: ({ m }) => (
+      <>
+        {m.name}
+        {m.discontinuedAt && (
+          <span
+            className="ml-2 chip bg-amber-50 text-amber-700 border border-amber-200 align-middle"
+            title="Ya no se ofrece en el sitio de Ligne Roset"
+          >
+            <AlertTriangle size={10} /> No en sitio
+          </span>
+        )}
+        {m.notInPricelistAt && (
+          <span
+            className="ml-2 chip bg-red-50 text-red-700 border border-red-200 align-middle"
+            title="No aparece en la lista de precios (PDF) de Ligne Roset"
+          >
+            <AlertTriangle size={10} /> No en lista
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: 'grade', label: 'Grade',
+    cell: ({ m }) => <GradePill grade={m.grade} />,
+  },
+  {
+    key: 'price', label: 'Precio (USD)',
+    thClass: 'text-right whitespace-nowrap',
+    tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => (m.price != null ? `$${m.price} / ${m.priceUnit === 'sm' ? 'm²' : 'yd'}` : '—'),
+  },
+  {
+    key: 'measure', label: 'Medida',
+    thClass: 'text-right whitespace-nowrap',
+    tdClass: 'text-right tabular-nums text-ink-500 whitespace-nowrap',
+    cell: ({ m }) => (m.measure != null ? `${m.measure} ${m.measureUnit || ''}` : '—'),
+  },
+  {
+    key: 'colors', label: '# colores',
+    thClass: 'text-right whitespace-nowrap',
+    tdClass: 'text-right tabular-nums text-ink-500',
+    cell: ({ m }) => m.colors?.length || 0,
+  },
+];
+
+// Default visibility for the hideable columns — the set the table shipped
+// with (photo is always on). Persisted per-browser so an admin's column
+// choice sticks across sessions; the _v1 suffix lets a future column set reset.
+const MATERIAL_DEFAULT_COLS = {
+  category: true, name: true, grade: true, price: true, measure: true, colors: true,
+};
+const MATERIAL_COLS_STORAGE_KEY = 'rs.materials.cols.v1';
 
 /**
  * Materials catalog admin page.
@@ -55,6 +141,13 @@ export default function Materials() {
   const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
   const [importing, setImporting] = useState(false); // catalog import modal open?
+
+  // Column visibility (Shopify "edit columns") — persisted per browser. The
+  // table renders `cols` (photo anchor + the toggled-on columns, in order);
+  // the Columns menu gets the full MATERIAL_COLUMNS so hidden ones can return.
+  const {
+    visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
+  } = useColumns(MATERIAL_COLUMNS, MATERIAL_DEFAULT_COLS, MATERIAL_COLS_STORAGE_KEY);
 
   // Category tabs (the primary dimension). Counts ride the full materials
   // list so each tab shows "how many would I see if I tapped this",
@@ -184,6 +277,10 @@ export default function Materials() {
         sortOptions={sortOptions}
         sort={sort}
         onSortChange={setSort}
+        columns={MATERIAL_COLUMNS}
+        visibleColumns={visibleCols}
+        onColumnsChange={setVisibleCols}
+        onColumnsReset={resetCols}
         resultCount={filtered.length}
         resultNoun={['material', 'materiales']}
       />
@@ -248,59 +345,18 @@ export default function Materials() {
             <table className="table">
               <thead>
                 <tr>
-                  <th className="w-12">Foto</th>
-                  <th>Categoría</th>
-                  <th>Nombre</th>
-                  <th>Grade</th>
-                  <th className="text-right whitespace-nowrap">Precio (USD)</th>
-                  <th className="text-right whitespace-nowrap">Medida</th>
-                  <th className="text-right whitespace-nowrap"># colores</th>
+                  {cols.map((col) => (
+                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  ))}
                   <th className="w-px" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((m) => (
                   <tr key={m.id} className="hover:bg-ink-50 transition-colors">
-                    <td>
-                      <ImageView
-                        id={heroImageId(m)}
-                        fallbackUrl={heroSwatchUrl(m)}
-                        alt={m.name}
-                        hoverPreview
-                        className="w-10 h-10 object-cover rounded-lg border border-ink-100 bg-white shadow-xs"
-                        placeholderClassName="w-10 h-10 rounded-lg border border-dashed border-ink-200 bg-ink-50"
-                      />
-                    </td>
-                    <td className="eyebrow font-normal tracking-wide text-ink-500">
-                      {categoryLabel(m.category)}
-                    </td>
-                    <td className="font-medium text-ink-900">
-                      {m.name}
-                      {m.discontinuedAt && (
-                        <span
-                          className="ml-2 chip bg-amber-50 text-amber-700 border border-amber-200 align-middle"
-                          title="Ya no se ofrece en el sitio de Ligne Roset"
-                        >
-                          <AlertTriangle size={10} /> No en sitio
-                        </span>
-                      )}
-                      {m.notInPricelistAt && (
-                        <span
-                          className="ml-2 chip bg-red-50 text-red-700 border border-red-200 align-middle"
-                          title="No aparece en la lista de precios (PDF) de Ligne Roset"
-                        >
-                          <AlertTriangle size={10} /> No en lista
-                        </span>
-                      )}
-                    </td>
-                    <td><GradePill grade={m.grade} /></td>
-                    <td className="text-right tabular-nums whitespace-nowrap">
-                      {m.price != null ? `$${m.price} / ${m.priceUnit === 'sm' ? 'm²' : 'yd'}` : '—'}
-                    </td>
-                    <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">
-                      {m.measure != null ? `${m.measure} ${m.measureUnit || ''}` : '—'}
-                    </td>
-                    <td className="text-right tabular-nums text-ink-500">{m.colors?.length || 0}</td>
+                    {cols.map((col) => (
+                      <td key={col.key} className={col.tdClass || ''}>{col.cell({ m })}</td>
+                    ))}
                     <td className="text-right whitespace-nowrap">
                       <button
                         type="button"
@@ -324,7 +380,7 @@ export default function Materials() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-ink-400">
+                    <td colSpan={cols.length + 1} className="px-3 py-10 text-center text-sm text-ink-400">
                       Sin resultados.
                     </td>
                   </tr>

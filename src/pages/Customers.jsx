@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import CustomerModal from '../components/CustomerModal.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
+import useColumns from '../components/search/useColumns.js';
 import {
   Cell, PanelField, PanelTextArea, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
@@ -41,6 +42,100 @@ const STATUS_LABELS = {
   declined: 'Rechazadas',
   archived: 'Archivadas',
 };
+
+/**
+ * Desktop sheet columns (Shopify-orders-style customizable list). ONE ordered
+ * definition drives the table render (`cell`), the sortable headers (`th`) and
+ * the Columns menu (`label` / `canHide`). `name` is the fixed identity anchor
+ * (`canHide: false`) — never hidden, not offered in the menu; everything else
+ * the seller can toggle. Each `cell` is a pure render off the per-row `ctx` the
+ * row assembles ({ c, row, rollup, onCommit }) so the inline-edit semantics are
+ * unchanged. `th(hctx)` renders the full <th> for sortable columns (reusing
+ * SortableTh); plain columns fall back to <th>{label}</th>. The chevron and the
+ * row-action buttons stay FIXED leading/trailing cells (they close over the
+ * row's handlers), outside this array.
+ */
+const CUSTOMER_COLUMNS = [
+  {
+    key: 'name', label: 'Nombre', canHide: false,
+    tdClass: 'font-medium max-w-[200px]',
+    th: ({ sort, onSort }) => <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={onSort} />,
+    cell: ({ c, row, rollup, onCommit }) => (
+      <div className="flex items-center gap-1.5">
+        <Cell value={c.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
+        <ContactGapDot rollup={rollup} />
+      </div>
+    ),
+  },
+  {
+    key: 'company', label: 'Empresa',
+    tdClass: 'max-w-[180px]',
+    th: ({ sort, onSort }) => <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={onSort} />,
+    cell: ({ c, row, onCommit }) => (
+      <Cell value={c.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${c.name}`} />
+    ),
+  },
+  {
+    key: 'email', label: 'Correo',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell min-w-[9rem] max-w-[200px]',
+    cell: ({ c, row, onCommit }) => (
+      <Cell value={c.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${c.name}`} />
+    ),
+  },
+  {
+    // min-w: phone digits must never clip — name/empresa absorb the squeeze
+    // instead (they truncate gracefully, numbers don't).
+    key: 'phone', label: 'Teléfono',
+    thClass: 'hidden lg:table-cell', tdClass: 'hidden lg:table-cell min-w-[8rem] max-w-[140px]',
+    cell: ({ c, row, onCommit }) => (
+      <Cell value={c.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${c.name}`} />
+    ),
+  },
+  {
+    key: 'city', label: 'Ciudad',
+    thClass: 'hidden xl:table-cell', tdClass: 'hidden xl:table-cell max-w-[140px]',
+    cell: ({ c, row, onCommit }) => (
+      <Cell value={c.city} onCommit={(v) => onCommit('city', v)} row={row} col="city" placeholder="—" label={`Ciudad de ${c.name}`} />
+    ),
+  },
+  {
+    key: 'pipeline', label: 'Pipeline',
+    tdClass: 'text-right tabular-nums whitespace-nowrap',
+    th: ({ sort, onSort }) => <SortableTh label="Pipeline" sortKey="pipeline" sort={sort} onSort={onSort} numeric className="text-right" />,
+    cell: ({ rollup }) => (
+      rollup?.openCount > 0 ? (
+        <span className="text-ink-800">
+          {formatMoney(rollup.openTotal, 'USD', { USD: 1 })}
+          <span className="text-[11px] text-ink-400 ml-1">({rollup.openCount})</span>
+        </span>
+      ) : (
+        <span className="text-ink-300">—</span>
+      )
+    ),
+  },
+  {
+    // xl-only: at lg the column total exceeds the container and the squeeze
+    // clips the phone digits.
+    key: 'lifetime', label: 'Compras',
+    thClass: 'hidden xl:table-cell', tdClass: 'hidden xl:table-cell text-right tabular-nums whitespace-nowrap',
+    th: ({ sort, onSort }) => <SortableTh label="Compras" sortKey="lifetime" sort={sort} onSort={onSort} numeric className="text-right hidden xl:table-cell" />,
+    cell: ({ rollup }) => (
+      rollup?.acceptedTotal > 0 ? (
+        <span className="text-emerald-700">{formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}</span>
+      ) : (
+        <span className="text-ink-300">—</span>
+      )
+    ),
+  },
+];
+
+// Default visibility for the hideable columns — the set the sheet shipped with
+// (name is always on). Persisted per-browser; the _v1 suffix lets a future
+// column set reset.
+const CUSTOMER_DEFAULT_COLS = {
+  company: true, email: true, phone: true, city: true, pipeline: true, lifetime: true,
+};
+const CUSTOMER_COLS_STORAGE_KEY = 'rs.customers.cols.v1';
 
 /**
  * Clientes — the seller's working directory, same inline-editable sheet as
@@ -104,6 +199,14 @@ export default function Customers() {
     () => resolveCustomersList({ customers, quotes, lines: allLines, q, tab, filters, sort }),
     [customers, quotes, allLines, q, tab, filters, sort],
   );
+
+  // Column visibility (Shopify "edit columns") — persisted per browser. The
+  // sheet renders `cols` (name anchor + the toggled-on columns, in order); the
+  // Columns menu gets the full CUSTOMER_COLUMNS so hidden ones can return.
+  const {
+    visible: visibleCols, setVisible: setVisibleCols, reset: resetCols, cols,
+  } = useColumns(CUSTOMER_COLUMNS, CUSTOMER_DEFAULT_COLS, CUSTOMER_COLS_STORAGE_KEY);
+  const colSpan = cols.length + 2; // chevron + data columns + actions
 
   // One field per commit, straight to the row — same sheet semantics as
   // Profesionales. No updatedAt in the payload: the DB touch trigger owns
@@ -190,6 +293,10 @@ export default function Customers() {
             sortOptions={SORT_OPTIONS}
             sort={sort}
             onSortChange={setSort}
+            columns={CUSTOMER_COLUMNS}
+            visibleColumns={visibleCols}
+            onColumnsChange={setVisibleCols}
+            onColumnsReset={resetCols}
             resultCount={rows.length}
             resultNoun={['cliente', 'clientes']}
           />
@@ -213,49 +320,50 @@ export default function Customers() {
             ))}
           </div>
 
-          {/* Desktop sheet */}
+          {/* Desktop sheet. Columns are user-customizable (Columnas menu),
+              so it scrolls horizontally when many are on. */}
           <div className="hidden md:block card overflow-hidden">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="w-8"></th>
-                  <SortableTh label="Nombre" sortKey="name" sort={sort} onSort={setSort} />
-                  <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
-                  <th className="hidden lg:table-cell">Correo</th>
-                  <th className="hidden lg:table-cell">Teléfono</th>
-                  <th className="hidden xl:table-cell">Ciudad</th>
-                  <SortableTh label="Pipeline" sortKey="pipeline" sort={sort} onSort={setSort} numeric className="text-right" />
-                  {/* xl-only: at lg the column total exceeds the container and
-                      the squeeze clips the phone digits. */}
-                  <SortableTh label="Compras" sortKey="lifetime" sort={sort} onSort={setSort} numeric className="text-right hidden xl:table-cell" />
-                  <th className="w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {noMatches && (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
                   <tr>
-                    <td colSpan={9}>
-                      <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
-                        <SearchX size={15} className="flex-shrink-0" aria-hidden />
-                        Sin resultados — ajusta la búsqueda o los filtros.
-                      </div>
-                    </td>
+                    <th className="w-8"></th>
+                    {cols.map((col) => (
+                      col.th
+                        ? <ColumnTh key={col.key} col={col} sort={sort} onSort={setSort} />
+                        : <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                    ))}
+                    <th className="w-10"></th>
                   </tr>
-                )}
-                {rows.map((c, i) => (
-                  <SheetRow
-                    key={c.id}
-                    c={c}
-                    row={i}
-                    rollup={rollupByCustomerId.get(c.id)}
-                    isOpen={expanded.has(c.id)}
-                    onToggle={() => toggleExpanded(c.id)}
-                    onCommit={(field, v) => commitField(c, field, v)}
-                    onRemove={() => removeCustomer(c)}
-                  />
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {noMatches && (
+                    <tr>
+                      <td colSpan={colSpan}>
+                        <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
+                          <SearchX size={15} className="flex-shrink-0" aria-hidden />
+                          Sin resultados — ajusta la búsqueda o los filtros.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {rows.map((c, i) => (
+                    <SheetRow
+                      key={c.id}
+                      c={c}
+                      row={i}
+                      cols={cols}
+                      colSpan={colSpan}
+                      rollup={rollupByCustomerId.get(c.id)}
+                      isOpen={expanded.has(c.id)}
+                      onToggle={() => toggleExpanded(c.id)}
+                      onCommit={(field, v) => commitField(c, field, v)}
+                      onRemove={() => removeCustomer(c)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
@@ -275,8 +383,19 @@ function NoMatchesCard() {
   );
 }
 
+/**
+ * Renders one sortable header from a column definition — the `th(hctx)` from
+ * CUSTOMER_COLUMNS reused so the desktop column headers keep their sort
+ * affordance (SortableTh) while the column set is data-driven.
+ */
+function ColumnTh({ col, sort, onSort }) {
+  return col.th({ sort, onSort });
+}
+
 /** One client as a sheet row + (when open) the full-record dropdown row. */
-function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
+function SheetRow({ c, row, cols, colSpan, rollup, isOpen, onToggle, onCommit, onRemove }) {
+  // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
+  const ctx = { c, row, rollup, onCommit };
   return (
     <>
       <tr className="group/row hover:bg-ink-50/40 transition-colors">
@@ -292,43 +411,9 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </button>
         </td>
-        <td className="font-medium max-w-[200px]">
-          <div className="flex items-center gap-1.5">
-            <Cell value={c.name} onCommit={(v) => onCommit('name', v)} row={row} col="name" placeholder="Nombre" label={`Nombre de ${c.name}`} />
-            <ContactGapDot rollup={rollup} />
-          </div>
-        </td>
-        <td className="max-w-[180px]">
-          <Cell value={c.company} onCommit={(v) => onCommit('company', v)} row={row} col="company" placeholder="—" label={`Empresa de ${c.name}`} />
-        </td>
-        <td className="hidden lg:table-cell min-w-[9rem] max-w-[200px]">
-          <Cell value={c.email} onCommit={(v) => onCommit('email', v)} row={row} col="email" type="email" inputMode="email" placeholder="—" label={`Correo de ${c.name}`} />
-        </td>
-        {/* min-w: phone digits must never clip — name/empresa absorb the
-            squeeze instead (they truncate gracefully, numbers don't). */}
-        <td className="hidden lg:table-cell min-w-[8rem] max-w-[140px]">
-          <Cell value={c.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${c.name}`} />
-        </td>
-        <td className="hidden xl:table-cell max-w-[140px]">
-          <Cell value={c.city} onCommit={(v) => onCommit('city', v)} row={row} col="city" placeholder="—" label={`Ciudad de ${c.name}`} />
-        </td>
-        <td className="text-right tabular-nums whitespace-nowrap">
-          {rollup?.openCount > 0 ? (
-            <span className="text-ink-800">
-              {formatMoney(rollup.openTotal, 'USD', { USD: 1 })}
-              <span className="text-[11px] text-ink-400 ml-1">({rollup.openCount})</span>
-            </span>
-          ) : (
-            <span className="text-ink-300">—</span>
-          )}
-        </td>
-        <td className="hidden xl:table-cell text-right tabular-nums whitespace-nowrap">
-          {rollup?.acceptedTotal > 0 ? (
-            <span className="text-emerald-700">{formatMoney(rollup.acceptedTotal, 'USD', { USD: 1 })}</span>
-          ) : (
-            <span className="text-ink-300">—</span>
-          )}
-        </td>
+        {cols.map((col) => (
+          <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+        ))}
         <td className="!pl-0 text-right">
           <span className="inline-flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
             <Link
@@ -353,7 +438,7 @@ function SheetRow({ c, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={9} className="!p-0 bg-ink-50/50">
+          <td colSpan={colSpan} className="!p-0 bg-ink-50/50">
             <CustomerPanel c={c} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>

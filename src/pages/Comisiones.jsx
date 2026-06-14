@@ -12,6 +12,8 @@ import { cycleEnding, formatCycle } from '../lib/commissionCycle.js';
 import { computeTotals, lineForTotals } from '../lib/pricing.js';
 import { isPricedLine } from '../lib/constants.js';
 import { resolveSales, resolveCommissionsOverview } from '../core/bridge/index.js';
+import useColumns from '../components/search/useColumns.js';
+import ColumnsMenu from '../components/search/ColumnsMenu.jsx';
 
 /** How far back the cycle picker reaches (current + 5 closed cycles). */
 const CYCLE_HISTORY = 6;
@@ -33,6 +35,181 @@ function ProStatus({ e, className = '' }) {
       ? <span className={`status-pill status-pill-deposito ${className}`}>Por pagar</span>
       : <span className={`text-[11px] text-ink-400 italic ${className}`}>No exigible</span>;
 }
+
+/**
+ * Customizable desktop columns (Shopify "edit columns" pattern) for each list
+ * table. ONE ordered definition drives both the table render (`cell`) and the
+ * Columns menu (`label` / `canHide`). The identity/first column is the fixed
+ * anchor (`canHide: false`). Each `cell` is pure over the per-row `ctx` bag the
+ * row assembles (it carries the row record plus the `usd` formatter, which the
+ * component owns). Defaults below mirror the columns each table shipped with.
+ */
+
+// "Mis comisiones" (employee scope) — one row per own sale in the cycle.
+const MY_COMMISSION_COLUMNS = [
+  {
+    key: 'quote', label: 'Cotización', canHide: false,
+    tdClass: 'tabular-nums font-medium text-ink-900',
+    cell: ({ e }) => `#${e.quote.number ?? '—'}`,
+  },
+  {
+    key: 'client', label: 'Cliente',
+    tdClass: 'text-ink-700',
+    cell: ({ e }) => e.customer?.name || '—',
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ e, usd }) => usd(e.base),
+  },
+  {
+    key: 'pct', label: '%',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums',
+    cell: ({ e }) => `${e.commissionPct}%`,
+  },
+  {
+    key: 'commission', label: 'Comisión',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-semibold text-ink-900',
+    cell: ({ e, usd }) => usd(e.sellerReported),
+  },
+  {
+    key: 'status', label: 'Estado',
+    cell: ({ e }) => <SellerStatus e={e} />,
+  },
+];
+const MY_COMMISSION_DEFAULT = { client: true, base: true, pct: true, commission: true, status: true };
+const MY_COMMISSION_COLS_KEY = 'rs.comisiones.mias.cols.v1';
+
+// "Vendedores" rollup — one row per seller in the cycle.
+const VENDEDOR_COLUMNS = [
+  {
+    key: 'name', label: 'Vendedor', canHide: false,
+    tdClass: 'font-medium text-ink-900',
+    cell: ({ r }) => r.user.name,
+  },
+  {
+    key: 'pct', label: '%',
+    thClass: 'text-right', tdClass: 'text-right tabular-nums text-ink-500',
+    cell: ({ r }) => `${r.pct}%`,
+  },
+  {
+    key: 'count', label: 'Ventas',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ r }) => r.count,
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ r, usd }) => usd(r.base),
+  },
+  {
+    key: 'commission', label: 'Comisión',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-semibold',
+    cell: ({ r, usd }) => usd(r.commission),
+  },
+  {
+    key: 'paid', label: 'Pagado',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums text-emerald-700',
+    cell: ({ r, usd }) => usd(r.paid),
+  },
+  {
+    key: 'pending', label: 'Pendiente',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium text-amber-700',
+    cell: ({ r, usd }) => usd(r.pending),
+  },
+];
+const VENDEDOR_DEFAULT = { pct: true, count: true, base: true, commission: true, paid: true, pending: true };
+const VENDEDOR_COLS_KEY = 'rs.comisiones.vendedores.cols.v1';
+
+// "Profesionales" rollup — one row per professional in the cycle.
+const PROF_COLUMNS = [
+  {
+    key: 'name', label: 'Profesional', canHide: false,
+    tdClass: 'font-medium text-ink-900',
+    cell: ({ r }) => r.professional.name,
+  },
+  {
+    key: 'count', label: 'Ventas',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ r }) => r.count,
+  },
+  {
+    key: 'commission', label: 'Comisión',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-semibold',
+    cell: ({ r, usd }) => usd(r.commission),
+  },
+  {
+    key: 'paid', label: 'Pagado',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums text-emerald-700',
+    cell: ({ r, usd }) => usd(r.paid),
+  },
+  {
+    key: 'pending', label: 'Pendiente',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium text-amber-700',
+    cell: ({ r, usd }) => usd(r.pending),
+  },
+];
+const PROF_DEFAULT = { count: true, commission: true, paid: true, pending: true };
+const PROF_COLS_KEY = 'rs.comisiones.profesionales.cols.v1';
+
+// "Detalle por venta" — one row per sale with BOTH commission streams.
+const DETALLE_COLUMNS = [
+  {
+    key: 'quote', label: 'Cotización', canHide: false,
+    tdClass: 'tabular-nums font-medium',
+    cell: ({ e }) => (
+      <Link to={`/quotes/${e.quote.id}`} className="text-brand-600 hover:text-brand-700">
+        #{e.quote.number ?? '—'}
+      </Link>
+    ),
+  },
+  {
+    key: 'client', label: 'Cliente',
+    tdClass: 'text-ink-700',
+    cell: ({ e }) => e.customer?.name || '—',
+  },
+  {
+    key: 'seller', label: 'Vendedor',
+    tdClass: 'text-ink-700',
+    cell: ({ e }) => e.creator?.name || '—',
+  },
+  {
+    key: 'base', label: 'Base',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums',
+    cell: ({ e, usd }) => usd(e.base),
+  },
+  {
+    key: 'sellerCommission', label: 'Com. vendedor',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ e, usd }) => (e.creator ? (
+      <>
+        <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
+        <SellerStatus e={e} className="ml-2" />
+      </>
+    ) : <span className="text-ink-400">—</span>),
+  },
+  {
+    key: 'professional', label: 'Profesional',
+    tdClass: 'text-ink-700',
+    cell: ({ e }) => e.professional?.name || '—',
+  },
+  {
+    key: 'proCommission', label: 'Com. profesional',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ e, usd }) => (!e.professional ? (
+      <span className="text-ink-400">—</span>
+    ) : e.trade ? (
+      <span className="text-[11px] text-ink-500 italic">Trade {e.decoratorPct}% ({usd(e.tradeDiscount)})</span>
+    ) : (
+      <>
+        <span className="font-medium text-ink-900">{usd(e.proReported)}</span>
+        <ProStatus e={e} className="ml-2" />
+      </>
+    )),
+  },
+];
+const DETALLE_DEFAULT = { client: true, seller: true, base: true, sellerCommission: true, professional: true, proCommission: true };
+const DETALLE_COLS_KEY = 'rs.comisiones.detalle.cols.v1';
 
 /**
  * Comisiones — the bridge surface between a CRM sale and its accounting payout.
@@ -102,6 +279,14 @@ export default function Comisiones() {
 
   const usd = (v) => formatMoney(v, 'USD');
 
+  // Column visibility (Shopify "edit columns") — one per desktop list table,
+  // persisted per browser. Each table renders `cols` and feeds the menu the
+  // full set so hidden columns can return.
+  const myCols = useColumns(MY_COMMISSION_COLUMNS, MY_COMMISSION_DEFAULT, MY_COMMISSION_COLS_KEY);
+  const vendCols = useColumns(VENDEDOR_COLUMNS, VENDEDOR_DEFAULT, VENDEDOR_COLS_KEY);
+  const profCols = useColumns(PROF_COLUMNS, PROF_DEFAULT, PROF_COLS_KEY);
+  const detCols = useColumns(DETALLE_COLUMNS, DETALLE_DEFAULT, DETALLE_COLS_KEY);
+
   return (
     <>
       <PageHeader title="Comisiones"
@@ -162,29 +347,29 @@ export default function Comisiones() {
               ))}
             </div>
             <div className="hidden md:block card overflow-hidden">
+              <div className="flex justify-end px-3 pt-3">
+                <ColumnsMenu columns={myCols.columns} visible={myCols.visible} onChange={myCols.setVisible} onReset={myCols.reset} />
+              </div>
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Cotización</th>
-                      <th>Cliente</th>
-                      <th className="text-right whitespace-nowrap">Base</th>
-                      <th className="text-right">%</th>
-                      <th className="text-right whitespace-nowrap">Comisión</th>
-                      <th>Estado</th>
+                      {myCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {myEntries.map((e) => (
-                      <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
-                        <td className="tabular-nums font-medium text-ink-900">#{e.quote.number ?? '—'}</td>
-                        <td className="text-ink-700">{e.customer?.name || '—'}</td>
-                        <td className="text-right tabular-nums">{usd(e.base)}</td>
-                        <td className="text-right tabular-nums">{e.commissionPct}%</td>
-                        <td className="text-right tabular-nums font-semibold text-ink-900">{usd(e.sellerReported)}</td>
-                        <td><SellerStatus e={e} /></td>
-                      </tr>
-                    ))}
+                    {myEntries.map((e) => {
+                      const ctx = { e, usd };
+                      return (
+                        <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
+                          {myCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -250,35 +435,35 @@ export default function Comisiones() {
                 </div>
               ))}
             </div>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Vendedor</th>
-                    <th className="text-right">%</th>
-                    <th className="text-right whitespace-nowrap">Ventas</th>
-                    <th className="text-right whitespace-nowrap">Base</th>
-                    <th className="text-right whitespace-nowrap">Comisión</th>
-                    <th className="text-right whitespace-nowrap">Pagado</th>
-                    <th className="text-right whitespace-nowrap">Pendiente</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sales.vendedorRows.length === 0 ? (
-                    <tr><td colSpan={7} className="py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
-                  ) : sales.vendedorRows.map((r) => (
-                    <tr key={r.user.id} className="hover:bg-ink-50 transition-colors">
-                      <td className="font-medium text-ink-900">{r.user.name}</td>
-                      <td className="text-right tabular-nums text-ink-500">{r.pct}%</td>
-                      <td className="text-right tabular-nums">{r.count}</td>
-                      <td className="text-right tabular-nums">{usd(r.base)}</td>
-                      <td className="text-right tabular-nums font-semibold">{usd(r.commission)}</td>
-                      <td className="text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
-                      <td className="text-right tabular-nums font-medium text-amber-700">{usd(r.pending)}</td>
+            <div className="hidden md:block">
+              <div className="flex justify-end px-3 pt-3">
+                <ColumnsMenu columns={vendCols.columns} visible={vendCols.visible} onChange={vendCols.setVisible} onReset={vendCols.reset} />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {vendCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sales.vendedorRows.length === 0 ? (
+                      <tr><td colSpan={vendCols.cols.length} className="py-8 text-center text-ink-400 text-sm">Sin comisiones en el ciclo.</td></tr>
+                    ) : sales.vendedorRows.map((r) => {
+                      const ctx = { r, usd };
+                      return (
+                        <tr key={r.user.id} className="hover:bg-ink-50 transition-colors">
+                          {vendCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -307,29 +492,33 @@ export default function Comisiones() {
                   </div>
                 ))}
               </div>
-              <div className="hidden md:block overflow-x-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Profesional</th>
-                      <th className="text-right whitespace-nowrap">Ventas</th>
-                      <th className="text-right whitespace-nowrap">Comisión</th>
-                      <th className="text-right whitespace-nowrap">Pagado</th>
-                      <th className="text-right whitespace-nowrap">Pendiente</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sales.profRows.map((r) => (
-                      <tr key={r.professional.id} className="hover:bg-ink-50 transition-colors">
-                        <td className="font-medium text-ink-900">{r.professional.name}</td>
-                        <td className="text-right tabular-nums">{r.count}</td>
-                        <td className="text-right tabular-nums font-semibold">{usd(r.commission)}</td>
-                        <td className="text-right tabular-nums text-emerald-700">{usd(r.paid)}</td>
-                        <td className="text-right tabular-nums font-medium text-amber-700">{usd(r.pending)}</td>
+              <div className="hidden md:block">
+                <div className="flex justify-end px-3 pt-3">
+                  <ColumnsMenu columns={profCols.columns} visible={profCols.visible} onChange={profCols.setVisible} onReset={profCols.reset} />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        {profCols.cols.map((col) => (
+                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {sales.profRows.map((r) => {
+                        const ctx = { r, usd };
+                        return (
+                          <tr key={r.professional.id} className="hover:bg-ink-50 transition-colors">
+                            {profCols.cols.map((col) => (
+                              <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -380,57 +569,35 @@ export default function Comisiones() {
                 </div>
               ))}
             </div>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Cotización</th>
-                    <th>Cliente</th>
-                    <th>Vendedor</th>
-                    <th className="text-right whitespace-nowrap">Base</th>
-                    <th className="text-right whitespace-nowrap">Com. vendedor</th>
-                    <th>Profesional</th>
-                    <th className="text-right whitespace-nowrap">Com. profesional</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sales.entries.length === 0 ? (
-                    <tr><td colSpan={7} className="py-8 text-center text-ink-400 text-sm">Sin ventas en el ciclo.</td></tr>
-                  ) : sales.entries.map((e) => (
-                    <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
-                      <td className="tabular-nums font-medium">
-                        <Link to={`/quotes/${e.quote.id}`} className="text-brand-600 hover:text-brand-700">
-                          #{e.quote.number ?? '—'}
-                        </Link>
-                      </td>
-                      <td className="text-ink-700">{e.customer?.name || '—'}</td>
-                      <td className="text-ink-700">{e.creator?.name || '—'}</td>
-                      <td className="text-right tabular-nums">{usd(e.base)}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">
-                        {e.creator ? (
-                          <>
-                            <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
-                            <SellerStatus e={e} className="ml-2" />
-                          </>
-                        ) : <span className="text-ink-400">—</span>}
-                      </td>
-                      <td className="text-ink-700">{e.professional?.name || '—'}</td>
-                      <td className="text-right tabular-nums whitespace-nowrap">
-                        {!e.professional ? (
-                          <span className="text-ink-400">—</span>
-                        ) : e.trade ? (
-                          <span className="text-[11px] text-ink-500 italic">Trade {e.decoratorPct}% ({usd(e.tradeDiscount)})</span>
-                        ) : (
-                          <>
-                            <span className="font-medium text-ink-900">{usd(e.proReported)}</span>
-                            <ProStatus e={e} className="ml-2" />
-                          </>
-                        )}
-                      </td>
+            <div className="hidden md:block">
+              <div className="flex justify-end px-3 pt-3">
+                <ColumnsMenu columns={detCols.columns} visible={detCols.visible} onChange={detCols.setVisible} onReset={detCols.reset} />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {detCols.cols.map((col) => (
+                        <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sales.entries.length === 0 ? (
+                      <tr><td colSpan={detCols.cols.length} className="py-8 text-center text-ink-400 text-sm">Sin ventas en el ciclo.</td></tr>
+                    ) : sales.entries.map((e) => {
+                      const ctx = { e, usd };
+                      return (
+                        <tr key={e.quote.id} className="hover:bg-ink-50 transition-colors">
+                          {detCols.cols.map((col) => (
+                            <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 

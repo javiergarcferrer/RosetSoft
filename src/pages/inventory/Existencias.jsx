@@ -12,11 +12,85 @@ import InventoryGate from '../../components/InventoryGate.jsx';
 import InventorySubnav from '../../components/InventorySubnav.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
+import useColumns from '../../components/search/useColumns.js';
+import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { resolveInventory, resolveItemKardex, planSalida } from '../../core/accounting/index.js';
 
 const TYPE_LABEL = { in: 'Entrada', out: 'Salida', adjust: 'Ajuste' };
+
+/**
+ * Stock-list columns (Shopify-style customizable list). ONE ordered definition
+ * drives the table render (`cell`), the footer (`foot`) and the Columns menu
+ * (`label`/`canHide`). `item` is the fixed identity anchor (never hidden); the
+ * rest the team can toggle. Each `cell`/`foot` is a pure render off the per-row
+ * `ctx` bag (or the totals bag) the table assembles.
+ */
+const STOCK_COLUMNS = [
+  {
+    key: 'item', label: 'Artículo', canHide: false,
+    tdClass: 'min-w-0',
+    cell: ({ item }) => (
+      <div className="truncate">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</div>
+    ),
+    foot: () => 'Valor total',
+  },
+  {
+    key: 'qty', label: 'Existencia',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ item, qty }) => <>{qty} {item.unit}</>,
+  },
+  {
+    key: 'avgCost', label: 'Costo prom.',
+    thClass: 'text-right whitespace-nowrap hidden sm:table-cell',
+    tdClass: 'text-right tabular-nums whitespace-nowrap hidden sm:table-cell',
+    cell: ({ avgCost }) => formatDop(avgCost),
+  },
+  {
+    key: 'value', label: 'Valor',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
+    cell: ({ value }) => formatDop(value),
+    foot: ({ totalValue }) => formatDop(totalValue),
+    footClass: 'text-right tabular-nums whitespace-nowrap',
+  },
+];
+const STOCK_DEFAULT = { qty: true, avgCost: true, value: true };
+const STOCK_COLS_KEY = 'rs.existencias.cols.v1';
+
+/**
+ * Kardex (per-item movement history) columns. Read-only movement list — Fecha is
+ * the fixed anchor; the rest toggle. Pure `cell(ctx)` over the per-movement bag.
+ */
+const KARDEX_COLUMNS = [
+  {
+    key: 'date', label: 'Fecha', canHide: false,
+    thClass: 'text-left py-1 whitespace-nowrap', tdClass: 'py-1 text-ink-500 whitespace-nowrap',
+    cell: ({ m }) => formatDate(m.movedAt),
+  },
+  {
+    key: 'type', label: 'Tipo',
+    thClass: 'text-left py-1', tdClass: 'py-1',
+    cell: ({ m }) => TYPE_LABEL[m.type],
+  },
+  {
+    key: 'qty', label: 'Cant.',
+    thClass: 'text-right py-1 whitespace-nowrap', tdClass: 'py-1 text-right tabular-nums whitespace-nowrap',
+    cell: ({ m }) => <>{m.type === 'out' ? '−' : ''}{m.qty}</>,
+  },
+  {
+    key: 'unitCost', label: 'C. unit.',
+    thClass: 'text-right py-1 whitespace-nowrap', tdClass: 'py-1 text-right tabular-nums whitespace-nowrap',
+    cell: ({ m, avgCost }) => formatDop(m.unitCost || avgCost),
+  },
+  {
+    key: 'balance', label: 'Saldo',
+    thClass: 'text-right py-1 whitespace-nowrap', tdClass: 'py-1 text-right tabular-nums whitespace-nowrap',
+    cell: ({ qty }) => qty,
+  },
+];
+const KARDEX_DEFAULT = { type: true, qty: true, unitCost: true, balance: true };
+const KARDEX_COLS_KEY = 'rs.existencias.kardex.cols.v1';
 
 /**
  * Inventario · Existencias — the team's current stock as a simple list (qty on
@@ -56,6 +130,12 @@ export default function Existencias() {
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
   const [syncing, setSyncing] = useState(false);
+
+  // Customizable columns (Shopify "Columnas") — persisted per browser. The
+  // stock list and the kardex each render `cols` (anchor + toggled-on, in order)
+  // and feed the full set to their <ColumnsMenu>.
+  const stockCols = useColumns(STOCK_COLUMNS, STOCK_DEFAULT, STOCK_COLS_KEY);
+  const kardexCols = useColumns(KARDEX_COLUMNS, KARDEX_DEFAULT, KARDEX_COLS_KEY);
 
   async function createItem() {
     if (!itemForm.name.trim()) return;
@@ -161,31 +241,38 @@ export default function Existencias() {
             footer={[['Valor total', formatDop(inv.totalValue)]]}
           />
           <div className="hidden md:block card overflow-hidden">
+            <div className="flex justify-end px-3 pt-3">
+              <ColumnsMenu columns={stockCols.columns} visible={stockCols.visible} onChange={stockCols.setVisible} onReset={stockCols.reset} />
+            </div>
             <div className="overflow-x-auto">
             <table className="table min-w-[320px]">
               <thead>
                 <tr>
-                  <th>Artículo</th>
-                  <th className="text-right whitespace-nowrap">Existencia</th>
-                  <th className="text-right whitespace-nowrap hidden sm:table-cell">Costo prom.</th>
-                  <th className="text-right whitespace-nowrap">Valor</th>
+                  {stockCols.cols.map((col) => (
+                    <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {inv.rows.map(({ item, qty, avgCost, value }) => (
-                  <tr key={item.id} onClick={() => { setSelectedId(item.id); setOutQty(''); setErr(''); }}
-                    className={`cursor-pointer transition-colors active:bg-ink-100 ${selectedId === item.id ? 'bg-ink-50' : ''}`}>
-                    <td className="min-w-0"><div className="truncate">{item.name}{item.sku ? <code className="text-[11px] text-ink-400 ml-2">{item.sku}</code> : null}</div></td>
-                    <td className="text-right tabular-nums whitespace-nowrap">{qty} {item.unit}</td>
-                    <td className="text-right tabular-nums whitespace-nowrap hidden sm:table-cell">{formatDop(avgCost)}</td>
-                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(value)}</td>
-                  </tr>
-                ))}
+                {inv.rows.map(({ item, qty, avgCost, value }) => {
+                  const ctx = { item, qty, avgCost, value };
+                  return (
+                    <tr key={item.id} onClick={() => { setSelectedId(item.id); setOutQty(''); setErr(''); }}
+                      className={`cursor-pointer transition-colors active:bg-ink-100 ${selectedId === item.id ? 'bg-ink-50' : ''}`}>
+                      {stockCols.cols.map((col) => (
+                        <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
-                  <td colSpan={3}>Valor total</td>
-                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(inv.totalValue)}</td>
+                  {stockCols.cols.map((col) => (
+                    <td key={col.key} className={col.footClass || col.thClass || ''}>
+                      {col.foot ? col.foot({ totalValue: inv.totalValue }) : null}
+                    </td>
+                  ))}
                 </tr>
               </tfoot>
             </table>
@@ -219,30 +306,34 @@ export default function Existencias() {
                 {kardex.rows.length === 0 ? (
                   <p className="text-sm text-ink-500">Sin movimientos.</p>
                 ) : (
+                  <>
+                  <div className="hidden md:flex justify-end mb-2">
+                    <ColumnsMenu columns={kardexCols.columns} visible={kardexCols.visible} onChange={kardexCols.setVisible} onReset={kardexCols.reset} />
+                  </div>
                   <div className="overflow-x-auto -mx-4 px-4">
                   <table className="w-full text-sm min-w-[300px]">
                     <thead className="text-ink-500 text-xs uppercase tracking-wide">
                       <tr>
-                        <th className="text-left py-1 whitespace-nowrap">Fecha</th>
-                        <th className="text-left py-1">Tipo</th>
-                        <th className="text-right py-1 whitespace-nowrap">Cant.</th>
-                        <th className="text-right py-1 whitespace-nowrap">C. unit.</th>
-                        <th className="text-right py-1 whitespace-nowrap">Saldo</th>
+                        {kardexCols.cols.map((col) => (
+                          <th key={col.key} className={col.thClass || ''}>{col.label}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {kardex.rows.slice().reverse().map(({ movement: m, qty, avgCost }) => (
-                        <tr key={m.id} className="border-t border-ink-50">
-                          <td className="py-1 text-ink-500 whitespace-nowrap">{formatDate(m.movedAt)}</td>
-                          <td className="py-1">{TYPE_LABEL[m.type]}</td>
-                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{m.type === 'out' ? '−' : ''}{m.qty}</td>
-                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{formatDop(m.unitCost || avgCost)}</td>
-                          <td className="py-1 text-right tabular-nums whitespace-nowrap">{qty}</td>
-                        </tr>
-                      ))}
+                      {kardex.rows.slice().reverse().map(({ movement: m, qty, avgCost }) => {
+                        const ctx = { m, qty, avgCost };
+                        return (
+                          <tr key={m.id} className="border-t border-ink-50">
+                            {kardexCols.cols.map((col) => (
+                              <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   </div>
+                  </>
                 )}
               </div>
             )}
