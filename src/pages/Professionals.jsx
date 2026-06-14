@@ -152,6 +152,7 @@ export default function Professionals() {
       email: String(draft.email || '').trim(),
       phone: String(draft.phone || '').trim(),
       address: '',
+      city: String(draft.city || '').trim(),
       notes: '',
       createdAt: now,
       updatedAt: now,
@@ -271,6 +272,7 @@ export default function Professionals() {
                   <SortableTh label="Empresa" sortKey="company" sort={sort} onSort={setSort} />
                   <th className="hidden lg:table-cell">Correo</th>
                   <th className="hidden lg:table-cell">Teléfono</th>
+                  <th className="hidden xl:table-cell">Ciudad</th>
                   <SortableTh label="Cotizaciones" sortKey="quotes" sort={sort} onSort={setSort} numeric className="text-right" />
                   <th className="w-10"></th>
                 </tr>
@@ -278,7 +280,7 @@ export default function Professionals() {
               <tbody>
                 {noMatches && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
                         <SearchX size={15} className="flex-shrink-0" aria-hidden />
                         Sin resultados — ajusta la búsqueda o los filtros.
@@ -352,6 +354,9 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
         <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">
           <Cell value={p.phone} onCommit={(v) => onCommit('phone', v)} row={row} col="phone" type="tel" inputMode="tel" placeholder="—" label={`Teléfono de ${p.name}`} />
         </td>
+        <td className="hidden xl:table-cell max-w-[140px]">
+          <Cell value={p.city} onCommit={(v) => onCommit('city', v)} row={row} col="city" placeholder="—" label={`Ciudad de ${p.name}`} />
+        </td>
         <td className="text-right tabular-nums whitespace-nowrap text-ink-800">
           {rollup?.count || 0}
           {rollup?.acceptedTotal > 0 && (
@@ -384,7 +389,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={7} className="!p-0 bg-ink-50/50">
+          <td colSpan={8} className="!p-0 bg-ink-50/50">
             <ProQuotesPanel pro={p} rollup={rollup} onCommit={onCommit} />
           </td>
         </tr>
@@ -399,7 +404,7 @@ function SheetRow({ p, row, rollup, isOpen, onToggle, onCommit, onRemove }) {
  * else was typed, then the row resets for the next one.
  */
 function NewSheetRow({ row, onCreate }) {
-  const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '' });
+  const [draft, setDraft] = useState({ name: '', company: '', email: '', phone: '', city: '' });
   const creating = useRef(false);
 
   async function maybeCreate(patch) {
@@ -409,7 +414,7 @@ function NewSheetRow({ row, onCreate }) {
     creating.current = true;
     try {
       const ok = await onCreate(next);
-      if (ok) setDraft({ name: '', company: '', email: '', phone: '' });
+      if (ok) setDraft({ name: '', company: '', email: '', phone: '', city: '' });
       return ok;
     } finally {
       creating.current = false;
@@ -445,6 +450,7 @@ function NewSheetRow({ row, onCreate }) {
       <td className="max-w-[200px]">{cell('company', { placeholder: 'Empresa' })}</td>
       <td className="hidden lg:table-cell min-w-[9rem] max-w-[220px]">{cell('email', { placeholder: 'Correo', type: 'email', inputMode: 'email' })}</td>
       <td className="hidden lg:table-cell min-w-[8rem] max-w-[150px]">{cell('phone', { placeholder: 'Teléfono', type: 'tel', inputMode: 'tel' })}</td>
+      <td className="hidden xl:table-cell max-w-[140px]">{cell('city', { placeholder: 'Ciudad' })}</td>
       <td className="text-right text-[11px] text-ink-300">—</td>
       <td></td>
     </tr>
@@ -703,7 +709,10 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
           here, not in notes); notes is for remarks only. */}
       <section className="px-4 py-3 space-y-2.5">
         <h4 className="font-display text-[11px] font-semibold uppercase tracking-wide text-ink-500">Datos del profesional</h4>
-        <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} />
+        <div className="grid grid-cols-2 gap-2">
+          <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} className="col-span-2" />
+          <PanelField label="Ciudad" value={pro.city} onCommit={(v) => onCommit('city', v)} className="col-span-2 sm:col-span-1" />
+        </div>
         <PanelTextArea
           label="Notas"
           value={pro.notes}

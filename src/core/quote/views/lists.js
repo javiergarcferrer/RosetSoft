@@ -248,7 +248,8 @@ export const PROFESSIONAL_QUOTE_STATUS_ORDER = ['accepted', 'sent', 'draft', 'de
 //                completeness dimensions), counted off ALL professionals so
 //                each tab reads "how many would I see if I tapped this".
 //   filterDefs — secondary-filter config for the FilterBar pills
-//                (empresa, datos de contacto, última cotización, alta).
+//                (ciudad, datos de contacto, última cotización) — kept in step
+//                with the Clientes bar so the two directories read the same.
 //   rows       — the professionals that survive tab + filters + search, in
 //                sort order.
 // Money routes through the shared totals helpers so these figures agree to
@@ -336,7 +337,26 @@ export function resolveProfessionalsList({
     { key: 'incomplete', label: 'Datos incompletos', count: incompleteN },
   ];
 
+  // Ciudad options: distinct non-empty cities actually on file — the same
+  // delivery/visit lens the Clientes bar offers, and the dropdown never lists
+  // a city nobody is in.
+  const citySeen = new Map();
+  for (const p of pros) {
+    const raw = String(p.city || '').trim();
+    if (!raw) continue;
+    const key = raw.toLowerCase();
+    if (!citySeen.has(key)) citySeen.set(key, raw);
+  }
   const filterDefs = [
+    {
+      key: 'city',
+      label: 'Ciudad',
+      type: 'select',
+      placeholder: 'Todas',
+      options: [...citySeen.entries()]
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    },
     {
       key: 'contact',
       label: 'Datos de contacto',
@@ -372,6 +392,7 @@ export function resolveProfessionalsList({
     if (tab === 'idle' && r.count > 0) return false;
     if (tab === 'incomplete' && !r.incomplete) return false;
 
+    if (filters.city && String(p.city || '').trim().toLowerCase() !== filters.city) return false;
     if (filters.contact === 'sin-correo' && !r.missingEmail) return false;
     if (filters.contact === 'sin-telefono' && !r.missingPhone) return false;
     if (filters.contact === 'incompleto' && !r.incomplete) return false;
@@ -387,7 +408,7 @@ export function resolveProfessionalsList({
 
     if (!needle) return true;
     const corpus = [
-      p.name, p.company, p.email, p.phone, p.address, p.notes,
+      p.name, p.company, p.email, p.phone, p.address, p.city, p.notes,
       p.number != null ? `#${p.number}` : '',
     ].map((s) => String(s || '').toLowerCase()).join(' ');
     if (corpus.includes(needle)) return true;
@@ -427,8 +448,8 @@ export function resolveProfessionalsList({
 //     actually bought, for repeat business and preferential treatment.
 //   • Sin actividad — on file but never quoted: the outreach pool.
 //   • Datos incompletos — no email or phone: unreachable, fix before selling.
-//   • Fiscal (RNC) — a B01 e-CF needs the client's RNC; the filter shows who
-//     still needs it collected before invoicing.
+// The secondary FilterBar pills mirror the Profesionales bar (ciudad, datos de
+// contacto, última cotización) so the two directories read the same.
 // Money routes through the shared totals helpers so figures agree to the
 // cent with CustomerDetail, the quotes list and the dashboard.
 export function resolveCustomersList({
@@ -485,7 +506,6 @@ export function resolveCustomersList({
       missingEmail,
       missingPhone,
       incomplete: missingEmail || missingPhone,
-      hasRnc: !!String(c.rnc || '').trim(),
     });
   }
 
@@ -540,18 +560,7 @@ export function resolveCustomersList({
         { value: 'completo', label: 'Contacto completo' },
       ],
     },
-    {
-      key: 'fiscal',
-      label: 'Fiscal',
-      type: 'select',
-      placeholder: 'Todos',
-      options: [
-        { value: 'con-rnc', label: 'Con RNC' },
-        { value: 'sin-rnc', label: 'Sin RNC' },
-      ],
-    },
     { key: 'activity', label: 'Última cotización', type: 'date-range' },
-    { key: 'created', label: 'Fecha de alta', type: 'date-range' },
   ];
 
   const parseRange = (r) => ({
@@ -559,7 +568,6 @@ export function resolveCustomersList({
     to: r?.to ? Date.parse(`${r.to}T23:59:59.999`) : null,
   });
   const activity = parseRange(filters.activity);
-  const created = parseRange(filters.created);
 
   const needle = String(q || '').trim().toLowerCase();
   const needleDigits = needle.replace(/\D/g, '');
@@ -576,16 +584,12 @@ export function resolveCustomersList({
     if (filters.contact === 'sin-telefono' && !r.missingPhone) return false;
     if (filters.contact === 'incompleto' && !r.incomplete) return false;
     if (filters.contact === 'completo' && r.incomplete) return false;
-    if (filters.fiscal === 'con-rnc' && !r.hasRnc) return false;
-    if (filters.fiscal === 'sin-rnc' && r.hasRnc) return false;
 
     if (activity.from != null || activity.to != null) {
       if (!r.lastActivityAt) return false;
       if (activity.from != null && r.lastActivityAt < activity.from) return false;
       if (activity.to != null && r.lastActivityAt > activity.to) return false;
     }
-    if (created.from != null && (c.createdAt || 0) < created.from) return false;
-    if (created.to != null && (c.createdAt || 0) > created.to) return false;
 
     if (!needle) return true;
     const corpus = [

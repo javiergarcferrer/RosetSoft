@@ -865,6 +865,8 @@ export interface Professional {
   phone?: string;
   /** Delivery/visit address — kept separate from freeform `notes`. */
   address?: string;
+  /** City — mirrors customers.city; drives the Ciudad directory filter. */
+  city?: string;
   notes?: string;
   createdAt?: number;
   updatedAt?: number;
