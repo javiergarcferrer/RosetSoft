@@ -4,7 +4,7 @@ import { useLiveQueryStatus } from '../../db/hooks.js';
 import { searchProducts, catalogCategories, productsByCategory } from '../../db/database.js';
 import { groupFamilies, productForGrade, familyStock } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
-import { ALL_BRANDS, BRAND_LIGNE_ROSET, brandName } from '../../lib/constants.js';
+import { BRAND_LIGNE_ROSET } from '../../lib/constants.js';
 import ImageView from '../ImageView.jsx';
 
 /**
@@ -14,26 +14,22 @@ import ImageView from '../ImageView.jsx';
  * chrome it needs and decides what picking a model means (e.g. CatalogPicker
  * advances to the fabric/grade step to insert a new line).
  *
- * Two ways in, mirroring the admin Catalogs section:
- *   • Browse — ONE BRAND at a time (segmented tabs, like the admin's
- *     one-page-per-brand): every CATEGORY of the active brand listed
- *     (collapsed); opening one lazy-loads its models, so nothing pulls the
- *     whole tens-of-thousands-row table. Tabbed rather than mixed because the
- *     two brands' category trees mean nothing interleaved.
- *   • Search — spans EVERY brand (the dealer quotes them all in one quote);
- *     relevance-ranked matches (best first) grouped under their category, each
- *     row naming its brand. Weights name > family > reference, exact > prefix
- *     > word-start > substring. Hits Postgres for a bounded matched set.
+ * Scoped to ONE `brand` (the host decides which): the Catálogo picker passes
+ * Ligne Roset, the Inventario picker's LifestyleGarden tab passes LSG. Both
+ * browse (every CATEGORY of the brand, collapsed → lazy-loaded models, so
+ * nothing pulls the whole tens-of-thousands-row table) and search are filtered
+ * to that brand. Search is relevance-ranked (best first) grouped under each
+ * category — weights name > family > reference, exact > prefix > word-start >
+ * substring — and hits Postgres for a bounded matched set.
  *
  * Self-contained query state (debounced), so it resets cleanly each time the
  * host modal mounts it.
  */
 const usd = (n) => formatMoney(Number(n) || 0, 'USD', { USD: 1 });
 
-export default function ModelBrowser({ profileId, onPick }) {
+export default function ModelBrowser({ profileId, onPick, brand = BRAND_LIGNE_ROSET }) {
   const [q, setQ] = useState('');
   const [dq, setDq] = useState('');
-  const [brand, setBrand] = useState(BRAND_LIGNE_ROSET); // browse-mode brand tab
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -49,11 +45,11 @@ export default function ModelBrowser({ profileId, onPick }) {
 
   const searching = dq.length > 0;
 
-  // Two-band flex column: a PINNED header (search + brand tabs) that never
-  // scrolls, over a SINGLE scrolling results region. The host (CatalogPicker)
-  // gives us a flush, non-scrolling modal body (`flushBody`), so this is the
-  // only scroller — the search box stays put even as the list grows long and
-  // even with the iOS keyboard up. We own the modal's horizontal padding here.
+  // Two-band flex column: a PINNED search header that never scrolls, over a
+  // SINGLE scrolling results region. The host gives us a flush, non-scrolling
+  // modal body (`flushBody`), so this is the only scroller — the search box
+  // stays put even as the list grows long and even with the iOS keyboard up. We
+  // own the modal's horizontal padding here.
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-shrink-0 px-4 sm:px-6 pt-4 pb-3">
@@ -88,34 +84,13 @@ export default function ModelBrowser({ profileId, onPick }) {
             </button>
           )}
         </div>
-
-        {/* Brand tabs scope BROWSE only; a search spans every brand (each result
-            row names its own), so the tabs bow out while a query is typed. */}
-        {!searching && <div className="mt-3"><BrandTabs brand={brand} onChange={setBrand} /></div>}
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-4">
         {searching
-          ? <PickerSearch profileId={profileId} term={dq} onPick={onPick} />
+          ? <PickerSearch profileId={profileId} brand={brand} term={dq} onPick={onPick} />
           : <PickerBrowse profileId={profileId} brand={brand} onPick={onPick} />}
       </div>
-    </div>
-  );
-}
-
-/** Segmented brand switcher for browse mode (the ScopeToggle idiom). */
-function BrandTabs({ brand, onChange }) {
-  const cls = (active) =>
-    active
-      ? 'px-3 py-1.5 min-h-8 coarse:min-h-11 bg-ink-900 text-ink-50'
-      : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors';
-  return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
-      {ALL_BRANDS.map((b) => (
-        <button key={b} type="button" onClick={() => onChange(b)} aria-pressed={brand === b} className={cls(brand === b)}>
-          {brandName(b)}
-        </button>
-      ))}
     </div>
   );
 }
@@ -196,12 +171,13 @@ function groupAndRank(products, tokens) {
   return sections.sort((a, b) => b.best - a.best || sortCat(a.category, b.category));
 }
 
-/** Search mode — relevance-ranked matches grouped by category. Owns its query
- *  so a fresh search shows a loader rather than a stale/empty flash. */
-function PickerSearch({ profileId, term, onPick }) {
+/** Search mode — relevance-ranked matches grouped by category, scoped to the
+ *  active brand. Owns its query so a fresh search shows a loader rather than a
+ *  stale/empty flash. */
+function PickerSearch({ profileId, brand, term, onPick }) {
   const { data: products, loaded } = useLiveQueryStatus(
-    () => searchProducts(profileId, term, SEARCH_LIMIT),
-    [profileId, term],
+    () => searchProducts(profileId, term, SEARCH_LIMIT, brand),
+    [profileId, brand, term],
     [],
   );
   const tokens = useMemo(
@@ -223,7 +199,7 @@ function PickerSearch({ profileId, term, onPick }) {
   return (
     <div className="space-y-2">
       {sections.map((section) => (
-        <ResultCategory key={section.category || NONE_KEY} section={section} onPick={onPick} showBrand />
+        <ResultCategory key={section.category || NONE_KEY} section={section} onPick={onPick} />
       ))}
     </div>
   );
@@ -318,7 +294,7 @@ function BrowseCategoryModels({ profileId, brand, category, onPick }) {
 }
 
 /** One category of search results — open by default, with its ranked models. */
-function ResultCategory({ section, onPick, showBrand = false }) {
+function ResultCategory({ section, onPick }) {
   return (
     <details open className="rounded-lg border border-ink-100 overflow-hidden group/cat">
       <summary className="cursor-pointer list-none select-none px-3 py-3 sm:py-2.5 min-h-11 flex items-center justify-between gap-3 hover:bg-ink-50 active:bg-ink-100 transition-colors">
@@ -331,7 +307,7 @@ function ResultCategory({ section, onPick, showBrand = false }) {
         <span className="text-[11px] text-ink-400 tabular-nums flex-shrink-0">{section.models.length}</span>
       </summary>
       <div className="border-t border-ink-100 py-1">
-        {section.models.map((m) => <ModelButton key={m.root} model={m} onPick={onPick} showBrand={showBrand} />)}
+        {section.models.map((m) => <ModelButton key={m.root} model={m} onPick={onPick} />)}
       </div>
     </details>
   );
@@ -339,10 +315,8 @@ function ResultCategory({ section, onPick, showBrand = false }) {
 
 /** A selectable model row — picking it hands the model up to the caller. Shows
  *  the product's description (its Description-2 text + dimensions) under the name
- *  so the dealer can tell what the model is. `showBrand` leads the secondary
- *  line with the model's brand — for cross-brand lists (search), where the
- *  category heading alone can't tell a Roset hit from a LifestyleGarden one. */
-function ModelButton({ model, onPick, showBrand = false }) {
+ *  so the dealer can tell what the model is. */
+function ModelButton({ model, onPick }) {
   // Any member SKU carries the model-level descriptor + dimensions (they're
   // the same across grades); take the leading grade's product as the sample.
   const sample = productForGrade(model, model.grades?.[0] || '');
@@ -379,7 +353,7 @@ function ModelButton({ model, onPick, showBrand = false }) {
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-ink-900 truncate">{model.name || model.root}</span>
         <span className="block text-[11px] text-ink-500 truncate">
-          {[showBrand ? brandName(model.brand) : null, model.family, model.graded ? `${model.grades.length} grados` : null].filter(Boolean).join(' · ')}
+          {[model.family, model.graded ? `${model.grades.length} grados` : null].filter(Boolean).join(' · ')}
         </span>
         {description && (
           <span className="block text-[11px] text-ink-400 truncate" title={description}>{description}</span>

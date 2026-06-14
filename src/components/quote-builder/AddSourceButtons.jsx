@@ -3,11 +3,11 @@ import { BookOpen, Boxes } from 'lucide-react';
 /**
  * The two product-source buttons for the editor — LABELED. They are
  * deliberately SEPARATE because the two sources are fundamentally different:
- *   • Catálogo  → the brand catalogs (CatalogPicker), spanning every brand:
- *                 a Ligne Roset SKU/model priced by grade + fabric, or a
- *                 LifestyleGarden piece — ordered from the manufacturer.
- *   • Inventario → our own stock on hand (InventoryPicker): a physical unit
- *                 already received into the warehouse, at its selling price.
+ *   • Catálogo  → the Ligne Roset catalog (CatalogPicker): a SKU/model priced
+ *                 by grade + fabric, ordered from the manufacturer.
+ *   • Inventario → our own stock on hand (InventoryPicker): the manual
+ *                 existencias list AND the LifestyleGarden Shopify stock — a
+ *                 physical unit already on hand, at its selling price.
  *
  * They used to be icon-only (a book and boxes) — the PRIMARY way to add a
  * product hidden behind two mystery glyphs. The labels are the point: the
@@ -28,7 +28,7 @@ export default function AddSourceButtons({ onOpenCatalog, onOpenInventory, varia
         type="button"
         onClick={onOpenCatalog}
         className={cls}
-        title="Agregar desde los catálogos de marca (Ligne Roset, LifestyleGarden)"
+        title="Agregar desde el catálogo Ligne Roset"
       >
         <BookOpen size={size} aria-hidden /> Catálogo
       </button>
@@ -36,7 +36,7 @@ export default function AddSourceButtons({ onOpenCatalog, onOpenInventory, varia
         type="button"
         onClick={onOpenInventory}
         className={cls}
-        title="Agregar desde el inventario (existencias)"
+        title="Agregar desde el inventario (existencias y LifestyleGarden)"
       >
         <Boxes size={size} aria-hidden /> Inventario
       </button>

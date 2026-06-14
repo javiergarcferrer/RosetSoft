@@ -8,11 +8,14 @@ import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { productForGrade, isOutOfStock } from '../../lib/catalog.js';
-import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
+import { BRAND_LIGNE_ROSET } from '../../lib/constants.js';
+import { productLineSeed, rangeLineSeed } from './catalogSeed.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
- * Catalog picker — the model → fabric(grade)→ price quote flow.
+ * Catalog picker — the Ligne Roset model → fabric(grade)→ price quote flow.
+ * (LifestyleGarden stock is added from the Inventario picker's LSG tab, not
+ * here — it's our own warehouse stock, not the supplier catalog.)
  *
  *   Step 1: find a MODEL (a family of SKUs sharing the 8-digit root, e.g.
  *           "Togo Fireside Chair"). Two ways in:
@@ -73,37 +76,12 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
   // catalog subtype (the wood finish / variant text).
   function insertProduct(fam, product, grade, material, color) {
     if (!product) return;
-    // Inventory gate: a tracked product (LSG) with no sellable units can't be
-    // quoted. The picker row is already disabled — this is the hard stop.
+    // Inventory gate: a tracked product with no sellable units can't be quoted.
+    // The picker row is already disabled — this is the hard stop.
     if (isOutOfStock(product)) return;
-    // The catalog's "Description 2" — the model's finish/variant text, e.g.
-    // "STANDARD HEADBOARD" — parses into product.subtype. Keep it as the line's
-    // read-only `productDescription` (its SECOND identifying line) so it SURVIVES
-    // when a fabric grade takes over the subtype, and shows on every surface
-    // (quote pane, client preview, public link, PDF). It is kept SEPARATE from
-    // the editable `description` so the catalog text never pre-fills the dealer's
-    // own "Descripción". The subtype slot is then the fabric (graded) or empty
-    // (non-upholstered) — never the finish text masquerading as a fabric.
-    onInsert({
-      family: product.family || fam.family,
-      reference: product.reference,
-      name: product.name,
-      dimensions: product.dimensions,
-      subtype: (grade || material)
-        ? composeSubtype(grade, composeFabricLabel(material, color))
-        : '',
-      productDescription: product.subtype || '',
-      unitPrice: product.priceUsd,
-      unitCost: product.cost,
-      // The catalog's own photos (LSG CDN pointers) ride along — cover + the
-      // full store gallery — so the line lands fully illustrated with zero
-      // extra steps; LR rows carry none.
-      imageId: product.imageId ?? null,
-      extraImageIds: Array.isArray(product.extraImageIds) && product.extraImageIds.length
-        ? product.extraImageIds
-        : null,
-      swatchImageId: color?.imageId ?? null,
-    });
+    // The line seed is built by the shared productLineSeed so it matches the
+    // Inventario picker's LifestyleGarden tab byte-for-byte (see catalogSeed.js).
+    onInsert(productLineSeed(fam, product, grade, material, color));
     onClose();
   }
 
@@ -122,26 +100,9 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
   // the cheapest SKU so the line's reference root still resolves the family
   // when a material is finally chosen.
   function insertRange(fam) {
-    const lo = productForGrade(fam, fam.grades[0]);
-    const hi = productForGrade(fam, fam.grades[fam.grades.length - 1]);
-    if (!lo || !hi) return;
-    const min = Number(lo.priceUsd) || 0;
-    const max = Number(hi.priceUsd) || 0;
-    onInsert({
-      family: lo.family || fam.family,
-      reference: lo.reference,
-      name: lo.name || fam.name,
-      dimensions: lo.dimensions,
-      subtype: '',
-      // Carry the model's second description (finish/variant) — see insertProduct.
-      productDescription: lo.subtype || '',
-      unitPrice: min,
-      unitCost: lo.cost,
-      imageId: lo.imageId ?? null,
-      swatchImageId: null,
-      priceMin: min,
-      priceMax: max,
-    });
+    const seed = rangeLineSeed(fam);
+    if (!seed) return;
+    onInsert(seed);
     onClose();
   }
 
@@ -167,7 +128,7 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       flushBody={!sel}
     >
       {!sel ? (
-        <ModelBrowser profileId={profileId} onPick={pickFamily} />
+        <ModelBrowser profileId={profileId} brand={BRAND_LIGNE_ROSET} onPick={pickFamily} />
       ) : (
         <>
           <button type="button" onClick={() => setSel(null)} className="back-link"><ChevronLeft size={12} /> Volver a modelos</button>
