@@ -596,6 +596,14 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
     <div className="flex-1 min-w-0 sm:flex sm:items-start sm:gap-6">
       <div className="min-w-0 sm:flex-1">
         <LineIdentity family={entity.family} name={entity.name} />
+        {/* Catalog Description 2 (read-only product identity, e.g. "W/SHORT
+            UNIT") — parked immediately UNDER the name so it reads as part of
+            the title, matching the editor's IdentityBand. */}
+        {entity.productDescription && (
+          <div className="text-[11px] text-ink-600 mt-1 max-w-xl whitespace-pre-line">
+            {entity.productDescription}
+          </div>
+        )}
         {((entity.subtype && !hideSwatch) || entity.reference || entity.dimensions) && (
           <div className="min-w-0 mt-1">
             {/* Fabric line — suppressed when the compound hero already names it. */}
@@ -630,13 +638,8 @@ function LineContent({ entity, mf, priced, families, currency, rates, fmt, hideS
         />
         {/* No standalone swatch (a grid showed instead) → controls render here. */}
         {!showSwatch && pickerStack && <div className="mt-2.5">{pickerStack}</div>}
-        {/* Catalog Description 2 (read-only product identity) then the dealer's
-            editable Descripción — two distinct fields. */}
-        {entity.productDescription && (
-          <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
-            {entity.productDescription}
-          </div>
-        )}
+        {/* The dealer's editable Descripción (the read-only catalog Description 2
+            now renders up under the name). */}
         {entity.description && (
           <div className="text-[11px] text-ink-600 mt-1.5 max-w-xl whitespace-pre-line">
             {entity.description}
