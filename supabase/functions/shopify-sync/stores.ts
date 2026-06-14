@@ -18,6 +18,12 @@ export interface SyncRequest {
   test?: boolean;
   importCatalog?: boolean;
   store?: string;
+  /** Register the LSG stock-refresh cron (admin-gated). */
+  ensureCron?: boolean;
+  /** Cron tick: re-pull the LSG catalog (Bearer service key only). */
+  cron?: boolean;
+  /** LSG inventory write-back: decrement Shopify when sold in ALCOVER. */
+  lsgAdjust?: Array<{ productId?: string; variantId?: string; delta: number }>;
 }
 
 /**
@@ -31,13 +37,17 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
 }
 
 /**
- * The scopes a store's app installation must carry, per direction:
- * the catalog pull only READS; the inventory mirror also writes products +
- * quantities and resolves the location.
+ * The scopes a store's app installation must carry, per direction. The
+ * LifestyleGarden link is now TWO-WAY: it PULLS the catalog (read_products,
+ * read_inventory) AND pushes inventory decrements back when an LSG product is
+ * sold inside ALCOVER (write_inventory + read_locations to resolve the location).
+ * The Alcover mirror writes products + quantities. Surfacing write_inventory in
+ * the LSG list makes the Settings connection test flag the (one-time) re-auth
+ * the dealer must do in the Shopify Dev Dashboard for the push to work.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
-    ? ['read_products', 'read_inventory']
+    ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
     : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
 }
 

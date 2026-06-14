@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
-import { saveShopifyConfig, syncShopify, pingShopify, SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
+import { saveShopifyConfig, syncShopify, pingShopify, ensureShopifyRefreshCron, SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
 import CredentialInput from '../components/settings/CredentialInput.jsx';
 import SettingsSection from '../components/settings/SettingsSection.jsx';
@@ -603,6 +603,9 @@ function ShopifyCard({ settings, store }) {
       // a bad or under-scoped credential is caught here, not later as "0 published".
       const ping = await pingShopify(store);
       if (ping?.ok) {
+        // LSG is two-way: once connected, register the periodic stock-refresh
+        // cron so Shopify-side sales keep our mirror fresh hands-off.
+        if (store === SHOPIFY_STORE_LSG) ensureShopifyRefreshCron().catch(() => {});
         const missing = ping.missingScopes || [];
         setStatus(missing.length ? 'error' : 'saved');
         setMsg(missing.length

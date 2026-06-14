@@ -47,8 +47,15 @@ test('storeForRequest: test mode checks whichever store the caller names', () =>
   assert.equal(storeForRequest({ test: true, store: STORE_LSG }), STORE_LSG);
 });
 
-test('requiredScopes: the catalog pull is read-only; the mirror also writes', () => {
-  assert.deepEqual(requiredScopes(STORE_LSG).sort(), ['read_inventory', 'read_products']);
+test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirror also writes', () => {
+  // LSG now PULLS the catalog AND pushes inventory decrements back when an LSG
+  // product is sold in ALCOVER, so it needs write_inventory + read_locations on
+  // top of the read scopes — this is what makes the connection test flag the
+  // one-time Shopify re-auth.
+  assert.deepEqual(
+    requiredScopes(STORE_LSG).sort(),
+    ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
+  );
   const mirror = requiredScopes(STORE_ALCOVER);
   for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {
     assert.ok(mirror.includes(s), `mirror needs ${s}`);

@@ -10,7 +10,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatMoney } from '../../lib/format.js';
-import { importLifestyleGardenCatalog } from '../../lib/shopifySync.js';
+import { importLifestyleGardenCatalog, ensureShopifyRefreshCron } from '../../lib/shopifySync.js';
 import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
 import { groupLsgModels, resolveLsgCatalogBook } from '../../core/catalog/index.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
@@ -79,6 +79,9 @@ export default function CatalogLifestyleGarden() {
         const images = Number(r?.images) || 0;
         setResult(`${r?.skus ?? 0} SKU de ${r?.products ?? 0} productos sincronizados${images ? ` · ${images} fotos enlazadas` : ''}${removed ? ` · ${removed} retirados` : ''}.`);
         setRefresh((n) => n + 1);
+        // Keep the mirror fresh hands-off from here on: register the periodic
+        // re-pull cron so Shopify-side sales lower our stock_qty automatically.
+        ensureShopifyRefreshCron().catch(() => {});
       }
     } catch (e) {
       console.error('[CatalogLifestyleGarden] sync failed:', e);

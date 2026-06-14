@@ -105,6 +105,31 @@ export async function importLifestyleGardenCatalog() {
 }
 
 /**
+ * Register (idempotently) the every-15-min cron that re-pulls the LSG catalog,
+ * so mirrored `stock_qty` stays fresh after products sell on the Shopify
+ * storefront — the PULL half of the two-way sync. Admin-only server-side; safe
+ * to call fire-and-forget right after a successful LSG connection. Returns
+ * { ok } or { ok:false, error }.
+ */
+export async function ensureShopifyRefreshCron() {
+  return invokeShopify({ ensureCron: true });
+}
+
+/**
+ * Push LSG inventory decrements to the LifestyleGarden Shopify store — the PUSH
+ * half of the two-way sync: when an LSG product is sold inside ALCOVER, lower
+ * its available count on Shopify so the storefront can't oversell. `items` =
+ * [{ productId | variantId, delta }] (delta NEGATIVE for a sale). Safe to call
+ * fire-and-forget (`.catch(() => {})`). Returns { ok, adjusted, skipped, errors }
+ * or { configured:false }.
+ */
+export async function pushLsgInventoryAdjust(items) {
+  const list = Array.isArray(items) ? items.filter((i) => i && Number(i.delta)) : [];
+  if (!list.length) return { ok: true, adjusted: 0, skipped: 0, errors: [] };
+  return invokeShopify({ lsgAdjust: list });
+}
+
+/**
  * Verify one store's saved connection: does the token reach the store, and was
  * the custom app granted every scope that store's direction needs? Returns
  * { configured:false } when no token is saved, { ok:true, shop, missingScopes }
