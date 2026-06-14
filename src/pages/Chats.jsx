@@ -195,11 +195,17 @@ export default function Chats() {
 
   return (
     <>
-      {/* On a phone an OPEN thread takes the page over, WhatsApp-style: the
-          page header (whose actions — Difusión, Nuevo chat — are list-level,
-          not thread-level) steps aside and ChatThread's own header carries
-          Back. The inbox chrome returns with the list. Desktop keeps the
-          header always — the split pane shows list + thread together. */}
+      {/* The WhatsApp screen is viewport-LOCKED on a phone: a flex column the
+          exact height of the area under the topbar, so the page never
+          shell-scrolls (which used to hide the Difusión / Nuevo chat buttons)
+          and the composer never floats above a dead gap — only the list and
+          the thread scroll, inside the pane. Negative margins cancel the
+          shared content-wrapper padding; `kb-inbox-pane` lets the keyboard
+          shrink the column. Desktop keeps the original flow via the md heights. */}
+      <div className="flex flex-col kb-inbox-pane max-md:h-[calc(100dvh-55px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-md:-mt-4 max-md:-mb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      {/* On a phone an OPEN thread takes the page over: the page header
+          (Difusión, Nuevo chat — list-level actions) steps aside and
+          ChatThread's own header carries Back; it returns with the list. */}
       <div className={selectedKey ? 'hidden md:block' : undefined}>
         <PageHeader
           title="WhatsApp"
@@ -217,14 +223,13 @@ export default function Chats() {
         />
       </div>
 
-      {/* With the header gone, the open thread gets the full viewport minus
-          the app chrome (topbar + page padding; the safe-area insets ride
-          100dvh, so they're subtracted too). The fixed-px desktop height is
-          unchanged. */}
-      <div className={`card overflow-hidden flex min-h-[420px] ${
+      {/* The pane fills the locked column on a phone (flex-1, its own inner
+          scroll) so nothing below it can shell-scroll; desktop keeps the fixed
+          split-pane height. Thread view bleeds to the screen edges. */}
+      <div className={`card overflow-hidden flex max-md:flex-1 max-md:min-h-0 md:min-h-[420px] md:h-[calc(100dvh-230px)] ${
         selectedKey
-          ? 'kb-inbox-pane h-[calc(100dvh-7.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] md:h-[calc(100dvh-230px)] max-md:-mx-4 max-md:-mt-4 max-md:rounded-none max-md:border-x-0 max-md:border-t-0'
-          : 'h-[calc(100dvh-230px)]'
+          ? 'max-md:-mx-4 max-md:rounded-none max-md:border-x-0 max-md:border-t-0 max-md:border-b-0'
+          : ''
       }`}>
         {/* Conversation list — full width on a phone until a thread is open. */}
         <div className={`${selectedKey ? 'hidden md:flex' : 'flex'} w-full md:w-[320px] lg:w-[360px] shrink-0 flex-col border-r border-ink-100`}>
@@ -400,6 +405,7 @@ export default function Chats() {
           )}
         </div>
       </div>
+      </div>
 
       <NewChatModal
         open={pickerOpen}
@@ -421,11 +427,13 @@ export default function Chats() {
 /** One inbox status filter pill — label + live count, tinted when it carries
  *  pending work (emerald for unread, amber for awaiting-reply). */
 function FilterChip({ label, active, onClick, count, tone }) {
+  // Active tone uses fixed brand/semantic colors, NOT ink-900: the ink ramp
+  // inverts in dark mode, so `bg-ink-900 text-white` became white-on-white.
   const activeTone = tone === 'amber'
     ? 'bg-amber-500 text-white border-amber-500'
     : tone === 'emerald'
       ? 'bg-emerald-600 text-white border-emerald-600'
-      : 'bg-ink-900 text-white border-ink-900';
+      : 'bg-brand-600 text-white border-brand-600';
   return (
     <button
       type="button"

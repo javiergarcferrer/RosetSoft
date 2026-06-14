@@ -1042,7 +1042,11 @@
      Phones only (the bar's own breakpoint); md+ has no soft keyboard. */
   @media (max-width: 767.98px) {
     html.kb-open .kb-inbox-pane {
-      height: calc(100dvh - 7.5rem - env(safe-area-inset-top));
+      /* Keyboard up: the webview already excludes the keyboard, and the home
+         indicator is hidden behind it, so only the topbar (55px + safe-top) is
+         subtracted — no safe-area-inset-bottom. Matches the locked-column base
+         height in Chats.jsx (which drops the bottom inset when typing). */
+      height: calc(100dvh - 55px - env(safe-area-inset-top));
     }
   }
 }
