@@ -18,14 +18,19 @@ const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
  * — instead of an opaque token alone. The token stays the real key (the route
  * ignores the slug), so links minted before this, or with no slug, still work.
  *
- * `?lp=3` (before the #, so crawlers see it) is a LINK-PREVIEW cache buster:
+ * `?lp=4` (before the #, so crawlers see it) is a LINK-PREVIEW cache buster:
  * WhatsApp — Meta's servers for Cloud-API sends AND each recipient's device —
- * caches the preview card per URL STRING for weeks, so quote links crawled
- * while og-image was broken kept showing the garbled card forever. lp=2 was
- * burned while an og:url canonical tag was still collapsing every variant
- * onto the stale cached object (see index.html); bump the number only if the
- * preview must be re-crawled again. The SPA ignores the query (hash routing)
- * and old links keep resolving.
+ * caches the preview card per URL STRING for weeks. Crawlers strip everything
+ * after the `#`, so every quote link collapses to the SAME crawled URL
+ * (`<origin>/?lp=N`); bumping N is the only lever that forces a re-crawl of a
+ * fresh card. History: lp=2 was burned while an og:url canonical tag was still
+ * collapsing every variant onto the stale cached object (see index.html);
+ * lp=3 was burned with the broken (progressive/garbled) og image still
+ * cached; lp=4 busts the cache after the og-card-v2 baseline re-encode (the
+ * image is now a valid baseline JPEG but WhatsApp kept serving the cached
+ * `?lp=3` card). Bump the number only if the preview must be re-crawled again
+ * (2 → 3 → 4). The SPA ignores the query (hash routing) and old links keep
+ * resolving.
  */
 export function shareLinkUrl(token, slug) {
   if (!token) return '';
@@ -33,7 +38,7 @@ export function shareLinkUrl(token, slug) {
   const path = slug
     ? `${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
     : encodeURIComponent(token);
-  return `${origin}/?lp=3#/q/${path}`;
+  return `${origin}/?lp=4#/q/${path}`;
 }
 
 /**
