@@ -49,36 +49,55 @@ export default function ModelBrowser({ profileId, onPick }) {
 
   const searching = dq.length > 0;
 
+  // Two-band flex column: a PINNED header (search + brand tabs) that never
+  // scrolls, over a SINGLE scrolling results region. The host (CatalogPicker)
+  // gives us a flush, non-scrolling modal body (`flushBody`), so this is the
+  // only scroller — the search box stays put even as the list grows long and
+  // even with the iOS keyboard up. We own the modal's horizontal padding here.
   return (
-    <>
-      <div className="relative mb-3">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-        <input
-          ref={inputRef}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
-          placeholder="Buscar modelo por nombre, referencia o familia…"
-        />
-        {q && (
-          // btn-icon matches the input's 36/44 height exactly, so the clear
-          // affordance fills the input's right end as a full-size touch target.
-          <button type="button" onClick={() => { setQ(''); inputRef.current?.focus(); }} className="btn-icon absolute right-0 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
-            <X size={14} />
-          </button>
-        )}
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex-shrink-0 px-4 sm:px-6 pt-4 pb-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
+            placeholder="Buscar modelo por nombre, referencia o familia…"
+            aria-label="Buscar modelo en el catálogo"
+            // iOS: a plain text field whose placeholder mentions "nombre" trips
+            // the QuickType "AutoFill Contact" bar (and autocorrect mangles
+            // references). These attrs declare it a SEARCH box — Buscar return
+            // key, no autofill/autocorrect/capitalize. Mirrors GlobalSearch.
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+          {q && (
+            // btn-icon matches the input's 36/44 height exactly, so the clear
+            // affordance fills the input's right end as a full-size touch target.
+            <button type="button" onClick={() => { setQ(''); inputRef.current?.focus(); }} className="btn-icon absolute right-0 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Brand tabs scope BROWSE only; a search spans every brand (each result
+            row names its own), so the tabs bow out while a query is typed. */}
+        {!searching && <div className="mt-3"><BrandTabs brand={brand} onChange={setBrand} /></div>}
       </div>
 
-      {/* Brand tabs scope BROWSE only; a search spans every brand (each result
-          row names its own), so the tabs bow out while a query is typed. */}
-      {!searching && <BrandTabs brand={brand} onChange={setBrand} />}
-
-      <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 pb-4">
         {searching
           ? <PickerSearch profileId={profileId} term={dq} onPick={onPick} />
           : <PickerBrowse profileId={profileId} brand={brand} onPick={onPick} />}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -89,7 +108,7 @@ function BrandTabs({ brand, onChange }) {
       ? 'px-3 py-1.5 min-h-8 coarse:min-h-11 bg-ink-900 text-ink-50'
       : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors';
   return (
-    <div className="mb-3 inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
       {ALL_BRANDS.map((b) => (
         <button key={b} type="button" onClick={() => onChange(b)} aria-pressed={brand === b} className={cls(brand === b)}>
           {brandName(b)}

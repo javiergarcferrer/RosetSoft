@@ -96,66 +96,83 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
   const count = picked.size;
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Agregar varios elementos">
-      <div className="relative mb-3">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="input pl-9"
-          placeholder="Buscar modelo por nombre, referencia o familia…"
-          autoFocus
-        />
-        {q && (
-          <button type="button" onClick={() => setQ('')} className="btn-icon absolute right-0.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="text-[11px] font-medium text-ink-500 whitespace-nowrap">Grado para todos:</span>
-        <Select variant="ghost" value={grade} onChange={setGrade} aria-label="Grado para todos los elementos" className="flex-1 min-w-0">
-          <option value="">Sin material · rango</option>
-          {GRADE_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.grades.map((g) => <option key={g} value={g}>Grade {g}</option>)}
-            </optgroup>
-          ))}
-          <optgroup label="Otros">
-            {SPECIAL_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-          </optgroup>
-        </Select>
-      </div>
-
-      <div className="max-h-[50vh] overflow-y-auto -mx-1 px-1 space-y-0.5">
-        {!dq ? (
-          <div className="px-3 py-10 text-center text-sm text-ink-500">Escribe para buscar los elementos del modelo.</div>
-        ) : !loaded ? (
-          <div className="px-3 py-10 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
-            <Loader2 size={15} className="animate-spin" /> Buscando…
+    <Modal open={open} onClose={onClose} size="lg" title="Agregar varios elementos" flushBody>
+      {/* Pinned header (search + grade) over a single scroll region over a
+          pinned footer — the search bar and CTA stay put as the list grows and
+          with the iOS keyboard up; only the results scroll. */}
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-shrink-0 px-4 sm:px-6 pt-4 pb-3 space-y-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
+              placeholder="Buscar modelo por nombre, referencia o familia…"
+              aria-label="Buscar modelo en el catálogo"
+              autoFocus
+              // See ModelBrowser: declare a SEARCH box so iOS gives the Buscar
+              // return key and skips the AutoFill-Contact bar / autocorrect.
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            {q && (
+              <button type="button" onClick={() => setQ('')} className="btn-icon absolute right-0 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700" aria-label="Limpiar">
+                <X size={14} />
+              </button>
+            )}
           </div>
-        ) : families.length === 0 ? (
-          <div className="px-3 py-10 text-center text-sm text-ink-500">Sin coincidencias.</div>
-        ) : (
-          families.map((fam) => (
-            <MultiRow key={fam.root} fam={fam} grade={grade} checked={picked.has(fam.root)} onToggle={() => toggle(fam)} />
-          ))
-        )}
-      </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3">
-        <span className="text-xs text-ink-500 tabular-nums">{count} seleccionado{count === 1 ? '' : 's'}</span>
-        {/* The single loudest action in this modal — the brand CTA. */}
-        <button
-          type="button"
-          onClick={add}
-          disabled={!count}
-          className="btn-brand"
-        >
-          <Plus size={16} aria-hidden />
-          Agregar {count || ''} {count === 1 ? 'elemento' : 'elementos'}
-        </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium text-ink-500 whitespace-nowrap">Grado para todos:</span>
+            <Select variant="ghost" value={grade} onChange={setGrade} aria-label="Grado para todos los elementos" className="flex-1 min-w-0">
+              <option value="">Sin material · rango</option>
+              {GRADE_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.grades.map((g) => <option key={g} value={g}>Grade {g}</option>)}
+                </optgroup>
+              ))}
+              <optgroup label="Otros">
+                {SPECIAL_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+              </optgroup>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-1 space-y-0.5">
+          {!dq ? (
+            <div className="px-3 py-10 text-center text-sm text-ink-500">Escribe para buscar los elementos del modelo.</div>
+          ) : !loaded ? (
+            <div className="px-3 py-10 text-center text-sm text-ink-500 flex items-center justify-center gap-2">
+              <Loader2 size={15} className="animate-spin" /> Buscando…
+            </div>
+          ) : families.length === 0 ? (
+            <div className="px-3 py-10 text-center text-sm text-ink-500">Sin coincidencias.</div>
+          ) : (
+            families.map((fam) => (
+              <MultiRow key={fam.root} fam={fam} grade={grade} checked={picked.has(fam.root)} onToggle={() => toggle(fam)} />
+            ))
+          )}
+        </div>
+
+        <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 px-4 sm:px-6 py-3">
+          <span className="text-xs text-ink-500 tabular-nums">{count} seleccionado{count === 1 ? '' : 's'}</span>
+          {/* The single loudest action in this modal — the brand CTA. */}
+          <button
+            type="button"
+            onClick={add}
+            disabled={!count}
+            className="btn-brand"
+          >
+            <Plus size={16} aria-hidden />
+            Agregar {count || ''} {count === 1 ? 'elemento' : 'elementos'}
+          </button>
+        </div>
       </div>
     </Modal>
   );

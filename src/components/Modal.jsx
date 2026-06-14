@@ -9,7 +9,7 @@ import { X } from 'lucide-react';
  * dialog. Body scroll is locked while open so iOS doesn't rubber-band the
  * page underneath, and the close button is sized to a 44pt touch target.
  */
-export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md', flushBody = false }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -63,7 +63,18 @@ export default function Modal({ open, onClose, title, children, footer, size = '
             <X size={18} aria-hidden />
           </button>
         </div>
-        <div className="overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-5 flex-1 min-w-0">{children}</div>
+        {/* Default body OWNS the scroll (padded). `flushBody` instead hands a
+            bare, non-scrolling flex column to the child so IT can pin a header
+            (e.g. a search field) and scroll only its results — one scroll
+            region, never two. Without this a search-driven picker nests a
+            second scroller inside this one, and iOS scrolls the focused input
+            (plus the whole body) up behind the keyboard, hiding the search box.
+            The child supplies its own padding in flush mode. */}
+        {flushBody ? (
+          <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">{children}</div>
+        ) : (
+          <div className="overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-5 flex-1 min-w-0">{children}</div>
+        )}
         {footer && (
           <div className="px-4 sm:px-6 py-4 border-t border-ink-100 bg-ink-50/50 sm:rounded-b-2xl flex flex-wrap items-center justify-end gap-2.5">
             {footer}

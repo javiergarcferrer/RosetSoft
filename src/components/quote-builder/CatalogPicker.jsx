@@ -162,6 +162,9 @@ export default function CatalogPicker({ open, onClose, onInsert }) {
       onClose={onClose}
       size="lg"
       title={sel ? `${sel.name} · elige la tela` : 'Catálogo'}
+      // Model-search step pins its own search bar over a single scroll region
+      // (flush body). The fabric step is short, ordinary content → padded body.
+      flushBody={!sel}
     >
       {!sel ? (
         <ModelBrowser profileId={profileId} onPick={pickFamily} />
