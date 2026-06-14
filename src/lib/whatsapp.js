@@ -120,8 +120,8 @@ export async function completeWaOnboarding({ code, appId, phoneNumberId, wabaId,
  * Spanish message. `replyTo` (a wamid) sends it as a quoted reply. Returns
  * { ok, id } or { ok:false, error }.
  */
-export async function sendWhatsappText({ to, text, replyTo, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), text, replyTo, customerId, professionalId, quoteId });
+export async function sendWhatsappText({ to, groupId, text, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ ...(groupId ? { groupId } : { to: waDigits(to) }), text, replyTo, customerId, professionalId, quoteId });
 }
 
 /**
@@ -130,16 +130,16 @@ export async function sendWhatsappText({ to, text, replyTo, customerId, professi
  * `buttonParams` fill a URL button's {{1}} suffix (the part Meta appends to
  * the URL registered on the template).
  */
-export async function sendWhatsappTemplate({ to, template, params, buttonParams, lang, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), template, params, buttonParams, lang, customerId, professionalId, quoteId });
+export async function sendWhatsappTemplate({ to, groupId, template, params, buttonParams, lang, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ ...(groupId ? { groupId } : { to: waDigits(to) }), template, params, buttonParams, lang, customerId, professionalId, quoteId });
 }
 
 /**
  * React to a message (the emoji decorates their bubble, like in the phone
  * app). An empty emoji removes the reaction. `messageId` is the target wamid.
  */
-export async function sendWhatsappReaction({ to, messageId, emoji, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), reaction: { messageId, emoji: emoji || '' }, customerId, professionalId, quoteId });
+export async function sendWhatsappReaction({ to, groupId, messageId, emoji, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ ...(groupId ? { groupId } : { to: waDigits(to) }), reaction: { messageId, emoji: emoji || '' }, customerId, professionalId, quoteId });
 }
 
 /**
@@ -150,8 +150,8 @@ export async function sendWhatsappReaction({ to, messageId, emoji, customerId, p
  *            one menu button.
  *   cta:     { displayText, url } — a single tappable link button.
  */
-export async function sendWhatsappInteractive({ to, text, buttons, list, cta, replyTo, customerId, professionalId, quoteId }) {
-  return invokeWaSend({ to: waDigits(to), interactive: { text, buttons, list, cta }, replyTo, customerId, professionalId, quoteId });
+export async function sendWhatsappInteractive({ to, groupId, text, buttons, list, cta, replyTo, customerId, professionalId, quoteId }) {
+  return invokeWaSend({ ...(groupId ? { groupId } : { to: waDigits(to) }), interactive: { text, buttons, list, cta }, replyTo, customerId, professionalId, quoteId });
 }
 
 /**
@@ -295,7 +295,7 @@ export async function saveWaBusinessProfile(profile) {
  * `wa-send` as base64, which uploads it to Meta AND mirrors it into Storage so
  * the chat renders what was sent. Returns { ok, id } or { ok:false, error }.
  */
-export async function sendWhatsappMedia({ to, file, caption, replyTo, customerId, professionalId, quoteId }) {
+export async function sendWhatsappMedia({ to, groupId, file, caption, replyTo, customerId, professionalId, quoteId }) {
   if (!file) return { ok: false, error: 'Falta el archivo.' };
   if (file.size > 24 * 1024 * 1024) return { ok: false, error: 'El archivo supera el límite de 24 MB.' };
   // Bake EXIF orientation into photos so they don't arrive sideways on the
@@ -303,7 +303,7 @@ export async function sendWhatsappMedia({ to, file, caption, replyTo, customerId
   const sendable = await normalizeImageOrientation(file);
   const base64 = await blobToBase64(sendable);
   return invokeWaSend({
-    to: waDigits(to),
+    ...(groupId ? { groupId } : { to: waDigits(to) }),
     media: { base64, mime: sendable.type || 'application/octet-stream', filename: sendable.name || '', caption: caption || '' },
     replyTo, customerId, professionalId, quoteId,
   });
@@ -377,6 +377,57 @@ export async function sendWhatsappTyping(messageId) {
  */
 export async function sendWhatsappBroadcast({ name, template, lang, audience, recipients }) {
   return invokeWaSend({ broadcast: { name, template, lang, audience, recipients } });
+}
+
+// ── WhatsApp Groups (Cloud API Groups — needs an Official Business Account) ──
+// Every action mirrors the result into wa_groups / wa_group_participants
+// server-side, so the inbox + Grupos panel re-read it via db after the call.
+
+/** Refresh the group list from Meta into the local mirror. { ok, error? }. */
+export async function listWaGroups() {
+  return invokeWaSend({ listGroups: true });
+}
+
+/** Refresh one group's subject/description + full roster from Meta. */
+export async function syncWaGroup(groupId) {
+  return invokeWaSend({ getGroup: { groupId } });
+}
+
+/** Create a group (subject + initial participants). Meta returns its id, which
+ *  we mirror. { ok, groupId, subject } or { ok:false, error }. */
+export async function createWaGroup({ subject, description, participants } = {}) {
+  return invokeWaSend({ createGroup: { subject, description, participants: (participants || []).map(waDigits) } });
+}
+
+/** Edit a group's subject / description (admin only). */
+export async function updateWaGroup({ groupId, subject, description } = {}) {
+  return invokeWaSend({ updateGroup: { groupId, subject, description } });
+}
+
+/** Fetch (or regenerate, with `revoke`) the group's join link. { ok, inviteLink }. */
+export async function getWaGroupInviteLink({ groupId, revoke = false } = {}) {
+  return invokeWaSend({ groupInviteLink: { groupId, revoke } });
+}
+
+/** Add / remove group participants (admin only). Numbers are normalized to
+ *  digits-only E.164 before sending. */
+export async function manageWaGroupParticipants({ groupId, add = [], remove = [] } = {}) {
+  return invokeWaSend({ groupParticipants: { groupId, add: add.map(waDigits), remove: remove.map(waDigits) } });
+}
+
+/**
+ * Archive / unarchive a group — a LOCAL inbox hide (status flip), NOT a Meta
+ * leave: the number stays in the group, the thread just drops out of the active
+ * inbox / Grupos list. Written straight to the mirror (no Graph round-trip).
+ */
+export async function setWaGroupArchived(groupId, archived) {
+  if (!groupId) return { ok: false };
+  try {
+    await db.waGroups.update(groupId, { status: archived ? 'archived' : 'active', updatedAt: Date.now() });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message };
+  }
 }
 
 /**
@@ -531,12 +582,13 @@ export async function markThreadRead(messages) {
  * Optimistic outbound row for the chat view (the server writes the durable
  * one; this renders instantly while wa-send round-trips).
  */
-export function draftOutboundMessage({ phone, text, customerId, professionalId, profileId = TEAM_PROFILE_ID }) {
+export function draftOutboundMessage({ phone, groupId, text, customerId, professionalId, profileId = TEAM_PROFILE_ID }) {
   return {
     id: newId(),
     profileId,
     direction: 'out',
-    phone: waDigits(phone),
+    phone: groupId ? '' : waDigits(phone),
+    groupId: groupId || null,
     customerId: customerId || null,
     professionalId: professionalId || null,
     kind: 'text',

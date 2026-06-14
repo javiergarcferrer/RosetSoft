@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGoBack } from '../context/NavMemory.jsx';
-import { MessageCircle, Loader2, Search, Plus, Megaphone } from 'lucide-react';
+import { MessageCircle, Loader2, Search, Plus, Megaphone, Users } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import ChatThread, { StatusTicks, initials, timeLabel } from '../components/whatsapp/ChatThread.jsx';
+import GroupsPanel from '../components/whatsapp/GroupsPanel.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
   resolveConversations, resolveThread, resolveNewChatContacts, resolveChatTarget, buildOrderRefsParam,
 } from '../core/crm/index.js';
-import { displayPhone, phoneKey } from '../lib/phone.js';
+import { displayPhone, phoneKey, isGroupKey, groupIdFromKey } from '../lib/phone.js';
 import {
   sendWhatsappText, sendWhatsappTemplate, sendWhatsappMedia, sendWhatsappReadReceipt,
   sendWhatsappReaction, sendWhatsappInteractive, sendWhatsappLocation, sendWhatsappContact,
@@ -59,6 +60,19 @@ export default function Chats() {
     () => db.waConversationState.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  // WhatsApp groups + their rosters — group threads sit in the same inbox as
+  // 1:1 chats (resolveConversations buckets a message with a groupId into its
+  // group thread); the Grupos panel manages them.
+  const { data: waGroups } = useLiveQueryStatus(
+    () => db.waGroups.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
+  const { data: waGroupParticipants } = useLiveQueryStatus(
+    () => db.waGroupParticipants.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  const [groupsFocus, setGroupsFocus] = useState(null);
   const stateByKey = useMemo(() => {
     const m = new Map();
     for (const s of convStates) m.set(s.phoneKey, s);
@@ -93,11 +107,11 @@ export default function Chats() {
   // dedupe all read THIS (never the status-filtered view, so filtering the
   // list never closes an open thread or un-dedupes the picker).
   const allConversations = useMemo(
-    () => resolveConversations(messages, customers, professionals, { needle }).map((c) => {
+    () => resolveConversations(messages, customers, professionals, { needle, groups: waGroups }).map((c) => {
       const s = stateByKey.get(c.key) || null;
       return { ...c, state: s, labels: s?.labels || [], snoozeExpiresAt: s?.snoozeExpiresAt || null };
     }),
-    [messages, customers, professionals, needle, stateByKey],
+    [messages, customers, professionals, needle, stateByKey, waGroups],
   );
   // A snoozed conversation drops out of the active inbox until its expiry
   // passes (the 10s poll re-renders and it returns on its own).
@@ -127,6 +141,9 @@ export default function Chats() {
     return allConversations.find((c) => c.key === selectedKey)
       || (draftTarget && draftTarget.key === selectedKey ? draftTarget : null);
   }, [allConversations, selectedKey, draftTarget]);
+  // Where a send goes: a group thread by groupId (recipient_type 'group'),
+  // otherwise the 1:1 phone. Spread into every send handler below.
+  const sendTarget = selected ? (selected.groupId ? { groupId: selected.groupId } : { to: selected.phone }) : null;
 
   const thread = useMemo(
     () => (selectedKey ? resolveThread([...messages, ...pending], { key: selectedKey }) : null),
@@ -156,7 +173,8 @@ export default function Chats() {
   useEffect(() => {
     if (!pending.length) return;
     setPending((rows) => rows.filter((p) => !messages.some(
-      (m) => m.direction === 'out' && phoneKey(m.phone) === phoneKey(p.phone)
+      (m) => m.direction === 'out'
+        && (p.groupId ? m.groupId === p.groupId : (!m.groupId && phoneKey(m.phone) === phoneKey(p.phone)))
         && (m.body || '') === (p.body || '') && (m.createdAt || 0) >= p.createdAt - 1000,
     )));
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,7 +185,10 @@ export default function Chats() {
   const lastReceiptFor = useRef(null);
   useEffect(() => {
     if (!selectedKey) return;
-    const unread = messages.filter((m) => phoneKey(m.phone) === selectedKey && m.direction === 'in' && !m.readAt);
+    const gid = isGroupKey(selectedKey) ? groupIdFromKey(selectedKey) : null;
+    const unread = messages.filter((m) =>
+      (gid ? m.groupId === gid : (!m.groupId && phoneKey(m.phone) === selectedKey))
+      && m.direction === 'in' && !m.readAt);
     if (!unread.length) return;
     markThreadRead(unread).catch(() => {});
     const latest = unread.reduce((a, b) => ((a.createdAt || 0) >= (b.createdAt || 0) ? a : b));
@@ -215,6 +236,9 @@ export default function Chats() {
               <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5">
                 <Megaphone size={15} /> Difusión
               </Link>
+              <button type="button" onClick={() => { setGroupsFocus(null); setGroupsOpen(true); }} className="btn-secondary text-sm inline-flex items-center gap-1.5">
+                <Users size={15} /> Grupos
+              </button>
               <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm inline-flex items-center gap-1.5">
                 <Plus size={15} /> Nuevo chat
               </button>
@@ -309,13 +333,13 @@ export default function Chats() {
               }}
               onSend={async (text, replyTo) => {
                 const draft = draftOutboundMessage({
-                  phone: selected.phone, text,
+                  phone: selected.phone, groupId: selected.groupId, text,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                   profileId,
                 });
                 setPending((rows) => [...rows, draft]);
                 const res = await sendWhatsappText({
-                  to: selected.phone, text, replyTo,
+                  ...sendTarget, text, replyTo,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 // On failure no server row will ever arrive to reconcile the
@@ -327,7 +351,7 @@ export default function Chats() {
               }}
               onSendMedia={async (file, caption, replyTo) => {
                 const res = await sendWhatsappMedia({
-                  to: selected.phone, file, caption, replyTo,
+                  ...sendTarget, file, caption, replyTo,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -335,7 +359,7 @@ export default function Chats() {
               }}
               onSendTemplate={async ({ template, params, lang }) => {
                 const res = await sendWhatsappTemplate({
-                  to: selected.phone, template, params, lang,
+                  ...sendTarget, template, params, lang,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -343,7 +367,7 @@ export default function Chats() {
               }}
               onReact={async (m, emoji) => {
                 const res = await sendWhatsappReaction({
-                  to: selected.phone, messageId: m.waId, emoji,
+                  ...sendTarget, messageId: m.waId, emoji,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -351,7 +375,7 @@ export default function Chats() {
               }}
               onSendInteractive={async (spec) => {
                 const res = await sendWhatsappInteractive({
-                  to: selected.phone, ...spec,
+                  ...sendTarget, ...spec,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -359,7 +383,7 @@ export default function Chats() {
               }}
               onSendLocation={async (spec) => {
                 const res = await sendWhatsappLocation({
-                  to: selected.phone, ...spec,
+                  ...sendTarget, ...spec,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -367,7 +391,7 @@ export default function Chats() {
               }}
               onSendContact={async (spec) => {
                 const res = await sendWhatsappContact({
-                  to: selected.phone, ...spec,
+                  ...sendTarget, ...spec,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -375,7 +399,7 @@ export default function Chats() {
               }}
               onSendProducts={async ({ items, names, text }) => {
                 const res = await sendWhatsappProducts({
-                  to: selected.phone, items, names, text,
+                  ...sendTarget, items, names, text,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -383,7 +407,7 @@ export default function Chats() {
               }}
               onSendCatalog={async ({ text }) => {
                 const res = await sendWhatsappCatalog({
-                  to: selected.phone, text,
+                  ...sendTarget, text,
                   customerId: selected.customerId, professionalId: selected.professionalId,
                 }).catch((e) => ({ ok: false, error: e?.message }));
                 invalidate();
@@ -397,6 +421,7 @@ export default function Chats() {
               }}
               onSuggestReply={(payload) =>
                 suggestWhatsappReply(payload).catch((e) => ({ ok: false, error: e?.message }))}
+              onManageGroup={(groupId) => { setGroupsFocus(groupId); setGroupsOpen(true); }}
               convState={selected ? (stateByKey.get(selected.key) || null) : null}
               allLabels={allLabels}
               onSaveState={async (patch) => {
@@ -426,6 +451,19 @@ export default function Chats() {
           setSelectedKey(contact.key);
           setPickerOpen(false);
         }}
+      />
+
+      <GroupsPanel
+        open={groupsOpen}
+        onClose={() => { setGroupsOpen(false); setGroupsFocus(null); }}
+        groups={waGroups}
+        participants={waGroupParticipants}
+        messages={messages}
+        customers={customers}
+        professionals={professionals}
+        focusGroupId={groupsFocus}
+        onOpenChat={(key) => { selectionOrigin.current = 'list'; setSelectedKey(key); setDraftTarget(null); }}
+        onInvalidate={invalidate}
       />
     </>
   );
@@ -467,8 +505,10 @@ function ConversationRow({ c, active, onOpen }) {
       onClick={onOpen}
       className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b border-ink-50 transition-colors ${active ? 'bg-brand-50' : 'hover:bg-ink-50/60'}`}
     >
-      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${c.contactKind ? 'bg-brand-100 text-brand-800' : 'bg-ink-100 text-ink-500'}`}>
-        {initials(c.name)}
+      <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+        c.contactKind === 'group' ? 'bg-emerald-100 text-emerald-700' : c.contactKind ? 'bg-brand-100 text-brand-800' : 'bg-ink-100 text-ink-500'
+      }`}>
+        {c.contactKind === 'group' ? <Users size={16} /> : initials(c.name)}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">
@@ -478,7 +518,7 @@ function ConversationRow({ c, active, onOpen }) {
         <span className="flex items-center justify-between gap-2 mt-0.5">
           <span className={`text-xs truncate ${c.unread ? 'text-ink-800 font-medium' : 'text-ink-500'}`}>
             {c.lastDirection === 'out' && <StatusTicks status={c.lastStatus} className="inline mr-1 -mt-px" />}
-            {c.lastBody || '—'}
+            {c.lastSenderName ? `${c.lastSenderName}: ` : ''}{c.lastBody || '—'}
           </span>
           {c.unread ? (
             <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center">

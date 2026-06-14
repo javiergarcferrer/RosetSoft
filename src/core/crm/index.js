@@ -21,6 +21,12 @@ export {
   fillTemplateBody,
   resolveCampaignsList,
 } from './views/campaigns.js';
+export {
+  resolveGroupsList,
+  resolveGroupParticipants,
+  resolveGroupAudience,
+  buildGroupBroadcastRecipients,
+} from './views/groups.js';
 export { buildDraftTurns } from './views/draft.js';
 export { resolveTemplateHealth } from './views/templates.js';
-export { waDigits, phoneKey, displayPhone } from '../../lib/phone.js';
+export { waDigits, phoneKey, displayPhone, groupKey, isGroupKey, groupIdFromKey } from '../../lib/phone.js';

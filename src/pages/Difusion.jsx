@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
-  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2,
+  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2, MessagesSquare,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import TemplateRejectionsPanel from '../components/whatsapp/TemplateRejectionsPanel.jsx';
@@ -16,6 +16,7 @@ import { useLiveQueryStatus } from '../db/hooks.js';
 import {
   VAR_SOURCES, resolveBroadcastAudience, buildBroadcastRecipients,
   fillTemplateBody, resolveCampaignsList, displayPhone,
+  resolveGroupAudience, buildGroupBroadcastRecipients,
 } from '../core/crm/index.js';
 import {
   listWaTemplates, createWaTemplate, deleteWaTemplate, sendWhatsappBroadcast,
@@ -80,6 +81,10 @@ export default function Difusion() {
     () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  const { data: waGroups } = useLiveQueryStatus(
+    () => db.waGroups.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
 
   const campaignRows = useMemo(
     () => resolveCampaignsList({ campaigns, messages }),
@@ -122,6 +127,7 @@ export default function Difusion() {
           campaignRows={campaignRows}
           customers={customers}
           professionals={professionals}
+          groups={waGroups}
           autoOpenKind={campaignParam === 'clientes' ? 'customers' : campaignParam ? 'professionals' : null}
         />
       ) : (
@@ -151,7 +157,7 @@ function TabButton({ active, onClick, icon: Icon, label }) {
 
 /* ------------------------------- campaigns ------------------------------- */
 
-function CampaignsTab({ templates, templatesError, campaignRows, customers, professionals, autoOpenKind }) {
+function CampaignsTab({ templates, templatesError, campaignRows, customers, professionals, groups, autoOpenKind }) {
   const [wizardOpen, setWizardOpen] = useState(!!autoOpenKind);
   const approved = (templates || []).filter((t) => t.status === 'APPROVED');
 
@@ -222,6 +228,7 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
         approved={approved}
         customers={customers}
         professionals={professionals}
+        groups={groups}
         initialKind={autoOpenKind}
       />
     </div>
@@ -243,10 +250,11 @@ const AUDIENCE_KINDS = [
   { value: 'professionals', label: 'Profesionales', icon: UserSquare2 },
   { value: 'customers', label: 'Clientes', icon: Users },
   { value: 'all', label: 'Todos', icon: Megaphone },
+  { value: 'groups', label: 'Grupos', icon: MessagesSquare },
 ];
 
 /** Template → audience → variables → send, in one modal. */
-function CampaignWizard({ open, onClose, approved, customers, professionals, initialKind }) {
+function CampaignWizard({ open, onClose, approved, customers, professionals, groups, initialKind }) {
   const [template, setTemplate] = useState(null);
   const [kind, setKind] = useState(initialKind || 'professionals');
   const [needle, setNeedle] = useState('');
@@ -272,14 +280,18 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
     setError(null);
   }, [open]);
 
+  const isGroups = kind === 'groups';
+  // Group audience rows are normalized to the same shape the picker renders
+  // (key/name), carrying `subject` + `isGroup` so send/preview can branch.
+  const groupRows = (g) => g.map((row) => ({ key: row.key, id: row.id, name: row.subject, subject: row.subject, participantCount: row.participantCount, isGroup: true }));
   const audience = useMemo(
-    () => resolveBroadcastAudience(customers, professionals, { kind, needle }),
-    [customers, professionals, kind, needle],
+    () => (isGroups ? groupRows(resolveGroupAudience(groups, { needle })) : resolveBroadcastAudience(customers, professionals, { kind, needle })),
+    [isGroups, groups, customers, professionals, kind, needle],
   );
   // The full (unsearched) audience for "select all" counts.
   const fullAudience = useMemo(
-    () => resolveBroadcastAudience(customers, professionals, { kind }),
-    [customers, professionals, kind],
+    () => (isGroups ? groupRows(resolveGroupAudience(groups, {})) : resolveBroadcastAudience(customers, professionals, { kind })),
+    [isGroups, groups, customers, professionals, kind],
   );
   const selectedContacts = useMemo(
     () => fullAudience.filter((c) => picked.has(c.key)),
@@ -313,20 +325,25 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
 
   const previewContact = selectedContacts[0] || null;
   const previewParams = previewContact
-    ? buildBroadcastRecipients([previewContact], varSpecs)[0]?.params || []
+    ? (isGroups
+        ? buildGroupBroadcastRecipients([previewContact], varSpecs)[0]?.params
+        : buildBroadcastRecipients([previewContact], varSpecs)[0]?.params) || []
     : [];
 
   async function send() {
     if (!template || sending) return;
-    const recipients = buildBroadcastRecipients(selectedContacts, varSpecs);
-    if (!recipients.length) { setError('Elige al menos un destinatario.'); return; }
+    const recipients = isGroups
+      ? buildGroupBroadcastRecipients(selectedContacts, varSpecs)
+      : buildBroadcastRecipients(selectedContacts, varSpecs);
+    if (!recipients.length) { setError(isGroups ? 'Elige al menos un grupo.' : 'Elige al menos un destinatario.'); return; }
     if (varSpecs.some((s) => s.source === 'fixed' && !String(s.text || '').trim()) && template.varCount > 0) {
       setError('Completa el texto fijo de todas las variables.');
       return;
     }
     setSending(true);
     setError(null);
-    const audienceLabel = `${AUDIENCE_KINDS.find((k) => k.value === kind)?.label || ''} · ${recipients.length} contactos`;
+    const kindLabel = AUDIENCE_KINDS.find((k) => k.value === kind)?.label || '';
+    const audienceLabel = `${kindLabel} · ${recipients.length} ${isGroups ? 'grupos' : 'contactos'}`;
     let sent = 0;
     let failed = 0;
     const errors = [];
@@ -461,11 +478,13 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
                   <input type="checkbox" checked={picked.has(c.key)} onChange={() => toggle(c.key)} className="accent-brand-600" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-ink-900 truncate">{c.name}</span>
-                    <span className="block text-[11px] text-ink-400">{displayPhone(c.phone)}</span>
+                    <span className="block text-[11px] text-ink-400">
+                      {c.isGroup ? `${c.participantCount ?? 0} participantes` : displayPhone(c.phone)}
+                    </span>
                   </span>
                 </label>
               ))}
-              {!audience.length && <p className="text-xs text-ink-400 text-center py-4">Sin contactos con teléfono.</p>}
+              {!audience.length && <p className="text-xs text-ink-400 text-center py-4">{isGroups ? 'Sin grupos. Créalos en WhatsApp → Grupos.' : 'Sin contactos con teléfono.'}</p>}
             </div>
           </div>
 
@@ -473,6 +492,9 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
           {template.varCount > 0 && (
             <div>
               <div className="label">Variables de la plantilla</div>
+              {isGroups && (
+                <p className="text-[11px] text-ink-400 mb-1.5">En grupos, las variables de nombre/empresa usan el nombre del grupo; usa “Texto fijo” para un valor igual para todos.</p>
+              )}
               <div className="space-y-2">
                 {varSpecs.map((spec, i) => (
                   <div key={i} className="flex flex-wrap items-center gap-2">
@@ -532,7 +554,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, ini
               className="btn-primary text-sm inline-flex items-center gap-1.5"
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Enviar a {picked.size} {picked.size === 1 ? 'contacto' : 'contactos'}
+              Enviar a {picked.size} {isGroups ? (picked.size === 1 ? 'grupo' : 'grupos') : (picked.size === 1 ? 'contacto' : 'contactos')}
             </button>
           </div>
         </div>

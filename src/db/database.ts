@@ -34,6 +34,8 @@ import type {
   WaMessage,
   WaCampaign,
   WaConversationState,
+  WaGroup,
+  WaGroupParticipant,
   ClaudeMessage,
   ScheduledPost,
   IgEvent,
@@ -104,6 +106,8 @@ const TABLES = {
   waMessages:         { db: 'wa_messages',         pk: 'id' },
   waCampaigns:        { db: 'wa_campaigns',        pk: 'id' },
   waConversationState:{ db: 'wa_conversation_state', pk: 'id' },
+  waGroups:           { db: 'wa_groups',           pk: 'id' },
+  waGroupParticipants:{ db: 'wa_group_participants', pk: 'id' },
   claudeMessages:     { db: 'claude_messages',     pk: 'id' },
   scheduledPosts:     { db: 'scheduled_posts',     pk: 'id' },
   igEvents:           { db: 'ig_events',           pk: 'id' },
@@ -150,6 +154,8 @@ export interface TableRowMap {
   waMessages: WaMessage;
   waCampaigns: WaCampaign;
   waConversationState: WaConversationState;
+  waGroups: WaGroup;
+  waGroupParticipants: WaGroupParticipant;
   claudeMessages: ClaudeMessage;
   scheduledPosts: ScheduledPost;
   igEvents: IgEvent;

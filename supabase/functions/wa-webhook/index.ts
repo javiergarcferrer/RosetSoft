@@ -106,6 +106,15 @@ function inboundBody(msg: Record<string, any>): string {
   }
 }
 
+/** The group id of an inbound message (Cloud API Groups), or null for a 1:1.
+ *  The group context's exact location is new (2026); probe the documented spots
+ *  defensively so a message lands in its GROUP thread, not the sender's 1:1. */
+function inboundGroupId(msg: Record<string, any>, value: Record<string, any>): string | null {
+  const id = msg.group_id || msg.recipient_group_id
+    || msg.context?.group_id || value.group_id || value.metadata?.group_id || '';
+  return String(id).trim() || null;
+}
+
 Deno.serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -180,6 +189,60 @@ Deno.serve(async (req: Request) => {
         .eq('wa_id', waId).is('media_path', null);
     } catch (e) {
       console.error('[wa-webhook] media persist failed:', (e as Error).message);
+    }
+  }
+
+  // Ensure a group row exists for an inbound group message, so the thread shows
+  // in the inbox even before the roster/subject is synced. Never clobbers a
+  // known subject (only sets it when the webhook carries one).
+  async function ensureGroup(groupId: string, value: Record<string, any>): Promise<void> {
+    const subject = value?.group_subject || value?.metadata?.group_subject || null;
+    const row: Record<string, unknown> = { id: groupId, profile_id: TEAM, updated_at: new Date().toISOString() };
+    if (subject) row.subject = String(subject);
+    const { error } = await admin.from('wa_groups').upsert(row, { onConflict: 'id' });
+    if (error) console.error('[wa-webhook] ensureGroup failed:', error.message);
+  }
+
+  // Group lifecycle / settings / status / participants webhooks → the wa_groups
+  // mirror + roster. Payload shapes are new (2026) and probed defensively; this
+  // never throws (the outer try answers 200 so Meta keeps the webhook alive).
+  async function handleGroupEvent(field: string, value: Record<string, any>): Promise<void> {
+    const groupId = String(value.group_id || value.id || value.metadata?.group_id || '').trim();
+    if (!groupId) return;
+    const ts = new Date().toISOString();
+    const row: Record<string, unknown> = { id: groupId, profile_id: TEAM, updated_at: ts };
+    if (value.subject != null) row.subject = String(value.subject);
+    if (value.description != null) row.description = String(value.description);
+    if (value.invite_link != null) row.invite_link = String(value.invite_link);
+    const ev = String(value.event || value.action || value.status || '').toLowerCase();
+    if (field === 'group_status_update') {
+      if (/(deactivat|delet|end|remov|leave)/.test(ev)) row.status = 'archived';
+      else if (/(activ|creat|join|add)/.test(ev)) row.status = 'active';
+    }
+    await admin.from('wa_groups').upsert(row, { onConflict: 'id' });
+
+    if (field === 'group_participants_update') {
+      const norm = (p: any) => String(p?.user || p?.wa_id || p?.phone || p || '').replace(/\D/g, '');
+      const added = value.added_participants || value.participants_added || (/(add|join|creat)/.test(ev) ? (value.participants || []) : []);
+      const removed = value.removed_participants || value.participants_removed || (/(remov|leave|delet)/.test(ev) ? (value.participants || []) : []);
+      for (const p of added) {
+        const phone = norm(p);
+        if (!phone) continue;
+        await admin.from('wa_group_participants').upsert({
+          id: `${groupId}:${phoneKey(phone)}`, profile_id: TEAM, group_id: groupId, phone,
+          name: p?.name || p?.profile?.name || null,
+          role: String(p?.role || p?.type || 'member').toLowerCase() === 'admin' ? 'admin' : 'member',
+          left_at: null, updated_at: ts,
+        }, { onConflict: 'id' });
+      }
+      for (const p of removed) {
+        const phone = norm(p);
+        if (!phone) continue;
+        await admin.from('wa_group_participants').update({ left_at: ts }).eq('id', `${groupId}:${phoneKey(phone)}`);
+      }
+      const { count } = await admin.from('wa_group_participants')
+        .select('id', { count: 'exact', head: true }).eq('group_id', groupId).is('left_at', null);
+      if (typeof count === 'number') await admin.from('wa_groups').update({ participant_count: count, updated_at: ts }).eq('id', groupId);
     }
   }
 
@@ -261,12 +324,24 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        // Group lifecycle / membership / settings / status → the wa_groups
+        // mirror + roster (no messages/statuses ride these changes).
+        if (change.field === 'group_lifecycle_update' || change.field === 'group_status_update'
+            || change.field === 'group_settings_update' || change.field === 'group_participants_update') {
+          await handleGroupEvent(change.field, value as Record<string, any>);
+          continue;
+        }
+
         const contacts: Record<string, any>[] = value.contacts || [];
 
-        // Inbound messages → wa_messages (dedupe on wa_id: Meta retries).
+        // Inbound messages → wa_messages (dedupe on wa_id: Meta retries). A
+        // GROUP message carries a group id; it's filed under group_id (its
+        // thread) with `phone` = the participant who sent it, and the group row
+        // is ensured so the conversation appears even before a roster sync.
         for (const msg of value.messages || []) {
           const phone = String(msg.from || '').replace(/\D/g, '');
           if (!phone) continue;
+          const groupId = inboundGroupId(msg, value);
           const contact = contacts.find((c) => phoneKey(c.wa_id) === phoneKey(phone));
           const link = await linkFor(phone);
           const tsMs = Number(msg.timestamp) ? Number(msg.timestamp) * 1000 : Date.now();
@@ -276,6 +351,7 @@ Deno.serve(async (req: Request) => {
             direction: 'in',
             wa_id: msg.id || null,
             phone,
+            group_id: groupId,
             profile_name: contact?.profile?.name || null,
             ...link,
             kind: msg.type || 'unknown',
@@ -285,6 +361,7 @@ Deno.serve(async (req: Request) => {
             created_at: new Date(tsMs).toISOString(),
           }, { onConflict: 'wa_id', ignoreDuplicates: true });
           if (error) console.error('[wa-webhook] inbound insert failed:', error.message);
+          if (!error && groupId) await ensureGroup(groupId, value as Record<string, any>);
           const media = inboundMedia(msg);
           if (!error && media && msg.id) await persistMedia(msg.id, media);
         }

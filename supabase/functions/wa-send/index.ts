@@ -40,7 +40,7 @@ const IMAGES_BUCKET = 'images';
 // a campaign comfortably inside the function's wall-clock budget.
 const MAX_BROADCAST = 300;
 
-type Recipient = { to?: string; params?: string[]; customerId?: string | null; professionalId?: string | null };
+type Recipient = { to?: string; groupId?: string | null; params?: string[]; customerId?: string | null; professionalId?: string | null };
 type SendBody = {
   test?: boolean;
   listTemplates?: boolean;
@@ -85,6 +85,18 @@ type SendBody = {
   /** Send the WHOLE connected catalog as a "View catalog" message. */
   catalogMessage?: { text?: string };
   broadcast?: { name?: string; template?: string; lang?: string; audience?: string; recipients?: Recipient[] };
+  /** A single send TO a group (recipient_type 'group'): the message body rides
+   *  the same fields as a 1:1 send (text/media/template/…), but `to` is this
+   *  group id instead of a phone. Requires an Official Business Account. */
+  groupId?: string;
+  /** Group management (Cloud API Groups). We mirror every group + roster into
+   *  wa_groups / wa_group_participants so the app renders from our own DB. */
+  listGroups?: boolean;
+  getGroup?: { groupId?: string };
+  createGroup?: { subject?: string; description?: string; participants?: string[] };
+  updateGroup?: { groupId?: string; subject?: string; description?: string };
+  groupInviteLink?: { groupId?: string; revoke?: boolean };
+  groupParticipants?: { groupId?: string; add?: string[]; remove?: string[] };
   to?: string;
   text?: string;
   template?: string;
@@ -332,7 +344,9 @@ Deno.serve(async (req: Request) => {
           // app, the chat-history sync at onboarding, and contact sync. The
           // template_* fields proactively flag an approved template that Meta
           // later pauses/disables or downgrades (it silently breaks sends).
-          fields: 'messages,smb_message_echoes,history,smb_app_state_sync,message_template_status_update,message_template_quality_update,phone_number_quality_update',
+          // The group_* fields deliver group lifecycle + membership + settings
+          // changes (so the inbox/Grupos panel stay live without polling).
+          fields: 'messages,smb_message_echoes,history,smb_app_state_sync,message_template_status_update,message_template_quality_update,phone_number_quality_update,group_lifecycle_update,group_participants_update,group_settings_update,group_status_update',
           access_token: `${appId}|${appSecret}`,
         }),
       });
@@ -512,6 +526,165 @@ Deno.serve(async (req: Request) => {
       const e = failed.errors?.[0];
       return json({ ok: false, error: e?.error_data?.details || e?.message || 'No se pudo completar la acción de bloqueo.' }, 502);
     }
+    return json({ ok: true });
+  }
+
+  // ── WhatsApp Groups (Cloud API Groups — recipient_type 'group') ──────────
+  // Requires an Official Business Account. We MIRROR every group + roster into
+  // wa_groups / wa_group_participants so the inbox and the Grupos panel render
+  // from our own DB (the same way wa_messages mirrors the chat log). The Graph
+  // shapes for groups are new (2026) and isolated to these handlers; each
+  // degrades to a clear error if Meta rejects it, and the local mirror keeps
+  // the UI working from what the lifecycle webhooks already captured.
+  const nowIso = () => new Date().toISOString();
+  const gpKey = (phone: string) => { const d = String(phone || '').replace(/\D/g, ''); return d.length > 10 ? d.slice(-10) : d; };
+  async function upsertGroupRow(g: Record<string, any>): Promise<void> {
+    const id = String(g.id || '').trim();
+    if (!id) return;
+    const row: Record<string, unknown> = { id, profile_id: TEAM, updated_at: nowIso() };
+    if (g.subject != null) row.subject = String(g.subject);
+    if (g.description != null) row.description = String(g.description);
+    if (g.invite_link != null) row.invite_link = String(g.invite_link);
+    if (typeof g.participant_count === 'number') row.participant_count = g.participant_count;
+    if (typeof g.is_admin === 'boolean') row.is_admin = g.is_admin;
+    if (g.status != null) row.status = String(g.status);
+    const { error } = await admin.from('wa_groups').upsert(row, { onConflict: 'id' });
+    if (error) console.error('[wa-send] group upsert failed:', error.message);
+  }
+  // Mirror a participant list onto a group. `full` ⇒ the list is the COMPLETE
+  // roster (refresh the count). joined_at is omitted so onConflict never resets
+  // an existing member's join date (the column defaults to now() on insert).
+  async function upsertRoster(groupId: string, parts: Record<string, any>[], opts: { full?: boolean } = {}): Promise<void> {
+    const rows = (parts || []).map((p) => {
+      const phone = String(p.user || p.wa_id || p.phone || '').replace(/\D/g, '');
+      if (!phone) return null;
+      return {
+        id: `${groupId}:${gpKey(phone)}`,
+        profile_id: TEAM,
+        group_id: groupId,
+        phone,
+        name: p.name || p.profile?.name || null,
+        role: String(p.role || p.type || 'member').toLowerCase() === 'admin' ? 'admin' : 'member',
+        left_at: null,
+        updated_at: nowIso(),
+      };
+    }).filter(Boolean) as Record<string, unknown>[];
+    if (rows.length) {
+      const { error } = await admin.from('wa_group_participants').upsert(rows, { onConflict: 'id' });
+      if (error) console.error('[wa-send] roster upsert failed:', error.message);
+    }
+    if (opts.full) await admin.from('wa_groups').update({ participant_count: rows.length, updated_at: nowIso() }).eq('id', groupId);
+  }
+
+  // Refresh the group list from Meta into the mirror; the client reads wa_groups
+  // back via db. Always 200 with what we have, even if Meta's list call fails.
+  if (body.listGroups) {
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/groups?fields=id,subject,description,participant_count`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) {
+      for (const g of ((data as { data?: Record<string, any>[] }).data || [])) await upsertGroupRow(g);
+    } else {
+      console.error('[wa-send] listGroups failed:', JSON.stringify(data));
+    }
+    return json({ ok: r.ok, ...(r.ok ? {} : { error: metaError(data, r.status) }) });
+  }
+
+  // Refresh one group's subject/description + full roster from Meta.
+  if (body.getGroup) {
+    const groupId = String(body.getGroup.groupId || '').trim();
+    if (!groupId) return json({ ok: false, error: 'Falta el grupo.' }, 400);
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(groupId)}?fields=id,subject,description,participants,invite_link`, { headers: graphHeaders });
+    const data = await r.json().catch(() => ({})) as Record<string, any>;
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    await upsertGroupRow(data);
+    const parts = data.participants?.data || data.participants || [];
+    await upsertRoster(groupId, parts, { full: true });
+    return json({ ok: true });
+  }
+
+  // Create a group with an initial subject + participants; Meta returns its id.
+  if (body.createGroup) {
+    const subject = String(body.createGroup.subject || '').trim();
+    const participants = (body.createGroup.participants || []).map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean);
+    if (!subject) return json({ ok: false, error: 'Escribe el nombre del grupo.' }, 400);
+    if (!participants.length) return json({ ok: false, error: 'Agrega al menos un participante.' }, 400);
+    const description = String(body.createGroup.description || '').trim();
+    const r = await fetch(`${GRAPH}/${phoneNumberId}/groups`, {
+      method: 'POST', headers: graphJson,
+      body: JSON.stringify({ messaging_product: 'whatsapp', subject, ...(description ? { description } : {}), participants: participants.map((u) => ({ user: u })) }),
+    });
+    const data = await r.json().catch(() => ({})) as Record<string, any>;
+    const groupId = String(data.id || data.groups?.[0]?.id || data.group_id || '');
+    if (!r.ok || !groupId) {
+      console.error('[wa-send] createGroup failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    await upsertGroupRow({ id: groupId, subject, description: description || null, is_admin: true, status: 'active' });
+    await upsertRoster(groupId, participants.map((u) => ({ user: u })), { full: true });
+    return json({ ok: true, groupId, subject });
+  }
+
+  // Edit a group's subject / description (admin only on Meta's side).
+  if (body.updateGroup) {
+    const groupId = String(body.updateGroup.groupId || '').trim();
+    if (!groupId) return json({ ok: false, error: 'Falta el grupo.' }, 400);
+    const payload: Record<string, unknown> = { messaging_product: 'whatsapp' };
+    if (typeof body.updateGroup.subject === 'string') payload.subject = body.updateGroup.subject.trim();
+    if (typeof body.updateGroup.description === 'string') payload.description = body.updateGroup.description.trim();
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(groupId)}`, { method: 'POST', headers: graphJson, body: JSON.stringify(payload) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[wa-send] updateGroup failed:', JSON.stringify(data));
+      return json({ ok: false, error: metaError(data, r.status) }, 502);
+    }
+    await upsertGroupRow({ id: groupId, ...(payload.subject != null ? { subject: payload.subject } : {}), ...(payload.description != null ? { description: payload.description } : {}) });
+    return json({ ok: true });
+  }
+
+  // Fetch (or regenerate, when revoke) the group's join link.
+  if (body.groupInviteLink) {
+    const groupId = String(body.groupInviteLink.groupId || '').trim();
+    if (!groupId) return json({ ok: false, error: 'Falta el grupo.' }, 400);
+    const revoke = body.groupInviteLink.revoke === true;
+    const r = await fetch(`${GRAPH}/${encodeURIComponent(groupId)}/invite`, { method: revoke ? 'POST' : 'GET', headers: graphHeaders });
+    const data = await r.json().catch(() => ({})) as Record<string, any>;
+    if (!r.ok) return json({ ok: false, error: metaError(data, r.status) }, 502);
+    const link = String(data.invite_link || data.link || data.url || '');
+    if (link) await upsertGroupRow({ id: groupId, invite_link: link });
+    return json({ ok: true, inviteLink: link });
+  }
+
+  // Add / remove participants (admin only). Add upserts the roster; remove marks
+  // the rows left (by exact `${groupId}:${phoneKey}` id) — kept for history.
+  if (body.groupParticipants) {
+    const groupId = String(body.groupParticipants.groupId || '').trim();
+    if (!groupId) return json({ ok: false, error: 'Falta el grupo.' }, 400);
+    const add = (body.groupParticipants.add || []).map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean);
+    const remove = (body.groupParticipants.remove || []).map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean);
+    if (!add.length && !remove.length) return json({ ok: false, error: 'No hay cambios de participantes.' }, 400);
+    let groupErr: string | null = null;
+    if (add.length) {
+      const r = await fetch(`${GRAPH}/${encodeURIComponent(groupId)}/participants`, {
+        method: 'POST', headers: graphJson,
+        body: JSON.stringify({ messaging_product: 'whatsapp', participants: add.map((u) => ({ user: u })) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) groupErr = metaError(d, r.status);
+      else await upsertRoster(groupId, add.map((u) => ({ user: u })));
+    }
+    if (remove.length && !groupErr) {
+      const r = await fetch(`${GRAPH}/${encodeURIComponent(groupId)}/participants`, {
+        method: 'DELETE', headers: graphJson,
+        body: JSON.stringify({ messaging_product: 'whatsapp', participants: remove.map((u) => ({ user: u })) }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) groupErr = metaError(d, r.status);
+      else await admin.from('wa_group_participants').update({ left_at: nowIso() }).in('id', remove.map((p) => `${groupId}:${gpKey(p)}`));
+    }
+    if (groupErr) return json({ ok: false, error: groupErr }, 502);
+    // Refresh the count off the live roster.
+    const { count } = await admin.from('wa_group_participants').select('id', { count: 'exact', head: true }).eq('group_id', groupId).is('left_at', null);
+    if (typeof count === 'number') await admin.from('wa_groups').update({ participant_count: count, updated_at: nowIso() }).eq('id', groupId);
     return json({ ok: true });
   }
 
@@ -829,6 +1002,9 @@ Deno.serve(async (req: Request) => {
   // ── The send-and-log core (single sends and broadcast share it) ───────────
   type SendSpec = {
     to: string;
+    /** When set, this is a GROUP send: recipient_type 'group' is injected and
+     *  the log row is filed under group_id (phone left blank). */
+    groupId?: string | null;
     payload: Record<string, unknown>;
     logKind: string;
     logBody: string;
@@ -845,8 +1021,11 @@ Deno.serve(async (req: Request) => {
     campaignId?: string | null;
   };
   async function sendOne(spec: SendSpec): Promise<{ ok: boolean; id: string | null; error: string | null }> {
+    // Group sends carry recipient_type 'group' (default is 'individual'); `to`
+    // is already the group id in that case.
+    const payload = spec.groupId ? { ...spec.payload, recipient_type: 'group' } : spec.payload;
     const r = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
-      method: 'POST', headers: graphJson, body: JSON.stringify(spec.payload),
+      method: 'POST', headers: graphJson, body: JSON.stringify(payload),
     });
     const data = await r.json().catch(() => ({}));
     const waId = (data as { messages?: { id?: string }[] }).messages?.[0]?.id || null;
@@ -859,7 +1038,10 @@ Deno.serve(async (req: Request) => {
       profile_id: TEAM,
       direction: 'out',
       wa_id: waId,
-      phone: spec.to,
+      // A group send is filed under group_id with a blank phone (the recipient
+      // is the group, not a number); a 1:1 send keeps the phone.
+      phone: spec.groupId ? '' : spec.to,
+      group_id: spec.groupId || null,
       customer_id: spec.customerId || null,
       professional_id: spec.professionalId || null,
       quote_id: spec.quoteId || null,
@@ -912,8 +1094,9 @@ Deno.serve(async (req: Request) => {
     const template = String(b.template || '').trim();
     if (!template) return json({ ok: false, error: 'Falta la plantilla de la campaña.' }, 400);
     const recipients = (Array.isArray(b.recipients) ? b.recipients : [])
-      .map((r) => ({ ...r, to: String(r.to || '').replace(/\D/g, '') }))
-      .filter((r) => r.to);
+      .map((r) => ({ ...r, to: String(r.to || '').replace(/\D/g, ''), groupId: r.groupId ? String(r.groupId).trim() : null }))
+      // A recipient is a phone (individual) OR a group id — keep either.
+      .filter((r) => r.to || r.groupId);
     if (!recipients.length) return json({ ok: false, error: 'La campaña no tiene destinatarios.' }, 400);
     if (recipients.length > MAX_BROADCAST) {
       return json({ ok: false, error: `Máximo ${MAX_BROADCAST} destinatarios por envío.` }, 400);
@@ -935,9 +1118,11 @@ Deno.serve(async (req: Request) => {
     let failed = 0;
     const errors: { to: string; error: string }[] = [];
     for (const rcp of recipients) {
+      const target = rcp.groupId || rcp.to;
       const res = await sendOne({
-        to: rcp.to,
-        payload: templatePayload(rcp.to, template, b.lang, rcp.params),
+        to: target,
+        groupId: rcp.groupId || null,
+        payload: templatePayload(target, template, b.lang, rcp.params),
         logKind: 'template',
         logBody: Array.isArray(rcp.params) ? rcp.params.join(' · ') : '',
         templateName: template,
@@ -948,7 +1133,7 @@ Deno.serve(async (req: Request) => {
       if (res.ok) sent += 1;
       else {
         failed += 1;
-        if (errors.length < 10 && res.error) errors.push({ to: rcp.to, error: res.error });
+        if (errors.length < 10 && res.error) errors.push({ to: target, error: res.error });
       }
     }
     await admin.from('wa_campaigns').update({
@@ -958,8 +1143,13 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Single sends ───────────────────────────────────────────────────────────
-  const to = String(body.to || '').replace(/\D/g, '');
-  if (!to) return json({ ok: false, error: 'Falta el número de destino.' }, 400);
+  // A group send sets `groupId`; `to` then carries the group id (not a phone)
+  // and sendOne injects recipient_type 'group'. Otherwise it's a normal 1:1.
+  const groupId = String(body.groupId || '').trim();
+  const isGroup = !!groupId;
+  const groupTag = isGroup ? groupId : null;
+  const to = isGroup ? groupId : String(body.to || '').replace(/\D/g, '');
+  if (!to) return json({ ok: false, error: isGroup ? 'Falta el grupo de destino.' : 'Falta el número de destino.' }, 400);
   const replyTo = String(body.replyTo || '').trim();
   const contextPart = replyTo ? { context: { message_id: replyTo } } : {};
   const contextLog = replyTo ? { context: { id: replyTo } } : null;
@@ -977,6 +1167,7 @@ Deno.serve(async (req: Request) => {
       // Same shape wa-webhook stores for inbound reactions, so resolveThread
       // folds ours onto the target bubble identically.
       logPayload: { reaction: { message_id: messageId, emoji } },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1034,6 +1225,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'interactive',
       logBody: text,
       logPayload: { ...(contextLog || {}), interactive: logInteractive },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1058,6 +1250,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'location',
       logBody: name || address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       logPayload: { ...(contextLog || {}), location: { latitude: lat, longitude: lng, name, address } },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1085,6 +1278,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'contacts',
       logBody: cName,
       logPayload: { ...(contextLog || {}), contact: { name: cName, phone: cPhone, org } },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1109,6 +1303,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'catalog',
       logBody: text || 'Catálogo completo',
       logPayload: { ...(contextLog || {}), catalog: true },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1151,6 +1346,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'product',
       logBody: text || names.filter(Boolean).join(' · ') || `${items.length} producto(s)`,
       logPayload: { ...(contextLog || {}), products: { items, names } },
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1205,6 +1401,7 @@ Deno.serve(async (req: Request) => {
       logPayload: contextLog,
       mediaPath,
       mediaMime: mime,
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1220,6 +1417,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'template',
       logBody: Array.isArray(body.params) ? body.params.join(' · ') : '',
       templateName: body.template,
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,
@@ -1253,6 +1451,7 @@ Deno.serve(async (req: Request) => {
       logKind: 'text',
       logBody,
       logPayload: contextLog,
+      groupId: groupTag,
       customerId: body.customerId || null,
       professionalId: body.professionalId || null,
       quoteId: body.quoteId || null,

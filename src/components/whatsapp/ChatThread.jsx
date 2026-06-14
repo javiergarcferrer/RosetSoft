@@ -94,7 +94,8 @@ function ComposerAttachPanel({ actions, onClose }) {
   );
 }
 
-export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, convState = null, allLabels = [], onSaveState = null, showHeader = true, contextQuoteId = null }) {
+export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, onManageGroup = null, convState = null, allLabels = [], onSaveState = null, showHeader = true, contextQuoteId = null }) {
+  const isGroup = contact.contactKind === 'group';
   const [text, setText] = useState('');
   // Attachment tray (the "+" grid) open state — mutually exclusive with the
   // keyboard, WhatsApp-style: opening it blurs the box (keyboard down), and
@@ -557,8 +558,8 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             <ArrowLeft size={16} />
           </button>
         )}
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-800 text-[11px] font-semibold">
-          {initials(contact.name)}
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${isGroup ? 'bg-emerald-100 text-emerald-700' : 'bg-brand-100 text-brand-800'}`}>
+          {isGroup ? <Users size={15} /> : initials(contact.name)}
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-display font-semibold text-sm text-ink-900 truncate">
@@ -569,6 +570,10 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
               <span className="inline-flex items-center gap-1 text-amber-600 font-medium" title={`Viendo ahora: ${viewers.join(', ')}`}>
                 <Eye size={11} /> {viewers[0]}{viewers.length > 1 ? ` +${viewers.length - 1}` : ''} {viewers.length > 1 ? 'están viendo' : 'está viendo'}
               </span>
+            ) : isGroup ? (
+              <span className="inline-flex items-center gap-0.5">
+                <Users size={10} /> {contact.participantCount != null ? `${contact.participantCount} participantes` : 'Grupo'}
+              </span>
             ) : (
               <>
                 {displayPhone(contact.phone)}
@@ -578,6 +583,17 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
             )}
           </div>
         </div>
+        {/* Group: jump to the Grupos panel to manage members / subject. */}
+        {isGroup && onManageGroup && (
+          <button
+            type="button"
+            onClick={() => onManageGroup(contact.groupId)}
+            className="btn-ghost text-xs inline-flex items-center gap-1.5 shrink-0"
+            title="Gestionar grupo"
+          >
+            <Users size={13} /> Gestionar
+          </button>
+        )}
         {/* Unknown chatter → save them into the CRM (the official app's "Add to contacts"). */}
         {onSaveContact && !contact.contactKind && contact.phone && (
           <button
@@ -647,7 +663,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
           ))}
           {!thread.items.length && (
             <p className="text-xs text-ink-400 text-center py-8">
-              Sin mensajes todavía. {contact.contactKind ? 'Escríbele para iniciar la conversación.' : ''}
+              Sin mensajes todavía. {isGroup ? 'Escribe al grupo para iniciar.' : contact.contactKind ? 'Escríbele para iniciar la conversación.' : ''}
             </p>
           )}
         </div>
@@ -1962,6 +1978,11 @@ function Bubble({ m, prev, onReply, onReact, onSaveCard, onCreateOrder = null, q
                 : 'bg-surface border border-ink-100 text-ink-900'
             }`
         }`}>
+          {/* In a group, name the participant who sent this — only at a cluster
+              start (consecutive same-sender turns share one label), like the app. */}
+          {!out && m.senderName && !grouped && (
+            <div className="text-[11px] font-semibold text-emerald-700 mb-0.5 truncate max-w-full">{m.senderName}</div>
+          )}
           {referral && (
             <div className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 rounded-md px-1.5 py-0.5 mb-1 max-w-full">
               <Megaphone size={10} className="shrink-0" />
