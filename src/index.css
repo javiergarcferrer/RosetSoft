@@ -436,6 +436,23 @@
     @apply w-full rounded-md border border-ink-200 bg-surface px-3 py-2 min-h-9 coarse:min-h-11 text-sm text-ink-900 placeholder:text-ink-400 shadow-xs transition-shadow focus:border-brand-500 focus:outline-none focus:shadow-focus;
     caret-color: rgb(var(--brand-500));
   }
+  /* A `type="search"` input whose component already renders its own clear (×)
+     button. Suppress WebKit's native search cancel button (so there aren't two)
+     AND the iOS contacts/credentials AutoFill buttons. Note: this only removes
+     the in-field affordances — keeping a field as `type="search"` (not text) and
+     free of contact words ("nombre", "email", …) in its placeholder/labels is
+     what stops iOS from raising the "AutoFill Contact" QuickType bar at all. */
+  .search-clean::-webkit-search-cancel-button,
+  .search-clean::-webkit-search-decoration,
+  .search-clean::-webkit-contacts-auto-fill-button,
+  .search-clean::-webkit-credentials-auto-fill-button {
+    visibility: hidden;
+    display: none !important;
+    pointer-events: none;
+    height: 0;
+    width: 0;
+    margin: 0;
+  }
   .label { @apply block font-display text-[11px] font-medium text-ink-500 mb-1.5 uppercase tracking-[0.06em]; }
   /* Card = the resting elevated surface. Softer 2xl radius (warm editorial),
      a faint top-down gradient sheen (lit-from-above), a warm hairline border,

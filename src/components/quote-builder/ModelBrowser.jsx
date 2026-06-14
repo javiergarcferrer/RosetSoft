@@ -63,14 +63,16 @@ export default function ModelBrowser({ profileId, onPick }) {
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
-            placeholder="Buscar modelo por nombre, referencia o familia…"
-            aria-label="Buscar modelo en el catálogo"
-            // iOS: a plain text field whose placeholder mentions "nombre" trips
-            // the QuickType "AutoFill Contact" bar (and autocorrect mangles
-            // references). These attrs declare it a SEARCH box — Buscar return
-            // key, no autofill/autocorrect/capitalize. Mirrors GlobalSearch.
-            type="text"
+            className={q ? 'input search-clean pl-9 pr-9 coarse:pr-11' : 'input search-clean pl-9'}
+            placeholder="Buscar por modelo, referencia o familia…"
+            aria-label="Buscar en el catálogo"
+            // iOS raises the "AutoFill Contact" QuickType bar when it classifies
+            // a field as wanting contact info — and the trigger is the field's
+            // type + the words in its placeholder/label (the old "…por nombre…"
+            // read as a NAME field). A real `type="search"` with no contact
+            // words, autofill off, autocorrect/capitalize off keeps it a search
+            // box; `.search-clean` hides the native ✕ (we render our own).
+            type="search"
             inputMode="search"
             enterKeyHint="search"
             autoComplete="off"

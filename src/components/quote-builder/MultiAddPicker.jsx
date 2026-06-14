@@ -107,13 +107,14 @@ export default function MultiAddPicker({ open, onClose, onAddMany }) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className={q ? 'input pl-9 pr-9 coarse:pr-11' : 'input pl-9'}
-              placeholder="Buscar modelo por nombre, referencia o familia…"
-              aria-label="Buscar modelo en el catálogo"
+              className={q ? 'input search-clean pl-9 pr-9 coarse:pr-11' : 'input search-clean pl-9'}
+              placeholder="Buscar por modelo, referencia o familia…"
+              aria-label="Buscar en el catálogo"
               autoFocus
-              // See ModelBrowser: declare a SEARCH box so iOS gives the Buscar
-              // return key and skips the AutoFill-Contact bar / autocorrect.
-              type="text"
+              // See ModelBrowser: a real type="search" with no contact words in
+              // the placeholder keeps iOS from raising the AutoFill-Contact bar;
+              // .search-clean hides the native ✕ (we render our own).
+              type="search"
               inputMode="search"
               enterKeyHint="search"
               autoComplete="off"
