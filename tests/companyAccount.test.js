@@ -23,6 +23,7 @@ import {
   lineForTotals,
 } from '../src/lib/pricing.js';
 import { quoteTotals } from '../src/core/quote/totals.js';
+import { resolveLineItem } from '../src/core/quote/views/lineItem.js';
 
 const SETTINGS = { storeCustomerId: 'acct-1', companyDiscountPct: 60 };
 const COMPANY_QUOTE = { id: 'q1', customerId: 'acct-1' };
@@ -105,4 +106,35 @@ test('quoteTotals never discounts a regular customer quote', () => {
   const withSettings = quoteTotals(CLIENT_QUOTE, lines, SETTINGS).grandTotal;
   const without = quoteTotals(CLIENT_QUOTE, lines).grandTotal;
   assert.equal(withSettings, without);       // settings present, but not the company account
+});
+
+test('resolveLineItem scales the editor display to dealer cost (pct param)', () => {
+  const line = { id: 'l1', kind: 'item', qty: 2, unitPrice: 1000 };
+  // No pct → list price display (default behaviour unchanged).
+  const list = resolveLineItem(line);
+  assert.equal(list.unitNet, 1000);
+  assert.equal(list.subtotal, 2000);
+  assert.equal(list.companyDiscountPct, 0);
+  // 60% → the displayed unit + subtotal read at cost, and the badge value is set.
+  const cost = resolveLineItem(line, 60);
+  assert.equal(cost.unitNet, 400);
+  assert.equal(cost.subtotal, 800);
+  assert.equal(cost.companyDiscountPct, 60);
+  // The raw line the editor edits is NOT mutated (the unit-price input stays list).
+  assert.equal(line.unitPrice, 1000);
+});
+
+test('resolveLineItem scales a compound + its components to cost', () => {
+  const line = {
+    id: 'l1', kind: 'item', qty: 1, unitPrice: 0,
+    components: [
+      { id: 'c1', qty: 1, unitPrice: 300 },
+      { id: 'c2', qty: 2, unitPrice: 100 },
+    ],
+  };
+  const cost = resolveLineItem(line, 60); // factor 0.4
+  assert.equal(cost.subtotal, (300 + 200) * 0.4);          // compound rolls up at cost
+  assert.equal(cost.components.find((c) => c.id === 'c1').total, 120);
+  assert.equal(cost.components.find((c) => c.id === 'c2').total, 80);
+  assert.equal(line.components[0].unitPrice, 300);          // raw components untouched
 });

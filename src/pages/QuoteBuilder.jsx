@@ -24,6 +24,7 @@ import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
 import { MaterialsContext } from '../components/quote-builder/MaterialsContext.js';
 import { ProjectPaletteContext } from '../components/quote-builder/ProjectPaletteContext.js';
+import { CompanyDiscountContext } from '../components/quote-builder/CompanyDiscountContext.js';
 import ProjectPaletteCard from '../components/quote-builder/ProjectPaletteCard.jsx';
 import { QuoteActionsContext, useQuoteActions } from '../components/quote-builder/QuoteActionsContext.js';
 import { rememberSwatchInCatalog } from '../lib/swatchCatalog.js';
@@ -774,17 +775,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // `min-w-0` lets the column shrink below its content's intrinsic width,
         // so a long money value / dimension spec can't force a horizontal scroll.
         <div className="space-y-5 min-w-0">
-          {/* Company-account orders: the line cards below show LIST price (the
-              catalog figure you type), but the total + client view are priced
-              at dealer cost. Spell out the gap so the two never read as a bug. */}
+          {/* Company-account orders: each line/component TOTAL reads at dealer
+              cost (badged −N%); the editable Unitario stays at the catalog LIST
+              price. Spell that out so qty × unit ≠ total never reads as a bug. */}
           {companyDiscountPct > 0 && (
             <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 flex items-start gap-2.5">
               <Hash size={15} className="mt-0.5 flex-shrink-0 text-brand-500" aria-hidden />
               <p className="min-w-0">
                 <span className="font-semibold">Cuenta empresa.</span>{' '}
-                Las líneas muestran el precio de lista; el total y la Vista cliente
-                aplican <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
-                (precio de costo del pedido para la tienda).
+                Los totales muestran el costo con{' '}
+                <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
+                aplicado (precio del pedido para la tienda); el precio unitario
+                editable sigue siendo el de lista.
               </p>
             </div>
           )}
@@ -829,12 +831,16 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           }}>
             <FamiliesContext.Provider value={families}>
               <MaterialsContext.Provider value={materials}>
-                <LineItemsCard
-                  lines={lines}
-                  groups={groups}
-                  quote={quote}
-                  focusLineId={focusLineId}
-                />
+                {/* Company (house) account → each line/component total in the
+                    editor reads at dealer cost (−companyDiscountPct%). */}
+                <CompanyDiscountContext.Provider value={companyDiscountPct}>
+                  <LineItemsCard
+                    lines={lines}
+                    groups={groups}
+                    quote={quote}
+                    focusLineId={focusLineId}
+                  />
+                </CompanyDiscountContext.Provider>
               </MaterialsContext.Provider>
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>

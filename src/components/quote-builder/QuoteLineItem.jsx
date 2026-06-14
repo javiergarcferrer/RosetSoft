@@ -18,6 +18,7 @@ import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { FamiliesContext } from './FamiliesContext.js';
 import { MaterialsContext } from './MaterialsContext.js';
+import { CompanyDiscountContext } from './CompanyDiscountContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
@@ -92,7 +93,10 @@ export default function QuoteLineItem({
   // All per-line DISPLAY derivation lives in the ViewModel — the card reads
   // fields, never computes them. Currency formatting stays here (the VM is a
   // plain-data projection, rate-agnostic) via the `fmt` closure below.
-  const vm = useMemo(() => resolveLineItem(line), [line]);
+  // Company-account quotes show dealer cost per line; the VM scales a copy (the
+  // raw `line` we edit stays at list). 0 for a normal customer quote.
+  const companyDiscountPct = useContext(CompanyDiscountContext);
+  const vm = useMemo(() => resolveLineItem(line, companyDiscountPct), [line, companyDiscountPct]);
   const compound = vm.isCompound;
   // Catalog families (keyed by SKU root) — used by applyComponentMaterialToAll
   // to re-price a material-less RANGE sibling at the propagated grade, exactly
@@ -1555,6 +1559,10 @@ function PricingRow({
   // and renders the c/u adjustment caption. Components pass none of these
   // (their total is a plain read-out; the parent line owns the breakdown).
   onToggleBreakdown, breakdownOpen, breakdown, adjustmentLine, unitForCaption, hasAdjustment,
+  // Company (house) account: the Total already reads at dealer cost, so badge it
+  // "−N%" next to the label — the editable Unitario stays at list, so the badge
+  // is what explains why qty × unit ≠ the shown (discounted) Total.
+  companyDiscountPct = 0,
   qtyAriaLabel = 'Cantidad', unitAriaLabel = 'Precio unitario',
 }) {
   // Weight ladder (Lausanne 400/500/600/700): the line TOTAL is the money
@@ -1598,6 +1606,9 @@ function PricingRow({
       <div className="qli-pricing-cell qli-pricing-total relative">
         <div className="eyebrow-xs tracking-wide">
           {totalLabel}
+          {companyDiscountPct > 0 && (
+            <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+          )}
         </div>
         {onToggleBreakdown ? (
           <>
@@ -1636,6 +1647,7 @@ function CalculatorBand({
   line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
   onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
+  const companyDiscountPct = useContext(CompanyDiscountContext);
   return (
     <div className="qli-pricing">
       <PricingRow
@@ -1648,6 +1660,7 @@ function CalculatorBand({
         onUnitChange={(v) => onChange({ unitPrice: v })}
         totalSize="lg"
         totalLabel="Total"
+        companyDiscountPct={companyDiscountPct}
         onToggleBreakdown={onToggleBreakdown}
         breakdownOpen={breakdownOpen}
         hasAdjustment={hasAdjustment}
@@ -2134,6 +2147,9 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   const { total, optional, inGroup, isSelected, dimmed, groupInfo, canApplyToAll } = vm;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const families = useContext(FamiliesContext);
+  // Component total (from the parent VM) is already at dealer cost on a company
+  // quote; badge it "−N%" while the unit-price input stays at list.
+  const companyDiscountPct = useContext(CompanyDiscountContext);
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
   // The catalog seed is applied to the component (dropping the line-only family
@@ -2368,6 +2384,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
             onUnitChange={(v) => onChange({ unitPrice: v })}
             totalSize="md"
             totalLabel="Total"
+            companyDiscountPct={companyDiscountPct}
             qtyAriaLabel="Cantidad del componente"
             unitAriaLabel="Precio unitario del componente"
           />

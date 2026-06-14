@@ -21,6 +21,7 @@ import {
   lineTotal,
   isRangeLine, lineTotalRange, isRangeComponent, componentSubtotalRange, lineHasRange,
   componentAlternativeGroupInfo,
+  applyCompanyDiscount, clampPct,
 } from '../../../lib/pricing.js';
 import { isModularLine, modulesOf } from '../../../lib/modules.js';
 import { canPropagateMaterial } from '../../../lib/subtype.js';
@@ -140,8 +141,14 @@ function resolveComponents(components) {
  *   components: Array<object>,  // per-component projection (see resolveComponents)
  * }}
  */
-export function resolveLineItem(line) {
-  const l = line || {};
+export function resolveLineItem(line, companyDiscountPct = 0) {
+  // Company (house) account quotes show DEALER COST per line: scale a COPY of the
+  // line + its components (applyCompanyDiscount is pure — the raw `line` the
+  // editor edits is untouched, so the unit-price INPUT keeps the list price)
+  // and derive every figure below from it, so the displayed unit/subtotal/range/
+  // compound roll-up/module subtotals all read at cost. pct 0 ⇒ no change.
+  const pct = clampPct(companyDiscountPct);
+  const l = pct > 0 ? applyCompanyDiscount([line || {}], pct)[0] : (line || {});
   const isCompound = isCompoundLine(l);
 
   // Adjusted unit price (line-level margin then discount) and the line's own
@@ -191,6 +198,9 @@ export function resolveLineItem(line) {
     hasAdjustment,
     margin,
     discount,
+    // The company-account cost discount baked into the figures above (0 for a
+    // normal quote), so the card can badge each total as "−N%".
+    companyDiscountPct: pct,
     compound,
     modules: isModular ? resolveModules(l.components) : [],
     components: isCompound ? resolveComponents(l.components) : [],
