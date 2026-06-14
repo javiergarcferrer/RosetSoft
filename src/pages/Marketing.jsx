@@ -543,10 +543,13 @@ export default function Marketing() {
                     </div>
                   )}
 
-                  {/* action bar — sticky on mobile, clears the home indicator */}
-                  <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-wrap items-center gap-2 border-t border-ink-100 bg-surface px-5 py-3 [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+                  {/* action bar — sticky on mobile, clears the home indicator.
+                      Controls stack full-width on a phone (the datetime-local
+                      input has a wide intrinsic size and won't shrink, so a
+                      w-auto row overflowed and got clipped); inline from sm+. */}
+                  <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-col gap-2 border-t border-ink-100 bg-surface px-5 py-3 [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:static sm:m-0 sm:flex-row sm:flex-wrap sm:items-center sm:border-0 sm:bg-transparent sm:p-0">
                     <select
-                      className="input w-auto py-2 text-sm min-h-[44px]"
+                      className="input w-full sm:w-auto py-2 text-sm min-h-[44px]"
                       value={pubMode}
                       onChange={(e) => setPubMode(e.target.value)}
                       aria-label="Tipo de publicación"
@@ -557,7 +560,7 @@ export default function Marketing() {
                       <option value="carousel">Carrusel</option>
                     </select>
                     <input
-                      className="input w-auto py-2 text-sm min-h-[44px]"
+                      className="input w-full min-w-0 sm:w-auto py-2 text-sm min-h-[44px]"
                       type="datetime-local"
                       value={pubAt}
                       onChange={(e) => setPubAt(e.target.value)}
@@ -565,7 +568,7 @@ export default function Marketing() {
                     />
                     <button
                       type="button"
-                      className="btn-brand ml-auto min-h-[44px]"
+                      className="btn-brand w-full justify-center sm:w-auto sm:ml-auto min-h-[44px]"
                       onClick={publish}
                       disabled={!canPublish || pubBusy}
                     >
