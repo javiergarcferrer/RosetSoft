@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, PanelLeftClose, PanelLeft, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -71,18 +71,25 @@ export default function Layout() {
     return () => { document.body.style.overflow = prev; };
   }, [navOpen, isMobile]);
 
-  // The desktop sidebar's horizontal footprint, published as a CSS variable on
-  // the shell root so position:fixed chrome rendered deep inside the page — the
-  // quote TotalsDock and the client-preview Ver/Personalizar toggle — can offset
-  // past the sidebar AND follow it when collapsed. They're DOM descendants of
-  // this div, so the variable inherits even though they're fixed. Expanded = the
+  // The desktop sidebar's horizontal footprint, published as a CSS variable so
+  // position:fixed chrome — the quote TotalsDock — can offset past the sidebar AND
+  // follow it when collapsed. It's set on the DOCUMENT ROOT (<html>), not the
+  // shell div below, because the TotalsDock portals to document.body: it lives
+  // OUTSIDE this React subtree, so a var scoped to the shell div would never reach
+  // it (CSS custom properties inherit through the DOM tree, not the React tree —
+  // the portaled dock is a sibling of #root, so it only ever saw the 15rem
+  // fallback and stayed wedged there once the sidebar collapsed). Setting it on
+  // <html> lets it cascade to body and thus into the portal. Expanded = the
   // sidebar's w-60 (15rem); collapsed = the md:pl-12 gutter the floating
   // show-toggle sits in (3rem). Consumed only via md:-gated utilities, so the
   // mobile drawer layout ignores it.
   const sidebarOffset = collapsed ? '3rem' : '15rem';
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty('--rs-sidebar-offset', sidebarOffset);
+  }, [sidebarOffset]);
 
   return (
-    <div className="h-full flex flex-col md:flex-row" style={{ '--rs-sidebar-offset': sidebarOffset }}>
+    <div className="h-full flex flex-col md:flex-row">
       {/* Mobile topbar — extends behind the status bar on standalone iOS
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}

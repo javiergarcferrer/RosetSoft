@@ -16,11 +16,13 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * width, so the running total is never out of view. Replaces the old desktop
  * right-rail + the separate mobile totals bar with one responsive control.
  *
- * Anchored bottom, offset past the static sidebar on desktop via the shell's
- * `--rs-sidebar-offset` CSS variable (Layout publishes the sidebar's live width
- * — 15rem expanded, 3rem when collapsed — so the dock tracks it instead of
- * stranding a 15rem gap once the sidebar is hidden) and full-bleed on mobile
- * (where the sidebar is an off-canvas drawer). Its inner content lines up with
+ * Anchored bottom, offset past the static sidebar on desktop via the
+ * `--rs-sidebar-offset` CSS variable Layout publishes on the document root (the
+ * sidebar's live width — 15rem expanded, 3rem when collapsed — so the dock tracks
+ * it instead of stranding a 15rem gap once the sidebar is hidden). It must come
+ * from the root: this dock portals to document.body, so a var scoped to Layout's
+ * shell div (a sibling subtree) would never reach it. Full-bleed on mobile (where
+ * the sidebar is an off-canvas drawer). Its inner content lines up with
  * the page's `max-w-[1400px]` container so the figures sit under the columns
  * above.
  *
