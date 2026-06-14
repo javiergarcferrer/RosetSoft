@@ -29,12 +29,16 @@ import Modal from '../Modal.jsx';
  * page (detach there, then re-attach) — once it's in an order the chip is a
  * link, not a picker, to keep the common case one tap.
  */
-export default function OrderChip({ quote, profileId, onAttach }) {
+export default function OrderChip({ quote, profileId, onAttach, inline = false }) {
   const order = useLiveQuery(
     () => (quote.orderId ? db.orders.get(quote.orderId) : Promise.resolve(null)),
     [quote.orderId],
     null,
   );
+
+  // `inline` drops the own-row margin so the chip can sit in the header's
+  // status row (opposite the quote number); otherwise it owns its row.
+  const wrap = inline ? '' : 'mt-2.5';
 
   // Quote isn't in a state where attaching to an order makes sense.
   if (quote.status !== 'accepted' && !quote.orderId) return null;
@@ -42,8 +46,8 @@ export default function OrderChip({ quote, profileId, onAttach }) {
   // Accepted but unattached — the assign-or-create CTA owns the row.
   if (!quote.orderId) {
     return (
-      <div className="mt-2.5">
-        <AttachCta quote={quote} profileId={profileId} onAttach={onAttach} />
+      <div className={wrap}>
+        <AttachCta quote={quote} profileId={profileId} onAttach={onAttach} inline={inline} />
       </div>
     );
   }
@@ -52,7 +56,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
     // Order id present but the row hasn't loaded yet (or was deleted).
     // Quiet placeholder so the layout doesn't shift when it resolves.
     return (
-      <div className="mt-2.5">
+      <div className={wrap}>
         <span className="inline-flex items-center gap-1.5 px-2.5 min-h-8 coarse:min-h-11 rounded-full text-xs text-ink-400 bg-ink-50 border border-ink-100 ring-1 ring-inset ring-black/5">
           <Package size={12} /> Pedido…
         </span>
@@ -62,7 +66,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
 
   const stage = ORDER_STAGE_BY_KEY[currentOrderStage(order)];
   return (
-    <div className="mt-2.5">
+    <div className={wrap}>
       <Link
         to={`/orders/${order.id}`}
         className="inline-flex items-center gap-1.5 px-3 min-h-8 coarse:min-h-11 rounded-full text-xs font-medium text-ink-700 bg-surface border border-ink-200 hover:border-ink-400 hover:text-ink-900 hover:bg-ink-50 transition-all active:scale-[0.98] ring-1 ring-inset ring-black/5"
@@ -89,7 +93,7 @@ export default function OrderChip({ quote, profileId, onAttach }) {
  * popover. The portal-based Modal escapes that and gives a native bottom
  * sheet with full-size touch targets.
  */
-function AttachCta({ quote, profileId, onAttach }) {
+function AttachCta({ quote, profileId, onAttach, inline = false }) {
   const [open, setOpen] = useState(false);
 
   const orders = useLiveQuery(
@@ -129,9 +133,9 @@ function AttachCta({ quote, profileId, onAttach }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        className="btn-brand w-full sm:w-auto"
+        className={inline ? 'btn-brand w-auto whitespace-nowrap !min-h-7 coarse:!min-h-9 !px-2.5 !py-1 !text-xs' : 'btn-brand w-full sm:w-auto'}
       >
-        <Package size={16} />
+        <Package size={inline ? 14 : 16} />
         Agregar a pedido
       </button>
 

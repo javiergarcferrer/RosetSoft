@@ -73,33 +73,29 @@ export default function QuoteHeader({
 
   return (
     <div className="mb-5">
-      {/* ROW 1 — back · identity (#number + save) · undo/redo + view toggle, all
-          on ONE line: the eyebrow + number sit inline (not stacked), the view
-          toggle is icon-only on a phone, so the cluster never wraps onto a
-          second line. */}
-      <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <button type="button" onClick={() => goBack('/quotes')} className="back-link mb-0 px-2" title="Volver a cotizaciones">
-            <ArrowLeft size={14} />
-            <span className="hidden sm:inline">Volver</span>
-          </button>
-          <div className="flex items-baseline gap-2 min-w-0">
-            <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest hidden sm:inline">Cotización</span>
-            <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">
-              {quote.number != null ? `#${quote.number}` : 'Borrador'}
-            </h1>
-            <SaveIndicator savedAt={savedAt} saving={saving} />
-          </div>
+      {/* ROW 1 — back · quote # + save STATE · seller · undo/redo, on ONE line;
+          the order affordance sits at the FAR RIGHT (ml-auto), opposite the
+          state, so the number/state and the order read as the two ends of a
+          single status row. Order renders nothing until the quote is accepted,
+          so a draft shows just #number · state · seller · undo/redo. */}
+      <div className="flex items-center gap-2 min-w-0">
+        <button type="button" onClick={() => goBack('/quotes')} className="back-link mb-0 px-2 shrink-0" title="Volver a cotizaciones">
+          <ArrowLeft size={14} />
+          <span className="hidden sm:inline">Volver</span>
+        </button>
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span className="eyebrow shrink-0 text-brand-600 font-bold tracking-widest hidden sm:inline">Cotización</span>
+          <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight leading-none text-ink-900 whitespace-nowrap">
+            {quote.number != null ? `#${quote.number}` : 'Borrador'}
+          </h1>
+          <SaveIndicator savedAt={savedAt} saving={saving} />
         </div>
-        {/* Seller (Vendedor) — lifted out of the meta strip below into the
-            header's open space, where it's always visible. In the strip it sat
-            at the tail of a horizontal scroller whose edge-fade could hide it on
-            a phone; here it reads inline with the quote number ("#1010 by …")
-            and never scrolls out of view. */}
+        {/* Seller (Vendedor) — reads inline with the quote number ("#1010 by …"),
+            always visible (never behind the ROW 2 scroll fade). */}
         {isAdmin ? (
           <SellerSelect quote={quote} assignableSellers={assignableSellers} onUpdateQuote={onUpdateQuote} />
         ) : creatorLabel ? (
-          <span className="text-[11px] text-ink-400 whitespace-nowrap">
+          <span className="text-[11px] text-ink-400 whitespace-nowrap truncate min-w-0">
             Creada por <span className="text-ink-600 font-medium">{creatorLabel}</span>
           </span>
         ) : null}
@@ -107,17 +103,16 @@ export default function QuoteHeader({
           <UndoRedo onUndo={onUndo} onRedo={onRedo} canUndo={canUndo} canRedo={canRedo} />
           <ViewToggle view={view} onChange={onViewChange} />
         </div>
+        {/* Order — far right, opposite the state. */}
+        <div className="ml-auto shrink-0">
+          <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} inline />
+        </div>
       </div>
 
-      {/* ROW 2 — the "who": customer + professional. A single
+      {/* ROW 2 — the "who": customer · WhatsApp · professional. A single
           horizontally-scrollable strip on a phone (so it never stacks into
           extra rows), with a soft right-edge fade so the overflow reads as
-          "scroll for more", not a clipped chip. Wraps normally on sm+.
-          (The seller moved up to ROW 1 so it's never hidden by the fade.)
-
-          The order affordance is deliberately NOT in this strip: it's the
-          primary post-accept action, so burying it behind a horizontal
-          scroll hid it on phones. It gets its own always-visible row below. */}
+          "scroll for more", not a clipped chip. Wraps normally on sm+. */}
       <div
         className="mt-2 -mx-1 px-1 flex items-center gap-1.5 overflow-x-auto sm:overflow-visible sm:flex-wrap [&>*]:shrink-0 sm:[&>*]:shrink [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-mask-image:linear-gradient(to_right,#000_90%,transparent)] [mask-image:linear-gradient(to_right,#000_90%,transparent)] sm:[-webkit-mask-image:none] sm:[mask-image:none]"
         role="group"
@@ -133,11 +128,6 @@ export default function QuoteHeader({
           onUpdateQuote={onUpdateQuote}
         />
       </div>
-
-      {/* Order affordance — its own full-width row (renders nothing until the
-          quote is accepted), so the "Agregar a pedido" CTA / order chip is
-          always visible without horizontal scrolling on a phone. */}
-      <OrderChip quote={quote} profileId={profileId} onAttach={(orderId) => onUpdateQuote({ orderId })} />
 
       {/* Invoicing stamp — the books' one-way echo (bridge): NCF + e-CF state. */}
       {invoice && (

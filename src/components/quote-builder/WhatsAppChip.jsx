@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
+import { Check, X, Pencil, Send, Loader2, AlertTriangle, Link2, FileText } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import BrandName from '../BrandName.jsx';
 import { db } from '../../db/database.js';
@@ -10,6 +10,19 @@ import { waDigits, displayPhone } from '../../lib/phone.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
 import { sendQuoteLink, sendQuotePdf, phoneOwner, phoneInUseMessage } from '../../lib/whatsapp.js';
+
+/**
+ * The literal WhatsApp mark (phone inside a speech bubble) as an inline SVG —
+ * lucide dropped its brand glyphs, so we ship the official logo path here.
+ * Inherits `currentColor` so the chip's green tint flows straight through.
+ */
+function WhatsAppGlyph({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.967-.94 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.885-9.885 9.885m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+    </svg>
+  );
+}
 
 /**
  * The quote customer's WhatsApp number, editable inline from the header — so
@@ -57,7 +70,7 @@ export default function WhatsAppChip({ customer }) {
     return (
       <span className="inline-flex flex-col gap-1 min-w-0 max-w-full">
         <span className={`inline-flex items-center gap-1 rounded-full border bg-surface px-2 min-h-7 coarse:min-h-9 text-xs shadow-xs ring-1 ring-inset max-w-full min-w-0 ${phoneErr ? 'border-rose-300 ring-rose-200/60' : 'border-emerald-300 ring-emerald-200/50'}`}>
-          <MessageCircle size={12} className={phoneErr ? 'text-rose-500 flex-shrink-0' : 'text-emerald-600 flex-shrink-0'} aria-hidden />
+          <WhatsAppGlyph className={`h-3 w-3 flex-shrink-0 ${phoneErr ? 'text-rose-500' : 'text-[#25D366]'}`} />
           <input
             autoFocus
             type="tel"
@@ -92,25 +105,26 @@ export default function WhatsAppChip({ customer }) {
         onClick={startEdit}
         title="Agregar WhatsApp"
         aria-label="Agregar número de WhatsApp"
-        className="inline-flex h-7 w-7 coarse:h-11 coarse:w-11 items-center justify-center rounded-full border border-dashed border-ink-300 text-ink-300 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50/50 transition-all active:scale-[0.95]"
+        className="inline-flex h-6 w-6 coarse:h-11 coarse:w-11 items-center justify-center rounded-full border border-dashed border-ink-300 text-ink-300 hover:border-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10 transition-all active:scale-[0.95]"
       >
-        <MessageCircle size={14} aria-hidden />
+        <WhatsAppGlyph className="h-3.5 w-3.5" />
       </button>
     );
   }
 
   return (
-    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50/60 ring-1 ring-inset ring-emerald-200/50">
-      {/* Green = number on file. Tap opens the WhatsApp chat. */}
+    <span className="group inline-flex items-center rounded-full bg-[#25D366]/12 ring-1 ring-inset ring-[#25D366]/30 shadow-xs transition-shadow hover:shadow-sm">
+      {/* Green = number on file. Tap opens the WhatsApp chat — a solid
+          brand-green badge carries the literal WhatsApp mark in white. */}
       <a
         href={`https://wa.me/${waDigits(phone)}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex h-7 w-7 coarse:h-11 coarse:w-11 items-center justify-center rounded-full text-emerald-600 hover:text-emerald-700 transition-colors"
+        className="inline-flex h-6 w-6 coarse:h-10 coarse:w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm transition-transform active:scale-95 group-hover:brightness-105"
         title={`Abrir WhatsApp · ${phone}`}
         aria-label={`Abrir WhatsApp de ${phone}`}
       >
-        <MessageCircle size={14} className="flex-shrink-0" aria-hidden />
+        <WhatsAppGlyph className="h-3.5 w-3.5 coarse:h-5 coarse:w-5" />
       </a>
       {/* Edit stays reachable (fix a typo) without ever printing the number. */}
       <button
@@ -118,9 +132,9 @@ export default function WhatsAppChip({ customer }) {
         onClick={startEdit}
         title="Editar número"
         aria-label="Editar número de WhatsApp"
-        className="inline-flex h-7 w-5 coarse:h-11 coarse:w-9 items-center justify-center rounded-r-full text-emerald-600/60 hover:text-emerald-700 hover:bg-emerald-100/60 transition-colors flex-shrink-0"
+        className="inline-flex h-6 w-4 coarse:h-10 coarse:w-8 items-center justify-center rounded-r-full text-[#1f9e4d]/60 hover:text-[#1f9e4d] hover:bg-[#25D366]/15 transition-colors flex-shrink-0"
       >
-        <Pencil size={10} />
+        <Pencil size={9} />
       </button>
     </span>
   );
