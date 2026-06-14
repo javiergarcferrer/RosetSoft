@@ -1,7 +1,7 @@
-// ViewModels for the LifestyleGarden catalog surfaces — the MODEL grouping the
-// admin browser renders (pages/admin/CatalogLifestyleGarden.jsx) and the
-// client-facing catalog book the PDF prints (src/pdf/catalog). Pure: product
-// rows in, projection out — no React, no db.
+// ViewModels for the LifestyleGarden surfaces — the MODEL grouping the stock
+// browser renders (pages/inventory/LifestyleGarden.jsx) and the client-facing
+// catalog book the PDF prints (src/pdf/catalog). Pure: product rows in,
+// projection out — no React, no db.
 //
 // A MODEL is one Shopify product: the import (shopify-sync/catalogImport.ts)
 // writes one `products` row per VARIANT and keys siblings together by

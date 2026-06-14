@@ -34,7 +34,7 @@ const GROUPS = [
   ] },
   { title: 'Importaciones e inventario', items: [
     { label: 'Importaciones', desc: 'Expedientes, costo en destino e ITBIS aduanal', to: '/accounting/importaciones' },
-    { label: 'Existencias y valuación', desc: 'Kardex y costo promedio', to: '/accounting/inventario' },
+    { label: 'Existencias y valuación', desc: 'Kardex y costo promedio', to: '/inventario/existencias' },
   ] },
   { title: 'Gastos, banca y nómina', items: [
     { label: 'Cuentas por pagar', desc: 'Antigüedad por proveedor', to: '/accounting/cuentas?tab=cxp' },

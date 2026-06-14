@@ -493,7 +493,7 @@ export default function Facturacion() {
                     const first = stocked[0];
                     return (
                       <Link
-                        to={`/accounting/inventario?item=${first.inventoryItemId}&qty=${Number(first.qty) || 1}`}
+                        to={`/inventario/existencias?item=${first.inventoryItemId}&qty=${Number(first.qty) || 1}`}
                         className="btn-ghost text-xs mt-2"
                         title="Registrar la salida de almacén de los artículos vendidos de stock"
                       >

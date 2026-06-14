@@ -238,9 +238,10 @@ export function resolveGlobalSearch({
     toItem: (p) => ({
       key: `product:${p.id}`,
       type: 'product',
-      // Deep-link to the row's own brand-catalog page (the search spans every
-      // brand); rows imported before the brand column default to Ligne Roset.
-      to: p.brand === BRAND_LIFESTYLEGARDEN ? '/admin/catalog/lifestylegarden' : '/admin/catalog/roset',
+      // Deep-link to where the row lives: LSG stock under Inventario, every
+      // other brand under its Catálogos page (rows imported before the brand
+      // column default to Ligne Roset).
+      to: p.brand === BRAND_LIFESTYLEGARDEN ? '/inventario/lifestylegarden' : '/admin/catalog/roset',
       primary: p.name || p.reference || '—',
       secondary: [p.reference, p.family].filter(Boolean).join(' · '),
       priceUsd: p.priceUsd ?? null,

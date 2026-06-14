@@ -3,32 +3,35 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, assignSequenceNumber } from '../../db/database.js';
+import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
-import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import InventoryGate from '../../components/InventoryGate.jsx';
+import InventorySubnav from '../../components/InventorySubnav.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ImageDrop from '../../components/ImageDrop.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
-import {
-  resolveInventory, resolveItemKardex, buildCogsEntry, planSalida, resolveAccountingConfig,
-} from '../../core/accounting/index.js';
+import { resolveInventory, resolveItemKardex, planSalida } from '../../core/accounting/index.js';
 
 const TYPE_LABEL = { in: 'Entrada', out: 'Salida', adjust: 'Ajuste' };
 
 /**
- * Inventario — costed stock (weighted average) projected from the kardex. New
- * items here; entries come from Compras (goods). "Salida" books the cost of
- * sale (Debit costo de venta / Credit inventario) at the current average cost.
- * Self-gates on accounting/admin.
+ * Inventario · Existencias — the team's current stock as a simple list (qty on
+ * hand + weighted-average cost projected from the kardex). New items here;
+ * entries come from Compras (goods). "Salida" discounts sold units at the
+ * current average cost.
+ *
+ * NOTE: while the accounting engine is in testing, Inventario is DISCONNECTED
+ * from the books — a salida no longer posts a cost-of-sale journal entry; it
+ * only moves the stock. (Re-wire the COGS posting here when accounting goes
+ * live: see git history for the buildCogsEntry/journalLines path.)
  */
-export default function Inventario() {
-  const { profileId, settings } = useApp();
+export default function Existencias() {
+  const { profileId } = useApp();
   const scope = profileId || 'team';
-  const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const itemsQ = useLiveQueryStatus(() => db.inventoryItems.where('profileId').equals(scope).toArray(), [scope], []);
   const movesQ = useLiveQueryStatus(() => db.inventoryMovements.where('profileId').equals(scope).toArray(), [scope], []);
@@ -71,26 +74,17 @@ export default function Inventario() {
 
   async function registerSalida() {
     setErr('');
-    // The salida's MONEY rule (validation, COGS at average, new on-hand) is a
-    // pure Model helper; this handler only performs the writes it dictates.
+    // The salida's stock rule (validation, new on-hand, the cost it leaves at)
+    // is a pure Model helper; this handler only performs the writes it dictates.
+    // While Inventario is disconnected from accounting it records the movement
+    // only — no cost-of-sale journal entry.
     const plan = planSalida({ qty: outQty, onHand: kardex?.qty || 0, avgCost: kardex?.avgCost });
     if (!selectedItem || !plan.ok) { setErr(plan.error || 'Indica una cantidad válida.'); return; }
     setPosting(true);
     try {
-      const moveId = newId();
-      if (plan.cost > 0) {
-        const built = buildCogsEntry({ newId, config, cost: plan.cost, postedAt: Date.now(), refId: moveId, memo: `Salida ${selectedItem.name}` });
-        await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
-        await db.journalLines.bulkPut(built.lines);
-        await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost,
-          movedAt: Date.now(), memo: 'Costo de venta', journalEntryId: built.entry.id,
-        });
-      } else {
-        await db.inventoryMovements.put({
-          id: moveId, profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost, movedAt: Date.now(),
-        });
-      }
+      await db.inventoryMovements.put({
+        id: newId(), profileId: scope, itemId: selectedItem.id, type: 'out', qty: plan.qty, unitCost: plan.unitCost, movedAt: Date.now(),
+      });
       await db.inventoryItems.update(selectedItem.id, { qtyOnHand: plan.newQty, avgCost: plan.unitCost });
       // Stock changed → reflect it in the Shopify catalog (sold out → removed).
       syncShopify([selectedItem.id]).catch(() => {});
@@ -118,7 +112,8 @@ export default function Inventario() {
   const field = 'input';
 
   return (
-    <AccountingGate title="Inventario">
+    <InventoryGate title="Inventario">
+      <InventorySubnav />
       <PageHeader title="Inventario"
         subtitle={loaded ? `${inv.count} artículos · valor ${formatDop(inv.totalValue)}` : ' '}
         actions={(
@@ -217,7 +212,7 @@ export default function Inventario() {
                       {posting ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownToLine size={15} />} Registrar salida
                     </button>
                   </div>
-                  <p className="text-[11px] text-ink-400 mt-1">Descuenta unidades vendidas y registra el costo de venta al costo promedio (no es el precio de venta).</p>
+                  <p className="text-[11px] text-ink-400 mt-1">Descuenta las unidades vendidas del inventario.</p>
                 </div>
                 {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
 
@@ -254,7 +249,7 @@ export default function Inventario() {
           </div>
         </div>
       )}
-    </AccountingGate>
+    </InventoryGate>
   );
 }
 

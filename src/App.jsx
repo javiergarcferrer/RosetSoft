@@ -38,7 +38,8 @@ const ShopifyOrders = lazyPage(() => import('./pages/ShopifyOrders.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
-const AdminCatalogLifestyleGarden = lazyPage(() => import('./pages/admin/CatalogLifestyleGarden.jsx'));
+const InventoryExistencias = lazyPage(() => import('./pages/inventory/Existencias.jsx'));
+const InventoryLifestyleGarden = lazyPage(() => import('./pages/inventory/LifestyleGarden.jsx'));
 const AccountingWorkspace = lazyPage(() => import('./pages/accounting/Workspace.jsx'));
 const AccountingDashboard = lazyPage(() => import('./pages/accounting/Dashboard.jsx'));
 const AccountingLedger = lazyPage(() => import('./pages/accounting/Ledger.jsx'));
@@ -50,7 +51,6 @@ const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.
 const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
 const AccountingCompras = lazyPage(() => import('./pages/accounting/Compras.jsx'));
-const AccountingInventario = lazyPage(() => import('./pages/accounting/Inventario.jsx'));
 const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Importaciones.jsx'));
 const AccountingImportacionDetail = lazyPage(() => import('./pages/accounting/ImportacionDetail.jsx'));
 const AccountingECFSequences = lazyPage(() => import('./pages/accounting/ECFSequences.jsx'));
@@ -271,7 +271,16 @@ function ProtectedApp() {
                 from the Roset page. */}
             <Route path="admin/catalog" element={<AdminCatalogs />} />
             <Route path="admin/catalog/roset" element={<AdminCatalog />} />
-            <Route path="admin/catalog/lifestylegarden" element={<AdminCatalogLifestyleGarden />} />
+            {/* LifestyleGarden moved out of Catálogos into the standalone
+                Inventario section — old bookmarks redirect there. */}
+            <Route path="admin/catalog/lifestylegarden" element={<Navigate to="/inventario/lifestylegarden" replace />} />
+            {/* Inventario — a STANDALONE section (no longer a Contabilidad
+                center) while the accounting engine is in testing: just a place
+                to hold current stock. Two tabs: manual Existencias + the LSG
+                Shopify-synced stock. */}
+            <Route path="inventario" element={<Navigate to="/inventario/existencias" replace />} />
+            <Route path="inventario/existencias" element={<InventoryExistencias />} />
+            <Route path="inventario/lifestylegarden" element={<InventoryLifestyleGarden />} />
             {/* Accounting surface. /accounting lands on the Panel (the
                 business overview) — the sales/commissions workspace lives at
                 /accounting/ventas with the other Ventas tabs. Every legacy
@@ -289,7 +298,9 @@ function ProtectedApp() {
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
             <Route path="accounting/ligne-roset" element={<AccountingLigneRoset />} />
             <Route path="accounting/compras" element={<AccountingCompras />} />
-            <Route path="accounting/inventario" element={<AccountingInventario />} />
+            {/* Inventario left Contabilidad — old accounting bookmarks redirect
+                to the standalone section. */}
+            <Route path="accounting/inventario" element={<Navigate to="/inventario/existencias" replace />} />
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />
             <Route path="accounting/importaciones/:id" element={<AccountingImportacionDetail />} />
             <Route path="accounting/ecf" element={<AccountingECFSequences />} />

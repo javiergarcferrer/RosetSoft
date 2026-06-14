@@ -10,7 +10,7 @@
 // expediente capitalizes inventory (an asset) — it's the supply side of the
 // trade cycle, never an expense.
 import {
-  Gauge, FileText, Receipt, Landmark, Boxes, Wallet, BookOpen, BarChart3,
+  Gauge, FileText, Receipt, Landmark, Wallet, BookOpen, BarChart3,
   Percent, SlidersHorizontal, Ship,
 } from 'lucide-react';
 
@@ -27,9 +27,8 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
   ] },
-  { key: 'inventario', label: 'Inventario', icon: Boxes, tabs: [
-    { to: '/accounting/inventario', label: 'Existencias' },
-  ] },
+  // Inventario left Contabilidad — it's a standalone section now (see
+  // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
   { key: 'gastos', label: 'Gastos', icon: Receipt, tabs: [
     { to: '/accounting/expenses', label: 'Gastos' },
     { to: '/accounting/compras', label: 'Compras' },
@@ -84,7 +83,7 @@ export const QUICK_CREATE = [
   ] },
   { group: 'Otros', items: [
     { label: 'Asiento contable', to: '/accounting/ledger?new=1' },
-    { label: 'Artículo de inventario', to: '/accounting/inventario?new=1' },
+    { label: 'Artículo de inventario', to: '/inventario/existencias?new=1' },
     { label: 'Cuenta del catálogo', to: '/accounting/chart' },
   ] },
 ];

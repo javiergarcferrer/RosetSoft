@@ -1,6 +1,6 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, ExternalLink, FileDown, Loader2, PackageSearch, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, ExternalLink, FileDown, Loader2, PackageSearch, RefreshCw } from 'lucide-react';
 import ImageView from '../../components/ImageView.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { searchProducts, catalogCategories, productsByCategory, productsByBrand } from '../../db/database.js';
@@ -9,6 +9,8 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
+import InventoryGate from '../../components/InventoryGate.jsx';
+import InventorySubnav from '../../components/InventorySubnav.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { importLifestyleGardenCatalog, ensureShopifyRefreshCron } from '../../lib/shopifySync.js';
 import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
@@ -16,19 +18,18 @@ import { groupLsgModels, resolveLsgCatalogBook } from '../../core/catalog/index.
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
 /**
- * Catálogo LifestyleGarden — the second brand catalog. Its particular import
- * manner is a one-click SYNC from the team's own Shopify store
- * (www.lifestylegarden.do): the shopify-sync Edge Function pulls every ACTIVE
- * product (what the public site shows) and upserts it into `products` with
- * brand 'lifestylegarden'; products that left the store are removed.
+ * Inventario · LifestyleGarden — the team's LSG stock. It's its own brand of
+ * "current stock": a one-click SYNC from the team's own Shopify store
+ * (www.lifestylegarden.do) pulls every ACTIVE product (what the public site
+ * shows) and upserts it into `products` with brand 'lifestylegarden', carrying
+ * its live Shopify inventory quantity; products that left the store are removed.
  *
- * Browse mirrors the Roset catalog page (category cards, lazy-loaded), but the
- * MODEL grouping differs by nature of the source: a model = one Shopify
- * PRODUCT (grouped by its handle in `familyCode`) and its members are the
- * store VARIANTS — there are no fabric grades here.
+ * Browse groups by COLLECTION → MODEL (a model = one Shopify PRODUCT, grouped
+ * by its handle in `familyCode`; its members are the store VARIANTS — there are
+ * no fabric grades here).
  */
-export default function CatalogLifestyleGarden() {
-  const { profileId, isAdmin } = useApp();
+export default function LifestyleGarden() {
+  const { profileId } = useApp();
   const [q, setQ] = useState('');
   const [dq, setDq] = useState('');
   useEffect(() => {
@@ -55,15 +56,6 @@ export default function CatalogLifestyleGarden() {
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
 
-  if (!isAdmin) {
-    return (
-      <>
-        <PageHeader title="Catálogo LifestyleGarden" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo de productos." />
-      </>
-    );
-  }
-
   async function onSync() {
     setBusy(true);
     setError('');
@@ -73,7 +65,7 @@ export default function CatalogLifestyleGarden() {
       if (r?.configured === false) {
         setError('Shopify no está conectado. Conéctalo en Configuración → Shopify y vuelve a sincronizar.');
       } else if (r?.ok === false || r?.error) {
-        setError(r?.error || 'No se pudo sincronizar el catálogo.');
+        setError(r?.error || 'No se pudo sincronizar el inventario.');
       } else {
         const removed = Number(r?.removed) || 0;
         const images = Number(r?.images) || 0;
@@ -84,7 +76,7 @@ export default function CatalogLifestyleGarden() {
         ensureShopifyRefreshCron().catch(() => {});
       }
     } catch (e) {
-      console.error('[CatalogLifestyleGarden] sync failed:', e);
+      console.error('[InventoryLifestyleGarden] sync failed:', e);
       setError(userMessageFor(e));
     } finally {
       setBusy(false);
@@ -103,7 +95,7 @@ export default function CatalogLifestyleGarden() {
       const products = await productsByBrand(profileId, BRAND_LIFESTYLEGARDEN);
       const book = resolveLsgCatalogBook(products);
       if (!book.hasStockData) {
-        setError('El catálogo aún no trae existencias. Sincroniza desde Shopify y vuelve a generar el PDF.');
+        setError('El inventario aún no trae existencias. Sincroniza desde Shopify y vuelve a generar el PDF.');
         return;
       }
       if (!book.skus) {
@@ -115,7 +107,7 @@ export default function CatalogLifestyleGarden() {
       await mod.downloadBlob(blob, 'Catálogo LifestyleGarden.pdf');
       setResult(`Catálogo listo: ${book.models} modelo(s) en existencia.`);
     } catch (e) {
-      console.error('[CatalogLifestyleGarden] catalog pdf failed:', e);
+      console.error('[InventoryLifestyleGarden] catalog pdf failed:', e);
       setError(userMessageFor(e));
     } finally {
       setPdfBusy(false);
@@ -125,10 +117,11 @@ export default function CatalogLifestyleGarden() {
   const emptyCatalog = !searching && catsLoaded && !catsError && total === 0;
 
   return (
-    <>
+    <InventoryGate title="LifestyleGarden">
+      <InventorySubnav />
       <PageHeader
-        title="Catálogo LifestyleGarden"
-        subtitle={total > 0 ? `${total} producto(s)` : ' '}
+        title="LifestyleGarden"
+        subtitle={total > 0 ? `${total} producto(s) · sincronizado desde Shopify` : ' '}
         actions={(
           <>
             <button
@@ -168,8 +161,8 @@ export default function CatalogLifestyleGarden() {
       {emptyCatalog ? (
         <EmptyState
           icon={PackageSearch}
-          title="Catálogo vacío"
-          description="Sincroniza la tienda Shopify de LifestyleGarden para tener su catálogo buscable al cotizar."
+          title="Inventario vacío"
+          description="Sincroniza la tienda Shopify de LifestyleGarden para tener tu existencia aquí y buscable al cotizar."
           action={<button type="button" onClick={onSync} disabled={busy} className="btn-primary"><RefreshCw size={14} /> Sincronizar desde Shopify</button>}
         />
       ) : (
@@ -189,7 +182,7 @@ export default function CatalogLifestyleGarden() {
           ) : catsError ? (
             <EmptyState
               icon={PackageSearch}
-              title="No se pudo cargar el catálogo"
+              title="No se pudo cargar el inventario"
               description="La columna de marca aún no existe en la base de datos (la migración todavía no se ha aplicado en este deploy). Espera a que termine el despliegue y recarga."
             />
           ) : (
@@ -207,7 +200,7 @@ export default function CatalogLifestyleGarden() {
           )}
         </>
       )}
-    </>
+    </InventoryGate>
   );
 }
 

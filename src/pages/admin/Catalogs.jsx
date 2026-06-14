@@ -1,19 +1,19 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, ChevronRight, Shield, Store } from 'lucide-react';
+import { BookOpen, ChevronRight, Shield } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { catalogCategories } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
-import { BRAND_LIGNE_ROSET, BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
+import { BRAND_LIGNE_ROSET } from '../../lib/constants.js';
 
 /**
- * Catálogos — the section where the BRAND catalogs live. One card per brand;
- * each brand's page owns its catalog AND its particular import manner:
- *   • Ligne Roset      — the supplier price-list CSV upload.
- *   • LifestyleGarden  — synced from the team's Shopify store
- *     (www.lifestylegarden.do) with one click.
- * Adding a brand = one entry here + its page.
+ * Catálogos — the section where the BRAND catalogs for quoting live. One card
+ * per brand; each brand's page owns its catalog AND its particular import
+ * manner:
+ *   • Ligne Roset — the supplier price-list CSV upload.
+ * (LifestyleGarden is the team's OWN stock — it lives under Inventario, not
+ * here.) Adding a brand = one entry here + its page.
  */
 const BRANDS = [
   {
@@ -22,13 +22,6 @@ const BRANDS = [
     name: 'Ligne Roset',
     importHint: 'Se importa de la lista de precios del proveedor (CSV)',
     icon: BookOpen,
-  },
-  {
-    brand: BRAND_LIFESTYLEGARDEN,
-    to: '/admin/catalog/lifestylegarden',
-    name: 'LifestyleGarden',
-    importHint: 'Se sincroniza desde la tienda Shopify (lifestylegarden.do)',
-    icon: Store,
   },
 ];
 

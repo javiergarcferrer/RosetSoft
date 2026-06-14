@@ -42,7 +42,12 @@ const ADMIN_GROUP = {
     { to: '/admin/users', label: 'Usuarios', icon: Shield },
     { to: '/admin/materials', label: 'Materiales', icon: Layers },
     { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
-    { to: '/accounting/inventario', label: 'Inventario', icon: Boxes },
+    {
+      to: '/inventario/existencias',
+      label: 'Inventario',
+      icon: Boxes,
+      match: ['/inventario/existencias', '/inventario/lifestylegarden'],
+    },
     { to: '/marketing', label: 'Marketing', icon: Megaphone },
     { to: '/instagram-studio', label: 'Instagram Studio', icon: Instagram },
     { to: '/shopify/orders', label: 'Pedidos Shopify', icon: ShoppingBag },
