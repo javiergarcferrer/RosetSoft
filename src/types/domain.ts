@@ -435,6 +435,41 @@ export interface IgEvent {
   createdAt?: number;
 }
 
+/**
+ * One Instagram Direct (DM) message — the IG twin of WaMessage, the CRM inbox's
+ * second channel. Threads group by `threadKey` (the counterpart's IG-scoped id,
+ * IGSID), so a contact's inbound messages and our outbound replies land in one
+ * conversation. Inbound rows are written by the `meta-webhook` Edge Function
+ * (object=instagram, messaging[]); outbound by `meta-social`'s igSendDm. Meta's
+ * 24h standard-messaging window applies just like WhatsApp — the composer
+ * renders off the last inbound time.
+ */
+export interface IgMessage {
+  id: string;
+  profileId: string;
+  direction: 'in' | 'out';
+  /** Meta's message id (mid.…) — dedupe + delivery join key. */
+  igMessageId?: string | null;
+  /** The counterpart's IG-scoped id (IGSID) — the thread identity. */
+  threadKey: string;
+  senderId?: string | null;
+  recipientId?: string | null;
+  /** The counterpart's IG @-handle (resolved best-effort from the webhook). */
+  username?: string | null;
+  name?: string | null;
+  kind?: string;
+  body?: string;
+  /** in: received · out: sent, or failed. */
+  status?: string;
+  error?: string | null;
+  payload?: unknown;
+  /** Storage path (images bucket) of attached media, persisted at receipt. */
+  mediaPath?: string | null;
+  mediaMime?: string | null;
+  readAt?: number | null;
+  createdAt?: number;
+}
+
 /** A WhatsApp message-template rejection captured from the webhook, for display. */
 export interface WaTemplateRejection {
   id: string;

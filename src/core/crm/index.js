@@ -15,6 +15,11 @@ export {
   fillQuickReply,
 } from './views/inbox.js';
 export {
+  IG_WINDOW_MS,
+  resolveIgConversations,
+  resolveIgThread,
+} from './views/igInbox.js';
+export {
   VAR_SOURCES,
   resolveBroadcastAudience,
   buildBroadcastRecipients,

@@ -1,10 +1,12 @@
-// meta-webhook — Instagram real-time events (comments + mentions).
+// meta-webhook — Instagram real-time events (Direct messages + comments + mentions).
 //
-// Meta calls this the instant someone comments on or @-mentions our IG account
-// (after the page is subscribed via meta-social `subscribeWebhooks`). We verify
-// the handshake, persist each event to `ig_events` with the service role, and
-// answer 200 fast — the Studio reads the table for a live activity feed instead
-// of polling the Graph API.
+// Meta calls this the instant someone DMs, comments on, or @-mentions our IG
+// account (after the account is subscribed via meta-social `subscribeWebhooks`).
+// We verify the handshake, persist each event with the service role, and answer
+// 200 fast:
+//   • DIRECT messages (entry[].messaging[]) → `ig_messages` (the CRM Instagram
+//     inbox reads the table — webhook-fed, like wa_messages).
+//   • comments / mentions (entry[].changes[]) → `ig_events` (the Studio live feed).
 //
 // POST payloads are authenticated by the X-Hub-Signature-256 header — an
 // HMAC-SHA256 of the raw body with the Meta App Secret, exactly as wa-webhook
@@ -12,9 +14,9 @@
 // (meta_social_config.ig_app_secret), which may differ from the WhatsApp app
 // (whatsapp_config.app_secret). We accept a signature from EITHER so the feed
 // works whether the two share one Meta app or not. No valid signature → 401, so
-// nobody who merely knows the URL can inject forged comments/mentions into the
-// JARVIS live feed. Without a secret saved we can't authenticate Meta, so
-// inbound processing stays off until one is pasted in Configuración.
+// nobody who merely knows the URL can inject forged events into the JARVIS feed.
+// Without a secret saved we can't authenticate Meta, so inbound processing stays
+// off until one is pasted in Configuración.
 //
 // Setup (Meta App Dashboard → Instagram → Webhooks): callback URL = this
 // function's URL, verify token = META_WEBHOOK_VERIFY_TOKEN (default 'rosetsoft-ig').
@@ -23,6 +25,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || 'rosetsoft-ig';
 const TEAM = 'team';
+const IG_API = 'https://graph.instagram.com/v23.0';
 
 /** HMAC-SHA256 verify of the raw body against the App Secret (the twin of
  *  wa-webhook's check — the Deno functions don't share modules, so the rule is
@@ -40,6 +43,20 @@ async function validSignature(raw: string, header: string | null, secret: string
   let diff = 0;
   for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ given.charCodeAt(i);
   return diff === 0;
+}
+
+/** The renderable text + kind of an inbound Direct message. */
+function dmContent(message: Record<string, any>): { kind: string; body: string } {
+  if (message?.text) return { kind: 'text', body: String(message.text).slice(0, 1000) };
+  const att = (message?.attachments || [])[0];
+  const type = String(att?.type || '').toLowerCase();
+  if (type === 'image') return { kind: 'image', body: '📷 Imagen' };
+  if (type === 'video') return { kind: 'video', body: '🎬 Video' };
+  if (type === 'audio') return { kind: 'audio', body: '🎤 Audio' };
+  if (type === 'share') return { kind: 'share', body: '↗️ Publicación compartida' };
+  if (type === 'story_mention') return { kind: 'story_mention', body: 'Te mencionó en su historia' };
+  if (message?.is_deleted) return { kind: 'deleted', body: 'Mensaje eliminado' };
+  return { kind: 'unknown', body: '' };
 }
 
 Deno.serve(async (req) => {
@@ -66,11 +83,12 @@ Deno.serve(async (req) => {
   // Authenticate the payload BEFORE trusting (or persisting) any of it. Read the
   // raw bytes (not req.json()) so the HMAC is over exactly what Meta signed.
   // Accept a signature from the Instagram app secret OR the WhatsApp app secret
-  // (they may be the same Meta app, or two — see header note).
+  // (they may be the same Meta app, or two — see header note). The same
+  // meta_social_config read also gives us our IG id + token for DM enrichment.
   const raw = await req.text();
   const sig = req.headers.get('x-hub-signature-256');
   const [{ data: igCfg }, { data: waCfg }] = await Promise.all([
-    admin.from('meta_social_config').select('ig_app_secret').eq('profile_id', TEAM).maybeSingle(),
+    admin.from('meta_social_config').select('ig_app_secret, ig_user_id, ig_access_token').eq('profile_id', TEAM).maybeSingle(),
     admin.from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle(),
   ]);
   const igSecret = (igCfg as { ig_app_secret?: string } | null)?.ig_app_secret || '';
@@ -81,16 +99,79 @@ Deno.serve(async (req) => {
     return new Response('invalid signature', { status: 401 });
   }
 
-  let body: { object?: string; entry?: Array<{ changes?: Array<{ field?: string; value?: Record<string, unknown> }> }> } = {};
+  const igUserId = (igCfg as { ig_user_id?: string } | null)?.ig_user_id || '';
+  const igToken = (igCfg as { ig_access_token?: string } | null)?.ig_access_token || '';
+
+  let body: {
+    object?: string;
+    entry?: Array<{
+      id?: string;
+      changes?: Array<{ field?: string; value?: Record<string, unknown> }>;
+      messaging?: Array<Record<string, any>>;
+    }>;
+  } = {};
   try { body = JSON.parse(raw); } catch { /* tolerate empty */ }
 
-  const rows: Array<Record<string, unknown>> = [];
+  // Best-effort @-handle / name for an inbound DM sender (IG User Profile API).
+  const nameCache = new Map<string, { username: string | null; name: string | null }>();
+  async function profileOf(igsid: string): Promise<{ username: string | null; name: string | null }> {
+    if (nameCache.has(igsid)) return nameCache.get(igsid)!;
+    let out: { username: string | null; name: string | null } = { username: null, name: null };
+    if (igToken && igsid) {
+      try {
+        const res = await fetch(`${IG_API}/${igsid}?fields=name,username&access_token=${encodeURIComponent(igToken)}`);
+        const d = await res.json().catch(() => ({}));
+        if (res.ok && !d?.error) out = { username: d?.username || null, name: d?.name || null };
+      } catch { /* leave null */ }
+    }
+    nameCache.set(igsid, out);
+    return out;
+  }
+
+  const eventRows: Array<Record<string, unknown>> = [];  // ig_events (comments/mentions)
+  const dmRows: Array<Record<string, unknown>> = [];     // ig_messages (Direct)
+
   for (const entry of body.entry || []) {
+    // ── Direct messages (Messenger-style messaging array) → ig_messages ──
+    for (const ev of entry.messaging || []) {
+      const message = (ev?.message || {}) as Record<string, any>;
+      const mid = message?.mid ? String(message.mid) : null;
+      const senderId = String(ev?.sender?.id || '');
+      const recipientId = String(ev?.recipient?.id || '');
+      if (!senderId && !recipientId) continue;
+      // An echo (is_echo) is a message WE sent (app or IG app) — log it outbound
+      // so the inbox shows both sides. The COUNTERPART (thread identity) is
+      // whoever isn't our own IG account.
+      const isEcho = message?.is_echo === true || senderId === igUserId;
+      const counterpart = isEcho ? recipientId : senderId;
+      if (!counterpart) continue;
+      const { kind, body: text } = dmContent(message);
+      const prof = isEcho ? { username: null, name: null } : await profileOf(counterpart);
+      const tsMs = Number(ev?.timestamp) || Date.now();
+      dmRows.push({
+        id: crypto.randomUUID(),
+        profile_id: TEAM,
+        direction: isEcho ? 'out' : 'in',
+        ig_message_id: mid,
+        thread_key: counterpart,
+        sender_id: senderId || null,
+        recipient_id: recipientId || null,
+        username: prof.username,
+        name: prof.name,
+        kind,
+        body: text,
+        status: isEcho ? 'sent' : 'received',
+        payload: ev,
+        created_at: new Date(tsMs).toISOString(),
+      });
+    }
+
+    // ── comments / mentions → ig_events (the Studio live feed) ──
     for (const change of entry.changes || []) {
       const field = change.field;
       const v = (change.value || {}) as Record<string, any>;
       if (field === 'comments') {
-        rows.push({
+        eventRows.push({
           id: crypto.randomUUID(), profile_id: TEAM, kind: 'comment',
           object_id: v.id ? String(v.id) : null,
           media_id: v.media?.id ? String(v.media.id) : null,
@@ -99,7 +180,7 @@ Deno.serve(async (req) => {
           payload: v, created_at: new Date().toISOString(),
         });
       } else if (field === 'mentions') {
-        rows.push({
+        eventRows.push({
           id: crypto.randomUUID(), profile_id: TEAM, kind: 'mention',
           object_id: v.comment_id ? String(v.comment_id) : null,
           media_id: v.media_id ? String(v.media_id) : null,
@@ -108,8 +189,14 @@ Deno.serve(async (req) => {
       }
     }
   }
-  if (rows.length) {
-    try { await admin.from('ig_events').insert(rows); } catch { /* never fail the webhook */ }
+
+  // Dedupe DMs on the message id (Meta retries) — the partial unique index backs this.
+  if (dmRows.length) {
+    try { await admin.from('ig_messages').upsert(dmRows, { onConflict: 'ig_message_id', ignoreDuplicates: true }); }
+    catch (e) { console.error('[meta-webhook] dm insert failed:', (e as Error).message); }
+  }
+  if (eventRows.length) {
+    try { await admin.from('ig_events').insert(eventRows); } catch { /* never fail the webhook */ }
   }
 
   // Always 200 — Meta retries on non-2xx and will disable a flaky endpoint.

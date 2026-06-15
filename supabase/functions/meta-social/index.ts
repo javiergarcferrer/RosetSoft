@@ -52,6 +52,7 @@ const SCOPES = [
   'instagram_business_content_publish',
   'instagram_business_manage_comments',
   'instagram_business_manage_insights',
+  'instagram_business_manage_messages',
 ].join(',');
 
 type CarouselItem = { imageUrl?: string; videoUrl?: string };
@@ -89,6 +90,11 @@ type Body = {
   setCommentVisibility?: { commentId?: string; hide?: boolean };
   deleteComment?: { commentId?: string };
   subscribeWebhooks?: boolean;
+  // ── Instagram Direct (DM) inbox ──
+  /** Send a Direct message to a contact (within Meta's 24h window). */
+  igSendDm?: { recipientId?: string; text?: string };
+  /** Pull recent Direct conversations into ig_messages (history backfill). */
+  igBackfill?: boolean;
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -117,6 +123,21 @@ async function igPost(path: string, token: string, params: Record<string, string
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ ...params, access_token: token }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) {
+    throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+  }
+  return data;
+}
+
+/** POST JSON to an IG Graph endpoint (the Direct messaging send takes a JSON
+ *  body, not a form). */
+async function igPostJson(path: string, token: string, payload: Record<string, unknown>) {
+  const res = await fetch(`${IG_API}/${path}?access_token=${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.error) {
@@ -700,8 +721,77 @@ Deno.serve(async (req) => {
     const err = await requireAdmin();
     if (err) return json({ ok: false, error: err }, 403);
     try {
-      const r = await igPost(`${igId}/subscribed_apps`, token, { subscribed_fields: 'comments,mentions' });
-      return json({ ok: !!r?.success, fields: 'comments,mentions' });
+      const fields = 'comments,mentions,messages';
+      const r = await igPost(`${igId}/subscribed_apps`, token, { subscribed_fields: fields });
+      return json({ ok: !!r?.success, fields });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // Instagram Direct (DM) inbox.
+  // ════════════════════════════════════════════════════════════════════
+
+  // ── igSendDm: reply to a contact within Meta's 24h window. Stores the
+  // outbound row in ig_messages so the inbox shows it immediately. ─────────
+  if (body.igSendDm) {
+    const recipientId = String(body.igSendDm.recipientId || '').trim();
+    const text = String(body.igSendDm.text || '').trim();
+    if (!recipientId || !text) return json({ ok: false, error: 'recipientId y text requeridos' }, 400);
+    try {
+      const r = await igPostJson('me/messages', token, { recipient: { id: recipientId }, message: { text } });
+      const messageId = String(r?.message_id || '');
+      await admin.from('ig_messages').insert({
+        id: crypto.randomUUID(), profile_id: TEAM, direction: 'out',
+        ig_message_id: messageId || null, thread_key: recipientId,
+        sender_id: igId, recipient_id: recipientId,
+        kind: 'text', body: text, status: 'sent',
+        created_at: new Date().toISOString(),
+      });
+      return json({ ok: true, id: messageId });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
+
+  // ── igBackfill: pull recent Direct conversations into ig_messages, so the
+  // inbox has history before/independent of live webhooks. Dedupes on the
+  // message id (the partial unique index the webhook also relies on). ──────
+  if (body.igBackfill) {
+    try {
+      const convos = await igGet('me/conversations', token, {
+        platform: 'instagram',
+        fields: 'participants,updated_time,messages.limit(25){id,created_time,from,to,message}',
+        limit: '20',
+      });
+      const rows: Array<Record<string, unknown>> = [];
+      for (const c of (convos?.data || [])) {
+        const parts = (c?.participants?.data || []) as Array<{ id?: string; username?: string }>;
+        const other = parts.find((p) => String(p?.id) !== String(igId)) || parts[0] || {};
+        const threadKey = String(other?.id || '');
+        if (!threadKey) continue;
+        for (const m of (c?.messages?.data || [])) {
+          const fromId = String(m?.from?.id || '');
+          const outbound = fromId === String(igId);
+          rows.push({
+            id: crypto.randomUUID(), profile_id: TEAM,
+            direction: outbound ? 'out' : 'in',
+            ig_message_id: m?.id ? String(m.id) : null,
+            thread_key: threadKey,
+            sender_id: fromId || null,
+            recipient_id: outbound ? threadKey : igId,
+            username: other?.username ? String(other.username) : null,
+            kind: 'text', body: m?.message ? String(m.message) : '',
+            status: outbound ? 'sent' : 'received',
+            read_at: new Date().toISOString(), // history is read; never blows up unread badges
+            payload: m,
+            created_at: m?.created_time ? new Date(m.created_time).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+      if (rows.length) await admin.from('ig_messages').upsert(rows, { onConflict: 'ig_message_id', ignoreDuplicates: true });
+      return json({ ok: true, count: rows.length });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }

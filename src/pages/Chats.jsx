@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGoBack } from '../context/NavMemory.jsx';
-import { MessageCircle, Loader2, Search, Plus, Megaphone, Users } from 'lucide-react';
+import { MessageCircle, Loader2, Search, Plus, Megaphone, Users, Instagram } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
 import ChatThread, { StatusTicks, initials, timeLabel } from '../components/whatsapp/ChatThread.jsx';
 import GroupsPanel from '../components/whatsapp/GroupsPanel.jsx';
+import InstagramInbox from '../components/instagram/InstagramInbox.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
@@ -198,7 +199,15 @@ export default function Chats() {
     }
   }, [selectedKey, messages]);
 
+  const [channel, setChannel] = useState('whatsapp');
   const connected = !!settings?.whatsappConnectedAt;
+
+  // The CRM inbox has two channels — WhatsApp (this file) and Instagram Direct.
+  // Instagram renders its own self-contained surface (its own ig_messages data
+  // + composer), so every WhatsApp path below stays untouched.
+  if (channel === 'instagram') {
+    return <InstagramInbox onBack={() => setChannel('whatsapp')} />;
+  }
 
   if (loaded && !connected && !messages.length) {
     return (
@@ -233,6 +242,9 @@ export default function Chats() {
           subtitle={settings?.whatsappDisplayNumber ? `Número del negocio · ${settings.whatsappDisplayNumber}` : 'Conversaciones con clientes y profesionales'}
           actions={
             <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setChannel('instagram')} className="btn-secondary text-sm inline-flex items-center gap-1.5" title="Mensajes directos de Instagram">
+                <Instagram size={15} /> Instagram
+              </button>
               <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5">
                 <Megaphone size={15} /> Difusión
               </Link>

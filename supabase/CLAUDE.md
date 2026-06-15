@@ -31,7 +31,7 @@ purchases · import_liquidations · import_expedientes · ecf_sequences ·
 payments · fiscal_periods · employees · payroll_runs`. Comms/AI:
 `wa_messages · wa_campaigns · wa_conversation_state · wa_groups ·
 wa_group_participants · wa_template_rejections · scheduled_posts · ig_events ·
-claude_messages`. **WhatsApp groups** (Cloud API Groups): `wa_groups` mirrors
+ig_messages · claude_messages`. **WhatsApp groups** (Cloud API Groups): `wa_groups` mirrors
 each group the number belongs to (subject/description/invite_link/`status`
 active|archived — archive is a LOCAL inbox hide, never a Meta leave),
 `wa_group_participants` (`id = ${group_id}:${phoneKey}`, `left_at` null ⇒ active)
@@ -121,12 +121,15 @@ conventions).
   token 401s on the other. Non-sensitive mirrors on settings:
   `shopify_domain/connected_at` (alcover), `shopify_lsg_*` (LSG).
 - **meta_social_config** WRITE-ONLY (no client policies; only the `meta-social`
-  Edge Function touches it with the service role — its `link` mode validates a
-  pasted Meta Business token, discovers the Page (+ page token), the linked IG
-  business account and the ad account, and persists them). Backs the JARVIS
-  "Social · Meta" panel (IG/FB analytics, ad results, scheduled posts).
-  Non-sensitive mirrors on settings: `meta_social_connected_at`,
-  `meta_social_page_name`, `meta_social_ig_username`.
+  Edge Function touches it with the service role). **Instagram-Login** model:
+  stores the Instagram app creds (`ig_app_id`/`ig_app_secret`) + the long-lived
+  IG user token (`ig_access_token`/`ig_token_expires_at`, auto-refreshed) minted
+  by the OAuth round-trip; calls go to graph.instagram.com (no Facebook Page).
+  The legacy `page_*`/`access_token`/`ad_account_id` columns are retained but
+  unused (additive — no pasted credential is erased). Backs the JARVIS "Social ·
+  Instagram" panel + the Instagram Direct inbox (`ig_messages`). Non-sensitive
+  mirrors on settings: `meta_social_connected_at`, `meta_social_ig_username`,
+  `meta_social_ig_app_id`.
 
 ## Cross-cutting
 - **RLS:** single-tenant "team can write" — most tables: `for all to

@@ -164,9 +164,10 @@ Server side = Deno Edge Functions (`supabase/functions/*`): public surfaces
 `quote-share` (client quote link + picks) and `store` (storefront data);
 integrations `shopify-sync` (inventory mirror + LSG catalog import),
 `wa-send`/`wa-webhook` (WhatsApp send + inbound), `wa-draft` (Claude reply
-suggestions — never sends, human-in-the-loop), `meta-social` (Instagram +
-Facebook + Ads into JARVIS), `meta-webhook` (IG comments/mentions → `ig_events`,
-live feed), `ig-publish-worker` (IG scheduler worker — pg_cron fires due
+suggestions — never sends, human-in-the-loop), `meta-social` (Instagram
+publish/insights/comments/Direct via Instagram-Login OAuth — no Facebook Page),
+`meta-webhook` (IG Direct messages → `ig_messages`; comments/mentions →
+`ig_events`), `ig-publish-worker` (IG scheduler worker — pg_cron fires due
 `scheduled_posts`, since IG has no native scheduling), `ecf-send` (DGII e-CF),
 `bpd-rate` (USD→DOP rate), `hl-track` (container tracking), `lr-catalog`,
 `rnc-lookup`, `swatch-proxy`, `claude-chat` (JARVIS chat), `invite-user`,

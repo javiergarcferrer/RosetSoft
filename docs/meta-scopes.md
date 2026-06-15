@@ -32,7 +32,7 @@ Legend: ✅ wired today · ⬜ headroom (could be requested later).
 | `instagram_business_content_publish` | ✅ | Publish from device upload — feed image, Reel, image/video Story, 2–10 carousels (`/media` → `/media_publish`), plus alt text, collaborators (≤3) and first-comment automation. Backs the Marketing composer and the scheduler (`ig-publish-worker`). |
 | `instagram_business_manage_comments` | ✅ | Read + reply + hide/unhide + delete comments (Marketing triage + Studio moderation), and the realtime comment/mention feed (`subscribeWebhooks` → `/{ig-user}/subscribed_apps` → `meta-webhook` → `ig_events`). |
 | `instagram_business_manage_insights` | ✅ | Account insights (reach, follower growth, profile-link taps, views/engagement totals, reach by follower type), per-post insights, follower demographics (gender/age/country/city), the content-publishing quota. |
-| `instagram_business_manage_messages` | ⬜ | Instagram DMs → an Instagram thread in the CRM inbox (not wired yet). |
+| `instagram_business_manage_messages` | ✅ | **Instagram Direct (DM) inbox** — receive DMs via `meta-webhook` (object=instagram, `messaging[]` → `ig_messages`) and reply within Meta's 24h window via `meta-social` `igSendDm`. The CRM inbox's second channel, beside WhatsApp. Requested in the OAuth consent scopes. |
 
 ## OAuth flow (Instagram Business Login)
 1. Admin pastes the **Instagram App ID + App Secret** in Configuración →

@@ -39,6 +39,7 @@ import type {
   ClaudeMessage,
   ScheduledPost,
   IgEvent,
+  IgMessage,
   WaTemplateRejection,
 } from '../types/domain.ts';
 
@@ -111,6 +112,7 @@ const TABLES = {
   claudeMessages:     { db: 'claude_messages',     pk: 'id' },
   scheduledPosts:     { db: 'scheduled_posts',     pk: 'id' },
   igEvents:           { db: 'ig_events',           pk: 'id' },
+  igMessages:         { db: 'ig_messages',         pk: 'id' },
   waTemplateRejections: { db: 'wa_template_rejections', pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
@@ -159,6 +161,7 @@ export interface TableRowMap {
   claudeMessages: ClaudeMessage;
   scheduledPosts: ScheduledPost;
   igEvents: IgEvent;
+  igMessages: IgMessage;
   waTemplateRejections: WaTemplateRejection;
 }
 
