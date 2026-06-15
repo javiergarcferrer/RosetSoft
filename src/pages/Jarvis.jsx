@@ -520,49 +520,54 @@ export default function Jarvis() {
 
   return (
     <div className="jarvis">
-      {/* ── HUD header — centered wordmark, controls on their own row ─── */}
-      <header className="jv-header px-1 pb-4">
-        <div className="jv-wordmark">
+      {/* ── HUD command bar — one compact row owns the top edge ───────── */}
+      <header className="jv-header">
+        <div className="jv-brand">
+          <span className="jv-core" aria-hidden="true" />
           <h1 className="jv-title">JARVIS</h1>
+          <span className="jv-brand-tag jv-mono">centro de mando</span>
         </div>
-        <div className="jv-header-bar flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="jv-mono text-xs" style={{ color: 'var(--jv-muted)' }}>
-            <div className="flex items-center gap-2">
-              <span style={{ color: 'var(--jv-fg)', fontSize: '1.05rem' }}>
-                {clock.toLocaleTimeString('es-DO', { hour12: false })}
-              </span>
-              <StatusChip
-                status={navigator.onLine ? 'online' : 'fail'}
-                label={navigator.onLine ? 'Enlace' : 'Sin red'}
-              />
-            </div>
-            <div className="hidden sm:block">
-              {clock.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="jv-btn flex-none"
-              onClick={() => setPaletteOpen(true)}
-              aria-label="Abrir paleta de comandos"
-            >
-              <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
-            </button>
-            <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
-              <X size={14} /> Salir
-            </Link>
-          </div>
+        <div className="jv-statusline jv-mono">
+          <span className="jv-clock">{clock.toLocaleTimeString('es-DO', { hour12: false })}</span>
+          <span className="jv-readout hidden md:flex">
+            <i>FECHA</i>
+            <b>{clock.toLocaleDateString('es-DO', { day: '2-digit', month: 'short' }).toUpperCase()}</b>
+          </span>
+          <span className="jv-readout hidden lg:flex">
+            <i>SISTEMAS</i>
+            <b className={`jv-${integrity >= 80 ? 'online' : integrity >= 50 ? 'stale' : 'fail'}`}>
+              {integrityShown}%
+            </b>
+          </span>
+          <StatusChip
+            status={navigator.onLine ? 'online' : 'fail'}
+            label={navigator.onLine ? 'Enlace' : 'Sin red'}
+          />
+        </div>
+        <div className="jv-header-actions">
+          <button
+            type="button"
+            className="jv-btn flex-none"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Abrir paleta de comandos"
+          >
+            <Command size={13} /> <span className="jv-mono" style={{ fontSize: '0.7rem' }}>K</span>
+          </button>
+          <Link to="/" className="jv-btn flex-none" aria-label="Salir de JARVIS">
+            <X size={14} /> Salir
+          </Link>
         </div>
       </header>
 
-      <div className="jv-grid grid gap-3 xl:grid-cols-[280px_1fr_300px]">
+      <div className="jv-grid">
         {/* ── left rail: reactor + stats + integration status list ──── */}
         <div className="jv-col-left flex flex-col gap-3 min-h-0">
-          <section className="jv-panel p-3">
+          <section className="jv-panel jv-reactor p-3">
             <div className="jv-gauge">
+              <i className="jv-gauge-sweep" aria-hidden="true" />
               <svg viewBox="0 0 120 120" aria-hidden="true">
                 <circle className="track" cx="60" cy="60" r="52" />
+                <circle className="ticks" cx="60" cy="60" r="52" />
                 <circle
                   className="value"
                   cx="60"
@@ -645,14 +650,14 @@ export default function Jarvis() {
 
         {/* ── center: business pulse + social ──────────────────────── */}
         <div className="jv-col-center flex flex-col gap-3 min-h-0">
-        <section className="jv-panel">
+        <section className="jv-panel jv-flex-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
             <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>USD · datos reales en vivo</span>
           </div>
           {!bizLoaded ? (
             // Skeleton in the final layout's shape — no spinners, no jumps.
-            <div className="p-4 space-y-4">
+            <div className="jv-fill p-4 space-y-4">
               <div className="grid gap-2.5 sm:grid-cols-3">
                 {[0, 1, 2].map((i) => (
                   <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
@@ -671,7 +676,7 @@ export default function Jarvis() {
               </div>
             </div>
           ) : (
-          <div className="p-4 space-y-4">
+          <div className="jv-fill p-4 space-y-4">
             {/* KPI strip — each figure traces to rows via core/quote/totals */}
             <div className="grid gap-2.5 sm:grid-cols-3">
               <div className="jv-kpi">
@@ -840,7 +845,7 @@ export default function Jarvis() {
         </section>
 
         {/* ── social: Instagram + Facebook + Ads (Meta Graph) ──────── */}
-        <section className="jv-panel flex-1">
+        <section className="jv-panel jv-flex-panel">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><Share2 size={12} /> Social · Meta</span>
             {socialLinked ? (
@@ -860,7 +865,7 @@ export default function Jarvis() {
           </div>
 
           {!socialLinked ? (
-            <div className="p-4">
+            <div className="jv-fill p-4">
               <p className="text-xs" style={{ color: 'var(--jv-muted)' }}>
                 Conecta tu cuenta de Instagram en Configuración para ver aquí seguidores, alcance y publicaciones.
               </p>
@@ -869,14 +874,14 @@ export default function Jarvis() {
               </button>
             </div>
           ) : socialError ? (
-            <div className="p-4">
+            <div className="jv-fill p-4">
               <div className="text-xs" style={{ color: 'var(--jv-danger)' }}>{socialError}</div>
               <button type="button" className="jv-btn mt-3" onClick={loadSocial}>
                 <RefreshCw size={12} /> Reintentar
               </button>
             </div>
           ) : !social ? (
-            <div className="p-4 grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+            <div className="jv-fill p-4 grid gap-2.5 grid-cols-2 sm:grid-cols-3">
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
                   <Skeleton w="55%" h="0.6rem" />
@@ -885,7 +890,7 @@ export default function Jarvis() {
               ))}
             </div>
           ) : (
-            <div className="p-4 space-y-4">
+            <div className="jv-fill p-4 space-y-4">
               <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
                 <div className="jv-kpi">
                   <span className="label">Seguidores IG</span>
@@ -1007,9 +1012,9 @@ export default function Jarvis() {
 
         {/* ── right column: live feeds ─────────────────────────────── */}
         <div className="jv-col-right flex flex-col gap-3 min-h-0">
-          <section className="jv-panel">
+          <section className="jv-panel jv-flex-panel">
             <div className="jv-panel-head"><Activity size={12} /> Actividad comercial</div>
-            <div className="jv-timeline p-3 max-h-64 overflow-y-auto">
+            <div className="jv-timeline jv-fill p-3 overflow-y-auto">
               {!bizLoaded && [0, 1, 2, 3].map((i) => (
                 <div key={i} className="trow">
                   <span className="tdot" />
@@ -1034,9 +1039,9 @@ export default function Jarvis() {
             </div>
           </section>
 
-          <section className="jv-panel flex-1 flex flex-col min-h-0">
+          <section className="jv-panel jv-flex-panel">
             <div className="jv-panel-head"><Cpu size={12} /> Cambios en vigor</div>
-            <div className="jv-feed jv-mono p-3 flex-1 min-h-0 overflow-y-auto" style={{ maxHeight: '20rem' }}>
+            <div className="jv-feed jv-fill jv-mono p-3 overflow-y-auto">
               {BUILD.builtAt ? (
                 <div className="item">
                   <span className="tag">deploy</span>
@@ -1059,11 +1064,9 @@ export default function Jarvis() {
               )}
             </div>
           </section>
-        </div>
-      </div>
 
-      {/* ── Claude uplink console ─────────────────────────────────────── */}
-      <section className="jv-panel mt-3">
+          {/* ── Claude uplink — the command line, inside the right rail ── */}
+          <section className="jv-panel jv-console-panel">
         <div className="jv-panel-head justify-between">
           <span className="flex items-center gap-2"><Bot size={12} /> Enlace Claude</span>
           <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>
@@ -1074,7 +1077,7 @@ export default function Jarvis() {
                 : 'Canal asíncrono — Claude Code atiende las directivas con tu cuenta actual, sin llave API'}
           </span>
         </div>
-        <div className="jv-console p-4 max-h-80 overflow-y-auto">
+        <div className="jv-console jv-fill p-4 overflow-y-auto">
           {thread.length === 0 && (
             <div className="row">
               <span className="who claude">claude</span>
@@ -1178,6 +1181,8 @@ export default function Jarvis() {
           )}
         </div>
       </section>
+        </div>
+      </div>
 
       <CommandPalette
         open={paletteOpen}
