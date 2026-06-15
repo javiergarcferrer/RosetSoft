@@ -11,7 +11,8 @@ RosetSoft's Meta surface is now **two independent integrations**:
   talks to `graph.instagram.com`.
 
 The old **Facebook Pages** surface was **removed** (no Page publishing/insights,
-no catalogs, no `pages_*` / `business_management`). The **one** Facebook-side
+no IG/FB Shopping catalogs, no `pages_*` / `business_management`). The **one**
+Facebook-side
 piece that stays is **Instagram ad management** — Meta exposes ad reads +
 pause/resume only through the **Marketing API** (`graph.facebook.com`), which the
 Instagram-Login token can't touch, so it rides the **Business/system-user token**
@@ -26,6 +27,7 @@ Legend: ✅ wired today · ⬜ headroom (could be requested later).
 |---|---|---|
 | `whatsapp_business_messaging` | ✅ | Send/receive WhatsApp messages (CRM inbox + campaign sends). |
 | `whatsapp_business_management` | ✅ | Manage the WABA: message templates, phone numbers, registration. |
+| `catalog_management` | ✅ | The in-chat **Commerce catalog** — browse the connected catalog's products (`GET /{catalog_id}/products`) and send product / "view catalog" messages (`wa-send`). The System User token must carry it alongside the two WhatsApp scopes (`wa-send` validates this and errors otherwise). |
 | `whatsapp_business_manage_events` | 🟡 | WhatsApp conversational/marketing analytics events. |
 | `paid_marketing_messages` | ⬜ | Paid WhatsApp marketing messages → future paid campaign tier. |
 
