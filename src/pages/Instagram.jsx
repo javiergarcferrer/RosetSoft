@@ -1,101 +1,208 @@
-// Instagram — one home for the two Instagram surfaces, behind a tab toggle:
-//   • Marketing — publish, schedule, comment triage, ad campaigns.
-//   • Studio    — audience intelligence, content grid + per-post insights,
-//                 best-time heatmap, stories, mentions, real-time activity.
-//
-// The two pages are kept intact; this shell switches between them AND owns the
-// shared chrome: one unified header (title · @handle · the single live pill)
-// plus the segmented tab control. Only the ACTIVE tab is mounted, so only that
-// surface's Graph read fires (Marketing's `snapshot` vs Studio's `igStudio`) —
-// no double-fetch; the active tab publishes its fetch status up to the header
-// via InstagramLiveProvider. `/marketing` and `/instagram-studio` both route
-// here, opening the matching tab, so old links and the JARVIS deep-link work.
-import { useEffect, useState } from 'react';
+// Instagram — ONE command-center screen for the whole Meta surface (replaces
+// the old Marketing/Studio tab split). It fires the two meta-social reads in
+// parallel — `snapshot` (comments, ad campaigns, recent posts) and `igStudio`
+// (profile, 28-day KPIs, audience, best-time, content grid, stories, mentions)
+// — and lays them out as an interactive dashboard:
+//   • header: the connected account + a single live pill + a "Publicar" button
+//     that opens the composer in a modal (no more wasted half-screen).
+//   • KPI row → content grid (click a post for insights) beside an interactive
+//     rail that switches Comentarios / Campañas / Actividad → audience + best-time.
+// Tokens never reach the browser; every read/action goes through the Edge
+// Function. `/marketing` and `/instagram-studio` both route here (old links).
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Megaphone, Sparkles, Instagram as InstagramIcon } from 'lucide-react';
-import Marketing from './Marketing.jsx';
-import InstagramStudio from './InstagramStudio.jsx';
+import { Instagram as InstagramIcon, Plus, RefreshCw } from 'lucide-react';
+import ImageView from '../components/ImageView.tsx';
+import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { InstagramLiveProvider, LivePill, freshLabel } from '../components/instagram/chrome.jsx';
+import { supabase } from '../db/supabaseClient.js';
+import { resolveSocialPulse, resolveIgStudio } from '../core/jarvis/index.js';
+import { Stat, LivePill, freshLabel, fmt, pctFmt } from '../components/instagram/chrome.jsx';
+import AudienceCard from '../components/instagram/AudienceCard.jsx';
+import BestTimeCard from '../components/instagram/BestTimeCard.jsx';
+import ContentGrid from '../components/instagram/ContentGrid.jsx';
+import EngagementPanel from '../components/instagram/EngagementPanel.jsx';
+import ComposerCard from '../components/instagram/ComposerCard.jsx';
 
-const TABS = [
-  { id: 'marketing', label: 'Marketing', icon: Megaphone },
-  { id: 'studio', label: 'Studio', icon: Sparkles },
-];
+// Settle one meta-social result into { raw } or { error }. okGuard flags a 200
+// body that still carries a failure (e.g. { configured:false } / { ok:false }).
+function pick(res, okGuard) {
+  if (res.status !== 'fulfilled') return { error: res.reason?.message || 'sin respuesta' };
+  const { data, error } = res.value;
+  if (error) return { error: error.message || 'sin respuesta' };
+  if (!data || okGuard(data)) return { error: data?.error || 'sin respuesta' };
+  return { raw: data };
+}
 
-export default function Instagram({ initialTab = 'marketing' }) {
+export default function Instagram() {
   const { settings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
   const username = settings?.metaSocialIgUsername;
-  const [tab, setTab] = useState(initialTab === 'studio' ? 'studio' : 'marketing');
 
-  // The active tab publishes its live-fetch status here (loading / freshness /
-  // refresh handler) so the header can show ONE live pill for whichever tab is
-  // mounted. null = nothing published yet (or not connected).
-  const [live, setLive] = useState(null);
+  // Two independent reads, kept apart so one failing never blanks the other.
+  const [snap, setSnap] = useState({ raw: null, error: null, at: null });
+  const [stud, setStud] = useState({ raw: null, error: null, at: null });
+  const [loading, setLoading] = useState(false);
+  const busy = useRef(false);
+  const load = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setLoading(true);
+    const [snapRes, studRes] = await Promise.allSettled([
+      supabase.functions.invoke('meta-social', { body: { snapshot: true } }),
+      supabase.functions.invoke('meta-social', { body: { igStudio: true } }),
+    ]);
+    const s = pick(snapRes, (d) => d.configured === false || d.error);
+    setSnap((prev) => (s.raw ? { raw: s.raw, error: null, at: Date.now() } : { ...prev, error: s.error }));
+    const t = pick(studRes, (d) => d.ok === false || d.error);
+    setStud((prev) => (t.raw ? { raw: t.raw, error: null, at: Date.now() } : { ...prev, error: t.error }));
+    busy.current = false;
+    setLoading(false);
+  }, []);
 
-  // Own the freshness ticker so the pill's "hace 3 s" updates once per second
-  // without re-rendering the active tab's subtree (paused while hidden).
+  // Live data: load on mount, poll every 45 s while visible, refetch on return.
+  useEffect(() => {
+    if (!linked) return undefined;
+    load();
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    const poll = setInterval(onVisible, 45_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [linked, load]);
+
+  // 1-second clock so the freshness label ticks between polls (paused hidden).
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => { if (document.visibilityState === 'visible') setNowTick(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);
 
-  return (
-    <InstagramLiveProvider value={setLive}>
-      <header className="mb-5 pb-4 border-b border-ink-100">
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight leading-tight">Instagram</h1>
-            <p className="text-sm text-ink-500 mt-1.5 leading-snug">
-              {linked ? (username ? `@${username}` : 'Cuenta conectada') : 'Sin conectar'}
-            </p>
-          </div>
-          {linked ? (
-            live && (
-              <LivePill
-                loading={live.loading}
-                hasData={live.hasData}
-                error={live.error}
-                sinceLabel={freshLabel(live.loadedAt, nowTick)}
-                onRefresh={live.onRefresh}
-              />
-            )
-          ) : (
-            <Link to="/settings" className="btn-brand">
-              <InstagramIcon size={14} /> Conectar Instagram
-            </Link>
-          )}
-        </div>
+  const sp = useMemo(() => (snap.raw ? resolveSocialPulse(snap.raw) : null), [snap.raw]);
+  const st = useMemo(() => (stud.raw ? resolveIgStudio(stud.raw) : null), [stud.raw]);
 
-        {/* Segmented tab control — full-width 50/50 on a phone (big touch
-            targets), shrinks to content width inline from sm+. */}
-        <div
-          className="mt-4 inline-flex w-full sm:w-auto rounded-full border border-ink-200 bg-surface p-0.5"
-          role="tablist"
-          aria-label="Vistas de Instagram"
-        >
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.id)}
-                className={`inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${active ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
-              >
-                <Icon size={15} /> {t.label}
-              </button>
-            );
-          })}
+  const [composerOpen, setComposerOpen] = useState(false);
+
+  const anyData = !!(sp || st);
+  const bothError = !!snap.error && !!stud.error;
+  const loadedAt = Math.max(snap.at || 0, stud.at || 0) || null;
+  const error = snap.error || stud.error;
+
+  if (!linked) {
+    return (
+      <>
+        <header className="mb-5 pb-4 border-b border-ink-100 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">Instagram</h1>
+          <Link to="/settings" className="btn-brand"><InstagramIcon size={14} /> Conectar Instagram</Link>
+        </header>
+        <div className="card card-pad text-sm text-ink-500">
+          Conecta tu cuenta de Instagram profesional en{' '}
+          <Link to="/settings" className="text-brand-700 hover:underline">Configuración → Instagram</Link>{' '}
+          para publicar, programar, responder comentarios y ver estadísticas desde aquí.
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <header className="mb-5 pb-4 border-b border-ink-100">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-brand-200 bg-ink-100">
+              <ImageView id={null} fallbackUrl={st?.profile?.avatarUrl} alt="" className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-display text-xl sm:text-2xl font-semibold tracking-tight leading-tight truncate">{st?.profile?.name || 'Instagram'}</h1>
+              <p className="text-sm text-ink-500 leading-snug truncate">
+                {username ? `@${username}` : 'Instagram'}
+                {st?.profile?.followers != null ? ` · ${fmt(st.profile.followers)} seguidores` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <LivePill loading={loading} hasData={anyData} error={error} sinceLabel={freshLabel(loadedAt, nowTick)} onRefresh={load} />
+            <button type="button" className="btn-brand" onClick={() => setComposerOpen(true)}>
+              <Plus size={15} /> Publicar
+            </button>
+          </div>
         </div>
       </header>
 
-      {tab === 'studio' ? <InstagramStudio /> : <Marketing />}
-    </InstagramLiveProvider>
+      {!anyData ? (
+        bothError ? (
+          <div className="card card-pad text-sm">
+            <div className="text-red-600">{error}</div>
+            <div className="mt-1 text-xs text-ink-400">Reintentando automáticamente…</div>
+            <button type="button" className="btn-brand mt-3" onClick={load}><RefreshCw size={14} /> Reintentar ahora</button>
+          </div>
+        ) : (
+          <div className="card card-pad text-sm text-ink-400">Leyendo Instagram…</div>
+        )
+      ) : (
+        <div className="space-y-4">
+          {/* KPI row — 28-day figures from igStudio, snapshot's 7-day as fallback */}
+          {st ? (
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <Stat label="Seguidores" value={fmt(st.profile.followers)} sub={`${fmt(st.profile.mediaCount)} publicaciones`} />
+              <Stat label="Alcance · 28d" value={fmt(st.kpis.reach28)} sub={st.kpis.hasReachSplit ? `${st.kpis.followerReachPct}% seguidores` : 'cuentas alcanzadas'} />
+              <Stat label="Interacciones · 28d" value={st.kpis.interactions28 != null ? fmt(st.kpis.interactions28) : '—'} sub={`tasa ${pctFmt(st.kpis.engagementRatePct)}`} />
+              <Stat label="Toques al perfil · 28d" value={st.kpis.profileTaps28 != null ? fmt(st.kpis.profileTaps28) : '—'} sub="enlaces y botones" />
+            </div>
+          ) : sp ? (
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <Stat label="Seguidores IG" value={fmt(sp.kpis.igFollowers ?? 0)} sub={`${sp.kpis.newFollowers7 >= 0 ? '+' : ''}${fmt(sp.kpis.newFollowers7)} · 7d`} />
+              <Stat label="Alcance IG · 7d" value={fmt(sp.kpis.reach7)} sub="cuentas alcanzadas" />
+              <Stat label="Acciones perfil · 7d" value={fmt(sp.kpis.profileActions7)} sub="enlaces y botones" />
+              <Stat label="Comentarios" value={fmt(sp.recentComments.length)} sub="para responder" />
+            </div>
+          ) : null}
+
+          {/* working area — content grid (2/3) + interactive engagement rail (1/3) */}
+          <div className="grid gap-4 lg:grid-cols-3 items-start">
+            <div className="lg:col-span-2 min-w-0">
+              {st ? (
+                <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} />
+              ) : (
+                <div className="card card-pad text-sm text-ink-400">Cargando contenido…</div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <EngagementPanel
+                comments={sp?.recentComments || []}
+                campaigns={sp?.campaigns || []}
+                hasAds={!!sp?.hasAds}
+                adCurrency={sp?.adCurrency}
+                spend7={sp?.kpis?.spend7}
+                posts={sp?.posts || []}
+                onChanged={load}
+              />
+            </div>
+          </div>
+
+          {/* analytics row — audience + best-time, balanced side by side */}
+          {st && (
+            <div className="grid gap-4 lg:grid-cols-2 items-start">
+              <AudienceCard audience={st.audience} errors={st.errors} />
+              <BestTimeCard bestTimes={st.bestTimes} />
+            </div>
+          )}
+
+          {st && Object.keys(st.errors).length > 0 && (
+            <div className="text-xs text-amber-700">
+              Secciones sin respuesta: {Object.keys(st.errors).join(', ')} — el resto es dato real.
+            </div>
+          )}
+        </div>
+      )}
+
+      <Modal open={composerOpen} onClose={() => setComposerOpen(false)} title="Publicar en Instagram" size="lg">
+        <ComposerCard publishLimit={st?.publishLimit} onPublished={load} />
+      </Modal>
+    </>
   );
 }

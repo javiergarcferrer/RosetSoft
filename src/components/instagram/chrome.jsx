@@ -1,9 +1,10 @@
-// Shared chrome for the Instagram pane (the Marketing + Studio tabs live under
-// one shell, src/pages/Instagram.jsx). These primitives used to be copy-pasted
-// in both pages; keeping them here is the single source so the two surfaces
-// can't drift — same KPI tile, same freshness clock, same live-status pill.
-import { createContext, useContext, useEffect } from 'react';
+// Shared chrome for the Instagram command center — the small primitives the
+// page and its section cards reuse: number formatters, the KPI tile, and the
+// live-status pill. Kept here as the single source so the surfaces can't drift.
 import { RefreshCw } from 'lucide-react';
+
+export const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+export const pctFmt = (n) => (n == null ? '—' : `${n.toFixed(1)}%`);
 
 // "hace 12 s" → "hace 3 min" → "hace 2 h". Drives the live freshness pill.
 export const freshLabel = (ms, now) => {
@@ -16,7 +17,7 @@ export const freshLabel = (ms, now) => {
   return `hace ${Math.round(min / 60)} h`;
 };
 
-// A KPI tile — the analytics layer's material figure. Shared by both tabs.
+// A KPI tile — the analytics layer's material figure.
 export function Stat({ label, value, sub, tone }) {
   return (
     <div className="stat-card p-4">
@@ -57,20 +58,4 @@ export function LivePill({ loading, hasData, error, sinceLabel, onRefresh }) {
       <RefreshCw size={12} className={`transition-opacity ${loading ? 'animate-spin opacity-90' : 'opacity-0 group-hover:opacity-60'}`} />
     </button>
   );
-}
-
-// The active tab publishes its live-fetch status up to the shell, which renders
-// the single LivePill (and owns the per-second freshness ticker) in the unified
-// header. Keeping ONE pill in the header — instead of one per page — is why the
-// two tabs share a consistent "live" signal and the seconds tick without
-// re-rendering the active tab's whole subtree.
-const LiveCtx = createContext(() => {});
-export const InstagramLiveProvider = LiveCtx.Provider;
-
-export function useInstagramLive({ loading, hasData, error, loadedAt, onRefresh }) {
-  const publish = useContext(LiveCtx);
-  useEffect(() => {
-    publish({ loading, hasData, error, loadedAt, onRefresh });
-    return () => publish(null);
-  }, [publish, loading, hasData, error, loadedAt, onRefresh]);
 }

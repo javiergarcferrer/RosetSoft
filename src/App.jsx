@@ -241,8 +241,8 @@ function ProtectedApp() {
             <Route index element={<RoleHome />} />
             <Route path="chats" element={<Chats />} />
             <Route path="chats/difusion" element={<Difusion />} />
-            <Route path="marketing" element={<Instagram initialTab="marketing" />} />
-            <Route path="instagram-studio" element={<Instagram initialTab="studio" />} />
+            <Route path="marketing" element={<Instagram />} />
+            <Route path="instagram-studio" element={<Instagram />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />
