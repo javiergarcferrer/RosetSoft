@@ -107,3 +107,31 @@ export function initialQuoteTerms(
   }
   return presets[0]?.body || '';
 }
+
+/**
+ * The patch to apply to a quote when its orderType changes to `nextOrderType`:
+ * auto-swaps `terms` to the preset matching the new type, so a Piso ⇄ Especial
+ * toggle re-points the terms without a second tap.
+ *
+ * Returns `{ terms }` ONLY when it's safe to overwrite — the current terms are
+ * empty, or are verbatim one of the presets (the dealer was on a template, not
+ * a bespoke note). Returns null when there's nothing to do: no preset matches
+ * the new type, the matching preset is already applied, or the dealer
+ * hand-edited the terms (we never clobber custom text — the picker chip is
+ * there if they want to discard it). The caller merges the result into the
+ * orderType update so it's a single change (one undo).
+ */
+export function termsPatchForOrderType(
+  settings?: Pick<Settings, 'quoteTermsPresets'> | null,
+  quote?: Pick<Quote, 'terms'> | null,
+  nextOrderType?: OrderType | string | null,
+): { terms: string } | null {
+  const presets = resolveTermsPresets(settings);
+  const match = presets.find((p) => p.orderType === normOrderType(nextOrderType));
+  if (!match) return null;
+  const current = (quote?.terms || '').trim();
+  if (current === match.body.trim()) return null; // already applied
+  const onTemplate = current.length === 0 || presets.some((p) => p.body.trim() === current);
+  if (!onTemplate) return null; // preserve hand-typed terms
+  return { terms: match.body };
+}

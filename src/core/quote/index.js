@@ -37,9 +37,11 @@ export {
 export { applyAction, applyClientPick, reanchorMaterial } from './actions.js';
 
 // ---- terms presets (the dealer's named-terms library + the editor's one-tap
-//      picker that writes a preset body into quote.terms)
+//      picker that writes a preset body into quote.terms; termsPatchForOrderType
+//      auto-swaps terms when the Piso/Especial toggle flips)
 export {
-  DEFAULT_QUOTE_TERMS_PRESETS, resolveTermsPresets, resolveTermsPresetPicker, initialQuoteTerms,
+  DEFAULT_QUOTE_TERMS_PRESETS, resolveTermsPresets, resolveTermsPresetPicker,
+  initialQuoteTerms, termsPatchForOrderType,
 } from '../../lib/quoteTerms.js';
 
 // ---- ViewModels (per-view projections off the Model)

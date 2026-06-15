@@ -10,6 +10,7 @@ import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import InvoiceChip from '../InvoiceChip.jsx';
 import { useApp } from '../../context/AppContext.jsx';
+import { termsPatchForOrderType } from '../../core/quote/index.js';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
 /**
@@ -48,7 +49,7 @@ export default function QuoteHeader({
   // a different seller, or to fix legacy quotes that predate user
   // attribution. Falls back silently to "—" when unset; the rest of
   // the app (commissions report) skips quotes with no creator.
-  const { profiles: allProfiles, currentProfile } = useApp();
+  const { profiles: allProfiles, currentProfile, settings } = useApp();
   const isAdmin = currentProfile?.role === 'admin';
   const creator = quote?.createdByUserId
     ? allProfiles.find((p) => p.id === quote.createdByUserId)
@@ -70,6 +71,19 @@ export default function QuoteHeader({
     ? professionals.find((p) => p.id === quote.professionalId)
     : null;
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Flipping the order type (Piso ⇄ Especial) re-points the terms to the
+  // matching preset — but only when the dealer hadn't hand-edited them
+  // (termsPatchForOrderType decides). Merged into the same patch so the swap
+  // is a single change/undo. Non-orderType updates (seller, professional,
+  // customer) pass straight through untouched.
+  const onUpdateQuoteWithTerms = (patch) => {
+    if (patch && typeof patch.orderType === 'string') {
+      const termsPatch = termsPatchForOrderType(settings, quote, patch.orderType);
+      if (termsPatch) return onUpdateQuote({ ...patch, ...termsPatch });
+    }
+    return onUpdateQuote(patch);
+  };
 
   return (
     <div className="mb-5">
@@ -118,7 +132,7 @@ export default function QuoteHeader({
           professional={professional}
           professionals={professionals}
           profileId={profileId}
-          onUpdateQuote={onUpdateQuote}
+          onUpdateQuote={onUpdateQuoteWithTerms}
         />
       </div>
 

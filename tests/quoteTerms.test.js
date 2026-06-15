@@ -12,6 +12,7 @@ import {
   resolveTermsPresets,
   resolveTermsPresetPicker,
   initialQuoteTerms,
+  termsPatchForOrderType,
 } from '../src/lib/quoteTerms.js';
 
 test('resolveTermsPresets — falls back to defaults when unset/empty/garbage', () => {
@@ -81,4 +82,30 @@ test('initialQuoteTerms — falls back to legacy quoteTerms, then first preset',
 test('initialQuoteTerms — empty config uses the default presets', () => {
   assert.equal(initialQuoteTerms(null, 'floor'), DEFAULT_QUOTE_TERMS_PRESETS[0].body);
   assert.equal(initialQuoteTerms(null, 'special'), DEFAULT_QUOTE_TERMS_PRESETS[1].body);
+});
+
+test('termsPatchForOrderType — swaps when terms are empty or on a template', () => {
+  const settings = { quoteTermsPresets: [
+    { id: 'p', orderType: 'floor', body: 'PISO' },
+    { id: 's', orderType: 'special', body: 'ESP' },
+  ] };
+  // Empty terms → adopt the new type's preset.
+  assert.deepEqual(termsPatchForOrderType(settings, { terms: '' }, 'special'), { terms: 'ESP' });
+  // Currently on the OTHER preset → swap to the new type's preset.
+  assert.deepEqual(termsPatchForOrderType(settings, { terms: 'PISO' }, 'special'), { terms: 'ESP' });
+  assert.deepEqual(termsPatchForOrderType(settings, { terms: '  ESP  ' }, 'floor'), { terms: 'PISO' });
+});
+
+test('termsPatchForOrderType — no-op when already applied, custom, or unmatched', () => {
+  const settings = { quoteTermsPresets: [
+    { id: 'p', orderType: 'floor', body: 'PISO' },
+    { id: 's', orderType: 'special', body: 'ESP' },
+  ] };
+  // Matching preset already in the box → nothing to do.
+  assert.equal(termsPatchForOrderType(settings, { terms: 'ESP' }, 'special'), null);
+  // Hand-typed terms (not any preset) → preserved.
+  assert.equal(termsPatchForOrderType(settings, { terms: 'Mis términos a medida' }, 'special'), null);
+  // No preset tagged for the new type → nothing to swap to.
+  const floorOnly = { quoteTermsPresets: [{ id: 'p', orderType: 'floor', body: 'PISO' }] };
+  assert.equal(termsPatchForOrderType(floorOnly, { terms: 'PISO' }, 'special'), null);
 });
