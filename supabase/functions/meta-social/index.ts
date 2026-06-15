@@ -347,10 +347,29 @@ async function igWaitReady(creationId: string, token: string, tries = 9, delayMs
 }
 
 /**
+ * Publish a media container — but only AFTER it reports FINISHED. EVERY
+ * container, an image one included (not just video), must reach FINISHED
+ * before media_publish, or IG answers "Media ID is not available" (code 9007 /
+ * subcode 2207027): the container id exists but isn't ready to publish yet —
+ * the classic Story/feed symptom of publishing one beat too early. An image
+ * container is normally FINISHED on the first poll (no delay added); a video
+ * still processing comes back as { pending, creationId } so the caller (the UI
+ * "Finalizar" button / the scheduler requeue) can finish it seconds later.
+ */
+async function publishContainer(igId: string, token: string, creationId: string, pendingMsg: string): Promise<PublishResult> {
+  const s = await igWaitReady(creationId, token);
+  if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId, error: pendingMsg };
+  if (s !== 'FINISHED') return { ok: false, error: `No se pudo procesar (${s})` };
+  const out = await igPost(`${igId}/media_publish`, token, { creation_id: creationId });
+  return { ok: true, id: out?.id };
+}
+
+/**
  * Publish to Instagram. Picks the media kind from the body: a ≥2-item carousel,
  * else a Reel (video, not story), else a Story (image/video), else the original
  * single-image feed post. Every path is the same 2-step container → publish
- * dance; video paths wait for processing first.
+ * dance, and every path waits for its final container to finish
+ * (publishContainer) before publishing — image included, not just video.
  */
 async function publishInstagram(igId: string, token: string, pub: PublishBody): Promise<PublishResult> {
   const caption = String(pub.message || '').trim();
@@ -377,8 +396,8 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
     }
     if (childIds.length < 2) return { ok: false, error: 'El carrusel necesita al menos 2 elementos válidos' };
     const parent = await igPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(','), ...collabParam });
-    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(parent?.id || '') });
-    return { ok: true, id: out?.id };
+    // The parent container assembles too — wait for it before publishing.
+    return publishContainer(igId, token, String(parent?.id || ''), 'El carrusel sigue procesando — pulsa “Finalizar”.');
   }
 
   // REEL — a video feed post (async processing).
@@ -387,27 +406,19 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
     if (pub.coverUrl) params.cover_url = String(pub.coverUrl);
     if (pub.shareToFeed === false) params.share_to_feed = 'false';
     const c = await igPost(`${igId}/media`, token, params);
-    const s = await igWaitReady(String(c?.id), token);
-    if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'El Reel sigue procesando — pulsa “Finalizar” en unos segundos.' };
-    if (s !== 'FINISHED') return { ok: false, error: `El Reel no se pudo procesar (${s})` };
-    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
-    return { ok: true, id: out?.id };
+    return publishContainer(igId, token, String(c?.id || ''), 'El Reel sigue procesando — pulsa “Finalizar” en unos segundos.');
   }
 
-  // STORY — image or video, 24h, no caption.
+  // STORY — image or video, 24h, no caption. The STORIES container (image too)
+  // is NOT instantly ready, so we always wait for it — publishing early is what
+  // raised "Media ID is not available".
   if (pub.igStory) {
     const params = pub.videoUrl
       ? { media_type: 'STORIES', video_url: String(pub.videoUrl) }
       : pub.imageUrl ? { media_type: 'STORIES', image_url: String(pub.imageUrl) } : null;
     if (!params) return { ok: false, error: 'La Story requiere una imagen o un video' };
     const c = await igPost(`${igId}/media`, token, params);
-    if (pub.videoUrl) {
-      const s = await igWaitReady(String(c?.id), token);
-      if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'La Story de video sigue procesando — pulsa “Finalizar”.' };
-      if (s !== 'FINISHED') return { ok: false, error: `La Story no se pudo procesar (${s})` };
-    }
-    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
-    return { ok: true, id: out?.id };
+    return publishContainer(igId, token, String(c?.id || ''), 'La Story sigue procesando — pulsa “Finalizar”.');
   }
 
   // FEED IMAGE — the original path (alt text + collaborators here).
@@ -415,8 +426,7 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
   const params: Record<string, string> = { image_url: String(pub.imageUrl), caption, ...collabParam };
   if (altText) params.alt_text = altText;
   const c = await igPost(`${igId}/media`, token, params);
-  const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
-  return { ok: true, id: out?.id };
+  return publishContainer(igId, token, String(c?.id || ''), 'La imagen sigue procesando — pulsa “Finalizar”.');
 }
 
 /**
