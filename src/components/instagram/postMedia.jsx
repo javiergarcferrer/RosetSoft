@@ -123,13 +123,13 @@ export function PostPeek({ post, onClose }) {
               <div className="text-[11px] uppercase tracking-wider text-ink-400">Comentarios</div>
               {post.highlight && (
                 <div className="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                  <span className="font-medium text-ink-900">@{post.highlight.username || 'Anónimo'}</span>{' '}
+                  {post.highlight.username ? <span className="font-medium text-ink-900">@{post.highlight.username} </span> : null}
                   <span className="text-ink-700">{post.highlight.text}</span>
                 </div>
               )}
               {others.map((c) => (
                 <div key={c.id || `${c.username}-${c.at}`} className="text-sm">
-                  <span className="font-medium text-ink-900">@{c.username || 'Anónimo'}</span>{' '}
+                  {c.username ? <span className="font-medium text-ink-900">@{c.username} </span> : null}
                   <span className="text-ink-700">{c.text}</span>
                   {c.ago && <span className="ml-2 text-xs text-ink-400">{c.ago}</span>}
                 </div>

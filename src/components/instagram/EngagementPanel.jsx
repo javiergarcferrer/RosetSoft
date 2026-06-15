@@ -122,7 +122,7 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
   return (
     <div className="card flex flex-col lg:h-full">
       <div className="p-2 border-b border-ink-100 shrink-0">
-        <div className="inline-flex w-full rounded-full border border-ink-200 bg-surface p-0.5 text-xs" role="tablist" aria-label="Interacción">
+        <div className="inline-flex w-full rounded-full border border-ink-200 bg-ink-100 p-1 text-xs" role="tablist" aria-label="Interacción">
           {tabs.map((t) => {
             const on = activeTab === t.id;
             const Icon = t.icon;
@@ -133,7 +133,7 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
                 role="tab"
                 aria-selected={on}
                 onClick={() => setTab(t.id)}
-                className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-1.5 font-medium transition-colors ${on ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+                className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-1.5 font-medium transition-colors ${on ? 'bg-surface text-brand-700 shadow-sm ring-1 ring-black/5' : 'text-ink-500 hover:text-ink-800'}`}
               >
                 <Icon size={13} /> {t.label}
               </button>
@@ -161,8 +161,10 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2 text-sm">
                       <span className="min-w-0 truncate">
-                        <span className="font-medium text-ink-900">@{c.username || 'Anónimo'}</span>{' '}
-                        <span className="text-ink-600">{c.text}</span>
+                        {c.username
+                          ? <span className="font-medium text-ink-900">@{c.username} </span>
+                          : null}
+                        <span className={c.username ? 'text-ink-600' : 'text-ink-800'}>{c.text}</span>
                       </span>
                       <span className="ml-auto flex-none text-xs text-ink-400">{c.ago || ''}</span>
                     </div>

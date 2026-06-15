@@ -57,7 +57,7 @@ export default function AudienceCard({ audience, errors }) {
             {active && (
               <>
                 {dims.length > 1 ? (
-                  <div className="inline-flex w-full rounded-full border border-ink-200 bg-surface p-0.5 text-xs" role="tablist" aria-label="Desglose de audiencia">
+                  <div className="inline-flex w-full rounded-full border border-ink-200 bg-ink-100 p-1 text-xs" role="tablist" aria-label="Desglose de audiencia">
                     {dims.map((d) => {
                       const on = active.id === d.id;
                       return (
@@ -67,7 +67,7 @@ export default function AudienceCard({ audience, errors }) {
                           role="tab"
                           aria-selected={on}
                           onClick={() => setDim(d.id)}
-                          className={`flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${on ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+                          className={`flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${on ? 'bg-surface text-brand-700 shadow-sm ring-1 ring-black/5' : 'text-ink-500 hover:text-ink-800'}`}
                         >
                           {d.label}
                         </button>

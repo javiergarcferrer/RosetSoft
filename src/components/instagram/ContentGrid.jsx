@@ -123,7 +123,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
       <div className="card-header lg:shrink-0">
         <span className="flex items-center gap-2 font-medium"><Images size={15} /> Contenido</span>
         {mentions.length > 0 && (
-          <div className="inline-flex rounded-full border border-ink-200 bg-surface p-0.5 text-xs" role="tablist" aria-label="Vista de contenido">
+          <div className="inline-flex rounded-full border border-ink-200 bg-ink-100 p-1 text-xs" role="tablist" aria-label="Vista de contenido">
             {[['posts', 'Publicaciones'], ['mentions', 'Menciones']].map(([id, label]) => {
               const on = view === id;
               return (
@@ -133,7 +133,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
                   role="tab"
                   aria-selected={on}
                   onClick={() => setView(id)}
-                  className={`rounded-full px-3 py-1 font-medium transition-colors ${on ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-800'}`}
+                  className={`rounded-full px-3 py-1 font-medium transition-colors ${on ? 'bg-surface text-brand-700 shadow-sm ring-1 ring-black/5' : 'text-ink-500 hover:text-ink-800'}`}
                 >
                   {label}
                 </button>

@@ -221,7 +221,7 @@ export default function Instagram() {
             indicator + jump). Tap to go, or swipe the boards below. */}
         {anyData && (
           <nav className="mb-3 shrink-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Secciones de Instagram">
-            <div className="inline-flex min-w-full rounded-full border border-ink-200 bg-surface p-0.5 text-sm" role="tablist">
+            <div className="inline-flex min-w-full rounded-full border border-ink-200 bg-ink-100 p-1 text-sm" role="tablist">
               {sections.map((sec, i) => {
                 const on = active === i;
                 return (
@@ -231,7 +231,7 @@ export default function Instagram() {
                     role="tab"
                     aria-selected={on}
                     onClick={() => goToSection(i)}
-                    className={`flex-1 whitespace-nowrap rounded-full px-4 py-1.5 font-medium transition-colors ${on ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+                    className={`flex-1 whitespace-nowrap rounded-full px-4 py-1.5 font-medium transition-colors ${on ? 'bg-surface text-brand-700 shadow-sm ring-1 ring-black/5' : 'text-ink-500 hover:text-ink-800'}`}
                   >
                     {sec.label}
                   </button>
