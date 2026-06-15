@@ -42,16 +42,23 @@ export async function runCoexistenceSignup({ appId, configId }) {
   }
   const FB = await loadFbSdk(appId);
 
-  const session = { phoneNumberId: '', wabaId: '' };
+  // Session logging (Meta's required Embedded Signup pattern): capture EVERY
+  // WA_EMBEDDED_SIGNUP postMessage — the onboarded ids, the step the dealer
+  // reached, and the terminal event (FINISH / CANCEL / ERROR). Logged for
+  // debugging and used to give a precise reason when the dialog doesn't finish.
+  const session = { phoneNumberId: '', wabaId: '', currentStep: '', event: '', errorMessage: '' };
   const onMessage = (event) => {
     if (!/facebook\.com$/.test(String(event.origin || ''))) return;
-    try {
-      const data = JSON.parse(event.data);
-      if (data?.type === 'WA_EMBEDDED_SIGNUP' && data.data) {
-        session.phoneNumberId = String(data.data.phone_number_id || session.phoneNumberId);
-        session.wabaId = String(data.data.waba_id || session.wabaId);
-      }
-    } catch { /* non-JSON frame chatter — ignore */ }
+    let payload;
+    try { payload = JSON.parse(event.data); } catch { return; } // non-JSON frame chatter
+    if (payload?.type !== 'WA_EMBEDDED_SIGNUP') return;
+    console.log('[wa-embedded-signup] session', payload); // session logging
+    if (payload.event) session.event = String(payload.event);
+    const d = payload.data || {};
+    if (d.phone_number_id) session.phoneNumberId = String(d.phone_number_id);
+    if (d.waba_id) session.wabaId = String(d.waba_id);
+    if (d.current_step) session.currentStep = String(d.current_step);
+    if (d.error_message) session.errorMessage = String(d.error_message);
   };
   window.addEventListener('message', onMessage);
 
@@ -59,8 +66,14 @@ export async function runCoexistenceSignup({ appId, configId }) {
     const code = await new Promise((resolve, reject) => {
       FB.login((resp) => {
         const c = resp?.authResponse?.code;
-        if (c) resolve(c);
-        else reject(new Error('Conexión cancelada en el diálogo de Meta.'));
+        if (c) { resolve(c); return; }
+        // No code → the dialog was cancelled or errored. Use the logged session
+        // event for a precise reason instead of a generic "cancelled".
+        if (session.event === 'ERROR' || session.errorMessage) {
+          reject(new Error(session.errorMessage || 'Meta reportó un error en el diálogo de Embedded Signup.'));
+        } else {
+          reject(new Error(`Conexión cancelada en el diálogo de Meta${session.currentStep ? ` (paso: ${session.currentStep})` : ''}.`));
+        }
       }, {
         config_id: configId,
         response_type: 'code',
