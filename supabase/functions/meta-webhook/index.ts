@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
   const raw = await req.text();
   const sig = req.headers.get('x-hub-signature-256');
   const [{ data: igCfg }, { data: waCfg }] = await Promise.all([
-    admin.from('meta_social_config').select('ig_app_secret, ig_user_id, ig_access_token').eq('profile_id', TEAM).maybeSingle(),
+    admin.from('meta_social_config').select('ig_app_secret, ig_user_id').eq('profile_id', TEAM).maybeSingle(),
     admin.from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle(),
   ]);
   const igSecret = (igCfg as { ig_app_secret?: string } | null)?.ig_app_secret || '';
@@ -100,7 +100,6 @@ Deno.serve(async (req) => {
   }
 
   const igUserId = (igCfg as { ig_user_id?: string } | null)?.ig_user_id || '';
-  const igToken = (igCfg as { ig_access_token?: string } | null)?.ig_access_token || '';
 
   let body: {
     object?: string;
@@ -112,21 +111,10 @@ Deno.serve(async (req) => {
   } = {};
   try { body = JSON.parse(raw); } catch { /* tolerate empty */ }
 
-  // Best-effort @-handle / name for an inbound DM sender (IG User Profile API).
-  const nameCache = new Map<string, { username: string | null; name: string | null }>();
-  async function profileOf(igsid: string): Promise<{ username: string | null; name: string | null }> {
-    if (nameCache.has(igsid)) return nameCache.get(igsid)!;
-    let out: { username: string | null; name: string | null } = { username: null, name: null };
-    if (igToken && igsid) {
-      try {
-        const res = await fetch(`${IG_API}/${igsid}?fields=name,username&access_token=${encodeURIComponent(igToken)}`);
-        const d = await res.json().catch(() => ({}));
-        if (res.ok && !d?.error) out = { username: d?.username || null, name: d?.name || null };
-      } catch { /* leave null */ }
-    }
-    nameCache.set(igsid, out);
-    return out;
-  }
+  // Inbound DM @-handles are resolved by igBackfill (me/conversations carries the
+  // participant usernames), NOT here: a per-message Graph call inside the webhook
+  // would serialize N live round-trips into the response and risk Meta disabling
+  // the endpoint for slowness. We store the IGSID now; the inbox enriches later.
 
   const eventRows: Array<Record<string, unknown>> = [];  // ig_events (comments/mentions)
   const dmRows: Array<Record<string, unknown>> = [];     // ig_messages (Direct)
@@ -146,7 +134,6 @@ Deno.serve(async (req) => {
       const counterpart = isEcho ? recipientId : senderId;
       if (!counterpart) continue;
       const { kind, body: text } = dmContent(message);
-      const prof = isEcho ? { username: null, name: null } : await profileOf(counterpart);
       const tsMs = Number(ev?.timestamp) || Date.now();
       dmRows.push({
         id: crypto.randomUUID(),
@@ -156,8 +143,8 @@ Deno.serve(async (req) => {
         thread_key: counterpart,
         sender_id: senderId || null,
         recipient_id: recipientId || null,
-        username: prof.username,
-        name: prof.name,
+        username: null,
+        name: null,
         kind,
         body: text,
         status: isEcho ? 'sent' : 'received',

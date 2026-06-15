@@ -109,9 +109,6 @@ test('resolveDashboard pairs every KPI count with its USD pipeline value', () =>
   assert.equal(d.kpis.sentCount, 1);
   assert.equal(d.kpis.sentValue, total('qs'));
   assert.equal(d.kpis.staleCount, 1); // sent 10 days ago ≥ STALE_DAYS
-  // Won this month counts/sums only the June acceptance, not May's.
-  assert.equal(d.kpis.wonThisMonth, 1);
-  assert.equal(d.kpis.wonThisMonthValue, total('qa'));
 });
 
 test('resolveDashboard "por cobrar" = balance after deposit + untouched totals', () => {

@@ -151,12 +151,6 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const newFollowers7 = sumTail(followerRows, 'value', 7);
   const profileActions7 = totalValue(s.igProfileActions, 'profile_links_taps');
 
-  // Facebook Page daily engagement + unique reach (when Meta still answers
-  // this metric family — absent otherwise).
-  const pageEngRows = metricRows(s.pageInsights, 'page_post_engagements');
-  const pageEngagement7 = sumTail(pageEngRows, 'value', 7);
-  const pageEngagement7Prev = sumTail(pageEngRows, 'value', 7, 7);
-
   // Ad RESULTS: the first result type with activity in range (see above).
   const resultType = RESULT_TYPES.find(([t]) => adsDaily.some((r) => actionCount(r, t) > 0)) || null;
   const sumResults = (days, skip = 0) => {
@@ -191,17 +185,6 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       };
     })
     .sort((a, b) => b.spend - a.spend);
-
-  const scheduled = (s.scheduled || [])
-    .map((p) => ({
-      at: toMs(p.scheduled_publish_time),
-      text: (p.message || '').slice(0, 120) || '(sin texto)',
-      mediaUrl: p.full_picture || null,
-      permalink: p.permalink_url || null,
-    }))
-    .filter((p) => p.at && p.at > now)
-    .sort((a, b) => a.at - b.at)
-    .map((p) => ({ ...p, inLabel: inLabel(p.at, now) }));
 
   const posts = (s.igMedia || [])
     .map((m) => ({
@@ -245,14 +228,12 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
     .map((c) => ({ ...c, ago: agoLabel(c.at, now) }));
 
   return {
-    pageName: s.page?.name || s.pageName || '',
     igUsername: s.ig?.username || s.igUsername || '',
     hasIg: !!s.hasIg,
     hasAds: !!s.hasAds,
     adCurrency: s.adAccount?.currency || null,
     kpis: {
       igFollowers: num(s.ig?.followers_count) || null,
-      fbFollowers: num(s.page?.followers_count) || num(s.page?.fan_count) || null,
       reach7,
       reachDeltaPct: deltaPct(reach7, reach7Prev),
       spend7,
@@ -266,23 +247,13 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       costPerResult7: results7 > 0 ? spend7 / results7 : null,
       profileActions7,
       newFollowers7,
-      pageEngagement7,
-      pageEngagementDeltaPct: deltaPct(pageEngagement7, pageEngagement7Prev),
     },
     spendSeries: adsDaily.map((r) => num(r.spend)),
     reachSeries: reachRows.map((r) => num(r.value)),
     followerSeries: followerRows.map((r) => num(r.value)),
     campaigns,
-    scheduled,
     posts,
     recentComments,
-    // Meta product catalogs across the business portfolios the token sees.
-    catalogs: (s.businesses || []).flatMap((b) => ((b.owned_product_catalogs?.data) || []).map((c) => ({
-      name: c.name || '—',
-      products: num(c.product_count),
-      vertical: c.vertical || '',
-      business: b.name || '',
-    }))),
     errors: s.errors || {},
     fetchedAt: s.fetchedAt || null,
   };

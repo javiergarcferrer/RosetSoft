@@ -89,15 +89,6 @@ export function resolveDashboard({
     .filter((q) => q.status === 'draft')
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  // Won this month — accepted (acceptedAt) since the 1st of the current
-  // month, within scope, regardless of where fulfillment stands now.
-  const monthStartDate = new Date(now);
-  monthStartDate.setDate(1);
-  monthStartDate.setHours(0, 0, 0, 0);
-  const monthStart = monthStartDate.getTime();
-  const wonQuotes = scoped.filter((q) => (q.acceptedAt || 0) >= monthStart);
-  const wonThisMonth = wonQuotes.length;
-
   // ---- Pedidos en curso — orders not yet received/cancelled, with the cheap
   // per-order rollups the strip shows. Orders are the team's shared logistics
   // pipeline, so this section deliberately ignores the Mías/Equipo scope.
@@ -176,8 +167,6 @@ export function resolveDashboard({
       staleCount,
       inProcessCount,
       dueValue,
-      wonThisMonth,
-      wonThisMonthValue: sumTotals(wonQuotes),
     },
     scopedCount: scoped.length,
   };

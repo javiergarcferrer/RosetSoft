@@ -493,21 +493,13 @@ Deno.serve(async (req) => {
 
   // ── Instagram ADS ride the Marketing API (graph.facebook.com) — the
   // Instagram-Login token can't access ads, so they use the Business/system-user
-  // token (reused from whatsapp_config when meta_social_config has none), against
-  // an ad account discovered once and persisted. ────────────────────────────
+  // token (reused from whatsapp_config when meta_social_config has none). The ad
+  // ACCOUNT is resolved lazily inside the snapshot branch (its only reader), NOT
+  // here — so a DM send / comment reply never pays a me/adaccounts round-trip. ──
   let bizToken = cfg.access_token || '';
   if (!bizToken) {
     const { data: wa } = await admin.from('whatsapp_config').select('access_token').eq('profile_id', TEAM).maybeSingle();
     bizToken = wa?.access_token || '';
-  }
-  let adAccountId = cfg.ad_account_id || '';
-  if (!adAccountId && bizToken) {
-    try {
-      const accts = await fb('me/adaccounts', bizToken, { fields: 'id,name,account_status', limit: '25' });
-      const active = (accts?.data || []).find((a: { account_status?: number }) => a.account_status === 1) || (accts?.data || [])[0];
-      adAccountId = active?.id || '';
-      if (adAccountId) await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
-    } catch { adAccountId = ''; }
   }
 
   // ── setCampaignStatus: pause/resume an Instagram ad campaign — REAL MONEY,
@@ -607,6 +599,18 @@ Deno.serve(async (req) => {
       }
     };
 
+    // Resolve the ad account HERE (the only reader) — discover once via
+    // me/adaccounts and persist; gated so no other meta-social call hits it.
+    let adAccountId = cfg.ad_account_id || '';
+    if (!adAccountId && bizToken) {
+      try {
+        const accts = await fb('me/adaccounts', bizToken, { fields: 'id,name,account_status', limit: '25' });
+        const active = (accts?.data || []).find((a: { account_status?: number }) => a.account_status === 1) || (accts?.data || [])[0];
+        adAccountId = active?.id || '';
+        if (adAccountId) await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
+      } catch { adAccountId = ''; }
+    }
+
     const [igProfile, igReach, igAudience, igProfileActions, igMedia, adAccount, adsDaily, adCampaigns] = await Promise.all([
       safe('ig', () => igGet(igId, token, { fields: 'username,followers_count,media_count' })),
       safe('igReach', () => igGet(`${igId}/insights`, token, {
@@ -652,7 +656,9 @@ Deno.serve(async (req) => {
       fetchedAt: Date.now(),
       igUsername: cfg.ig_username,
       hasIg: !!igId,
-      hasAds: !!adAccountId,
+      // true only when the ad-account read SUCCEEDED — a Business token without
+      // ads_read fails that read, so the panel hides instead of showing empty.
+      hasAds: !!adAccount,
       page: null,
       ig: igProfile,
       adAccount,

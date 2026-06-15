@@ -43,6 +43,17 @@ export default function InstagramInbox({ onBack }) {
     return () => clearInterval(id);
   }, []);
 
+  // Resolve contact @-handles + recent history once on open: the webhook stores
+  // only the IGSID (no blocking Graph call there), so a one-shot backfill pulls
+  // me/conversations (which carries participant usernames) to enrich the threads.
+  const didBackfill = useRef(false);
+  useEffect(() => {
+    if (linked && !didBackfill.current) {
+      didBackfill.current = true;
+      backfillInstagramDms().then((r) => { if (r.ok) invalidate(); }).catch(() => {});
+    }
+  }, [linked]);
+
   const conversations = useMemo(
     () => resolveIgConversations(messages, { needle: search }),
     [messages, search],
@@ -223,10 +234,15 @@ export default function InstagramInbox({ onBack }) {
 
 /** The message bubbles, oldest-first, auto-scrolled to the newest. */
 function ThreadMessages({ items }) {
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [items.length]);
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    // Scroll the CONTAINER (scrollTop), never scrollIntoView — the latter yanks
+    // the whole iOS-PWA host page (see ChatThread's note). Stays contained here.
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [items.length]);
   return (
-    <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
+    <div ref={scrollRef} className="flex-1 space-y-1.5 overflow-y-auto p-3">
       {items.map((m) => {
         const out = m.direction === 'out';
         return (
@@ -240,7 +256,6 @@ function ThreadMessages({ items }) {
           </div>
         );
       })}
-      <div ref={endRef} />
     </div>
   );
 }

@@ -99,28 +99,10 @@ test('IG audience: follower_count is a daily series; profile actions a total_val
   const igProfileActions = [
     { name: 'profile_links_taps', total_value: { value: 42 } },
   ];
-  const pageInsights = [
-    { name: 'page_post_engagements', values: Array.from({ length: 14 }, (_, i) => ({ value: i < 7 ? 1 : 4 })) },
-  ];
-  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, igProfileActions, pageInsights }, { now: NOW });
+  const { kpis, followerSeries } = resolveSocialPulse({ igAudience, igProfileActions }, { now: NOW });
   assert.equal(kpis.newFollowers7, 5);
   assert.equal(kpis.profileActions7, 42);
   assert.deepEqual(followerSeries, [2, 3]);
-  assert.equal(kpis.pageEngagement7, 28);
-  assert.equal(kpis.pageEngagementDeltaPct, 300); // 28 vs 7
-});
-
-test('scheduled posts: ISO and unix-second timestamps both parse; past drops; soonest first', () => {
-  const { scheduled } = resolveSocialPulse({
-    scheduled: [
-      { message: 'far', scheduled_publish_time: new Date(NOW + 3 * DAY).toISOString() },
-      { message: 'soon', scheduled_publish_time: String(Math.floor((NOW + 2 * 3_600_000) / 1000)) },
-      { message: 'past', scheduled_publish_time: new Date(NOW - DAY).toISOString() },
-    ],
-  }, { now: NOW });
-  assert.deepEqual(scheduled.map((p) => p.text), ['soon', 'far']);
-  assert.equal(scheduled[0].inLabel, 'en 2 h');
-  assert.equal(scheduled[1].inLabel, 'en 3 d');
 });
 
 test('ads↔sales weeks bucket spend by LOCAL day next to quote counts', () => {
@@ -219,21 +201,10 @@ test('campaigns map the campaigns-edge shape (id + status + nested insights)', (
   assert.equal(campaigns[2].spend, 0);
 });
 
-test('catalogs flatten across businesses with product counts', () => {
-  const businesses = [
-    { name: 'alcover', owned_product_catalogs: { data: [
-      { name: 'WhatsApp Product Catalog', product_count: '120', vertical: 'commerce' },
-      { name: 'Shopify Product Catalog', product_count: 300 },
-    ] } },
-  ];
-  const { catalogs, recentComments } = resolveSocialPulse({
-    businesses,
+test('recent IG comments carry the id a reply needs', () => {
+  const { recentComments } = resolveSocialPulse({
     igMedia: [{ caption: 'P', comments: { data: [{ id: 'c1', text: 'hola', username: 'ana', timestamp: new Date(NOW - 1000).toISOString() }] } }],
   }, { now: NOW });
-  assert.equal(catalogs.length, 2);
-  assert.equal(catalogs[0].products, 120); // string count normalized
-  assert.equal(catalogs[1].products, 300);
-  assert.equal(catalogs[0].business, 'alcover');
   assert.equal(recentComments[0].id, 'c1'); // reply needs the id
 });
 
