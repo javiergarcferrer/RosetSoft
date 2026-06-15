@@ -152,6 +152,12 @@ function LineRow({
   const setI = inSet ? view.setInfo.get(line.id) : null;
   const compound = isCompoundLine(line);
   const cover = imgFor(images, coverKey(line.id));
+  // A line with no photo reserves NO image column — the body takes the full
+  // width, exactly as ClientPreview omits its image column when there's no
+  // `imageId`. (Drawing the empty `imgBox` is the "big empty square" the dealer
+  // saw.) The compound rail below aligns under the name, so its left indent
+  // collapses from "past the 120pt photo + 14pt gap" to 0 when the photo is gone.
+  const railIndent = cover ? 134 : 0;
   const cells = materialCells({ mo: line.materialOptions, reference: line.reference, baseSwatchImageId: line.swatchImageId, families, currency, rates });
   // Uniform compound → hoist the shared fabric to ONE hero swatch at the header
   // and drop every per-piece swatch below. A mixed compound keeps per-piece
@@ -203,7 +209,9 @@ function LineRow({
           (wrap={false}) so a compound line's photo + name + total never split
           across a page; only the component list below is allowed to paginate. */}
       <View style={compound ? { flexDirection: 'row', gap: 14 } : s.line} wrap={false}>
-        <View style={s.imgBox}>{cover && <Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} />}</View>
+        {cover && (
+          <View style={s.imgBox}><Image src={cover} style={{ width: 120, height: 120, objectFit: 'contain' }} /></View>
+        )}
         <View style={s.lineBody}>
           <View style={s.lineMain}>
             {caption && <Text style={[s.groupCaption, { color: caption.color }]}>{caption.text}</Text>}
@@ -239,7 +247,7 @@ function LineRow({
           wrap={false} identity row) so a long blurb paginates instead of jamming
           the row. Indented to align under the product name, like the rail. */}
       {compound && line.description && (
-        <View style={{ marginTop: 6, marginLeft: 134 }}>
+        <View style={{ marginTop: 6, marginLeft: railIndent }}>
           <Text style={s.lineDesc}>{line.description}</Text>
         </View>
       )}
@@ -253,7 +261,7 @@ function LineRow({
         // name (past the 92pt photo + 14pt gap) with a hairline left rule, so the
         // whole block reads as "what this product is made of" instead of a stack
         // of rows that look like top-level line items.
-        <View style={{ marginTop: 8, marginLeft: 134, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
+        <View style={{ marginTop: 8, marginLeft: railIndent, paddingLeft: 12, borderLeftWidth: 1.5, borderLeftColor: C.inkLine2 }}>
           {(() => {
             // A modular line whose modules carry OPTIONAL / ALTERNATIVE state must
             // render per-module (each dimmed block keeps its own caption). Every

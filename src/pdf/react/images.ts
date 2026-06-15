@@ -123,11 +123,18 @@ async function bytesToDataUri(bytes: Uint8Array, contentType: string): Promise<s
     const png = await rasterizeSvgToPng(bytes);
     return png ? `data:image/png;base64,${toBase64(png)}` : null;
   }
-  const mime = ct.includes('png') || isPng(bytes) ? 'image/png'
-    : ct.includes('jpeg') || ct.includes('jpg') || isJpeg(bytes) ? 'image/jpeg'
-    : isPng(bytes) ? 'image/png' : isJpeg(bytes) ? 'image/jpeg' : null;
-  if (!mime) return null;
-  return `data:${mime};base64,${toBase64(bytes)}`;
+  // react-pdf's <Image> embeds ONLY JPEG and PNG. The magic bytes are the
+  // reliable signal (a Supabase / Shopify-CDN content-type can lie), so embed
+  // those two directly. EVERYTHING else the browser can still decode — WebP,
+  // AVIF, GIF, HEIC (all permitted uploads) and, critically, the WebP that
+  // Shopify's CDN serves for LSG catalog photos via content negotiation even
+  // off a `.jpg` URL — gets re-encoded to PNG through the canvas (the same path
+  // SVG takes). Without this the tile is simply dropped and the PDF shows an
+  // empty frame where the <img>-based client preview shows the photo.
+  if (isJpeg(bytes)) return `data:image/jpeg;base64,${toBase64(bytes)}`;
+  if (isPng(bytes)) return `data:image/png;base64,${toBase64(bytes)}`;
+  const png = await rasterizeRasterToPng(bytes, contentType);
+  return png ? `data:image/png;base64,${toBase64(png)}` : null;
 }
 
 const isPng = (b: Uint8Array) => b.length > 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
@@ -145,6 +152,69 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+/**
+ * Re-encode a raster image react-pdf can't embed (WebP / AVIF / GIF / HEIC) to
+ * PNG bytes via the browser canvas, so the photo prints exactly as the on-screen
+ * <img> preview shows it instead of an empty tile. `createImageBitmap` decodes
+ * every format the browser supports (and honors EXIF orientation), with an
+ * <img> fallback for engines that reject the bitmap path; longest side is capped
+ * at print width so a full-res upload doesn't bloat the PDF. Returns null outside
+ * a browser (the Node harness) or when the browser itself can't decode the bytes
+ * (e.g. HEIC off Safari) — the renderer then degrades to an empty frame, the same
+ * graceful fallback as before.
+ */
+async function rasterizeRasterToPng(bytes: Uint8Array, contentType: string): Promise<Uint8Array | null> {
+  if (typeof document === 'undefined') return null;
+  const type = /^image\//i.test(contentType || '') ? contentType : 'image/*';
+  // Slice into a fresh, contiguous ArrayBuffer — the DOM Blob types reject a
+  // Uint8Array that may be backed by a SharedArrayBuffer.
+  const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const blob = new Blob([buf], { type });
+  let source: CanvasImageSource & { width: number; height: number; close?: () => void } | null = null;
+  let url: string | null = null;
+  try {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        source = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+      } catch {
+        source = null;
+      }
+    }
+    if (!source) {
+      if (typeof Image === 'undefined') return null;
+      url = URL.createObjectURL(blob);
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('image decode failed'));
+        i.src = url as string;
+      });
+      source = Object.assign(img, { width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    }
+    const sw = source.width;
+    const sh = source.height;
+    if (!sw || !sh) return null;
+    const scale = Math.min(1, DOWNLOAD_IMG_WIDTH / Math.max(sw, sh));
+    const w = Math.max(1, Math.round(sw * scale));
+    const h = Math.max(1, Math.round(sh * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const cx = canvas.getContext('2d');
+    if (!cx) return null;
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = 'high';
+    cx.drawImage(source, 0, 0, w, h);
+    const pngBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!pngBlob) return null;
+    return new Uint8Array(await pngBlob.arrayBuffer());
+  } catch {
+    return null;
+  } finally {
+    if (source && typeof source.close === 'function') source.close();
+    if (url) URL.revokeObjectURL(url);
+  }
 }
 
 /**
