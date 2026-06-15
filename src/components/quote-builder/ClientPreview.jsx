@@ -511,7 +511,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
     {/* Floating "Personalizar" pencil — interactive link only. One FAB pinned to
         the bottom-RIGHT (thumb zone, clear of the centred content) toggles edit
         mode: a pencil to start configuring, a check to return to the clean
-        proposal. An amber dot quietly advertises there's more to do. z-40 sits
+        proposal. z-40 sits
         under the transient SaveToast (z-50). Inside the in-app editor preview
         (inEditor) it clears the stacked bottom chrome — the ModeBar (~3.5rem)
         plus the TotalsDock above it (~3.5rem) — so it never lands on the dock's
@@ -528,7 +528,6 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
           }`}
         >
           {editable ? <Check size={22} strokeWidth={2.5} aria-hidden /> : <Pencil size={20} aria-hidden />}
-          {!editable && <span className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-white" aria-hidden />}
           <span className="sr-only">{editable ? 'Listo' : 'Personalizar'}</span>
         </button>
       </div>
