@@ -9,23 +9,13 @@ import { Link } from 'react-router-dom';
 import {
   CalendarClock, ExternalLink, Instagram, MessageSquare, RefreshCw, Send,
 } from 'lucide-react';
-import PageHeader from '../components/PageHeader.jsx';
 import MediaPicker from '../components/MediaPicker.jsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { db, newId } from '../db/database.js';
 import { resolveSocialPulse, resolveScheduleAgenda, describePost } from '../core/jarvis/index.js';
-
-function Stat({ label, value, sub, tone }) {
-  return (
-    <div className="stat-card p-4">
-      <div className="text-[11px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className={`font-display text-2xl font-semibold tabular-nums mt-0.5 ${tone || 'text-ink-900'}`}>{value}</div>
-      {sub && <div className="text-xs text-ink-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
+import { Stat, useInstagramLive } from '../components/instagram/chrome.jsx';
 
 const deltaSub = (pct, fallback) => (pct != null
   ? `${pct >= 0 ? '+' : ''}${pct}% vs 7d anteriores`
@@ -231,50 +221,6 @@ function CommentsCard({
   );
 }
 
-// "hace 12 s" → "hace 3 min" → "hace 2 h". Drives the live freshness pill.
-const freshLabel = (ms, now) => {
-  if (!ms) return null;
-  const s = Math.max(0, Math.round((now - ms) / 1000));
-  if (s < 4) return 'ahora mismo';
-  if (s < 60) return `hace ${s} s`;
-  const min = Math.round(s / 60);
-  if (min < 60) return `hace ${min} min`;
-  return `hace ${Math.round(min / 60)} h`;
-};
-
-// Live-status pill — replaces the old "Actualizar" button. A pulsing dot +
-// ticking freshness label reads as a passive "this is live" signal; it's
-// still tappable to force a refresh (and shows the spinner on hover/while
-// fetching), but it no longer looks like a chore the user has to perform.
-function LivePill({ loading, hasData, error, sinceLabel, onRefresh }) {
-  // A failed poll only counts as "degraded" when there's nothing on screen;
-  // with data still showing, it's just a momentary reconnect.
-  const stale = error && hasData;
-  const dot = stale ? 'bg-amber-500' : 'bg-emerald-500';
-  const text = loading && !hasData
-    ? 'Conectando…'
-    : stale
-      ? 'Reconectando…'
-      : loading
-        ? 'Actualizando…'
-        : `En vivo${sinceLabel ? ` · ${sinceLabel}` : ''}`;
-  return (
-    <button
-      type="button"
-      onClick={onRefresh}
-      title="Datos en vivo — toca para actualizar ahora"
-      className="group inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface px-2.5 py-1 text-xs text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
-    >
-      <span className="relative flex h-2 w-2">
-        {!stale && <span className={`absolute inline-flex h-full w-full rounded-full ${dot} opacity-60 animate-ping`} />}
-        <span className={`relative inline-flex h-2 w-2 rounded-full ${dot}`} />
-      </span>
-      <span className="tabular-nums">{text}</span>
-      <RefreshCw size={12} className={`transition-opacity ${loading ? 'animate-spin opacity-90' : 'opacity-0 group-hover:opacity-60'}`} />
-    </button>
-  );
-}
-
 export default function Marketing() {
   const { settings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
@@ -323,18 +269,11 @@ export default function Marketing() {
     };
   }, [linked, load]);
 
-  // 1-second clock so the "hace 12 s" label actually ticks between polls
-  // (paused while hidden — a background tab needn't wake to count seconds).
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    if (!linked) return undefined;
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') setNowTick(Date.now());
-    }, 1000);
-    return () => clearInterval(id);
-  }, [linked]);
-
   const m = useMemo(() => (raw ? resolveSocialPulse(raw) : null), [raw]);
+
+  // Surface this tab's fetch status to the shell header's single live pill (the
+  // shell owns the freshness ticker, so the "hace 3 s" label updates there).
+  useInstagramLive({ loading, hasData: !!m, error: loadError, loadedAt, onRefresh: load });
 
   // ── composer ─────────────────────────────────────────────────────────
   const [pubText, setPubText] = useState('');
@@ -565,26 +504,6 @@ export default function Marketing() {
 
   return (
     <>
-      <PageHeader
-        title="Marketing"
-        subtitle={linked
-          ? (m?.igUsername ? `@${m.igUsername}` : 'Instagram conectado')
-          : 'Instagram sin conectar'}
-        actions={linked ? (
-          <LivePill
-            loading={loading}
-            hasData={!!m}
-            error={loadError}
-            sinceLabel={freshLabel(loadedAt, nowTick)}
-            onRefresh={load}
-          />
-        ) : (
-          <Link to="/settings" className="btn-brand">
-            <Instagram size={14} /> Conectar Instagram
-          </Link>
-        )}
-      />
-
       {!linked ? (
         <div className="card card-pad text-sm text-ink-500">
           Conecta tu cuenta de Instagram profesional en{' '}

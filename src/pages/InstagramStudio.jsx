@@ -11,7 +11,6 @@ import {
   Instagram, RefreshCw, Send, Heart, MessageCircle, Eye, EyeOff,
   Trash2, X, Clock, Film, AtSign, Sparkles, ExternalLink,
 } from 'lucide-react';
-import PageHeader from '../components/PageHeader.jsx';
 import ImageView from '../components/ImageView.tsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
@@ -20,29 +19,10 @@ import {
   resolveIgStudio, resolveMediaInsights, resolveMediaComments,
 } from '../core/jarvis/index.js';
 import { Donut, BulletBar, Sparkline, Legend } from '../components/charts/MiniCharts.jsx';
+import { Stat, useInstagramLive } from '../components/instagram/chrome.jsx';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const pctFmt = (n) => (n == null ? '—' : `${n.toFixed(1)}%`);
-
-const freshLabel = (ms, now) => {
-  if (!ms) return null;
-  const s = Math.max(0, Math.round((now - ms) / 1000));
-  if (s < 4) return 'ahora mismo';
-  if (s < 60) return `hace ${s} s`;
-  const min = Math.round(s / 60);
-  if (min < 60) return `hace ${min} min`;
-  return `hace ${Math.round(min / 60)} h`;
-};
-
-function Stat({ label, value, sub, tone }) {
-  return (
-    <div className="stat-card p-4">
-      <div className="text-[11px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className={`font-display text-2xl font-semibold tabular-nums mt-0.5 ${tone || 'text-ink-900'}`}>{value}</div>
-      {sub && <div className="text-xs text-ink-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
 
 // A ranked horizontal-bar list (age / countries / cities) — label, bar, value.
 function BarList({ rows, max, accent = '#c96a2a' }) {
@@ -189,13 +169,10 @@ export default function InstagramStudio() {
     return () => window.removeEventListener('focus', onVisible);
   }, [linked, load]);
 
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => { if (document.visibilityState === 'visible') setNowTick(Date.now()); }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
   const m = useMemo(() => (raw ? resolveIgStudio(raw) : null), [raw]);
+
+  // Surface this tab's fetch status to the shell header's single live pill.
+  useInstagramLive({ loading, hasData: !!m, error: loadError, loadedAt, onRefresh: load });
 
   // ── per-post drill-down ──────────────────────────────────────────────
   const [selected, setSelected] = useState(null); // grid item
@@ -320,39 +297,16 @@ export default function InstagramStudio() {
 
   if (!linked) {
     return (
-      <>
-        <PageHeader title="Instagram Studio" subtitle="Sin conectar" />
-        <div className="card card-pad text-sm text-ink-500">
-          Conecta tu cuenta de Instagram en{' '}
-          <Link to="/settings" className="font-medium text-brand-700 hover:underline">Configuración → Instagram</Link>.
-          El Studio comparte esa conexión.
-        </div>
-      </>
+      <div className="card card-pad text-sm text-ink-500">
+        Conecta tu cuenta de Instagram en{' '}
+        <Link to="/settings" className="font-medium text-brand-700 hover:underline">Configuración → Instagram</Link>.
+        El Studio comparte esa conexión.
+      </div>
     );
   }
 
   return (
     <>
-      <PageHeader
-        title="Instagram Studio"
-        subtitle={m?.profile.username ? `@${m.profile.username}` : 'Instagram'}
-        actions={(
-          <button
-            type="button"
-            onClick={load}
-            className="group inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface px-2.5 py-1 text-xs text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
-            title="Datos en vivo — toca para actualizar"
-          >
-            <span className="relative flex h-2 w-2">
-              {!loadError && <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 animate-ping" />}
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${loadError ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-            </span>
-            <span className="tabular-nums">{loading && !m ? 'Conectando…' : `En vivo${loadedAt ? ` · ${freshLabel(loadedAt, nowTick)}` : ''}`}</span>
-            <RefreshCw size={12} className={`transition-opacity ${loading ? 'animate-spin opacity-90' : 'opacity-0 group-hover:opacity-60'}`} />
-          </button>
-        )}
-      />
-
       {loadError && !m ? (
         <div className="card card-pad text-sm">
           <div className="text-red-600">{loadError}</div>
